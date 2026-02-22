@@ -1,7 +1,7 @@
 [project]
 name = "workshop"
 version = "0.0.1"
-description = "Micro services + micro frontend workspace"
+description = "Modular Monolith + Event-Driven workspace"
 requires-python = ">=3.12"
 
 [tool.uv.workspace]
@@ -9,6 +9,9 @@ members = [
     "services/*",
     "libs/python",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = []
 
 [build-system]
 requires = ["hatchling"]

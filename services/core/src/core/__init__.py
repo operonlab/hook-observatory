@@ -1,0 +1,1 @@
+"""Pulso Core — Modular Monolith."""

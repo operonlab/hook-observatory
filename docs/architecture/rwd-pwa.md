@@ -81,12 +81,12 @@ Strategy per asset type:
 - Show offline indicator when network unavailable
 - Queue mutations for replay when back online (future)
 
-## Implementation in Shell
+## Implementation in Web App
 
-The shell app (`apps/shell/`) serves as the reference implementation. All MFE apps inherit:
-- Tailwind breakpoint config from `libs/typescript/`
-- PWA manifest and SW registration from shell
-- Dark/light theme variables via CSS custom properties
+The web app (`apps/web/`) serves as the reference implementation:
+- Tailwind breakpoint config from shared styles
+- PWA manifest and SW registration from web app entry point
+- Dark/light theme variables via CSS custom properties (Catppuccin Mocha)
 
 ## Theme: Catppuccin Mocha
 

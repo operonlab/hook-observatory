@@ -1,0 +1,1 @@
+"""Muse schemas — placeholder."""

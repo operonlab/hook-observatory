@@ -1,0 +1,397 @@
+# Plugin System Architecture
+
+## Design Inspiration
+
+The plugin system draws from three proven models:
+
+| Source | What We Borrow |
+|--------|---------------|
+| **Stable Diffusion WebUI** | Extension manifest, hook-based lifecycle, git-based installation |
+| **Obsidian** | Plugin settings UI, sandboxed execution, community plugin gallery |
+| **VS Code** | Contribution points (UI slots), activation events, permission model |
+
+## Plugin Manifest
+
+Every plugin declares itself via `pulso-plugin.json`:
+
+```json
+{
+  "id": "expense-categorizer",
+  "name": "Smart Expense Categorizer",
+  "version": "1.0.0",
+  "description": "Automatically categorizes transactions using AI",
+  "author": "workshop-plugins",
+  "repository": "https://github.com/workshop-plugins/expense-categorizer",
+
+  "permissions": [
+    "finance.read",
+    "finance.write"
+  ],
+
+  "hooks": {
+    "before_transaction_create": "backend/hooks.py:before_transaction_create",
+    "after_transaction_create": "backend/hooks.py:after_transaction_create"
+  },
+
+  "ui_slots": {
+    "finance.dashboard.sidebar": "frontend/components/CategoryBreakdown.tsx"
+  },
+
+  "settings": {
+    "model": {
+      "type": "string",
+      "default": "gpt-4o-mini",
+      "description": "AI model for categorization"
+    },
+    "auto_categorize": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically categorize new transactions"
+    }
+  },
+
+  "activationEvents": [
+    "finance.transaction.created"
+  ],
+
+  "minCoreVersion": "0.1.0"
+}
+```
+
+### Manifest Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Unique plugin identifier (kebab-case) |
+| `name` | Yes | Human-readable name |
+| `version` | Yes | SemVer version |
+| `description` | Yes | Short description |
+| `author` | Yes | Author or organization |
+| `repository` | Yes | Git repository URL |
+| `permissions` | Yes | Required permissions (intersected with user permissions) |
+| `hooks` | No | Backend hook registrations |
+| `ui_slots` | No | Frontend UI slot registrations |
+| `settings` | No | Plugin configuration schema |
+| `activationEvents` | No | Events that trigger plugin loading |
+| `minCoreVersion` | No | Minimum compatible core version |
+
+## Hook Lifecycle
+
+Hooks follow the `before_*` / `after_*` pattern:
+
+```
+Request arrives
+    │
+    ▼
+before_{action}  ← Plugin can validate, modify, or reject
+    │
+    ▼
+Core action executes
+    │
+    ▼
+after_{action}   ← Plugin can extend, log, or trigger side effects
+    │
+    ▼
+Response sent
+```
+
+### Available Hooks
+
+| Hook | Timing | Can Modify | Can Reject |
+|------|--------|-----------|------------|
+| `before_transaction_create` | Before inserting transaction | Yes (data) | Yes |
+| `after_transaction_create` | After transaction committed | No | No |
+| `before_quest_complete` | Before marking quest done | Yes (data) | Yes |
+| `after_quest_complete` | After quest marked done | No | No |
+| `before_spark_create` | Before creating spark | Yes (data) | Yes |
+| `after_spark_create` | After spark committed | No | No |
+| `before_user_approve` | Before admin approves user | Yes (data) | Yes |
+| `after_user_approve` | After user approved | No | No |
+| `on_startup` | Application startup | No | No |
+| `on_shutdown` | Application shutdown | No | No |
+
+### Hook Implementation
+
+```python
+# plugins/expense-categorizer/backend/hooks.py
+
+async def before_transaction_create(context: HookContext) -> HookResult:
+    """Auto-categorize transaction before it's saved."""
+    if not context.plugin_settings.get("auto_categorize"):
+        return HookResult.PASS
+
+    data = context.data
+    if not data.get("category"):
+        category = await ai_categorize(data["description"], data["amount"])
+        data["category"] = category
+
+    return HookResult.CONTINUE(data=data)
+
+
+async def after_transaction_create(context: HookContext) -> None:
+    """Log categorization result for analytics."""
+    await log_categorization(
+        transaction_id=context.data["transaction_id"],
+        category=context.data.get("category"),
+        was_auto=True,
+    )
+```
+
+### HookContext
+
+```python
+@dataclass
+class HookContext:
+    event_type: str              # The hook being called
+    data: dict                   # Mutable data (for before_* hooks)
+    user: AuthUser               # Current user
+    plugin_settings: dict        # This plugin's settings values
+    event_bus: EventBus          # For publishing follow-up events
+```
+
+### HookResult
+
+```python
+class HookResult:
+    PASS = ...       # Skip this hook, let others run
+    CONTINUE = ...   # Continue with (optionally modified) data
+    REJECT = ...     # Reject the action (before_* only), returns 400 to client
+```
+
+## Plugin Installation
+
+### Git-Based Installation
+
+Plugins are installed from Git repositories:
+
+```bash
+# CLI (future)
+pulso plugin install https://github.com/workshop-plugins/expense-categorizer
+
+# API
+POST /api/admin/plugins/install
+{
+  "repository": "https://github.com/workshop-plugins/expense-categorizer",
+  "version": "1.0.0"
+}
+```
+
+### Installation Flow
+
+```
+1. Clone repository to services/core/plugins/<plugin-id>/
+2. Validate pulso-plugin.json manifest
+3. Check permission compatibility
+4. Register hooks with Hook Engine
+5. Register UI slots with frontend runtime
+6. Publish event: admin.plugin.installed
+```
+
+### Plugin Directory Layout
+
+```
+services/core/plugins/
+├── expense-categorizer/
+│   ├── pulso-plugin.json
+│   ├── backend/
+│   │   └── hooks.py
+│   ├── frontend/
+│   │   └── components/
+│   │       └── CategoryBreakdown.tsx
+│   └── README.md
+└── daily-summary/
+    ├── pulso-plugin.json
+    ├── backend/
+    │   └── hooks.py
+    └── README.md
+```
+
+## Permission Isolation
+
+Plugins operate within a **permission sandbox**:
+
+```
+effective_permissions = plugin.manifest.permissions ∩ current_user.permissions
+```
+
+### Rules
+
+1. A plugin **cannot** access modules beyond its declared permissions
+2. A plugin **cannot** escalate beyond the current user's permissions
+3. Admin-only plugins require `admin.*` permissions in manifest
+4. Permission violations are logged and the action is rejected
+
+### Example
+
+```
+Plugin declares: ["finance.read", "finance.write", "quest.read"]
+
+Admin user (has all permissions):
+  → Plugin gets: finance.read, finance.write, quest.read
+
+Regular user (has finance.*, quest.*):
+  → Plugin gets: finance.read, finance.write, quest.read
+
+Guest user (has *.read only):
+  → Plugin gets: finance.read, quest.read
+  → finance.write is silently excluded
+```
+
+## UI Slots
+
+Plugins inject frontend components into predefined slots:
+
+### Slot Registration
+
+In `pulso-plugin.json`:
+```json
+{
+  "ui_slots": {
+    "finance.dashboard.sidebar": "frontend/components/CategoryBreakdown.tsx"
+  }
+}
+```
+
+### Slot Rendering
+
+```typescript
+// In the finance dashboard
+import { PluginSlot } from "@/plugins/PluginSlot";
+
+export function FinanceDashboard() {
+  return (
+    <div className="flex">
+      <main>
+        <TransactionList />
+      </main>
+      <aside>
+        <PluginSlot name="finance.dashboard.sidebar" context={{ userId }} />
+      </aside>
+    </div>
+  );
+}
+```
+
+### Available Slots
+
+| Slot Name | Location | Context Provided |
+|-----------|----------|-----------------|
+| `shell.header.right` | Global header, right side | `{ user }` |
+| `shell.sidebar.bottom` | Global sidebar, bottom | `{ user }` |
+| `finance.dashboard.sidebar` | Finance dashboard sidebar | `{ userId }` |
+| `finance.transaction.detail` | Transaction detail panel | `{ transaction }` |
+| `quest.detail.actions` | Quest detail action area | `{ quest }` |
+| `muse.spark.toolbar` | Spark editor toolbar | `{ spark }` |
+
+## Plugin Development Guide
+
+### 1. Create Plugin Scaffold
+
+```bash
+mkdir my-plugin && cd my-plugin
+```
+
+```
+my-plugin/
+├── pulso-plugin.json
+├── backend/
+│   └── hooks.py
+├── frontend/           # Optional
+│   └── components/
+└── README.md
+```
+
+### 2. Define Manifest
+
+Start with minimal permissions. Expand only as needed.
+
+### 3. Implement Hooks
+
+```python
+# backend/hooks.py
+
+async def after_transaction_create(context: HookContext) -> None:
+    """React to new transactions."""
+    amount = context.data.get("amount", 0)
+    if amount > 10000:
+        await context.event_bus.publish(
+            "plugin.expense_categorizer.large_transaction_detected",
+            data={"transaction_id": context.data["transaction_id"], "amount": amount},
+            user_id=context.user.id,
+        )
+```
+
+### 4. Add Frontend Components (Optional)
+
+```typescript
+// frontend/components/CategoryBreakdown.tsx
+interface Props {
+  context: { userId: string };
+}
+
+export function CategoryBreakdown({ context }: Props) {
+  const { data } = usePluginApi("/api/plugins/expense-categorizer/breakdown", {
+    userId: context.userId,
+  });
+  return <PieChart data={data} />;
+}
+```
+
+### 5. Test Locally
+
+```bash
+# Copy plugin to core plugins directory
+cp -r my-plugin/ ~/workshop/services/core/plugins/my-plugin/
+
+# Restart core to pick up new plugin
+# Plugin hooks will auto-register on startup
+```
+
+### 6. Publish
+
+```bash
+git init && git add . && git commit -m "Initial plugin release"
+git remote add origin https://github.com/you/my-plugin
+git push -u origin main
+git tag v1.0.0 && git push --tags
+```
+
+## Hook Engine Internals
+
+```python
+class HookEngine:
+    """Manages plugin hook registration and execution."""
+
+    def __init__(self):
+        self._hooks: dict[str, list[PluginHook]] = defaultdict(list)
+
+    def register(self, plugin_id: str, hook_name: str, handler: Callable):
+        self._hooks[hook_name].append(PluginHook(plugin_id, handler))
+
+    async def run_before(self, hook_name: str, context: HookContext) -> HookResult:
+        """Run all before_* hooks. Any REJECT stops the chain."""
+        for hook in self._hooks.get(hook_name, []):
+            if not self._has_permission(hook.plugin_id, context.user):
+                continue
+            result = await hook.handler(context)
+            if result == HookResult.REJECT:
+                return result
+            if result.data:
+                context.data = result.data  # Apply modifications
+        return HookResult.CONTINUE(data=context.data)
+
+    async def run_after(self, hook_name: str, context: HookContext):
+        """Run all after_* hooks. Fire-and-forget."""
+        for hook in self._hooks.get(hook_name, []):
+            if not self._has_permission(hook.plugin_id, context.user):
+                continue
+            asyncio.create_task(hook.handler(context))
+```
+
+## Future Considerations
+
+- **Plugin marketplace**: Web UI for browsing and installing community plugins
+- **Plugin sandboxing**: Process-level isolation for untrusted plugins
+- **Plugin dependencies**: Allow plugins to depend on other plugins
+- **Plugin API versioning**: Stable hook API with deprecation warnings
+- **Hot reload**: Reload plugin code without restarting core
