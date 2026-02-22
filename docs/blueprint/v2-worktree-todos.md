@@ -1,391 +1,492 @@
-# V2 Worktree Todo List
+# V2 Worktree Todo List (Revised)
 
-Each track is a git worktree (branch) that can be worked on in parallel by a separate Claude Code session.
+> NOT a migration. Rebuild everything from V1 documentation + V2 architecture with maximum code reuse.
+> Reference: `v1-feature-inventory.md` for V1 features, `v2-blueprint.md` for V2 design.
 
 ## Setup
 
 ```bash
-# From ~/workshop/ (main branch)
-git worktree add ../ws-infra    -b feat/infra-foundation
-git worktree add ../ws-core     -b feat/core-backend
-git worktree add ../ws-web      -b feat/web-frontend
-git worktree add ../ws-tools    -b feat/tools-devx
+# From ~/workshop/ (main branch, after blueprint commit)
+git worktree add ../ws-infra    -b feat/infra-db
+git worktree add ../ws-engine   -b feat/core-engine
+git worktree add ../ws-modules  -b feat/domain-modules
+git worktree add ../ws-web      -b feat/web-complete
 ```
 
-Each session should read THIS file first, then work through their track's tasks in order.
+**Important for each session**:
+- Read `docs/blueprint/v2-blueprint.md` for architecture decisions
+- Read `docs/blueprint/v1-feature-inventory.md` for V1 reference
+- Use Sonnet agents (not Haiku). Do NOT use external CLIs (Codex/Gemini).
+- Each track works only in its designated directories.
 
 ---
 
-## Track 1: `feat/infra-foundation`
+## Track 1: `feat/infra-db`
 
-**Branch**: `feat/infra-foundation`
+**Branch**: `feat/infra-db`
 **Worktree**: `../ws-infra/`
-**Scope**: `infra/`, root `docker-compose*.yml`
-**Context**: Read `docs/architecture/observability.md`, `docs/architecture/folder-structure.md`
+**Scope**: `infra/`, `docker-compose*.yml`, `services/core/migrations/`
+**Dependencies**: None
 
 ### Tasks
 
 - [ ] **1.1 Docker Compose dev stack**
-  Create `docker-compose.dev.yml` at project root with:
-  - PostgreSQL 16 (port 5432, volume `pg-data`)
-  - Redis 7 (port 6379, volume `redis-data`)
-  - Grafana LGTM all-in-one (port 3100 grafana, 4317 OTLP)
-  - Shared network `pulso-net`
-  - `.env.example` with all required env vars
+  Create `docker-compose.dev.yml`:
+  - PostgreSQL 16 (port 5432, user: pulso, db: pulso_dev)
+  - Redis 7 (port 6379)
+  - Grafana LGTM all-in-one `grafana/otel-lgtm` (ports: 3100 grafana, 4317 OTLP gRPC, 4318 OTLP HTTP)
+  - Network: `pulso-net`
+  - Volumes: `pg-data`, `redis-data`
+  - `.env.example` with all vars
 
-- [ ] **1.2 PostgreSQL init scripts**
-  Create `infra/docker/postgres/`:
-  - `init.sql` — Create schemas: `auth`, `finance`, `quest`, `muse`, `admin`
-  - `init.sql` — Create extension: `uuid-ossp`, `pgcrypto`
-  - Mount as docker-entrypoint-initdb.d volume
+- [ ] **1.2 PostgreSQL init schemas**
+  `infra/docker/postgres/init.sql`:
+  ```sql
+  CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+  CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+  CREATE SCHEMA IF NOT EXISTS auth;
+  CREATE SCHEMA IF NOT EXISTS finance;
+  CREATE SCHEMA IF NOT EXISTS quest;
+  CREATE SCHEMA IF NOT EXISTS muse;
+  CREATE SCHEMA IF NOT EXISTS admin;
+  ```
+  Mount as `docker-entrypoint-initdb.d` volume.
 
-- [ ] **1.3 Redis configuration**
-  Create `infra/docker/redis/`:
-  - `redis.conf` — maxmemory 256mb, maxmemory-policy allkeys-lru
-  - Stream config for EventBus (consumer groups)
+- [ ] **1.3 Auth migration SQL**
+  `services/core/migrations/001_auth.sql`:
+  - `auth.users` (id UUID PK, email UNIQUE, display_name, avatar_url, role, status, timestamps)
+  - `auth.local_credentials` (user_id FK PK, password_hash, email_verified)
+  - `auth.oauth_accounts` (id, user_id FK, provider, provider_user_id, email, tokens, raw_profile JSONB, UNIQUE(provider, provider_user_id))
+  - `auth.webauthn_credentials` (id, user_id FK, credential_id BYTEA UNIQUE, public_key BYTEA, sign_count, aaguid, transports, backup fields, device_name)
+  - `auth.sessions` (id VARCHAR PK, user_id FK, ip_address INET, user_agent, expires_at, last_active_at)
+  - All indexes
 
-- [ ] **1.4 LGTM observability stack**
-  Create `infra/observability/`:
-  - `otel-collector.yml` — OTLP receiver → Loki + Tempo + Mimir exporters
-  - `grafana/provisioning/datasources/` — auto-provision Loki, Tempo, Mimir
-  - `grafana/provisioning/dashboards/` — basic service health dashboard
-  - Document access at http://localhost:3100
+- [ ] **1.4 Finance migration SQL**
+  `services/core/migrations/002_finance.sql`:
+  - `finance.transactions` (id, user_id, type enum, amount decimal, currency, category, description, date, tags[], created_at, updated_at)
+  - `finance.budgets` (id, user_id, category, amount, period enum, start_date, created_at)
+  - `finance.categories` (id, user_id, name, icon, color, type, sort_order)
 
-- [ ] **1.5 Nginx reverse proxy**
-  Create `infra/nginx/`:
-  - `nginx.conf` — upstream definitions for core(:8800), realtime(:8830), media(:8831)
-  - `/auth/*`, `/api/*` → core
-  - `/ws/*`, `/rtc/*` → realtime
-  - `/` → static files (apps/web/dist/) or dev proxy
-  - SSL config placeholder for production
-  - `Dockerfile` for nginx container
+- [ ] **1.5 Quest migration SQL**
+  `services/core/migrations/003_quest.sql`:
+  - `quest.quests` (id, creator_id, title, description, status enum, xp_reward, difficulty, tags[], deadline, created_at)
+  - `quest.progress` (id, quest_id, user_id, status enum, started_at, completed_at)
+  - `quest.skills` (id, user_id, name, category, xp_total, level)
 
-- [ ] **1.6 Add Nginx to Docker Compose**
-  Update `docker-compose.dev.yml`:
-  - Nginx service (port 80, 443)
-  - Depends on core, realtime, media
+- [ ] **1.6 Muse migration SQL**
+  `services/core/migrations/004_muse.sql`:
+  - `muse.sparks` (id, user_id, type enum, title, content text, tags[], metadata JSONB, created_at, updated_at)
+  - `muse.links` (id, source_id FK, target_id FK, relation varchar, strength float, created_at)
 
-- [ ] **1.7 Core service Dockerfile**
-  Create `services/core/Dockerfile`:
-  - Multi-stage build (uv install → slim runtime)
-  - Expose 8800
-  - Health check endpoint
+- [ ] **1.7 Redis configuration**
+  `infra/docker/redis/redis.conf`:
+  - maxmemory 256mb, allkeys-lru
+  - Stream config documentation for EventBus consumer groups
 
-- [ ] **1.8 Dev setup script**
-  Create `infra/scripts/dev-setup.sh`:
-  - Check prerequisites (docker, uv, pnpm, node)
-  - `docker compose -f docker-compose.dev.yml up -d` (PG + Redis + LGTM)
-  - `uv sync` for Python workspace
-  - `pnpm install` for JS workspace
+- [ ] **1.8 Nginx reverse proxy**
+  `infra/nginx/nginx.conf`:
+  - Upstream: core(:8800), realtime(:8830), media(:8831), web(:3000 dev)
+  - Routes: /auth/*, /api/* → core; /ws/*, /rtc/* → realtime; / → web
+  - Security headers (X-Frame-Options, CSP, HSTS)
+  - `infra/nginx/Dockerfile`
+
+- [ ] **1.9 LGTM observability config**
+  `infra/observability/`:
+  - `otel-collector.yml` — receivers (OTLP gRPC + HTTP), exporters (Loki, Tempo, Prometheus)
+  - `grafana/provisioning/dashboards/pulso-overview.json` — basic dashboard
+
+- [ ] **1.10 Dev scripts**
+  `infra/scripts/dev-setup.sh`:
+  - Check prereqs (docker, uv, pnpm)
+  - `docker compose -f docker-compose.dev.yml up -d`
+  - Wait for PG ready (`pg_isready`)
+  - Run migrations
+  - `uv sync && pnpm install`
   - Print service URLs
 
-- [ ] **1.9 Dev teardown script**
-  Create `infra/scripts/dev-teardown.sh`:
-  - `docker compose -f docker-compose.dev.yml down`
-  - Optional: `-v` flag to remove volumes
+  `infra/scripts/dev-teardown.sh`:
+  - `docker compose down [-v]`
 
-- [ ] **1.10 Verify & document**
-  - Start full stack: `docker compose -f docker-compose.dev.yml up -d`
-  - Verify PG accepts connections
-  - Verify Redis ping
-  - Verify Grafana dashboard loads
-  - Update `docs/architecture/observability.md` with actual endpoints
+- [ ] **1.11 Verify**
+  - `docker compose up -d` → all services healthy
+  - PG: `psql -c '\dn'` shows 5 schemas
+  - PG: all tables created with correct columns
+  - Redis: `redis-cli ping` → PONG
+  - Grafana: http://localhost:3100 loads
 
 ---
 
-## Track 2: `feat/core-backend`
+## Track 2: `feat/core-engine`
 
-**Branch**: `feat/core-backend`
-**Worktree**: `../ws-core/`
-**Scope**: `services/core/`, `services/realtime/`, `services/media/`, `libs/python/`
-**Context**: Read `docs/architecture/modular-monolith.md`, `docs/architecture/event-driven.md`, `docs/architecture/auth.md`
-**Note**: DB/Redis integration can be coded with connection logic but tested after Track 1 merges. Use in-memory fallback for dev without Docker.
+**Branch**: `feat/core-engine`
+**Worktree**: `../ws-engine/`
+**Scope**: `libs/python/`, `services/core/src/core/` (events, hooks, middleware, modules/auth, shared, config, main, db)
+**Dependencies**: None to start. Needs T1 for DB testing.
+**V1 Reference**: Auth section of `v1-feature-inventory.md`
 
 ### Tasks
 
-- [ ] **2.1 Database connection layer**
-  `services/core/src/core/db.py`:
-  - Async connection pool using `psycopg_pool.AsyncConnectionPool`
-  - Lifespan integration (open on startup, close on shutdown)
-  - Per-request connection via FastAPI dependency
-  - Config from `settings.db_url`
+- [ ] **2.1 Python shared lib — DB layer**
+  `libs/python/src/corelib/db/`:
+  - `pool.py` — `create_pool(db_url) → AsyncConnectionPool` (psycopg 3 async), lifespan helpers
+  - `migrations.py` — `MigrationRunner` — read `migrations/*.sql`, track in `public.schema_migrations`, CLI entry
 
-- [ ] **2.2 Migration runner**
-  `services/core/src/core/migrations/`:
-  - `runner.py` — Read SQL files, execute in order, track applied in `public.migrations` table
-  - `services/core/migrations/` — SQL files named `001_<description>.sql`
-  - CLI entry: `uv run python -m core.migrations.runner`
-
-- [ ] **2.3 Auth module → PostgreSQL**
-  `services/core/src/core/modules/auth/`:
-  - `models.py` — `auth.users` table (id UUID PK, email UNIQUE, name, role, status, password_hash, password_salt, created_at, updated_at)
-  - `services.py` — UserService (create, get_by_email, get_by_id, update_status)
-  - Update `routes.py` — Replace `_users` dict with UserService
-  - Migration: `migrations/001_create_auth_users.sql`
-
-- [ ] **2.4 Finance module CRUD**
-  `services/core/src/core/modules/finance/`:
-  - `models.py` — `finance.transactions` (id, user_id FK, type, amount, currency, category, description, date, created_at)
-  - `models.py` — `finance.budgets` (id, user_id FK, category, amount, period, created_at)
-  - `services.py` — TransactionService, BudgetService
-  - `routes.py` — CRUD endpoints: GET/POST/PUT/DELETE /api/finance/transactions, /api/finance/budgets
-  - `schemas.py` — Request/response models
-  - `events.py` — Emit `finance.transaction.created/updated/deleted`
-  - Migration: `migrations/002_create_finance.sql`
-  - RBAC: `finance.read`, `finance.write` permissions
-
-- [ ] **2.5 Quest module CRUD**
-  `services/core/src/core/modules/quest/`:
-  - `models.py` — `quest.quests` (id, user_id, title, description, status, xp_reward, created_at), `quest.progress` (id, quest_id, user_id, status, completed_at)
-  - `services.py` — QuestService, ProgressService
-  - `routes.py` — CRUD + /api/quest/quests/{id}/accept, /complete, /fail
-  - `schemas.py`, `events.py`
-  - Migration: `migrations/003_create_quest.sql`
-  - RBAC: `quest.read`, `quest.write`
-
-- [ ] **2.6 Muse module CRUD**
-  `services/core/src/core/modules/muse/`:
-  - `models.py` — `muse.sparks` (id, user_id, type, title, content, tags[], created_at), `muse.links` (id, source_id FK, target_id FK, relation, created_at)
-  - `services.py` — SparkService, LinkService
-  - `routes.py` — CRUD + /api/muse/sparks/{id}/link
-  - `schemas.py`, `events.py`
-  - Migration: `migrations/004_create_muse.sql`
-  - RBAC: `muse.read`, `muse.write`
-
-- [ ] **2.7 Admin module**
-  `services/core/src/core/modules/admin/`:
-  - `services.py` — AdminService (list_users, update_user_role, update_user_status, system_stats)
-  - `routes.py` — GET /api/admin/users, PATCH /api/admin/users/{id}, GET /api/admin/stats
-  - `schemas.py`
-  - RBAC: `admin.*` (admin role only)
-
-- [ ] **2.8 EventBus Redis Streams backend**
-  `services/core/src/core/events/backends/`:
-  - `memory.py` — Extract current in-process backend
-  - `redis_streams.py` — Redis Streams implementation (XADD, XREADGROUP, consumer group per module)
-  - `bus.py` — Update EventBus to support backend selection via config
-  - Config: `settings.event_backend = "memory" | "redis"`
-
-- [ ] **2.9 Event middleware**
-  `services/core/src/core/events/middleware.py`:
-  - Auto-publish `system.request.received` on every request
-  - Attach trace_id, user_id from session
-  - Log event flow via structlog
-
-- [ ] **2.10 OTel instrumentation**
-  `services/core/src/core/middleware/telemetry.py`:
-  - OpenTelemetry FastAPI instrumentation
-  - Auto-tracing for all routes
-  - Custom spans for EventBus publish/subscribe
-  - Metrics: request count, latency histogram, event throughput
-  - Export via OTLP to collector (localhost:4317)
-  - Add `opentelemetry-*` deps to pyproject.toml
-
-- [ ] **2.11 Structured logging**
-  `services/core/src/core/logging.py`:
-  - structlog configuration (JSON in prod, console in dev)
-  - Bind trace_id, user_id to log context
-  - Integration with OTel trace context
-
-- [ ] **2.12 API error handling**
-  `services/core/src/core/middleware/errors.py`:
-  - Global exception handler
-  - Structured error response: `{error: string, code: string, detail?: any}`
-  - Map domain exceptions to HTTP status codes
-
-- [ ] **2.13 Shared lib setup**
+- [ ] **2.2 Python shared lib — Base classes**
   `libs/python/src/corelib/`:
-  - `types.py` — Shared types (Pagination, SortOrder, FilterOp)
-  - `pagination.py` — Paginated query helper (offset/limit → SQL)
-  - Update `libs/python/pyproject.toml`
+  - `schemas.py` — `PaginatedResponse[T]`, `ErrorResponse`, `SortOrder`, `FilterOp`, `Pagination`
+  - `repository.py` — `BaseRepository[T]` — generic async CRUD against psycopg pool, pagination support
+  - `service.py` — `BaseService[T]` — wraps BaseRepository + auto permission check + auto event emission
+  - `router.py` — `create_crud_router()` — generates GET (list), GET/{id}, POST, PUT/{id}, DELETE/{id} from service + schemas + permission map
+  - `events.py` — `CRUDEventMixin` — auto-emit `{domain}.{entity}.{created|updated|deleted}`
+  - `health.py` — `create_health_router(name, version, checks: list)` — /health + /health/ready
+  - Update `libs/python/pyproject.toml` (deps: psycopg[pool], pydantic, structlog)
 
-- [ ] **2.14 Verify full integration**
-  - Run Core with PostgreSQL + Redis
-  - Test auth register → login → session cycle
-  - Test finance CRUD
-  - Test event publishing + subscribing
-  - Verify OTel traces appear in Tempo
+- [ ] **2.3 Python shared lib — Auth abstractions**
+  `libs/python/src/corelib/auth/`:
+  - `provider.py` — `AuthProvider` ABC (`authenticate()`, `provider_name`)
+  - `session.py` — `SessionManager` (create, validate, revoke, list by user; DB-backed with TTL; signed cookie with session ID)
+  - `deps.py` — `get_current_user(request)`, `require_role(*roles)`, `require_permission(perm)`
+  - `types.py` — `AuthResult`, `UserIdentity`, `SessionPayload`
+
+- [ ] **2.4 Python shared lib — Middleware**
+  `libs/python/src/corelib/middleware/`:
+  - `errors.py` — Global exception handler → `{"error": str, "code": str, "detail": any, "trace_id": str}`
+  - `logging.py` — structlog config (JSON prod, console dev), bind trace_id + user_id
+  - `telemetry.py` — OTel FastAPI instrumentation, custom spans for EventBus
+  - `rate_limit.py` — slowapi wrapper, per-route limits, Redis backend support
+
+- [ ] **2.5 Core config update**
+  `services/core/src/core/config.py`:
+  - Add: `webauthn_rp_id`, `webauthn_rp_name`, `webauthn_origin`
+  - Add: `github_client_id`, `github_client_secret`
+  - Add: `google_client_id`, `google_client_secret`
+  - Add: `public_base_url` (for OAuth redirect URIs)
+  - Add: `session_secret` (for cookie signing)
+  - Keep: db_url, redis_url, cors_origins, event_backend, plugin_dir
+
+- [ ] **2.6 Core DB integration**
+  `services/core/src/core/db.py`:
+  - Use `corelib.db.create_pool(settings.db_url)`
+  - Integrate into FastAPI lifespan (open on startup, close on shutdown)
+  - FastAPI dependency: `get_pool()`, `get_conn()`
+
+- [ ] **2.7 Auth module — Email/Password provider**
+  `services/core/src/core/modules/auth/providers/email.py`:
+  - `EmailPasswordProvider(AuthProvider)`
+  - Register: validate email + password(>=8) → bcrypt hash → create user + local_credentials
+  - Login: verify email + bcrypt → return AuthResult
+  - Use passlib CryptContext(schemes=["bcrypt"])
+
+- [ ] **2.8 Auth module — GitHub OAuth provider**
+  `services/core/src/core/modules/auth/providers/github.py`:
+  - `GitHubOAuthProvider(AuthProvider)`
+  - Use authlib: register github oauth, authorize_redirect, authorize_access_token
+  - Fetch /user + /user/emails (primary verified email)
+  - Return AuthResult with provider_user_id = github user id
+  - Allowlist support (optional env var)
+
+- [ ] **2.9 Auth module — Google OAuth provider**
+  `services/core/src/core/modules/auth/providers/google.py`:
+  - `GoogleOAuthProvider(AuthProvider)`
+  - Use authlib: OIDC discovery, authorize_redirect, authorize_access_token
+  - PKCE enabled (code_challenge_method: S256)
+  - Extract userinfo from ID token
+  - Google One Tap: POST endpoint, verify with google-auth library
+  - Return AuthResult with provider_user_id = sub claim
+
+- [ ] **2.10 Auth module — Passkey provider**
+  `services/core/src/core/modules/auth/providers/passkey.py`:
+  - `PasskeyProvider(AuthProvider)`
+  - Use py_webauthn (webauthn>=2.7.1)
+  - Registration: generate_registration_options → verify_registration_response → store credential (BYTEA)
+  - Authentication: generate_authentication_options → verify_authentication_response → update sign_count
+  - Credential management: list, delete
+
+- [ ] **2.11 Auth module — Service + Routes**
+  `services/core/src/core/modules/auth/`:
+  - `service.py` — `AuthService` orchestrator: authenticate(provider, **kwargs), link_account(), create_session(), revoke_session()
+  - Account linking: check provider_user_id → check email → create new user
+  - `routes.py` — All endpoints from blueprint (register, login, logout, session, OAuth flows, Passkey flows, provider management)
+  - `repository.py` — `UserRepository`, `OAuthAccountRepository`, `WebAuthnCredentialRepository`, `SessionRepository`
+  - `schemas.py` — Request/response Pydantic models for all endpoints
+
+- [ ] **2.12 Auth module — RBAC + ABAC**
+  Rewrite `services/core/src/core/modules/auth/permissions.py`:
+  - Keep ROLE_PERMISSIONS dict (admin, user, guest)
+  - Keep PolicyEngine with RequestContext
+  - Integrate with corelib deps: `require_permission()` auto-checks RBAC + ABAC
+  - Add policies: suspended_users_blocked, owner_only_write, rate_limited
+
+- [ ] **2.13 EventBus — Redis Streams backend**
+  `services/core/src/core/events/backends/`:
+  - `memory.py` — Extract current in-process implementation
+  - `redis_streams.py` — XADD, XREADGROUP, consumer groups per module
+  - `services/core/src/core/events/bus.py` — Backend selection via settings.event_backend
+
+- [ ] **2.14 Core main.py update**
+  - Wire up: db pool, all auth providers, auth service, session middleware
+  - Add: Starlette SessionMiddleware (for OAuth state)
+  - Add: OTel middleware, structured logging, global error handler, rate limiting
+  - Mount: auth router, health router
+  - Lifespan: db pool open/close, event_bus start/stop, hook_bus load_plugins
+
+- [ ] **2.15 Verify full auth flow**
+  - Register via email/password → session created → /auth/session returns user
+  - Login → session → logout → session revoked
+  - OAuth flow (mock or real if keys available)
+  - Passkey registration + authentication (test with Chrome)
+  - RBAC: admin can access admin routes, user cannot
+  - Rate limiting: 6th login attempt in 1 minute → 429
 
 ---
 
-## Track 3: `feat/web-frontend`
+## Track 3: `feat/domain-modules`
 
-**Branch**: `feat/web-frontend`
+**Branch**: `feat/domain-modules`
+**Worktree**: `../ws-modules/`
+**Scope**: `services/core/src/core/modules/{finance,quest,muse,admin}/`
+**Dependencies**: Needs T2 base classes (BaseService, BaseRepository, create_crud_router). Can stub them initially.
+**Strategy**: If T2 isn't merged yet, define minimal interfaces inline and refactor on merge.
+
+### Tasks
+
+- [ ] **3.1 Finance module — Repository + Service**
+  `services/core/src/core/modules/finance/`:
+  - `repository.py`:
+    - `TransactionRepo(BaseRepository[Transaction])` — schema="finance", table="transactions"
+    - `BudgetRepo(BaseRepository[Budget])` — schema="finance", table="budgets"
+    - `CategoryRepo(BaseRepository[Category])` — custom: default categories seeding
+  - `services.py`:
+    - `TransactionService(BaseService[Transaction])` — domain="finance"
+    - Custom: `get_monthly_summary(user_id, year, month)`, `get_by_category(user_id, category)`
+    - `BudgetService(BaseService[Budget])` — custom: `check_budget_alert(user_id, category)`
+
+- [ ] **3.2 Finance module — Routes + Schemas**
+  - `schemas.py`:
+    - `TransactionCreate` (type: income|expense, amount: Decimal, currency, category, description, date, tags)
+    - `TransactionUpdate` (all optional)
+    - `TransactionResponse` (id, + all fields + created_at)
+    - `TransactionFilter` (type, category, date_from, date_to, amount_min, amount_max)
+    - `MonthlySummary` (income, expense, balance, by_category: list)
+    - Same pattern for Budget, Category
+  - `routes.py`:
+    - CRUD via `create_crud_router("/api/finance/transactions", ...)` permissions: finance.read/write
+    - Custom: `GET /api/finance/summary?year=&month=` → MonthlySummary
+    - CRUD for budgets, categories
+  - `events.py`:
+    - Constants: `TRANSACTION_CREATED/UPDATED/DELETED`, `BUDGET_CREATED/EXCEEDED`
+    - Handler: on transaction_created → check budget → emit budget_exceeded if over
+
+- [ ] **3.3 Quest module — Repository + Service**
+  `services/core/src/core/modules/quest/`:
+  - `repository.py`:
+    - `QuestRepo(BaseRepository[Quest])` — schema="quest", table="quests"
+    - `ProgressRepo(BaseRepository[Progress])` — schema="quest", table="progress"
+    - `SkillRepo(BaseRepository[Skill])` — schema="quest", table="skills"
+  - `services.py`:
+    - `QuestService(BaseService[Quest])` — domain="quest"
+    - Custom: `accept(quest_id, user_id)`, `complete(quest_id, user_id)`, `fail(quest_id, user_id)`
+    - XP calculation: on complete → update skill XP → recalculate level
+    - `SkillService` — `get_skill_tree(user_id)`, `add_xp(user_id, skill_name, amount)`
+
+- [ ] **3.4 Quest module — Routes + Schemas**
+  - `schemas.py`: QuestCreate, QuestResponse, QuestFilter, ProgressResponse, SkillResponse, SkillTree
+  - `routes.py`:
+    - CRUD quests: `/api/quest/quests` (permissions: quest.read/write)
+    - Actions: `POST /api/quest/quests/{id}/accept`, `/complete`, `/fail`
+    - Skills: `GET /api/quest/skills` (user's skill tree), `GET /api/quest/skills/{id}`
+    - Board: `GET /api/quest/board` (grouped by status)
+  - `events.py`: QUEST_CREATED/ACCEPTED/COMPLETED/FAILED, SKILL_XP_GAINED/LEVEL_UP
+
+- [ ] **3.5 Muse module — Repository + Service**
+  `services/core/src/core/modules/muse/`:
+  - `repository.py`:
+    - `SparkRepo(BaseRepository[Spark])` — custom: full-text search on title+content, tag filtering
+    - `LinkRepo(BaseRepository[Link])` — custom: get_graph(user_id), get_connected(spark_id)
+  - `services.py`:
+    - `SparkService(BaseService[Spark])` — domain="muse"
+    - Custom: `search(user_id, query, tags)`, `get_inbox(user_id)` (recent unlinked sparks)
+    - `LinkService` — `link(source_id, target_id, relation)`, `unlink(link_id)`, `get_graph(user_id)`
+
+- [ ] **3.6 Muse module — Routes + Schemas**
+  - `schemas.py`: SparkCreate, SparkResponse, SparkFilter, LinkCreate, LinkResponse, GraphResponse
+  - `routes.py`:
+    - CRUD sparks: `/api/muse/sparks` (permissions: muse.read/write)
+    - Search: `GET /api/muse/sparks/search?q=&tags=`
+    - Inbox: `GET /api/muse/sparks/inbox`
+    - Links: `POST /api/muse/links`, `DELETE /api/muse/links/{id}`
+    - Graph: `GET /api/muse/graph`
+  - `events.py`: SPARK_CREATED/UPDATED/DELETED, LINK_CREATED/DELETED
+
+- [ ] **3.7 Admin module**
+  `services/core/src/core/modules/admin/`:
+  - `services.py`:
+    - `AdminService` — list_users(filters, pagination), update_user_role(id, role), update_user_status(id, status)
+    - `SystemService` — get_stats() → {total_users, active_sessions, events_24h, db_size, redis_memory}
+  - `routes.py`:
+    - `GET /api/admin/users` — paginated user list (admin only)
+    - `PATCH /api/admin/users/{id}` — update role/status
+    - `GET /api/admin/stats` — system statistics
+    - `GET /api/admin/events` — recent event log (from EventBus)
+  - All routes: `require_permission("admin.*")`
+
+- [ ] **3.8 Register all module routers**
+  Update `services/core/src/core/main.py`:
+  - Import and mount finance, quest, muse, admin routers
+  - Register event handlers from each module
+  - Register hook points from each module
+
+- [ ] **3.9 Verify modules**
+  - Each module's CRUD endpoints respond correctly
+  - Events are emitted on create/update/delete
+  - RBAC enforced (user can access finance, guest cannot write)
+  - Pagination works (limit, offset, sort, filter)
+
+---
+
+## Track 4: `feat/web-complete`
+
+**Branch**: `feat/web-complete`
 **Worktree**: `../ws-web/`
 **Scope**: `apps/web/`, `libs/typescript/`
-**Context**: Read `docs/architecture/frontend.md`, `docs/architecture/rwd-pwa.md`
-**Note**: Can build UI with mock data first, then connect to real API after Track 2 merges.
+**Dependencies**: Needs T2 API contracts. Can build UI first with mock/type stubs.
+**V1 Reference**: Frontend section of `v1-feature-inventory.md`
 
 ### Tasks
 
-- [ ] **3.1 API client layer**
-  `apps/web/src/api/`:
-  - `client.ts` — Base fetch wrapper with error handling, auth headers, types
-  - `auth.ts` — Register, login, logout, getSession (already exists, refactor to use client)
-  - `finance.ts` — Transaction CRUD, budget CRUD
-  - `quest.ts` — Quest CRUD, accept/complete/fail actions
-  - `muse.ts` — Spark CRUD, link CRUD
-  - `admin.ts` — User management, system stats
-  - Shared types matching backend schemas
+- [ ] **4.1 TypeScript shared lib — API client**
+  `libs/typescript/src/api/`:
+  - `client.ts` — `apiClient` with fetch wrapper: base URL, credentials: "include", error handling (parse ErrorResponse), type-safe generics
+  - `types.ts` — `PaginatedResponse<T>`, `ErrorResponse`, `ApiError` class
+  - `resource.ts` — `createResourceApi<T>(basePath)` → { list, get, create, update, delete }
 
-- [ ] **3.2 Auth module UI**
-  `apps/web/src/modules/auth/`:
-  - `pages/LoginPage.tsx` — Email + password form, error display, redirect on success
-  - `pages/RegisterPage.tsx` — Name + email + password + confirm, validation
-  - `components/AuthGuard.tsx` — Refactor from current App.tsx inline guard
-  - `components/SessionProvider.tsx` — Auto-refresh session, context provider
-  - `stores/auth.ts` — Move from src/stores/, add token refresh logic
+- [ ] **4.2 TypeScript shared lib — Auth**
+  `libs/typescript/src/auth/`:
+  - `types.ts` — `User`, `AuthState`, `LoginRequest`, `RegisterRequest`, `OAuthProvider`
+  - `AuthProvider.tsx` — React context: user state, loading, initialized; actions: login, register, logout, checkSession, linkProvider
+  - `AuthGuard.tsx` — Wraps routes, redirects to /login if unauthenticated
+  - `useAuth.ts` — Hook consuming AuthProvider context
 
-- [ ] **3.3 Finance module UI**
+- [ ] **4.3 TypeScript shared lib — Components**
+  `libs/typescript/src/components/`:
+  - `DataTable.tsx` — Props: columns, data, sortable, pagination, onSort, onPageChange, loading, emptyMessage. Catppuccin Mocha styled.
+  - `Modal.tsx` — Props: isOpen, onClose, title, children, footer. Backdrop click closes.
+  - `Toast.tsx` — Toast manager: useToast() → { success, error, warning, info }. Auto-dismiss.
+  - `LoadingSpinner.tsx` — Centered spinner with optional message
+  - `EmptyState.tsx` — Icon + message + optional action button
+  - `ErrorBoundary.tsx` — Catches React errors, shows fallback UI
+
+- [ ] **4.4 TypeScript shared lib — Hooks**
+  `libs/typescript/src/hooks/`:
+  - `useResource.ts` — `createResourceHook<T>(api)` → { items, loading, error, create, update, remove, refresh }
+  - `usePagination.ts` — page, pageSize, sort, filter state management
+  - `useWebSocket.ts` — WebSocket with auto-reconnect + message handler
+
+- [ ] **4.5 Auth module — Login page**
+  `apps/web/src/modules/auth/pages/LoginPage.tsx`:
+  - Email + password form (validation, error display)
+  - "Sign in with GitHub" button → `window.location = /auth/oauth/github`
+  - "Sign in with Google" button → Google One Tap integration
+  - "Sign in with Passkey" button → `@simplewebauthn/browser` startAuthentication
+  - Link to register page
+  - Responsive: full-width on mobile, centered card on desktop
+  - Catppuccin Mocha dark theme
+
+- [ ] **4.6 Auth module — Register page**
+  `apps/web/src/modules/auth/pages/RegisterPage.tsx`:
+  - Name + email + password + confirm password
+  - Password strength indicator
+  - "Or register with" → GitHub, Google buttons
+  - "Add Passkey" option after registration (optional step)
+  - Link to login page
+
+- [ ] **4.7 Auth module — Settings page**
+  `apps/web/src/modules/auth/pages/AccountSettings.tsx`:
+  - Linked providers list (email, github, google, passkey)
+  - "Link GitHub/Google" buttons
+  - Passkey management (list credentials, add new, remove)
+  - Active sessions list (with revoke)
+  - Profile edit (display name, avatar)
+
+- [ ] **4.8 Finance module**
   `apps/web/src/modules/finance/`:
-  - `pages/FinanceDashboard.tsx` — Summary cards (income, expense, balance), chart
-  - `pages/TransactionList.tsx` — Sortable table, pagination, filters
-  - `components/TransactionForm.tsx` — Create/edit transaction modal
-  - `components/BudgetCard.tsx` — Budget vs actual progress bar
-  - `stores/finance.ts` — Zustand store
-  - `api/finance.ts` → import from shared api layer
+  - `api.ts` — `createResourceApi<Transaction>('/api/finance/transactions')` + summary API
+  - `hooks.ts` — `useTransactions`, `useBudgets`, `useMonthlySummary`
+  - `pages/Dashboard.tsx` — Summary cards (income/expense/balance), category donut chart, recent transactions
+  - `pages/TransactionList.tsx` — DataTable with filters (type, category, date range), create button
+  - `components/TransactionForm.tsx` — Modal form for create/edit
+  - `components/BudgetCard.tsx` — Budget vs actual progress bar, alert on exceed
+  - `types.ts` — Transaction, Budget, MonthlySummary types
 
-- [ ] **3.4 Quest module UI**
+- [ ] **4.9 Quest module**
   `apps/web/src/modules/quest/`:
-  - `pages/QuestBoard.tsx` — Kanban-style board (available, in-progress, completed)
-  - `pages/QuestDetail.tsx` — Quest info, progress, XP reward
-  - `components/QuestCard.tsx` — Card with status badge, XP, action button
-  - `components/SkillTree.tsx` — Skill tree visualization (future)
-  - `stores/quest.ts` — Zustand store
+  - `api.ts` — Quest CRUD + accept/complete/fail actions
+  - `hooks.ts` — `useQuests`, `useQuestBoard`, `useSkills`
+  - `pages/QuestBoard.tsx` — Kanban columns: Available, In Progress, Completed. Drag-and-drop optional.
+  - `pages/QuestDetail.tsx` — Quest info, progress, XP reward, action buttons
+  - `components/QuestCard.tsx` — Card: title, difficulty badge, XP, status, deadline
+  - `components/SkillTree.tsx` — Tree/graph visualization of skills + levels
+  - `types.ts` — Quest, Progress, Skill types
 
-- [ ] **3.5 Muse module UI**
+- [ ] **4.10 Muse module**
   `apps/web/src/modules/muse/`:
-  - `pages/MuseInbox.tsx` — Inbox list of sparks, create button
-  - `pages/SparkDetail.tsx` — Spark viewer/editor
-  - `components/SparkEditor.tsx` — Rich text editor (markdown)
-  - `components/LinkGraph.tsx` — Force-directed graph of spark connections
-  - `stores/muse.ts` — Zustand store
+  - `api.ts` — Spark CRUD + search + link API
+  - `hooks.ts` — `useSparks`, `useSparkSearch`, `useGraph`
+  - `pages/Inbox.tsx` — List of recent/unlinked sparks, create button
+  - `pages/SparkDetail.tsx` — Markdown editor/viewer, linked sparks sidebar
+  - `components/SparkEditor.tsx` — Markdown textarea with preview
+  - `components/LinkGraph.tsx` — Force-directed graph (canvas or SVG), nodes = sparks, edges = links
+  - `types.ts` — Spark, Link, GraphData types
 
-- [ ] **3.6 Admin module UI**
+- [ ] **4.11 Admin module**
   `apps/web/src/modules/admin/`:
-  - `pages/AdminDashboard.tsx` — System stats (users, events, uptime)
-  - `pages/UserManagement.tsx` — User table with role/status edit
-  - `components/UserRow.tsx` — Inline edit for role, status toggle
-  - `components/SystemStats.tsx` — Real-time stats cards
-  - `stores/admin.ts` — Zustand store
-  - Route guard: admin role only
+  - `api.ts` — User management + system stats
+  - `hooks.ts` — `useUsers`, `useSystemStats`
+  - `pages/Dashboard.tsx` — System stats cards (users, sessions, events, db size), live feed
+  - `pages/UserManagement.tsx` — DataTable of users, inline role/status edit
+  - `components/UserRow.tsx` — Role dropdown, status toggle, last active
+  - Route guard: admin role only (redirect non-admins)
+  - `types.ts` — AdminUser, SystemStats types
 
-- [ ] **3.7 Shell enhancements**
+- [ ] **4.12 Shell enhancements**
   `apps/web/src/shell/`:
-  - `NavBar.tsx` — Add notification bell, user avatar dropdown
-  - `Sidebar.tsx` — Active route highlighting, collapsible on mobile
-  - `Layout.tsx` — Responsive: sidebar → bottom nav on mobile
-  - `AppLauncher.tsx` — Dynamic app availability based on user role/permissions
-  - Toast notification system (`shared/components/Toast.tsx`)
+  - `NavBar.tsx` — User avatar dropdown (profile, settings, logout), notification bell placeholder
+  - `Sidebar.tsx` — Active route highlighting, collapse on mobile (hamburger menu)
+  - `Layout.tsx` — Bottom nav on mobile (<640px), sidebar on desktop
+  - `AppLauncher.tsx` — Dynamic: show/hide apps based on user role + permissions
+  - Install `@simplewebauthn/browser` for passkey support
 
-- [ ] **3.8 Shared components**
-  `apps/web/src/shared/components/`:
-  - `DataTable.tsx` — Reusable sortable, paginated table
-  - `Modal.tsx` — Reusable modal with backdrop, close button
-  - `LoadingSpinner.tsx` — Consistent loading indicator
-  - `EmptyState.tsx` — No data placeholder
-  - `ErrorBoundary.tsx` — Error fallback UI
+- [ ] **4.13 App routing update**
+  `apps/web/src/App.tsx`:
+  - Add routes: /account (settings), /finance/*, /quest/*, /muse/*, /admin/*
+  - Auth routes: /login, /register (no guard)
+  - Admin guard for /admin/*
+  - 404 catch-all
 
-- [ ] **3.9 PWA enhancement**
-  `apps/web/public/`:
-  - `sw.js` — Update service worker with proper cache versioning
+- [ ] **4.14 PWA + Icons**
+  - Generate proper PNG icons (192x192, 512x512) — not SVG placeholders
+  - Update `manifest.json` with correct names
+  - `sw.js` — cache versioning, update notification
   - Offline fallback page
-  - App update notification banner
-  - Icon generation (192, 512 proper PNG, not SVG placeholders)
 
-- [ ] **3.10 Verify & test**
-  - Build passes: `pnpm build`
-  - All routes navigable (/, /finance, /quest, /muse, /admin, /login)
+- [ ] **4.15 Verify**
+  - `pnpm build` passes
+  - All routes navigable
   - Responsive at 320px, 768px, 1280px
-  - PWA installable in Chrome
-  - No console errors
+  - Auth flow: login → dashboard → navigate modules → logout
+  - No TypeScript errors, no console errors
 
 ---
 
-## Track 4: `feat/tools-devx`
+## Merge Order & Integration
 
-**Branch**: `feat/tools-devx`
-**Worktree**: `../ws-tools/`
-**Scope**: `tools/`, `docs/reference/`
-**Context**: Tools are developer/operator utilities, NOT platform services. They support development workflow.
-**Note**: Fully independent. No dependencies on other tracks.
-
-### Tasks
-
-- [ ] **4.1 Tools README**
-  Create `tools/README.md`:
-  - Tool catalog table (name, port, type, description)
-  - Quick start guide for each tool
-  - Architecture diagram (tools vs services vs infra)
-
-- [ ] **4.2 Migrate disk-report**
-  Move `~/.claude/data/disk-report/` → `tools/disk-report/`:
-  - Copy source files
-  - Add `pyproject.toml` with proper deps (fastapi, uvicorn, jinja2)
-  - Add `README.md`
-  - Update LaunchAgent plist path: `com.joneshong.disk-report.plist`
-  - Verify: `uv run uvicorn tools.disk-report.web.server:app --port 9527`
-
-- [ ] **4.3 Migrate cost-server → llm-usage**
-  Move `~/.claude/data/cost-server/` → `tools/llm-usage/`:
-  - Rename to `llm-usage` (clearer purpose)
-  - Copy source files
-  - Add `package.json`
-  - Add `README.md` with API docs
-  - Update LaunchAgent plist path
-  - Update socket path if needed
-  - Verify: service starts and tracks costs
-
-- [ ] **4.4 Migrate tmux-webui**
-  Move `~/Claude/projects/tmux-webui/` → `tools/tmux-webui/`:
-  - Copy source files
-  - Add `pyproject.toml` (aiohttp)
-  - Add `README.md`
-  - Verify: `uv run python tools/tmux-webui/server.py --port 8765`
-
-- [ ] **4.5 Symlink general-purpose tools**
-  Create symlinks for cross-project tools:
-  ```bash
-  ln -s ~/Claude/projects/kas-memory tools/kas-memory
-  ln -s ~/Claude/projects/session-redactor tools/session-redactor
-  ln -s ~/Claude/projects/claude-code-hooks-multi-agent-observability tools/observability
-  ```
-  These stay in their original repos but appear in `tools/` for discoverability.
-
-- [ ] **4.6 Build system-monitor**
-  Create `tools/system-monitor/`:
-  - `server.py` — FastAPI app (port 9528)
-  - Endpoints: GET /cpu, GET /memory, GET /disk, GET /gpu (if available), GET /all
-  - Use `psutil` for system metrics
-  - Simple HTML dashboard at GET /
-  - Auto-refresh via SSE or polling
-  - `pyproject.toml`, `README.md`
-
-- [ ] **4.7 Developer tools documentation**
-  Create `docs/reference/developer-tools.md`:
-  - Overview of all tools and their purposes
-  - Network map (which tool on which port)
-  - How tools relate to platform services
-  - Troubleshooting guide
-
-- [ ] **4.8 Verify all tools**
-  - disk-report starts and scans
-  - llm-usage tracks costs
-  - tmux-webui connects to tmux
-  - system-monitor shows metrics
-  - Symlinks resolve correctly
-  - All READMEs accurate
-
----
-
-## Merge Order & Checklist
-
-After all tracks complete:
-
-1. [ ] Merge `feat/infra-foundation` → main
-2. [ ] Merge `feat/tools-devx` → main
-3. [ ] Rebase `feat/core-backend` on main → merge
-4. [ ] Rebase `feat/web-frontend` on main → merge
-5. [ ] Full integration test: `docker compose up` + core + web
-6. [ ] Update `CLAUDE.md` if needed
-7. [ ] Tag release: `v2.0.0-alpha`
+1. [ ] Merge `feat/infra-db` → main (DB schemas ready)
+2. [ ] Merge `feat/core-engine` → main (rebase, resolve conflicts)
+3. [ ] Merge `feat/domain-modules` → main (rebase, may need main.py merge)
+4. [ ] Merge `feat/web-complete` → main (rebase, package.json merge)
+5. [ ] Integration test:
+   - `docker compose up -d` (PG + Redis + LGTM)
+   - `uv run uvicorn core.main:app --port 8800`
+   - `pnpm dev` (apps/web)
+   - Register → Login → Navigate → CRUD → Logout
+6. [ ] Tag `v2.0.0-alpha`
