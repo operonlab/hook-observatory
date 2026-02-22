@@ -71,14 +71,14 @@ PostgreSQL Instance
 - **Interface**: S3-compatible API (boto3 or custom client)
 - **Deployment**: Docker container
 
-**Alternatives comparison**:
+**Decision**: **RustFS** — MinIO 社群 fork（Rust 重寫），API 完全相容，活躍維護。
 
-| Name | License | Best For | S3 Compat |
-|------|---------|----------|-----------|
-| Garage | AGPLv3 | Lightweight self-hosting, small scale | Full |
-| SeaweedFS | Apache 2.0 | Performance, large files, POSIX mount | Full |
-
-**Decision**: TBD — evaluate both in prototype phase.
+| Name | License | Status | Note |
+|------|---------|--------|------|
+| RustFS | AGPLv3 | Active (MinIO fork) | Drop-in replacement, community-driven |
+| Garage | AGPLv3 | Active | Lightweight alternative |
+| SeaweedFS | Apache 2.0 | Active | High performance alternative |
+| MinIO | AGPLv3 | Archived (Feb 2026) | No longer maintained |
 
 **Use cases**: File uploads, media storage, report exports, model artifacts.
 

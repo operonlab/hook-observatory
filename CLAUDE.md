@@ -7,7 +7,7 @@ Micro services + micro frontend workspace (v2).
 - **Frontend**: React 19 / TypeScript / Rsbuild / pnpm
 - **Database**: PostgreSQL (per-service schema isolation)
 - **Cache/Pubsub**: Redis
-- **Object Storage**: Garage or SeaweedFS (MinIO archived Feb 2026)
+- **Object Storage**: RustFS (MinIO fork, S3-compatible)
 - **Realtime**: LiveKit (WebRTC for voice/video), SSE (streaming API)
 - **Inter-service**: Redis Pub/Sub (events), HTTP (queries)
 
@@ -16,6 +16,7 @@ Micro services + micro frontend workspace (v2).
 - `apps/` — React micro frontends
 - `libs/` — Shared libraries (python + typescript)
 - `infra/` — Docker, Nginx, scripts
+- `lab/` — POC experiments (Skill outputs, prototypes)
 - `docs/` — Cross-domain documentation
 
 ## Conventions

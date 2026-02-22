@@ -32,3 +32,7 @@ libs/typescript/dist/
 
 # Claude
 CLAUDE.local.md
+
+# Lab (POC experiments) - relaxed rules
+lab/*/outputs/*.tmp
+lab/*/outputs/*.bin

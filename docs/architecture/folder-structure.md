@@ -9,6 +9,7 @@
 ├── libs/                  # Shared libraries (cross-domain)
 │   ├── python/            # Python shared lib
 │   └── typescript/        # TypeScript shared lib (UI components, types)
+├── lab/                   # POC experiments (Skill outputs, prototypes)
 ├── infra/                 # Infrastructure (Docker, Nginx, scripts)
 ├── docs/                  # Cross-domain documentation
 ├── tools/                 # Developer tools, CLI utilities
@@ -122,6 +123,32 @@ A domain is a vertical slice of functionality. The same domain name appears in b
   STT domain ──────
                     (no apps entry)
 ```
+
+
+### Lab (`lab/`)
+
+POC experiments and Skill output staging area. Nothing here is imported by production services.
+
+| Rule | Example | Anti-pattern |
+|------|---------|-------------|
+| `<name>-poc` suffix | `finance-poc/` | `finance/` (conflicts with services/) |
+| Every POC has README.md | Documents goal, hypothesis, conclusion | No docs, orphaned outputs |
+| outputs/ for Skill artifacts | `lab/finance-poc/outputs/*.md` | Dumping .md in services/ |
+
+Each lab directory:
+```
+lab/<name>-poc/
+├── README.md              # Goal, hypothesis, conclusion (even if failed)
+├── outputs/               # Skill / script outputs (.md, .json, etc.)
+└── scripts/               # Quick validation scripts
+```
+
+**Lifecycle**: `lab/<name>-poc/` → validate → graduate to `services/` + `apps/` → archive or delete lab entry.
+
+**Cleanup rules**:
+- Graduated: keep README.md, delete outputs/
+- Failed: keep README.md (records why), delete rest
+- Idle > 30 days: review and decide
 
 ## Key Principles
 
