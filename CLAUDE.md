@@ -7,8 +7,9 @@ Micro services + micro frontend workspace (v2).
 - **Frontend**: React 19 / TypeScript / Rsbuild / pnpm
 - **Database**: PostgreSQL (per-service schema isolation)
 - **Cache/Pubsub**: Redis
-- **Object Storage**: MinIO (evaluating alternatives)
-- **Realtime**: LiveKit (WebRTC for voice/video)
+- **Object Storage**: Garage or SeaweedFS (MinIO archived Feb 2026)
+- **Realtime**: LiveKit (WebRTC for voice/video), SSE (streaming API)
+- **Inter-service**: Redis Pub/Sub (events), HTTP (queries)
 
 ## Structure
 - `services/` — Python micro services
