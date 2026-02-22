@@ -1,0 +1,58 @@
+import type { AppInfo } from "@/types";
+
+export const APP_LIST: AppInfo[] = [
+  {
+    id: "finance",
+    name: "Finance",
+    description: "記帳理財",
+    icon: "\uD83D\uDCB0",
+    path: "/finance",
+    color: "var(--green)",
+    status: "available",
+  },
+  {
+    id: "quest",
+    name: "Quest",
+    description: "任務冒險",
+    icon: "\u2694\uFE0F",
+    path: "/quest",
+    color: "var(--mauve)",
+    status: "available",
+  },
+  {
+    id: "muse",
+    name: "Muse",
+    description: "靈感筆記",
+    icon: "\uD83D\uDCA1",
+    path: "/muse",
+    color: "var(--yellow)",
+    status: "available",
+  },
+  {
+    id: "settings",
+    name: "Settings",
+    description: "系統設定",
+    icon: "\u2699\uFE0F",
+    path: "/settings",
+    color: "var(--subtext0)",
+    status: "available",
+  },
+  {
+    id: "research",
+    name: "Research",
+    description: "深度研究",
+    icon: "\uD83D\uDD2C",
+    path: "/research",
+    color: "var(--teal)",
+    status: "coming-soon",
+  },
+  {
+    id: "terminal",
+    name: "Terminal",
+    description: "遠端終端",
+    icon: "\uD83D\uDCBB",
+    path: "/terminal",
+    color: "var(--blue)",
+    status: "coming-soon",
+  },
+];
