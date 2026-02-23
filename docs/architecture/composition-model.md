@@ -174,4 +174,4 @@ matching   ──► 資源分配最佳化
 | [modular-monolith.md](./modular-monolith.md) | 服務積木的技術實現方式 |
 | [event-driven.md](./event-driven.md) | 服務透過事件鬆耦合——組合的黏著劑 |
 | [../vision/domain-catalog.md](../vision/domain-catalog.md) | 所有服務積木的完整目錄 |
-| [../blueprint/shared-layer-patterns.md](../blueprint/shared-layer-patterns.md) | 積木內部的共享模式（OOP 模式） |
+| [./shared-layer-patterns.md](./shared-layer-patterns.md) | 積木內部的共享模式（OOP 模式） |
