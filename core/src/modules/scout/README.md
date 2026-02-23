@@ -171,9 +171,24 @@ core/src/modules/scout/
 - **lore** — 搜尋報告可觸發記憶建立（跨模組事件）
 - **mcp/scout** — MCP 工具對接
 
+## Skill 整合
+
+除了 smart-search 和 daily-briefing 外，以下 Skills 的產出也統一存入 scout DB：
+
+| Skill | 整合方式 |
+|-------|---------|
+| **company-intel** | 報告存入 `scout.reports`（tag: company-intel） |
+| **competitive-intel** | 報告存入 `scout.reports`（tag: competitive-intel） |
+| **content-writer** | 文章存入 `scout.reports`（tag: content-article），來源連結存入 `sources` JSONB |
+
+所有研究成果統一入庫後，可跨 skill 語意搜尋，避免資訊孤島。
+
 ## 參考
 
 - 現有 research_report：`~/Claude/services/research_report/`
 - 現有 smart-search skill：`~/.claude/skills/smart-search/SKILL.md`
 - 現有 daily-briefing skill：`~/.claude/skills/daily-briefing/`
+- 現有 company-intel skill：`~/.claude/skills/company-intel/SKILL.md`
+- 現有 competitive-intel skill：`~/.claude/skills/competitive-intel/SKILL.md`
+- 現有 content-writer skill：`~/.claude/skills/content-writer/SKILL.md`
 - V1 前端 Research Hub：port 3005

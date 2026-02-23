@@ -257,6 +257,90 @@ mcp/scout/                        ← MCP Adapter（供 Claude Code 直接操作
 | `v2-worktree-todos.md` | 保留，待 P1/P2 完成後再回頭處理 |
 | `v1-feature-inventory.md` | 保留作為 V1 資產盤點參考 |
 
+## Skill → Module 對應表
+
+> 現有 Claude Code Skills 中哪些會併入 Workshop 模組，作為 Phase 3+ 規劃參考。
+
+### scout — 搜尋與情報
+
+P2 優先模組。以下 Skills 產出的研究報告、分析結果都應持久化到 scout DB：
+
+| Skill | 目前產出 | 整合方式 |
+|-------|---------|---------|
+| **smart-search** | 搜尋報告 (.md) | P2 主力。報告寫入 `scout.reports`，啟用 pgvector 語意搜尋 |
+| **daily-briefing** | 三分析師情報 (HTML) | P2 併入。寫入 `scout.briefings`，保留辯論格式 |
+| **company-intel** | 公司調查報告 | 報告結構相同，統一存入 `scout.reports`（tag: company-intel） |
+| **competitive-intel** | 競品分析報告 | 同上（tag: competitive-intel） |
+| **content-writer** | 有引用來源的文章 | 同上（tag: content-article），來源連結存入 `sources` JSONB |
+
+**合併效益**：所有研究成果可跨 skill 語意搜尋，避免「用 smart-search 查不到 company-intel 的產出」。
+
+### lore — 記憶與知識
+
+P1 優先模組。以下 Skills 產出可作為記憶來源：
+
+| Skill | 目前產出 | 整合方式 |
+|-------|---------|---------|
+| **kas-memory** (MCP) | 結構化記憶區塊 | P1 主力。遷移到 `lore.blocks` + pgvector |
+| **meeting-insights** | 溝通模式分析 | 分析結果作為 lore block 寫入，追蹤溝通風格演變 |
+
+### dojo — 技能與學習
+
+Phase 2 模組。以下 Skills 產出可作為 dojo 資料源：
+
+| Skill | 目前產出 | 整合方式 |
+|-------|---------|---------|
+| **skill-catalog** | 80+ skill 清冊 | → `dojo.skill_registry`（已安裝 skill 清單） |
+| **skill-graph** | skill 聯動圖 | → `dojo.skill_relations`（技能之間的關聯） |
+| **skill-optimizer** | 優化建議 | → `dojo.optimization_logs`（優化歷史追蹤） |
+| **model-mentor** | 模型推薦 | → `dojo.tool_proficiency`（工具熟練度記錄） |
+
+**願景**：追蹤「少爺和維恩一起磨練了哪些技能、各到什麼程度」，從 Galaxy 視覺化觀察成長軌跡。
+
+### roster — 資源管理
+
+Phase 3 模組。以下 Skills 對應 agent/resource 調度：
+
+| Skill | 目前產出 | 整合方式 |
+|-------|---------|---------|
+| **maestro** | 三 CLI 調度紀錄 | → `roster.agent_sessions`（agent 執行歷史） |
+| **team-tasks** | 多 agent 協調 | → `roster.task_allocations`（任務分配記錄） |
+| **scheduler** | 排程任務 | → `roster.schedules`（週期性任務管理） |
+
+### nexus — 媒合引擎
+
+Phase 3 模組。目前無直接對應 Skill，純新建。未來可整合：
+- quest 的任務分派 → nexus 評分引擎
+- dojo 的技能落差 → nexus 學習資源推薦
+
+### media — 媒體處理（`core/services/media/`）
+
+已規劃為 hot-path service，以下 Skills 對應媒體處理能力：
+
+| Skill | 功能 | 對應 API |
+|-------|------|---------|
+| **tts** | 文字轉語音 | `/api/media/tts` |
+| **stt** | 語音轉文字 | `/api/media/stt` |
+| **video-core/edit/mix/audio** | 影音處理 | `/api/media/video/*` |
+| **image-gen/edit** | 圖像生成與編輯 | `/api/media/image/*` |
+| **ocr**, **ocr-claude-api** | 文字辨識 | `/api/media/ocr` |
+
+**注意**：media 是 hot-path service（無狀態處理），不同於 domain modules（有 DB）。
+
+### 不併入模組的 Skills
+
+以下 Skills 保持獨立運作，不需要 API/UI/MCP：
+
+| 類別 | Skills | 理由 |
+|------|--------|------|
+| 開發流程 | blueprint, executor, forge, spec-kit, tdd-enforcer | 開發工具，不產出持久化資料 |
+| 程式碼品質 | code-review-interceptor, verification-before-completion, four-step-debug | 即時驗證，無需儲存 |
+| 內容格式 | pdf, pptx, xlsx, docx, diagram-gen | 檔案生成工具，產出已存檔 |
+| CLI 調度 | claude-code-headless, codex-cli-headless, gemini-cli-headless | 底層調度機制 |
+| 設定管理 | create-skill, create-agent, create-command, sync-config | 維護工具 |
+
+---
+
 ## 設計原則（貫穿 P1/P2）
 
 1. **文件先行**：每個模組先有 README.md + API spec，再動手寫程式碼

@@ -133,13 +133,14 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### scout — 每日情報
+#### scout — 搜尋與情報
 
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth, lore (用於個人化) |
 | **MCP 伺服器** | `workshop-scout` (待建置) |
-| **V1 狀態** | 不存在 |
+| **整合 Skills** | smart-search, daily-briefing, company-intel, competitive-intel, content-writer |
+| **V1 狀態** | research_report service (port 8830) + smart-search skill v0.3.3 |
 
 **功能能力**:
 - RSS / 社群媒體來源管理
@@ -157,6 +158,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **依賴項目** | auth |
 | **被依賴於** | dojo, scout |
 | **MCP 伺服器** | `kas-memory` (現有，8 個工具) |
+| **整合 Skills** | kas-memory (MCP), meeting-insights |
 | **V1 狀態** | MCP 伺服器 v0.2.0 (語義搜索 + 個人檔案) |
 
 **功能能力**:
@@ -176,6 +178,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **依賴項目** | auth, lore |
 | **被依賴於** | nexus, roster |
 | **MCP 伺服器** | `workshop-dojo` (待建置) |
+| **整合 Skills** | skill-catalog, skill-graph, skill-optimizer, model-mentor |
 | **V1 狀態** | 不存在 |
 
 **功能能力**:
@@ -194,6 +197,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **依賴項目** | auth, dojo |
 | **被依賴於** | nexus |
 | **MCP 伺服器** | `workshop-roster` (待建置) |
+| **整合 Skills** | maestro, team-tasks, scheduler |
 | **V1 狀態** | 不存在 |
 
 **功能能力**:

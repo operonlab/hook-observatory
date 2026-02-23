@@ -115,8 +115,17 @@ core/src/modules/lore/
 - **auth** — space_id 隔離
 - **mcp/lore** — MCP 工具對接
 
+## Skill 整合
+
+除了 kas-memory MCP 外，以下 Skill 的產出可作為記憶來源：
+
+| Skill | 整合方式 |
+|-------|---------|
+| **meeting-insights** | 溝通模式分析結果作為 lore block 寫入，追蹤溝通風格演變 |
+
 ## 參考
 
 - 現有系統：`~/Claude/projects/kas-memory/`
 - MCP Server：`~/Claude/projects/kas-memory/mcp-server/`
 - Galaxy 視覺化：`~/Claude/kas-memory/galaxy-explorer.html`
+- 現有 meeting-insights skill：`~/.claude/skills/meeting-insights/SKILL.md`
