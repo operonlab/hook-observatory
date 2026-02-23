@@ -1,3 +1,8 @@
+---
+doc_version: 3
+content_hash: 1db2d231
+---
+
 # Workshop
 
 Modular Monolith + Event-Driven workspace.
@@ -12,15 +17,27 @@ Modular Monolith + Event-Driven workspace.
 - **Observability**: OpenTelemetry + LGTM (dev) / SigNoz (prod)
 
 ## Structure
-- `services/core/` — Modular Monolith (auth, finance, quest, muse, admin)
-- `services/realtime/` — LiveKit WebRTC gateway
-- `services/media/` — STT/TTS/image processing
-- `apps/web/` — Single React application
+- `core/` — Modular Monolith (10 Core Modules + hot-path services)
+  - `core/src/modules/` — Domain modules (auth, finance, quest, muse, intel, memory, skill, workforce, matching, admin)
+  - `core/services/realtime/` — LiveKit WebRTC gateway
+  - `core/services/media/` — STT/TTS/image processing
+- `dashboard/` — Single React application
+- `mcp/` — MCP adapter layer (thin wrappers over Core API)
+- `stations/` — Standalone local tools (disk analyzer, LLM usage, etc.)
+- `bridges/` — External platform connectors (LINE, Telegram, Discord)
 - `plugins/` — Plugin packages
 - `libs/` — Shared libraries (python + typescript)
 - `infra/` — Docker, Nginx, observability configs
+- `scripts/` — Build/translate/deploy scripts
 - `lab/` — POC experiments
-- `docs/` — Architecture documentation
+- `docs/` — Architecture + vision documentation
+  - `docs/vision/` — Platform vision (manifesto, domain catalog, ADRs, roadmap)
+  - `docs/zh-TW/` — Traditional Chinese translations (auto-generated)
+
+## Three-Tier Taxonomy
+- **Core Modules** (DB-backed): auth, finance, quest, muse, intel, memory, skill, workforce, matching, admin
+- **Stations**: Standalone local tools (legal advisor, church music, etc.)
+- **Bridges**: External connectors (LINE, Telegram, Discord, Firebase)
 
 ## Core Concepts
 - **Event-Driven**: All state changes are events flowing through EventBus

@@ -1,3 +1,8 @@
+---
+doc_version: 3
+content_hash: d08da8ad
+---
+
 # Frontend Architecture Guide
 
 ## Design Principles
@@ -7,14 +12,19 @@
 One React application with domain-based module organization. No Module Federation, no micro-frontends -- just clean code splitting with `React.lazy`.
 
 ```
-apps/web/                     Single React App
+dashboard/                    Single React App
 ├── src/
 │   ├── shell/                App shell (layout, nav, auth)
-│   ├── modules/              Domain UI modules
+│   ├── modules/              Domain UI modules (10 Core Modules)
 │   │   ├── auth/
 │   │   ├── finance/
 │   │   ├── quest/
 │   │   ├── muse/
+│   │   ├── intel/
+│   │   ├── memory/
+│   │   ├── skill/
+│   │   ├── workforce/
+│   │   ├── matching/
 │   │   └── admin/
 │   ├── plugins/              Plugin UI runtime
 │   └── shared/               Shared components, hooks, utils
@@ -85,20 +95,36 @@ src/shell/
 import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 
+// Phase 1
 const Finance = lazy(() => import("../modules/finance"));
 const Quest = lazy(() => import("../modules/quest"));
 const Muse = lazy(() => import("../modules/muse"));
 const Admin = lazy(() => import("../modules/admin"));
+// Phase 2
+const Intel = lazy(() => import("../modules/intel"));
+const Memory = lazy(() => import("../modules/memory"));
+const Skill = lazy(() => import("../modules/skill"));
+// Phase 3
+const Workforce = lazy(() => import("../modules/workforce"));
+const Matching = lazy(() => import("../modules/matching"));
 
 export function Router() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        {/* Phase 1 */}
         <Route path="/finance/*" element={<Finance />} />
         <Route path="/quest/*" element={<Quest />} />
         <Route path="/muse/*" element={<Muse />} />
         <Route path="/admin/*" element={<Admin />} />
+        {/* Phase 2 */}
+        <Route path="/intel/*" element={<Intel />} />
+        <Route path="/memory/*" element={<Memory />} />
+        <Route path="/skill/*" element={<Skill />} />
+        {/* Phase 3 */}
+        <Route path="/workforce/*" element={<Workforce />} />
+        <Route path="/matching/*" element={<Matching />} />
         <Route path="/settings/*" element={<Settings />} />
       </Routes>
     </Suspense>
@@ -110,21 +136,26 @@ Each module handles its own sub-routing internally.
 
 ## Routing Convention
 
-| Pattern | Owner |
-|---------|-------|
-| `/` | Shell (dashboard) |
-| `/finance/*` | Finance module |
-| `/quest/*` | Quest module |
-| `/muse/*` | Muse module |
-| `/admin/*` | Admin module |
-| `/settings/*` | Shell (global settings) |
+| Pattern | Owner | Phase |
+|---------|-------|-------|
+| `/` | Shell (dashboard) | 1 |
+| `/finance/*` | Finance module | 1 |
+| `/quest/*` | Quest module | 1 |
+| `/muse/*` | Muse module | 1 |
+| `/admin/*` | Admin module | 1 |
+| `/intel/*` | Intel module | 2 |
+| `/memory/*` | Memory module | 2 |
+| `/skill/*` | Skill module | 2 |
+| `/workforce/*` | Workforce module | 3 |
+| `/matching/*` | Matching module | 3 |
+| `/settings/*` | Shell (global settings) | 1 |
 
 ## API Communication
 
 All modules talk to the same backend (Core Monolith on port 8800):
 
 ```
-apps/web/  →  services/core/  (port 8800)
+dashboard/  →  core/  (port 8800)
 ```
 
 API calls are routed through the Gateway (Nginx) in production:
@@ -203,14 +234,14 @@ import { useAuth } from "@/shared/hooks/useAuth";
 Single build, single artifact:
 
 ```bash
-cd apps/web && pnpm build    # → dist/ with index.html + chunks
+cd dashboard && pnpm build   # → dist/ with index.html + chunks
 ```
 
 Production: Nginx serves `dist/index.html`. Code-split chunks are loaded on demand per route.
 
 Development:
 ```bash
-cd apps/web && pnpm dev      # → http://localhost:3000
+cd dashboard && pnpm dev     # → http://localhost:3000
 ```
 
 Rsbuild config proxies `/api/*` to the Core Monolith during development.

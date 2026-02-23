@@ -1,3 +1,8 @@
+---
+doc_version: 1
+content_hash: 68a8fc10
+---
+
 # V1 Feature Inventory
 
 Complete documentation of all V1 systems for V2 redesign reference.

@@ -1,3 +1,8 @@
+---
+doc_version: 2
+content_hash: 40ef2e7d
+---
+
 # Sandbox Executor — Reference
 
 ## Origin
@@ -149,7 +154,7 @@ output(data, label);
 ### Location
 
 ```
-~/workshop/tools/sandbox-executor/
+~/workshop/stations/sandbox-executor/
 ├── src/           # TypeScript source
 ├── dist/          # Built JavaScript (run this)
 ├── package.json
@@ -163,7 +168,7 @@ output(data, label);
 "sandbox-executor": {
   "type": "stdio",
   "command": "node",
-  "args": ["/Users/joneshong/workshop/tools/sandbox-executor/dist/index.js"],
+  "args": ["/Users/joneshong/workshop/stations/sandbox-executor/dist/index.js"],
   "env": {
     "PYTHON_PATH": "/Users/joneshong/.local/bin/python3"
   }
@@ -174,7 +179,7 @@ output(data, label);
 ```json
 "sandbox-executor": {
   "command": "node",
-  "args": ["/Users/joneshong/workshop/tools/sandbox-executor/dist/index.js"],
+  "args": ["/Users/joneshong/workshop/stations/sandbox-executor/dist/index.js"],
   "env": {
     "PYTHON_PATH": "/Users/joneshong/.local/bin/python3"
   }
@@ -184,7 +189,7 @@ output(data, label);
 ## Development
 
 ```bash
-cd ~/workshop/tools/sandbox-executor
+cd ~/workshop/stations/sandbox-executor
 npm install
 npm run build     # TypeScript → dist/
 npm run dev       # Watch mode

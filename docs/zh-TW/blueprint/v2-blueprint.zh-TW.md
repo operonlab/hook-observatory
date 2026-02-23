@@ -1,20 +1,22 @@
 ---
 doc_version: 2
 content_hash: 98b30e6c
+source_version: 2
+translated_at: 2026-02-23
 ---
 
-# Workshop V2 Blueprint (Revised)
+# Workshop V2 藍圖 (修訂版)
 
 > V1 完整功能文件化 → V2 根據架構重新構建，封裝、抽象化、繼承，最大化程式碼共用
 
-## Design Principles
+## 設計原則
 
-1. **Abstract first** — 共同模式抽出 `libs/`，domain modules 繼承使用
-2. **Provider pattern** — Auth 用抽象 Provider 介面，新增 provider 不改核心
-3. **Event-driven** — 所有狀態變更是事件，CRUD 自動 emit
-4. **Convention over config** — 一致的 module 結構 = 零配置新增 module
+1. **抽象優先** — 共同模式抽出 `libs/`，domain modules 繼承使用
+2. **Provider 模式** — Auth 使用抽象 Provider 介面，新增 provider 無須修改核心
+3. **事件驅動** — 所有狀態變更皆為事件，CRUD 自動發送 (emit)
+4. **慣例優於配置** — 一致的 module 結構 = 零配置新增 module
 
-## Architecture
+## 架構
 
 ```
                     ┌─────────────────────────────────────┐
@@ -49,7 +51,7 @@ content_hash: 98b30e6c
 
 ---
 
-## Shared Libraries — Code Reuse Foundation
+## 共享函式庫 — 程式碼重用基礎
 
 ### Python (`libs/python/src/corelib/`)
 
@@ -77,10 +79,10 @@ libs/python/src/corelib/
     └── migrations.py   # MigrationRunner — SQL files, version tracking in public.migrations
 ```
 
-**Key abstractions**:
+**關鍵抽象**：
 
 ```python
-# BaseRepository — every module inherits this
+# BaseRepository — 每個 module 皆繼承此類別
 class BaseRepository(Generic[T]):
     def __init__(self, pool, schema: str, table: str): ...
     async def get(self, id: UUID) -> T | None: ...
@@ -89,14 +91,14 @@ class BaseRepository(Generic[T]):
     async def update(self, id: UUID, data: dict) -> T: ...
     async def delete(self, id: UUID) -> bool: ...
 
-# BaseService — orchestrates repo + events + permissions
+# BaseService — 編排 repo + 事件 + 權限
 class BaseService(Generic[T]):
     def __init__(self, repo: BaseRepository[T], event_bus, domain: str): ...
     async def create(self, data, user) -> T:  # auto-check permission + auto-emit event
     async def get(self, id, user) -> T:       # auto-check read permission
     # ... CRUD with automatic RBAC check + event emission
 
-# create_crud_router — zero-boilerplate module routes
+# create_crud_router — 零樣板代碼的 module 路由
 def create_crud_router(
     prefix: str, service: BaseService,
     create_schema, update_schema, response_schema,
@@ -132,10 +134,10 @@ libs/typescript/src/
     └── index.ts         # Common types (AppInfo, Theme, etc.)
 ```
 
-**Key abstraction**:
+**關鍵抽象**：
 
 ```typescript
-// createResourceApi — every module uses this
+// createResourceApi — 每個 module 皆使用此功能
 function createResourceApi<T>(basePath: string) {
   return {
     list: (params?) => apiClient.get<PaginatedResponse<T>>(basePath, params),
@@ -146,7 +148,7 @@ function createResourceApi<T>(basePath: string) {
   };
 }
 
-// createResourceHook — React hook factory
+// createResourceHook — React hook 工廠
 function createResourceHook<T>(api: ResourceApi<T>) {
   return function useResource() {
     const [items, setItems] = useState<T[]>([]);
@@ -159,31 +161,31 @@ function createResourceHook<T>(api: ResourceApi<T>) {
 
 ---
 
-## Auth System — Multi-Provider Design
+## 認證系統 — 多 Provider 設計
 
-### V1 → V2 Comparison
+### V1 與 V2 比較
 
-| Feature | V1 | V2 |
+| 功能 | V1 | V2 |
 |---------|----|----|
-| Email/Password | pbkdf2_sha256, passlib | **bcrypt**, passlib |
-| GitHub OAuth | authlib 1.3.0 | **authlib** (keep, works well) |
+| 電子郵件/密碼 | pbkdf2_sha256, passlib | **bcrypt**, passlib |
+| GitHub OAuth | authlib 1.3.0 | **authlib** (保留，運作良好) |
 | Google OAuth | authlib 1.3.0 | **authlib + One Tap** |
-| Passkey/WebAuthn | Not implemented | **py_webauthn 2.7+** + @simplewebauthn/browser |
-| User storage | OAuth users NOT in DB | **Unified users table** + provider tables |
-| Session | URLSafeSerializer (no expiry) | **DB-backed sessions** with TTL |
-| Account linking | None | **Auto-link by verified email** |
-| CSRF | None | **SameSite=lax** + custom header check |
-| Rate limiting | None | **slowapi** + Redis |
-| RBAC | None | **Role → permissions map** |
-| ABAC | None | **Policy engine** (owner-only, suspended block) |
+| Passkey/WebAuthn | 未實作 | **py_webauthn 2.7+** + @simplewebauthn/browser |
+| 使用者儲存 | OAuth 使用者不在資料庫中 | **統一的 users 表** + provider 表 |
+| 會話 (Session) | URLSafeSerializer (無過期機制) | **資料庫支援的會話** 並具備 TTL |
+| 帳號連結 | 無 | **透過已驗證的電子郵件自動連結** |
+| CSRF | 無 | **SameSite=lax** + 自定義標頭檢查 |
+| 速率限制 | 無 | **slowapi** + Redis |
+| RBAC | 無 | **角色 → 權限映射** |
+| ABAC | 無 | **策略引擎** (僅限所有者、停權阻擋) |
 
-### Database Schema
+### 資料庫 Schema
 
 ```sql
--- Core user identity (provider-agnostic)
+-- 核心使用者身份 (與 provider 無關)
 CREATE TABLE auth.users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email           VARCHAR(255) UNIQUE,          -- NULL for passkey-only users
+    email           VARCHAR(255) UNIQUE,          -- 對於僅限 passkey 的使用者可為 NULL
     display_name    VARCHAR(255),
     avatar_url      TEXT,
     role            VARCHAR(50) NOT NULL DEFAULT 'user',   -- admin, user, guest
@@ -192,79 +194,79 @@ CREATE TABLE auth.users (
     updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Email/Password credentials
+-- 電子郵件/密碼憑據
 CREATE TABLE auth.local_credentials (
     user_id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    password_hash   VARCHAR(255) NOT NULL,         -- bcrypt via passlib
+    password_hash   VARCHAR(255) NOT NULL,         -- 透過 passlib 使用 bcrypt
     email_verified  BOOLEAN DEFAULT FALSE,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- OAuth provider accounts (one row per provider per user)
+-- OAuth provider 帳號 (每個使用者每個 provider 一列)
 CREATE TABLE auth.oauth_accounts (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     provider        VARCHAR(50) NOT NULL,          -- 'github' | 'google'
-    provider_user_id VARCHAR(255) NOT NULL,        -- stable provider ID
-    email           VARCHAR(255),                  -- email from provider
-    access_token    TEXT,                           -- encrypted
-    refresh_token   TEXT,                           -- encrypted
+    provider_user_id VARCHAR(255) NOT NULL,        -- 穩定的 provider ID
+    email           VARCHAR(255),                  -- 來自 provider 的電子郵件
+    access_token    TEXT,                           -- 已加密
+    refresh_token   TEXT,                           -- 已加密
     token_expires_at TIMESTAMPTZ,
-    raw_profile     JSONB,                         -- full provider profile
+    raw_profile     JSONB,                         -- 完整的 provider 個人檔案
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (provider, provider_user_id)
 );
 
--- WebAuthn/Passkey credentials
+-- WebAuthn/Passkey 憑據
 CREATE TABLE auth.webauthn_credentials (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     credential_id   BYTEA NOT NULL UNIQUE,
-    public_key      BYTEA NOT NULL,                -- COSE-encoded
+    public_key      BYTEA NOT NULL,                -- COSE 編碼
     sign_count      BIGINT NOT NULL DEFAULT 0,
     aaguid          UUID,
     transports      TEXT[],                        -- ["internal","usb","ble","nfc"]
     backup_eligible BOOLEAN DEFAULT FALSE,
     backup_state    BOOLEAN DEFAULT FALSE,
-    device_name     VARCHAR(100),                  -- user-friendly label
+    device_name     VARCHAR(100),                  -- 使用者友善的標籤
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     last_used_at    TIMESTAMPTZ
 );
 
--- Server-side sessions (replace cookie-only approach)
+-- 伺服器端會話 (取代僅靠 cookie 的做法)
 CREATE TABLE auth.sessions (
     id              VARCHAR(128) PRIMARY KEY,       -- secrets.token_urlsafe(64)
     user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     ip_address      INET,
     user_agent      TEXT,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
-    expires_at      TIMESTAMPTZ NOT NULL,           -- created_at + 7 days
+    expires_at      TIMESTAMPTZ NOT NULL,           -- created_at + 7 天
     last_active_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_sessions_user ON auth.sessions(user_id);
 CREATE INDEX idx_sessions_expires ON auth.sessions(expires_at);
 ```
 
-### Auth Provider Interface
+### Auth Provider 介面
 
 ```python
 class AuthProvider(ABC):
-    """All auth providers implement this interface."""
+    """所有的 auth provider 皆實作此介面。"""
     provider_name: str
 
     @abstractmethod
     async def authenticate(self, request: Request, **kwargs) -> AuthResult:
-        """Verify credentials → return AuthResult(user_identity, is_new_user)"""
+        """驗證憑據 → 回傳 AuthResult(user_identity, is_new_user)"""
         ...
 
-# Implementations:
-# - EmailPasswordProvider    → verify email + bcrypt hash
-# - GitHubOAuthProvider      → authlib callback → token → /user + /user/emails
-# - GoogleOAuthProvider      → authlib callback → OIDC userinfo (+ One Tap verify)
+# 實作：
+# - EmailPasswordProvider    → 驗證電子郵件 + bcrypt 雜湊
+# - GitHubOAuthProvider      → authlib 回呼 → token → /user + /user/emails
+# - GoogleOAuthProvider      → authlib 回呼 → OIDC userinfo (+ One Tap 驗證)
 # - PasskeyProvider          → py_webauthn verify_authentication_response
 
 class AuthService:
-    """Orchestrates providers + account linking + session management."""
+    """編排 provider + 帳號連結 + 會話管理。"""
     providers: dict[str, AuthProvider]
     session_mgr: SessionManager
 
@@ -275,88 +277,88 @@ class AuthService:
     async def get_user_sessions(self, user_id: UUID) -> list[Session]
 ```
 
-### Account Linking Strategy
+### 帳號連結策略
 
 ```
-1. Check (provider, provider_user_id) in oauth_accounts → found → return existing user
-2. Check email in users table → found + email verified → auto-link (add oauth_account)
-3. Not found → create new user + create oauth_account
+1. 在 oauth_accounts 檢查 (provider, provider_user_id) → 找到 → 回傳現有使用者
+2. 在 users 表檢查電子郵件 → 找到且電子郵件已驗證 → 自動連結 (新增 oauth_account)
+3. 未找到 → 建立新使用者 + 建立 oauth_account
 ```
 
-### Auth API Endpoints (V2)
+### Auth API 端點 (V2)
 
-| Method | Path | Purpose |
+| 方法 | 路徑 | 目的 |
 |--------|------|---------|
-| POST | /auth/register | Email/password registration |
-| POST | /auth/login | Email/password login |
-| POST | /auth/logout | Revoke current session |
-| GET | /auth/session | Get current session + user |
-| GET | /auth/sessions | List all active sessions |
-| DELETE | /auth/sessions/{id} | Revoke specific session |
-| GET | /auth/oauth/github | Initiate GitHub OAuth |
-| GET | /auth/oauth/github/callback | GitHub OAuth callback |
-| GET | /auth/oauth/google | Initiate Google OAuth |
-| GET | /auth/oauth/google/callback | Google OAuth callback |
-| POST | /auth/oauth/google/one-tap | Verify Google One Tap credential |
-| GET | /auth/passkey/register/options | WebAuthn registration options |
-| POST | /auth/passkey/register/verify | WebAuthn registration verify |
-| GET | /auth/passkey/auth/options | WebAuthn auth options |
-| POST | /auth/passkey/auth/verify | WebAuthn auth verify |
-| GET | /auth/passkey/credentials | List user's passkeys |
-| DELETE | /auth/passkey/credentials/{id} | Remove a passkey |
-| GET | /auth/providers | List linked providers for current user |
-| POST | /auth/link/{provider} | Link new provider to existing account |
+| POST | /auth/register | 電子郵件/密碼註冊 |
+| POST | /auth/login | 電子郵件/密碼登入 |
+| POST | /auth/logout | 撤銷目前會話 |
+| GET | /auth/session | 取得目前會話 + 使用者 |
+| GET | /auth/sessions | 列出所有活動中的會話 |
+| DELETE | /auth/sessions/{id} | 撤銷特定會話 |
+| GET | /auth/oauth/github | 啟動 GitHub OAuth |
+| GET | /auth/oauth/github/callback | GitHub OAuth 回呼 |
+| GET | /auth/oauth/google | 啟動 Google OAuth |
+| GET | /auth/oauth/google/callback | Google OAuth 回呼 |
+| POST | /auth/oauth/google/one-tap | 驗證 Google One Tap 憑據 |
+| GET | /auth/passkey/register/options | WebAuthn 註冊選項 |
+| POST | /auth/passkey/register/verify | WebAuthn 註冊驗證 |
+| GET | /auth/passkey/auth/options | WebAuthn 認證選項 |
+| POST | /auth/passkey/auth/verify | WebAuthn 認證驗證 |
+| GET | /auth/passkey/credentials | 列出使用者的 passkey |
+| DELETE | /auth/passkey/credentials/{id} | 移除 passkey |
+| GET | /auth/providers | 列出目前使用者已連結的 provider |
+| POST | /auth/link/{provider} | 將新 provider 連結至現有帳號 |
 
 ---
 
-## Domain Module Pattern
+## Domain Module 模式
 
-Every domain module follows the same structure, inheriting from shared base classes:
+每個 domain module 皆遵循相同的結構，並繼承自共享的基底類別：
 
-### Backend (`core/src/modules/<name>/`)
-
-```
-<name>/
-├── __init__.py        # Module registration (export router, register events)
-├── routes.py          # create_crud_router() + custom endpoints
-├── services.py        # <Name>Service(BaseService) — business logic
-├── repository.py      # <Name>Repository(BaseRepository) — DB access
-├── schemas.py         # Pydantic models (Create, Update, Response, Filter)
-├── events.py          # Event type constants + custom event handlers
-├── hooks.py           # Hook points for plugin extension
-└── deps.py            # FastAPI dependencies (get_service, etc.)
-```
-
-### Frontend (`dashboard/src/modules/<name>/`)
+### 後端 (`core/src/modules/<name>/`)
 
 ```
 <name>/
-├── pages/             # Route-level components
-├── components/        # Domain-specific components
+├── __init__.py        # Module 註冊 (導出 router、註冊事件)
+├── routes.py          # create_crud_router() + 自定義端點
+├── services.py        # <Name>Service(BaseService) — 業務邏輯
+├── repository.py      # <Name>Repository(BaseRepository) — 資料庫存取
+├── schemas.py         # Pydantic 模型 (Create, Update, Response, Filter)
+├── events.py          # 事件類型常數 + 自定義事件處理器
+├── hooks.py           # 外掛擴充的掛鉤點
+└── deps.py            # FastAPI 依賴項 (get_service 等)
+```
+
+### 前端 (`dashboard/src/modules/<name>/`)
+
+```
+<name>/
+├── pages/             # 路由級別組件
+├── components/        # Domain 專用組件
 ├── api.ts             # createResourceApi<T>('/api/<name>/<entity>')
-├── hooks.ts           # createResourceHook(api) + custom hooks
-├── stores.ts          # Zustand store (if needed beyond hooks)
-├── types.ts           # Domain types (matching backend schemas)
-└── index.tsx          # Module entry (lazy-loaded routes)
+├── hooks.ts           # createResourceHook(api) + 自定義 hook
+├── stores.ts          # Zustand store (若除了 hook 之外還需要)
+├── types.ts           # Domain 型別 (與後端 schema 匹配)
+└── index.tsx          # Module 入口 (延遲載入路由)
 ```
 
-### Example: Finance Module
+### 範例：財務 (Finance) 模組
 
 ```python
-# Backend: core/src/modules/finance/repository.py
+# 後端：core/src/modules/finance/repository.py
 class TransactionRepo(BaseRepository[Transaction]):
     def __init__(self, pool):
         super().__init__(pool, schema="finance", table="transactions")
 
-# Backend: core/src/modules/finance/services.py
+# 後端：core/src/modules/finance/services.py
 class TransactionService(BaseService[Transaction]):
     def __init__(self, repo, event_bus):
         super().__init__(repo, event_bus, domain="finance")
-    # All CRUD auto-generates events: finance.transaction.created, etc.
-    # Custom methods:
+    # 所有 CRUD 自動產生事件：finance.transaction.created 等
+    # 自定義方法：
     async def get_monthly_summary(self, user_id, year, month): ...
 
-# Backend: core/src/modules/finance/routes.py
+# 後端：core/src/modules/finance/routes.py
 router = create_crud_router(
     prefix="/api/finance/transactions",
     service=transaction_service,
@@ -368,69 +370,77 @@ router = create_crud_router(
 ```
 
 ```typescript
-// Frontend: dashboard/src/modules/finance/api.ts
+// 前端：dashboard/src/modules/finance/api.ts
 export const transactionApi = createResourceApi<Transaction>('/api/finance/transactions');
 
-// Frontend: dashboard/src/modules/finance/hooks.ts
+// 前端：dashboard/src/modules/finance/hooks.ts
 export const useTransactions = createResourceHook(transactionApi);
 ```
 
 ---
 
-## 4 Parallel Tracks (Worktrees)
+## 4 個平行軌道 (Worktrees)
 
-### Updated Dependency Map
+### 更新後的依賴地圖
 
 ```
-Track 1: infra-db ─────────────────────────────────→ merge FIRST
-Track 2: core-engine ──────────────────────────────→ merge SECOND
-Track 3: domain-modules ── (needs T2 base classes) → merge THIRD
-Track 4: web-complete ──── (needs T2 API contracts) → merge FOURTH
+軌道 1: infra-db ─────────────────────────────────→ 優先合併
+軌道 2: core-engine ──────────────────────────────→ 其次合併
+軌道 3: domain-modules ── (需要 T2 基底類別) → 第三合併
+軌道 4: web-complete ──── (需要 T2 API 合約) → 第四合併
          │                                              │
          ▼                                              ▼
-      T1+T2 start immediately          T3+T4 start immediately (UI/skeleton)
-      T3+T4 need T2 merge for full     but need T2 for integration
+      T1+T2 立即開始                     T3+T4 立即開始 (UI/骨架)
+      T3+T4 需要 T2 合併以完成完整功能     但需要 T2 進行整合
 ```
 
-### File Isolation
+### 檔案隔離
 
-| Track | Directories (exclusive) | Potential overlap |
+| 軌道 | 目錄 (專屬) | 潛在重疊 |
 |-------|------------------------|-------------------|
 | 1. infra-db | `infra/`, `docker-compose*`, `core/migrations/` | - |
-| 2. core-engine | `libs/python/`, `core/src/` (engines, auth, middleware) | `pyproject.toml`, `main.py` |
-| 3. domain-modules | `core/src/modules/{finance,quest,muse,admin}/` | `main.py` (router registration) |
+| 2. core-engine | `libs/python/`, `core/src/` (引擎、認證、中間件) | `pyproject.toml`, `main.py` |
+| 3. domain-modules | `core/src/modules/{finance,quest,muse,admin}/` | `main.py` (路由註冊) |
 | 4. web-complete | `dashboard/`, `libs/typescript/` | `package.json` |
 
-### Track 1: `feat/infra-db` — Infrastructure + Database
+### 軌道 1：`feat/infra-db` — 基礎設施 + 資料庫
 
-Scope: Docker stack + all database schemas + migration system
+範圍：Docker stack + 所有資料庫 schema + 遷移系統
 
-### Track 2: `feat/core-engine` — Shared Libs + Auth + Engines
+### 軌道 2：`feat/core-engine` — 共享函式庫 + 認證 + 引擎
 
-Scope: Python shared lib (BaseService, BaseRepository, BaseRouter) + complete auth system (4 providers) + EventBus + HookBus + RBAC/ABAC + OTel + Session management
+範圍：Python 共享函式庫 (BaseService, BaseRepository, BaseRouter) + 完整的認證系統 (4 個 provider) + EventBus + HookBus + RBAC/ABAC + OTel + 會話管理
 
-### Track 3: `feat/domain-modules` — Business Domain Modules
+### 軌道 3：`feat/domain-modules` — 業務領域模組
 
-Scope: Finance, Quest, Muse, Admin modules (backend only, using base classes from T2)
+範圍：Finance, Quest, Muse, Admin 模組 (僅後端，使用 T2 的基底類別)
 
-### Track 4: `feat/web-complete` — React Frontend (Complete)
+### 軌道 4：`feat/web-complete` — React 前端 (完整)
 
-Scope: TypeScript shared lib + all frontend modules + auth UI (login, register, OAuth, Passkey) + shell enhancements + shared components
+範圍：TypeScript 共享函式庫 + 所有前端模組 + 認證 UI (登入、註冊、OAuth、Passkey) + shell 增強 + 共享組件
 
-### Merge Order
+### 合併順序
 
-1. `feat/infra-db` → main (no conflicts)
-2. `feat/core-engine` → main (rebase on main, resolve pyproject.toml)
-3. `feat/domain-modules` → main (rebase, resolve main.py router registration)
-4. `feat/web-complete` → main (rebase, resolve package.json)
+1. `feat/infra-db` → main (無衝突)
+2. `feat/core-engine` → main (對 main 進行 rebase，解決 pyproject.toml 衝突)
+3. `feat/domain-modules` → main (rebase，解決 main.py 路由註冊衝突)
+4. `feat/web-complete` → main (rebase，解決 package.json 衝突)
 
 ---
 
-## Out of Scope (Future)
+## 超出範圍 (未來計畫)
 
-- LiveKit/WebRTC (realtime service)
-- STT/TTS (media service)
-- Plugin marketplace
-- Developer tools migration (separate sprint)
-- E2E testing
-- Production deployment (SigNoz, CI/CD)
+- LiveKit/WebRTC (即時服務)
+- STT/TTS (多媒體服務)
+- 外掛市場
+- 開發者工具遷移 (獨立 sprint)
+- E2E 測試
+- 正式環境部署 (SigNoz, CI/CD)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

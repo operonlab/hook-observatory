@@ -1,6 +1,11 @@
+---
+doc_version: 2
+content_hash: 9c75f789
+---
+
 # RWD + PWA Development Standards
 
-All frontend applications (`apps/*`) MUST follow these standards.
+The frontend application (`dashboard/`) MUST follow these standards.
 
 ## Responsive Web Design (RWD)
 
@@ -83,7 +88,7 @@ Strategy per asset type:
 
 ## Implementation in Web App
 
-The web app (`apps/web/`) serves as the reference implementation:
+The dashboard app (`dashboard/`) serves as the reference implementation:
 - Tailwind breakpoint config from shared styles
 - PWA manifest and SW registration from web app entry point
 - Dark/light theme variables via CSS custom properties (Catppuccin Mocha)

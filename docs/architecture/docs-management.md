@@ -1,3 +1,8 @@
+---
+doc_version: 3
+content_hash: 5cdc4d23
+---
+
 # Documentation Management
 
 ## Hybrid Model: Centralized + Distributed
@@ -41,10 +46,10 @@ docs/
 Domain-specific documentation lives **inside** each module/service as `README.md`.
 
 ```
-services/core/README.md                  ← How to run, env vars, module overview
-services/core/src/core/modules/finance/  ← Module-level docs in code comments
-services/realtime/README.md              ← Realtime service setup
-apps/web/README.md                       ← Frontend development guide
+core/README.md                           ← How to run, env vars, module overview
+core/src/modules/finance/                ← Module-level docs in code comments
+core/services/realtime/README.md         ← Realtime service setup
+dashboard/README.md                      ← Frontend development guide
 ```
 
 ## What Goes Where?
@@ -55,7 +60,7 @@ apps/web/README.md                       ← Frontend development guide
 | API design standards | `docs/api/` | "All endpoints use camelCase" |
 | Deployment procedures | `docs/runbooks/` | "How to deploy core service" |
 | Onboarding guide | `docs/guides/` | "Set up dev environment" |
-| Module-specific setup | `services/core/README.md` | "Core needs CORE_DB_URL env var" |
+| Module-specific setup | `core/README.md` | "Core needs CORE_DB_URL env var" |
 | Plugin development | `docs/guides/create-plugin.md` | "How to build a plugin" |
 | Shared lib usage | `libs/<lang>/README.md` | "Import corelib.db for connections" |
 
@@ -79,9 +84,61 @@ What did we decide?
 What are the trade-offs?
 ```
 
+## Translation Workflow (zh-TW)
+
+### Structure
+
+English documents are the **source of truth**. Traditional Chinese translations live in `docs/zh-TW/`, mirroring the source tree:
+
+```
+docs/architecture/modular-monolith.md     →  docs/zh-TW/architecture/modular-monolith.zh-TW.md
+docs/vision/roadmap.md                    →  docs/zh-TW/vision/roadmap.zh-TW.md
+CLAUDE.md                                 →  docs/zh-TW/CLAUDE.zh-TW.md
+```
+
+### Version Tracking
+
+Every `.md` file has YAML frontmatter with version tracking:
+
+```yaml
+---
+doc_version: 3
+content_hash: a1b2c3d4
+---
+```
+
+- `content_hash`: SHA-256 of file body (first 8 hex chars). Changes when content changes.
+- `doc_version`: Auto-increments when `content_hash` changes. Used to detect translation staleness.
+
+### Translation Script
+
+```bash
+# Translate all changed docs to zh-TW (via Gemini CLI)
+python3 scripts/translate-docs.py
+
+# Check which docs need translation updates
+python3 scripts/translate-docs.py --status
+
+# Dry run (show what would be translated)
+python3 scripts/translate-docs.py --dry-run
+
+# Update version numbers only (no translation)
+python3 scripts/translate-docs.py --version-only
+
+# Force re-translate all docs
+python3 scripts/translate-docs.py --force
+```
+
+### Rules
+
+1. **Never edit zh-TW files directly** — they are auto-generated from English sources
+2. **Run translation after doc changes** — `python3 scripts/translate-docs.py` detects changed files
+3. **Claude Code reads English** — zh-TW is for human quick reading only
+
 ## Maintenance Rules
 
 1. **Update docs with code** — if you change behavior, update the relevant doc in the same PR
 2. **README.md is mandatory** — every service and significant module must have one
 3. **No stale docs** — delete docs for removed features; outdated docs are worse than no docs
 4. **English for code docs** — technical docs in English for tooling compatibility
+5. **Translate after changes** — run `python3 scripts/translate-docs.py` after updating any doc

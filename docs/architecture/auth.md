@@ -1,3 +1,8 @@
+---
+doc_version: 1
+content_hash: aece66bc
+---
+
 # Authentication & Authorization Architecture
 
 ## Model: RBAC + ABAC Hybrid

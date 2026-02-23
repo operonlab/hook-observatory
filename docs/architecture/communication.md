@@ -1,3 +1,8 @@
+---
+doc_version: 1
+content_hash: b6f7fdd7
+---
+
 # Communication Patterns
 
 ## Overview

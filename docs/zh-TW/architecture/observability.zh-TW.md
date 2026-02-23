@@ -1,13 +1,15 @@
 ---
 doc_version: 2
 content_hash: ad0b7cdb
+source_version: 2
+translated_at: 2026-02-23
 ---
 
-# Observability Architecture
+# 可觀測性架構
 
-## Strategy
+## 策略
 
-Full observability via the three pillars (traces, metrics, logs) using **OpenTelemetry** as the universal instrumentation layer.
+透過 **OpenTelemetry** 作為通用儀表化層，利用三大支柱（追蹤、指標、日誌）實現全面可觀測性。
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -39,11 +41,11 @@ Full observability via the three pillars (traces, metrics, logs) using **OpenTel
               └──────────────────┘
 ```
 
-## Environment Strategy
+## 環境策略
 
-### Development: grafana/otel-lgtm (Single Container)
+### 開發環境：grafana/otel-lgtm（單一容器）
 
-One Docker container provides the complete LGTM stack:
+一個 Docker 容器即可提供完整的 LGTM 堆疊：
 
 ```yaml
 # infra/docker/docker-compose.dev.yml
@@ -61,15 +63,15 @@ services:
       - ENABLE_LOGS_ALL=true
 ```
 
-**Why single container for dev:**
-- Zero config, `docker compose up` and it works
-- All backends pre-connected to Grafana
-- OTel Collector built-in, ready to receive OTLP
-- Lightweight enough for local development
+**為何開發環境使用單一容器：**
+- 零配置，執行 `docker compose up` 即可運作
+- 所有後端均已預先連接至 Grafana
+- 內建 OTel Collector，隨時準備接收 OTLP
+- 足夠輕量，適合本地開發
 
-### Production: SigNoz
+### 生產環境：SigNoz
 
-Self-hosted SigNoz for production observability:
+用於生產環境可觀測性的自代管 SigNoz：
 
 ```yaml
 # infra/observability/signoz-values.yml (Helm chart or docker-compose)
@@ -81,16 +83,16 @@ Self-hosted SigNoz for production observability:
 # - Alerting
 ```
 
-**Why SigNoz over full Grafana stack in prod:**
-- Single platform for all three signals (no separate Tempo/Loki/Prometheus)
-- Built on ClickHouse (better query performance than Loki for logs)
-- OpenTelemetry native (designed around OTLP from the start)
-- Unified alerting across signals
-- Self-hosted, no vendor lock-in
+**為何在生產環境選擇 SigNoz 而非完整 Grafana 堆疊：**
+- 單一平台整合所有三種信號（無需分開維護 Tempo/Loki/Prometheus）
+- 基於 ClickHouse 構建（日誌查詢效能優於 Loki）
+- 原生支援 OpenTelemetry（從一開始就圍繞 OTLP設計）
+- 跨信號的統一警示
+- 自代管，無供應商鎖定
 
-## Application Integration
+## 應用程式整合
 
-### FastAPI Instrumentation
+### FastAPI 儀表化
 
 ```python
 # core/src/observability.py
@@ -120,7 +122,7 @@ def setup_observability(app: FastAPI, service_name: str = "core"):
     metrics.set_meter_provider(meter_provider)
 ```
 
-### Structured Logging with structlog + OTel
+### 使用 structlog + OTel 的結構化日誌
 
 ```python
 import structlog
@@ -146,7 +148,7 @@ def add_otel_context(logger, method_name, event_dict):
     return event_dict
 ```
 
-Log output:
+日誌輸出：
 ```json
 {
   "event": "transaction.created",
@@ -159,9 +161,9 @@ Log output:
 }
 ```
 
-## Event-Driven + OTel Integration
+## 事件驅動 + OTel 整合
 
-Every event published through the Event Bus creates an OTel span and updates metrics:
+每個透過 Event Bus 發布的事件都會建立一個 OTel span 並更新指標：
 
 ```python
 class OTelEventMiddleware(EventMiddleware):
@@ -195,9 +197,9 @@ class OTelEventMiddleware(EventMiddleware):
             self.event_latency.record(duration_ms, {"event.type": event.type})
 ```
 
-### Trace Propagation
+### 追蹤傳播
 
-Events carry `trace_id` to maintain trace continuity across async boundaries:
+事件攜帶 `trace_id` 以維持跨非同步邊界的追蹤連續性：
 
 ```
 HTTP Request (trace A)
@@ -206,62 +208,62 @@ HTTP Request (trace A)
             → Subscriber publishes follow-up event (still in trace A)
 ```
 
-## Dashboard Design
+## 儀表板設計
 
-### Core Dashboard: System Health
+### 核心儀表板：系統健康狀況
 
-| Panel | Metric | Purpose |
+| 面板 | 指標 | 用途 |
 |-------|--------|---------|
-| Request Rate | `http.server.request.duration` | Overall API throughput |
-| Error Rate | `http.server.request.duration{http.status_code>=400}` | API error percentage |
-| P50/P95/P99 Latency | `http.server.request.duration` histogram | Response time distribution |
-| Active Sessions | `auth.sessions.active` gauge | Current logged-in users |
+| 請求率 | `http.server.request.duration` | 整體 API 吞吐量 |
+| 錯誤率 | `http.server.request.duration{http.status_code>=400}` | API 錯誤百分比 |
+| P50/P95/P99 延遲 | `http.server.request.duration` histogram | 回應時間分佈 |
+| 活躍會話 | `auth.sessions.active` gauge | 當前登入用戶 |
 
-### Event Dashboard: Event Flow
+### 事件儀表板：事件流
 
-| Panel | Metric | Purpose |
+| 面板 | 指標 | 用途 |
 |-------|--------|---------|
-| Event Throughput | `events.published.total` by type | Events per second per type |
-| Event Handling Latency | `events.handling.duration_ms` | How long handlers take |
-| Event Error Rate | `events.handling.errors` | Failed event handlers |
-| Event Flow Diagram | Trace waterfall | Visualize event chains |
-| Top Event Types | `events.published.total` ranked | Which events fire most |
+| 事件吞吐量 | `events.published.total` by type | 每秒每種類型的事件數 |
+| 事件處理延遲 | `events.handling.duration_ms` | 處理器耗時 |
+| 事件錯誤率 | `events.handling.errors` | 失敗的事件處理器 |
+| 事件流程圖 | Trace waterfall | 視覺化事件鏈 |
+| 熱門事件類型 | `events.published.total` ranked | 哪些事件觸發最頻繁 |
 
-### Module Dashboard: Per-Module Health
+### 模組儀表板：各模組健康狀況
 
-| Panel | Metric | Purpose |
+| 面板 | 指標 | 用途 |
 |-------|--------|---------|
-| Module Request Rate | `http.server.request.duration{http.route~"/api/<module>/*"}` | Per-module throughput |
-| Module Error Rate | Same, filtered by status code | Per-module errors |
-| Database Query Latency | `db.client.operation.duration` by module schema | Query performance |
-| Cache Hit Rate | `redis.cache.hit / (hit + miss)` | Cache effectiveness |
+| 模組請求率 | `http.server.request.duration{http.route~"/api/<module>/*"}` | 各模組吞吐量 |
+| 模組錯誤率 | Same, filtered by status code | 各模組錯誤 |
+| 資料庫查詢延遲 | `db.client.operation.duration` by module schema | 查詢效能 |
+| 快取命中率 | `redis.cache.hit / (hit + miss)` | 快取有效性 |
 
-### Plugin Dashboard: Plugin Health
+### 插件儀表板：插件健康狀況
 
-| Panel | Metric | Purpose |
+| 面板 | 指標 | 用途 |
 |-------|--------|---------|
-| Hook Execution Count | `plugin.hook.executions` by plugin | Plugin activity |
-| Hook Latency | `plugin.hook.duration_ms` | Plugin performance impact |
-| Hook Rejections | `plugin.hook.rejections` | Plugin blocking actions |
-| Permission Denials | `plugin.permission.denied` | Permission misconfigs |
+| Hook 執行次數 | `plugin.hook.executions` by plugin | 插件活動 |
+| Hook 延遲 | `plugin.hook.duration_ms` | 插件效能影響 |
+| Hook 拒絕 | `plugin.hook.rejections` | 插件阻斷行為 |
+| 權限遭拒 | `plugin.permission.denied` | 權限配置錯誤 |
 
-## Configuration
+## 配置
 
-### Application Environment Variables
+### 應用程式環境變數
 
 ```bash
-# OTel Collector endpoint
+# OTel Collector 端點
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
-# Service identification
+# 服務識別
 OTEL_SERVICE_NAME=core
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=development
 
-# Log level
+# 日誌層級
 LOG_LEVEL=info
 ```
 
-### OTel Collector Config (Production)
+### OTel Collector 配置（生產環境）
 
 ```yaml
 # infra/observability/otel-collector.yml
@@ -300,12 +302,20 @@ service:
       exporters: [otlp/signoz]
 ```
 
-## Alerting Rules (Production)
+## 警示規則（生產環境）
 
-| Alert | Condition | Severity |
+| 警示 | 條件 | 嚴重程度 |
 |-------|-----------|----------|
-| High Error Rate | `error_rate > 5%` for 5 min | Critical |
-| High Latency | `p99 > 2s` for 5 min | Warning |
-| Event Bus Backlog | `pending_events > 1000` | Warning |
-| Plugin Hook Timeout | `hook.duration > 5s` | Warning |
-| Database Connection Pool Exhausted | `pool.available == 0` | Critical |
+| 高錯誤率 | `error_rate > 5%` 持續 5 分鐘 | 危急 |
+| 高延遲 | `p99 > 2s` 持續 5 分鐘 | 警告 |
+| 事件總線待處理積壓 | `pending_events > 1000` | 警告 |
+| 插件 Hook 超時 | `hook.duration > 5s` | 警告 |
+| 資料庫連接池耗盡 | `pool.available == 0` | 危急 |
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

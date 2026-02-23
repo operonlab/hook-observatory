@@ -1,3 +1,8 @@
+---
+doc_version: 3
+content_hash: 95d02640
+---
+
 # Technology Stack Specification
 
 ## Backend
@@ -34,15 +39,20 @@
 - **Deployment**: Docker container, single instance
 - **Schema isolation**: Each module owns its own schema (`CREATE SCHEMA <module_name>`)
 - **Driver**: psycopg 3 (async support via psycopg[binary])
-- **Migrations**: Raw SQL files in `services/core/migrations/`, version-tracked
+- **Migrations**: Raw SQL files in `core/migrations/`, version-tracked
 
 ```
 PostgreSQL Instance
-├── schema: auth         (users, sessions, permissions)
-├── schema: finance      (transactions, budgets, subscriptions)
-├── schema: quest        (quests, skills, rewards)
-├── schema: muse         (sparks, links, graph)
-└── schema: admin        (audit_logs, settings)
+├── schema: auth         (users, sessions, spaces, permissions)     — Phase 1
+├── schema: finance      (transactions, budgets, subscriptions)     — Phase 1
+├── schema: quest        (quests, tasks, dispatch, rewards)         — Phase 1
+├── schema: muse         (sparks, links, knowledge graph)           — Phase 1
+├── schema: intel        (feeds, briefings, topic tracking)         — Phase 2
+├── schema: memory       (memories, embeddings, profiles)           — Phase 2
+├── schema: skill        (skill trees, learning paths, assessments) — Phase 2
+├── schema: workforce    (resources, schedules, capacity)           — Phase 3
+├── schema: matching     (match rules, scores, recommendations)     — Phase 3
+└── schema: admin        (audit_logs, settings, system health)      — Phase 1
 ```
 
 **Rules**:

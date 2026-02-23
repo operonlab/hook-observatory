@@ -1,11 +1,13 @@
 ---
 doc_version: 1
 content_hash: bbc48960
+source_version: 1
+translated_at: 2026-02-23
 ---
 
-# Feature Lifecycle: POC → Production
+# 功能生命週期：POC → 正式產線
 
-## Decision Tree
+## 決策樹
 
 ```
 新想法到來
@@ -15,9 +17,9 @@ content_hash: bbc48960
     └─ 確定要做 / 規格明確 → 直接 services/<name>/
 ```
 
-## Phases
+## 階段
 
-### Phase 1: Explore (lab/)
+### Phase 1: 探索 (lab/)
 
 ```
 lab/<name>-poc/
@@ -27,11 +29,11 @@ lab/<name>-poc/
 ```
 
 - Skill 輸出路徑：`~/workshop/lab/<name>-poc/outputs/`
-- 格式：.md（方便閱讀、快速迭代）
+- 格式：.md（易讀、快速迭代）
 - 不需要 pyproject.toml、不需要 tests/、不需要遵守正式結構
 - README.md 持續更新觀察與發現
 
-### Phase 2: Validate
+### Phase 2: 驗證
 
 - 根據成功標準評估 POC 結果
 - 在 README.md 記錄結論
@@ -43,7 +45,7 @@ lab/<name>-poc/outputs/   ← 刪除（或保留有價值的）
 ```
 失敗紀錄有價值 — 避免未來重複踩坑。
 
-### Phase 3: Graduate 🎓
+### Phase 3: 畢業 🎓
 
 **如果成功 → 正式化**：
 
@@ -67,27 +69,35 @@ lab/<name>-poc/outputs/   ← 刪除（或保留有價值的）
 5. 更新 lab README.md：
    ```markdown
    ## Status: GRADUATED
-   Migrated to services/<name>/ + apps/<name>/ on YYYY-MM-DD
+   於 YYYY-MM-DD 遷移至 services/<name>/ + apps/<name>/
    ```
 
-### Phase 4: Cleanup
+### Phase 4: 清理
 
 | 狀態 | 處理 |
 |------|------|
 | 畢業 | 保留 README.md，刪除 outputs/ |
 | 失敗 | 保留 README.md，刪除其餘 |
-| 閒置 > 30 天 | 提醒決定：保留 or 清理 |
+| 閒置 > 30 天 | 提醒決定：保留或清理 |
 
-## Skill Output Path Convention
+## Skill 輸出路徑規範
 
 | 階段 | 輸出路徑 | 格式 |
 |------|---------|------|
 | POC | `~/workshop/lab/<name>-poc/outputs/` | .md / .json |
-| Production | HTTP API → PostgreSQL | DB records |
+| 正式產線 | HTTP API → PostgreSQL | 資料庫紀錄 |
 
-## Rules
+## 規則
 
 1. `services/` 和 `apps/` **絕對不會有 .md 產出物** — 只有程式碼
-2. `lab/` 的東西**不會被**任何正式服務 import
+2. `lab/` 的內容**不會被**任何正式服務 import
 3. 每個 POC 都有 README.md — 即使失敗也記錄
 4. POC 命名：`<domain>-poc`（跟 services/ 裡的正式名稱加後綴區分）
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

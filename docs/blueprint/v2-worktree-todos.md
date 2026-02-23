@@ -1,3 +1,8 @@
+---
+doc_version: 2
+content_hash: 85d21b7c
+---
+
 # V2 Worktree Todo List (Revised)
 
 > NOT a migration. Rebuild everything from V1 documentation + V2 architecture with maximum code reuse.
@@ -25,7 +30,7 @@ git worktree add ../ws-web      -b feat/web-complete
 
 **Branch**: `feat/infra-db`
 **Worktree**: `../ws-infra/`
-**Scope**: `infra/`, `docker-compose*.yml`, `services/core/migrations/`
+**Scope**: `infra/`, `docker-compose*.yml`, `core/migrations/`
 **Dependencies**: None
 
 ### Tasks
@@ -53,7 +58,7 @@ git worktree add ../ws-web      -b feat/web-complete
   Mount as `docker-entrypoint-initdb.d` volume.
 
 - [ ] **1.3 Auth migration SQL**
-  `services/core/migrations/001_auth.sql`:
+  `core/migrations/001_auth.sql`:
   - `auth.users` (id UUID PK, email UNIQUE, display_name, avatar_url, role, status, timestamps)
   - `auth.local_credentials` (user_id FK PK, password_hash, email_verified)
   - `auth.oauth_accounts` (id, user_id FK, provider, provider_user_id, email, tokens, raw_profile JSONB, UNIQUE(provider, provider_user_id))
@@ -62,19 +67,19 @@ git worktree add ../ws-web      -b feat/web-complete
   - All indexes
 
 - [ ] **1.4 Finance migration SQL**
-  `services/core/migrations/002_finance.sql`:
+  `core/migrations/002_finance.sql`:
   - `finance.transactions` (id, user_id, type enum, amount decimal, currency, category, description, date, tags[], created_at, updated_at)
   - `finance.budgets` (id, user_id, category, amount, period enum, start_date, created_at)
   - `finance.categories` (id, user_id, name, icon, color, type, sort_order)
 
 - [ ] **1.5 Quest migration SQL**
-  `services/core/migrations/003_quest.sql`:
+  `core/migrations/003_quest.sql`:
   - `quest.quests` (id, creator_id, title, description, status enum, xp_reward, difficulty, tags[], deadline, created_at)
   - `quest.progress` (id, quest_id, user_id, status enum, started_at, completed_at)
   - `quest.skills` (id, user_id, name, category, xp_total, level)
 
 - [ ] **1.6 Muse migration SQL**
-  `services/core/migrations/004_muse.sql`:
+  `core/migrations/004_muse.sql`:
   - `muse.sparks` (id, user_id, type enum, title, content text, tags[], metadata JSONB, created_at, updated_at)
   - `muse.links` (id, source_id FK, target_id FK, relation varchar, strength float, created_at)
 
@@ -120,7 +125,7 @@ git worktree add ../ws-web      -b feat/web-complete
 
 **Branch**: `feat/core-engine`
 **Worktree**: `../ws-engine/`
-**Scope**: `libs/python/`, `services/core/src/core/` (events, hooks, middleware, modules/auth, shared, config, main, db)
+**Scope**: `libs/python/`, `core/src/` (events, hooks, middleware, modules/auth, shared, config, main, db)
 **Dependencies**: None to start. Needs T1 for DB testing.
 **V1 Reference**: Auth section of `v1-feature-inventory.md`
 
@@ -156,7 +161,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `rate_limit.py` — slowapi wrapper, per-route limits, Redis backend support
 
 - [ ] **2.5 Core config update**
-  `services/core/src/core/config.py`:
+  `core/src/config.py`:
   - Add: `webauthn_rp_id`, `webauthn_rp_name`, `webauthn_origin`
   - Add: `github_client_id`, `github_client_secret`
   - Add: `google_client_id`, `google_client_secret`
@@ -165,20 +170,20 @@ git worktree add ../ws-web      -b feat/web-complete
   - Keep: db_url, redis_url, cors_origins, event_backend, plugin_dir
 
 - [ ] **2.6 Core DB integration**
-  `services/core/src/core/db.py`:
+  `core/src/db.py`:
   - Use `corelib.db.create_pool(settings.db_url)`
   - Integrate into FastAPI lifespan (open on startup, close on shutdown)
   - FastAPI dependency: `get_pool()`, `get_conn()`
 
 - [ ] **2.7 Auth module — Email/Password provider**
-  `services/core/src/core/modules/auth/providers/email.py`:
+  `core/src/modules/auth/providers/email.py`:
   - `EmailPasswordProvider(AuthProvider)`
   - Register: validate email + password(>=8) → bcrypt hash → create user + local_credentials
   - Login: verify email + bcrypt → return AuthResult
   - Use passlib CryptContext(schemes=["bcrypt"])
 
 - [ ] **2.8 Auth module — GitHub OAuth provider**
-  `services/core/src/core/modules/auth/providers/github.py`:
+  `core/src/modules/auth/providers/github.py`:
   - `GitHubOAuthProvider(AuthProvider)`
   - Use authlib: register github oauth, authorize_redirect, authorize_access_token
   - Fetch /user + /user/emails (primary verified email)
@@ -186,7 +191,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Allowlist support (optional env var)
 
 - [ ] **2.9 Auth module — Google OAuth provider**
-  `services/core/src/core/modules/auth/providers/google.py`:
+  `core/src/modules/auth/providers/google.py`:
   - `GoogleOAuthProvider(AuthProvider)`
   - Use authlib: OIDC discovery, authorize_redirect, authorize_access_token
   - PKCE enabled (code_challenge_method: S256)
@@ -195,7 +200,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Return AuthResult with provider_user_id = sub claim
 
 - [ ] **2.10 Auth module — Passkey provider**
-  `services/core/src/core/modules/auth/providers/passkey.py`:
+  `core/src/modules/auth/providers/passkey.py`:
   - `PasskeyProvider(AuthProvider)`
   - Use py_webauthn (webauthn>=2.7.1)
   - Registration: generate_registration_options → verify_registration_response → store credential (BYTEA)
@@ -203,7 +208,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Credential management: list, delete
 
 - [ ] **2.11 Auth module — Service + Routes**
-  `services/core/src/core/modules/auth/`:
+  `core/src/modules/auth/`:
   - `service.py` — `AuthService` orchestrator: authenticate(provider, **kwargs), link_account(), create_session(), revoke_session()
   - Account linking: check provider_user_id → check email → create new user
   - `routes.py` — All endpoints from blueprint (register, login, logout, session, OAuth flows, Passkey flows, provider management)
@@ -211,17 +216,17 @@ git worktree add ../ws-web      -b feat/web-complete
   - `schemas.py` — Request/response Pydantic models for all endpoints
 
 - [ ] **2.12 Auth module — RBAC + ABAC**
-  Rewrite `services/core/src/core/modules/auth/permissions.py`:
+  Rewrite `core/src/modules/auth/permissions.py`:
   - Keep ROLE_PERMISSIONS dict (admin, user, guest)
   - Keep PolicyEngine with RequestContext
   - Integrate with corelib deps: `require_permission()` auto-checks RBAC + ABAC
   - Add policies: suspended_users_blocked, owner_only_write, rate_limited
 
 - [ ] **2.13 EventBus — Redis Streams backend**
-  `services/core/src/core/events/backends/`:
+  `core/src/events/backends/`:
   - `memory.py` — Extract current in-process implementation
   - `redis_streams.py` — XADD, XREADGROUP, consumer groups per module
-  - `services/core/src/core/events/bus.py` — Backend selection via settings.event_backend
+  - `core/src/events/bus.py` — Backend selection via settings.event_backend
 
 - [ ] **2.14 Core main.py update**
   - Wire up: db pool, all auth providers, auth service, session middleware
@@ -244,14 +249,14 @@ git worktree add ../ws-web      -b feat/web-complete
 
 **Branch**: `feat/domain-modules`
 **Worktree**: `../ws-modules/`
-**Scope**: `services/core/src/core/modules/{finance,quest,muse,admin}/`
+**Scope**: `core/src/modules/{finance,quest,muse,admin}/`
 **Dependencies**: Needs T2 base classes (BaseService, BaseRepository, create_crud_router). Can stub them initially.
 **Strategy**: If T2 isn't merged yet, define minimal interfaces inline and refactor on merge.
 
 ### Tasks
 
 - [ ] **3.1 Finance module — Repository + Service**
-  `services/core/src/core/modules/finance/`:
+  `core/src/modules/finance/`:
   - `repository.py`:
     - `TransactionRepo(BaseRepository[Transaction])` — schema="finance", table="transactions"
     - `BudgetRepo(BaseRepository[Budget])` — schema="finance", table="budgets"
@@ -278,7 +283,7 @@ git worktree add ../ws-web      -b feat/web-complete
     - Handler: on transaction_created → check budget → emit budget_exceeded if over
 
 - [ ] **3.3 Quest module — Repository + Service**
-  `services/core/src/core/modules/quest/`:
+  `core/src/modules/quest/`:
   - `repository.py`:
     - `QuestRepo(BaseRepository[Quest])` — schema="quest", table="quests"
     - `ProgressRepo(BaseRepository[Progress])` — schema="quest", table="progress"
@@ -299,7 +304,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `events.py`: QUEST_CREATED/ACCEPTED/COMPLETED/FAILED, SKILL_XP_GAINED/LEVEL_UP
 
 - [ ] **3.5 Muse module — Repository + Service**
-  `services/core/src/core/modules/muse/`:
+  `core/src/modules/muse/`:
   - `repository.py`:
     - `SparkRepo(BaseRepository[Spark])` — custom: full-text search on title+content, tag filtering
     - `LinkRepo(BaseRepository[Link])` — custom: get_graph(user_id), get_connected(spark_id)
@@ -319,7 +324,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `events.py`: SPARK_CREATED/UPDATED/DELETED, LINK_CREATED/DELETED
 
 - [ ] **3.7 Admin module**
-  `services/core/src/core/modules/admin/`:
+  `core/src/modules/admin/`:
   - `services.py`:
     - `AdminService` — list_users(filters, pagination), update_user_role(id, role), update_user_status(id, status)
     - `SystemService` — get_stats() → {total_users, active_sessions, events_24h, db_size, redis_memory}
@@ -331,7 +336,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - All routes: `require_permission("admin.*")`
 
 - [ ] **3.8 Register all module routers**
-  Update `services/core/src/core/main.py`:
+  Update `core/src/main.py`:
   - Import and mount finance, quest, muse, admin routers
   - Register event handlers from each module
   - Register hook points from each module
@@ -348,7 +353,7 @@ git worktree add ../ws-web      -b feat/web-complete
 
 **Branch**: `feat/web-complete`
 **Worktree**: `../ws-web/`
-**Scope**: `apps/web/`, `libs/typescript/`
+**Scope**: `dashboard/`, `libs/typescript/`
 **Dependencies**: Needs T2 API contracts. Can build UI first with mock/type stubs.
 **V1 Reference**: Frontend section of `v1-feature-inventory.md`
 
@@ -383,7 +388,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `useWebSocket.ts` — WebSocket with auto-reconnect + message handler
 
 - [ ] **4.5 Auth module — Login page**
-  `apps/web/src/modules/auth/pages/LoginPage.tsx`:
+  `dashboard/src/modules/auth/pages/LoginPage.tsx`:
   - Email + password form (validation, error display)
   - "Sign in with GitHub" button → `window.location = /auth/oauth/github`
   - "Sign in with Google" button → Google One Tap integration
@@ -393,7 +398,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Catppuccin Mocha dark theme
 
 - [ ] **4.6 Auth module — Register page**
-  `apps/web/src/modules/auth/pages/RegisterPage.tsx`:
+  `dashboard/src/modules/auth/pages/RegisterPage.tsx`:
   - Name + email + password + confirm password
   - Password strength indicator
   - "Or register with" → GitHub, Google buttons
@@ -401,7 +406,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Link to login page
 
 - [ ] **4.7 Auth module — Settings page**
-  `apps/web/src/modules/auth/pages/AccountSettings.tsx`:
+  `dashboard/src/modules/auth/pages/AccountSettings.tsx`:
   - Linked providers list (email, github, google, passkey)
   - "Link GitHub/Google" buttons
   - Passkey management (list credentials, add new, remove)
@@ -409,7 +414,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Profile edit (display name, avatar)
 
 - [ ] **4.8 Finance module**
-  `apps/web/src/modules/finance/`:
+  `dashboard/src/modules/finance/`:
   - `api.ts` — `createResourceApi<Transaction>('/api/finance/transactions')` + summary API
   - `hooks.ts` — `useTransactions`, `useBudgets`, `useMonthlySummary`
   - `pages/Dashboard.tsx` — Summary cards (income/expense/balance), category donut chart, recent transactions
@@ -419,7 +424,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — Transaction, Budget, MonthlySummary types
 
 - [ ] **4.9 Quest module**
-  `apps/web/src/modules/quest/`:
+  `dashboard/src/modules/quest/`:
   - `api.ts` — Quest CRUD + accept/complete/fail actions
   - `hooks.ts` — `useQuests`, `useQuestBoard`, `useSkills`
   - `pages/QuestBoard.tsx` — Kanban columns: Available, In Progress, Completed. Drag-and-drop optional.
@@ -429,7 +434,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — Quest, Progress, Skill types
 
 - [ ] **4.10 Muse module**
-  `apps/web/src/modules/muse/`:
+  `dashboard/src/modules/muse/`:
   - `api.ts` — Spark CRUD + search + link API
   - `hooks.ts` — `useSparks`, `useSparkSearch`, `useGraph`
   - `pages/Inbox.tsx` — List of recent/unlinked sparks, create button
@@ -439,7 +444,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — Spark, Link, GraphData types
 
 - [ ] **4.11 Admin module**
-  `apps/web/src/modules/admin/`:
+  `dashboard/src/modules/admin/`:
   - `api.ts` — User management + system stats
   - `hooks.ts` — `useUsers`, `useSystemStats`
   - `pages/Dashboard.tsx` — System stats cards (users, sessions, events, db size), live feed
@@ -449,7 +454,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — AdminUser, SystemStats types
 
 - [ ] **4.12 Shell enhancements**
-  `apps/web/src/shell/`:
+  `dashboard/src/shell/`:
   - `NavBar.tsx` — User avatar dropdown (profile, settings, logout), notification bell placeholder
   - `Sidebar.tsx` — Active route highlighting, collapse on mobile (hamburger menu)
   - `Layout.tsx` — Bottom nav on mobile (<640px), sidebar on desktop
@@ -457,7 +462,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Install `@simplewebauthn/browser` for passkey support
 
 - [ ] **4.13 App routing update**
-  `apps/web/src/App.tsx`:
+  `dashboard/src/App.tsx`:
   - Add routes: /account (settings), /finance/*, /quest/*, /muse/*, /admin/*
   - Auth routes: /login, /register (no guard)
   - Admin guard for /admin/*

@@ -1,3 +1,8 @@
+---
+doc_version: 1
+content_hash: 3ff968ae
+---
+
 # Event-Driven Architecture
 
 ## Design Philosophy

@@ -1,3 +1,8 @@
+---
+doc_version: 3
+content_hash: 87cf60a6
+---
+
 # Modular Monolith Architecture Guide
 
 ## Design Principles
@@ -13,9 +18,15 @@ The backend is a **single deployable unit** with clearly separated domain module
                     │  ┌────────┐ ┌────────┐ ┌────────┐  │
                     │  │  auth  │ │finance │ │  quest │  │
                     │  └────────┘ └────────┘ └────────┘  │
-                    │  ┌────────┐ ┌────────┐             │
-                    │  │  muse  │ │ admin  │             │
-                    │  └────────┘ └────────┘             │
+                    │  ┌────────┐ ┌────────┐ ┌────────┐  │
+                    │  │  muse  │ │ intel  │ │ memory │  │
+                    │  └────────┘ └────────┘ └────────┘  │
+                    │  ┌────────┐ ┌────────┐ ┌────────┐  │
+                    │  │ skill  │ │workfrc │ │matching│  │
+                    │  └────────┘ └────────┘ └────────┘  │
+                    │  ┌────────┐                        │
+                    │  │ admin  │                        │
+                    │  └────────┘                        │
                     │                                     │
                     │  ┌─────────────────────────────┐    │
                     │  │  Event Bus  │  Hook Engine  │    │
@@ -40,13 +51,18 @@ The backend is a **single deployable unit** with clearly separated domain module
 
 Each module owns **one** business domain:
 
-| Module | Owns | Database Schema |
-|--------|------|-----------------|
-| `auth` | Users, sessions, roles, permissions | `auth` |
-| `finance` | Transactions, budgets, subscriptions | `finance` |
-| `quest` | Quests, skills, rewards | `quest` |
-| `muse` | Sparks, links, knowledge graph | `muse` |
-| `admin` | Platform management, user approval, audit logs | `admin` |
+| Module | Owns | Database Schema | Phase |
+|--------|------|-----------------|-------|
+| `auth` | Users, sessions, spaces, permissions | `auth` | 1 |
+| `finance` | Transactions, budgets, subscriptions | `finance` | 1 |
+| `quest` | Quests, tasks, dispatch, rewards | `quest` | 1 |
+| `muse` | Sparks, links, knowledge graph | `muse` | 1 |
+| `intel` | RSS feeds, daily briefings, topic tracking | `intel` | 2 |
+| `memory` | LLM memories, semantic search, profiles | `memory` | 2 |
+| `skill` | Skill trees, learning paths, assessments | `skill` | 2 |
+| `workforce` | Resources (human/machine/agent), scheduling | `workforce` | 3 |
+| `matching` | Talent-job matching, task pairing | `matching` | 3 |
+| `admin` | Platform management, audit logs, system health | `admin` | 1 |
 
 ### 3. Module Boundary Rules
 
@@ -58,13 +74,13 @@ Each module owns **one** business domain:
 
 ```python
 # GOOD: Module A reads from Module B via service import
-from core.modules.finance.services import get_user_balance
+from src.modules.finance.services import get_user_balance
 
 # GOOD: Module A notifies Module B via event
 await event_bus.publish("quest.quest.completed", {"quest_id": "...", "user_id": "..."})
 
 # BAD: Module A directly imports Module B's models
-from core.modules.finance.models import Transaction  # FORBIDDEN
+from src.modules.finance.models import Transaction  # FORBIDDEN
 ```
 
 ### 4. Independent Data Stores
@@ -72,11 +88,16 @@ from core.modules.finance.models import Transaction  # FORBIDDEN
 All modules share one PostgreSQL instance but use **separate schemas**:
 
 ```sql
-CREATE SCHEMA auth;      -- owned by auth module
-CREATE SCHEMA finance;   -- owned by finance module
-CREATE SCHEMA quest;     -- owned by quest module
-CREATE SCHEMA muse;      -- owned by muse module
-CREATE SCHEMA admin;     -- owned by admin module
+CREATE SCHEMA auth;       -- owned by auth module (Phase 1)
+CREATE SCHEMA finance;    -- owned by finance module (Phase 1)
+CREATE SCHEMA quest;      -- owned by quest module (Phase 1)
+CREATE SCHEMA muse;       -- owned by muse module (Phase 1)
+CREATE SCHEMA intel;      -- owned by intel module (Phase 2)
+CREATE SCHEMA memory;     -- owned by memory module (Phase 2)
+CREATE SCHEMA skill;      -- owned by skill module (Phase 2)
+CREATE SCHEMA workforce;  -- owned by workforce module (Phase 3)
+CREATE SCHEMA matching;   -- owned by matching module (Phase 3)
+CREATE SCHEMA admin;      -- owned by admin module (Phase 1)
 ```
 
 Cross-schema queries are technically possible but **architecturally forbidden**. If Module A needs data from Module B, it calls B's service layer.
@@ -86,7 +107,7 @@ Cross-schema queries are technically possible but **architecturally forbidden**.
 Each module follows a consistent internal layout:
 
 ```
-core/src/core/modules/<name>/
+core/src/modules/<name>/
 ├── __init__.py          # Module registration
 ├── routes.py            # FastAPI router (or routes/ directory)
 ├── models.py            # SQLAlchemy / Pydantic models (module-scoped)
@@ -105,7 +126,7 @@ The `services.py` is the **public interface** of each module. Other modules impo
 |---------|------|---------|
 | Service import (sync) | Reading data from another module | `finance.services.get_balance(user_id)` |
 | Event Bus (async) | State change that others may care about | `quest.quest.completed` triggers finance reward |
-| Shared types in `core.shared` | Common types used by 2+ modules | `UserId`, `Pagination`, `ErrorResponse` |
+| Shared types in `src.shared` | Common types used by 2+ modules | `UserId`, `Pagination`, `ErrorResponse` |
 
 See [Event-Driven Architecture](./event-driven.md) for detailed event patterns.
 
@@ -164,6 +185,11 @@ The monolith exposes a single health endpoint with per-module status:
     "finance": "healthy",
     "quest": "healthy",
     "muse": "healthy",
+    "intel": "healthy",
+    "memory": "healthy",
+    "skill": "healthy",
+    "workforce": "healthy",
+    "matching": "healthy",
     "admin": "healthy"
   }
 }
@@ -174,18 +200,27 @@ The monolith exposes a single health endpoint with per-module status:
 Modules register themselves with the core application at startup:
 
 ```python
-# core/src/core/app.py
-from core.modules import auth, finance, quest, muse, admin
+# core/src/app.py
+from src.modules import auth, finance, quest, muse, intel, memory, skill, workforce, matching, admin
 
 def create_app() -> FastAPI:
     app = FastAPI()
 
-    # Register module routers
+    # Register module routers (Phase 1)
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(finance.router, prefix="/api/finance", tags=["finance"])
     app.include_router(quest.router, prefix="/api/quest", tags=["quest"])
     app.include_router(muse.router, prefix="/api/muse", tags=["muse"])
     app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+
+    # Register module routers (Phase 2)
+    app.include_router(intel.router, prefix="/api/intel", tags=["intel"])
+    app.include_router(memory.router, prefix="/api/memory", tags=["memory"])
+    app.include_router(skill.router, prefix="/api/skill", tags=["skill"])
+
+    # Register module routers (Phase 3)
+    app.include_router(workforce.router, prefix="/api/workforce", tags=["workforce"])
+    app.include_router(matching.router, prefix="/api/matching", tags=["matching"])
 
     # Initialize event bus and hook engine
     app.state.event_bus = EventBus()
