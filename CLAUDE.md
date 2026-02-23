@@ -1,6 +1,6 @@
 ---
-doc_version: 3
-content_hash: 1db2d231
+doc_version: 5
+content_hash: f6ad7751
 ---
 
 # Workshop
@@ -18,10 +18,10 @@ Modular Monolith + Event-Driven workspace.
 
 ## Structure
 - `core/` — Modular Monolith (10 Core Modules + hot-path services)
-  - `core/src/modules/` — Domain modules (auth, finance, quest, muse, intel, memory, skill, workforce, matching, admin)
+  - `core/src/modules/` — Domain modules (auth, finance, quest, muse, scout, lore, dojo, roster, nexus, admin)
   - `core/services/realtime/` — LiveKit WebRTC gateway
   - `core/services/media/` — STT/TTS/image processing
-- `dashboard/` — Single React application
+- `workbench/` — Single React application
 - `mcp/` — MCP adapter layer (thin wrappers over Core API)
 - `stations/` — Standalone local tools (disk analyzer, LLM usage, etc.)
 - `bridges/` — External platform connectors (LINE, Telegram, Discord)
@@ -30,16 +30,21 @@ Modular Monolith + Event-Driven workspace.
 - `infra/` — Docker, Nginx, observability configs
 - `scripts/` — Build/translate/deploy scripts
 - `lab/` — POC experiments
-- `docs/` — Architecture + vision documentation
-  - `docs/vision/` — Platform vision (manifesto, domain catalog, ADRs, roadmap)
-  - `docs/zh-TW/` — Traditional Chinese translations (auto-generated)
+- `docs/` — 架構 + 願景文件（繁體中文，source of truth）
+  - `docs/vision/` — 平台願景（宣言、領域目錄、ADRs、路線圖）
+  - `docs/architecture/` — 系統架構、ADRs、設計原則
+- `docs-en/` — English backup (original English versions)
 
-## Three-Tier Taxonomy
-- **Core Modules** (DB-backed): auth, finance, quest, muse, intel, memory, skill, workforce, matching, admin
-- **Stations**: Standalone local tools (legal advisor, church music, etc.)
-- **Bridges**: External connectors (LINE, Telegram, Discord, Firebase)
+## Service Taxonomy
+- **Foundation**: auth, admin
+- **Domain Services** (DB-backed): finance, quest, muse, scout, lore, dojo, roster, nexus
+- **Bridges**: External connectors (social-hooks, notification)
+- **Hot-path Services**: media (STT/TTS/image), realtime (LiveKit)
+- **Stations**: Standalone local tools (disk analyzer, LLM usage, etc.)
+- **Compositions**: Service assemblies for specific use cases (Legal Advisor, Church Music, Virtual CS, ERP/POS)
 
 ## Core Concepts
+- **LEGO Composition**: Services are reusable blocks. Projects = extend services + compose them. No "project vs module" distinction.
 - **Event-Driven**: All state changes are events flowing through EventBus
 - **RBAC+ABAC**: Role-based + attribute-based permission hybrid
 - **Hook/Plugin**: Extensible via plugin manifest + hook bus

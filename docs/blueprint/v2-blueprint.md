@@ -327,7 +327,7 @@ Every domain module follows the same structure, inheriting from shared base clas
 └── deps.py            # FastAPI dependencies (get_service, etc.)
 ```
 
-### Frontend (`dashboard/src/modules/<name>/`)
+### Frontend (`workbench/src/modules/<name>/`)
 
 ```
 <name>/
@@ -368,10 +368,10 @@ router = create_crud_router(
 ```
 
 ```typescript
-// Frontend: dashboard/src/modules/finance/api.ts
+// Frontend: workbench/src/modules/finance/api.ts
 export const transactionApi = createResourceApi<Transaction>('/api/finance/transactions');
 
-// Frontend: dashboard/src/modules/finance/hooks.ts
+// Frontend: workbench/src/modules/finance/hooks.ts
 export const useTransactions = createResourceHook(transactionApi);
 ```
 
@@ -399,7 +399,7 @@ Track 4: web-complete ──── (needs T2 API contracts) → merge FOURTH
 | 1. infra-db | `infra/`, `docker-compose*`, `core/migrations/` | - |
 | 2. core-engine | `libs/python/`, `core/src/` (engines, auth, middleware) | `pyproject.toml`, `main.py` |
 | 3. domain-modules | `core/src/modules/{finance,quest,muse,admin}/` | `main.py` (router registration) |
-| 4. web-complete | `dashboard/`, `libs/typescript/` | `package.json` |
+| 4. web-complete | `workbench/`, `libs/typescript/` | `package.json` |
 
 ### Track 1: `feat/infra-db` — Infrastructure + Database
 

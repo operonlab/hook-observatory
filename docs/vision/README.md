@@ -41,7 +41,7 @@ Meeting:   Compose services into solutions (Legal Advisor, ERP, ...)
 | 類型 | 範例 | 資料駐留位置 |
 |------|----------|---------------|
 | **基礎 (Foundation)** | auth, admin | PostgreSQL |
-| **領域 (Domain)** | finance, quest, muse, intel, memory, skill, workforce, matching | PostgreSQL (schema-per-module) |
+| **領域 (Domain)** | finance, quest, muse, scout, lore, dojo, roster, nexus | PostgreSQL (schema-per-module) |
 | **橋接 (Bridge)** | social-hooks, notification | 外部 + Event Bus |
 | **工作站 (Station)** | 磁碟分析、LLM 用量、本地工具 | 本地 / 可選 DB |
 | **組合 (Composition)** | Legal Advisor、Church Music、Virtual CS、ERP/POS | 上述服務的組裝 |
@@ -60,6 +60,6 @@ Social Bridges (LINE/TG/DC) ─────► FastAPI Core
 
 ### 階段摘要
 1. **Phase 1**：auth + finance + quest + muse + LINE bot + Widget Dashboard
-2. **Phase 2**：memory v2 + skill + intel + church music
-3. **Phase 3**：workforce + task dispatch + multi-platform social
+2. **Phase 2**：lore v2 + dojo + scout + church music
+3. **Phase 3**：roster + task dispatch + multi-platform social
 4. **Phase 4**：商業化 (ERP/POS/legal/virtual CS)

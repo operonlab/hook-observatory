@@ -353,7 +353,7 @@ git worktree add ../ws-web      -b feat/web-complete
 
 **Branch**: `feat/web-complete`
 **Worktree**: `../ws-web/`
-**Scope**: `dashboard/`, `libs/typescript/`
+**Scope**: `workbench/`, `libs/typescript/`
 **Dependencies**: Needs T2 API contracts. Can build UI first with mock/type stubs.
 **V1 Reference**: Frontend section of `v1-feature-inventory.md`
 
@@ -388,7 +388,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `useWebSocket.ts` — WebSocket with auto-reconnect + message handler
 
 - [ ] **4.5 Auth module — Login page**
-  `dashboard/src/modules/auth/pages/LoginPage.tsx`:
+  `workbench/src/modules/auth/pages/LoginPage.tsx`:
   - Email + password form (validation, error display)
   - "Sign in with GitHub" button → `window.location = /auth/oauth/github`
   - "Sign in with Google" button → Google One Tap integration
@@ -398,7 +398,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Catppuccin Mocha dark theme
 
 - [ ] **4.6 Auth module — Register page**
-  `dashboard/src/modules/auth/pages/RegisterPage.tsx`:
+  `workbench/src/modules/auth/pages/RegisterPage.tsx`:
   - Name + email + password + confirm password
   - Password strength indicator
   - "Or register with" → GitHub, Google buttons
@@ -406,7 +406,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Link to login page
 
 - [ ] **4.7 Auth module — Settings page**
-  `dashboard/src/modules/auth/pages/AccountSettings.tsx`:
+  `workbench/src/modules/auth/pages/AccountSettings.tsx`:
   - Linked providers list (email, github, google, passkey)
   - "Link GitHub/Google" buttons
   - Passkey management (list credentials, add new, remove)
@@ -414,7 +414,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Profile edit (display name, avatar)
 
 - [ ] **4.8 Finance module**
-  `dashboard/src/modules/finance/`:
+  `workbench/src/modules/finance/`:
   - `api.ts` — `createResourceApi<Transaction>('/api/finance/transactions')` + summary API
   - `hooks.ts` — `useTransactions`, `useBudgets`, `useMonthlySummary`
   - `pages/Dashboard.tsx` — Summary cards (income/expense/balance), category donut chart, recent transactions
@@ -424,7 +424,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — Transaction, Budget, MonthlySummary types
 
 - [ ] **4.9 Quest module**
-  `dashboard/src/modules/quest/`:
+  `workbench/src/modules/quest/`:
   - `api.ts` — Quest CRUD + accept/complete/fail actions
   - `hooks.ts` — `useQuests`, `useQuestBoard`, `useSkills`
   - `pages/QuestBoard.tsx` — Kanban columns: Available, In Progress, Completed. Drag-and-drop optional.
@@ -434,7 +434,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — Quest, Progress, Skill types
 
 - [ ] **4.10 Muse module**
-  `dashboard/src/modules/muse/`:
+  `workbench/src/modules/muse/`:
   - `api.ts` — Spark CRUD + search + link API
   - `hooks.ts` — `useSparks`, `useSparkSearch`, `useGraph`
   - `pages/Inbox.tsx` — List of recent/unlinked sparks, create button
@@ -444,7 +444,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — Spark, Link, GraphData types
 
 - [ ] **4.11 Admin module**
-  `dashboard/src/modules/admin/`:
+  `workbench/src/modules/admin/`:
   - `api.ts` — User management + system stats
   - `hooks.ts` — `useUsers`, `useSystemStats`
   - `pages/Dashboard.tsx` — System stats cards (users, sessions, events, db size), live feed
@@ -454,7 +454,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - `types.ts` — AdminUser, SystemStats types
 
 - [ ] **4.12 Shell enhancements**
-  `dashboard/src/shell/`:
+  `workbench/src/shell/`:
   - `NavBar.tsx` — User avatar dropdown (profile, settings, logout), notification bell placeholder
   - `Sidebar.tsx` — Active route highlighting, collapse on mobile (hamburger menu)
   - `Layout.tsx` — Bottom nav on mobile (<640px), sidebar on desktop
@@ -462,7 +462,7 @@ git worktree add ../ws-web      -b feat/web-complete
   - Install `@simplewebauthn/browser` for passkey support
 
 - [ ] **4.13 App routing update**
-  `dashboard/src/App.tsx`:
+  `workbench/src/App.tsx`:
   - Add routes: /account (settings), /finance/*, /quest/*, /muse/*, /admin/*
   - Auth routes: /login, /register (no guard)
   - Admin guard for /admin/*

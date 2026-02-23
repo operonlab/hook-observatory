@@ -8,7 +8,7 @@ translated_at: 2026-02-23
 
 # RWD + PWA 開發規範
 
-前端應用程式 (`dashboard/`) 必須遵守這些規範。
+前端應用程式 (`workbench/`) 必須遵守這些規範。
 
 ## 響應式網頁設計 (RWD)
 
@@ -91,7 +91,7 @@ translated_at: 2026-02-23
 
 ## 在 Web App 中的實作
 
-dashboard 應用程式 (`dashboard/`) 作為參考實作：
+workbench 應用程式 (`workbench/`) 作為參考實作：
 - 來自共用樣式的 Tailwind 斷點配置
 - 來自 Web App 進入點的 PWA manifest 和 SW 註冊
 - 透過 CSS 自定義屬性實現深色/淺色主題變數 (Catppuccin Mocha)

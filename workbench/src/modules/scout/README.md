@@ -1,19 +1,19 @@
-# Intel 模組（前端）
+# Scout 模組（前端）
 
-> Research Hub + Daily Briefing — Intel 模組的 Dashboard UI。
+> Research Hub + Daily Briefing — Scout 模組的 Workbench UI。
 
 ## 頁面規劃
 
 | 路由 | 頁面 | 說明 |
 |------|------|------|
-| `/intel` | 情報總覽 | 最新報告 + 趨勢圖 + 主題圖譜入口 |
-| `/intel/reports` | 報告列表 | 全文搜尋 + 語意搜尋 + tag/topic 過濾 |
-| `/intel/reports/:id` | 報告詳情 | Markdown 渲染 + 來源連結 + 相關報告 |
-| `/intel/topics` | 主題圖譜 | Force-directed graph 視覺化 + 主題鑽取 |
-| `/intel/briefings` | 每日情報 | 情報列表（日期選擇） |
-| `/intel/briefings/:date` | 情報詳情 | 三分析師分析 + 辯論結論 |
+| `/scout` | 情報總覽 | 最新報告 + 趨勢圖 + 主題圖譜入口 |
+| `/scout/reports` | 報告列表 | 全文搜尋 + 語意搜尋 + tag/topic 過濾 |
+| `/scout/reports/:id` | 報告詳情 | Markdown 渲染 + 來源連結 + 相關報告 |
+| `/scout/topics` | 主題圖譜 | Force-directed graph 視覺化 + 主題鑽取 |
+| `/scout/briefings` | 每日情報 | 情報列表（日期選擇） |
+| `/scout/briefings/:date` | 情報詳情 | 三分析師分析 + 辯論結論 |
 
-## Dashboard Widgets
+## Workbench Widgets
 
 | Widget | 尺寸 | 說明 |
 |--------|------|------|
@@ -64,16 +64,16 @@
 ## 目錄結構（規劃）
 
 ```
-dashboard/src/modules/intel/
+workbench/src/modules/scout/
 ├── README.md             ← 本文件
 ├── index.tsx             ← 模組入口（導出路由）
 ├── pages/
-│   ├── Overview.tsx      ← /intel
-│   ├── ReportList.tsx    ← /intel/reports
-│   ├── ReportDetail.tsx  ← /intel/reports/:id
-│   ├── TopicGraph.tsx    ← /intel/topics
-│   ├── BriefingList.tsx  ← /intel/briefings
-│   └── BriefingDetail.tsx ← /intel/briefings/:date
+│   ├── Overview.tsx      ← /scout
+│   ├── ReportList.tsx    ← /scout/reports
+│   ├── ReportDetail.tsx  ← /scout/reports/:id
+│   ├── TopicGraph.tsx    ← /scout/topics
+│   ├── BriefingList.tsx  ← /scout/briefings
+│   └── BriefingDetail.tsx ← /scout/briefings/:date
 ├── components/
 │   ├── ReportCard.tsx    ← 報告卡片
 │   ├── TopicMap.tsx      ← 主題圖譜視覺化
@@ -85,11 +85,11 @@ dashboard/src/modules/intel/
 │   ├── TrendChartWidget.tsx
 │   └── DailyBriefingWidget.tsx
 ├── hooks/
-│   └── useIntel.ts       ← Intel API hooks
+│   └── useScout.ts       ← Scout API hooks
 ├── stores/
-│   └── intelStore.ts     ← Zustand store
+│   └── scoutStore.ts     ← Zustand store
 ├── api/
-│   └── client.ts         ← Intel API client
+│   └── client.ts         ← Scout API client
 └── types/
-    └── index.ts          ← Intel types
+    └── index.ts          ← Scout types
 ```

@@ -22,10 +22,10 @@ translated_at: 2026-02-23
                     │  │  auth  │ │finance │ │  quest │  │
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │  muse  │ │ intel  │ │ memory │  │
+                    │  │  muse  │ │ scout  │ │  lore  │  │
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │ skill  │ │workfrc │ │matching│  │
+                    │  │  dojo  │ │ roster │ │ nexus  │  │
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐                        │
                     │  │ admin  │                        │
@@ -60,11 +60,11 @@ translated_at: 2026-02-23
 | `finance` | Transactions, budgets, subscriptions | `finance` | 1 |
 | `quest` | Quests, tasks, dispatch, rewards | `quest` | 1 |
 | `muse` | Sparks, links, knowledge graph | `muse` | 1 |
-| `intel` | RSS feeds, daily briefings, topic tracking | `intel` | 2 |
-| `memory` | LLM memories, semantic search, profiles | `memory` | 2 |
-| `skill` | Skill trees, learning paths, assessments | `skill` | 2 |
-| `workforce` | Resources (human/machine/agent), scheduling | `workforce` | 3 |
-| `matching` | Talent-job matching, task pairing | `matching` | 3 |
+| `scout` | RSS feeds, daily briefings, topic tracking | `scout` | 2 |
+| `lore` | LLM memories, semantic search, profiles | `lore` | 2 |
+| `dojo` | Skill trees, learning paths, assessments | `dojo` | 2 |
+| `roster` | Resources (human/machine/agent), scheduling | `roster` | 3 |
+| `nexus` | Talent-job matching, task pairing | `nexus` | 3 |
 | `admin` | Platform management, audit logs, system health | `admin` | 1 |
 
 ### 3. 模組邊界規則
@@ -95,11 +95,11 @@ CREATE SCHEMA auth;       -- 由 auth 模組擁有 (Phase 1)
 CREATE SCHEMA finance;    -- 由 finance 模組擁有 (Phase 1)
 CREATE SCHEMA quest;      -- 由 quest 模組擁有 (Phase 1)
 CREATE SCHEMA muse;       -- 由 muse 模組擁有 (Phase 1)
-CREATE SCHEMA intel;      -- 由 intel 模組擁有 (Phase 2)
-CREATE SCHEMA memory;     -- 由 memory 模組擁有 (Phase 2)
-CREATE SCHEMA skill;      -- 由 skill 模組擁有 (Phase 2)
-CREATE SCHEMA workforce;  -- 由 workforce 模組擁有 (Phase 3)
-CREATE SCHEMA matching;   -- 由 matching 模組擁有 (Phase 3)
+CREATE SCHEMA scout;      -- 由 scout 模組擁有 (Phase 2)
+CREATE SCHEMA lore;       -- 由 lore 模組擁有 (Phase 2)
+CREATE SCHEMA dojo;       -- 由 dojo 模組擁有 (Phase 2)
+CREATE SCHEMA roster;     -- 由 roster 模組擁有 (Phase 3)
+CREATE SCHEMA nexus;      -- 由 nexus 模組擁有 (Phase 3)
 CREATE SCHEMA admin;      -- 由 admin 模組擁有 (Phase 1)
 ```
 
@@ -188,11 +188,11 @@ class CoreSettings(BaseSettings):
     "finance": "healthy",
     "quest": "healthy",
     "muse": "healthy",
-    "intel": "healthy",
-    "memory": "healthy",
-    "skill": "healthy",
-    "workforce": "healthy",
-    "matching": "healthy",
+    "scout": "healthy",
+    "lore": "healthy",
+    "dojo": "healthy",
+    "roster": "healthy",
+    "nexus": "healthy",
     "admin": "healthy"
   }
 }
@@ -204,7 +204,7 @@ class CoreSettings(BaseSettings):
 
 ```python
 # core/src/app.py
-from src.modules import auth, finance, quest, muse, intel, memory, skill, workforce, matching, admin
+from src.modules import auth, finance, quest, muse, scout, lore, dojo, roster, nexus, admin
 
 def create_app() -> FastAPI:
     app = FastAPI()
@@ -217,13 +217,13 @@ def create_app() -> FastAPI:
     app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
     # 註冊模組路由 (Phase 2)
-    app.include_router(intel.router, prefix="/api/intel", tags=["intel"])
-    app.include_router(memory.router, prefix="/api/memory", tags=["memory"])
-    app.include_router(skill.router, prefix="/api/skill", tags=["skill"])
+    app.include_router(scout.router, prefix="/api/scout", tags=["scout"])
+    app.include_router(lore.router, prefix="/api/lore", tags=["lore"])
+    app.include_router(dojo.router, prefix="/api/dojo", tags=["dojo"])
 
     # 註冊模組路由 (Phase 3)
-    app.include_router(workforce.router, prefix="/api/workforce", tags=["workforce"])
-    app.include_router(matching.router, prefix="/api/matching", tags=["matching"])
+    app.include_router(roster.router, prefix="/api/roster", tags=["roster"])
+    app.include_router(nexus.router, prefix="/api/nexus", tags=["nexus"])
 
     # 初始化事件總線與 Hook 引擎
     app.state.event_bus = EventBus()

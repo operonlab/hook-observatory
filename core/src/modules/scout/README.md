@@ -1,10 +1,10 @@
-# Intel 模組（後端）
+# Scout 模組（後端）
 
 > Smart Search V2 + Daily Briefing — 搜尋報告結構化儲存與情報管理引擎。
 
 ## 定位
 
-Workshop Core 的 `intel` 模組，整合三個現有系統：
+Workshop Core 的 `scout` 模組，整合三個現有系統：
 1. **research_report service**（`~/Claude/services/research_report/`）— 報告 CRUD + pgvector
 2. **smart-search skill**（`~/.claude/skills/smart-search/`）— 多源搜尋引擎
 3. **daily-briefing skill**（`~/.claude/skills/daily-briefing/`）— 三 AI 分析師辯論
@@ -19,11 +19,11 @@ Workshop Core 的 `intel` 模組，整合三個現有系統：
 | **每日情報** | 三 AI 分析師獨立分析 + 交叉辯論 |
 | **NL Q&A** | 自然語言問答（DB 優先，向量搜尋輔助） |
 
-## DB Schema（`intel` schema）
+## DB Schema（`scout` schema）
 
 ```sql
 -- 搜尋/研究報告
-CREATE TABLE intel.reports (
+CREATE TABLE scout.reports (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title       TEXT NOT NULL,
     query       TEXT NOT NULL,            -- 原始搜尋查詢
@@ -38,7 +38,7 @@ CREATE TABLE intel.reports (
 );
 
 -- 主題分類
-CREATE TABLE intel.topics (
+CREATE TABLE scout.topics (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name         TEXT UNIQUE NOT NULL,
     display_name TEXT,
@@ -49,23 +49,23 @@ CREATE TABLE intel.topics (
 );
 
 -- 報告 ↔ 主題（多對多）
-CREATE TABLE intel.report_topics (
-    report_id UUID REFERENCES intel.reports(id) ON DELETE CASCADE,
-    topic_id  UUID REFERENCES intel.topics(id) ON DELETE CASCADE,
+CREATE TABLE scout.report_topics (
+    report_id UUID REFERENCES scout.reports(id) ON DELETE CASCADE,
+    topic_id  UUID REFERENCES scout.topics(id) ON DELETE CASCADE,
     relevance FLOAT DEFAULT 1.0,
     PRIMARY KEY (report_id, topic_id)
 );
 
 -- 主題關聯圖
-CREATE TABLE intel.topic_relations (
-    source_topic_id UUID REFERENCES intel.topics(id),
-    target_topic_id UUID REFERENCES intel.topics(id),
+CREATE TABLE scout.topic_relations (
+    source_topic_id UUID REFERENCES scout.topics(id),
+    target_topic_id UUID REFERENCES scout.topics(id),
     weight          FLOAT DEFAULT 1.0,
     PRIMARY KEY (source_topic_id, target_topic_id)
 );
 
 -- 每日情報彙整
-CREATE TABLE intel.briefings (
+CREATE TABLE scout.briefings (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     date        DATE NOT NULL UNIQUE,
     domain      TEXT NOT NULL,            -- finance / ai / tech / geopolitics / weather
@@ -78,25 +78,25 @@ CREATE TABLE intel.briefings (
 );
 
 -- 搜尋紀錄
-CREATE TABLE intel.search_sessions (
+CREATE TABLE scout.search_sessions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     query       TEXT NOT NULL,
     source      TEXT,                     -- smart-search / manual / api
     result_type TEXT,                     -- found_existing / new_report
-    report_id   UUID REFERENCES intel.reports(id),
+    report_id   UUID REFERENCES scout.reports(id),
     space_id    UUID NOT NULL,
     created_at  TIMESTAMPTZ DEFAULT now()
 );
 
 -- 索引
-CREATE INDEX idx_reports_embedding ON intel.reports USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX idx_reports_tags ON intel.reports USING GIN (tags);
-CREATE INDEX idx_reports_created ON intel.reports (created_at DESC);
-CREATE INDEX idx_topics_embedding ON intel.topics USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX idx_briefings_date ON intel.briefings (date DESC);
+CREATE INDEX idx_reports_embedding ON scout.reports USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_reports_tags ON scout.reports USING GIN (tags);
+CREATE INDEX idx_reports_created ON scout.reports (created_at DESC);
+CREATE INDEX idx_topics_embedding ON scout.topics USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_briefings_date ON scout.briefings (date DESC);
 ```
 
-## API 端點（`/api/intel/`）
+## API 端點（`/api/scout/`）
 
 ### 報告
 
@@ -143,7 +143,7 @@ CREATE INDEX idx_briefings_date ON intel.briefings (date DESC);
 ## 目錄結構（規劃）
 
 ```
-core/src/modules/intel/
+core/src/modules/scout/
 ├── README.md             ← 本文件
 ├── __init__.py
 ├── routes.py             ← API 路由
@@ -153,7 +153,7 @@ core/src/modules/intel/
 ├── search.py             ← pgvector 語意搜尋引擎
 ├── topic_extractor.py    ← 自動主題提取 + 關聯圖
 ├── briefing_pipeline.py  ← 三分析師辯論管線
-└── events.py             ← 事件定義（intel.report.created 等）
+└── events.py             ← 事件定義（scout.report.created 等）
 ```
 
 ## 遷移計劃
@@ -168,8 +168,8 @@ core/src/modules/intel/
 ## 相依模組
 
 - **auth** — space_id 隔離
-- **memory** — 搜尋報告可觸發記憶建立（跨模組事件）
-- **mcp/intel** — MCP 工具對接
+- **lore** — 搜尋報告可觸發記憶建立（跨模組事件）
+- **mcp/scout** — MCP 工具對接
 
 ## 參考
 

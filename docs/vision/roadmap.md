@@ -19,10 +19,10 @@ Phase 1              Phase 2              Phase 3              Phase 4
 Personal + Family    Knowledge + Growth   Team + Dispatch      Commercial
 ──────────────────►──────────────────►──────────────────►──────────────────►
 
-auth ✓               memory v2            workforce            matching v3
-finance              skill                quest dispatch       quest commercial
-quest (simple)       intel                matching v2          legal advisor
-muse                 matching v1          resource pool        virtual CS
+auth ✓               lore v2              roster               nexus v3
+finance              dojo                 quest dispatch       quest commercial
+quest (simple)       scout                nexus v2             legal advisor
+muse                 nexus v1             resource pool        virtual CS
 notification         church music         social hooks v2      ERP/POS
 social hooks v1                                                full platform
 ```
@@ -79,10 +79,10 @@ social hooks v1                                                full platform
 
 | 模組 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **memory** | KAS Memory v2 | 自動提取、語義搜尋、跨階段召回 |
-| **skill** | 技能樹 v1 | 技能定義、等級、學習路徑 |
-| **intel** | 每日情報 v1 | RSS 訂閱、自動摘要、簡報 |
-| **matching v1** | 基礎媒合 | 技能 × 學習資源推薦 |
+| **lore** | KAS Memory v2 | 自動提取、語義搜尋、跨階段召回 |
+| **dojo** | 技能樹 v1 | 技能定義、等級、學習路徑 |
+| **scout** | 每日情報 v1 | RSS 訂閱、自動摘要、簡報 |
+| **nexus v1** | 基礎媒合 | 技能 × 學習資源推薦 |
 
 ### 站點
 
@@ -92,7 +92,7 @@ social hooks v1                                                full platform
 
 ### 第二階段交付成果
 
-- Memory v2 上線：Claude Code 的記憶更加準確且結構化
+- Lore v2 上線：Claude Code 的記憶更加準確且結構化
 - 技能樹視覺化：顯示個人技能地圖的 Widget
 - 每日簡報：每天早晨自動接收新聞/社群媒體摘要
 - 樂譜庫：教會聖詩可搜尋與瀏覽
@@ -107,9 +107,9 @@ social hooks v1                                                full platform
 
 | 模組 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **workforce** | 資源管理 v1 | 人類 + AI 代理人能力/負載追蹤 |
+| **roster** | 資源管理 v1 | 人類 + AI 代理人能力/負載追蹤 |
 | **quest dispatch** | 任務派遣 | 任務池 + 被動分配 + 主動領取 |
-| **matching v2** | 進階媒合 | 人才 × 任務多維度評分 |
+| **nexus v2** | 進階媒合 | 人才 × 任務多維度評分 |
 
 ### 橋接器
 
@@ -135,8 +135,8 @@ social hooks v1                                                full platform
 |---------|--------|----------|
 | **Quest Commercial** | 訂單/報價/驗收 | quest + finance |
 | **Legal Advisor** | 法律諮詢服務 | RAG + LLM 推理 |
-| **Virtual CS** | 虛擬客服 | matching + social hooks |
-| **ERP/POS** | 庫存管理系統 | finance + quest + workforce |
+| **Virtual CS** | 虛擬客服 | nexus + social hooks |
+| **ERP/POS** | 庫存管理系統 | finance + quest + roster |
 | **Full Platform** | 開放平台 | 所有模組 + 外掛系統 |
 
 ### 第四階段交付成果

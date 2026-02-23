@@ -141,7 +141,7 @@ CREATE TABLE space_members (
 **決策理由**：
 - quest 的 task dispatch 需要知道「誰能執行此任務」—— 而這個「誰」並不一定是人
 - 一個任務可以分配給 human (手動)、machine (cron job) 或 AI agent (Claude/Codex)
-- 統一的模型使得無論 resource type 為何，皆可套用相同的 matching logic
+- 統一的模型使得無論 resource type 為何，皆可套用相同的 nexus logic
 - 為未來的 ERP 場景 (machine capacity、personnel hours、AI agent parallelism) 奠定基礎
 
 **統一 Resource 模型**：
@@ -160,8 +160,8 @@ resources:
 ```
 
 **使用案例**：
-- **matching**：`SELECT * FROM resources WHERE capabilities @> ARRAY['python'] AND current_load < capacity`
-- **workforce**：Dashboard 顯示所有 resources 的負載狀態
+- **nexus**：`SELECT * FROM resources WHERE capabilities @> ARRAY['python'] AND current_load < capacity`
+- **roster**：Dashboard 顯示所有 resources 的負載狀態
 - **quest dispatch**：根據 task requirements × resource capabilities 進行自動配對
 
 ---
@@ -205,8 +205,8 @@ resources:
 |--------|---------|---------|---------|---------|
 | quest | Checkbox to-do | + Story points | + Skill requirements + Task pool | + Orders/quotation/acceptance |
 | finance | Personal accounting | + Family shared ledger | + Budget/analysis | + Inventory/POS |
-| matching | Manual pairing | + Conditional filtering | + AI recommendations | + Auto dispatch |
-| memory | Manual memory | + Auto extraction | + Semantic search | + Cross-space isolation |
+| nexus | Manual pairing | + Conditional filtering | + AI recommendations | + Auto dispatch |
+| lore | Manual memory | + Auto extraction | + Semantic search | + Cross-space isolation |
 
 **原則**：
 - 每個 Phase 都是可用且完整的產品 —— 而非半成品原型

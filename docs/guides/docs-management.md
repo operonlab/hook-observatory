@@ -54,7 +54,7 @@ docs/
 core/README.md                           ← 如何執行、環境變數、模組概覽
 core/src/modules/finance/                ← 程式碼註釋中的模組級別文件
 core/services/realtime/README.md         ← Realtime 服務設置
-dashboard/README.md                      ← 前端開發指南
+workbench/README.md                      ← 前端開發指南
 ```
 
 ## 東西該放哪？

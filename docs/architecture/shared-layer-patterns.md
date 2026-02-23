@@ -55,7 +55,7 @@ Skill, Resource
 ```
 
 **誰繼承了 SpaceScopedModel (8 個模組, ~35 個實體)**：
-finance, quest, muse, intel, memory, skill, workforce, matching
+finance, quest, muse, scout, lore, dojo, roster, nexus
 
 **誰繼承了 GlobalModel (2 個模組, ~4 個實體)**：
 admin (audit_log, setting), auth (user, api_key)
@@ -215,11 +215,11 @@ create() 流程：
 | finance | 金額驗證 | 發送 `transaction.created` 事件 | -- | monthly_insights() |
 | quest | 預設狀態=open | 發送 `quest.created` 事件 | 關聯任務計數 | dispatch(), accept(), complete() |
 | muse | -- | 發送 `spark.created` 事件 | -- | graph_traverse(), semantic_search() |
-| intel | -- | 排程摘要生成 | -- | generate_briefing() |
-| memory | Embedding 計算 | 發送事件 | -- | semantic_search(), auto_extract() |
-| skill | 前置條件檢查 | 發送事件 | 關聯學習進度 | recommend() |
-| workforce | 容量檢查 | 發送事件 | -- | check_availability() |
-| matching | -- | 發送事件 + 觸發評分 | -- | score(), match() |
+| scout | -- | 排程摘要生成 | -- | generate_briefing() |
+| lore | Embedding 計算 | 發送事件 | -- | semantic_search(), auto_extract() |
+| dojo | 前置條件檢查 | 發送事件 | 關聯學習進度 | recommend() |
+| roster | 容量檢查 | 發送事件 | -- | check_availability() |
+| nexus | -- | 發送事件 + 觸發評分 | -- | score(), match() |
 
 ### 3.2 Bridge 配接器 — 相同介面，不同平台
 
@@ -366,7 +366,7 @@ Quest 的狀態機 (accept/complete) 不使用 BaseCRUD，但仍使用 `get_or_4
 | `exceptions.py` | WorkshopError 層級 + ERROR_REGISTRY | 繼承 + 註冊表 |
 | `events.py` | event_type(), publish_crud_event() | 封裝 (函式) |
 
-### 前端：`dashboard/src/shared/`
+### 前端：`workbench/src/shared/`
 
 | 檔案 | 內容 | 技術 |
 |------|----------|-----------|

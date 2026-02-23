@@ -57,7 +57,7 @@ lab/<name>-poc/outputs/   ← 刪除 (或保留有價值的產出)
 
 2. 建立正式前端 (如果需要)：
    ```bash
-   mkdir -p dashboard/src/modules/<name>/{src/{components,pages,hooks},public}
+   mkdir -p workbench/src/modules/<name>/{src/{components,pages,hooks},public}
    ```
 
 3. 撰寫遷移腳本 (.md → DB)：
@@ -70,7 +70,7 @@ lab/<name>-poc/outputs/   ← 刪除 (或保留有價值的產出)
 5. 更新 lab README.md：
    ```markdown
    ## Status: GRADUATED
-   已於 YYYY-MM-DD 遷移至 core/src/modules/<name>/ + dashboard/src/modules/<name>/
+   已於 YYYY-MM-DD 遷移至 core/src/modules/<name>/ + workbench/src/modules/<name>/
    ```
 
 ### 階段 4：清理

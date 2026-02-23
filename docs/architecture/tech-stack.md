@@ -50,11 +50,11 @@ PostgreSQL Instance
 ├── schema: finance      (transactions, budgets, subscriptions)     — 第一階段 (Phase 1)
 ├── schema: quest        (quests, tasks, dispatch, rewards)         — 第一階段 (Phase 1)
 ├── schema: muse         (sparks, links, knowledge graph)           — 第一階段 (Phase 1)
-├── schema: intel        (feeds, briefings, topic tracking)         — 第二階段 (Phase 2)
-├── schema: memory       (memories, embeddings, profiles)           — 第二階段 (Phase 2)
-├── schema: skill        (skill trees, learning paths, assessments) — 第二階段 (Phase 2)
-├── schema: workforce    (resources, schedules, capacity)           — 第三階段 (Phase 3)
-├── schema: matching     (match rules, scores, recommendations)     — 第三階段 (Phase 3)
+├── schema: scout        (feeds, briefings, topic tracking)         — 第二階段 (Phase 2)
+├── schema: lore         (memories, embeddings, profiles)           — 第二階段 (Phase 2)
+├── schema: dojo         (skill trees, learning paths, assessments) — 第二階段 (Phase 2)
+├── schema: roster       (resources, schedules, capacity)           — 第三階段 (Phase 3)
+├── schema: nexus        (match rules, scores, recommendations)     — 第三階段 (Phase 3)
 └── schema: admin        (audit_logs, settings, system health)      — 第一階段 (Phase 1)
 ```
 

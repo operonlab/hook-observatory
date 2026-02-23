@@ -27,7 +27,7 @@ Layer 2 是 Layer 1 的**補充**（不取代模組頁面）。Layer 3 橫跨所
 一個以領域為中心組織模組的 React 應用程式。不使用 Module Federation，也不使用微前端 —— 僅透過 `React.lazy` 進行乾淨的程式碼分割（code splitting）。
 
 ```
-dashboard/                    單一 React App
+workbench/                    單一 React App
 ├── src/
 │   ├── shell/                應用程式外殼 (佈局、導覽、認證、LLM Chat 浮層)
 │   ├── modules/              領域 UI 模組 (10 個核心模組)
@@ -35,14 +35,14 @@ dashboard/                    單一 React App
 │   │   ├── finance/
 │   │   ├── quest/
 │   │   ├── muse/
-│   │   ├── intel/
-│   │   ├── memory/
-│   │   ├── skill/
-│   │   ├── workforce/
-│   │   ├── matching/
+│   │   ├── scout/
+│   │   ├── lore/
+│   │   ├── dojo/
+│   │   ├── roster/
+│   │   ├── nexus/
 │   │   └── admin/
 │   ├── chat/                 LLM Chat 浮層 (Layer 3)
-│   ├── widgets/              Dashboard Widget 元件庫 (Layer 2)
+│   ├── widgets/              Workbench Widget 元件庫 (Layer 2)
 │   ├── plugins/              插件 UI 運行時
 │   └── shared/               共用組件、Hooks、工具函式
 ```
@@ -111,12 +111,12 @@ const Quest = lazy(() => import("../modules/quest"));
 const Muse = lazy(() => import("../modules/muse"));
 const Admin = lazy(() => import("../modules/admin"));
 // 階段 2
-const Intel = lazy(() => import("../modules/intel"));
-const Memory = lazy(() => import("../modules/memory"));
-const Skill = lazy(() => import("../modules/skill"));
+const Scout = lazy(() => import("../modules/scout"));
+const Lore = lazy(() => import("../modules/lore"));
+const Dojo = lazy(() => import("../modules/dojo"));
 // 階段 3
-const Workforce = lazy(() => import("../modules/workforce"));
-const Matching = lazy(() => import("../modules/matching"));
+const Roster = lazy(() => import("../modules/roster"));
+const Nexus = lazy(() => import("../modules/nexus"));
 
 export function Router() {
   return (
@@ -129,12 +129,12 @@ export function Router() {
         <Route path="/muse/*" element={<Muse />} />
         <Route path="/admin/*" element={<Admin />} />
         {/* 階段 2 */}
-        <Route path="/intel/*" element={<Intel />} />
-        <Route path="/memory/*" element={<Memory />} />
-        <Route path="/skill/*" element={<Skill />} />
+        <Route path="/scout/*" element={<Scout />} />
+        <Route path="/lore/*" element={<Lore />} />
+        <Route path="/dojo/*" element={<Dojo />} />
         {/* 階段 3 */}
-        <Route path="/workforce/*" element={<Workforce />} />
-        <Route path="/matching/*" element={<Matching />} />
+        <Route path="/roster/*" element={<Roster />} />
+        <Route path="/nexus/*" element={<Nexus />} />
         <Route path="/settings/*" element={<Settings />} />
       </Routes>
     </Suspense>
@@ -155,11 +155,11 @@ export function Router() {
 | `/quest/*` | Quest 模組 | 1 |
 | `/muse/*` | Muse 模組 | 1 |
 | `/admin/*` | Admin 模組 | 1 |
-| `/intel/*` | Intel 模組 | 2 |
-| `/memory/*` | Memory 模組 | 2 |
-| `/skill/*` | Skill 模組 | 2 |
-| `/workforce/*` | Workforce 模組 | 3 |
-| `/matching/*` | Matching 模組 | 3 |
+| `/scout/*` | Scout 模組 | 2 |
+| `/lore/*` | Lore 模組 | 2 |
+| `/dojo/*` | Dojo 模組 | 2 |
+| `/roster/*` | Roster 模組 | 3 |
+| `/nexus/*` | Nexus 模組 | 3 |
 | `/settings/*` | 外殼 (全域設定) | 1 |
 
 ## API 通訊
@@ -167,7 +167,7 @@ export function Router() {
 所有模組都與同一個後端通訊（位於連接埠 8800 的核心單體 Core Monolith）：
 
 ```
-dashboard/  →  core/  (port 8800)
+workbench/  →  core/  (port 8800)
 ```
 
 在生產環境中，API 呼叫會經由閘道器（Nginx）進行路由：
@@ -237,14 +237,14 @@ import { useAuth } from " @/shared/hooks/useAuth";
 單一建置，單一產出物：
 
 ```bash
-cd dashboard && pnpm build   # → 包含 index.html 與 chunks 的 dist/ 目錄
+cd workbench && pnpm build   # → 包含 index.html 與 chunks 的 dist/ 目錄
 ```
 
 生產環境：由 Nginx 提供 `dist/index.html`。程式碼分割後的區塊會根據路由需求進行載入。
 
 開發環境：
 ```bash
-cd dashboard && pnpm dev     # → http://localhost:3000
+cd workbench && pnpm dev     # → http://localhost:3000
 ```
 
 Rsbuild 設定會在開發期間將 `/api/*` 代理到核心單體（Core Monolith）。

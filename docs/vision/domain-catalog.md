@@ -91,7 +91,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, skill (用於量化模式) |
+| **依賴項目** | auth, dojo (用於量化模式) |
 | **雙向連接** | finance (任務 ↔ 訂單) |
 | **MCP 伺服器** | `workshop-quest` |
 | **V1 狀態** | MCP 伺服器運作中 (10 個工具) |
@@ -133,12 +133,12 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### intel — 每日情報
+#### scout — 每日情報
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, memory (用於個人化) |
-| **MCP 伺服器** | `workshop-intel` (待建置) |
+| **依賴項目** | auth, lore (用於個人化) |
+| **MCP 伺服器** | `workshop-scout` (待建置) |
 | **V1 狀態** | 不存在 |
 
 **功能能力**:
@@ -150,12 +150,12 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### memory — LLM 記憶持久化
+#### lore — LLM 記憶持久化
 
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **被依賴於** | skill, intel |
+| **被依賴於** | dojo, scout |
 | **MCP 伺服器** | `kas-memory` (現有，8 個工具) |
 | **V1 狀態** | MCP 伺服器 v0.2.0 (語義搜索 + 個人檔案) |
 
@@ -169,13 +169,13 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### skill — 技能樹與學習路徑
+#### dojo — 技能樹與學習路徑
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, memory |
-| **被依賴於** | matching, workforce |
-| **MCP 伺服器** | `workshop-skill` (待建置) |
+| **依賴項目** | auth, lore |
+| **被依賴於** | nexus, roster |
+| **MCP 伺服器** | `workshop-dojo` (待建置) |
 | **V1 狀態** | 不存在 |
 
 **功能能力**:
@@ -187,13 +187,13 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### workforce — 資源管理
+#### roster — 資源管理
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, skill |
-| **被依賴於** | matching |
-| **MCP 伺服器** | `workshop-workforce` (待建置) |
+| **依賴項目** | auth, dojo |
+| **被依賴於** | nexus |
+| **MCP 伺服器** | `workshop-roster` (待建置) |
 | **V1 狀態** | 不存在 |
 
 **功能能力**:
@@ -220,12 +220,12 @@ resources:
 
 ---
 
-#### matching — 媒合引擎
+#### nexus — 媒合引擎
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, skill, workforce |
-| **MCP 伺服器** | `workshop-matching` (待建置) |
+| **依賴項目** | auth, dojo, roster |
+| **MCP 伺服器** | `workshop-nexus` (待建置) |
 | **V1 狀態** | 不存在 |
 
 **功能能力**:
@@ -310,10 +310,10 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 > 關於完整的組合配方，請參閱 [vision/composition-model.md](./composition-model.md)
 
 計劃中的組合：
-- **法律顧問 (Legal Advisor)** = memory + intel + muse + media
-- **教會音樂 (Church Music)** = media + memory + muse
-- **虛擬客服 (Virtual CS)** = matching + social-hooks + quest + finance
-- **ERP/POS** = finance + quest + workforce + matching
+- **法律顧問 (Legal Advisor)** = lore + scout + muse + media
+- **教會音樂 (Church Music)** = media + lore + muse
+- **虛擬客服 (Virtual CS)** = nexus + social-hooks + quest + finance
+- **ERP/POS** = finance + quest + roster + nexus
 
 ---
 
@@ -331,16 +331,16 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
      └─────────┘   └────┬────┘   └─────────┘
                         │
                    ┌────▼────┐
-                   │  intel  │
+                   │  scout  │
                    └─────────┘
 
-     ┌─────────┐   ┌─────────┐   ┌───────────┐
-     │ memory  │──►│  skill  │──►│ workforce │
-     └─────────┘   └────┬────┘   └─────┬─────┘
+     ┌─────────┐   ┌─────────┐   ┌─────────┐
+     │  lore   │──►│  dojo   │──►│ roster  │
+     └─────────┘   └────┬────┘   └────┬────┘
                         │              │
                         └──────┬───────┘
                           ┌────▼────┐
-                          │matching │
+                          │  nexus  │
                           └─────────┘
 
      ┌─────────┐
@@ -351,8 +351,8 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 **依賴鏈解讀**:
 1. `auth` 是所有事物的基礎
 2. `finance ↔ quest` 雙向連結 (任務可以是訂單，訂單也是一種任務類型)
-3. `memory → skill → matching → workforce` 是從知識到執行的鏈條
-4. `intel` 依賴 `memory` 進行個人化
+3. `lore → dojo → nexus → roster` 是從知識到執行的鏈條
+4. `scout` 依賴 `lore` 進行個人化
 5. `admin` 是一個唯讀觀察者
 
 ---
@@ -366,11 +366,11 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | finance | 領域服務 | MCP 運作中 | `workshop-finance` | 9 |
 | quest | 領域服務 | MCP 運作中 | `workshop-quest` | 10 |
 | muse | 領域服務 | MCP 運作中 | `workshop-muse` | 8 |
-| intel | 領域服務 | 未開始 | `workshop-intel` | 待定 |
-| memory | 領域服務 | MCP v0.2.0 | `kas-memory` | 8 |
-| skill | 領域服務 | 未開始 | `workshop-skill` | 待定 |
-| workforce | 領域服務 | 未開始 | `workshop-workforce` | 待定 |
-| matching | 領域服務 | 未開始 | `workshop-matching` | 待定 |
+| scout | 領域服務 | 未開始 | `workshop-scout` | 待定 |
+| lore | 領域服務 | MCP v0.2.0 | `kas-memory` | 8 |
+| dojo | 領域服務 | 未開始 | `workshop-dojo` | 待定 |
+| roster | 領域服務 | 未開始 | `workshop-roster` | 待定 |
+| nexus | 領域服務 | 未開始 | `workshop-nexus` | 待定 |
 | social-hooks | 橋接層 | 未開始 | — | — |
 | notification | 橋接層 | 未開始 | — | — |
 | media | 熱路徑 | 位於 core/services/ | — | — |
@@ -382,7 +382,7 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | 類型 | 項目 | 資料存放地 |
 |------|-------|---------------|
 | **基礎層 (Foundation)** | auth, admin | PostgreSQL |
-| **領域服務 (Domain Service)** | finance, quest, muse, intel, memory, skill, workforce, matching | PostgreSQL (每個模組一個 schema) |
+| **領域服務 (Domain Service)** | finance, quest, muse, scout, lore, dojo, roster, nexus | PostgreSQL (每個模組一個 schema) |
 | **橋接層 (Bridge)** | social-hooks, notification | 外部 + 事件總線 (Event Bus) |
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
 | **工作站 (Station)** | 磁碟分析, LLM 使用量, 本地工具, Claude Code 技能 | 本地 / 可選資料庫 |

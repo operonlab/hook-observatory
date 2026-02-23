@@ -31,11 +31,11 @@ Workshop 將所有功能組織成三個層級：
 │   │   │   ├── finance/         # 會計與財務
 │   │   │   ├── quest/           # 任務與調度
 │   │   │   ├── muse/            # 想法與知識圖譜
-│   │   │   ├── intel/           # 每日情報
-│   │   │   ├── memory/          # LLM 記憶持久化
-│   │   │   ├── skill/           # 技能樹與學習路徑
-│   │   │   ├── workforce/       # 資源管理
-│   │   │   ├── matching/        # 匹配引擎
+│   │   │   ├── scout/           # 每日情報
+│   │   │   ├── lore/            # LLM 記憶持久化
+│   │   │   ├── dojo/            # 技能樹與學習路徑
+│   │   │   ├── roster/          # 資源管理
+│   │   │   ├── nexus/           # 匹配引擎
 │   │   │   └── admin/           # 平台管理
 │   │   ├── middleware/          # Auth, CORS, OTel 中間件
 │   │   ├── shared/              # 共享類型、工具
@@ -46,7 +46,7 @@ Workshop 將所有功能組織成三個層級：
 │   ├── plugins/                 # 已安裝插件
 │   ├── migrations/              # 資料庫遷移 (所有 schema)
 │   └── tests/
-├── dashboard/                   # 單個 React 應用程式
+├── workbench/                   # 單個 React 應用程式
 │   ├── src/
 │   │   ├── shell/               # 應用程式外殼 (佈局、導航、認證)
 │   │   ├── modules/             # 領域 UI 模組 (對應核心模組)
@@ -54,11 +54,11 @@ Workshop 將所有功能組織成三個層級：
 │   │   │   ├── finance/
 │   │   │   ├── quest/
 │   │   │   ├── muse/
-│   │   │   ├── intel/
-│   │   │   ├── memory/
-│   │   │   ├── skill/
-│   │   │   ├── workforce/
-│   │   │   ├── matching/
+│   │   │   ├── scout/
+│   │   │   ├── lore/
+│   │   │   ├── dojo/
+│   │   │   ├── roster/
+│   │   │   ├── nexus/
 │   │   │   └── admin/
 │   │   ├── plugins/             # 插件 UI 運行時 + 插槽
 │   │   └── shared/              # 共享組件、鉤子、工具
@@ -123,23 +123,23 @@ core/src/modules/<name>/
 | `finance` | 會計與財務 | 1 | `finance` |
 | `quest` | 任務與調度 | 1 | `quest` |
 | `muse` | 想法與知識圖譜 | 1 | `muse` |
-| `intel` | 每日情報 | 2 | `intel` |
-| `memory` | LLM 記憶持久化 | 2 | `memory` |
-| `skill` | 技能樹與學習路徑 | 2 | `skill` |
-| `workforce` | 資源管理 | 3 | `workforce` |
-| `matching` | 匹配引擎 | 3 | `matching` |
+| `scout` | 每日情報 | 2 | `scout` |
+| `lore` | LLM 記憶持久化 | 2 | `lore` |
+| `dojo` | 技能樹與學習路徑 | 2 | `dojo` |
+| `roster` | 資源管理 | 3 | `roster` |
+| `nexus` | 匹配引擎 | 3 | `nexus` |
 | `admin` | 平台管理 | 1 | `admin` |
 
-### 前端模組 (`dashboard/src/modules/`)
+### 前端模組 (`workbench/src/modules/`)
 
 | 規則 | 範例 | 反面模式 |
 |------|---------|-------------|
 | 小寫、短橫線命名法 (kebab-case) | `finance`, `quest` | `Finance`, `questModule` |
-| 匹配後端模組 | `modules/finance` ↔ `core/src/modules/finance` | 不同的名稱 |
+| 匹配後端模組 | `modules/finance` ↔ `core/src/modules/finance` | 不同名稱 |
 
 每個前端模組：
 ```
-dashboard/src/modules/<name>/
+workbench/src/modules/<name>/
 ├── components/          # 領域特定組件
 ├── pages/               # 路由層級組件
 ├── hooks/               # 領域特定鉤子
@@ -293,7 +293,7 @@ lab/<name>-poc/
 └── scripts/               # 快速驗證腳本
 ```
 
-**生命週期**：`lab/<name>-poc/` → 驗證 → 晉升至 `core/src/modules/` + `dashboard/src/modules/` → 封存或刪除實驗項目。
+**生命週期**：`lab/<name>-poc/` → 驗證 → 晉升至 `core/src/modules/` + `workbench/src/modules/` → 封存或刪除實驗項目。
 
 ## 領域映射
 
@@ -302,11 +302,11 @@ lab/<name>-poc/
 ```
                   core/src/modules/finance/           ← 後端邏輯
 Finance 領域 ──
-                  dashboard/src/modules/finance/      ← 前端 UI
+                  workbench/src/modules/finance/      ← 前端 UI
 
                   core/src/modules/auth/              ← 後端邏輯
 Auth 領域 ─────
-                  dashboard/src/modules/auth/         ← 前端 UI (登入、註冊)
+                  workbench/src/modules/auth/         ← 前端 UI (登入、註冊)
 
                   core/services/media/                ← 獨立服務，無前端
 Media 領域 ────
