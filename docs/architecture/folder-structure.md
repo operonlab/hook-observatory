@@ -83,13 +83,8 @@ Workshop 將所有功能組織成三個層級：
 │   ├── architecture/            # 系統架構文檔
 │   ├── blueprint/               # 實作藍圖
 │   ├── reference/               # 參考資料
-│   ├── vision/                  # 平台願景 (宣言、領域、ADR、路線圖)
-│   └── zh-TW/                   # 繁體中文翻譯 (自動生成)
-│       ├── architecture/        # docs/architecture/ 的鏡像
-│       ├── blueprint/           # docs/blueprint/ 的鏡像
-│       ├── reference/           # docs/reference/ 的鏡像
-│       ├── vision/              # docs/vision/ 的鏡像
-│       └── CLAUDE.zh-TW.md     # 根目錄 CLAUDE.md 的鏡像
+│   ├── vision/                  # 平台願景 (宣言、領域、組合模型、路線圖)
+│   └── guides/                  # 開發者指南 (文件管理、功能生命週期)
 ├── scripts/                     # 構建/翻譯/部署腳本
 │   └── translate-docs.py       # 通過 Gemini CLI 自動將文檔翻譯成繁體中文 (zh-TW)
 ├── lab/                         # POC 實驗
@@ -267,20 +262,12 @@ docs/
 ├── vision/                  # 平台願景文檔
 │   ├── workshop-manifesto.md    # 何謂 Workshop
 │   ├── domain-catalog.md        # 10 個核心模組 + 5 個專案構想
-│   ├── architecture-decisions.md # 腦力激盪產出的 7 個 ADR
+│   ├── composition-model.md     # 樂高組合模型
 │   └── roadmap.md               # 四階段路線圖
-├── zh-TW/                   # 繁體中文翻譯
-│   ├── architecture/        # *.zh-TW.md 文件
-│   ├── blueprint/
-│   ├── reference/
-│   ├── vision/
-│   └── CLAUDE.zh-TW.md
-├── api/                     # API 設計標準
-├── runbooks/                # 運作程序
-└── guides/                  # 開發者入職指南
+└── guides/                  # 開發者指南 (文件管理、功能生命週期)
 ```
 
-**翻譯工作流**：英文文檔為單一事實來源。運行 `python3 scripts/translate-docs.py` 以自動翻譯至繁體中文 (zh-TW)。版本追蹤通過 YAML frontmatter (`doc_version` + `content_hash`) 進行。
+**翻譯工作流**：`docs/` 以繁體中文撰寫（source of truth）。`docs-en/` 為英文備份。版本追蹤通過 YAML frontmatter (`doc_version` + `content_hash`) 進行。
 
 ### 腳本 (`scripts/`)
 
