@@ -16,12 +16,13 @@ translated_at: 2026-02-23
 |------|----------|
 | [workshop-manifesto.md](./workshop-manifesto.md) | Workshop 是什麼、LEGO 組合哲學、服務分類、設計原則 |
 | [domain-catalog.md](./domain-catalog.md) | 統一服務目錄 + 組合配方 + 依賴關係圖 |
-| [architecture-decisions.md](./architecture-decisions.md) | 7 項 ADR：Monolith、MCP Adapter、Space Model、Widget、Resource、Event、Progressive |
+| [architecture-decisions.md](../architecture/architecture-decisions.md) | 7 項 ADR：Monolith、MCP Adapter、Space Model、Widget、Resource、Event、Progressive |
+| [composition-model.md](./composition-model.md) | 樂高組合模型：雙線夾擊、組合配方、決策流程 |
 | [roadmap.md](./roadmap.md) | 四階段路線圖：個人 → 知識 → 團隊 → 商業 |
 
 ## 翻譯
 
-英文是唯一真實來源（本目錄）。翻譯由 `scripts/translate-docs.py` 自動產生至 `docs-<lang>/`（例如 `docs-zh-TW/`、`docs-ja/`）。
+`docs/` 以繁體中文撰寫（source of truth）。`docs-en/` 為英文備份（原始英文版本）。
 
 ## 快速參考
 

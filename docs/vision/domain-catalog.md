@@ -12,7 +12,7 @@ translated_at: 2026-02-23
 
 ---
 
-> 關於 LEGO 組合模型與組合配方，請參閱 [architecture/composition-model.md](../architecture/composition-model.md)
+> 關於 LEGO 組合模型與組合配方，請參閱 [vision/composition-model.md](./composition-model.md)
 
 ---
 
@@ -68,7 +68,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **MCP 伺服器** | `pulso-finance` (現有，待更名為 → `workshop-finance`) |
+| **MCP 伺服器** | `workshop-finance` |
 | **V1 狀態** | MCP 伺服器運作中 (9 個工具) |
 
 **功能能力**:
@@ -93,7 +93,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 |----------|-------|
 | **依賴項目** | auth, skill (用於量化模式) |
 | **雙向連接** | finance (任務 ↔ 訂單) |
-| **MCP 伺服器** | `pulso-quest` (現有，待更名為 → `workshop-quest`) |
+| **MCP 伺服器** | `workshop-quest` |
 | **V1 狀態** | MCP 伺服器運作中 (10 個工具) |
 
 **功能能力**:
@@ -121,7 +121,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **MCP 伺服器** | `pulso-muse` (現有，待更名為 → `workshop-muse`) |
+| **MCP 伺服器** | `workshop-muse` |
 | **V1 狀態** | MCP 伺服器運作中 (8 個工具) |
 
 **功能能力**:
@@ -307,7 +307,7 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 
 ## 組合配方 (Composition Recipes)
 
-> 關於完整的組合配方，請參閱 [architecture/composition-model.md](../architecture/composition-model.md)
+> 關於完整的組合配方，請參閱 [vision/composition-model.md](./composition-model.md)
 
 計劃中的組合：
 - **法律顧問 (Legal Advisor)** = memory + intel + muse + media
@@ -387,67 +387,3 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
 | **工作站 (Station)** | 磁碟分析, LLM 使用量, 本地工具, Claude Code 技能 | 本地 / 可選資料庫 |
 | **組合 (Composition)** | 法律顧問, 教會音樂, 虛擬客服, ERP/POS | 上述服務的組合 |
---- 引用文件內容 ---
-Content from @.cache/uv/simple-v20/pypi/pycryptodomex.rkyv:
-無法顯示二進位檔案內容：.cache/uv/simple-v20/pypi/pycryptodomex.rkyv
-Content from @.tmux/logs/memory-guardian.log:
-[02/21 17:00:32] PRESSURE: level=35 (WARN<40 CRIT<15)
-  --- P1: 可刪減應用程式 ---
-  KILL Chrome 分頁 PID 989 (302MB)
-  KILL Chrome 分頁 PID 90058 (226MB)
-  KILL Chrome 分頁 PID 60600 (210MB)
-  KILL Chrome 分頁 PID 5368 (192MB)
-  KILL Chrome 分頁 PID 2166 (182MB)
-  KILL Chrome 分頁 PID 10965 (174MB)
-  KILL Chrome 分頁 PID 5883 (162MB)
-  KILL Chrome 分頁 PID 44685 (158MB)
-  KILL Chrome 分頁 PID 1874 (148MB)
-  KILL Chrome 分頁 PID 6024 (140MB)
-  KILL Chrome 分頁 PID 6251 (140MB)
-  KILL Chrome 分頁 PID 34150 (126MB)
-  KILL Chrome 分頁 PID 5887 (116MB)
-  KILL Chrome 分頁 PID 50737 (112MB)
-  KILL Chrome 分頁 PID 6439 (112MB)
-  KILL Chrome 分頁 PID 32051 (112MB)
-  KILL Chrome 分頁 PID 6523 (110MB)
-  KILL Chrome 分頁 PID 5269 (104MB)
-  KILL Chrome 分頁 PID 1294 (95MB)
-  KILL Chrome 分頁 PID 13711 (74MB)
-  KILL Chrome 分頁 PID 45506 (70MB)
-  KILL LINE PID 413 (67MB)
-  KILL AltServer PID 1884 (50MB)
-  P1 結果：已刪除=23 釋放空間=3182MB
-  P2+P3：已跳過 (僅 WARN 級別，Claude Code 受保護)
-[02/21 17:00:32] 完成：總刪除=23 釋放空間≈3182MB
----
-[02/22 01:12:54] PRESSURE: level=35 (WARN<40 CRIT<15)
-  --- P1: 可刪減應用程式 ---
-  KILL Chrome 分頁 PID 71759 (124MB)
-  P1 結果：已刪除=1 釋放空間=124MB
-  P2+P3：已跳過 (僅 WARN 級別，Claude Code 受保護)
-[02/22 01:12:54] 完成：總刪除=1 釋放空間≈124MB
----
-[02/22 11:36:23] PRESSURE: level=36 (WARN<40 CRIT<15)
-  --- P1: 可刪減應用程式 ---
-  KILL Chrome 分頁 PID 51400 (102MB)
-  P1 結果：已刪除=1 釋放空間=102MB
-  P2+P3：已跳過 (僅 WARN 級別，Claude Code 受保護)
-[02/22 11:36:23] 完成：總刪除=1 釋放空間≈102MB
----
-[02/22 11:37:23] PRESSURE: level=35 (WARN<40 CRIT<15)
-  --- P1: 可刪減應用程式 ---
-  KILL Chrome 分頁 PID 54259 (103MB)
-  P1 結果：已刪除=1 釋放空間=103MB
-  P2+P3：已跳過 (僅 WARN 級別，Claude Code 受保護)
-[02/22 11:37:23] 完成：總刪除=1 釋放空間≈103MB
----
-[02/23 18:12:44] PRESSURE: level=36 (WARN<40 CRIT<15)
-  --- P1: 可刪減應用程式 ---
-  KILL Chrome 分頁 PID 73668 (104MB)
-  P1 結果：已刪除=1 釋放空間=104MB
-  P2+P3：已跳過 (僅 WARN 級別，Claude Code 受保護)
-[02/23 18:12:44] 完成：總刪除=1 釋放空間≈104MB
----
-Content from @Library/Developer/Xcode/iOS DeviceSupport/iPhone16,2 26.2.1 (23C71)/Symbols/System/Library/PrivateFrameworks/MemoryAccounting.framework/MemoryAccounting:
-無法顯示二進位檔案內容：Library/Developer/Xcode/iOS DeviceSupport/iPhone16,2 26.2.1 (23C71)/Symbols/System/Library/PrivateFrameworks/MemoryAccounting.framework/MemoryAccounting
----

@@ -164,11 +164,3 @@ async def chat_stream():
 | UI 插槽 | React PluginSlot | 前端插件注入點 |
 
 規範詳情請參閱 [插件系統 (Plugin System)](./plugin-system.md)。
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

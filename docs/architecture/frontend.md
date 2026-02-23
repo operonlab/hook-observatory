@@ -69,14 +69,7 @@ src/modules/<domain>/
 
 ## 技術棧
 
-| 層級 | 選擇 | 原理/依據 |
-|-------|--------|-----------|
-| 建置 | Rsbuild | 基於 Rspack，建置速度快 |
-| 框架 | React 19 | 組件模型、生態系統、並行特性 |
-| 路由 | React Router 7 | 延遲載入、巢狀路由 |
-| 樣式 | Tailwind CSS 4 | 實用優先（Utility-first），一致的設計標記（design tokens） |
-| 狀態 | Zustand 5 | 輕量級，每個模組獨立作用域 |
-| 型別 | TypeScript 5 | 嚴格模式，透過 `src/shared/types/` 共用型別 |
+詳見 [tech-stack.md](./tech-stack.md#前端)。
 
 ## 應用程式外殼 (`src/shell/`)
 
@@ -193,16 +186,7 @@ export function PluginSlot({ name, context }: PluginSlotProps) {
 }
 ```
 
-可用的插槽遵循 `{module}.{page}.{position}` 的模式：
-
-| 插槽 | 位置 |
-|------|----------|
-| `finance.dashboard.sidebar` | 財務儀表板側邊欄 |
-| `quest.detail.actions` | 任務詳情頁動作按鈕 |
-| `shell.header.right` | 全域頁首右側區塊 |
-| `shell.sidebar.bottom` | 全域側邊欄底部區塊 |
-
-詳見 [插件系統](./plugin-system.md)。
+完整插槽清單詳見 [Plugin System](./plugin-system.md#ui-插槽)。
 
 ## 共用組件 (`src/shared/`)
 

@@ -312,11 +312,3 @@ service:
 | 事件總線待處理積壓 | `pending_events > 1000` | 警告 |
 | 插件 Hook 超時 | `hook.duration > 5s` | 警告 |
 | 資料庫連接池耗盡 | `pool.available == 0` | 危急 |
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

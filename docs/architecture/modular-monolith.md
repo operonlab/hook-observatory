@@ -248,11 +248,3 @@ def create_app() -> FastAPI:
 5. 其他模組無需更改（它們已經在使用 service/event 介面）
 
 這就是從第一天起就強制執行模組邊界的核心優勢。
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

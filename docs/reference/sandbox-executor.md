@@ -199,11 +199,3 @@ npm run dev       # 監控模式 (Watch mode)
 ```
 
 修改源碼後，請重新編譯並重啟 LLM CLI 以套用更改。
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

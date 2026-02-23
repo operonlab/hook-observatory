@@ -170,8 +170,8 @@ matching   ──► 資源分配最佳化
 
 | 文件 | 關係 |
 |------|------|
-| [principles.md](./principles.md) | 組合優於繼承、KISS、YAGNI 是此模型的理論基礎 |
-| [modular-monolith.md](./modular-monolith.md) | 服務積木的技術實現方式 |
-| [event-driven.md](./event-driven.md) | 服務透過事件鬆耦合——組合的黏著劑 |
-| [../vision/domain-catalog.md](../vision/domain-catalog.md) | 所有服務積木的完整目錄 |
-| [./shared-layer-patterns.md](./shared-layer-patterns.md) | 積木內部的共享模式（OOP 模式） |
+| [principles.md](../architecture/principles.md) | 組合優於繼承、KISS、YAGNI 是此模型的理論基礎 |
+| [modular-monolith.md](../architecture/modular-monolith.md) | 服務積木的技術實現方式 |
+| [event-driven.md](../architecture/event-driven.md) | 服務透過事件鬆耦合——組合的黏著劑 |
+| [domain-catalog.md](./domain-catalog.md) | 所有服務積木的完整目錄 |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 積木內部的共享模式（OOP 模式） |

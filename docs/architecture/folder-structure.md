@@ -334,12 +334,4 @@ Media 領域 ────
 4. **共享代碼是顯式的** —— 僅共享 `libs/` 與 `shared/` 的內容
 5. **約定優於配置** —— 一致的命名意味著需要的文檔更少
 6. **每個單元一個 README.md** —— 每個服務和重要的模組都有自己的 README
-7. **英文為事實來源** —— 所有文檔均以英文撰寫，自動翻譯為繁體中文 (zh-TW)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+7. **繁體中文為事實來源** —— `docs/` 以繁體中文撰寫（source of truth），`docs-en/` 為英文備份

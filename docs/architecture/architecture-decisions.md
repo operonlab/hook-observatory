@@ -51,13 +51,13 @@ Claude Code ──► MCP Server ──► FastAPI Core ──► Database
 - 超過 10 個 tools 的 MCP Servers 應進行切分 (例如：`workshop-quest-manage` + `workshop-quest-pool`)
 - MCP Server tool 命名規則：`{domain}_{action}` (例如：`finance_add_transaction`)
 
-**現有 MCP Servers (待更名)**：
-| 現有名稱 | 預計名稱 | Tool 數量 |
-|-------------|-------------|------------|
-| `pulso-finance` | `workshop-finance` | 9 |
-| `pulso-quest` | `workshop-quest` | 10 |
-| `pulso-muse` | `workshop-muse` | 8 |
-| `kas-memory` | `workshop-memory` | 8 |
+**現有 MCP Servers**：
+| 名稱 | Tool 數量 |
+|-------------|------------|
+| `workshop-finance` | 9 |
+| `workshop-quest` | 10 |
+| `workshop-muse` | 8 |
+| `kas-memory` | 8 |
 
 ---
 
@@ -170,6 +170,8 @@ resources:
 
 **決策**：Modules 透過 Event Bus 進行通訊，而非 direct imports。
 
+完整事件格式與規範詳見 [event-driven.md](./event-driven.md)。
+
 **決策理由**：
 - 保持清晰的 Module 邊界
 - 允許 asynchronous processing (finance 記錄無需等待 quest 更新)
@@ -188,8 +190,8 @@ resources:
 
 **實作層級**：
 1. **Phase 1**：In-process Event Bus (Python asyncio，在 multi-worker 之前已足夠)
-2. **Phase 2**：Redis Pub/Sub (multi-process / multi-instance)
-3. **Phase 3**：考慮 NATS / RabbitMQ (若確實需要)
+2. **Phase 2**：Redis Streams (multi-process / multi-instance)
+3. **Phase 3**：NATS JetStream
 
 ---
 
@@ -210,11 +212,3 @@ resources:
 - 每個 Phase 都是可用且完整的產品 —— 而非半成品原型
 - Phase N+1 不會破壞 Phase N 的使用者體驗
 - 升級是可選的 (Opt-in)，而非強制的 (simple mode 始終可用)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

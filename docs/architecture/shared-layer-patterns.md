@@ -398,4 +398,4 @@ Quest 的狀態機 (accept/complete) 不使用 BaseCRUD，但仍使用 `get_or_4
 | **8/10** | 核心模組使用 SpaceScopedModel |
 | **~60** | 遵循 `module.entity.action` 格式的事件型別 |
 | **3+** | 使用 BridgeAdapter 多型的 Bridge 平台 |
-| **9** | 前端模組對應後端共享型別 |
+| **10** | 前端模組對應後端共享型別 |

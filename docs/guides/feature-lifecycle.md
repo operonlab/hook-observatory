@@ -15,7 +15,7 @@ translated_at: 2026-02-23
     │
     ├─ 不確定 / 需要驗證 → lab/<name>-poc/
     │
-    └─ 已確認 / 規格明確 → 直接進入 services/<name>/
+    └─ 已確認 / 規格明確 → 直接進入 core/src/modules/<name>/
 ```
 
 ## 階段
@@ -52,12 +52,12 @@ lab/<name>-poc/outputs/   ← 刪除 (或保留有價值的產出)
 
 1. 建立正式服務骨架：
    ```bash
-   mkdir -p services/<name>/{src/<name>/{routes,models,core},tests,migrations}
+   mkdir -p core/src/modules/<name>/{src/<name>/{routes,models,core},tests,migrations}
    ```
 
 2. 建立正式前端 (如果需要)：
    ```bash
-   mkdir -p apps/<name>/{src/{components,pages,hooks},public}
+   mkdir -p dashboard/src/modules/<name>/{src/{components,pages,hooks},public}
    ```
 
 3. 撰寫遷移腳本 (.md → DB)：
@@ -70,7 +70,7 @@ lab/<name>-poc/outputs/   ← 刪除 (或保留有價值的產出)
 5. 更新 lab README.md：
    ```markdown
    ## Status: GRADUATED
-   已於 YYYY-MM-DD 遷移至 services/<name>/ + apps/<name>/
+   已於 YYYY-MM-DD 遷移至 core/src/modules/<name>/ + dashboard/src/modules/<name>/
    ```
 
 ### 階段 4：清理

@@ -54,7 +54,7 @@ social hooks v1                                                full platform
 - [ ] FastAPI Core Monolith + 模組化結構
 - [ ] PostgreSQL 每個模組獨立 Schema + 所有資料表皆含 space_id
 - [ ] 事件匯流排（進程內）
-- [ ] Widget 儀表板框架 (react-grid-layout + Container Queries)
+- [ ] 🔮 Widget 儀表板框架 (react-grid-layout + Container Queries) — 未來願景
 - [ ] 針對 finance, quest, muse 的 MCP Server（對接到核心 API）
 - [ ] PWA + Service Worker（基礎已存在）
 - [ ] 基礎 CI/CD
@@ -181,11 +181,3 @@ social hooks v1                                                full platform
 | 動力下降 | 每個階段都產生可用產品 —— 日常使用 = 持續動力 |
 | 上下文爆炸 | Wayne 的記憶系統 + HANDOFF.md + 特定領域文件 |
 | 過度工程 | 漸進式複雜度原則：先建構最簡單的版本 |
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
-Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
-Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
-Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
