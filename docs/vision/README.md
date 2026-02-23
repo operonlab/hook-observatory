@@ -1,34 +1,51 @@
 ---
-doc_version: 1
-content_hash: 25063671
+doc_version: 4
+content_hash: 1dafee87
+source_version: 4
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# Workshop Vision Documents
+# Workshop 願景文件
 
-> 2026-02-23 brainstorming session output — Complete record of the Workshop platform vision.
+> Workshop 平台願景 — 定義我們建造什麼、為什麼，以及服務如何組合。
 
-## Documents
+## 文件列表
 
-| File | Contents |
+| 檔案 | 內容 |
 |------|----------|
-| [workshop-manifesto.md](./workshop-manifesto.md) | What Workshop is, Core/Stations/Bridges taxonomy, design principles |
-| [domain-catalog.md](./domain-catalog.md) | 10 Core Modules + 5 Project Ideas + dependency graph + classification index |
-| [architecture-decisions.md](./architecture-decisions.md) | 7 ADRs: Monolith, MCP Adapter, Space Model, Widget, Resource, Event, Progressive |
-| [roadmap.md](./roadmap.md) | Four-phase roadmap: Personal → Knowledge → Team → Commercial |
+| [workshop-manifesto.md](./workshop-manifesto.md) | Workshop 是什麼、LEGO 組合哲學、服務分類、設計原則 |
+| [domain-catalog.md](./domain-catalog.md) | 統一服務目錄 + 組合配方 + 依賴關係圖 |
+| [architecture-decisions.md](./architecture-decisions.md) | 7 項 ADR：Monolith、MCP Adapter、Space Model、Widget、Resource、Event、Progressive |
+| [roadmap.md](./roadmap.md) | 四階段路線圖：個人 → 知識 → 團隊 → 商業 |
 
-## Translations
+## 翻譯
 
-Chinese (Traditional) translations are available in [`zh-TW/`](./zh-TW/) for quick reading.
-English versions are the source of truth — Claude Code reads these.
+英文是唯一真實來源（本目錄）。翻譯由 `scripts/translate-docs.py` 自動產生至 `docs-<lang>/`（例如 `docs-zh-TW/`、`docs-ja/`）。
 
-## Quick Reference
+## 快速參考
 
-### Three-Tier Taxonomy
-- **Core Modules**: DB-backed business domains (auth, finance, quest, muse, intel, memory, skill, workforce, matching, admin)
-- **Stations**: Standalone local tools (disk analyzer, LLM usage, legal advisor, church music)
-- **Bridges**: External connectors (LINE, Telegram, Discord, Firebase, external APIs)
+### LEGO 組合模型
 
-### Architecture Pattern
+「專案」與「模組」之間沒有區別 — 一切都是可組合的服務：
+
+```
+Bottom-Up: Build service blocks (auth, finance, quest, muse, ...)
+Top-Down:  Analyze requirements, design blueprints
+Meeting:   Compose services into solutions (Legal Advisor, ERP, ...)
+```
+
+### 服務類型
+
+| 類型 | 範例 | 資料駐留位置 |
+|------|----------|---------------|
+| **基礎 (Foundation)** | auth, admin | PostgreSQL |
+| **領域 (Domain)** | finance, quest, muse, intel, memory, skill, workforce, matching | PostgreSQL (schema-per-module) |
+| **橋接 (Bridge)** | social-hooks, notification | 外部 + Event Bus |
+| **工作站 (Station)** | 磁碟分析、LLM 用量、本地工具 | 本地 / 可選 DB |
+| **組合 (Composition)** | Legal Advisor、Church Music、Virtual CS、ERP/POS | 上述服務的組裝 |
+
+### 架構模式
 ```
 Claude Code → MCP Server (adapter) → FastAPI Core (monolith) → PostgreSQL
                                           ↕
@@ -37,8 +54,8 @@ Web Dashboard (widgets) ──────────► FastAPI Core
 Social Bridges (LINE/TG/DC) ─────► FastAPI Core
 ```
 
-### Phase Summary
-1. **Phase 1**: auth + finance + quest + muse + LINE bot + Widget Dashboard
-2. **Phase 2**: memory v2 + skill + intel + church music
-3. **Phase 3**: workforce + task dispatch + multi-platform social
-4. **Phase 4**: commercial (ERP/POS/legal/virtual CS)
+### 階段摘要
+1. **Phase 1**：auth + finance + quest + muse + LINE bot + Widget Dashboard
+2. **Phase 2**：memory v2 + skill + intel + church music
+3. **Phase 3**：workforce + task dispatch + multi-platform social
+4. **Phase 4**：商業化 (ERP/POS/legal/virtual CS)

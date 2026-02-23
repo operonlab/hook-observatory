@@ -1,49 +1,52 @@
 ---
 doc_version: 2
 content_hash: 9c75f789
+source_version: 2
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# RWD + PWA Development Standards
+# RWD + PWA 開發規範
 
-The frontend application (`dashboard/`) MUST follow these standards.
+前端應用程式 (`dashboard/`) 必須遵守這些規範。
 
-## Responsive Web Design (RWD)
+## 響應式網頁設計 (RWD)
 
-### Breakpoints (Tailwind CSS)
+### 斷點 (Tailwind CSS)
 
-| Token | Min Width | Target |
+| Token | 最小寬度 | 目標 |
 |-------|-----------|--------|
-| `sm`  | 640px     | Mobile landscape |
-| `md`  | 768px     | Tablet |
-| `lg`  | 1024px    | Desktop |
-| `xl`  | 1280px    | Large desktop |
+| `sm`  | 640px     | 手機橫向 |
+| `md`  | 768px     | 平板 |
+| `lg`  | 1024px    | 桌上型電腦 |
+| `xl`  | 1280px    | 大型桌上型電腦 |
 
-### Rules
+### 規則
 
-1. **Mobile-first**: Default styles target `<640px`. Use `sm:`, `md:`, `lg:` for wider screens.
-2. **Touch targets**: Minimum 44×44px for all interactive elements.
-3. **No horizontal scroll**: At any breakpoint. Test at 320px minimum.
-4. **Fluid typography**: Use `rem` units (base 16px). Scale with viewport via `clamp()`.
-5. **Responsive images**: Use `srcset` / `<picture>` or CSS `object-fit`.
-6. **Container queries**: Prefer over media queries for component-level responsiveness.
+1. **行動優先**：預設樣式針對 `<640px`。較寬的螢幕請使用 `sm:`、`md:`、`lg:`。
+2. **觸控目標**：所有互動元素最小需為 44×44px。
+3. **禁止橫向捲動**：在任何斷點下皆然。最低請在 320px 進行測試。
+4. **流體字型**：使用 `rem` 單位（基準為 16px）。透過 `clamp()` 隨視窗大小縮放。
+5. **響應式圖片**：使用 `srcset` / `<picture>` 或 CSS `object-fit`。
+6. **容器查詢**：在元件級別的響應式設計中，優先於媒體查詢使用。
 
-### Testing Checklist
+### 測試檢查清單
 
-- [ ] 320px (small mobile)
+- [ ] 320px (小型手機)
 - [ ] 375px (iPhone SE)
-- [ ] 768px (iPad portrait)
-- [ ] 1024px (iPad landscape / small desktop)
-- [ ] 1280px+ (desktop)
+- [ ] 768px (iPad 縱向)
+- [ ] 1024px (iPad 橫向 / 小型桌上型電腦)
+- [ ] 1280px+ (桌上型電腦)
 
-## Progressive Web App (PWA)
+## 漸進式網路應用程式 (PWA)
 
-### Required Files
+### 必要檔案
 
 #### `manifest.json`
 ```json
 {
-  "name": "App Full Name",
-  "short_name": "App",
+  "name": "應用程式全名",
+  "short_name": "應用程式",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1e1e2e",
@@ -57,15 +60,15 @@ The frontend application (`dashboard/`) MUST follow these standards.
 
 #### Service Worker
 
-Strategy per asset type:
+各資產類型的策略：
 
-| Asset | Strategy | Rationale |
+| 資產 | 策略 | 原理說明 |
 |-------|----------|-----------|
-| App shell (HTML/CSS/JS) | **Cache-first** | Instant load, update in background |
-| API responses | **Network-first**, cache fallback | Fresh data preferred |
-| Static assets (images, fonts) | **Cache-first**, stale-while-revalidate | Rarely change |
+| App shell (HTML/CSS/JS) | **Cache-first** | 即時載入，在背景更新 |
+| API 回應 | **Network-first**, 快取備援 | 優先取得最新數據 |
+| 靜態資產 (圖片、字型) | **Cache-first**, stale-while-revalidate | 極少變動 |
 
-### HTML Requirements
+### HTML 要求
 
 ```html
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -74,28 +77,28 @@ Strategy per asset type:
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 ```
 
-### Install Criteria (Chrome)
+### 安裝標準 (Chrome)
 
-1. Valid `manifest.json` with `name`, `icons` (≥192px), `start_url`, `display`
-2. Registered service worker with `fetch` event handler
-3. Served over HTTPS (or localhost for dev)
+1. 包含 `name`、`icons` (≥192px)、`start_url`、`display` 的有效 `manifest.json`
+2. 已註冊且包含 `fetch` 事件處理器的 service worker
+3. 透過 HTTPS 傳輸（開發環境可使用 localhost）
 
-### Offline Behavior
+### 離線行為
 
-- App shell loads from cache (instant)
-- Show offline indicator when network unavailable
-- Queue mutations for replay when back online (future)
+- App shell 從快取載入（即時）
+- 網路不可用時顯示離線指示器
+- 將變更放入佇列，待重新連線後重播（未來功能）
 
-## Implementation in Web App
+## 在 Web App 中的實作
 
-The dashboard app (`dashboard/`) serves as the reference implementation:
-- Tailwind breakpoint config from shared styles
-- PWA manifest and SW registration from web app entry point
-- Dark/light theme variables via CSS custom properties (Catppuccin Mocha)
+dashboard 應用程式 (`dashboard/`) 作為參考實作：
+- 來自共用樣式的 Tailwind 斷點配置
+- 來自 Web App 進入點的 PWA manifest 和 SW 註冊
+- 透過 CSS 自定義屬性實現深色/淺色主題變數 (Catppuccin Mocha)
 
-## Theme: Catppuccin Mocha
+## 主題：Catppuccin Mocha
 
-Default dark theme palette (CSS custom properties):
+預設深色主題調色盤 (CSS 自定義屬性)：
 
 ```css
 :root {
@@ -115,4 +118,3 @@ Default dark theme palette (CSS custom properties):
   --yellow: #f9e2af;
   --teal: #94e2d5;
 }
-```

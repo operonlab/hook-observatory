@@ -1,42 +1,45 @@
 ---
 doc_version: 1
 content_hash: 3ff968ae
+source_version: 1
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# Event-Driven Architecture
+# 事件驅動架構 (Event-Driven Architecture)
 
-## Design Philosophy
+## 設計理念
 
-**Everything is an event. Events drive state changes.**
+**萬物皆事件。事件驅動狀態變更。**
 
-When a module changes state, it publishes an event. Other modules (and plugins) subscribe to events they care about. This creates loose coupling between modules while maintaining a clear audit trail of everything that happens in the system.
+當一個模組變更狀態時，它會發布一個事件。其他模組（和插件）訂閱它們關心的事件。這在模組之間建立了鬆散耦合，同時維護了系統中發生之所有事情的清晰稽核軌跡。
 
 ```
-Module A changes state
-    → publishes event to Event Bus
-    → Module B receives event, reacts
-    → Module C receives event, reacts
-    → Plugin hooks fire
-    → OTel span recorded
+模組 A 變更狀態
+    → 發布事件至事件匯流排 (Event Bus)
+    → 模組 B 接收事件並做出反應
+    → 模組 C 接收事件並做出反應
+    → 插件 Hook 觸發
+    → 記錄 OTel span
 ```
 
-## Event Structure
+## 事件結構
 
-Every event follows this schema:
+每個事件都遵循以下 Schema：
 
 ```python
-@dataclass
+ @.cache/uv/archive-v0/uj_7CuQMD1gog0o_f4ybB/huggingface_hub/dataclasses.py
 class Event:
-    type: str           # e.g., "finance.transaction.created"
-    data: dict          # event payload
-    id: str             # unique event ID (UUID v7)
-    timestamp: str      # ISO 8601 timestamp
-    source: str         # module that published the event
-    user_id: str | None # user who triggered the action (if applicable)
-    trace_id: str       # OpenTelemetry trace ID for correlation
+    type: str           # 例如 "finance.transaction.created"
+    data: dict          # 事件負載 (payload)
+    id: str             # 唯一事件 ID (UUID v7)
+    timestamp: str      # ISO 8601 時間戳記
+    source: str         # 發布事件的模組
+    user_id: str | None # 觸發動作的使用者（如果適用）
+    trace_id: str       # 用於關聯的 OpenTelemetry trace ID
 ```
 
-Example:
+範例：
 
 ```json
 {
@@ -55,21 +58,21 @@ Example:
 }
 ```
 
-## Event Naming Convention
+## 事件命名規範
 
 ```
 {domain}.{entity}.{past_tense_verb}
 ```
 
-| Component | Rule | Examples |
+| 組成部分 | 規則 | 範例 |
 |-----------|------|---------|
-| `domain` | Module name | `auth`, `finance`, `quest`, `muse` |
-| `entity` | Business entity (singular) | `user`, `transaction`, `quest`, `spark` |
-| `verb` | Past tense (event already happened) | `created`, `updated`, `deleted`, `completed` |
+| `domain` | 模組名稱 | `auth`, `finance`, `quest`, `muse` |
+| `entity` | 業務實體（單數） | `user`, `transaction`, `quest`, `spark` |
+| `verb` | 過去式（事件已經發生） | `created`, `updated`, `deleted`, `completed` |
 
-### Standard Events per Module
+### 各模組標準事件
 
-| Module | Events |
+| 模組 | 事件 |
 |--------|--------|
 | auth | `auth.user.registered`, `auth.user.approved`, `auth.user.suspended`, `auth.user.logged_in`, `auth.user.logged_out` |
 | finance | `finance.transaction.created`, `finance.transaction.updated`, `finance.budget.exceeded`, `finance.subscription.renewed` |
@@ -77,44 +80,44 @@ Example:
 | muse | `muse.spark.created`, `muse.spark.linked`, `muse.graph.updated` |
 | admin | `admin.setting.changed`, `admin.plugin.installed`, `admin.plugin.removed` |
 
-### System Events
+### 系統事件
 
-| Event | When |
+| 事件 | 觸發時機 |
 |-------|------|
-| `system.startup` | Application starts |
-| `system.shutdown` | Application shutting down |
-| `system.health.degraded` | Health check detects issues |
+| `system.startup` | 應用程式啟動 |
+| `system.shutdown` | 應用程式正在關閉 |
+| `system.health.degraded` | 健康檢查偵測到問題 |
 
 ## EventBus API
 
-### Core Interface
+### 核心介面
 
 ```python
 class EventBus:
     async def publish(self, event_type: str, data: dict, **kwargs) -> str:
-        """Publish an event. Returns event ID."""
+        """發布事件。回傳事件 ID。"""
 
     def subscribe(self, event_type: str, handler: Callable) -> None:
-        """Subscribe a handler to an event type. Supports glob patterns."""
+        """將處理程序訂閱至特定事件類型。支援 glob 模式。"""
 
     def on(self, event_type: str) -> Callable:
-        """Decorator for subscribing handlers."""
+        """用於訂閱處理程序的裝飾器。"""
 
     def use(self, middleware: EventMiddleware) -> None:
-        """Register middleware that runs on every event."""
+        """註冊在每個事件上運行的中間件。"""
 ```
 
-### Publishing Events
+### 發布事件
 
 ```python
-# Direct publish
+# 直接發布
 event_id = await event_bus.publish(
     "finance.transaction.created",
     data={"transaction_id": "txn_abc", "amount": 150.00},
     user_id=current_user.id,
 )
 
-# Or from within a module's service layer
+# 或從模組的服務層 (service layer) 內發布
 class TransactionService:
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
@@ -129,32 +132,32 @@ class TransactionService:
         return txn
 ```
 
-### Subscribing to Events
+### 訂閱事件
 
 ```python
-# Decorator style
-@event_bus.on("finance.transaction.created")
+# 裝飾器風格
+ @event_bus.on("finance.transaction.created")
 async def on_transaction_created(event: Event):
-    # Check if this triggers a quest achievement
+    # 檢查這是否觸發了任務成就
     await check_spending_quest(event.data["transaction_id"], event.user_id)
 
-# Glob pattern subscription
-@event_bus.on("finance.*.*")
+# Glob 模式訂閱
+ @event_bus.on("finance.*.*")
 async def on_any_finance_event(event: Event):
-    # Audit log all finance events
+    # 稽核記錄所有財務事件
     await audit_log.record(event)
 
-# Manual subscription
+# 手動訂閱
 event_bus.subscribe("quest.quest.completed", handle_quest_completion)
 ```
 
-### Middleware
+### 中間件 (Middleware)
 
-Middleware intercepts every event for cross-cutting concerns:
+中間件會攔截每個事件以處理橫切關注點 (cross-cutting concerns)：
 
 ```python
 class OTelEventMiddleware(EventMiddleware):
-    """Creates OpenTelemetry spans for every event."""
+    """為每個事件建立 OpenTelemetry spans。"""
 
     async def __call__(self, event: Event, next: Callable):
         with tracer.start_as_current_span(f"event:{event.type}") as span:
@@ -163,81 +166,81 @@ class OTelEventMiddleware(EventMiddleware):
             await next(event)
 
 class LoggingMiddleware(EventMiddleware):
-    """Logs every event with structlog."""
+    """使用 structlog 記錄每個事件。"""
 
     async def __call__(self, event: Event, next: Callable):
         log.info("event.published", event_type=event.type, event_id=event.id)
         await next(event)
         log.info("event.handled", event_type=event.type, event_id=event.id)
 
-# Register middleware
+# 註冊中間件
 event_bus.use(OTelEventMiddleware())
 event_bus.use(LoggingMiddleware())
 ```
 
-## Event Flow Examples
+## 事件流範例
 
-### 1. User Registration → Admin Notification
-
-```
-User submits registration form
-    │
-    ▼
-Auth module: create user (status=pending)
-    │
-    ▼
-Auth module: publish("auth.user.registered", {user_id, email, name})
-    │
-    ├──► Admin module subscriber: create audit log entry
-    │
-    ├──► Notification hook: send admin email/push notification
-    │
-    └──► Plugin hook (before_user_approve): custom validation
-```
-
-### 2. Transaction Created → Quest Achievement
+### 1. 使用者註冊 → 管理員通知
 
 ```
-User creates a financial transaction
+使用者提交註冊表單
     │
     ▼
-Finance module: insert transaction, publish("finance.transaction.created", {txn_id, amount, category})
+Auth 模組：建立使用者 (status=pending)
     │
-    ├──► Quest module subscriber:
-    │       check if user has active spending quests
-    │       if threshold met → complete quest
+    ▼
+Auth 模組：publish("auth.user.registered", {user_id, email, name})
+    │
+    ├──► Admin 模組訂閱者：建立稽核日誌條目
+    │
+    ├──► 通知 Hook：發送管理員電子郵件/推播通知
+    │
+    └──► 插件 Hook (before_user_approve)：自定義驗證
+```
+
+### 2. 交易建立 → 任務成就
+
+```
+使用者建立一筆財務交易
+    │
+    ▼
+Finance 模組：插入交易，publish("finance.transaction.created", {txn_id, amount, category})
+    │
+    ├──► Quest 模組訂閱者：
+    │       檢查使用者是否有進行中的支出任務
+    │       如果達到門檻 → 完成任務
     │       publish("quest.quest.completed", {quest_id, user_id})
     │       │
-    │       ├──► Finance module subscriber: grant reward points
+    │       ├──► Finance 模組訂閱者：發放獎勵積分
     │       │
-    │       └──► Muse module subscriber: create achievement spark
+    │       └──► Muse 模組訂閱者：建立成就靈感 (spark)
     │
-    └──► Admin module subscriber: audit log
+    └──► Admin 模組訂閱者：稽核日誌
 ```
 
-### 3. Plugin Installation → Hook Registration
+### 3. 插件安裝 → Hook 註冊
 
 ```
-Admin installs a plugin via manifest
+管理員透過 Manifest 安裝插件
     │
     ▼
-Admin module: validate manifest, install plugin
+Admin 模組：驗證 Manifest，安裝插件
     │
     ▼
-Admin module: publish("admin.plugin.installed", {plugin_id, hooks})
+Admin 模組：publish("admin.plugin.installed", {plugin_id, hooks})
     │
-    ├──► Hook Engine: register plugin's hook handlers
+    ├──► Hook 引擎：註冊插件的 Hook 處理程序
     │
-    ├──► Auth module: register plugin's permission set
+    ├──► Auth 模組：註冊插件的權限集
     │
-    └──► Frontend: reload plugin UI slots
+    └──► 前端：重新載入插件 UI 插槽 (slots)
 ```
 
-## Backend Strategy
+## 後端策略
 
-### Phase 1: In-Process Async (Current)
+### 階段 1：進程內非同步 (當前)
 
-Events are dispatched in-process using Python's `asyncio`:
+事件使用 Python 的 `asyncio` 在進程內分發：
 
 ```python
 class InProcessEventBus(EventBus):
@@ -247,18 +250,18 @@ class InProcessEventBus(EventBus):
 
     async def publish(self, event_type: str, data: dict, **kwargs) -> str:
         event = Event(type=event_type, data=data, id=str(uuid7()), ...)
-        # Run through middleware chain, then dispatch to handlers
+        # 跑完中間件鏈，然後分發給處理程序
         for handler in self._match_handlers(event_type):
             asyncio.create_task(handler(event))
         return event.id
 ```
 
-**Pros**: Zero latency, no external dependencies, simple debugging.
-**Cons**: Events lost on process crash, no cross-process delivery.
+**優點**：零延遲、無外部依賴、簡單調試。
+**缺點**：進程崩潰時事件遺失、無跨進程傳遞。
 
-### Phase 2: Redis Streams (Future)
+### 階段 2：Redis Streams (未來)
 
-When the system needs durability or cross-service events:
+當系統需要持久性或跨服務事件時：
 
 ```python
 class RedisStreamEventBus(EventBus):
@@ -268,39 +271,39 @@ class RedisStreamEventBus(EventBus):
         return event.id
 ```
 
-**Pros**: Durable, cross-service, consumer groups for load balancing.
-**Cons**: Additional infrastructure, slight latency.
+**優點**：持久化、跨服務、支援用於負載平衡的消費者群組 (consumer groups)。
+**缺點**：額外的基礎架構、微小的延遲。
 
-### Phase 3: NATS (Far Future)
+### 階段 3：NATS (遙遠的未來)
 
-If the system needs multi-node, high-throughput event streaming:
-- NATS JetStream for durable streams
-- Subject-based routing aligns with our naming convention
-- Built-in consumer groups and replay
+如果系統需要多節點、高吞吐量的事件流：
+- 使用 NATS JetStream 實現持久流
+- 基於主題 (Subject-based) 的路由與我們的命名規範一致
+- 內建消費者群組與重播功能
 
-## Observability Integration
+## 可觀測性整合
 
-Every event is a first-class observability citizen:
+每個事件都是一等可觀測性公民：
 
-| Signal | What | How |
+| 信號 | 內容 | 方式 |
 |--------|------|-----|
-| Trace | Each event = span in parent trace | `trace_id` field propagation |
-| Metric | Event throughput, latency, error rate | OTel event middleware counters |
-| Log | Structured event log | structlog with event metadata |
+| Trace | 每個事件 = 父級 Trace 中的一個 Span | `trace_id` 欄位傳遞 |
+| Metric | 事件吞吐量、延遲、錯誤率 | OTel 事件中間件計數器 |
+| Log | 結構化事件日誌 | 帶有事件元數據的 structlog |
 
 ```python
-# Automatic metrics per event type
-event_counter = meter.create_counter("events.published", description="Events published")
+# 每個事件類型的自動指標
+event_counter = meter.create_counter("events.published", description="發布的事件數")
 event_latency = meter.create_histogram("events.handling_duration_ms")
 ```
 
-See [Observability](./observability.md) for dashboard details.
+儀表板細節請參閱 [可觀測性 (Observability)](./observability.md)。
 
-## Rules
+## 規則
 
-1. **Past tense only**: Events describe something that already happened. Never `user.create` -- always `user.created`.
-2. **Events are immutable**: Once published, an event's data never changes. To correct, publish a new event.
-3. **Idempotent handlers**: Subscribers must handle the same event twice without side effects.
-4. **No request/response**: Events are fire-and-forget. If you need a response, use a service import.
-5. **Keep payloads lean**: Include IDs and essential data. Subscribers can fetch full records via service imports.
-6. **Schema evolution**: Add fields freely. Never remove or rename fields without a versioned event type.
+1. **僅限過去式**：事件描述已經發生的事情。永遠不要使用 `user.create` —— 始終使用 `user.created`。
+2. **事件是不可變的**：一旦發布，事件的數據永遠不會改變。如需更正，請發布新事件。
+3. **等冪處理程序**：訂閱者必須能夠在沒有副作用的情況下處理兩次相同的事件。
+4. **無請求/回應**：事件是「發布後不管」(fire-and-forget)。如果你需要回應，請使用服務導入 (service import)。
+5. **保持負載精簡**：僅包含 ID 和必要的數據。訂閱者可以透過服務導入獲取完整記錄。
+6. **Schema 演進**：可以自由添加欄位。在沒有版本化事件類型的情況下，切勿移除或重新命名欄位。

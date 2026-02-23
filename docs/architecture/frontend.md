@@ -1,21 +1,24 @@
 ---
 doc_version: 3
 content_hash: d08da8ad
+source_version: 3
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# Frontend Architecture Guide
+# 前端架構指南
 
-## Design Principles
+## 設計原則
 
-### 1. Single Application, Domain Modules
+### 1. 單一應用程式，領域模組
 
-One React application with domain-based module organization. No Module Federation, no micro-frontends -- just clean code splitting with `React.lazy`.
+一個以領域為中心組織模組的 React 應用程式。不使用 Module Federation，也不使用微前端 —— 僅透過 `React.lazy` 進行乾淨的程式碼分割（code splitting）。
 
 ```
-dashboard/                    Single React App
+dashboard/                    單一 React App
 ├── src/
-│   ├── shell/                App shell (layout, nav, auth)
-│   ├── modules/              Domain UI modules (10 Core Modules)
+│   ├── shell/                應用程式外殼 (佈局、導覽、認證)
+│   ├── modules/              領域 UI 模組 (10 個核心模組)
 │   │   ├── auth/
 │   │   ├── finance/
 │   │   ├── quest/
@@ -26,85 +29,85 @@ dashboard/                    Single React App
 │   │   ├── workforce/
 │   │   ├── matching/
 │   │   └── admin/
-│   ├── plugins/              Plugin UI runtime
-│   └── shared/               Shared components, hooks, utils
+│   ├── plugins/              插件 UI 運行時
+│   └── shared/               共用組件、Hooks、工具函式
 ```
 
-**Why single app over micro-frontends:**
-- Simpler build and deploy pipeline (one build, one artifact)
-- No Module Federation complexity or version conflicts
-- Shared state and routing are trivial (same React tree)
-- Code splitting via `React.lazy` provides equivalent lazy-loading
-- Aligns with backend modular monolith philosophy
+**為何選擇單一應用程式而非微前端：**
+- 更簡單的建置與部署流水線（一次建置，一個產出物）
+- 沒有 Module Federation 的複雜度或版本衝突問題
+- 共用狀態與路由非常簡單（位於同一個 React 樹中）
+- 透過 `React.lazy` 進行程式碼分割可提供等效的延遲載入效果
+- 與後端的模組化單體（modular monolith）哲學保持一致
 
-### 2. Domain Module Structure
+### 2. 領域模組結構
 
-Each module in `src/modules/<domain>/` follows a consistent layout:
+位於 `src/modules/<domain>/` 的每個模組都遵循一致的佈局：
 
 ```
 src/modules/<domain>/
-├── components/              Domain-specific components
+├── components/              領域特定組件
 │   └── <Component>.tsx
-├── pages/                   Route-level components
+├── pages/                   路由層級組件
 │   └── <Page>.tsx
-├── hooks/                   Domain-specific hooks
-├── stores/                  Zustand stores (domain-scoped)
-├── api/                     API client functions
+├── hooks/                   領域特定 hooks
+├── stores/                  Zustand stores（領域作用域）
+├── api/                     API 客戶端函式
 │   └── client.ts
-├── types/                   Domain-specific types
-└── index.tsx                Module entry (exports routes)
+├── types/                   領域特定型別
+└── index.tsx                模組入口（導出路由）
 ```
 
-### 3. Module Boundary Rules
+### 3. 模組邊界規則
 
-- Modules **may** import from `src/shared/`
-- Modules **must not** import from other modules directly
-- Cross-module interaction goes through:
-  - **Router** (navigation via URL)
-  - **Custom events** (cross-module notifications via EventEmitter)
-  - **Shared stores** in `src/shared/stores/` (auth context, user state)
+- 模組**可以**從 `src/shared/` 導入
+- 模組**絕不可**直接從其他模組導入
+- 跨模組互動需經由：
+  - **Router**（透過 URL 導覽）
+  - **自定義事件**（透過 EventEmitter 進行跨模組通知）
+  - **共用 stores** 於 `src/shared/stores/`（認證上下文、使用者狀態）
 
-## Technology Stack
+## 技術棧
 
-| Layer | Choice | Rationale |
+| 層級 | 選擇 | 原理/依據 |
 |-------|--------|-----------|
-| Build | Rsbuild | Rspack-based, fast builds |
-| Framework | React 19 | Component model, ecosystem, concurrent features |
-| Routing | React Router 7 | Lazy loading, nested routes |
-| Styling | Tailwind CSS 4 | Utility-first, consistent design tokens |
-| State | Zustand 5 | Lightweight, per-module scoped |
-| Types | TypeScript 5 | Strict mode, shared types via `src/shared/types/` |
+| 建置 | Rsbuild | 基於 Rspack，建置速度快 |
+| 框架 | React 19 | 組件模型、生態系統、並行特性 |
+| 路由 | React Router 7 | 延遲載入、巢狀路由 |
+| 樣式 | Tailwind CSS 4 | 實用優先（Utility-first），一致的設計標記（design tokens） |
+| 狀態 | Zustand 5 | 輕量級，每個模組獨立作用域 |
+| 型別 | TypeScript 5 | 嚴格模式，透過 `src/shared/types/` 共用型別 |
 
-## App Shell (`src/shell/`)
+## 應用程式外殼 (`src/shell/`)
 
-The shell provides the application frame:
+外殼（Shell）提供應用程式框架：
 
 ```
 src/shell/
-├── App.tsx                  Root component
-├── Layout.tsx               Header, sidebar, content area
-├── Router.tsx               Top-level routes with lazy loading
-├── AuthProvider.tsx         Auth context, session management
-└── ThemeProvider.tsx         Dark/light mode, CSS variables
+├── App.tsx                  根組件
+├── Layout.tsx               頁首、側邊欄、內容區域
+├── Router.tsx               具延遲載入的最上層路由
+├── AuthProvider.tsx         認證上下文、會話管理
+└── ThemeProvider.tsx         深色/淺色模式、CSS 變數
 ```
 
-### Routing with Code Splitting
+### 具程式碼分割的路由
 
 ```typescript
 // src/shell/Router.tsx
 import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 
-// Phase 1
+// 階段 1
 const Finance = lazy(() => import("../modules/finance"));
 const Quest = lazy(() => import("../modules/quest"));
 const Muse = lazy(() => import("../modules/muse"));
 const Admin = lazy(() => import("../modules/admin"));
-// Phase 2
+// 階段 2
 const Intel = lazy(() => import("../modules/intel"));
 const Memory = lazy(() => import("../modules/memory"));
 const Skill = lazy(() => import("../modules/skill"));
-// Phase 3
+// 階段 3
 const Workforce = lazy(() => import("../modules/workforce"));
 const Matching = lazy(() => import("../modules/matching"));
 
@@ -113,16 +116,16 @@ export function Router() {
     <Suspense fallback={<Loading />}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        {/* Phase 1 */}
+        {/* 階段 1 */}
         <Route path="/finance/*" element={<Finance />} />
         <Route path="/quest/*" element={<Quest />} />
         <Route path="/muse/*" element={<Muse />} />
         <Route path="/admin/*" element={<Admin />} />
-        {/* Phase 2 */}
+        {/* 階段 2 */}
         <Route path="/intel/*" element={<Intel />} />
         <Route path="/memory/*" element={<Memory />} />
         <Route path="/skill/*" element={<Skill />} />
-        {/* Phase 3 */}
+        {/* 階段 3 */}
         <Route path="/workforce/*" element={<Workforce />} />
         <Route path="/matching/*" element={<Matching />} />
         <Route path="/settings/*" element={<Settings />} />
@@ -132,50 +135,50 @@ export function Router() {
 }
 ```
 
-Each module handles its own sub-routing internally.
+每個模組內部自行處理其子路由。
 
-## Routing Convention
+## 路由慣例
 
-| Pattern | Owner | Phase |
+| 路徑模式 | 負責者 | 階段 |
 |---------|-------|-------|
-| `/` | Shell (dashboard) | 1 |
-| `/finance/*` | Finance module | 1 |
-| `/quest/*` | Quest module | 1 |
-| `/muse/*` | Muse module | 1 |
-| `/admin/*` | Admin module | 1 |
-| `/intel/*` | Intel module | 2 |
-| `/memory/*` | Memory module | 2 |
-| `/skill/*` | Skill module | 2 |
-| `/workforce/*` | Workforce module | 3 |
-| `/matching/*` | Matching module | 3 |
-| `/settings/*` | Shell (global settings) | 1 |
+| `/` | 外殼 (儀表板) | 1 |
+| `/finance/*` | Finance 模組 | 1 |
+| `/quest/*` | Quest 模組 | 1 |
+| `/muse/*` | Muse 模組 | 1 |
+| `/admin/*` | Admin 模組 | 1 |
+| `/intel/*` | Intel 模組 | 2 |
+| `/memory/*` | Memory 模組 | 2 |
+| `/skill/*` | Skill 模組 | 2 |
+| `/workforce/*` | Workforce 模組 | 3 |
+| `/matching/*` | Matching 模組 | 3 |
+| `/settings/*` | 外殼 (全域設定) | 1 |
 
-## API Communication
+## API 通訊
 
-All modules talk to the same backend (Core Monolith on port 8800):
+所有模組都與同一個後端通訊（位於連接埠 8800 的核心單體 Core Monolith）：
 
 ```
 dashboard/  →  core/  (port 8800)
 ```
 
-API calls are routed through the Gateway (Nginx) in production:
+在生產環境中，API 呼叫會經由閘道器（Nginx）進行路由：
 
 ```
-Production:  https://domain.com/api/finance/  → nginx → core monolith
-Development: http://localhost:8800/api/finance/ → direct
+生產環境：  https://domain.com/api/finance/  → nginx → core monolith
+開發環境：  http://localhost:8800/api/finance/ → 直接呼叫
 ```
 
-Each module has its own `api/client.ts` that wraps fetch calls for its domain endpoints.
+每個模組都有自己的 `api/client.ts`，用於封裝其領域端點的 fetch 呼叫。
 
-## Plugin UI Slots
+## 插件 UI 插槽
 
-Plugins can inject UI components into predefined slots in the application:
+插件可以將 UI 組件注入到應用程式中預定義的插槽：
 
 ```typescript
 // src/plugins/PluginSlot.tsx
 interface PluginSlotProps {
-  name: string;       // e.g., "finance.dashboard.sidebar"
-  context?: unknown;  // data passed to plugin components
+  name: string;       // 例如："finance.dashboard.sidebar"
+  context?: unknown;  // 傳遞給插件組件的資料
 }
 
 export function PluginSlot({ name, context }: PluginSlotProps) {
@@ -190,58 +193,58 @@ export function PluginSlot({ name, context }: PluginSlotProps) {
 }
 ```
 
-Available slots follow the pattern `{module}.{page}.{position}`:
+可用的插槽遵循 `{module}.{page}.{position}` 的模式：
 
-| Slot | Location |
+| 插槽 | 位置 |
 |------|----------|
-| `finance.dashboard.sidebar` | Finance dashboard sidebar |
-| `quest.detail.actions` | Quest detail page action buttons |
-| `shell.header.right` | Global header right section |
-| `shell.sidebar.bottom` | Global sidebar bottom section |
+| `finance.dashboard.sidebar` | 財務儀表板側邊欄 |
+| `quest.detail.actions` | 任務詳情頁動作按鈕 |
+| `shell.header.right` | 全域頁首右側區塊 |
+| `shell.sidebar.bottom` | 全域側邊欄底部區塊 |
 
-See [Plugin System](./plugin-system.md) for details.
+詳見 [插件系統](./plugin-system.md)。
 
-## Shared Components (`src/shared/`)
+## 共用組件 (`src/shared/`)
 
 ```
 src/shared/
-├── components/              Reusable UI components
+├── components/              可重複使用的 UI 組件
 │   ├── Button.tsx
 │   ├── Modal.tsx
 │   ├── DataTable.tsx
 │   └── ...
-├── hooks/                   Shared React hooks
+├── hooks/                   共用 React hooks
 │   ├── useAuth.ts
 │   ├── useApi.ts
 │   └── ...
-├── stores/                  Global stores (auth, theme)
+├── stores/                  全域 stores (認證、主題)
 │   ├── authStore.ts
 │   └── themeStore.ts
-├── types/                   Shared TypeScript types
+├── types/                   共用 TypeScript 型別
 │   ├── user.ts
 │   └── api.ts
-└── utils/                   Utility functions
+└── utils/                   工具函式
 ```
 
-Import in any module:
+在任何模組中導入：
 ```typescript
-import { Button } from "@/shared/components/Button";
-import { useAuth } from "@/shared/hooks/useAuth";
+import { Button } from " @/shared/components/Button";
+import { useAuth } from " @/shared/hooks/useAuth";
 ```
 
-## Build & Deploy
+## 建置與部署
 
-Single build, single artifact:
+單一建置，單一產出物：
 
 ```bash
-cd dashboard && pnpm build   # → dist/ with index.html + chunks
+cd dashboard && pnpm build   # → 包含 index.html 與 chunks 的 dist/ 目錄
 ```
 
-Production: Nginx serves `dist/index.html`. Code-split chunks are loaded on demand per route.
+生產環境：由 Nginx 提供 `dist/index.html`。程式碼分割後的區塊會根據路由需求進行載入。
 
-Development:
+開發環境：
 ```bash
 cd dashboard && pnpm dev     # → http://localhost:3000
 ```
 
-Rsbuild config proxies `/api/*` to the Core Monolith during development.
+Rsbuild 設定會在開發期間將 `/api/*` 代理到核心單體（Core Monolith）。

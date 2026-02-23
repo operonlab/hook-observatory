@@ -1,28 +1,31 @@
 ---
 doc_version: 1
 content_hash: 68a8fc10
+source_version: 1
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# V1 Feature Inventory
+# V1 功能清單
 
-Complete documentation of all V1 systems for V2 redesign reference.
+所有 V1 系統的完整文件，供 V2 重構參考。
 
-## 1. Auth Service (avatar-console)
+## 1. 身份驗證服務 (avatar-console)
 
-**Location**: `~/Claude/projects/avatar-console/backend/auth-service/`
-**Stack**: Python FastAPI + authlib + itsdangerous + passlib + psycopg2
-**Port**: 8790
+**位置**: `~/Claude/projects/avatar-console/backend/auth-service/`
+**技術棧**: Python FastAPI + authlib + itsdangerous + passlib + psycopg2
+**埠號**: 8790
 
-### Auth Providers
+### 身份驗證提供商
 
-| Provider | Library | Status |
+| 提供商 | 函式庫 | 狀態 |
 |----------|---------|--------|
-| Email/Password | passlib (pbkdf2_sha256) | Working |
-| GitHub OAuth | authlib 1.3.0 | Working |
-| Google OAuth | authlib 1.3.0 (OIDC) | Working |
-| Passkey/WebAuthn | (planned, not implemented) | `.env.example` has vars |
+| Email/Password | passlib (pbkdf2_sha256) | 運作中 |
+| GitHub OAuth | authlib 1.3.0 | 運作中 |
+| Google OAuth | authlib 1.3.0 (OIDC) | 運作中 |
+| Passkey/WebAuthn | (已規劃，尚未實作) | `.env.example` 已有變數 |
 
-### User Model (PostgreSQL)
+### 使用者模型 (PostgreSQL)
 
 ```sql
 -- users table (local auth only)
@@ -43,156 +46,164 @@ CREATE TABLE password_reset_tokens (
 );
 ```
 
-**Critical gap**: OAuth users NOT stored in DB. Session cookie is the only state.
+**關鍵缺口**: OAuth 使用者未儲存在資料庫中。Session cookie 是唯一的狀態。
 
-### Session Management
+### 工作階段管理
 
-- `itsdangerous.URLSafeSerializer` (no expiry)
+- `itsdangerous.URLSafeSerializer` (無過期時間)
 - Cookie: `avator_session`, httponly, secure, samesite=lax
-- No max_age (session cookie = browser lifetime)
-- OAuth state stored in separate Starlette SessionMiddleware
+- 無 max_age (工作階段 cookie = 瀏覽器生命週期)
+- OAuth 狀態儲存在獨立的 Starlette SessionMiddleware 中
 
-### Session Payload
+### 工作階段載荷 (Session Payload)
 
 ```python
-{"user": {"id": "github:12345", "email": "x@y.com", "method": "github"}}
+{"user": {"id": "github:12345", "email": "x @y.com", "method": "github"}}
 ```
 
-### API Endpoints
+### API 端點
 
-| Method | Path | Purpose |
+| 方法 | 路徑 | 用途 |
 |--------|------|---------|
-| POST | /api/auth/register | Create local account (localhost only) |
-| POST | /api/auth/login | Password login |
-| GET/POST | /api/auth/logout | Logout (multiple formats) |
-| GET | /api/auth/check | nginx auth_request probe |
-| POST | /api/auth/forgot | Password reset request (disabled: 501) |
-| POST | /api/auth/reset | Password reset with token |
-| GET | /auth/login/github | GitHub OAuth initiate |
-| GET | /auth/callback/github | GitHub OAuth callback |
-| GET | /auth/login/google | Google OAuth initiate |
-| GET | /auth/callback/google | Google OAuth callback |
+| POST | /api/auth/register | 建立本地帳戶 (僅限 localhost) |
+| POST | /api/auth/login | 密碼登入 |
+| GET/POST | /api/auth/logout | 登出 (多種格式) |
+| GET | /api/auth/check | nginx auth_request 探測 |
+| POST | /api/auth/forgot | 密碼重設請求 (已停用: 501) |
+| POST | /api/auth/reset | 使用權杖重設密碼 |
+| GET | /auth/login/github | 啟動 GitHub OAuth |
+| GET | /auth/callback/github | GitHub OAuth 回呼 |
+| GET | /auth/login/google | 啟動 Google OAuth |
+| GET | /auth/callback/google | Google OAuth 回呼 |
 
-### OAuth Config
+### OAuth 配置
 
-- GitHub: `read:user user:email` scopes, allowlist via `ALLOWED_GITHUB_USERS`
-- Google: `openid email profile` scopes, OIDC discovery, allowlist via `ALLOWED_GOOGLE_EMAILS`
-- Both use authlib `authorize_redirect` → `authorize_access_token` flow
+- GitHub: `read:user user:email` 權限範圍，透過 `ALLOWED_GITHUB_USERS` 進行允許清單過濾
+- Google: `openid email profile` 權限範圍，OIDC 發現機制，透過 `ALLOWED_GOOGLE_EMAILS` 進行允許清單過濾
+- 兩者皆使用 authlib 的 `authorize_redirect` → `authorize_access_token` 流程
 
-### Frontend (Server-rendered HTML)
+### 前端 (伺服器端渲染 HTML)
 
-- Login page: OAuth buttons + password form
-- Register page: localhost only
-- Apps page: grid of protected apps
-- Not a SPA — server-rendered Jinja2 templates
+- 登入頁面：OAuth 按鈕 + 密碼表單
+- 註冊頁面：僅限 localhost
+- 應用程式頁面：受保護應用程式的網格視圖
+- 非單頁面應用程式 (SPA) — 使用伺服器端渲染的 Jinja2 範本
 
-### Known Limitations
+### 已知限制
 
-1. OAuth users not in DB (no user management possible)
-2. No session expiry (browser-lifetime only)
-3. Forgot password disabled (SMTP configured but 501)
-4. No WebAuthn despite .env.example having vars
-5. No CSRF protection
-6. No rate limiting
-7. Register restricted to localhost
+1. OAuth 使用者不在資料庫中 (無法進行使用者管理)
+2. 無工作階段過期機制 (僅限瀏覽器生命週期)
+3. 忘記密碼功能已停用 (已配置 SMTP 但回傳 501)
+4. 儘管 .env.example 有相關變數，但未實作 WebAuthn
+5. 缺乏 CSRF 防護
+6. 缺乏速率限制 (Rate limiting)
+7. 註冊功能受限於 localhost
 
 ---
 
-## 2. Developer Tools
+## 2. 開發者工具
 
 ### 2.1 disk-report
 
-**Location**: `~/.claude/data/disk-report/`
-**Stack**: Python FastAPI + Jinja2, port 9527
-**Features**: Disk scan (du/df/apfs), AI analysis (Gemini/Claude), delete/clean operations
-**Frontend**: Full dashboard (5 tabs: overview, large files, old files, caches, reports)
-**Storage**: Pure filesystem (reports as markdown)
-**Launch**: LaunchAgent (daily 03:30 report generation)
-**API**: 8 endpoints (summary, scan, reports, delete, clean-cache, empty-trash)
-**Security**: Protected path validation (system dirs, .claude, .ssh blocked)
+**位置**: `~/.claude/data/disk-report/`
+**技術棧**: Python FastAPI + Jinja2, 埠號 9527
+**功能**: 硬碟掃描 (du/df/apfs)、AI 分析 (Gemini/Claude)、刪除/清理操作
+**前端**: 完整儀表板 (5 個分頁：概覽、大檔案、舊檔案、快取、報告)
+**儲存**: 純檔案系統 (報告格式為 markdown)
+**啟動**: LaunchAgent (每日 03:30 產生報告)
+**API**: 8 個端點 (摘要、掃描、報告、刪除、清理快取、清空垃圾桶)
+**安全性**: 受保護路徑驗證 (封鎖系統目錄、.claude、.ssh)
 
-### 2.2 cost-server (LLM Usage)
+### 2.2 cost-server (LLM 使用量)
 
-**Location**: `~/.claude/data/cost-server/`
-**Stack**: Node.js (zero deps), Unix socket `~/.claude/cost-server.sock`
-**Features**: Per-session cost tracking, daily rollover, stale session filtering
-**Storage**: `state.json` (atomic write via rename)
-**Launch**: LaunchAgent (auto-restart)
-**API**: 3 endpoints (POST /update, GET /stats, GET /health)
+**位置**: `~/.claude/data/cost-server/`
+**技術棧**: Node.js (無依賴), Unix socket `~/.claude/cost-server.sock`
+**功能**: 單次工作階段成本追蹤、每日變更紀錄、過期工作階段過濾
+**儲存**: `state.json` (透過 rename 進行原子寫入)
+**啟動**: LaunchAgent (自動重啟)
+**API**: 3 個端點 (POST /update, GET /stats, GET /health)
 
 ### 2.3 tmux-webui
 
-**Location**: `~/Claude/projects/tmux-webui/`
-**Stack**: Python (aiohttp or FastAPI), single file server.py
-**Features**: List sessions/panes/windows, send keys, web-based control
-**Frontend**: Browser control interface
+**位置**: `~/Claude/projects/tmux-webui/`
+**技術棧**: Python (aiohttp 或 FastAPI), 單一檔案 server.py
+**功能**: 列出工作階段/窗格/視窗、傳送按鍵、網頁端控制
+**前端**: 瀏覽器控制介面
 
 ### 2.4 kas-memory
 
-**Location**: `~/Claude/projects/kas-memory/`
-**Stack**: TypeScript MCP Server (@modelcontextprotocol/sdk)
-**Features**: Hybrid search (BM25 + cosine + RRF), auto-extract from sessions, tag system, embedding (Ollama/OpenAI), knowledge promotion, KAS profile
-**Storage**: Markdown files (memories/), JSON (embeddings, tags, profile)
-**Tools**: 9 MCP tools + 2 resources
-**Hooks**: extract.sh (SessionEnd), recall.sh (UserPromptSubmit)
+**位置**: `~/Claude/projects/kas-memory/`
+**技術棧**: TypeScript MCP Server ( @modelcontextprotocol/sdk)
+**功能**: 混合搜尋 (BM25 + 餘弦相似度 + RRF)、從工作階段自動擷取、標籤系統、嵌入向量 (Ollama/OpenAI)、知識提升、KAS 個人資料
+**儲存**: Markdown 檔案 (memories/)、JSON (嵌入向量、標籤、個人資料)
+**工具**: 9 個 MCP 工具 + 2 個資源
+**鉤子**: extract.sh (工作階段結束), recall.sh (使用者提交提示詞)
 
 ### 2.5 session-redactor
 
-**Location**: `~/Claude/projects/session-redactor/`
-**Stack**: Python FastAPI (sub-router of V1 platform)
-**Features**: 20 regex patterns, JSON-aware recursive redaction, daily sweep
-**Storage**: SQLite (file tracking, dedup via inode)
-**API**: 4 endpoints (status, scan, history, history by session)
+**位置**: `~/Claude/projects/session-redactor/`
+**技術棧**: Python FastAPI (V1 平台的子路由)
+**功能**: 20 種正規表示式模式、支援 JSON 的遞迴去識別化、每日清理
+**儲存**: SQLite (檔案追蹤、透過 inode 去重)
+**API**: 4 個端點 (狀態、掃描、歷史紀錄、按工作階段查詢歷史)
 
-### 2.6 observability
+### 2.6 觀測性 (observability)
 
-**Location**: `~/Claude/projects/claude-code-hooks-multi-agent-observability/`
-**Stack**: Bun + SQLite (server), Vue 3 + Vite + Tailwind (client)
-**Ports**: 4000 (server) + 5173 (client)
-**Features**: 12 hook event types, real-time WebSocket dashboard, HITL, agent swim lanes, theme system
-**Frontend**: Full Vue 3 dashboard with live pulse chart, event timeline, filter panel
-**Hooks**: 12 Python scripts (pre/post tool use, session lifecycle, etc.)
+**位置**: `~/Claude/projects/claude-code-hooks-multi-agent-observability/`
+**技術棧**: Bun + SQLite (伺服器), Vue 3 + Vite + Tailwind (用戶端)
+**埠號**: 4000 (伺服器) + 5173 (用戶端)
+**功能**: 12 種鉤子事件類型、即時 WebSocket 儀表板、人機協作 (HITL)、代理人泳道、主題系統
+**前端**: 完整的 Vue 3 儀表板，包含即時脈動圖、事件時間軸、過濾面板
+**鉤子**: 12 個 Python 腳本 (工具使用前後、工作階段生命週期等)
 
 ---
 
-## 3. V1 Apps (from auth /apps page)
+## 3. V1 應用程式 (來自 auth /apps 頁面)
 
-| App | Path | Description |
+| 應用程式 | 路徑 | 描述 |
 |-----|------|------------|
-| Avatar Console | /console/ | Chat interface (Vue SPA) |
-| Finance | /finance | Accounting app |
-| Ideas | /ideas | Knowledge graph |
-| OpenClaw | /openclaw/ | (unknown) |
-| Terminal | /terminal/ | Web terminal |
-| Disk Report | /apps/disk-report/ | Disk analysis |
-| Skill Galaxy | /apps/galaxy/ | Skill visualization |
-| Daily Briefing | /apps/briefing/ | Daily intel digest |
+| Avatar Console | /console/ | 聊天介面 (Vue SPA) |
+| Finance | /finance | 記帳應用程式 |
+| Ideas | /ideas | 知識圖譜 |
+| OpenClaw | /openclaw/ | (未知) |
+| Terminal | /terminal/ | 網頁終端機 |
+| Disk Report | /apps/disk-report/ | 硬碟分析 |
+| Skill Galaxy | /apps/galaxy/ | 技能視覺化 |
+| Daily Briefing | /apps/briefing/ | 每日情報摘要 |
 
 ---
 
-## 4. Common Patterns Across V1
+## 4. V1 跨系統通用模式
 
-### What Works (Keep)
-- authlib for OAuth (clean API, OIDC discovery)
-- itsdangerous for cookie signing (simple, secure)
-- LaunchAgent for background services (macOS native)
-- Markdown as storage format (kas-memory)
-- Dark theme (consistent across tools)
+### 運作良好之處 (保留)
+- 使用 authlib 處理 OAuth (API 整潔，支援 OIDC 發現機制)
+- 使用 itsdangerous 進行 cookie 簽章 (簡單且安全)
+- 使用 LaunchAgent 處理背景服務 (macOS 原生機制)
+- 以 Markdown 作為儲存格式 (kas-memory)
+- 深色主題 (各工具間保持一致)
 
-### What's Broken (Fix in V2)
-- OAuth users not in DB → V2: unified user table + oauth_accounts
-- No session expiry → V2: DB-backed sessions with TTL
-- No WebAuthn → V2: py_webauthn + @simplewebauthn/browser
-- No CSRF protection → V2: double-submit cookie or SameSite strict
-- No rate limiting → V2: slowapi + Redis backend
-- Scattered tools → V2: unified project structure
-- No code reuse → V2: shared libs (Python + TypeScript)
-- No observability → V2: OpenTelemetry + LGTM
+### 有待改進之處 (於 V2 修復)
+- OAuth 使用者未存入資料庫 → V2：統一的使用者表 + oauth_accounts
+- 無工作階段過期機制 → V2：由資料庫支援且具備 TTL 的工作階段
+- 缺乏 WebAuthn → V2：使用 py_webauthn + @simplewebauthn/browser
+- 缺乏 CSRF 防護 → V2：使用 double-submit cookie 或 SameSite strict
+- 缺乏速率限制 → V2：使用 slowapi + Redis 後端
+- 工具散亂 → V2：統一的專案結構
+- 缺乏程式碼重用 → V2：共享函式庫 (Python + TypeScript)
+- 缺乏觀測性 → V2：使用 OpenTelemetry + LGTM
 
-### What's Missing (Add in V2)
-- Account linking (same email, multiple providers)
-- Admin user management
-- Multi-provider auth abstraction
-- Centralized event bus
-- Plugin system
-- RBAC+ABAC enforcement on every route
+### 遺漏之處 (於 V2 新增)
+- 帳號連結 (相同 Email，多種提供商)
+- 管理員使用者管理
+- 多提供商驗證抽象化
+- 中央事件匯流排 (Centralized event bus)
+- 外掛系統
+- 每個路由強制執行 RBAC+ABAC
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

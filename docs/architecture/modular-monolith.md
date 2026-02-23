@@ -1,15 +1,18 @@
 ---
 doc_version: 3
 content_hash: 87cf60a6
+source_version: 3
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# Modular Monolith Architecture Guide
+# 模組化單體架構指南 (Modular Monolith Architecture Guide)
 
-## Design Principles
+## 設計原則
 
-### 1. Single Deployment, Module Boundaries
+### 1. 單一部署與模組邊界
 
-The backend is a **single deployable unit** with clearly separated domain modules. Each module owns its business logic, database schema, and API routes -- but they all run in one process.
+後端是一個**單一的可部署單元**，具有清晰分離的領域模組。每個模組擁有其業務邏輯、資料庫 schema 和 API 路由——但它們都運行在同一個程序（process）中。
 
 ```
                     ┌─────────────────────────────────────┐
@@ -40,18 +43,18 @@ The backend is a **single deployable unit** with clearly separated domain module
                     └────────────┘   └──────────────┘
 ```
 
-**Why Modular Monolith over Microservices:**
-- Simpler deployment and operations (one process, one container)
-- No network latency between modules (in-process calls)
-- Easier debugging and tracing (single log stream)
-- Module boundaries enforce discipline without operational overhead
-- Can extract to microservices later if a module truly needs independent scaling
+**為何選擇模組化單體而非微服務：**
+- 更簡單的部署與運維（一個程序，一個容器）
+- 模組之間沒有網路延遲（進程內調用）
+- 更容易進行調試與追蹤（單一日誌流）
+- 模組邊界強制執行開發紀律，且無運維開銷
+- 如果某個模組確實需要獨立擴展，以後可以輕鬆提取為微服務
 
-### 2. Module Ownership
+### 2. 模組權限歸屬
 
-Each module owns **one** business domain:
+每個模組擁有**一個**業務領域：
 
-| Module | Owns | Database Schema | Phase |
+| 模組 | 擁有內容 | 資料庫 Schema | 階段 |
 |--------|------|-----------------|-------|
 | `auth` | Users, sessions, spaces, permissions | `auth` | 1 |
 | `finance` | Transactions, budgets, subscriptions | `finance` | 1 |
@@ -64,100 +67,100 @@ Each module owns **one** business domain:
 | `matching` | Talent-job matching, task pairing | `matching` | 3 |
 | `admin` | Platform management, audit logs, system health | `admin` | 1 |
 
-### 3. Module Boundary Rules
+### 3. 模組邊界規則
 
-**Hard rules:**
-- A module **must not** directly import another module's models or database tables
-- A module **must not** directly write to another module's schema
-- Cross-module reads go through **service imports** (call the other module's service layer)
-- Cross-module state changes go through the **Event Bus**
+**硬性規則：**
+- 模組**不得**直接導入另一個模組的 models 或資料庫 tables
+- 模組**不得**直接寫入另一個模組的 schema
+- 跨模組讀取需通過**服務導入 (service imports)**（調用另一個模組的 service 層）
+- 跨模組的狀態變更需通過 **Event Bus**
 
 ```python
-# GOOD: Module A reads from Module B via service import
+# 正確：模組 A 透過服務導入讀取模組 B 的資料
 from src.modules.finance.services import get_user_balance
 
-# GOOD: Module A notifies Module B via event
+# 正確：模組 A 透過事件通知模組 B
 await event_bus.publish("quest.quest.completed", {"quest_id": "...", "user_id": "..."})
 
-# BAD: Module A directly imports Module B's models
-from src.modules.finance.models import Transaction  # FORBIDDEN
+# 錯誤：模組 A 直接導入模組 B 的 models
+from src.modules.finance.models import Transaction  # 禁止行為
 ```
 
-### 4. Independent Data Stores
+### 4. 獨立資料儲存
 
-All modules share one PostgreSQL instance but use **separate schemas**:
+所有模組共享一個 PostgreSQL 實例，但使用**獨立的 schemas**：
 
 ```sql
-CREATE SCHEMA auth;       -- owned by auth module (Phase 1)
-CREATE SCHEMA finance;    -- owned by finance module (Phase 1)
-CREATE SCHEMA quest;      -- owned by quest module (Phase 1)
-CREATE SCHEMA muse;       -- owned by muse module (Phase 1)
-CREATE SCHEMA intel;      -- owned by intel module (Phase 2)
-CREATE SCHEMA memory;     -- owned by memory module (Phase 2)
-CREATE SCHEMA skill;      -- owned by skill module (Phase 2)
-CREATE SCHEMA workforce;  -- owned by workforce module (Phase 3)
-CREATE SCHEMA matching;   -- owned by matching module (Phase 3)
-CREATE SCHEMA admin;      -- owned by admin module (Phase 1)
+CREATE SCHEMA auth;       -- 由 auth 模組擁有 (Phase 1)
+CREATE SCHEMA finance;    -- 由 finance 模組擁有 (Phase 1)
+CREATE SCHEMA quest;      -- 由 quest 模組擁有 (Phase 1)
+CREATE SCHEMA muse;       -- 由 muse 模組擁有 (Phase 1)
+CREATE SCHEMA intel;      -- 由 intel 模組擁有 (Phase 2)
+CREATE SCHEMA memory;     -- 由 memory 模組擁有 (Phase 2)
+CREATE SCHEMA skill;      -- 由 skill 模組擁有 (Phase 2)
+CREATE SCHEMA workforce;  -- 由 workforce 模組擁有 (Phase 3)
+CREATE SCHEMA matching;   -- 由 matching 模組擁有 (Phase 3)
+CREATE SCHEMA admin;      -- 由 admin 模組擁有 (Phase 1)
 ```
 
-Cross-schema queries are technically possible but **architecturally forbidden**. If Module A needs data from Module B, it calls B's service layer.
+跨 schema 查詢在技術上是可行的，但在**架構上是被禁止的**。如果模組 A 需要來自模組 B 的資料，它必須調用 B 的 service 層。
 
-## Module Structure
+## 模組結構
 
-Each module follows a consistent internal layout:
+每個模組遵循一致的內部佈局：
 
 ```
 core/src/modules/<name>/
-├── __init__.py          # Module registration
-├── routes.py            # FastAPI router (or routes/ directory)
-├── models.py            # SQLAlchemy / Pydantic models (module-scoped)
-├── schemas.py           # Pydantic request/response schemas
-├── services.py          # Business logic (the public API of this module)
-├── events.py            # Event handlers (subscribers)
-├── hooks.py             # Hook points this module exposes
-└── deps.py              # FastAPI dependencies
+├── __init__.py          # 模組註冊
+├── routes.py            # FastAPI 路由 (或 routes/ 目錄)
+├── models.py            # SQLAlchemy / Pydantic 模型 (模組作用域)
+├── schemas.py           # Pydantic 請求/響應 schemas
+├── services.py          # 業務邏輯 (此模組的公共 API)
+├── events.py            # 事件處理程序 (訂閱者)
+├── hooks.py             # 此模組公開的 Hook 點
+└── deps.py              # FastAPI 依賴項
 ```
 
-The `services.py` is the **public interface** of each module. Other modules import from here, never from `models.py` or `routes.py`.
+`services.py` 是每個模組的**公共介面**。其他模組應從此處導入，絕不從 `models.py` 或 `routes.py` 導入。
 
-## Inter-Module Communication
+## 模組間通訊
 
-| Pattern | When | Example |
+| 模式 | 適用時機 | 範例 |
 |---------|------|---------|
-| Service import (sync) | Reading data from another module | `finance.services.get_balance(user_id)` |
-| Event Bus (async) | State change that others may care about | `quest.quest.completed` triggers finance reward |
-| Shared types in `src.shared` | Common types used by 2+ modules | `UserId`, `Pagination`, `ErrorResponse` |
+| 服務導入 (同步) | 從另一個模組讀取資料 | `finance.services.get_balance(user_id)` |
+| Event Bus (非同步) | 其他模組可能感興趣的狀態變更 | `quest.quest.completed` 觸發 finance 獎勵 |
+| `src.shared` 中的共享類型 | 2 個以上模組使用的通用類型 | `UserId`, `Pagination`, `ErrorResponse` |
 
-See [Event-Driven Architecture](./event-driven.md) for detailed event patterns.
+詳情請參閱 [事件驅動架構 (Event-Driven Architecture)](./event-driven.md) 以了解詳細的事件模式。
 
-## Hot-Path Services
+## 熱點路徑服務 (Hot-Path Services)
 
-Two services run **outside** the monolith because they have fundamentally different runtime requirements:
+有兩個服務運行在單體**之外**，因為它們具有根本不同的運行時需求：
 
-### Realtime Service (port 8830)
+### 實時服務 (Realtime Service, port 8830)
 
-- **What**: LiveKit WebRTC gateway + agents
-- **Why separate**: WebRTC requires persistent connections, media processing, different scaling pattern
-- **Communication**: REST API for token generation, Redis events for state sync
+- **功能**：LiveKit WebRTC 網關 + agents
+- **為何分離**：WebRTC 需要持久連接、媒體處理，以及不同的擴展模式
+- **通訊方式**：用於 token 生成的 REST API，以及用於狀態同步的 Redis 事件
 
-### Media Service (port 8831)
+### 媒體服務 (Media Service, port 8831)
 
-- **What**: STT, TTS, image processing pipelines
-- **Why separate**: CPU/GPU intensive, needs independent resource allocation
-- **Communication**: HTTP API calls from core, results published as events
+- **功能**：STT、TTS、圖像處理流水線
+- **為何分離**：CPU/GPU 密集型，需要獨立的資源分配
+- **通訊方式**：來自 core 的 HTTP API 調用，結果以事件形式發布
 
-## Port Allocation
+## 埠位分配
 
-| Port | Service |
+| 埠位 | 服務 |
 |------|---------|
-| 8800 | Core Monolith |
-| 8830 | Realtime (LiveKit) |
-| 8831 | Media (STT/TTS) |
-| 3000 | Frontend dev server |
+| 8800 | 核心單體 (Core Monolith) |
+| 8830 | 實時服務 (LiveKit) |
+| 8831 | 媒體服務 (STT/TTS) |
+| 3000 | 前端開發伺服器 |
 
-## Configuration
+## 配置
 
-Use `pydantic-settings` with environment variables. Module-specific config uses prefixed env vars:
+使用 `pydantic-settings` 配合環境變數。模組特定的配置使用帶前綴的環境變數：
 
 ```python
 from pydantic_settings import BaseSettings
@@ -171,9 +174,9 @@ class CoreSettings(BaseSettings):
     model_config = {"env_prefix": "CORE_"}
 ```
 
-## Health Check
+## 健康檢查
 
-The monolith exposes a single health endpoint with per-module status:
+單體架構公開了一個單一的健康檢查端點，並包含各模組的狀態：
 
 ```json
 {
@@ -195,9 +198,9 @@ The monolith exposes a single health endpoint with per-module status:
 }
 ```
 
-## Module Registration
+## 模組註冊
 
-Modules register themselves with the core application at startup:
+模組在啟動時向核心應用程式註冊自身：
 
 ```python
 # core/src/app.py
@@ -206,27 +209,27 @@ from src.modules import auth, finance, quest, muse, intel, memory, skill, workfo
 def create_app() -> FastAPI:
     app = FastAPI()
 
-    # Register module routers (Phase 1)
+    # 註冊模組路由 (Phase 1)
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(finance.router, prefix="/api/finance", tags=["finance"])
     app.include_router(quest.router, prefix="/api/quest", tags=["quest"])
     app.include_router(muse.router, prefix="/api/muse", tags=["muse"])
     app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
-    # Register module routers (Phase 2)
+    # 註冊模組路由 (Phase 2)
     app.include_router(intel.router, prefix="/api/intel", tags=["intel"])
     app.include_router(memory.router, prefix="/api/memory", tags=["memory"])
     app.include_router(skill.router, prefix="/api/skill", tags=["skill"])
 
-    # Register module routers (Phase 3)
+    # 註冊模組路由 (Phase 3)
     app.include_router(workforce.router, prefix="/api/workforce", tags=["workforce"])
     app.include_router(matching.router, prefix="/api/matching", tags=["matching"])
 
-    # Initialize event bus and hook engine
+    # 初始化事件總線與 Hook 引擎
     app.state.event_bus = EventBus()
     app.state.hook_engine = HookEngine()
 
-    # Register module event handlers
+    # 註冊模組事件處理程序
     auth.register_events(app.state.event_bus)
     finance.register_events(app.state.event_bus)
     quest.register_events(app.state.event_bus)
@@ -234,14 +237,22 @@ def create_app() -> FastAPI:
     return app
 ```
 
-## Future: Extracting a Module
+## 未來展望：提取模組
 
-If a module outgrows the monolith (e.g., media processing needs GPU scaling), the extraction path is:
+如果某個模組的規模超出了單體的負荷（例如，媒體處理需要 GPU 擴展），提取路徑如下：
 
-1. Module already has clean boundaries (service layer, events, no cross-model imports)
-2. Replace in-process service imports with HTTP client calls
-3. Replace in-process events with Redis Streams events
-4. Deploy as independent service
-5. No changes needed in other modules (they already use the service/event interface)
+1. 模組已經具有清晰的邊界（service 層、事件、無跨模型導入）
+2. 將進程內服務導入替換為 HTTP 用戶端調用
+3. 將進程內事件替換為 Redis Streams 事件
+4. 作為獨立服務部署
+5. 其他模組無需更改（它們已經在使用 service/event 介面）
 
-This is the key advantage of enforcing module boundaries from day one.
+這就是從第一天起就強制執行模組邊界的核心優勢。
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

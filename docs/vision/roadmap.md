@@ -1,15 +1,18 @@
 ---
 doc_version: 1
 content_hash: f8683532
+source_version: 1
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# Workshop Roadmap
+# 工作坊路線圖
 
-> Four-phase development roadmap: from personal + family to commercial applications.
+> 四階段開發路線圖：從個人與家庭到商業應用。
 
 ---
 
-## Overview
+## 總覽
 
 ```
 Phase 1              Phase 2              Phase 3              Phase 4
@@ -26,155 +29,163 @@ social hooks v1                                                full platform
 
 ---
 
-## Phase 1: Personal + Family
+## 第一階段：個人與家庭
 
-> Goal: Workshop becomes a daily tool for Jones + family.
+> 目標：工作坊成為 Jones 與家人的日常工具。
 
-### Core Modules
+### 核心模組
 
-| Module | Target | Completion Criteria |
+| 模組 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **auth** | Multi-provider login + Space model | 2+ users, personal + family space |
-| **finance** | Personal/family accounting | Income/expense tracking, subscription management, monthly reports, wife can use |
-| **quest** | Simple mode to-do | Checkbox + due date + basic Widget |
-| **muse** | Idea notes | Spark CRUD + Link + Graph visualization |
+| **auth** | 多登入提供商支持 + 空間模型 | 2 名以上使用者，包含個人與家庭空間 |
+| **finance** | 個人/家庭記帳 | 收支追蹤、訂閱管理、月度報表，妻子亦可使用 |
+| **quest** | 簡單模式待辦 | 複選框 + 截止日期 + 基礎 Widget |
+| **muse** | 想法筆記 | Spark 增刪查改 + 連結 + 圖譜視覺化 |
 
-### Bridges
+### 橋接器
 
-| Bridge | Target | Completion Criteria |
+| 橋接器 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **Social Hooks v1** | Basic LINE bot integration | Accounting/to-do via LINE commands |
-| **Notification** | PWA Push | Basic push notification capability |
+| **Social Hooks v1** | 基礎 LINE 機器人整合 | 透過 LINE 指令進行記帳/待辦事項 |
+| **Notification** | PWA 推播 | 基礎推播通知能力 |
 
-### Infrastructure
+### 基礎設施
 
-- [ ] FastAPI Core Monolith + Module structure
-- [ ] PostgreSQL schema-per-module + space_id on all tables
-- [ ] Event Bus (in-process)
-- [ ] Widget Dashboard framework (react-grid-layout + Container Queries)
-- [ ] MCP Servers for finance, quest, muse (adapter to Core API)
-- [ ] PWA + Service Worker (foundation already exists)
-- [ ] Basic CI/CD
+- [ ] FastAPI Core Monolith + 模組化結構
+- [ ] PostgreSQL 每個模組獨立 Schema + 所有資料表皆含 space_id
+- [ ] 事件匯流排（進程內）
+- [ ] Widget 儀表板框架 (react-grid-layout + Container Queries)
+- [ ] 針對 finance, quest, muse 的 MCP Server（對接到核心 API）
+- [ ] PWA + Service Worker（基礎已存在）
+- [ ] 基礎 CI/CD
 
-### Phase 1 Deliverables
+### 第一階段交付成果
 
-- Dashboard functional: at least 4 Widgets (finance summary, recent transactions, quest list, quick note)
-- LINE bot functional: `@accounting`, `@todo` basic commands
-- Family accounts functional: wife can log in and see shared accounting
-- MCP functional: Claude Code can directly operate all Modules
+- 儀表板功能運作：至少 4 個 Widget（財務摘要、最近交易、任務列表、快速筆記）
+- LINE 機器人功能運作：基礎的 `@accounting`, `@todo` 指令
+- 家庭帳號功能運作：妻子可登入並查看共享記帳
+- MCP 功能運作：Claude Code 可直接操作所有模組
 
 ---
 
-## Phase 2: Knowledge + Growth
+## 第二階段：知識與成長
 
-> Goal: Workshop becomes a personal knowledge management and growth platform.
+> 目標：工作坊成為個人知識管理與成長平台。
 
-### Core Modules
+### 核心模組
 
-| Module | Target | Completion Criteria |
+| 模組 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **memory** | KAS Memory v2 | Auto extraction, semantic search, cross-session recall |
-| **skill** | Skill tree v1 | Skill definitions, levels, learning paths |
-| **intel** | Daily intelligence v1 | RSS subscriptions, auto summaries, briefing |
-| **matching v1** | Basic matching | Skill × learning resource recommendations |
+| **memory** | KAS Memory v2 | 自動提取、語義搜尋、跨階段召回 |
+| **skill** | 技能樹 v1 | 技能定義、等級、學習路徑 |
+| **intel** | 每日情報 v1 | RSS 訂閱、自動摘要、簡報 |
+| **matching v1** | 基礎媒合 | 技能 × 學習資源推薦 |
 
-### Stations
+### 站點
 
-| Station | Target | Completion Criteria |
+| 站點 | 目標 | 完成標準 |
 |---------|--------|-------------------|
-| **Church Music** | Sheet music digitization | OCR → library → basic search |
+| **Church Music** | 樂譜數位化 | OCR → 庫 → 基礎搜尋 |
 
-### Phase 2 Deliverables
+### 第二階段交付成果
 
-- Memory v2 live: Claude Code's memory is more accurate and structured
-- Skill tree visualization: Widget showing personal skill map
-- Daily briefing: Auto-receive news/social media summaries each morning
-- Music library: Church hymns searchable and browsable
-
----
-
-## Phase 3: Team + Dispatch
-
-> Goal: Workshop upgrades from personal tool to small team collaboration platform.
-
-### Core Modules
-
-| Module | Target | Completion Criteria |
-|--------|--------|-------------------|
-| **workforce** | Resource management v1 | Human + AI agent capability/load tracking |
-| **quest dispatch** | Task dispatch | Task pool + passive assignment + active pickup |
-| **matching v2** | Advanced matching | Talent × task multi-dimensional scoring |
-
-### Bridges
-
-| Bridge | Target | Completion Criteria |
-|--------|--------|-------------------|
-| **Social Hooks v2** | Full platform integration | LINE + Telegram + Discord |
-
-### Phase 3 Deliverables
-
-- Task pool functional: friends can pick up tasks from pool
-- Resource dashboard: see load status for all resources (human/AI)
-- Multi-platform notifications: task assignment/completion notifications pushed to all social platforms
+- Memory v2 上線：Claude Code 的記憶更加準確且結構化
+- 技能樹視覺化：顯示個人技能地圖的 Widget
+- 每日簡報：每天早晨自動接收新聞/社群媒體摘要
+- 樂譜庫：教會聖詩可搜尋與瀏覽
 
 ---
 
-## Phase 4: Commercial
+## 第三階段：團隊與派遣
 
-> Goal: Workshop's domain knowledge applied to commercial scenarios.
+> 目標：工作坊從個人工具升級為小團隊協作平台。
 
-### Applications
+### 核心模組
 
-| Project | Target | Built On |
+| 模組 | 目標 | 完成標準 |
+|--------|--------|-------------------|
+| **workforce** | 資源管理 v1 | 人類 + AI 代理人能力/負載追蹤 |
+| **quest dispatch** | 任務派遣 | 任務池 + 被動分配 + 主動領取 |
+| **matching v2** | 進階媒合 | 人才 × 任務多維度評分 |
+
+### 橋接器
+
+| 橋接器 | 目標 | 完成標準 |
+|--------|--------|-------------------|
+| **Social Hooks v2** | 全平台整合 | LINE + Telegram + Discord |
+
+### 第三階段交付成果
+
+- 任務池功能運作：朋友可以從任務池中領取任務
+- 資源儀表板：查看所有資源（人類/AI）的負載狀態
+- 多平台通知：任務分配/完成通知推送到所有社群平台
+
+---
+
+## 第四階段：商業化
+
+> 目標：將工作坊的領域知識應用於商業場景。
+
+### 應用程式
+
+| 專案 | 目標 | 建構於 |
 |---------|--------|----------|
-| **Quest Commercial** | Orders/quotation/acceptance | quest + finance |
-| **Legal Advisor** | Legal advisory service | RAG + LLM reasoning |
-| **Virtual CS** | Virtual customer service | matching + social hooks |
-| **ERP/POS** | Inventory management system | finance + quest + workforce |
-| **Full Platform** | Open platform | All Modules + Plugin system |
+| **Quest Commercial** | 訂單/報價/驗收 | quest + finance |
+| **Legal Advisor** | 法律諮詢服務 | RAG + LLM 推理 |
+| **Virtual CS** | 虛擬客服 | matching + social hooks |
+| **ERP/POS** | 庫存管理系統 | finance + quest + workforce |
+| **Full Platform** | 開放平台 | 所有模組 + 外掛系統 |
 
-### Phase 4 Deliverables
+### 第四階段交付成果
 
-- At least one commercial case landed (Virtual CS or ERP/POS)
-- Plugin system mature: third parties can develop Workshop plugins
-- Public API documentation
-- Multi-Space organizational management
+- 至少落地一個商業案例（虛擬客服或 ERP/POS）
+- 外掛系統成熟：第三方可以開發工作坊外掛
+- 公開 API 文件
+- 多空間組織管理
 
 ---
 
-## Cross-Cutting Concerns (Spanning All Phases)
+## 橫切關注點（貫穿所有階段）
 
-| Item | Description |
+| 項目 | 描述 |
 |------|-------------|
-| **Documentation** | Complete Phase spec before starting, update architecture docs upon completion |
-| **Testing** | Real scenario validation (no mocks), at least one end-to-end flow per Module |
-| **Security** | auth is production-grade from Phase 1 — no shortcuts |
-| **Observability** | OpenTelemetry traces + structured logging from Phase 1 |
-| **MCP** | Each new Module simultaneously produces an MCP Server |
-| **Widget** | Each new Module simultaneously produces at least 1 Dashboard Widget |
+| **文件** | 開始前完成階段規格，完成後更新架構文件 |
+| **測試** | 真實場景驗證（無 Mock），每個模組至少一個端到端流程 |
+| **安全性** | auth 從第一階段起即達到生產等級 —— 不走捷徑 |
+| **可觀測性** | 從第一階段起建立 OpenTelemetry 追蹤 + 結構化日誌 |
+| **MCP** | 每個新模組同時產生一個 MCP Server |
+| **Widget** | 每個新模組同時產生至少一個儀表板 Widget |
 
 ---
 
-## Priority Order (within each Phase)
+## 優先順序（各階段內）
 
-Priority within a Phase follows:
+階段內的優先順序如下：
 
-1. **Infrastructure** → foundation first
-2. **auth** → identity first
-3. **Data Model** → structure first
-4. **Core API** → backend first
-5. **MCP Server** → CLI interface first
-6. **Widget** → UI last
-7. **Documentation** → throughout
+1. **基礎設施** → 基礎先行
+2. **auth** → 身份先行
+3. **資料模型** → 結構先行
+4. **核心 API** → 後端先行
+5. **MCP Server** → CLI 介面先行
+6. **Widget** → UI 最後
+7. **文件** → 貫穿始終
 
 ---
 
-## Known Risks
+## 已知風險
 
-| Risk | Mitigation Strategy |
+| 風險 | 緩解策略 |
 |------|-------------------|
-| Scope too large | Strict Phase boundaries — don't start Phase N+1 until Phase N is complete |
-| Technical debt | Documentation first + real validation — no quick hacks |
-| Motivation decline | Each Phase produces a usable product — daily use = sustained motivation |
-| Context explosion | Wayne's memory system + HANDOFF.md + domain-specific docs |
-| Over-engineering | Progressive Complexity principle: build simplest version first |
+| 範圍過大 | 嚴格的階段界限 —— 在第 N 階段完成前，不開始第 N+1 階段 |
+| 技術債 | 文件先行 + 真實驗證 —— 拒絕快速臨時修補 |
+| 動力下降 | 每個階段都產生可用產品 —— 日常使用 = 持續動力 |
+| 上下文爆炸 | Wayne 的記憶系統 + HANDOFF.md + 特定領域文件 |
+| 過度工程 | 漸進式複雜度原則：先建構最簡單的版本 |
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

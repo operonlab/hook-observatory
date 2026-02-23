@@ -1,52 +1,55 @@
 ---
 doc_version: 4
 content_hash: adfe14e5
+source_version: 4
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# Folder Structure & Naming Conventions
+# 目錄結構與命名規範
 
-## Three-Tier Taxonomy
+## 三層分類法
 
-Workshop organizes all functionality into three tiers:
+Workshop 將所有功能組織成三個層級：
 
-| Tier | Description | Lives In |
+| 層級 | 描述 | 位置 |
 |------|-------------|----------|
-| **Core Modules** | DB-backed business domains (10 modules) | `core/src/modules/` |
-| **Stations** | Standalone local tools (no Core DB dependency) | `stations/` |
-| **Bridges** | External platform connectors | `bridges/` |
+| **核心模組 (Core Modules)** | 由資料庫支援的業務領域（10 個模組） | `core/src/modules/` |
+| **工作站 (Stations)** | 獨立的本地工具（不依賴核心資料庫） | `stations/` |
+| **橋接器 (Bridges)** | 外部平台連接器 | `bridges/` |
 
-## Overview
+## 概覽
 
 ```
 ~/workshop/
-├── core/                        # Modular Monolith (Python/FastAPI)
+├── core/                        # 模塊化單體 (Python/FastAPI)
 │   ├── src/
-│   │   ├── events/              # Event Bus engine
-│   │   ├── hooks/               # Hook/Plugin engine
-│   │   ├── modules/             # Core Modules (10 domains)
-│   │   │   ├── auth/            # Authentication & authorization
-│   │   │   ├── finance/         # Accounting & finance
-│   │   │   ├── quest/           # Tasks & dispatch
-│   │   │   ├── muse/            # Ideas & knowledge graph
-│   │   │   ├── intel/           # Daily intelligence
-│   │   │   ├── memory/          # LLM memory persistence
-│   │   │   ├── skill/           # Skill trees & learning paths
-│   │   │   ├── workforce/       # Resource management
-│   │   │   ├── matching/        # Matching engine
-│   │   │   └── admin/           # Platform management
-│   │   ├── middleware/          # Auth, CORS, OTel middleware
-│   │   ├── shared/              # Shared types, utils
-│   │   └── routes/              # Route aggregation
-│   ├── services/                # Hot-path services (independent deploy)
-│   │   ├── realtime/            # LiveKit WebRTC gateway
-│   │   └── media/               # STT/TTS/image processing
-│   ├── plugins/                 # Installed plugins
-│   ├── migrations/              # Database migrations (all schemas)
+│   │   ├── events/              # 事件匯流排引擎
+│   │   ├── hooks/               # 鉤子/插件引擎
+│   │   ├── modules/             # 核心模組 (10 個領域)
+│   │   │   ├── auth/            # 認證與授權
+│   │   │   ├── finance/         # 會計與財務
+│   │   │   ├── quest/           # 任務與調度
+│   │   │   ├── muse/            # 想法與知識圖譜
+│   │   │   ├── intel/           # 每日情報
+│   │   │   ├── memory/          # LLM 記憶持久化
+│   │   │   ├── skill/           # 技能樹與學習路徑
+│   │   │   ├── workforce/       # 資源管理
+│   │   │   ├── matching/        # 匹配引擎
+│   │   │   └── admin/           # 平台管理
+│   │   ├── middleware/          # Auth, CORS, OTel 中間件
+│   │   ├── shared/              # 共享類型、工具
+│   │   └── routes/              # 路由聚合
+│   ├── services/                # 熱路徑服務 (獨立部署)
+│   │   ├── realtime/            # LiveKit WebRTC 網關
+│   │   └── media/               # STT/TTS/圖像處理
+│   ├── plugins/                 # 已安裝插件
+│   ├── migrations/              # 資料庫遷移 (所有 schema)
 │   └── tests/
-├── dashboard/                   # Single React application
+├── dashboard/                   # 單個 React 應用程式
 │   ├── src/
-│   │   ├── shell/               # App shell (layout, nav, auth)
-│   │   ├── modules/             # Domain UI modules (mirror of Core Modules)
+│   │   ├── shell/               # 應用程式外殼 (佈局、導航、認證)
+│   │   ├── modules/             # 領域 UI 模組 (對應核心模組)
 │   │   │   ├── auth/
 │   │   │   ├── finance/
 │   │   │   ├── quest/
@@ -57,113 +60,113 @@ Workshop organizes all functionality into three tiers:
 │   │   │   ├── workforce/
 │   │   │   ├── matching/
 │   │   │   └── admin/
-│   │   ├── plugins/             # Plugin UI runtime + slots
-│   │   └── shared/              # Shared components, hooks, utils
+│   │   ├── plugins/             # 插件 UI 運行時 + 插槽
+│   │   └── shared/              # 共享組件、鉤子、工具
 │   ├── public/
 │   ├── rsbuild.config.ts
 │   └── package.json
-├── mcp/                         # MCP adapter layer (thin wrappers over Core API)
-├── stations/                    # Standalone local tools
-│   └── sandbox-executor/        # Sandbox code execution MCP server
-├── bridges/                     # External platform connectors
-│   └── (LINE, Telegram, Discord, Firebase — planned)
-├── plugins/                     # Plugin packages (git-based)
+├── mcp/                         # MCP 適配層 (對核心 API 的薄封裝)
+├── stations/                    # 獨立本地工具
+│   └── sandbox-executor/        # 沙盒代碼執行 MCP 伺服器
+├── bridges/                     # 外部平台連接器
+│   └── (LINE, Telegram, Discord, Firebase — 計劃中)
+├── plugins/                     # 插件包 (基於 git)
 ├── libs/
-│   ├── python/                  # Python shared lib
-│   └── typescript/              # TypeScript shared lib
+│   ├── python/                  # Python 共享庫
+│   └── typescript/              # TypeScript 共享庫
 ├── infra/
 │   ├── docker/                  # docker-compose, Dockerfiles
-│   ├── nginx/                   # Nginx configs, routing rules
-│   ├── observability/           # LGTM/SigNoz configs, dashboards
-│   └── scripts/                 # Deploy scripts, CI/CD helpers
+│   ├── nginx/                   # Nginx 配置, 路由規則
+│   ├── observability/           # LGTM/SigNoz 配置, 儀表板
+│   └── scripts/                 # 部署腳本, CI/CD 助手
 ├── docs/
-│   ├── architecture/            # System architecture docs
-│   ├── blueprint/               # Implementation blueprints
-│   ├── reference/               # Reference materials
-│   ├── vision/                  # Platform vision (manifesto, domains, ADRs, roadmap)
-│   └── zh-TW/                   # Traditional Chinese translations (auto-generated)
-│       ├── architecture/        # Mirror of docs/architecture/
-│       ├── blueprint/           # Mirror of docs/blueprint/
-│       ├── reference/           # Mirror of docs/reference/
-│       ├── vision/              # Mirror of docs/vision/
-│       └── CLAUDE.zh-TW.md     # Mirror of root CLAUDE.md
-├── scripts/                     # Build/translate/deploy scripts
-│   └── translate-docs.py       # Auto-translate docs to zh-TW via Gemini CLI
-├── lab/                         # POC experiments
-├── pyproject.toml               # Python workspace root (uv)
-└── package.json                 # JS workspace root (pnpm)
+│   ├── architecture/            # 系統架構文檔
+│   ├── blueprint/               # 實作藍圖
+│   ├── reference/               # 參考資料
+│   ├── vision/                  # 平台願景 (宣言、領域、ADR、路線圖)
+│   └── zh-TW/                   # 繁體中文翻譯 (自動生成)
+│       ├── architecture/        # docs/architecture/ 的鏡像
+│       ├── blueprint/           # docs/blueprint/ 的鏡像
+│       ├── reference/           # docs/reference/ 的鏡像
+│       ├── vision/              # docs/vision/ 的鏡像
+│       └── CLAUDE.zh-TW.md     # 根目錄 CLAUDE.md 的鏡像
+├── scripts/                     # 構建/翻譯/部署腳本
+│   └── translate-docs.py       # 通過 Gemini CLI 自動將文檔翻譯成繁體中文 (zh-TW)
+├── lab/                         # POC 實驗
+├── pyproject.toml               # Python 工作區根目錄 (uv)
+└── package.json                 # JS 工作區根目錄 (pnpm)
 ```
 
-## Naming Rules
+## 命名規則
 
-### Core Modules (`core/src/modules/`)
+### 核心模組 (`core/src/modules/`)
 
-| Rule | Example | Anti-pattern |
+| 規則 | 範例 | 反面模式 |
 |------|---------|-------------|
-| lowercase, snake_case | `auth`, `finance` | `Auth`, `userAuth` |
-| noun or noun-phrase | `finance`, `quest` | `handle_payments` |
-| match DB schema name | module `finance` → schema `finance` | Different names |
+| 小寫、蛇形命名法 (snake_case) | `auth`, `finance` | `Auth`, `userAuth` |
+| 名詞或名詞短語 | `finance`, `quest` | `handle_payments` |
+| 與資料庫 schema 名稱一致 | 模組 `finance` → schema `finance` | 不同的名稱 |
 
-Each module directory:
+每個模組目錄：
 ```
 core/src/modules/<name>/
-├── __init__.py          # Module registration, router export
-├── routes.py            # FastAPI router
-├── models.py            # Database models (module-scoped)
-├── schemas.py           # Pydantic request/response schemas
-├── services.py          # Business logic (public API)
-├── events.py            # Event handlers
-├── hooks.py             # Hook points
-└── deps.py              # FastAPI dependencies
+├── __init__.py          # 模組註冊、路由導出
+├── routes.py            # FastAPI 路由
+├── models.py            # 資料庫模型 (模組範圍)
+├── schemas.py           # Pydantic 請求/響應 schema
+├── services.py          # 業務邏輯 (公開 API)
+├── events.py            # 事件處理器
+├── hooks.py             # 鉤子點
+└── deps.py              # FastAPI 依賴項
 ```
 
-### 10 Core Modules
+### 10 個核心模組
 
-| Module | Domain | Phase | DB Schema |
+| 模組 | 領域 | 階段 | 資料庫 Schema |
 |--------|--------|-------|-----------|
-| `auth` | Authentication & authorization | 1 | `auth` |
-| `finance` | Accounting & finance | 1 | `finance` |
-| `quest` | Tasks & dispatch | 1 | `quest` |
-| `muse` | Ideas & knowledge graph | 1 | `muse` |
-| `intel` | Daily intelligence | 2 | `intel` |
-| `memory` | LLM memory persistence | 2 | `memory` |
-| `skill` | Skill trees & learning paths | 2 | `skill` |
-| `workforce` | Resource management | 3 | `workforce` |
-| `matching` | Matching engine | 3 | `matching` |
-| `admin` | Platform management | 1 | `admin` |
+| `auth` | 認證與授權 | 1 | `auth` |
+| `finance` | 會計與財務 | 1 | `finance` |
+| `quest` | 任務與調度 | 1 | `quest` |
+| `muse` | 想法與知識圖譜 | 1 | `muse` |
+| `intel` | 每日情報 | 2 | `intel` |
+| `memory` | LLM 記憶持久化 | 2 | `memory` |
+| `skill` | 技能樹與學習路徑 | 2 | `skill` |
+| `workforce` | 資源管理 | 3 | `workforce` |
+| `matching` | 匹配引擎 | 3 | `matching` |
+| `admin` | 平台管理 | 1 | `admin` |
 
-### Frontend Modules (`dashboard/src/modules/`)
+### 前端模組 (`dashboard/src/modules/`)
 
-| Rule | Example | Anti-pattern |
+| 規則 | 範例 | 反面模式 |
 |------|---------|-------------|
-| lowercase, kebab-case | `finance`, `quest` | `Finance`, `questModule` |
-| Match backend module | `modules/finance` ↔ `core/src/modules/finance` | Different names |
+| 小寫、短橫線命名法 (kebab-case) | `finance`, `quest` | `Finance`, `questModule` |
+| 匹配後端模組 | `modules/finance` ↔ `core/src/modules/finance` | 不同的名稱 |
 
-Each frontend module:
+每個前端模組：
 ```
 dashboard/src/modules/<name>/
-├── components/          # Domain-specific components
-├── pages/               # Route-level components
-├── hooks/               # Domain-specific hooks
-├── stores/              # Zustand stores
-├── api/                 # API client functions
-├── types/               # Domain-specific types
-└── index.tsx            # Module entry (exports routes)
+├── components/          # 領域特定組件
+├── pages/               # 路由層級組件
+├── hooks/               # 領域特定鉤子
+├── stores/              # Zustand 狀態庫
+├── api/                 # API 客戶端函數
+├── types/               # 領域特定類型
+└── index.tsx            # 模組入口 (導出路由)
 ```
 
-### Hot-Path Services (`core/services/`)
+### 熱路徑服務 (`core/services/`)
 
-| Rule | Example | Anti-pattern |
+| 規則 | 範例 | 反面模式 |
 |------|---------|-------------|
-| lowercase, kebab-case dirs | `realtime`, `media` | `livekit-service` |
-| Python package: snake_case | `src/realtime/` | `src/realtime-service/` |
+| 小寫、短橫線命名目錄 | `realtime`, `media` | `livekit-service` |
+| Python 套件：蛇形命名法 (snake_case) | `src/realtime/` | `src/realtime-service/` |
 
-Each hot-path service:
+每個熱路徑服務：
 ```
 core/services/<name>/
 ├── src/<package>/
 │   ├── __init__.py
-│   ├── main.py          # FastAPI app entrypoint
+│   ├── main.py          # FastAPI 應用程式入口點
 │   ├── routes/
 │   └── core/
 ├── tests/
@@ -172,163 +175,171 @@ core/services/<name>/
 └── README.md
 ```
 
-### Bridges (`bridges/`)
+### 橋接器 (`bridges/`)
 
-External platform connectors. Each bridge wraps a third-party API.
+外部平台連接器。每個橋接器封裝一個第三方 API。
 
 ```
 bridges/<platform>/
 ├── __init__.py
-├── client.py            # Platform API client
-├── webhook.py           # Incoming webhook handlers
-├── events.py            # Bridge-specific events
-└── schemas.py           # Platform-specific schemas
+├── client.py            # 平台 API 客戶端
+├── webhook.py           # 進入的 webhook 處理器
+├── events.py            # 橋接器特定事件
+└── schemas.py           # 平台特定 schema
 ```
 
-Planned bridges: LINE, Telegram, Discord, Firebase.
+計劃中的橋接器：LINE, Telegram, Discord, Firebase。
 
-### MCP Adapters (`mcp/`)
+### MCP 適配器 (`mcp/`)
 
-Thin wrapper layer that exposes Core API endpoints as MCP tools. MCP servers never touch the database directly.
+薄封裝層，將核心 API 端點公開為 MCP 工具。MCP 伺服器永遠不會直接接觸資料庫。
 
 ```
 mcp/<server-name>/
-├── server.py            # MCP server entrypoint
-├── tools/               # Tool definitions
+├── server.py            # MCP 伺服器入口點
+├── tools/               # 工具定義
 └── README.md
 ```
 
-### Stations (`stations/`)
+### 工作站 (`stations/`)
 
-Standalone local tools that don't depend on Core DB. Each station is self-contained.
+不依賴核心資料庫的獨立本地工具。每個工作站都是自成一體的。
 
 ```
 stations/<name>/
-├── src/                 # Source code
+├── src/                 # 源碼
 ├── README.md
 └── package.json / pyproject.toml
 ```
 
-### Plugins (`plugins/`)
+### 插件 (`plugins/`)
 
 ```
 plugins/
 ├── <plugin-name>/
-│   ├── plugin.json      # Plugin manifest
-│   ├── backend/         # Python hooks
+│   ├── plugin.json      # 插件清單
+│   ├── backend/         # Python 鉤子
 │   │   └── hooks.py
-│   ├── frontend/        # React components (optional)
+│   ├── frontend/        # React 組件 (選填)
 │   │   └── components/
 │   └── README.md
 ```
 
-### Libs (`libs/`)
+### 共享庫 (`libs/`)
 
-Shared code used by **2+ modules or services**. If only one consumer, keep it in that consumer.
+被 **2 個以上模組或服務**使用的共享代碼。如果只有一個使用者，請保留在該使用者目錄中。
 
 ```
 libs/
-├── python/                  # Python shared library
-│   ├── src/corelib/         # importable as `from corelib import ...`
+├── python/                  # Python 共享庫
+│   ├── src/corelib/         # 可作為 `from corelib import ...` 導入
 │   ├── pyproject.toml
 │   └── README.md
-└── typescript/              # TypeScript shared library
+└── typescript/              # TypeScript 共享庫
     ├── src/
-    │   ├── components/      # Shared UI components
-    │   ├── hooks/           # Shared React hooks
-    │   ├── types/           # Shared TypeScript types
-    │   └── utils/           # Shared utilities
+    │   ├── components/      # 共享 UI 組件
+    │   ├── hooks/           # 共享 React 鉤子
+    │   ├── types/           # 共享 TypeScript 類型
+    │   └── utils/           # 共享工具
     ├── package.json
     └── README.md
 ```
 
-### Infra (`infra/`)
+### 基礎設施 (`infra/`)
 
 ```
 infra/
-├── docker/                  # docker-compose files, base Dockerfiles
-├── nginx/                   # Nginx configs, routing rules
-├── observability/           # OTel collector config, Grafana dashboards, SigNoz setup
-└── scripts/                 # Deploy scripts, CI/CD helpers
+├── docker/                  # docker-compose 文件, 基礎 Dockerfile
+├── nginx/                   # Nginx 配置, 路由規則
+├── observability/           # OTel 收集器配置, Grafana 儀表板, SigNoz 設置
+└── scripts/                 # 部署腳本, CI/CD 助手
 ```
 
-### Docs (`docs/`)
+### 文檔 (`docs/`)
 
-Cross-domain documentation only. Domain-specific docs go in each module/service's `README.md`.
+僅限跨領域文檔。領域特定文檔位於每個模組/服務的 `README.md` 中。
 
 ```
 docs/
-├── architecture/            # System architecture, ADRs
-├── blueprint/               # Implementation blueprints
-├── reference/               # Reference materials
-├── vision/                  # Platform vision docs
-│   ├── workshop-manifesto.md    # What Workshop is
-│   ├── domain-catalog.md        # 10 Core Modules + 5 Project Ideas
-│   ├── architecture-decisions.md # 7 ADRs from brainstorming
-│   └── roadmap.md               # Four-phase roadmap
-├── zh-TW/                   # Traditional Chinese translations
-│   ├── architecture/        # *.zh-TW.md files
+├── architecture/            # 系統架構, ADRs
+├── blueprint/               # 實作藍圖
+├── reference/               # 參考資料
+├── vision/                  # 平台願景文檔
+│   ├── workshop-manifesto.md    # 何謂 Workshop
+│   ├── domain-catalog.md        # 10 個核心模組 + 5 個專案構想
+│   ├── architecture-decisions.md # 腦力激盪產出的 7 個 ADR
+│   └── roadmap.md               # 四階段路線圖
+├── zh-TW/                   # 繁體中文翻譯
+│   ├── architecture/        # *.zh-TW.md 文件
 │   ├── blueprint/
 │   ├── reference/
 │   ├── vision/
 │   └── CLAUDE.zh-TW.md
-├── api/                     # API design standards
-├── runbooks/                # Operational procedures
-└── guides/                  # Developer onboarding
+├── api/                     # API 設計標準
+├── runbooks/                # 運作程序
+└── guides/                  # 開發者入職指南
 ```
 
-**Translation workflow**: English docs are source of truth. Run `python3 scripts/translate-docs.py` to auto-translate to zh-TW. Version tracking via YAML frontmatter (`doc_version` + `content_hash`).
+**翻譯工作流**：英文文檔為單一事實來源。運行 `python3 scripts/translate-docs.py` 以自動翻譯至繁體中文 (zh-TW)。版本追蹤通過 YAML frontmatter (`doc_version` + `content_hash`) 進行。
 
-### Scripts (`scripts/`)
+### 腳本 (`scripts/`)
 
 ```
 scripts/
-└── translate-docs.py        # Auto-translate docs to zh-TW (Gemini CLI)
+└── translate-docs.py        # 自動將文檔翻譯成繁體中文 (Gemini CLI)
 ```
 
-### Lab (`lab/`)
+### 實驗室 (`lab/`)
 
-POC experiments and prototype staging. Nothing here is imported by production code.
+POC 實驗與原型展示。這裡的任何內容都不會被生產代碼導入。
 
-| Rule | Example | Anti-pattern |
+| 規則 | 範例 | 反面模式 |
 |------|---------|-------------|
-| `<name>-poc` suffix | `finance-poc/` | `finance/` (conflicts with modules) |
-| Every POC has README.md | Documents goal, hypothesis, conclusion | No docs, orphaned outputs |
+| `<name>-poc` 後綴 | `finance-poc/` | `finance/` (與模組衝突) |
+| 每個 POC 都有 README.md | 記錄目標、假設、結論 | 沒有文檔，孤立的輸出 |
 
-Each lab directory:
+每個實驗目錄：
 ```
 lab/<name>-poc/
-├── README.md              # Goal, hypothesis, conclusion (even if failed)
-├── outputs/               # Skill / script outputs (.md, .json, etc.)
-└── scripts/               # Quick validation scripts
+├── README.md              # 目標、假設、結論 (即使失敗了)
+├── outputs/               # 技能 / 腳本輸出 (.md, .json 等)
+└── scripts/               # 快速驗證腳本
 ```
 
-**Lifecycle**: `lab/<name>-poc/` → validate → graduate to `core/src/modules/` + `dashboard/src/modules/` → archive or delete lab entry.
+**生命週期**：`lab/<name>-poc/` → 驗證 → 晉升至 `core/src/modules/` + `dashboard/src/modules/` → 封存或刪除實驗項目。
 
-## Domain Mapping
+## 領域映射
 
-Domains map vertically between backend modules and frontend modules:
+領域在後端模組與前端模組之間垂直映射：
 
 ```
-                  core/src/modules/finance/           ← Backend logic
-Finance domain ──
-                  dashboard/src/modules/finance/      ← Frontend UI
+                  core/src/modules/finance/           ← 後端邏輯
+Finance 領域 ──
+                  dashboard/src/modules/finance/      ← 前端 UI
 
-                  core/src/modules/auth/              ← Backend logic
-Auth domain ─────
-                  dashboard/src/modules/auth/         ← Frontend UI (login, register)
+                  core/src/modules/auth/              ← 後端邏輯
+Auth 領域 ─────
+                  dashboard/src/modules/auth/         ← 前端 UI (登入、註冊)
 
-                  core/services/media/                ← Standalone service, no frontend
-Media domain ────
-                  (no frontend module)
+                  core/services/media/                ← 獨立服務，無前端
+Media 領域 ────
+                  (無前端模組)
 ```
 
-## Key Principles
+## 核心原則
 
-1. **Three-tier taxonomy** -- Core Modules (DB-backed) / Stations (local tools) / Bridges (connectors)
-2. **Modular monolith** -- organize by business domain within a single deployable unit
-3. **Module boundaries** -- no cross-module model imports; use service layer or events
-4. **Shared code is explicit** -- only `libs/` and `shared/` content is shared
-5. **Convention over configuration** -- consistent naming means less documentation needed
-6. **README.md per unit** -- every service and significant module has its own README
-7. **English source of truth** -- all docs in English, auto-translated to zh-TW
+1. **三層分類法** —— 核心模組 (資料庫支援) / 工作站 (本地工具) / 橋接器 (連接器)
+2. **模塊化單體** —— 在單個可部署單元內按業務領域組織
+3. **模組邊界** —— 禁止跨模組模型導入；使用服務層或事件
+4. **共享代碼是顯式的** —— 僅共享 `libs/` 與 `shared/` 的內容
+5. **約定優於配置** —— 一致的命名意味著需要的文檔更少
+6. **每個單元一個 README.md** —— 每個服務和重要的模組都有自己的 README
+7. **英文為事實來源** —— 所有文檔均以英文撰寫，自動翻譯為繁體中文 (zh-TW)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)

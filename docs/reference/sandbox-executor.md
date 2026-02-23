@@ -1,67 +1,70 @@
 ---
 doc_version: 2
 content_hash: 40ef2e7d
+source_version: 2
+target_lang: zh-TW
+translated_at: 2026-02-23
 ---
 
-# Sandbox Executor — Reference
+# Sandbox Executor — 參考文件
 
-## Origin
+## 起源 (Origin)
 
-Inspired by **Cloudflare Workers** concept: instead of making N individual tool calls (Read file, Bash command, HTTP request), bundle deterministic operations into a single code execution with pre-injected SDK helpers.
+靈感來自 **Cloudflare Workers** 的概念：與其執行 N 個獨立的工具調用（讀取檔案、Bash 命令、HTTP 請求），不如將確定的操作打包到單次程式碼執行中，並搭配預先注入的 SDK 輔助函式。
 
-### Problem (before sandbox)
-
-```
-Claude Code wants to: read 5 files + make 3 API calls + write 2 files
-= 10 individual tool calls
-= 10 round-trips (each ~2-3 seconds)
-= 20-30 seconds total
-```
-
-### Solution (with sandbox)
+### 問題（使用 sandbox 之前）
 
 ```
-Claude Code writes a Python script using SDK helpers
-= 1 tool call (sandbox_execute)
-= All operations run in a single subprocess
-= 1-5 seconds total
+Claude Code 想要：讀取 5 個檔案 + 進行 3 次 API 調用 + 寫入 2 個檔案
+= 10 次獨立的工具調用
+= 10 次往返（每次約 2-3 秒）
+= 總共耗時 20-30 秒
 ```
 
-### Cloudflare Workers analogy
+### 解決方案（使用 sandbox 之後）
+
+```
+Claude Code 使用 SDK 輔助函式撰寫 Python 腳本
+= 1 次工具調用 (sandbox_execute)
+= 所有操作在單個子進程中運行
+= 總共耗時 1-5 秒
+```
+
+### Cloudflare Workers 類比
 
 | Cloudflare Workers | Sandbox Executor |
 |-------------------|-----------------|
-| V8 isolate at the edge | Python/Node.js subprocess |
+| 邊緣端的 V8 isolate | Python/Node.js 子進程 |
 | fetch() API | http_get(), http_post() |
-| KV bindings | read_file(), write_file() |
-| Response object | output() structured results |
-| Runs close to user | Runs on local machine |
+| KV 綁定 (bindings) | read_file(), write_file() |
+| Response 物件 | output() 結構化結果 |
+| 運行位置鄰近使用者 | 運行在本地機器 |
 
-## Architecture
+## 架構 (Architecture)
 
 ```
 LLM CLI (Claude Code / Gemini / Codex)
     │
-    │ MCP stdio protocol
+    │ MCP stdio 協定
     ▼
 ┌──────────────────────┐
-│  sandbox-executor    │ (Node.js MCP server)
-│  ├── index.ts        │ MCP server + tool registration
-│  ├── tools/          │ Tool handlers (execute, info)
+│  sandbox-executor    │ (Node.js MCP 伺服器)
+│  ├── index.ts        │ MCP 伺服器 + 工具註冊
+│  ├── tools/          │ 工具處理程序 (execute, info)
 │  ├── sandbox/        │
-│  │   ├── prelude.ts  │ SDK helper injection (Python/JS)
-│  │   ├── runner.ts   │ Subprocess execution engine
-│  │   └── validator.ts│ Basic safety checks
-│  └── schemas/        │ Zod input validation
+│  │   ├── prelude.ts  │ SDK 輔助函式注入 (Python/JS)
+│  │   ├── runner.ts   │ 子進程執行引擎
+│  │   └── validator.ts│ 基礎安全檢查
+│  └── schemas/        │ Zod 輸入驗證
 └──────────┬───────────┘
            │
            │ child_process.spawn()
            ▼
     ┌──────────────┐
-    │  Python 3.12 │  or  Node.js
+    │  Python 3.12 │  或  Node.js
     │  subprocess  │
     │              │
-    │  SDK helpers: │
+    │  SDK 輔助函式: │
     │  http_get()  │
     │  http_post() │
     │  read_file() │
@@ -70,52 +73,52 @@ LLM CLI (Claude Code / Gemini / Codex)
     └──────────────┘
 ```
 
-## Tools
+## 工具 (Tools)
 
 ### `sandbox_execute`
 
-Execute Python or JavaScript code with auto-injected SDK helpers.
+執行 Python 或 JavaScript 程式碼，並自動注入 SDK 輔助函式。
 
-**Input**:
+**輸入 (Input)**：
 ```json
 {
   "language": "python" | "javascript",
   "code": "...",
   "timeout": 30,
-  "description": "What this code does"
+  "description": "這段程式碼的作用"
 }
 ```
 
-**Output**: Markdown formatted result with status, duration, stdout/stderr, structured outputs.
+**輸出 (Output)**：Markdown 格式的結果，包含狀態、執行時間、stdout/stderr 以及結構化輸出。
 
 ### `sandbox_info`
 
-Returns SDK documentation for the specified language.
+傳回指定語言的 SDK 說明文件。
 
-**Input**:
+**輸入 (Input)**：
 ```json
 {
   "language": "python" | "javascript"
 }
 ```
 
-## SDK Helpers
+## SDK 輔助函式 (SDK Helpers)
 
-All helpers are auto-injected as a prelude before user code. No imports needed.
+所有輔助函式都會在使用者程式碼執行前作為 prelude 自動注入，無需手動 import。
 
 ### Python
 
 ```python
 # HTTP
-response = http_get(url, headers=None)          # Returns: {"status": int, "body": str, "headers": dict}
+response = http_get(url, headers=None)          # 回傳: {"status": int, "body": str, "headers": dict}
 response = http_post(url, data=None, headers=None)
 
-# File I/O
-content = read_file(path)                       # Returns: str (file content)
-write_file(path, content)                       # Auto-creates parent directories
+# 檔案 I/O
+content = read_file(path)                       # 回傳: str (檔案內容)
+write_file(path, content)                       # 自動建立父目錄
 
-# Output
-output(data, label=None)                        # Register structured output (dict, list, str)
+# 輸出
+output(data, label=None)                        # 註冊結構化輸出 (dict, list, str)
 ```
 
 ### JavaScript
@@ -128,40 +131,40 @@ write_file(path, content);
 output(data, label);
 ```
 
-## Constraints
+## 限制 (Constraints)
 
-| Constraint | Value |
+| 限制項目 | 數值 |
 |-----------|-------|
-| Timeout | 1-60 seconds (default 30) |
-| Stdout limit | 50KB |
-| HTTP timeout | 15 seconds per request |
-| Validation | Path traversal check only |
-| Isolation | None — shares host filesystem and network |
+| Timeout (逾時) | 1-60 秒 (預設 30) |
+| Stdout 限制 | 50KB |
+| HTTP 逾時 | 每次請求 15 秒 |
+| 驗證 | 僅檢查路徑遍歷 (Path traversal) |
+| 隔離性 | 無 — 共享主機檔案系統與網路 |
 
-## When to Use
+## 使用時機 (When to Use)
 
-| Scenario | Use sandbox? |
+| 場景 | 使用 sandbox？ |
 |----------|-------------|
-| 3+ API calls (any URL) | Yes — one tool call replaces many |
-| Batch file read → transform → write | Yes — efficient pipeline |
-| Multi-service health check | Yes — parallel requests |
-| Single file read | No — direct Read tool is simpler |
-| Exploratory / need reasoning between steps | No — use sequential tool calls |
-| Need MCP tools (Playwright, etc.) | No — sandbox has no MCP access |
+| 3 次以上的 API 調用（任何 URL） | 是 — 單次工具調用取代多次調用 |
+| 批量檔案讀取 → 轉換 → 寫入 | 是 — 高效率的工作流 |
+| 多服務健康檢查 | 是 — 並行請求 |
+| 單一檔案讀取 | 否 — 使用直接的讀取工具更簡單 |
+| 探索性操作 / 步驟間需要推理 | 否 — 使用序列化的工具調用 |
+| 需要 MCP 工具 (Playwright 等) | 否 — sandbox 無法存取 MCP |
 
-## Configuration
+## 配置 (Configuration)
 
-### Location
+### 位置 (Location)
 
 ```
 ~/workshop/stations/sandbox-executor/
-├── src/           # TypeScript source
-├── dist/          # Built JavaScript (run this)
+├── src/           # TypeScript 源碼
+├── dist/          # 編譯後的 JavaScript (執行此目錄)
 ├── package.json
 └── tsconfig.json
 ```
 
-### MCP Server Registration
+### MCP 伺服器註冊
 
 **Claude Code** (`~/.claude.json`):
 ```json
@@ -186,13 +189,21 @@ output(data, label);
 }
 ```
 
-## Development
+## 開發 (Development)
 
 ```bash
 cd ~/workshop/stations/sandbox-executor
 npm install
 npm run build     # TypeScript → dist/
-npm run dev       # Watch mode
+npm run dev       # 監控模式 (Watch mode)
 ```
 
-After modifying source, rebuild and restart the LLM CLI to pick up changes.
+修改源碼後，請重新編譯並重啟 LLM CLI 以套用更改。
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
+Created execution plan for SessionEnd: 3 hook(s) to execute in parallel
+Expanding hook command: ~/Claude/projects/pulso/services/session_redactor/scripts/redact-session.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/Claude/projects/kas-memory/scripts/extract-async.sh (cwd: /Users/joneshong/workshop)
+Expanding hook command: ~/.claude/hooks/observability-bridge.sh SessionEnd (cwd: /Users/joneshong/workshop)
