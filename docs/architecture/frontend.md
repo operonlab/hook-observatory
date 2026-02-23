@@ -8,6 +8,18 @@ translated_at: 2026-02-23
 
 # 前端架構指南
 
+## 三層前端架構
+
+Workshop 前端是一個 Single React App，由三層共存組成：
+
+| 層級 | 名稱 | 說明 |
+|------|------|------|
+| **Layer 1** | 模組 SPA 頁面 | 每個模組有完整的路由與 UI（`/finance/*`, `/quest/*` 等） |
+| **Layer 2** | Dashboard Widgets | 首頁儀表板，從各模組抽取 Widget 拖放組合（`/`） |
+| **Layer 3** | LLM Chat 浮層 | 跨全域的對話介面，浮在最上層，類似 Google Gemini 嵌入 Chrome |
+
+Layer 2 是 Layer 1 的**補充**（不取代模組頁面）。Layer 3 橫跨所有頁面。
+
 ## 設計原則
 
 ### 1. 單一應用程式，領域模組
@@ -17,7 +29,7 @@ translated_at: 2026-02-23
 ```
 dashboard/                    單一 React App
 ├── src/
-│   ├── shell/                應用程式外殼 (佈局、導覽、認證)
+│   ├── shell/                應用程式外殼 (佈局、導覽、認證、LLM Chat 浮層)
 │   ├── modules/              領域 UI 模組 (10 個核心模組)
 │   │   ├── auth/
 │   │   ├── finance/
@@ -29,6 +41,8 @@ dashboard/                    單一 React App
 │   │   ├── workforce/
 │   │   ├── matching/
 │   │   └── admin/
+│   ├── chat/                 LLM Chat 浮層 (Layer 3)
+│   ├── widgets/              Dashboard Widget 元件庫 (Layer 2)
 │   ├── plugins/              插件 UI 運行時
 │   └── shared/               共用組件、Hooks、工具函式
 ```
@@ -129,6 +143,8 @@ export function Router() {
 ```
 
 每個模組內部自行處理其子路由。
+
+> **`/` (Dashboard)** 是 Widget 儀表板視圖，從各模組抽取摘要 Widget 組合顯示。各模組的完整 UI 則在 `/finance/*`、`/quest/*` 等路由下。
 
 ## 路由慣例
 
@@ -232,3 +248,27 @@ cd dashboard && pnpm dev     # → http://localhost:3000
 ```
 
 Rsbuild 設定會在開發期間將 `/api/*` 代理到核心單體（Core Monolith）。
+
+## LLM Chat 浮層 (Layer 3)
+
+全域 LLM 對話介面，浮在所有頁面最上層，類似 Google 將 Gemini Chat 嵌入 Chrome 的體驗。
+
+```
+┌──────────────────────────────────────┐
+│  任何頁面 (/finance, /quest, ...)     │
+│                                      │
+│                  ┌───────────────────┐│
+│                  │  LLM Chat Panel  ││ ← 浮層，可收合/展開
+│                  │  ─────────────── ││
+│                  │  使用者: 上個月...││
+│                  │  LLM: 根據記錄...││
+│                  │  [輸入框]        ││
+│                  └───────────────────┘│
+└──────────────────────────────────────┘
+```
+
+**特性**：
+- 不離開當前頁面即可與 LLM 對話
+- 可感知當前頁面上下文（例如在 finance 頁面時可直接詢問帳務問題）
+- 透過 SSE 串流 LLM 回應
+- 可收合/展開，不干擾主要操作

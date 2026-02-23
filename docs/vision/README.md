@@ -50,7 +50,10 @@ Meeting:   Compose services into solutions (Legal Advisor, ERP, ...)
 ```
 Claude Code → MCP Server (adapter) → FastAPI Core (monolith) → PostgreSQL
                                           ↕
-Web Dashboard (widgets) ──────────► FastAPI Core
+Single React App ─────────────────► FastAPI Core
+  ├── Layer 1: 模組 SPA 頁面           (HTTP REST)
+  ├── Layer 2: Dashboard Widgets        (HTTP REST)
+  └── Layer 3: LLM Chat 浮層           (SSE streaming)
                                           ↕
 Social Bridges (LINE/TG/DC) ─────► FastAPI Core
 ```

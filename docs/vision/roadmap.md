@@ -54,14 +54,17 @@ social hooks v1                                                full platform
 - [ ] FastAPI Core Monolith + 模組化結構
 - [ ] PostgreSQL 每個模組獨立 Schema + 所有資料表皆含 space_id
 - [ ] 事件匯流排（進程內）
-- [ ] 🔮 Widget 儀表板框架 (react-grid-layout + Container Queries) — 未來願景
+- [ ] Dashboard Widget 框架 (react-grid-layout + Container Queries) — 模組頁面之外的補充視圖
+- [ ] LLM Chat 浮層 — 跨全域的 LLM 對話介面（類似 Gemini in Chrome）
 - [ ] 針對 finance, quest, muse 的 MCP Server（對接到核心 API）
 - [ ] PWA + Service Worker（基礎已存在）
 - [ ] 基礎 CI/CD
 
 ### 第一階段交付成果
 
-- 儀表板功能運作：至少 4 個 Widget（財務摘要、最近交易、任務列表、快速筆記）
+- 模組頁面功能運作：finance、quest、muse 各有完整路由式 UI
+- 儀表板功能運作：首頁 Dashboard 至少 4 個 Widget（財務摘要、最近交易、任務列表、快速筆記）
+- LLM Chat 浮層功能運作：在任何頁面可呼叫 LLM 對話
 - LINE 機器人功能運作：基礎的 `@accounting`, `@todo` 指令
 - 家庭帳號功能運作：妻子可登入並查看共享記帳
 - MCP 功能運作：Claude Code 可直接操作所有模組
