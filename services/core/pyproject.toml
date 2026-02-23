@@ -1,7 +1,7 @@
 [project]
 name = "core"
 version = "0.1.0"
-description = "Pulso Core — Modular Monolith"
+description = "Core — Modular Monolith"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

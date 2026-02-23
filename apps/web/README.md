@@ -1,4 +1,4 @@
-# Pulso Web
+# Workshop Web
 
 Single React application with domain modules.
 

@@ -33,7 +33,7 @@ export default function NavBar({ onToggleSidebar }: NavBarProps) {
 
         {/* Logo */}
         <span className="text-xl font-bold" style={{ color: "var(--blue)" }}>
-          Pulso
+          Workshop
         </span>
       </div>
 

@@ -134,7 +134,7 @@ CREATE TABLE password_reset_tokens (
 ### 2.5 session-redactor
 
 **Location**: `~/Claude/projects/session-redactor/`
-**Stack**: Python FastAPI (sub-router of Pulso platform)
+**Stack**: Python FastAPI (sub-router of V1 platform)
 **Features**: 20 regex patterns, JSON-aware recursive redaction, daily sweep
 **Storage**: SQLite (file tracking, dedup via inode)
 **API**: 4 endpoints (status, scan, history, history by session)

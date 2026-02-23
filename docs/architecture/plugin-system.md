@@ -12,7 +12,7 @@ The plugin system draws from three proven models:
 
 ## Plugin Manifest
 
-Every plugin declares itself via `pulso-plugin.json`:
+Every plugin declares itself via `plugin.json`:
 
 ```json
 {
@@ -166,7 +166,7 @@ Plugins are installed from Git repositories:
 
 ```bash
 # CLI (future)
-pulso plugin install https://github.com/workshop-plugins/expense-categorizer
+workshop plugin install https://github.com/workshop-plugins/expense-categorizer
 
 # API
 POST /api/admin/plugins/install
@@ -180,7 +180,7 @@ POST /api/admin/plugins/install
 
 ```
 1. Clone repository to services/core/plugins/<plugin-id>/
-2. Validate pulso-plugin.json manifest
+2. Validate plugin.json manifest
 3. Check permission compatibility
 4. Register hooks with Hook Engine
 5. Register UI slots with frontend runtime
@@ -192,7 +192,7 @@ POST /api/admin/plugins/install
 ```
 services/core/plugins/
 ├── expense-categorizer/
-│   ├── pulso-plugin.json
+│   ├── plugin.json
 │   ├── backend/
 │   │   └── hooks.py
 │   ├── frontend/
@@ -200,7 +200,7 @@ services/core/plugins/
 │   │       └── CategoryBreakdown.tsx
 │   └── README.md
 └── daily-summary/
-    ├── pulso-plugin.json
+    ├── plugin.json
     ├── backend/
     │   └── hooks.py
     └── README.md
@@ -243,7 +243,7 @@ Plugins inject frontend components into predefined slots:
 
 ### Slot Registration
 
-In `pulso-plugin.json`:
+In `plugin.json`:
 ```json
 {
   "ui_slots": {
@@ -293,7 +293,7 @@ mkdir my-plugin && cd my-plugin
 
 ```
 my-plugin/
-├── pulso-plugin.json
+├── plugin.json
 ├── backend/
 │   └── hooks.py
 ├── frontend/           # Optional

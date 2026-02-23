@@ -129,7 +129,7 @@ export default function Sidebar({
               color: "var(--surface1)",
             }}
           >
-            Pulso v0.0.1
+            Workshop v0.0.1
           </div>
         )}
       </aside>

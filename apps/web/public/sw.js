@@ -1,4 +1,4 @@
-const CACHE_NAME = "pulso-v1";
+const CACHE_NAME = "workshop-v1";
 const APP_SHELL = ["/", "/manifest.json", "/icons/icon-192.svg"];
 
 // Install: cache app shell

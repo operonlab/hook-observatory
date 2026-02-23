@@ -1,6 +1,6 @@
 # Core Service (Modular Monolith)
 
-Pulso 核心服務 — 事件驅動的 Modular Monolith。
+核心服務 — 事件驅動的 Modular Monolith。
 
 ## Run
 ```bash

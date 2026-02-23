@@ -61,7 +61,7 @@ export default function Login() {
           className="mb-6 text-center text-3xl font-bold"
           style={{ color: "var(--blue)" }}
         >
-          Pulso
+          Workshop
         </h1>
 
         {/* Tabs */}

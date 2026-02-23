@@ -1,1 +1,1 @@
-"""Pulso Core — Modular Monolith."""
+"""Core — Modular Monolith."""

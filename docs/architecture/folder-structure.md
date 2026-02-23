@@ -126,7 +126,7 @@ services/<name>/
 ```
 plugins/
 ├── <plugin-name>/
-│   ├── pulso-plugin.json    # Plugin manifest
+│   ├── plugin.json    # Plugin manifest
 │   ├── backend/             # Python hooks
 │   │   └── hooks.py
 │   ├── frontend/            # React components (optional)

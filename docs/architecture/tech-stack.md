@@ -146,7 +146,7 @@ See [Observability](./observability.md) for architecture details.
 | Component | Implementation | Purpose |
 |-----------|---------------|---------|
 | Hook Engine | Custom Python | Lifecycle hooks (before_*/after_*) |
-| Plugin Manifest | `pulso-plugin.json` | Plugin declaration, permissions |
+| Plugin Manifest | `plugin.json` | Plugin declaration, permissions |
 | Plugin Runtime | Sandboxed execution | Isolated plugin code execution |
 | UI Slots | React PluginSlot | Frontend plugin injection points |
 

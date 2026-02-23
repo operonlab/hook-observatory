@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     await event_bus.stop()
 
 
-app = FastAPI(title="Pulso", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Workshop", version="0.1.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware)
 app.add_middleware(
     CORSMiddleware,

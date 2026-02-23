@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     ]
 
     # Session
-    session_cookie_name: str = "pulso_session"
+    session_cookie_name: str = "workshop_session"
     session_max_age: int = 7 * 24 * 60 * 60  # 7 days in seconds
 
     # Event Bus

@@ -22,7 +22,7 @@ class HookBus:
         return context
 
     async def load_plugins(self, plugin_dir: str):
-        # Future: scan plugin_dir for pulso-plugin.json manifests
+        # Future: scan plugin_dir for plugin.json manifests
         pass
 
 

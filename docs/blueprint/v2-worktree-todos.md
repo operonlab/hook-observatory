@@ -32,10 +32,10 @@ git worktree add ../ws-web      -b feat/web-complete
 
 - [ ] **1.1 Docker Compose dev stack**
   Create `docker-compose.dev.yml`:
-  - PostgreSQL 16 (port 5432, user: pulso, db: pulso_dev)
+  - PostgreSQL 16 (port 5432, user: workshop, db: workshop_dev)
   - Redis 7 (port 6379)
   - Grafana LGTM all-in-one `grafana/otel-lgtm` (ports: 3100 grafana, 4317 OTLP gRPC, 4318 OTLP HTTP)
-  - Network: `pulso-net`
+  - Network: `workshop-net`
   - Volumes: `pg-data`, `redis-data`
   - `.env.example` with all vars
 
@@ -93,7 +93,7 @@ git worktree add ../ws-web      -b feat/web-complete
 - [ ] **1.9 LGTM observability config**
   `infra/observability/`:
   - `otel-collector.yml` — receivers (OTLP gRPC + HTTP), exporters (Loki, Tempo, Prometheus)
-  - `grafana/provisioning/dashboards/pulso-overview.json` — basic dashboard
+  - `grafana/provisioning/dashboards/workshop-overview.json` — basic dashboard
 
 - [ ] **1.10 Dev scripts**
   `infra/scripts/dev-setup.sh`:
