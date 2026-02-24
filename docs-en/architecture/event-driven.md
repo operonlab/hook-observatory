@@ -1,6 +1,11 @@
 ---
 doc_version: 1
 content_hash: 3ff968ae
+source_version: 1
+target_lang: en
+translated_at: 2026-02-24
+source_hash: 2b5a3cb3
+source_lang: zh-TW
 ---
 
 # Event-Driven Architecture
@@ -9,30 +14,30 @@ content_hash: 3ff968ae
 
 **Everything is an event. Events drive state changes.**
 
-When a module changes state, it publishes an event. Other modules (and plugins) subscribe to events they care about. This creates loose coupling between modules while maintaining a clear audit trail of everything that happens in the system.
+When a module changes state, it publishes an event. Other modules (and plugins) subscribe to the events they care about. This creates loose coupling between modules while maintaining a clear audit trail of everything that happens in the system.
 
 ```
 Module A changes state
-    → publishes event to Event Bus
-    → Module B receives event, reacts
-    → Module C receives event, reacts
-    → Plugin hooks fire
-    → OTel span recorded
+    → Publishes event to Event Bus
+    → Module B receives the event and reacts
+    → Module C receives the event and reacts
+    → Plugin Hook triggers
+    → Records OTel span
 ```
 
 ## Event Structure
 
-Every event follows this schema:
+Every event follows the following schema:
 
 ```python
-@dataclass
+ @.cache/uv/archive-v0/uj_7CuQMD1gog0o_f4ybB/huggingface_hub/dataclasses.py
 class Event:
     type: str           # e.g., "finance.transaction.created"
-    data: dict          # event payload
-    id: str             # unique event ID (UUID v7)
+    data: dict          # Event payload
+    id: str             # Unique event ID (UUID v7)
     timestamp: str      # ISO 8601 timestamp
-    source: str         # module that published the event
-    user_id: str | None # user who triggered the action (if applicable)
+    source: str         # The module that published the event
+    user_id: str | None # The user who triggered the action (if applicable)
     trace_id: str       # OpenTelemetry trace ID for correlation
 ```
 
@@ -61,29 +66,29 @@ Example:
 {domain}.{entity}.{past_tense_verb}
 ```
 
-| Component | Rule | Examples |
+| Component | Rule | Example |
 |-----------|------|---------|
 | `domain` | Module name | `auth`, `finance`, `quest`, `muse` |
 | `entity` | Business entity (singular) | `user`, `transaction`, `quest`, `spark` |
-| `verb` | Past tense (event already happened) | `created`, `updated`, `deleted`, `completed` |
+| `verb` | Past tense (the event has already occurred) | `created`, `updated`, `deleted`, `completed` |
 
-### Standard Events per Module
+### Standard Events by Module
 
-| Module | Events |
+| Module | Event |
 |--------|--------|
 | auth | `auth.user.registered`, `auth.user.approved`, `auth.user.suspended`, `auth.user.logged_in`, `auth.user.logged_out` |
 | finance | `finance.transaction.created`, `finance.transaction.updated`, `finance.budget.exceeded`, `finance.subscription.renewed` |
-| quest | `quest.quest.created`, `quest.quest.completed`, `quest.dojo.leveled_up`, `quest.reward.claimed` |
+| quest | `quest.quest.created`, `quest.quest.completed`, `quest.skill.leveled_up`, `quest.reward.claimed` |
 | muse | `muse.spark.created`, `muse.spark.linked`, `muse.graph.updated` |
 | admin | `admin.setting.changed`, `admin.plugin.installed`, `admin.plugin.removed` |
 
 ### System Events
 
-| Event | When |
+| Event | When Triggered |
 |-------|------|
-| `system.startup` | Application starts |
-| `system.shutdown` | Application shutting down |
-| `system.health.degraded` | Health check detects issues |
+| `system.startup` | Application startup |
+| `system.shutdown` | Application is shutting down |
+| `system.health.degraded` | Health check detects an issue |
 
 ## EventBus API
 
@@ -92,10 +97,10 @@ Example:
 ```python
 class EventBus:
     async def publish(self, event_type: str, data: dict, **kwargs) -> str:
-        """Publish an event. Returns event ID."""
+        """Publish an event. Returns the event ID."""
 
     def subscribe(self, event_type: str, handler: Callable) -> None:
-        """Subscribe a handler to an event type. Supports glob patterns."""
+        """Subscribe a handler to a specific event type. Supports glob patterns."""
 
     def on(self, event_type: str) -> Callable:
         """Decorator for subscribing handlers."""
@@ -107,14 +112,14 @@ class EventBus:
 ### Publishing Events
 
 ```python
-# Direct publish
+# Direct publishing
 event_id = await event_bus.publish(
     "finance.transaction.created",
     data={"transaction_id": "txn_abc", "amount": 150.00},
     user_id=current_user.id,
 )
 
-# Or from within a module's service layer
+# Or publishing from within a module's service layer
 class TransactionService:
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
@@ -133,13 +138,13 @@ class TransactionService:
 
 ```python
 # Decorator style
-@event_bus.on("finance.transaction.created")
+ @event_bus.on("finance.transaction.created")
 async def on_transaction_created(event: Event):
     # Check if this triggers a quest achievement
     await check_spending_quest(event.data["transaction_id"], event.user_id)
 
 # Glob pattern subscription
-@event_bus.on("finance.*.*")
+ @event_bus.on("finance.*.*")
 async def on_any_finance_event(event: Event):
     # Audit log all finance events
     await audit_log.record(event)
@@ -150,11 +155,11 @@ event_bus.subscribe("quest.quest.completed", handle_quest_completion)
 
 ### Middleware
 
-Middleware intercepts every event for cross-cutting concerns:
+Middleware intercepts every event to handle cross-cutting concerns:
 
 ```python
 class OTelEventMiddleware(EventMiddleware):
-    """Creates OpenTelemetry spans for every event."""
+    """Create OpenTelemetry spans for each event."""
 
     async def __call__(self, event: Event, next: Callable):
         with tracer.start_as_current_span(f"event:{event.type}") as span:
@@ -163,7 +168,7 @@ class OTelEventMiddleware(EventMiddleware):
             await next(event)
 
 class LoggingMiddleware(EventMiddleware):
-    """Logs every event with structlog."""
+    """Log every event using structlog."""
 
     async def __call__(self, event: Event, next: Callable):
         log.info("event.published", event_type=event.type, event_id=event.id)
@@ -175,7 +180,7 @@ event_bus.use(OTelEventMiddleware())
 event_bus.use(LoggingMiddleware())
 ```
 
-## Event Flow Examples
+## Example Event Flows
 
 ### 1. User Registration → Admin Notification
 
@@ -183,59 +188,59 @@ event_bus.use(LoggingMiddleware())
 User submits registration form
     │
     ▼
-Auth module: create user (status=pending)
+Auth Module: Creates user (status=pending)
     │
     ▼
-Auth module: publish("auth.user.registered", {user_id, email, name})
+Auth Module: publishes("auth.user.registered", {user_id, email, name})
     │
-    ├──► Admin module subscriber: create audit log entry
+    ├──► Admin Module Subscriber: Creates audit log entry
     │
-    ├──► Notification hook: send admin email/push notification
+    ├──► Notification Hook: Sends admin email/push notification
     │
-    └──► Plugin hook (before_user_approve): custom validation
+    └──► Plugin Hook (before_user_approve): Custom validation
 ```
 
-### 2. Transaction Created → Quest Achievement
+### 2. Transaction Creation → Quest Achievement
 
 ```
 User creates a financial transaction
     │
     ▼
-Finance module: insert transaction, publish("finance.transaction.created", {txn_id, amount, category})
+Finance Module: Inserts transaction, publishes("finance.transaction.created", {txn_id, amount, category})
     │
-    ├──► Quest module subscriber:
-    │       check if user has active spending quests
-    │       if threshold met → complete quest
-    │       publish("quest.quest.completed", {quest_id, user_id})
+    ├──► Quest Module Subscriber:
+    │       Checks if user has an active spending quest
+    │       If threshold is met → complete quest
+    │       publishes("quest.quest.completed", {quest_id, user_id})
     │       │
-    │       ├──► Finance module subscriber: grant reward points
+    │       ├──► Finance Module Subscriber: Issues reward points
     │       │
-    │       └──► Muse module subscriber: create achievement spark
+    │       └──► Muse Module Subscriber: Creates achievement spark
     │
-    └──► Admin module subscriber: audit log
+    └──► Admin Module Subscriber: Audit log
 ```
 
 ### 3. Plugin Installation → Hook Registration
 
 ```
-Admin installs a plugin via manifest
+Admin installs plugin via Manifest
     │
     ▼
-Admin module: validate manifest, install plugin
+Admin Module: Validates Manifest, installs plugin
     │
     ▼
-Admin module: publish("admin.plugin.installed", {plugin_id, hooks})
+Admin Module: publishes("admin.plugin.installed", {plugin_id, hooks})
     │
-    ├──► Hook Engine: register plugin's hook handlers
+    ├──► Hook Engine: Registers plugin's Hook handlers
     │
-    ├──► Auth module: register plugin's permission set
+    ├──► Auth Module: Registers plugin's permission sets
     │
-    └──► Frontend: reload plugin UI slots
+    └──► Frontend: Reloads plugin UI slots
 ```
 
 ## Backend Strategy
 
-### Phase 1: In-Process Async (Current)
+### Stage 1: In-Process Async (Current)
 
 Events are dispatched in-process using Python's `asyncio`:
 
@@ -247,18 +252,18 @@ class InProcessEventBus(EventBus):
 
     async def publish(self, event_type: str, data: dict, **kwargs) -> str:
         event = Event(type=event_type, data=data, id=str(uuid7()), ...)
-        # Run through middleware chain, then dispatch to handlers
+        # Run through the middleware chain, then dispatch to handlers
         for handler in self._match_handlers(event_type):
             asyncio.create_task(handler(event))
         return event.id
 ```
 
 **Pros**: Zero latency, no external dependencies, simple debugging.
-**Cons**: Events lost on process crash, no cross-process delivery.
+**Cons**: Events are lost on process crash, no cross-process delivery.
 
-### Phase 2: Redis Streams (Future)
+### Stage 2: Redis Streams (Future)
 
-When the system needs durability or cross-service events:
+When the system requires persistence or cross-service events:
 
 ```python
 class RedisStreamEventBus(EventBus):
@@ -268,39 +273,41 @@ class RedisStreamEventBus(EventBus):
         return event.id
 ```
 
-**Pros**: Durable, cross-service, consumer groups for load balancing.
-**Cons**: Additional infrastructure, slight latency.
+**Pros**: Persistence, cross-service, supports consumer groups for load balancing.
+**Cons**: Additional infrastructure, minor latency.
 
-### Phase 3: NATS (Far Future)
+### Stage 3: NATS (Distant Future)
 
-If the system needs multi-node, high-throughput event streaming:
-- NATS JetStream for durable streams
+If the system requires multi-node, high-throughput event streaming:
+- Use NATS JetStream for persistent streams
 - Subject-based routing aligns with our naming convention
-- Built-in consumer groups and replay
+- Built-in consumer groups and replay functionality
 
 ## Observability Integration
 
 Every event is a first-class observability citizen:
 
-| Signal | What | How |
+| Signal | Content | How |
 |--------|------|-----|
-| Trace | Each event = span in parent trace | `trace_id` field propagation |
+| Trace | Each event = one Span in a parent Trace | `trace_id` field is passed |
 | Metric | Event throughput, latency, error rate | OTel event middleware counters |
-| Log | Structured event log | structlog with event metadata |
+| Log | Structured event logs | structlog with event metadata |
 
 ```python
-# Automatic metrics per event type
-event_counter = meter.create_counter("events.published", description="Events published")
+# Automatic metrics for each event type
+event_counter = meter.create_counter("events.published", description="Number of events published")
 event_latency = meter.create_histogram("events.handling_duration_ms")
 ```
 
-See [Observability](./observability.md) for dashboard details.
+For dashboard details, see [Observability](./observability.md).
 
 ## Rules
 
-1. **Past tense only**: Events describe something that already happened. Never `user.create` -- always `user.created`.
-2. **Events are immutable**: Once published, an event's data never changes. To correct, publish a new event.
-3. **Idempotent handlers**: Subscribers must handle the same event twice without side effects.
-4. **No request/response**: Events are fire-and-forget. If you need a response, use a service import.
-5. **Keep payloads lean**: Include IDs and essential data. Subscribers can fetch full records via service imports.
-6. **Schema evolution**: Add fields freely. Never remove or rename fields without a versioned event type.
+1. **Past Tense Only**: Events describe something that has already happened. Never use `user.create` — always use `user.created`.
+2. **Events are Immutable**: Once published, an event's data never changes. To make a correction, publish a new event.
+3. **Idempotent Handlers**: Subscribers must be able to process the same event twice without side effects.
+4. **No Request/Response**: Events are fire-and-forget. If you need a response, use a service import.
+5. **Keep Payloads Lean**: Include only IDs and essential data. Subscribers can fetch the full record via service imports.
+6. **Schema Evolution**: Feel free to add fields. Never remove or rename fields without versioning the event type.
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2454ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2711ms

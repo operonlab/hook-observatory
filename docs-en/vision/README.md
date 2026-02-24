@@ -1,25 +1,30 @@
 ---
-doc_version: 2
-content_hash: pending
+doc_version: 4
+content_hash: 1dafee87
+source_version: 4
+target_lang: en
+translated_at: 2026-02-24
+source_hash: bcf86c2f
+source_lang: zh-TW
 ---
 
-# Workshop Vision Documents
+# Workshop Vision Document
 
-> Workshop platform vision — defining what we build, why, and how services compose.
+> Workshop Platform Vision — Defining what we build, why, and how the services compose.
 
-## Documents
+## Document List
 
-| File | Contents |
+| File | Content |
 |------|----------|
-| [workshop-manifesto.md](./workshop-manifesto.md) | What Workshop is, LEGO composition philosophy, three-tier taxonomy, design principles |
-| [domain-catalog.md](./domain-catalog.md) | Unified Service Catalog + Composition Recipes + dependency graph |
-| [architecture-decisions.md](./architecture-decisions.md) | 7 ADRs: Monolith, MCP Adapter, Space Model, Widget, Resource, Event, Progressive |
+| [workshop-manifesto.md](./workshop-manifesto.md) | What Workshop is, LEGO composition philosophy, service classification, design principles |
+| [domain-catalog.md](./domain-catalog.md) | Unified service catalog + composition recipes + dependency graph |
+| [architecture-decisions.md](../architecture/architecture-decisions.md) | 7 ADRs: Monolith, MCP Adapter, Space Model, Widget, Resource, Event, Progressive |
+| [composition-model.md](./composition-model.md) | LEGO composition model: pincer movement, composition recipes, decision flow |
 | [roadmap.md](./roadmap.md) | Four-phase roadmap: Personal → Knowledge → Team → Commercial |
 
-## Translations
+## Translation
 
-Chinese (Traditional) translations are available in [`zh-TW/`](./zh-TW/) for quick reading.
-English versions are the source of truth — Claude Code reads these.
+`docs/` is written in Traditional Chinese (source of truth). `docs-en/` is the English backup (original English version).
 
 ## Quick Reference
 
@@ -35,19 +40,22 @@ Meeting:   Compose services into solutions (Legal Advisor, ERP, ...)
 
 ### Service Types
 
-| Type | Examples | Data Residency |
+| Type | Example | Data Residency |
 |------|----------|---------------|
 | **Foundation** | auth, admin | PostgreSQL |
 | **Domain** | finance, quest, muse, scout, lore, dojo, roster, nexus | PostgreSQL (schema-per-module) |
 | **Bridge** | social-hooks, notification | External + Event Bus |
-| **Station** | Disk analysis, LLM usage, local tools | Local / Optional DB |
-| **Composition** | Legal Advisor, Church Music, Virtual CS, ERP/POS | Assembly of above |
+| **Station** | system-monitor, llm-usage, envkit, sandbox-executor | Local / Optional DB |
+| **Composition** | Legal Advisor, Church Music, Virtual CS, ERP/POS | Composition of the above services |
 
 ### Architecture Pattern
 ```
 Claude Code → MCP Server (adapter) → FastAPI Core (monolith) → PostgreSQL
                                           ↕
-Web Dashboard (widgets) ──────────► FastAPI Core
+Single React App ─────────────────► FastAPI Core
+  ├── Layer 1: Module SPA Pages         (HTTP REST)
+  ├── Layer 2: Dashboard Widgets        (HTTP REST)
+  └── Layer 3: LLM Chat Overlay         (SSE streaming)
                                           ↕
 Social Bridges (LINE/TG/DC) ─────► FastAPI Core
 ```
@@ -56,4 +64,6 @@ Social Bridges (LINE/TG/DC) ─────► FastAPI Core
 1. **Phase 1**: auth + finance + quest + muse + LINE bot + Widget Dashboard
 2. **Phase 2**: lore v2 + dojo + scout + church music
 3. **Phase 3**: roster + task dispatch + multi-platform social
-4. **Phase 4**: commercial (ERP/POS/legal/virtual CS)
+4. **Phase 4**: Commercialization (ERP/POS/legal/virtual CS)
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3133ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3541ms

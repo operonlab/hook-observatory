@@ -1,45 +1,50 @@
 ---
 doc_version: 3
 content_hash: 95d02640
+source_version: 3
+target_lang: en
+translated_at: 2026-02-24
+source_hash: 638cc42f
+source_lang: zh-TW
 ---
 
 # Technology Stack Specification
 
 ## Backend
 
-| Component | Choice | Version | Rationale |
+| Component | Choice | Version | Reason |
 |-----------|--------|---------|-----------|
 | Language | Python | 3.12+ | Ecosystem maturity, AI/ML integration |
-| Framework | FastAPI | 0.115+ | Async-first, OpenAPI auto-gen, Pydantic native |
-| Package Manager | uv | latest | Fast, workspace support, lockfile |
-| ASGI Server | Uvicorn | 0.34+ | Production-grade, HTTP/2 support |
-| Config | pydantic-settings | 2.0+ | Type-safe env config, `.env` loading |
+| Framework | FastAPI | 0.115+ | Async-first, automatic OpenAPI generation, native Pydantic support |
+| Package Manager | uv | latest | Fast, supports workspaces, with lockfile |
+| ASGI Server | Uvicorn | 0.34+ | Production-grade, supports HTTP/2 |
+| Configuration | pydantic-settings | 2.0+ | Type-safe environment variable configuration, supports `.env` loading |
 | Logging | structlog | 24.0+ | Structured JSON logging, OTel integration |
-| HTTP Client | httpx | 0.27+ | Async HTTP for external service calls |
-| Event Bus | In-process async | -- | Module-to-module events (upgradeable to Redis Streams) |
+| HTTP Client | httpx | 0.27+ | Asynchronous HTTP for external service calls |
+| Event Bus | In-process async | -- | Inter-module events (upgradeable to Redis Streams) |
 | Hook Engine | Custom | -- | Plugin lifecycle hooks (before_*/after_*) |
 
 ## Frontend
 
-| Component | Choice | Version | Rationale |
+| Component | Choice | Version | Reason |
 |-----------|--------|---------|-----------|
-| Language | TypeScript | 5.x | Type safety, DX |
+| Language | TypeScript | 5.x | Type safety, developer experience (DX) |
 | Framework | React | 19 | Component model, ecosystem, concurrent features |
-| Build Tool | Rsbuild | latest | Rspack-based, fast builds |
-| Package Manager | pnpm | 9+ | Workspace support, disk efficient |
+| Build Tool | Rsbuild | latest | Based on Rspack, fast build speed |
+| Package Manager | pnpm | 9+ | Supports workspaces, high disk efficiency |
 | Styling | Tailwind CSS | 4.x | Utility-first, consistent design tokens |
-| State | Zustand | 5.x | Lightweight, per-module scoped |
-| Routing | React Router | 7.x | Lazy loading, nested routes |
+| State Management | Zustand | 5.x | Lightweight, module-scoped |
+| Routing | React Router | 7.x | Lazy loading, nested routing |
 
 ## Data Layer
 
-### PostgreSQL (Primary Database)
+### PostgreSQL (Main Database)
 
 - **Version**: 17+
 - **Deployment**: Docker container, single instance
-- **Schema isolation**: Each module owns its own schema (`CREATE SCHEMA <module_name>`)
-- **Driver**: psycopg 3 (async support via psycopg[binary])
-- **Migrations**: Raw SQL files in `core/migrations/`, version-tracked
+- **Schema Isolation**: Each module has its own schema (`CREATE SCHEMA <module_name>`)
+- **Driver**: psycopg 3 (supports async via psycopg[binary])
+- **Migrations**: Raw SQL files in `core/migrations/`, version tracking
 
 ```
 PostgreSQL Instance
@@ -56,42 +61,42 @@ PostgreSQL Instance
 ```
 
 **Rules**:
-- Module A must NEVER directly query Module B's schema
-- Cross-module data access goes through service layer imports
-- Shared reference data (e.g., user IDs) uses consistent types (UUID v7)
+- Module A is strictly forbidden from directly querying Module B's schema
+- Cross-module data access must be implemented through the service layer
+- Shared reference data (e.g., user IDs) use consistent types (UUID v7)
 
 ### Redis (Cache + Event Bus)
 
 - **Version**: 7+
 - **Deployment**: Docker container, single instance
-- **Key prefix**: `<module>:` namespace (e.g., `finance:cache:`, `auth:session:`)
+- **Key Prefix**: `<module>:` namespace (e.g., `finance:cache:`, `auth:session:`)
 
-**Use cases**:
+**Use Cases**:
 
 | Use Case | Pattern | Example |
 |----------|---------|---------|
-| Caching | GET/SET with TTL | `finance:cache:summary:{user_id}` |
-| Session | Hash with expiry | `auth:session:{session_id}` |
+| Cache | GET/SET with TTL | `finance:cache:summary:{user_id}` |
+| Session | Hash with expiration | `auth:session:{session_id}` |
 | Event Bus | Streams (future) | `events:finance.transaction.created` |
-| Rate limiting | INCR + EXPIRE | `auth:ratelimit:{ip}` |
+| Rate Limiting | INCR + EXPIRE | `auth:ratelimit:{ip}` |
 
-### Object Storage (S3-Compatible)
+### Object Storage (S3 Compatible)
 
-- **Choice**: **RustFS** (MinIO community fork, Rust rewrite)
-- **Interface**: S3-compatible API (boto3 or custom client)
+- **Choice**: **RustFS** (MinIO community fork, rewritten in Rust)
+- **Interface**: S3 compatible API (boto3 or custom client)
 - **Deployment**: Docker container
 - **License**: AGPLv3
 
-**Use cases**: File uploads, media storage, report exports, model artifacts.
+**Use Cases**: File uploads, media storage, report exports, model outputs.
 
 ## Realtime & Media
 
 ### LiveKit (WebRTC)
 
 - **Version**: Latest (self-hosted)
-- **Deployment**: Docker container + SSL/domain required
+- **Deployment**: Requires Docker container + SSL/domain
 - **License**: Apache 2.0
-- **Port**: 8830 (Realtime service)
+- **Port**: 8830 (realtime service)
 
 ```
 Browser (React SDK)
@@ -105,11 +110,11 @@ AI Services (STT, LLM, TTS)
 
 **SDKs**:
 
-| SDK | Language | Use |
+| SDK | Language | Purpose |
 |-----|----------|-----|
 | livekit-server-sdk-python | Python | Token generation, room management |
 | @livekit/components-react | React | UI components, hooks |
-| livekit-agents | Python | AI voice/video pipelines |
+| livekit-agents | Python | AI voice/video pipeline |
 
 ### Streaming API (SSE)
 
@@ -118,7 +123,7 @@ For non-media real-time data (LLM responses, progress updates):
 ```python
 from fastapi.responses import StreamingResponse
 
-@app.get("/api/chat/stream")
+ @app.get("/api/chat/stream")
 async def chat_stream():
     async def generate():
         async for chunk in llm.stream():
@@ -126,38 +131,40 @@ async def chat_stream():
     return StreamingResponse(generate(), media_type="text/event-stream")
 ```
 
-**When to use what**:
+**Recommended Solution Choices**:
 
-| Need | Solution |
+| Requirement | Solution |
 |------|----------|
-| LLM streaming responses | SSE (Server-Sent Events) |
-| Real-time voice/video | LiveKit WebRTC |
-| Module-to-module events | In-process Event Bus |
-| External service events | Redis Streams |
-| Client notifications | SSE |
-| File transfer | HTTP multipart upload → Object Storage |
+| LLM Streaming Response | SSE (Server-Sent Events) |
+| Real-time Voice/Video | LiveKit WebRTC |
+| Inter-module Events | In-process Event Bus |
+| External Service Events | Redis Streams |
+| Client Notifications | SSE |
+| File Transfer | HTTP multipart upload → Object storage |
 
 ## Observability
 
-| Component | Dev | Prod | Purpose |
+| Component | Development Environment (Dev) | Production Environment (Prod) | Purpose |
 |-----------|-----|------|---------|
-| Collector | grafana/otel-lgtm | SigNoz OTel Collector | Ingest traces, metrics, logs |
-| Traces | Grafana Tempo | SigNoz | Distributed tracing |
-| Metrics | Grafana + Prometheus | SigNoz | Application metrics |
-| Logs | Grafana Loki | SigNoz | Structured log aggregation |
-| Dashboards | Grafana | SigNoz | Visualization |
+| Collector | grafana/otel-lgtm | SigNoz OTel Collector | Ingests traces, metrics, logs |
+| Traces | Grafana Tempo | SigNoz | Distributed Tracing |
+| Metrics | Grafana + Prometheus | SigNoz | Application Metrics |
+| Logs | Grafana Loki | SigNoz | Structured Log Aggregation |
+| Dashboard | Grafana | SigNoz | Visualization |
 
 **Integration**: FastAPI + structlog → OpenTelemetry SDK → OTel Collector → Backend
 
-See [Observability](./observability.md) for architecture details.
+For architecture details, refer to [Observability](./observability.md).
 
 ## Hook/Plugin System
 
-| Component | Implementation | Purpose |
+| Component | Implementation Method | Purpose |
 |-----------|---------------|---------|
 | Hook Engine | Custom Python | Lifecycle hooks (before_*/after_*) |
-| Plugin Manifest | `plugin.json` | Plugin declaration, permissions |
+| Plugin List | `plugin.json` | Plugin declaration, permissions |
 | Plugin Runtime | Sandboxed execution | Isolated plugin code execution |
-| UI Slots | React PluginSlot | Frontend plugin injection points |
+| UI Slots | React PluginSlot | Frontend plugin injection point |
 
-See [Plugin System](./plugin-system.md) for specification.
+For specification details, refer to [Plugin System](./plugin-system.md).
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2766ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2896ms

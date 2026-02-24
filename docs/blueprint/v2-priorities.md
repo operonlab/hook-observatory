@@ -249,6 +249,88 @@ mcp/scout/                        ← MCP Adapter（供 Claude Code 直接操作
 
 ---
 
+## P3：Station 整合 — 系統監控 + LLM 用量 + 環境工具 + 情報主題管理
+
+### 概述
+
+將散落的 V1 工具整合到 Workshop `stations/` 目錄下，並為 scout 模組新增 Daily Briefing 動態主題管理。
+
+### P3-A：System Monitor — 磁碟 + 硬體監控
+
+**現況**：V1 磁碟分析運作良好（`~/.claude/data/disk-report/`，每日 launchd 排程）。
+
+**V2 變更**：
+- 頻率調整：每日 → 每週（週一 05:00 UTC）+ 月報
+- 新增硬體資源監控：CPU / RAM / Swap / 溫度 / 電池
+- 壓力等級判定 + 警報通知
+- Workbench Widget（系統健康卡片）
+- Core API 端點（`/api/stations/system-monitor/`）
+
+**技術架構**：
+```
+stations/system-monitor/
+├── collect.sh           ← 磁碟 + 硬體資料收集
+├── generate-report.sh   ← AI 分析報告（雙層 LLM 路由）
+└── config.json          ← 排程、門檻值、通知設定
+      ↓
+workbench Widget ← Core API ← 報告 DB / 即時狀態
+```
+
+### P3-B：LLM Usage — 統一 Token/Cost 追蹤
+
+**現況**：LLM 用量分散各處，model-policy 只看 CC 比率，LiteLLM 有資料但沒 UI。
+
+**V2 變更**：
+- LiteLLM DB 同步 → 統一 usage_records
+- 多維度分析：按 Provider / Model / Caller / 時間 / 用途
+- Cache 效率統計
+- 月度預算追蹤
+- model-policy 改讀統一 DB
+- Workbench Widget（成本儀表板）
+
+**技術架構**：
+```
+Claude Code ─┐
+Codex CLI   ─┼─► LiteLLM Proxy ─► collector.py ─► 統一 DB
+Gemini CLI  ─┘
+                                         ↓
+                    workbench Widget ← Core API
+```
+
+### P3-C：EnvKit — 環境快照 + 一鍵移植
+
+**現況**：`~/dotfiles/` 有基礎清單和腳本，但少爺認為 V1「不是我要的」。
+
+**V2 重新設計**：
+- 分類清冊（YAML，按 AI 工具 / 終端 / 開發 / 服務 / 應用分類）
+- Config 映射表（每個工具的設定檔位置 + git 追蹤狀態）
+- 8 階段 Bootstrap Pipeline（依賴順序安裝）
+- `envkit snapshot` / `envkit verify` / `envkit diff` CLI 工具
+- 與 `~/dotfiles/` 互補（dotfiles 管設定檔，envkit 管環境全貌）
+
+### P3-D：Daily Briefing 主題管理（scout 模組擴充）
+
+**現況**：V1 的 6 個情報主題完全寫死在 `run.sh`（530 行 shell 腳本）。
+
+**V2 變更**：
+- DB 表：`scout.briefing_topics` + `scout.briefing_subtopics`
+- 動態 CRUD：可新增/修改/啟停主題 + 子分類
+- 子分類參數化：例如天氣→輸入在意的地區（台北、東京、紐約）
+- 主題管理 UI：`/scout/briefings/settings`（樹狀結構，可勾選啟停）
+- 三分析師管線保留：改為讀取動態主題設定
+- V1 → V2 遷移：首次啟動自動建立 6 個預設主題
+
+### P3 遷移策略
+
+```
+P3-A (system-monitor): 複製 V1 腳本 → 改頻率 → 加硬體監控 → API + Widget
+P3-B (llm-usage):      解析 LiteLLM DB → 統一收集 → API + Widget
+P3-C (envkit):         盤點 ~/dotfiles/ → 產生 inventory.yaml → bootstrap pipeline
+P3-D (briefing 管理):  建立 DB 表 → 遷移寫死主題 → CRUD API → 管理 UI
+```
+
+---
+
 ## 與現有藍圖的關係
 
 | 現有文件 | 處置 |

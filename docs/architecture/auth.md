@@ -1,6 +1,6 @@
 ---
-doc_version: 1
-content_hash: aece66bc
+doc_version: 2
+content_hash: 4a697601
 source_version: 1
 target_lang: zh-TW
 translated_at: 2026-02-23

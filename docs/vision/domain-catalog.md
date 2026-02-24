@@ -299,13 +299,122 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 
 ### 工作站 (獨立工具 Stations)
 
-> 不需要資料庫的獨立本地工具。可以是 CLI、桌面公用程式或分析腳本。
-> 工作站可以獨立於 FastAPI Core 運行，但可以選擇將資料推送到 Core。
+> 可獨立運行的本地工具。需要推送資料到 Core API 或提供 Widget 的 Station，引用 `libs/python/station-sdk/` 共享排程、API 推送、Widget 格式、通知整合（參見 [AD-8](../architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
 
-- 磁碟分析 / 系統資源監測
-- LLM 使用量追蹤
-- 本地文件管理工具
-- Claude Code 技能 (diagram-gen, pdf, ocr 等)
+#### system-monitor — 系統監控
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **V1 狀態** | 磁碟分析運作中（`~/.claude/data/disk-report/`，每日 launchd） |
+| **V2 變更** | 頻率改為每週 + 新增硬體資源壓力監控 |
+
+**功能能力**：
+- 磁碟空間分析（週報 + 月報 + 手動即時掃描）
+- 硬體資源監控（CPU、RAM、Swap、溫度、電池）
+- 壓力等級判定（normal → warning → critical → danger）
+- AI 分析報告（雙層 LLM 路由：API → 離線 fallback）
+- Workbench Widget（系統健康狀態卡片）
+
+---
+
+#### llm-usage — LLM 使用量追蹤
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **V1 狀態** | model-policy（boost/normal 切換）+ LiteLLM Proxy |
+| **V2 變更** | 統一 token/cost 追蹤，整合所有 Provider |
+
+**功能能力**：
+- 跨 Provider 統一追蹤（Anthropic + OpenAI + Google + Ollama）
+- 跨 CLI 統一追蹤（Claude Code + Codex + Gemini + LiteLLM）
+- 多維度成本分析（按 Provider、Model、Caller、時間、用途）
+- Cache 效率統計
+- 月度預算追蹤與警報
+- Workbench Widget（成本儀表板）
+
+---
+
+#### envkit — 環境工具組
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **V1 狀態** | `~/dotfiles/` 有基礎清單，但缺分類、驗證、一鍵 bootstrap |
+| **V2 變更** | 完整分類清冊 + 順序化 bootstrap + 驗證 + diff |
+
+**功能能力**：
+- 分類清冊（AI 工具、終端、開發、服務、應用）
+- Config 映射表（每個工具的設定檔位置 + 追蹤狀態）
+- 8 階段 Bootstrap Pipeline（有依賴順序的安裝流程）
+- 環境快照 + 驗證（快照 vs 實際環境對比）
+- 雙機 Diff（比較兩台機器的環境差異）
+
+---
+
+#### tmux-webui — tmux 瀏覽器控制
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **V1 狀態** | 運作中（`~/Claude/projects/tmux-webui/`，port 8765） |
+
+**功能能力**：
+- 瀏覽器管理 tmux sessions / windows / panes
+- 從 Web 向 pane 發送指令
+- 系統指標即時顯示（CPU、RAM、Disk、Network）
+- LLM 用量一覽
+
+---
+
+#### session-redactor — 轉錄檔敏感資料清理
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **V1 狀態** | 運作中（SessionEnd hook + Daily 4 AM sweep） |
+
+**功能能力**：
+- SessionEnd hook 自動掃描 .jsonl 轉錄檔
+- 16 種敏感模式偵測（API key、密碼、token、SSH、DB credentials）
+- Atomic write 保證資料完整性
+- SQLite 追蹤清理歷史
+- SessionEnd pipeline 第一步（redact → lore extract → observability）
+
+---
+
+#### sandbox-executor — 批次執行引擎
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **V1 狀態** | 運作中（MCP Server，2 個工具） |
+
+**功能能力**：
+- Python/JS 沙盒執行
+- SDK Helpers 自動注入（http_get/post, read_file/write_file, output）
+- 批次操作（取代多次個別 tool call）
+
+---
+
+### 第三方工具 (Vendor)
+
+> 不改造成 V2 架構的第三方社群工具。直接使用，upstream 更新靠 `git pull`。
+
+#### observability — Multi-Agent Observability
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 第三方 (Vendor) |
+| **來源** | [@disler](https://github.com/disler/claude-code-hooks-multi-agent-observability) |
+| **技術** | Bun + SQLite + Vue.js |
+
+**功能能力**：
+- Claude Code hooks 即時事件追蹤
+- 多 agent session 監控
+- WebSocket 即時儀表板
+- 事件過濾與搜尋
 
 ---
 
@@ -378,6 +487,13 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | social-hooks | 橋接層 | 未開始 | — | — |
 | notification | 橋接層 | 未開始 | — | — |
 | media | 熱路徑 | 位於 core/services/ | — | — |
+| system-monitor | 工作站 | V1 運作中 | — | — |
+| llm-usage | 工作站 | 部分 V1 | — | — |
+| envkit | 工作站 | 重新設計 | — | — |
+| tmux-webui | 工作站 | V1 運作中 | — | — |
+| session-redactor | 工作站 | V1 運作中 | — | — |
+| sandbox-executor | 工作站 | V1 運作中 | MCP (2 工具) | 2 |
+| observability | 第三方 | 運作中 | — | — |
 
 ---
 
@@ -389,5 +505,6 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | **領域服務 (Domain Service)** | finance, quest, muse, scout, lore, dojo, roster, nexus | PostgreSQL (每個模組一個 schema) |
 | **橋接層 (Bridge)** | social-hooks, notification | 外部 + 事件總線 (Event Bus) |
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
-| **工作站 (Station)** | 磁碟分析, LLM 使用量, 本地工具, Claude Code 技能 | 本地 / 可選資料庫 |
+| **工作站 (Station)** | system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 PostgreSQL |
+| **第三方 (Vendor)** | observability (@disler) | 獨立運行 |
 | **組合 (Composition)** | 法律顧問, 教會音樂, 虛擬客服, ERP/POS | 上述服務的組合 |

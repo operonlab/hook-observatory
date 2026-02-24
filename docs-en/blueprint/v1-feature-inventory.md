@@ -2,27 +2,30 @@
 doc_version: 1
 content_hash: 68a8fc10
 source_version: 1
-translated_at: 2026-02-23
+target_lang: en
+translated_at: 2026-02-24
+source_hash: 13c1a010
+source_lang: zh-TW
 ---
 
-# V1 Feature Inventory
+# V1 Feature List
 
-Complete documentation of all V1 systems for V2 redesign reference.
+Complete documentation for all V1 systems, for V2 refactoring reference.
 
-## 1. Auth Service (avatar-console)
+## 1. Authentication Service (avatar-console)
 
 **Location**: `~/Claude/projects/avatar-console/backend/auth-service/`
-**Stack**: Python FastAPI + authlib + itsdangerous + passlib + psycopg2
+**Tech Stack**: Python FastAPI + authlib + itsdangerous + passlib + psycopg2
 **Port**: 8790
 
-### Auth Providers
+### Authentication Providers
 
 | Provider | Library | Status |
 |----------|---------|--------|
-| Email/Password | passlib (pbkdf2_sha256) | Working |
-| GitHub OAuth | authlib 1.3.0 | Working |
-| Google OAuth | authlib 1.3.0 (OIDC) | Working |
-| Passkey/WebAuthn | (planned, not implemented) | `.env.example` has vars |
+| Email/Password | passlib (pbkdf2_sha256) | Operational |
+| GitHub OAuth | authlib 1.3.0 | Operational |
+| Google OAuth | authlib 1.3.0 (OIDC) | Operational |
+| Passkey/WebAuthn | (Planned, not implemented) | `.env.example` already has variables |
 
 ### User Model (PostgreSQL)
 
@@ -45,13 +48,13 @@ CREATE TABLE password_reset_tokens (
 );
 ```
 
-**Critical gap**: OAuth users NOT stored in DB. Session cookie is the only state.
+**Key Gap**: OAuth users are not stored in the database. Session cookie is the only state.
 
 ### Session Management
 
-- `itsdangerous.URLSafeSerializer` (no expiry)
+- `itsdangerous.URLSafeSerializer` (no expiration)
 - Cookie: `avator_session`, httponly, secure, samesite=lax
-- No max_age (session cookie = browser lifetime)
+- No max_age (session cookie = browser lifecycle)
 - OAuth state stored in separate Starlette SessionMiddleware
 
 ### Session Payload
@@ -69,34 +72,34 @@ CREATE TABLE password_reset_tokens (
 | GET/POST | /api/auth/logout | Logout (multiple formats) |
 | GET | /api/auth/check | nginx auth_request probe |
 | POST | /api/auth/forgot | Password reset request (disabled: 501) |
-| POST | /api/auth/reset | Password reset with token |
-| GET | /auth/login/github | GitHub OAuth initiate |
+| POST | /api/auth/reset | Reset password using token |
+| GET | /auth/login/github | Initiate GitHub OAuth |
 | GET | /auth/callback/github | GitHub OAuth callback |
-| GET | /auth/login/google | Google OAuth initiate |
+| GET | /auth/login/google | Initiate Google OAuth |
 | GET | /auth/callback/google | Google OAuth callback |
 
-### OAuth Config
+### OAuth Configuration
 
-- GitHub: `read:user user:email` scopes, allowlist via `ALLOWED_GITHUB_USERS`
-- Google: `openid email profile` scopes, OIDC discovery, allowlist via `ALLOWED_GOOGLE_EMAILS`
-- Both use authlib `authorize_redirect` → `authorize_access_token` flow
+- GitHub: `read:user user:email` scope, allowlist filtering via `ALLOWED_GITHUB_USERS`
+- Google: `openid email profile` scope, OIDC discovery, allowlist filtering via `ALLOWED_GOOGLE_EMAILS`
+- Both use authlib's `authorize_redirect` → `authorize_access_token` flow
 
-### Frontend (Server-rendered HTML)
+### Frontend (Server-Side Rendered HTML)
 
 - Login page: OAuth buttons + password form
-- Register page: localhost only
-- Apps page: grid of protected apps
-- Not a SPA — server-rendered Jinja2 templates
+- Registration page: localhost only
+- Application page: Grid view of protected applications
+- Not a Single Page Application (SPA) — uses server-side rendered Jinja2 templates
 
 ### Known Limitations
 
-1. OAuth users not in DB (no user management possible)
-2. No session expiry (browser-lifetime only)
-3. Forgot password disabled (SMTP configured but 501)
-4. No WebAuthn despite .env.example having vars
-5. No CSRF protection
-6. No rate limiting
-7. Register restricted to localhost
+1. OAuth users not in database (no user management possible)
+2. No session expiration mechanism (browser lifecycle only)
+3. Forgot password functionality disabled (SMTP configured but returns 501)
+4. WebAuthn not implemented despite relevant variables in .env.example
+5. Lack of CSRF protection
+6. Lack of rate limiting
+7. Registration functionality limited to localhost
 
 ---
 
@@ -105,96 +108,99 @@ CREATE TABLE password_reset_tokens (
 ### 2.1 disk-report
 
 **Location**: `~/.claude/data/disk-report/`
-**Stack**: Python FastAPI + Jinja2, port 9527
-**Features**: Disk scan (du/df/apfs), AI analysis (Gemini/Claude), delete/clean operations
-**Frontend**: Full dashboard (5 tabs: overview, large files, old files, caches, reports)
-**Storage**: Pure filesystem (reports as markdown)
-**Launch**: LaunchAgent (daily 03:30 report generation)
-**API**: 8 endpoints (summary, scan, reports, delete, clean-cache, empty-trash)
-**Security**: Protected path validation (system dirs, .claude, .ssh blocked)
+**Tech Stack**: Python FastAPI + Jinja2, Port 9527
+**Functionality**: Disk scan (du/df/apfs), AI analysis (Gemini/Claude), delete/cleanup operations
+**Frontend**: Full dashboard (5 tabs: Overview, Large Files, Old Files, Cache, Report)
+**Storage**: Plain filesystem (reports in markdown format)
+**Launch**: LaunchAgent (generates report daily at 03:30)
+**API**: 8 endpoints (summary, scan, report, delete, clear cache, empty trash)
+**Security**: Protected path validation (blocks system directories, .claude, .ssh)
 
 ### 2.2 cost-server (LLM Usage)
 
 **Location**: `~/.claude/data/cost-server/`
-**Stack**: Node.js (zero deps), Unix socket `~/.claude/cost-server.sock`
-**Features**: Per-session cost tracking, daily rollover, stale session filtering
-**Storage**: `state.json` (atomic write via rename)
+**Tech Stack**: Node.js (dependency-free), Unix socket `~/.claude/cost-server.sock`
+**Functionality**: Per-session cost tracking, daily change log, expired session filtering
+**Storage**: `state.json` (atomic writes via rename)
 **Launch**: LaunchAgent (auto-restart)
 **API**: 3 endpoints (POST /update, GET /stats, GET /health)
 
 ### 2.3 tmux-webui
 
 **Location**: `~/Claude/projects/tmux-webui/`
-**Stack**: Python (aiohttp or FastAPI), single file server.py
-**Features**: List sessions/panes/windows, send keys, web-based control
+**Tech Stack**: Python (aiohttp or FastAPI), single-file server.py
+**Functionality**: List sessions/panes/windows, send keys, web-based control
 **Frontend**: Browser control interface
 
 ### 2.4 kas-memory
 
 **Location**: `~/Claude/projects/kas-memory/`
-**Stack**: TypeScript MCP Server ( @modelcontextprotocol/sdk)
-**Features**: Hybrid search (BM25 + cosine + RRF), auto-extract from sessions, tag system, embedding (Ollama/OpenAI), knowledge promotion, KAS profile
+**Tech Stack**: TypeScript MCP Server (@modelcontextprotocol/sdk)
+**Functionality**: Hybrid search (BM25 + cosine similarity + RRF), automatic extraction from sessions, tagging system, embeddings (Ollama/OpenAI), knowledge promotion, KAS profile
 **Storage**: Markdown files (memories/), JSON (embeddings, tags, profile)
 **Tools**: 9 MCP tools + 2 resources
-**Hooks**: extract.sh (SessionEnd), recall.sh (UserPromptSubmit)
+**Hooks**: extract.sh (session end), recall.sh (user prompt submission)
 
 ### 2.5 session-redactor
 
 **Location**: `~/Claude/projects/session-redactor/`
-**Stack**: Python FastAPI (sub-router of V1 platform)
-**Features**: 20 regex patterns, JSON-aware recursive redaction, daily sweep
-**Storage**: SQLite (file tracking, dedup via inode)
-**API**: 4 endpoints (status, scan, history, history by session)
+**Tech Stack**: Python FastAPI (sub-route of V1 platform)
+**Functionality**: 20 regex patterns, recursive JSON de-identification, daily cleanup
+**Storage**: SQLite (file tracking, deduplication via inode)
+**API**: 4 endpoints (status, scan, history, query history by session)
 
-### 2.6 observability
+### 2.6 Observability
 
 **Location**: `~/Claude/projects/claude-code-hooks-multi-agent-observability/`
-**Stack**: Bun + SQLite (server), Vue 3 + Vite + Tailwind (client)
+**Tech Stack**: Bun + SQLite (server), Vue 3 + Vite + Tailwind (client)
 **Ports**: 4000 (server) + 5173 (client)
-**Features**: 12 hook event types, real-time WebSocket dashboard, HITL, agent swim lanes, theme system
-**Frontend**: Full Vue 3 dashboard with live pulse chart, event timeline, filter panel
-**Hooks**: 12 Python scripts (pre/post tool use, session lifecycle, etc.)
+**Functionality**: 12 hook event types, real-time WebSocket dashboard, Human-in-the-Loop (HITL), agent swimlanes, theme system
+**Frontend**: Full Vue 3 dashboard, including real-time pulsometer, event timeline, filter panel
+**Hooks**: 12 Python scripts (before/after tool use, session lifecycle, etc.)
 
 ---
 
-## 3. V1 Apps (from auth /apps page)
+## 3. V1 Applications (from auth /apps page)
 
 | App | Path | Description |
 |-----|------|------------|
 | Avatar Console | /console/ | Chat interface (Vue SPA) |
-| Finance | /finance | Accounting app |
+| Finance | /finance | Accounting application |
 | Ideas | /ideas | Knowledge graph |
-| OpenClaw | /openclaw/ | (unknown) |
+| OpenClaw | /openclaw/ | (Unknown) |
 | Terminal | /terminal/ | Web terminal |
 | Disk Report | /apps/disk-report/ | Disk analysis |
 | Skill Galaxy | /apps/galaxy/ | Skill visualization |
-| Daily Briefing | /apps/briefing/ | Daily scout digest |
+| Daily Briefing | /apps/briefing/ | Daily intelligence summary |
 
 ---
 
-## 4. Common Patterns Across V1
+## 4. V1 Cross-System Common Patterns
 
-### What Works (Keep)
-- authlib for OAuth (clean API, OIDC discovery)
-- itsdangerous for cookie signing (simple, secure)
-- LaunchAgent for background services (macOS native)
+### What worked well (to be retained)
+- Using authlib for OAuth (clean API, supports OIDC discovery)
+- Using itsdangerous for cookie signing (simple and secure)
+- Using LaunchAgent for background services (macOS native mechanism)
 - Markdown as storage format (kas-memory)
 - Dark theme (consistent across tools)
 
-### What's Broken (Fix in V2)
-- OAuth users not in DB → V2: unified user table + oauth_accounts
-- No session expiry → V2: DB-backed sessions with TTL
-- No WebAuthn → V2: py_webauthn + @simplewebauthn/browser
-- No CSRF protection → V2: double-submit cookie or SameSite strict
-- No rate limiting → V2: slowapi + Redis backend
-- Scattered tools → V2: unified project structure
-- No code reuse → V2: shared libs (Python + TypeScript)
-- No observability → V2: OpenTelemetry + LGTM
+### What needs improvement (to be fixed in V2)
+- OAuth users not stored in DB → V2: Unified user table + oauth_accounts
+- No session expiration mechanism → V2: Database-backed sessions with TTL
+- Lack of WebAuthn → V2: Use py_webauthn + @simplewebauthn/browser
+- Lack of CSRF protection → V2: Use double-submit cookie or SameSite strict
+- Lack of rate limiting → V2: Use slowapi + Redis backend
+- Dispersed tools → V2: Unified project structure
+- Lack of code reuse → V2: Shared libraries (Python + TypeScript)
+- Lack of observability → V2: Use OpenTelemetry + LGTM
 
-### What's Missing (Add in V2)
+### What's missing (to be added in V2)
 - Account linking (same email, multiple providers)
 - Admin user management
-- Multi-provider auth abstraction
+- Multi-provider authentication abstraction
 - Centralized event bus
 - Plugin system
-- RBAC+ABAC enforcement on every route
+- RBAC+ABAC enforced for every route
+```
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2324ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3492ms

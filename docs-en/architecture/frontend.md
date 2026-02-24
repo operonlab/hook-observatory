@@ -2,22 +2,37 @@
 doc_version: 3
 content_hash: d08da8ad
 source_version: 3
-translated_at: 2026-02-23
+target_lang: en
+translated_at: 2026-02-24
+source_hash: 5c0da808
+source_lang: zh-TW
 ---
 
 # Frontend Architecture Guide
+
+## Three-Layer Frontend Architecture
+
+The Workshop frontend is a Single React App composed of three coexisting layers:
+
+| Layer | Name | Description |
+|------|------|------|
+| **Layer 1** | Module SPA Pages | Each module has its own complete routes and UI (`/finance/*`, `/quest/*`, etc.) |
+| **Layer 2** | Dashboard Widgets | The main dashboard, composed of draggable widgets extracted from various modules (`/`) |
+| **Layer 3** | LLM Chat Overlay | A global chat interface that floats on top, similar to Google Gemini embedded in Chrome |
+
+Layer 2 is a **supplement** to Layer 1 (it does not replace the module pages). Layer 3 spans across all pages.
 
 ## Design Principles
 
 ### 1. Single Application, Domain Modules
 
-One React application with domain-based module organization. No Module Federation, no micro-frontends -- just clean code splitting with `React.lazy`.
+A single React application with modules organized around domains. It does not use Module Federation or micro-frontends—only clean code splitting via `React.lazy`.
 
 ```
 workbench/                    Single React App
 ├── src/
-│   ├── shell/                App shell (layout, nav, auth)
-│   ├── modules/              Domain UI modules (10 Core Modules)
+│   ├── shell/                Application Shell (layout, navigation, auth, LLM Chat overlay)
+│   ├── modules/              Domain UI modules (10 core modules)
 │   │   ├── auth/
 │   │   ├── finance/
 │   │   ├── quest/
@@ -28,20 +43,22 @@ workbench/                    Single React App
 │   │   ├── roster/
 │   │   ├── nexus/
 │   │   └── admin/
-│   ├── plugins/              Plugin UI runtime
+│   ├── chat/                 LLM Chat Overlay (Layer 3)
+│   ├── widgets/              Workbench Widget Library (Layer 2)
+│   ├── plugins/              Plugin UI Runtime
 │   └── shared/               Shared components, hooks, utils
 ```
 
-**Why single app over micro-frontends:**
-- Simpler build and deploy pipeline (one build, one artifact)
-- No Module Federation complexity or version conflicts
-- Shared state and routing are trivial (same React tree)
-- Code splitting via `React.lazy` provides equivalent lazy-loading
-- Aligns with backend modular monolith philosophy
+**Why a single application instead of micro-frontends:**
+- Simpler build and deployment pipeline (one build, one artifact).
+- No Module Federation complexity or versioning conflicts.
+- Sharing state and routing is trivial (within the same React tree).
+- Code splitting via `React.lazy` provides equivalent lazy loading benefits.
+- Aligns with the backend's modular monolith philosophy.
 
 ### 2. Domain Module Structure
 
-Each module in `src/modules/<domain>/` follows a consistent layout:
+Each module under `src/modules/<domain>/` follows a consistent layout:
 
 ```
 src/modules/<domain>/
@@ -54,38 +71,31 @@ src/modules/<domain>/
 ├── api/                     API client functions
 │   └── client.ts
 ├── types/                   Domain-specific types
-└── index.tsx                Module entry (exports routes)
+└── index.tsx                Module entry point (exports routes)
 ```
 
 ### 3. Module Boundary Rules
 
-- Modules **may** import from `src/shared/`
-- Modules **must not** import from other modules directly
-- Cross-module interaction goes through:
-  - **Router** (navigation via URL)
-  - **Custom events** (cross-module notifications via EventEmitter)
+- Modules **can** import from `src/shared/`.
+- Modules **must never** import directly from other modules.
+- Cross-module interaction must happen via:
+  - **Router** (via URL navigation)
+  - **Custom Events** (via an EventEmitter for cross-module notifications)
   - **Shared stores** in `src/shared/stores/` (auth context, user state)
 
-## Technology Stack
+## Tech Stack
 
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| Build | Rsbuild | Rspack-based, fast builds |
-| Framework | React 19 | Component model, ecosystem, concurrent features |
-| Routing | React Router 7 | Lazy loading, nested routes |
-| Styling | Tailwind CSS 4 | Utility-first, consistent design tokens |
-| State | Zustand 5 | Lightweight, per-module scoped |
-| Types | TypeScript 5 | Strict mode, shared types via `src/shared/types/` |
+See [tech-stack.md](./tech-stack.md#前端) for details.
 
-## App Shell (`src/shell/`)
+## Application Shell (`src/shell/`)
 
-The shell provides the application frame:
+The Shell provides the application framework:
 
 ```
 src/shell/
 ├── App.tsx                  Root component
 ├── Layout.tsx               Header, sidebar, content area
-├── Router.tsx               Top-level routes with lazy loading
+├── Router.tsx               Top-level router with lazy loading
 ├── AuthProvider.tsx         Auth context, session management
 └── ThemeProvider.tsx         Dark/light mode, CSS variables
 ```
@@ -134,40 +144,42 @@ export function Router() {
 }
 ```
 
-Each module handles its own sub-routing internally.
+Each module handles its own sub-routes internally.
 
-## Routing Convention
+> The **`/` (Dashboard)** is the widget dashboard view, composed of summary widgets from various modules. The full UI for each module lives under routes like `/finance/*`, `/quest/*`, etc.
 
-| Pattern | Owner | Phase |
+## Routing Conventions
+
+| Path Pattern | Owner | Phase |
 |---------|-------|-------|
-| `/` | Shell (dashboard) | 1 |
-| `/finance/*` | Finance module | 1 |
-| `/quest/*` | Quest module | 1 |
-| `/muse/*` | Muse module | 1 |
-| `/admin/*` | Admin module | 1 |
-| `/scout/*` | Scout module | 2 |
-| `/lore/*` | Lore module | 2 |
-| `/dojo/*` | Dojo module | 2 |
-| `/roster/*` | Roster module | 3 |
-| `/nexus/*` | Nexus module | 3 |
-| `/settings/*` | Shell (global settings) | 1 |
+| `/` | Shell (Dashboard) | 1 |
+| `/finance/*` | Finance Module | 1 |
+| `/quest/*` | Quest Module | 1 |
+| `/muse/*` | Muse Module | 1 |
+| `/admin/*` | Admin Module | 1 |
+| `/scout/*` | Scout Module | 2 |
+| `/lore/*` | Lore Module | 2 |
+| `/dojo/*` | Dojo Module | 2 |
+| `/roster/*` | Roster Module | 3 |
+| `/nexus/*` | Nexus Module | 3 |
+| `/settings/*` | Shell (Global Settings) | 1 |
 
 ## API Communication
 
-All modules talk to the same backend (Core Monolith on port 8800):
+All modules communicate with the same backend (the Core Monolith on port 8800):
 
 ```
 workbench/  →  core/  (port 8800)
 ```
 
-API calls are routed through the Gateway (Nginx) in production:
+In production, API calls are routed through a gateway (Nginx):
 
 ```
 Production:  https://domain.com/api/finance/  → nginx → core monolith
-Development: http://localhost:8800/api/finance/ → direct
+Development:  http://localhost:8800/api/finance/ → direct call
 ```
 
-Each module has its own `api/client.ts` that wraps fetch calls for its domain endpoints.
+Each module has its own `api/client.ts` to encapsulate fetch calls for its domain endpoints.
 
 ## Plugin UI Slots
 
@@ -177,7 +189,7 @@ Plugins can inject UI components into predefined slots in the application:
 // src/plugins/PluginSlot.tsx
 interface PluginSlotProps {
   name: string;       // e.g., "finance.dashboard.sidebar"
-  context?: unknown;  // data passed to plugin components
+  context?: unknown;  // Data passed to the plugin component
 }
 
 export function PluginSlot({ name, context }: PluginSlotProps) {
@@ -192,16 +204,7 @@ export function PluginSlot({ name, context }: PluginSlotProps) {
 }
 ```
 
-Available slots follow the pattern `{module}.{page}.{position}`:
-
-| Slot | Location |
-|------|----------|
-| `finance.dashboard.sidebar` | Finance dashboard sidebar |
-| `quest.detail.actions` | Quest detail page action buttons |
-| `shell.header.right` | Global header right section |
-| `shell.sidebar.bottom` | Global sidebar bottom section |
-
-See [Plugin System](./plugin-system.md) for details.
+For a full list of slots, see [Plugin System](./plugin-system.md#ui-插槽).
 
 ## Shared Components (`src/shared/`)
 
@@ -227,23 +230,49 @@ src/shared/
 
 Import in any module:
 ```typescript
-import { Button } from "@/shared/components/Button";
-import { useAuth } from "@/shared/hooks/useAuth";
+import { Button } from " @/shared/components/Button";
+import { useAuth } from " @/shared/hooks/useAuth";
 ```
 
-## Build & Deploy
+## Build and Deployment
 
 Single build, single artifact:
 
 ```bash
-cd workbench && pnpm build   # → dist/ with index.html + chunks
+cd workbench && pnpm build   # → `dist/` directory with `index.html` and chunks
 ```
 
-Production: Nginx serves `dist/index.html`. Code-split chunks are loaded on demand per route.
+Production: `dist/index.html` is served by Nginx. Code-split chunks are loaded on demand based on the route.
 
 Development:
 ```bash
 cd workbench && pnpm dev     # → http://localhost:3000
 ```
 
-Rsbuild config proxies `/api/*` to the Core Monolith during development.
+The Rsbuild config proxies `/api/*` to the Core Monolith during development.
+
+## LLM Chat Overlay (Layer 3)
+
+A global LLM chat interface that floats on top of all pages, similar to the experience of Google embedding Gemini Chat in Chrome.
+
+```
+┌──────────────────────────────────────┐
+│  Any Page (/finance, /quest, ...)     │
+│                                      │
+│                  ┌───────────────────┐│
+│                  │  LLM Chat Panel  ││ ← Overlay, collapsible/expandable
+│                  │  ─────────────── ││
+│                  │  User: Last mo...││
+│                  │  LLM: According..││
+│                  │  [Input box]     ││
+│                  └───────────────────┘│
+└──────────────────────────────────────┘
+```
+
+**Features**:
+- Chat with the LLM without leaving the current page.
+- Is aware of the current page context (e.g., can ask financial questions directly on the finance page).
+- Streams LLM responses via SSE.
+- Collapsible/expandable to not interfere with main operations.
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3042ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2375ms

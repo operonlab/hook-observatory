@@ -6,7 +6,8 @@ requires-python = ">=3.12"
 
 [tool.uv.workspace]
 members = [
-    "services/*",
+    "core",
+    "core/services/*",
     "libs/python",
 ]
 

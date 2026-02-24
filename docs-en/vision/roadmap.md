@@ -1,11 +1,16 @@
 ---
 doc_version: 1
 content_hash: f8683532
+source_version: 1
+target_lang: en
+translated_at: 2026-02-24
+source_hash: b80736b0
+source_lang: zh-TW
 ---
 
 # Workshop Roadmap
 
-> Four-phase development roadmap: from personal + family to commercial applications.
+> A four-phase development roadmap: from personal and family use to commercial applications.
 
 ---
 
@@ -26,146 +31,149 @@ social hooks v1                                                full platform
 
 ---
 
-## Phase 1: Personal + Family
+## Phase 1: Personal & Family
 
-> Goal: Workshop becomes a daily tool for Jones + family.
+> Goal: The workshop becomes a daily tool for Jones and his family.
 
 ### Core Modules
 
-| Module | Target | Completion Criteria |
+| Module | Goal | Completion Criteria |
 |--------|--------|-------------------|
-| **auth** | Multi-provider login + Space model | 2+ users, personal + family space |
-| **finance** | Personal/family accounting | Income/expense tracking, subscription management, monthly reports, wife can use |
-| **quest** | Simple mode to-do | Checkbox + due date + basic Widget |
-| **muse** | Idea notes | Spark CRUD + Link + Graph visualization |
+| **auth** | Support for multiple login providers + space model | 2+ users, including personal and family spaces |
+| **finance** | Personal/family bookkeeping | Income/expense tracking, subscription management, monthly reports, also usable by wife |
+| **quest** | Simple mode to-do list | Checkbox + due date + basic widget |
+| **muse** | Idea notes | CRUD for Sparks + links + graph visualization |
 
-### Bridges
+### Connectors
 
-| Bridge | Target | Completion Criteria |
+| Connector | Goal | Completion Criteria |
 |--------|--------|-------------------|
-| **Social Hooks v1** | Basic LINE bot integration | Accounting/to-do via LINE commands |
-| **Notification** | PWA Push | Basic push notification capability |
+| **Social Hooks v1** | Basic LINE bot integration | Bookkeeping/to-do via LINE commands |
+| **Notification** | PWA push notifications | Basic push notification capability |
 
 ### Infrastructure
 
-- [ ] FastAPI Core Monolith + Module structure
-- [ ] PostgreSQL schema-per-module + space_id on all tables
+- [ ] FastAPI Core Monolith + modular structure
+- [ ] PostgreSQL with independent schema per module + all tables include `space_id`
 - [ ] Event Bus (in-process)
-- [ ] Widget Dashboard framework (react-grid-layout + Container Queries)
-- [ ] MCP Servers for finance, quest, muse (adapter to Core API)
-- [ ] PWA + Service Worker (foundation already exists)
+- [ ] Dashboard Widget Framework (react-grid-layout + Container Queries) — a supplementary view outside module pages
+- [ ] LLM Chat overlay — a global LLM conversation interface (similar to Gemini in Chrome)
+- [ ] MCP Servers for finance, quest, muse (connected to core API)
+- [ ] PWA + Service Worker (base already exists)
 - [ ] Basic CI/CD
 
 ### Phase 1 Deliverables
 
-- Dashboard functional: at least 4 Widgets (finance summary, recent transactions, quest list, quick note)
-- LINE bot functional: `@accounting`, `@todo` basic commands
-- Family accounts functional: wife can log in and see shared accounting
-- MCP functional: Claude Code can directly operate all Modules
+- Module pages operational: finance, quest, muse each have a complete route-based UI
+- Dashboard operational: Homepage dashboard with at least 4 widgets (financial summary, recent transactions, task list, quick note)
+- LLM Chat overlay operational: Can invoke LLM conversation from any page
+- LINE bot operational: Basic `@accounting`, `@todo` commands
+- Family account operational: Wife can log in and view shared bookkeeping
+- MCP operational: Claude Code can directly operate all modules
 
 ---
 
-## Phase 2: Knowledge + Growth
+## Phase 2: Knowledge & Growth
 
-> Goal: Workshop becomes a personal knowledge management and growth platform.
+> Goal: The workshop becomes a personal knowledge management and growth platform.
 
 ### Core Modules
 
-| Module | Target | Completion Criteria |
+| Module | Goal | Completion Criteria |
 |--------|--------|-------------------|
-| **lore** | KAS Memory v2 | Auto extraction, semantic search, cross-session recall |
-| **dojo** | Skill tree v1 | Skill definitions, levels, learning paths |
-| **scout** | Daily intelligence v1 | RSS subscriptions, auto summaries, briefing |
+| **lore** | KAS Memory v2 | Automatic extraction, semantic search, cross-phase recall |
+| **dojo** | Skill Tree v1 | Skill definitions, levels, learning paths |
+| **scout** | Daily Intel v1 | RSS subscriptions, auto-summarization, briefing |
 | **nexus v1** | Basic matching | Skill × learning resource recommendations |
 
-### Stations
+### Sites
 
-| Station | Target | Completion Criteria |
+| Site | Goal | Completion Criteria |
 |---------|--------|-------------------|
 | **Church Music** | Sheet music digitization | OCR → library → basic search |
 
 ### Phase 2 Deliverables
 
 - Lore v2 live: Claude Code's memory is more accurate and structured
-- Dojo tree visualization: Widget showing personal skill map
-- Daily briefing: Auto-receive news/social media summaries each morning
-- Music library: Church hymns searchable and browsable
+- Skill tree visualization: A widget displaying the personal skill map
+- Daily briefing: Automatically receive news/social media summaries every morning
+- Sheet music library: Church hymns are searchable and browsable
 
 ---
 
-## Phase 3: Team + Dispatch
+## Phase 3: Team & Dispatch
 
-> Goal: Workshop upgrades from personal tool to small team collaboration platform.
+> Goal: Upgrade the workshop from a personal tool to a small team collaboration platform.
 
 ### Core Modules
 
-| Module | Target | Completion Criteria |
+| Module | Goal | Completion Criteria |
 |--------|--------|-------------------|
-| **roster** | Resource management v1 | Human + AI agent capability/load tracking |
-| **quest dispatch** | Task dispatch | Task pool + passive assignment + active pickup |
-| **nexus v2** | Advanced matching | Talent × task multi-dimensional scoring |
+| **roster** | Resource Management v1 | Human + AI agent capability/load tracking |
+| **quest dispatch** | Task Dispatch | Task pool + passive assignment + active claiming |
+| **nexus v2** | Advanced Matching | Multi-dimensional scoring for talent × tasks |
 
-### Bridges
+### Connectors
 
-| Bridge | Target | Completion Criteria |
+| Connector | Goal | Completion Criteria |
 |--------|--------|-------------------|
 | **Social Hooks v2** | Full platform integration | LINE + Telegram + Discord |
 
 ### Phase 3 Deliverables
 
-- Task pool functional: friends can pick up tasks from pool
-- Resource dashboard: see load status for all resources (human/AI)
-- Multi-platform notifications: task assignment/completion notifications pushed to all social platforms
+- Task pool operational: Friends can claim tasks from the task pool
+- Resource dashboard: View the load status of all resources (human/AI)
+- Multi-platform notifications: Task assignment/completion notifications pushed to all social platforms
 
 ---
 
-## Phase 4: Commercial
+## Phase 4: Commercialization
 
-> Goal: Workshop's domain knowledge applied to commercial scenarios.
+> Goal: Apply the workshop's domain knowledge to commercial scenarios.
 
 ### Applications
 
-| Project | Target | Built On |
+| Project | Goal | Built on |
 |---------|--------|----------|
-| **Quest Commercial** | Orders/quotation/acceptance | quest + finance |
+| **Quest Commercial** | Orders/Quotes/Acceptance | quest + finance |
 | **Legal Advisor** | Legal advisory service | RAG + LLM reasoning |
-| **Virtual CS** | Virtual customer service | nexus + social hooks |
-| **ERP/POS** | Inventory management system | finance + quest + roster |
-| **Full Platform** | Open platform | All Modules + Plugin system |
+| **Virtual CS** | Virtual Customer Service | nexus + social hooks |
+| **ERP/POS** | Inventory Management System | finance + quest + roster |
+| **Full Platform** | Open Platform | All modules + plugin system |
 
 ### Phase 4 Deliverables
 
-- At least one commercial case landed (Virtual CS or ERP/POS)
-- Plugin system mature: third parties can develop Workshop plugins
+- Implement at least one commercial case (Virtual CS or ERP/POS)
+- Mature plugin system: Third parties can develop workshop plugins
 - Public API documentation
-- Multi-Space organizational management
+- Multi-space organization management
 
 ---
 
-## Cross-Cutting Concerns (Spanning All Phases)
+## Cross-Cutting Concerns (Across All Phases)
 
 | Item | Description |
 |------|-------------|
-| **Documentation** | Complete Phase spec before starting, update architecture docs upon completion |
-| **Testing** | Real scenario validation (no mocks), at least one end-to-end flow per Module |
-| **Security** | auth is production-grade from Phase 1 — no shortcuts |
-| **Observability** | OpenTelemetry traces + structured logging from Phase 1 |
-| **MCP** | Each new Module simultaneously produces an MCP Server |
-| **Widget** | Each new Module simultaneously produces at least 1 Dashboard Widget |
+| **Documentation** | Complete phase specs before starting, update architecture documents after completion |
+| **Testing** | Real-world scenario validation (no mocks), at least one end-to-end flow per module |
+| **Security** | `auth` must be production-grade from Phase 1 — no shortcuts |
+| **Observability** | Establish OpenTelemetry tracing + structured logging from Phase 1 |
+| **MCP** | Each new module simultaneously generates an MCP Server |
+| **Widget** | Each new module simultaneously generates at least one dashboard widget |
 
 ---
 
-## Priority Order (within each Phase)
+## Priorities (Within Each Phase)
 
-Priority within a Phase follows:
+Priorities within each phase are as follows:
 
-1. **Infrastructure** → foundation first
-2. **auth** → identity first
-3. **Data Model** → structure first
-4. **Core API** → backend first
-5. **MCP Server** → CLI interface first
-6. **Widget** → UI last
-7. **Documentation** → throughout
+1.  **Infrastructure** → Foundation first
+2.  **auth** → Identity first
+3.  **Data Model** → Structure first
+4.  **Core API** → Backend first
+5.  **MCP Server** → CLI interface first
+6.  **Widget** → UI last
+7.  **Documentation** → Throughout
 
 ---
 
@@ -173,8 +181,10 @@ Priority within a Phase follows:
 
 | Risk | Mitigation Strategy |
 |------|-------------------|
-| Scope too large | Strict Phase boundaries — don't start Phase N+1 until Phase N is complete |
-| Technical debt | Documentation first + real validation — no quick hacks |
-| Motivation decline | Each Phase produces a usable product — daily use = sustained motivation |
-| Context explosion | Wayne's memory system + HANDOFF.md + domain-specific docs |
-| Over-engineering | Progressive Complexity principle: build simplest version first |
+| Scope Creep | Strict phase boundaries — do not start Phase N+1 before Phase N is complete |
+| Technical Debt | Documentation first + real validation — refuse quick temporary fixes |
+| Loss of Motivation | Each phase produces a usable product — daily use = sustained motivation |
+| Context Explosion | Wayne's memory system + HANDOFF.md + domain-specific documents |
+| Over-engineering | Progressive complexity principle: build the simplest version first |
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2881ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2284ms

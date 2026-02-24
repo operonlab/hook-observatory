@@ -1,13 +1,18 @@
 ---
 doc_version: 2
 content_hash: ad0b7cdb
+source_version: 2
+target_lang: en
+translated_at: 2026-02-24
+source_hash: c3f21f17
+source_lang: zh-TW
 ---
 
 # Observability Architecture
 
 ## Strategy
 
-Full observability via the three pillars (traces, metrics, logs) using **OpenTelemetry** as the universal instrumentation layer.
+Achieve comprehensive observability through **OpenTelemetry** as a universal instrumentation layer, leveraging the three pillars (traces, metrics, logs).
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -41,9 +46,9 @@ Full observability via the three pillars (traces, metrics, logs) using **OpenTel
 
 ## Environment Strategy
 
-### Development: grafana/otel-lgtm (Single Container)
+### Development Environment: grafana/otel-lgtm (Single Container)
 
-One Docker container provides the complete LGTM stack:
+A single Docker container provides the complete LGTM stack:
 
 ```yaml
 # infra/docker/docker-compose.dev.yml
@@ -61,13 +66,13 @@ services:
       - ENABLE_LOGS_ALL=true
 ```
 
-**Why single container for dev:**
-- Zero config, `docker compose up` and it works
-- All backends pre-connected to Grafana
-- OTel Collector built-in, ready to receive OTLP
-- Lightweight enough for local development
+**Why use a single container for the development environment:**
+- Zero-configuration, runs with just `docker compose up`
+- All backends are pre-connected to Grafana
+- Built-in OTel Collector, ready to receive OTLP
+- Sufficiently lightweight, suitable for local development
 
-### Production: SigNoz
+### Production Environment: SigNoz
 
 Self-hosted SigNoz for production observability:
 
@@ -81,10 +86,10 @@ Self-hosted SigNoz for production observability:
 # - Alerting
 ```
 
-**Why SigNoz over full Grafana stack in prod:**
-- Single platform for all three signals (no separate Tempo/Loki/Prometheus)
-- Built on ClickHouse (better query performance than Loki for logs)
-- OpenTelemetry native (designed around OTLP from the start)
+**Why choose SigNoz over the full Grafana stack for production:**
+- Single platform integrates all three signals (no need to maintain Tempo/Loki/Prometheus separately)
+- Built on ClickHouse (log query performance is superior to Loki)
+- Native OpenTelemetry support (designed around OTLP from the start)
 - Unified alerting across signals
 - Self-hosted, no vendor lock-in
 
@@ -146,7 +151,7 @@ def add_otel_context(logger, method_name, event_dict):
     return event_dict
 ```
 
-Log output:
+Log Output:
 ```json
 {
   "event": "transaction.created",
@@ -161,7 +166,7 @@ Log output:
 
 ## Event-Driven + OTel Integration
 
-Every event published through the Event Bus creates an OTel span and updates metrics:
+Each event published via the Event Bus creates an OTel span and updates metrics:
 
 ```python
 class OTelEventMiddleware(EventMiddleware):
@@ -197,7 +202,7 @@ class OTelEventMiddleware(EventMiddleware):
 
 ### Trace Propagation
 
-Events carry `trace_id` to maintain trace continuity across async boundaries:
+Events carry a `trace_id` to maintain trace continuity across asynchronous boundaries:
 
 ```
 HTTP Request (trace A)
@@ -215,24 +220,24 @@ HTTP Request (trace A)
 | Request Rate | `http.server.request.duration` | Overall API throughput |
 | Error Rate | `http.server.request.duration{http.status_code>=400}` | API error percentage |
 | P50/P95/P99 Latency | `http.server.request.duration` histogram | Response time distribution |
-| Active Sessions | `auth.sessions.active` gauge | Current logged-in users |
+| Active Sessions | `auth.sessions.active` gauge | Currently logged-in users |
 
 ### Event Dashboard: Event Flow
 
 | Panel | Metric | Purpose |
 |-------|--------|---------|
-| Event Throughput | `events.published.total` by type | Events per second per type |
-| Event Handling Latency | `events.handling.duration_ms` | How long handlers take |
+| Event Throughput | `events.published.total` by type | Events per second by type |
+| Event Handling Latency | `events.handling.duration_ms` | Processor time consumption |
 | Event Error Rate | `events.handling.errors` | Failed event handlers |
 | Event Flow Diagram | Trace waterfall | Visualize event chains |
-| Top Event Types | `events.published.total` ranked | Which events fire most |
+| Top Event Types | `events.published.total` ranked | Which events are triggered most frequently |
 
-### Module Dashboard: Per-Module Health
+### Module Dashboard: Health by Module
 
 | Panel | Metric | Purpose |
 |-------|--------|---------|
-| Module Request Rate | `http.server.request.duration{http.route~"/api/<module>/*"}` | Per-module throughput |
-| Module Error Rate | Same, filtered by status code | Per-module errors |
+| Module Request Rate | `http.server.request.duration{http.route~"/api/<module>/*"}` | Throughput per module |
+| Module Error Rate | Same, filtered by status code | Errors per module |
 | Database Query Latency | `db.client.operation.duration` by module schema | Query performance |
 | Cache Hit Rate | `redis.cache.hit / (hit + miss)` | Cache effectiveness |
 
@@ -240,28 +245,28 @@ HTTP Request (trace A)
 
 | Panel | Metric | Purpose |
 |-------|--------|---------|
-| Hook Execution Count | `plugin.hook.executions` by plugin | Plugin activity |
+| Hook Executions | `plugin.hook.executions` by plugin | Plugin activity |
 | Hook Latency | `plugin.hook.duration_ms` | Plugin performance impact |
-| Hook Rejections | `plugin.hook.rejections` | Plugin blocking actions |
-| Permission Denials | `plugin.permission.denied` | Permission misconfigs |
+| Hook Rejections | `plugin.hook.rejections` | Plugin blocking behavior |
+| Permission Denied | `plugin.permission.denied` | Permission configuration errors |
 
 ## Configuration
 
 ### Application Environment Variables
 
 ```bash
-# OTel Collector endpoint
+# OTel Collector Endpoint
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
-# Service identification
+# Service Identification
 OTEL_SERVICE_NAME=core
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=development
 
-# Log level
+# Log Level
 LOG_LEVEL=info
 ```
 
-### OTel Collector Config (Production)
+### OTel Collector Configuration (Production)
 
 ```yaml
 # infra/observability/otel-collector.yml
@@ -304,8 +309,10 @@ service:
 
 | Alert | Condition | Severity |
 |-------|-----------|----------|
-| High Error Rate | `error_rate > 5%` for 5 min | Critical |
-| High Latency | `p99 > 2s` for 5 min | Warning |
-| Event Bus Backlog | `pending_events > 1000` | Warning |
+| High Error Rate | `error_rate > 5%` for 5 minutes | Critical |
+| High Latency | `p99 > 2s` for 5 minutes | Warning |
+| Event Bus Pending Backlog | `pending_events > 1000` | Warning |
 | Plugin Hook Timeout | `hook.duration > 5s` | Warning |
 | Database Connection Pool Exhausted | `pool.available == 0` | Critical |
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3086ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2439ms

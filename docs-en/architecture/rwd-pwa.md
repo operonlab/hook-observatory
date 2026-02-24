@@ -2,39 +2,42 @@
 doc_version: 2
 content_hash: 9c75f789
 source_version: 2
-translated_at: 2026-02-23
+target_lang: en
+translated_at: 2026-02-24
+source_hash: fac097fb
+source_lang: zh-TW
 ---
 
-# RWD + PWA Development Standards
+# RWD + PWA Development Specifications
 
-The frontend application (`workbench/`) MUST follow these standards.
+The frontend application (`workbench/`) must adhere to these specifications.
 
 ## Responsive Web Design (RWD)
 
 ### Breakpoints (Tailwind CSS)
 
-| Token | Min Width | Target |
+| Token | Minimum Width | Target |
 |-------|-----------|--------|
-| `sm`  | 640px     | Mobile landscape |
+| `sm`  | 640px     | Mobile Landscape |
 | `md`  | 768px     | Tablet |
 | `lg`  | 1024px    | Desktop |
-| `xl`  | 1280px    | Large desktop |
+| `xl`  | 1280px    | Large Desktop |
 
 ### Rules
 
-1. **Mobile-first**: Default styles target `<640px`. Use `sm:`, `md:`, `lg:` for wider screens.
-2. **Touch targets**: Minimum 44×44px for all interactive elements.
-3. **No horizontal scroll**: At any breakpoint. Test at 320px minimum.
-4. **Fluid typography**: Use `rem` units (base 16px). Scale with viewport via `clamp()`.
-5. **Responsive images**: Use `srcset` / `<picture>` or CSS `object-fit`.
-6. **Container queries**: Prefer over media queries for component-level responsiveness.
+1. **Mobile First**: Default styles target `<640px`. For wider screens, use `sm:`, `md:`, and `lg:`.
+2. **Touch Targets**: All interactive elements must be a minimum of 44×44px.
+3. **No Horizontal Scrolling**: At any breakpoint. Test down to 320px.
+4. **Fluid Typography**: Use `rem` units (16px base). Scale with viewport size via `clamp()`.
+5. **Responsive Images**: Use `srcset` / `<picture>` or CSS `object-fit`.
+6. **Container Queries**: Prefer over media queries for component-level responsiveness.
 
 ### Testing Checklist
 
-- [ ] 320px (Small mobile)
+- [ ] 320px (Small phone)
 - [ ] 375px (iPhone SE)
-- [ ] 768px (iPad portrait)
-- [ ] 1024px (iPad landscape / small desktop)
+- [ ] 768px (iPad Portrait)
+- [ ] 1024px (iPad Landscape / Small Desktop)
 - [ ] 1280px+ (Desktop)
 
 ## Progressive Web App (PWA)
@@ -44,7 +47,7 @@ The frontend application (`workbench/`) MUST follow these standards.
 #### `manifest.json`
 ```json
 {
-  "name": "App Full Name",
+  "name": "Full App Name",
   "short_name": "App",
   "start_url": "/",
   "display": "standalone",
@@ -59,13 +62,13 @@ The frontend application (`workbench/`) MUST follow these standards.
 
 #### Service Worker
 
-Strategy per asset type:
+Strategies by asset type:
 
 | Asset | Strategy | Rationale |
 |-------|----------|-----------|
-| App shell (HTML/CSS/JS) | **Cache-first** | Instant load, update in background |
-| API responses | **Network-first**, cache fallback | Fresh data preferred |
-| Static assets (images, fonts) | **Cache-first**, stale-while-revalidate | Rarely change |
+| App shell (HTML/CSS/JS) | **Cache-first** | Load instantly, update in background |
+| API Responses | **Network-first**, with cache fallback | Prioritize fresh data |
+| Static Assets (images, fonts) | **Cache-first**, stale-while-revalidate | Changes infrequently |
 
 ### HTML Requirements
 
@@ -76,28 +79,28 @@ Strategy per asset type:
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 ```
 
-### Install Criteria (Chrome)
+### Installation Criteria (Chrome)
 
-1. Valid `manifest.json` with `name`, `icons` (≥192px), `start_url`, `display`
-2. Registered service worker with `fetch` event handler
-3. Served over HTTPS (or localhost for dev)
+1. A valid `manifest.json` with `name`, `icons` (≥192px), `start_url`, and `display`
+2. A registered service worker with a `fetch` event handler
+3. Served over HTTPS (localhost is fine for development)
 
 ### Offline Behavior
 
 - App shell loads from cache (instant)
-- Show offline indicator when network unavailable
-- Queue mutations for replay when back online (future)
+- Displays an offline indicator when network is unavailable
+- Queue mutations to replay on reconnection (future feature)
 
-## Implementation in Web App
+## Implementation in the Web App
 
-The dashboard app (`workbench/`) serves as the reference implementation:
+The workbench application (`workbench/`) serves as the reference implementation:
 - Tailwind breakpoint config from shared styles
-- PWA manifest and SW registration from web app entry point
-- Dark/light theme variables via CSS custom properties (Catppuccin Mocha)
+- PWA manifest and SW registration from the web app entry point
+- Dark/light theme variables (Catppuccin Mocha) implemented via CSS custom properties
 
 ## Theme: Catppuccin Mocha
 
-Default dark theme palette (CSS custom properties):
+Default dark theme palette (CSS Custom Properties):
 
 ```css
 :root {
@@ -117,3 +120,6 @@ Default dark theme palette (CSS custom properties):
   --yellow: #f9e2af;
   --teal: #94e2d5;
 }
+```
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2695ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3350ms

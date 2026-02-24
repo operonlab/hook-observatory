@@ -67,12 +67,19 @@ Workshop 將所有功能組織成三個層級：
 │   └── package.json
 ├── mcp/                         # MCP 適配層 (對核心 API 的薄封裝)
 ├── stations/                    # 獨立本地工具
+│   ├── system-monitor/          # 磁碟分析 + 硬體資源監控
+│   ├── llm-usage/               # LLM Token/Cost 統一追蹤
+│   ├── envkit/                  # 環境快照 + 一鍵移植
+│   ├── tmux-webui/              # tmux 瀏覽器控制介面
+│   ├── session-redactor/        # 轉錄檔敏感資料清理
 │   └── sandbox-executor/        # 沙盒代碼執行 MCP 伺服器
+├── vendor/                      # 第三方社群工具（不改造）
+│   └── observability/           # Multi-Agent Observability (@disler)
 ├── bridges/                     # 外部平台連接器
 │   └── (LINE, Telegram, Discord, Firebase — 計劃中)
 ├── plugins/                     # 插件包 (基於 git)
 ├── libs/
-│   ├── python/                  # Python 共享庫
+│   ├── python/                  # Python 共享庫 (corelib + station-sdk)
 │   └── typescript/              # TypeScript 共享庫
 ├── infra/
 │   ├── docker/                  # docker-compose, Dockerfiles
@@ -198,7 +205,7 @@ mcp/<server-name>/
 
 ### 工作站 (`stations/`)
 
-不依賴核心資料庫的獨立本地工具。每個工作站都是自成一體的。
+可獨立運行的本地工具。需要推送資料到 Core API 或提供 Workbench Widget 的 station，可選擇引用 `libs/python/station-sdk/`（參見 [AD-8](./architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
 
 ```
 stations/<name>/
@@ -206,6 +213,32 @@ stations/<name>/
 ├── README.md
 └── package.json / pyproject.toml
 ```
+
+**Station 分類**：
+
+| Station | 語言 | 使用 SDK | 定位 |
+|---------|------|:--------:|------|
+| system-monitor | Python/Shell | ✅ | 磁碟 + 硬體監控，週報制 |
+| llm-usage | Python | ✅ | LLM Token/Cost 統一追蹤 |
+| envkit | Python/Shell | ❌ | 環境快照 + 一鍵移植 CLI |
+| tmux-webui | Python | ❌ | tmux 瀏覽器控制 + 系統指標 |
+| session-redactor | Python | ❌ | SessionEnd hook 敏感資料清理 |
+| sandbox-executor | Node.js | ❌ | 批次執行 MCP Server |
+
+### 第三方工具 (`vendor/`)
+
+不改造成 V2 架構的第三方社群工具。直接使用，upstream 更新靠 `git pull`。
+
+```
+vendor/
+└── <name>/
+    └── README.md            # 來源、用途、整合方式說明
+```
+
+**目前**：
+| 工具 | 來源 | 說明 |
+|------|------|------|
+| observability | [@disler](https://github.com/disler/claude-code-hooks-multi-agent-observability) | Claude Code hooks 即時監控儀表板 |
 
 ### 插件 (`plugins/`)
 
@@ -227,7 +260,12 @@ plugins/
 ```
 libs/
 ├── python/                  # Python 共享庫
-│   ├── src/corelib/         # 可作為 `from corelib import ...` 導入
+│   ├── corelib/             # Core 模組共用（可作為 `from corelib import ...` 導入）
+│   ├── station-sdk/         # Station 共用 SDK（可選依賴）
+│   │   ├── api_client.py    # Core API 推送（統一 auth + endpoint）
+│   │   ├── scheduler.py     # launchd plist 生成 / 管理
+│   │   ├── widget_schema.py # Workbench Widget JSON 標準格式
+│   │   └── notifier.py      # 通知管道抽象
 │   ├── pyproject.toml
 │   └── README.md
 └── typescript/              # TypeScript 共享庫
@@ -315,7 +353,7 @@ Media 領域 ────
 
 ## 核心原則
 
-1. **三層分類法** —— 核心模組 (資料庫支援) / 工作站 (本地工具) / 橋接器 (連接器)
+1. **四層分類法** —— 核心模組 (資料庫支援) / 工作站 (本地工具) / 橋接器 (連接器) / 第三方 (vendor)
 2. **模塊化單體** —— 在單個可部署單元內按業務領域組織
 3. **模組邊界** —— 禁止跨模組模型導入；使用服務層或事件
 4. **共享代碼是顯式的** —— 僅共享 `libs/` 與 `shared/` 的內容

@@ -1,94 +1,77 @@
 ---
 doc_version: 1
 content_hash: 13aa3c09
+source_version: 1
+target_lang: en
+translated_at: 2026-02-24
+source_hash: 6c5d5006
+source_lang: zh-TW
 ---
 
 # Workshop Manifesto
 
-> Workshop is a unified workstation that starts as personal tools and grows into a consumer-grade platform ecosystem.
+> Workshop is a unified workstation that starts with personal tools and grows into a consumer-grade platform ecosystem.
 
 ## What is Workshop?
 
-Workshop is not just a project folder — it is Jones's **digital workstation**, housing everything from disk analysis to enterprise-grade ERP.
-From small utilities like LLM usage tracking and hardware monitoring, to full-scale accounting, task dispatch, talent matching, and POS systems —
-everything lives under one architecture, sharing authentication, event streams, and data exchange.
+Workshop is not just a project folder—it is Jones's **digital workstation**, covering everything from disk analysis to enterprise-grade ERP.
+From small tools like LLM usage tracking and hardware monitoring, to full-scale accounting, task scheduling, talent matching, and POS systems—
+everything exists under the same architecture, sharing authentication, event streams, and data exchange.
 
 ### Core Philosophy
 
-1. **Personal → Platform**: Every feature serves the individual (+ family/friends) first, then opens up as a platform service once validated
-2. **Flexible but Bounded**: Leave room for expansion but prevent uncontrolled sprawl — domain boundaries manage complexity
-3. **Documentation First**: Think clearly, write clearly, then build (lesson learned: T1/T2 premature sprint led to full rollback)
-4. **Real Validation**: No mock tests or smoke tests — validate with real tasks and real results
-5. **MCP as First-Class Interface**: Claude Code Skills + MCP Servers are first-class citizens; UI comes second
-6. **LEGO Composition**: Every service is a reusable building block. New projects = extend existing services + compose them into specialized solutions. There is no distinction between "core modules" and "projects" — only services and compositions
-
-### Development Model: Two-Pronged Attack
-
-Workshop development follows a **bottom-up meets top-down** approach:
-
-```
-Top-Down (requirements → blueprint → backlog)
-    │
-    ▼         ┌───────────────────────────┐
-    ├────────►│ Convergence: blocks cover  │
-    │         │ requirements = ship it     │
-    ▲         └───────────────────────────┘
-    │
-Bottom-Up (build reusable service blocks)
-```
-
-- **Bottom-up**: Build services with well-defined capabilities and API surfaces. Each service is a LEGO block.
-- **Top-down**: Analyze what needs to be built, design blueprints, break down into backlog items.
-- **Convergence**: When the bottom-up service capabilities cover the top-down requirements, the project is complete.
-
-Every new project makes existing services more capable — this is the **compound interest** of service composition.
+1.  **Personal → Platform**: Every feature first serves the individual (+ family/friends), and is opened as a platform service after validation.
+2.  **Flexible but Bounded**: Leave room for expansion, but prevent uncontrolled sprawl—manage complexity through domain boundaries.
+3.  **Documentation First**: Think clearly, write clearly, then implement (Lesson learned: Premature sprints in T1/T2 led to a full rollback).
+4.  **Real-world Validation**: No mock tests or smoke tests—validate with real tasks and real results.
+5.  **MCP as a First-class Interface**: Claude Code Skills + MCP Servers are first-class citizens; UI is secondary.
 
 ---
 
-## Three-Tier Taxonomy: Core / Stations / Bridges
+## Three-Layer Taxonomy: Core / Stations / Bridges
 
-All Workshop functionality is classified into three tiers based on **data residency**:
+All Workshop functions are divided into three tiers based on **data residency**:
 
 ### Core Modules
 
-> Data lives in Workshop's own database (PostgreSQL), managed by the FastAPI Core Monolith.
+> Data resides in Workshop's own database (PostgreSQL), managed by the FastAPI Core Monolith.
 
-These are the backbone of Workshop — with persistent data, business logic, and multi-user sharing needs.
+These are the backbone of Workshop—requiring persistent data, business logic, and multi-user sharing.
 
 | Module | Description |
-|--------|-------------|
-| **auth** | Authentication + Space-based permissions (prerequisite for all) |
+|---|---|
+| **auth** | Authentication + space-based permissions (prerequisite for all features) |
 | **finance** | Accounting, subscription management, financial insights |
-| **quest** | To-do → quantified tasks → dispatch → orders (progressive complexity) |
-| **muse** | Idea notes, knowledge graph, inbox |
+| **quest** | To-dos → Quantified tasks → Scheduling → Orders (progressive complexity) |
+| **muse** | Inspiration notes, knowledge graph, inbox |
 | **scout** | Daily intelligence, auto-summaries, RSS/social monitoring |
 | **lore** | KAS Memory v2 (LLM memory persistence) |
-| **dojo** | Skill trees, learning paths, capability verification |
-| **roster** | Resource management (human/machine/service/AI agent unified abstraction) |
-| **nexus** | Matching engine (talent×jobs, capability×tasks) |
-| **admin** | Platform management, system monitoring, configuration |
+| **dojo** | Skill trees, learning paths, competency validation |
+| **roster** | Resource management (a unified abstraction for humans/machines/services/AI agents) |
+| **nexus** | Matching engine (talent × jobs, skills × tasks) |
+| **admin** | Platform administration, system monitoring, configuration |
 
 ### Stations
 
-> Standalone local tools that don't necessarily need a database. May be CLIs, desktop utilities, or analysis scripts.
+> Standalone local tools that don't necessarily require a database. Could be CLIs, desktop tools, or analysis scripts.
 
-- Disk analysis / system resource monitoring
-- LLM usage tracking
-- Local file management tools
-- Claude Code Skills (diagram-gen, pdf, ocr, etc.)
+-   **system-monitor** — Disk analysis + hardware resource stress monitoring
+-   **llm-usage** — LLM Token/Cost unified tracking (includes LiteLLM Proxy)
+-   **envkit** — Environment snapshot + one-click migration tool
+-   **sandbox-executor** — Batch code execution engine (MCP Server)
 
-Stations can run independently without FastAPI Core, but may optionally push data to Core.
+Stations can run independently without the FastAPI Core, but can optionally push data to the Core.
 
 ### Bridges
 
-> Adapters connecting to external ecosystems. They don't own data — they only handle bidirectional sync.
+> Adapters that connect to external ecosystems. They don't own data—they only handle bidirectional synchronization.
 
-- **Social Hooks**: LINE, Telegram, Discord, Facebook
-- **Notification Platform**: Firebase Cloud Messaging / PWA Push
-- **External APIs**: OpenAI, Google Calendar, GitHub, etc.
-- **OCR / AI Services**: Wrappers around external AI models
+-   **Social Hooks**: LINE, Telegram, Discord, Facebook
+-   **Notification Platforms**: Firebase Cloud Messaging / PWA Push
+-   **External APIs**: OpenAI, Google Calendar, GitHub, etc.
+-   **OCR / AI Services**: Wrappers for external AI models
 
-Bridge outputs typically flow into Core Modules (e.g., LINE message → quest creates a to-do).
+The output of a Bridge typically flows to a Core module (e.g., a LINE message → quest creates a to-do item).
 
 ---
 
@@ -96,48 +79,63 @@ Bridge outputs typically flow into Core Modules (e.g., LINE message → quest cr
 
 ### 1. Domain Boundary is King
 
-Each Core Module has its own:
-- Database schema (schema-per-module, not DB-per-module)
-- Event definitions (publish/subscribe)
-- MCP Server (thin adapter)
-- API routes (`/api/{module}/...`)
+Each Core module has its own:
+-   Database schema (one schema per module, not one DB per module)
+-   Event definitions (publish/subscribe)
+-   MCP Server (thin adapter)
+-   API routes (`/api/{module}/...`)
 
-Cross-module communication only via: Event Bus or Public API. Direct imports between modules are forbidden.
+Cross-module communication happens only through: the Event Bus or public APIs. Direct imports between modules are forbidden.
 
-### 2. Multi-User from Day 1
+### 2. Multi-user Support From Day One
 
-Not bolted on after the fact. The Space-based sharing model is designed into the data model from day one:
-- `space_id` appears on all data tables
-- Space = sharing scope (personal / family / friends / org)
-- Each Space can enable/disable different Modules
+This is not an afterthought. A space-based sharing model is designed into the data model from day one:
+-   `space_id` appears in all data tables
+-   Space = a shared scope (personal / family / friends / organization)
+-   Each Space can enable/disable different modules
 
 ### 3. Progressive Complexity
 
-Features start simple and grow complexity on demand:
-- quest: checkbox → story points → dojo requirements → task pool → commercial order
-- finance: personal accounting → family shared ledger → inventory → POS
-- nexus: manual pairing → conditional filtering → AI recommendations
+Features start simple and increase in complexity based on demand:
+-   quest: checkbox → story points → skill requirements → task pool → commercial order
+-   finance: personal bookkeeping → family shared ledger → inventory → POS
+-   nexus: manual matching → conditional filtering → AI recommendation
 
-### 4. MCP-First, UI-Second
+### 4. MCP First, UI Second
 
-Each Core Module gets an MCP Server first (so Claude Code can operate it directly),
-then a Widget UI (for Dashboard visual interaction).
-MCP Servers are thin adapters to the Core API — they never touch the database directly.
+Each Core module first gets an MCP Server (so Claude Code can operate it directly),
+followed by the module page UI and Dashboard Widget.
+MCP Servers are thin adapters for the Core API—they never touch the database directly.
 
-### 5. Widget-Based Dashboard
+### 5. Three-Layer Frontend Architecture
 
-Instead of traditional "one app, one page" routing, Workshop uses an Android-style Widget Dashboard:
-- Each Module provides multiple Widgets (different sizes, different functions)
-- Users freely drag, drop, and resize
-- Widgets exchange data via EventBus
-- Widgets are self-responsive via CSS Container Queries
+Workshop's frontend consists of three coexisting layers:
+
+```
+┌─────────────────────────────────────────────┐
+│  Layer 3: LLM Chat Overlay                  │ ← Global, always available for conversation
+│  (Similar to Google Gemini embedded in Chrome)  │
+├─────────────────────────────────────────────┤
+│  Layer 2: Dashboard Widget View             │ ← Drag-and-drop composition of widgets from various modules
+├─────────────────────────────────────────────┤
+│  Layer 1: Module SPA Pages                  │ ← /finance/*, /quest/* ...
+│  Each module has a full set of routes and UI      │
+└─────────────────────────────────────────────┘
+```
+
+-   **Layer 1 — Module Pages**: Each module has a complete route-based SPA page (for accounting, task management, etc.)
+-   **Layer 2 — Dashboard Widgets**: An additional dashboard view for freely dragging and dropping widgets extracted from various modules.
+-   **Layer 3 — LLM Chat Overlay**: A conversational interface that spans all pages, allowing interaction with the LLM without leaving the current page.
+
+The Widget Dashboard is a **supplement** to the module pages, not a replacement. The LLM Chat is a global overlay that can be invoked from any page.
 
 ---
 
-## What Workshop is NOT
+## What Workshop is Not
 
-- **Not microservices**: It's a Modular Monolith — single deployment unit
-- **Not a solo-user tool**: Multi-user from day one
-- **Not enterprise SaaS**: It's a personal workstation, but the architecture allows growth into a platform
-- **Not code-first**: Documentation first, validate then implement
-- **Not project-centric**: There are no standalone "projects" — only services that get composed for specific use cases
+-   **Not Microservices**: It is a Modular Monolith—a single deployment unit.
+-   **Not a Single-user Tool**: It supports multiple users from day one.
+-   **Not an Enterprise SaaS**: It is a personal workstation, but its architecture allows it to grow into a platform.
+-   **Not Code-First**: Documentation comes first, implementation after validation.
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2575ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2295ms

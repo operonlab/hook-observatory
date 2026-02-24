@@ -1,6 +1,6 @@
 ---
-doc_version: 1
-content_hash: 78a58ddc
+doc_version: 2
+content_hash: 3525e4c7
 source_version: 1
 target_lang: zh-TW
 translated_at: 2026-02-23
@@ -212,3 +212,46 @@ resources:
 - 每個 Phase 都是可用且完整的產品 —— 而非半成品原型
 - Phase N+1 不會破壞 Phase N 的使用者體驗
 - 升級是可選的 (Opt-in)，而非強制的 (simple mode 始終可用)
+
+---
+
+## AD-8: Station SDK — 工作站共享層
+
+**決策**：Stations 之間的共通邏輯提取到 `libs/python/station-sdk/`，作為輕量 SDK（非框架）提供。
+
+**決策理由**：
+- system-monitor 與 llm-usage 有 4 項重疊邏輯：launchd 排程、Core API 推送、Widget 資料格式、通知整合
+- 若每個 station 各寫一套 HTTP client 和 JSON 格式，維護成本隨 station 數量線性增長
+- 但 stations 的核心價值是「可獨立運行」，不能強制依賴 SDK
+
+**設計原則**：
+
+| 原則 | 說明 |
+|------|------|
+| **SDK 是可選依賴** | Station 不用 SDK 也能獨立運行（純 shell / 純 Python） |
+| **約定優於配置** | SDK 提供預設值（API 端點、Widget 格式），station 只需填入業務邏輯 |
+| **不是框架** | SDK 不控制 station 的生命週期，只提供可呼叫的工具函數 |
+| **提取門檻：≥ 2 個使用者** | 只在 2 個以上 station 共用時才提取到 SDK |
+
+**SDK 模組**：
+```
+libs/python/station-sdk/
+├── api_client.py       ← Core API 推送（統一 auth + endpoint discovery）
+├── scheduler.py        ← launchd plist 生成 / 管理 / 頻率變更
+├── widget_schema.py    ← Workbench Widget JSON 標準格式
+└── notifier.py         ← 通知管道抽象（notification bridge 對接）
+```
+
+**各 Station 與 SDK 的關係**：
+
+| Station | 使用 SDK | 說明 |
+|---------|:--------:|------|
+| system-monitor | ✅ | 排程 + API + Widget + 通知，全部用到 |
+| llm-usage | ✅ | API + Widget + 通知 |
+| envkit | ❌ | CLI 工具性質不同，無排程/Widget 需求 |
+| sandbox-executor | ❌ | Node.js MCP Server，語言不同 |
+
+**替代方案**：
+- ❌ 每個 station 獨立實作 → 重複代碼，格式不一致
+- ❌ Station 框架（強制繼承 BaseStation class）→ 過度工程化，限制靈活性
+- ✅ **輕量 SDK（可選依賴的工具函數庫）** → 平衡共用與獨立

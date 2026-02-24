@@ -1,6 +1,11 @@
 ---
 doc_version: 1
 content_hash: b6f7fdd7
+source_version: 1
+target_lang: en
+translated_at: 2026-02-24
+source_hash: 15be724d
+source_lang: zh-TW
 ---
 
 # Communication Patterns
@@ -10,24 +15,28 @@ content_hash: b6f7fdd7
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  Browser (Single React App)                              │
-│                                                          │
+│  ┌─────────────────────────────────────────────────────┐ │
+│  │ Layer 3: LLM Chat Overlay (SSE streaming)           │ │
+│  ├─────────────────────────────────────────────────────┤ │
+│  │ Layer 2: Dashboard Widgets  │  Layer 1: Module SPA  │ │
+│  └─────────────────────────────────────────────────────┘ │
 │  HTTP/SSE ──────────┐           WebRTC ──────────┐       │
 └─────────────────────┼───────────────────────────┼───────┘
                       ▼                           ▼
               ┌──────────────┐           ┌──────────────┐
-              │   Nginx      │           │   LiveKit     │
-              │   Gateway    │           │   Server      │
+              │   Nginx      │           │   LiveKit    │
+              │   Gateway    │           │   Server     │
               └──────┬───────┘           └──────┬───────┘
                      │                          │
                      ▼                          ▼
         ┌────────────────────────┐     ┌──────────────┐
-        │    Core Monolith       │     │   Realtime    │
-        │   ┌──────┬──────┐     │     │   Agents      │
+        │    Core Monolith       │     │   Realtime   │
+        │   ┌──────┬──────┐     │     │   Agents     │
         │   │auth  │quest │     │     └──────┬───────┘
         │   ├──────┼──────┤     │            │
         │   │finance│muse │     │     ┌──────┴───────┐
-        │   └──────┴──────┘     │     │    Media      │
-        │         │             │     │  (STT/TTS)    │
+        │   └──────┴──────┘     │     │    Media     │
+        │         │             │     │  (STT/TTS)   │
         │    Event Bus          │     └──────────────┘
         └───────┬───────────────┘
                 │
@@ -44,21 +53,21 @@ content_hash: b6f7fdd7
 
 ### Standard Request/Response
 
-All frontend-to-backend communication uses **HTTP REST** via Nginx reverse proxy to the Core Monolith.
+All frontend-to-backend communication goes through the Nginx reverse proxy to the Core Monolith, using **HTTP REST**.
 
 ```
 Browser → https://domain.com/api/finance/transactions → Nginx → Core Monolith
 ```
 
 **Conventions**:
-- `GET` for reads, `POST` for creates, `PUT` for full updates, `PATCH` for partial, `DELETE` for deletes
-- Request/response bodies in JSON (camelCase keys for JS compatibility)
-- Pagination: `?page=1&limit=20` with `X-Total-Count` header
-- Errors: `{ "detail": "message" }` with appropriate HTTP status
+- `GET` for reading, `POST` for creation, `PUT` for full updates, `PATCH` for partial updates, `DELETE` for deletion
+- Request/response bodies use JSON format (keys use camelCase for JS compatibility)
+- Pagination: use `?page=1&limit=20` with `X-Total-Count` header
+- Error handling: use `{ "detail": "message" }` with appropriate HTTP status codes
 
 ### Streaming (SSE)
 
-For long-running operations or LLM responses, use **Server-Sent Events**:
+For long-running operations or LLM responses, **Server-Sent Events** are used:
 
 ```
 Browser → GET /api/chat/stream (Accept: text/event-stream) → Nginx → Core
@@ -67,17 +76,17 @@ Browser → GET /api/chat/stream (Accept: text/event-stream) → Nginx → Core
          ← data: [DONE]\n\n
 ```
 
-**When to use SSE vs WebSocket:**
+**When to use SSE vs. WebSocket:**
 
-| Criteria | SSE | WebSocket |
+| Standard | SSE | WebSocket |
 |----------|-----|-----------|
 | Direction | Server → Client (unidirectional) | Bidirectional |
-| Use case | LLM streaming, progress updates | Chat, real-time collaboration |
-| Reconnection | Built-in auto-reconnect | Manual implementation |
-| Through proxies | Works through Nginx/CDN | Needs `Upgrade` support |
+| Use Case | LLM streaming, progress updates | Chat, real-time collaboration |
+| Reconnection | Built-in automatic reconnection | Requires manual implementation |
+| Via Proxy | Directly via Nginx/CDN | Requires `Upgrade` support |
 | Complexity | Simple | More complex |
 
-**Default choice: SSE** -- covers 90% of streaming needs with less complexity.
+**Default choice: SSE** -- Meets 90% of streaming needs with lower complexity.
 
 ### File Upload
 
@@ -87,7 +96,7 @@ Browser → POST /api/storage/upload (multipart/form-data) → Nginx → Core �
 
 ## 2. Frontend ↔ LiveKit: WebRTC
 
-For real-time voice and video, use **LiveKit** (separate Realtime service).
+For real-time audio and video, **LiveKit** (an independent Realtime service) is used.
 
 ```
                    ┌─────────────┐
@@ -110,58 +119,36 @@ For real-time voice and video, use **LiveKit** (separate Realtime service).
                [STT]   [LLM]   [TTS]
 ```
 
-**Flow**:
+**Process**:
 1. Frontend requests a **room token** from Core (`POST /api/livekit/token`)
-2. Core generates JWT via LiveKit Python SDK, returns token
-3. Frontend connects to LiveKit Server with token
-4. LiveKit Agent joins the room, processes audio/video with AI pipeline
+2. Core generates a JWT via the LiveKit Python SDK and returns the token
+3. Frontend uses the token to connect to the LiveKit Server
+4. LiveKit Agent joins the room, processes audio/video through AI workflows
 
 ## 3. Event-Driven Communication (Core Internal)
 
-Module-to-module communication within the monolith uses the **Event Bus**.
+Inter-module communication within the monolithic architecture uses an **Event Bus**.
 
-See [Event-Driven Architecture](./event-driven.md) for full specification.
+For full specification, see [Event-Driven Architecture](./event-driven.md).
 
-### Summary
-
-```
-State changes (async, no response needed)  → Event Bus
-Data queries (sync, response needed)        → Service import (in-process)
-External service calls                      → HTTP via httpx
-```
-
-### Event Flow Example
-
-```
-Finance module → publish("finance.transaction.created", {...})
-    ↓
-Event Bus (in-process async)
-    ↓
-Quest module → subscriber checks if transaction triggers achievement
-Admin module → subscriber logs audit trail
-Plugin hooks → any registered plugin hooks fire
-```
-
-### Rules
-
-1. **Events for writes**: When a module changes state, it publishes an event.
-2. **Service imports for reads**: When a module needs data from another module, it calls the service layer directly.
-3. **Idempotent handlers**: Event subscribers must handle duplicate events gracefully.
-4. **No circular dependencies**: If Module A subscribes to Module B's events and vice versa, reconsider the boundaries.
+**Summary**:
+- State changes (asynchronous) → Event Bus
+- Data queries (synchronous) → Service import (in-process)
+- External service calls → HTTP (httpx)
 
 ## 4. Core → Hot-Path Services: HTTP + Events
 
-The Core Monolith communicates with Realtime and Media services through:
+Communication between the Core Monolith and Realtime & Media services is as follows:
 
 | Direction | Pattern | Example |
 |-----------|---------|---------|
 | Core → Realtime | HTTP API | Generate LiveKit room token |
-| Core → Media | HTTP API | Request STT transcription |
-| Realtime → Core | Redis Events | Room participant joined |
-| Media → Core | Redis Events | Transcription completed |
+| Core → Media | HTTP API | Request STT transcript |
+| Realtime → Core | Redis Events | Room member joins |
+| Media → Core | Redis Events | Transcript conversion complete |
 
 ```python
-# Core calling Media service
+# Core calls Media service
 import httpx
 
 async def request_transcription(audio_url: str, user_id: str):
@@ -175,51 +162,28 @@ async def request_transcription(audio_url: str, user_id: str):
 
 ## 5. Database Access
 
-All modules connect to PostgreSQL through a shared connection pool, but each module only accesses its own schema:
+All modules connect to PostgreSQL via a shared connection pool, but each module can only access its dedicated schema:
 
 ```python
 # Each module uses schema-scoped queries
 await cur.execute("SELECT * FROM finance.transactions WHERE user_id = %s", [user_id])
 ```
 
-Driver: psycopg 3 with async support.
+Driver: supports asynchronous psycopg 3.
 
 ## 6. Authentication Flow
 
-```
-Browser → POST /api/auth/login (credentials) → Nginx → Core (auth module)
-Auth module → Verify credentials → Create session → Set signed cookie → Redis
+For the complete authentication architecture, see [Auth Architecture](./auth.md).
 
-Browser → GET /api/finance/transactions (signed cookie) → Nginx → Core
-Auth middleware → Validate cookie → Load user from Redis → Check permissions
-Finance module → Process request (user injected by middleware)
-```
-
-**Rules**:
-- Auth middleware runs before all protected routes (same process, no header forwarding needed)
-- Session state in Redis for fast lookup and cross-instance sharing
-- Never expose internal service ports to the internet
+**Summary**: Browser → signs cookie → Nginx → Core → Auth middleware validates → injects user info → module processes request. Session state stored in Redis.
 
 ## 7. Hook/Plugin Integration
 
-Events flow through the Hook Engine, allowing plugins to intercept and extend behavior:
-
-```
-Module publishes event
-    → Event Bus delivers to module subscribers
-    → Hook Engine checks for registered plugin hooks
-    → Plugin hooks execute (with permission isolation)
-```
-
-See [Plugin System](./plugin-system.md) for hook specification.
+Events flow through the Hook Engine, allowing plugins to intercept and extend behavior. See [Plugin System](./plugin-system.md).
 
 ## 8. Observability Integration
 
-All communication patterns are instrumented with OpenTelemetry:
-
-- HTTP requests: automatic span creation via FastAPI middleware
-- Events: each event publish/subscribe creates a trace span
-- External calls: httpx instrumentation for outbound requests
-- Database: psycopg instrumentation for query tracing
-
-See [Observability](./observability.md) for details.
+All communication patterns are integrated with OpenTelemetry. See [Observability](./observability.md).
+```
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3166ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2951ms

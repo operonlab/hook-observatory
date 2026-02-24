@@ -1,15 +1,18 @@
 ---
-doc_version: 1
-content_hash: aece66bc
+doc_version: 2
+content_hash: 4a697601
 source_version: 1
-translated_at: 2026-02-23
+target_lang: en
+translated_at: 2026-02-24
+source_hash: 4a697601
+source_lang: zh-TW
 ---
 
-# Authentication & Authorization Architecture
+# Authentication and Authorization Architecture
 
-## Model: RBAC + ABAC Hybrid
+## Model: Hybrid RBAC + ABAC
 
-The auth module (part of Core Monolith) handles both authentication and authorization using a layered permission model.
+The `auth` module (part of the Core Monolith) handles authentication and authorization using a layered permissions model.
 
 ```
                     ┌──────────────────────────────────────┐
@@ -40,8 +43,8 @@ The auth module (part of Core Monolith) handles both authentication and authoriz
 
 | Role | Permissions | Description |
 |------|------------|-------------|
-| `admin` | `*` (all) | Full platform access |
-| `user` | `finance.read`, `finance.write`, `quest.read`, `quest.write`, `muse.read`, `muse.write` | Standard active user |
+| `admin` | `*` (All) | Full platform access |
+| `user` | `finance.read`, `finance.write`, `quest.read`, `quest.write`, `muse.read`, `muse.write` | Standard activated user |
 | `guest` | `finance.read`, `quest.read`, `muse.read` | Read-only access |
 
 ### Permission Format
@@ -50,8 +53,8 @@ The auth module (part of Core Monolith) handles both authentication and authoriz
 {module}.{action}
 
 Examples:
-  finance.read        Read financial data
-  finance.write       Create/update financial records
+  finance.read        Read finance data
+  finance.write       Create/update finance records
   quest.read          View quests
   quest.write         Create/manage quests
   admin.users         Manage users
@@ -80,7 +83,7 @@ ABAC policies add dynamic, context-aware checks on top of RBAC.
 | `owner-only` | `resource.owner_id == user.id` | User can only edit their own transactions |
 | `status-check` | `resource.status in allowed_statuses` | Cannot modify archived quests |
 | `rate-limit` | `user.request_count < limit` | Max 100 API calls per minute |
-| `time-window` | `now() within allowed_hours` | Admin operations only during business hours |
+| `time-window` | `now() within allowed_hours` | Admin actions only during business hours |
 
 ### ABAC Check
 
@@ -91,7 +94,7 @@ from core.modules.auth.policies import enforce_policy
  @require_permission("finance.write")
 async def update_transaction(txn_id: str, user: AuthUser = Depends(get_current_user)):
     txn = await get_transaction(txn_id)
-    enforce_policy("owner-only", user=user, resource=txn)  # raises 403 if not owner
+    enforce_policy("owner-only", user=user, resource=txn)  # Throws 403 if not owner
     ...
 ```
 
@@ -111,21 +114,13 @@ class PolicyEngine:
         )
 ```
 
-## Plugin Permission Isolation
+### Plugin Permission Isolation
 
-Plugins run with the **intersection** of their declared permissions and the current user's permissions:
-
-```
-effective_permissions = plugin.manifest.permissions ∩ user.permissions
-```
-
-A plugin declaring `["finance.read", "quest.write"]` for an admin user gets both. For a guest user, it only gets `finance.read` (since guests lack `quest.write`).
-
-See [Plugin System](./plugin-system.md) for manifest format.
+Effective permissions during plugin execution = declared plugin permissions ∩ user permissions. See [Plugin System](./plugin-system.md#權限隔離) for details.
 
 ## Session Management
 
-### Signed Cookie (itsdangerous)
+### Signed Cookies (itsdangerous)
 
 Sessions use **signed cookies** via `itsdangerous`:
 
@@ -142,10 +137,10 @@ response.set_cookie("session", token, httponly=True, secure=True, samesite="lax"
 data = serializer.loads(token, max_age=604800)  # 7 days
 ```
 
-**Why signed cookies over JWT:**
+**Why Signed Cookies over JWT:**
 - Server-side revocation (just invalidate the session record)
-- No token size bloat in every request
-- Simple implementation, fewer security pitfalls
+- No giant token size in every request
+- Simpler implementation, fewer security pitfalls
 
 ### Session Storage
 
@@ -158,19 +153,19 @@ auth:session:{session_id} → {user_id, role, created_at, expires_at}
 ## User Lifecycle
 
 ```
-Register → pending → (Admin approval) → active → (normal use)
-                                       → (Admin suspend) → suspended → (Admin unsuspend) → active
-                                       → (Admin ban) → banned (permanent)
+Register → pending → (Admin approval) → active → (Normal usage)
+                                    → (Admin suspension) → suspended → (Admin unsuspension) → active
+                                    → (Admin ban) → banned (permanent)
 ```
 
-### Status Effects
+### Status Impact
 
-| Status | Can Login | Can Call API | Reaches Modules |
+| Status | Can Login | Can Call API | Reaches Module |
 |--------|-----------|-------------|-----------------|
 | pending | No | No | No |
 | active | Yes | Yes | Yes |
-| suspended | No (sessions cleared) | No | No |
-| banned | No (sessions cleared) | No | No |
+| suspended | No (clears session) | No | No |
+| banned | No (clears session) | No | No |
 
 ## Database Schema (auth module)
 
@@ -183,7 +178,7 @@ CREATE TYPE auth.user_role AS ENUM ('guest', 'user', 'admin');
 CREATE TABLE auth.users (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email       TEXT UNIQUE NOT NULL,
-    password    TEXT NOT NULL,  -- argon2 hashed
+    password    TEXT NOT NULL,  -- argon2 encrypted hash
     name        TEXT NOT NULL,
     status      auth.user_status NOT NULL DEFAULT 'pending',
     role        auth.user_role NOT NULL DEFAULT 'user',
@@ -213,53 +208,55 @@ CREATE TABLE auth.sessions (
 ### 1. Registration + Admin Approval
 
 ```
-User  → POST /api/auth/register {email, password, name}
-          Auth module → INSERT users (status='pending')
-          EventBus → publish("auth.user.registered", {user_id})
+User → POST /api/auth/register {email, password, name}
+       Auth Module → INSERT users (status='pending')
+       EventBus → publish("auth.user.registered", {user_id})
 
 Admin → GET /api/admin/users?status=pending
 Admin → POST /api/admin/users/{id}/approve
-          Auth module → UPDATE status='active'
-          EventBus → publish("auth.user.approved", {user_id})
+        Auth Module → UPDATE status='active'
+        EventBus → publish("auth.user.approved", {user_id})
 ```
 
 ### 2. Login + Authenticated Request
 
 ```
-User  → POST /api/auth/login {email, password}
-          Auth module → Verify password → Create session → Set signed cookie
+User → POST /api/auth/login {email, password}
+       Auth Module → Verify password → Create session → Set signed cookie
 
-User  → GET /api/finance/transactions (Cookie: session)
-          Auth middleware → Validate signed cookie
-          Auth middleware → Load user, check status=active
-          Auth middleware → Check RBAC permission (finance.read)
-          Finance module → Filter by user_id → Return transactions
+User → GET /api/finance/transactions (Cookie: session)
+       Auth Middleware → Validate signed cookie
+       Auth Middleware → Load user, check status=active
+       Auth Middleware → Check RBAC permission (finance.read)
+       Finance Module → Filter by user_id → Return transactions
 ```
 
-### 3. Admin Suspend User
+### 3. Admin Suspends User
 
 ```
 Admin → POST /api/admin/users/{id}/suspend
-          Auth module → UPDATE status='suspended'
-          Auth module → DELETE sessions WHERE user_id={id}
-          EventBus → publish("auth.user.suspended", {user_id})
+        Auth Module → UPDATE status='suspended'
+        Auth Module → DELETE sessions WHERE user_id={id}
+        EventBus → publish("auth.user.suspended", {user_id})
 ```
 
-## Security Notes
+## Security Considerations
 
-1. **Password hashing**: Argon2id (preferred) or bcrypt. Never store plaintext.
-2. **Cookie security**: `httponly=True`, `secure=True`, `samesite=lax`.
-3. **Session expiry**: Default 7 days, configurable. Periodic cleanup via background task.
-4. **Internal ports**: Services bind to `127.0.0.1`. All external traffic goes through Nginx.
-5. **CSRF protection**: SameSite cookies + optional CSRF token for mutation endpoints.
+1.  **Password Hashing**: Argon2id (preferred) or bcrypt. Never store in plaintext.
+2.  **Cookie Security**: `httponly=True`, `secure=True`, `samesite=lax`.
+3.  **Session Expiration**: 7-day default, configurable. Periodically cleaned by a background job.
+4.  **Internal Ports**: Services bind to `127.0.0.1`. All external traffic goes through Nginx.
+5.  **CSRF Protection**: SameSite cookies + optional CSRF tokens for mutating endpoints.
 
 ## Future: OAuth Providers
 
-Planned OAuth integration (Google, GitHub) for social login:
+Planning to integrate OAuth (Google, GitHub) for social login:
 
 ```
-Browser → /api/auth/oauth/google → redirect to Google
+Browser → /api/auth/oauth/google → Redirect to Google
 Google  → /api/auth/oauth/google/callback → Auth module creates/links user
 ```
 
-OAuth will supplement password auth, not replace it. Both methods create the same session format.
+OAuth will supplement, not replace, password authentication. Both methods will create the same session format.
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2520ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2387ms

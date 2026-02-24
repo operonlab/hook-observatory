@@ -1,15 +1,20 @@
 ---
 doc_version: 3
 content_hash: 87cf60a6
+source_version: 3
+target_lang: en
+translated_at: 2026-02-24
+source_hash: ea165cf9
+source_lang: zh-TW
 ---
 
 # Modular Monolith Architecture Guide
 
 ## Design Principles
 
-### 1. Single Deployment, Module Boundaries
+### 1. Single Deployment & Module Boundaries
 
-The backend is a **single deployable unit** with clearly separated domain modules. Each module owns its business logic, database schema, and API routes -- but they all run in one process.
+The backend is a **single deployable unit** with clearly separated domain modules. Each module owns its business logic, database schema, and API routes—but they all run in the same process.
 
 ```
                     ┌─────────────────────────────────────┐
@@ -40,12 +45,12 @@ The backend is a **single deployable unit** with clearly separated domain module
                     └────────────┘   └──────────────┘
 ```
 
-**Why Modular Monolith over Microservices:**
+**Why choose a modular monolith over microservices:**
 - Simpler deployment and operations (one process, one container)
 - No network latency between modules (in-process calls)
 - Easier debugging and tracing (single log stream)
-- Module boundaries enforce discipline without operational overhead
-- Can extract to microservices later if a module truly needs independent scaling
+- Module boundaries enforce development discipline without operational overhead
+- A module can be easily extracted into a microservice later if it truly needs to scale independently
 
 ### 2. Module Ownership
 
@@ -66,41 +71,41 @@ Each module owns **one** business domain:
 
 ### 3. Module Boundary Rules
 
-**Hard rules:**
+**Hard Rules:**
 - A module **must not** directly import another module's models or database tables
-- A module **must not** directly write to another module's schema
-- Cross-module reads go through **service imports** (call the other module's service layer)
-- Cross-module state changes go through the **Event Bus**
+- A module **must not** write directly to another module's schema
+- Cross-module reads happen via **service imports** (calling another module's service layer)
+- Cross-module state changes happen via the **Event Bus**
 
 ```python
-# GOOD: Module A reads from Module B via service import
+# Correct: Module A reads Module B's data via a service import
 from src.modules.finance.services import get_user_balance
 
-# GOOD: Module A notifies Module B via event
+# Correct: Module A notifies Module B via an event
 await event_bus.publish("quest.quest.completed", {"quest_id": "...", "user_id": "..."})
 
-# BAD: Module A directly imports Module B's models
-from src.modules.finance.models import Transaction  # FORBIDDEN
+# Incorrect: Module A directly imports Module B's models
+from src.modules.finance.models import Transaction  # Forbidden
 ```
 
-### 4. Independent Data Stores
+### 4. Independent Data Storage
 
-All modules share one PostgreSQL instance but use **separate schemas**:
+All modules share a single PostgreSQL instance but use **separate schemas**:
 
 ```sql
-CREATE SCHEMA auth;       -- owned by auth module (Phase 1)
-CREATE SCHEMA finance;    -- owned by finance module (Phase 1)
-CREATE SCHEMA quest;      -- owned by quest module (Phase 1)
-CREATE SCHEMA muse;       -- owned by muse module (Phase 1)
-CREATE SCHEMA scout;      -- owned by scout module (Phase 2)
-CREATE SCHEMA lore;       -- owned by lore module (Phase 2)
-CREATE SCHEMA dojo;       -- owned by dojo module (Phase 2)
-CREATE SCHEMA roster;     -- owned by roster module (Phase 3)
-CREATE SCHEMA nexus;      -- owned by nexus module (Phase 3)
-CREATE SCHEMA admin;      -- owned by admin module (Phase 1)
+CREATE SCHEMA auth;       -- Owned by auth module (Phase 1)
+CREATE SCHEMA finance;    -- Owned by finance module (Phase 1)
+CREATE SCHEMA quest;      -- Owned by quest module (Phase 1)
+CREATE SCHEMA muse;       -- Owned by muse module (Phase 1)
+CREATE SCHEMA scout;      -- Owned by scout module (Phase 2)
+CREATE SCHEMA lore;       -- Owned by lore module (Phase 2)
+CREATE SCHEMA dojo;       -- Owned by dojo module (Phase 2)
+CREATE SCHEMA roster;     -- Owned by roster module (Phase 3)
+CREATE SCHEMA nexus;      -- Owned by nexus module (Phase 3)
+CREATE SCHEMA admin;      -- Owned by admin module (Phase 1)
 ```
 
-Cross-schema queries are technically possible but **architecturally forbidden**. If Module A needs data from Module B, it calls B's service layer.
+Cross-schema queries are technically possible, but **architecturally forbidden**. If Module A needs data from Module B, it must call B's service layer.
 
 ## Module Structure
 
@@ -109,55 +114,55 @@ Each module follows a consistent internal layout:
 ```
 core/src/modules/<name>/
 ├── __init__.py          # Module registration
-├── routes.py            # FastAPI router (or routes/ directory)
+├── routes.py            # FastAPI routes (or routes/ directory)
 ├── models.py            # SQLAlchemy / Pydantic models (module-scoped)
 ├── schemas.py           # Pydantic request/response schemas
-├── services.py          # Business logic (the public API of this module)
+├── services.py          # Business logic (this module's public API)
 ├── events.py            # Event handlers (subscribers)
-├── hooks.py             # Hook points this module exposes
+├── hooks.py             # Hook points exposed by this module
 └── deps.py              # FastAPI dependencies
 ```
 
-The `services.py` is the **public interface** of each module. Other modules import from here, never from `models.py` or `routes.py`.
+`services.py` is the **public interface** of each module. Other modules should import from here, and never from `models.py` or `routes.py`.
 
 ## Inter-Module Communication
 
-| Pattern | When | Example |
+| Pattern | When to Use | Example |
 |---------|------|---------|
-| Service import (sync) | Reading data from another module | `finance.services.get_balance(user_id)` |
-| Event Bus (async) | State change that others may care about | `quest.quest.completed` triggers finance reward |
+| Service Import (Sync) | Reading data from another module | `finance.services.get_balance(user_id)` |
+| Event Bus (Async) | State change that other modules may care about | `quest.quest.completed` triggers finance reward |
 | Shared types in `src.shared` | Common types used by 2+ modules | `UserId`, `Pagination`, `ErrorResponse` |
 
 See [Event-Driven Architecture](./event-driven.md) for detailed event patterns.
 
 ## Hot-Path Services
 
-Two services run **outside** the monolith because they have fundamentally different runtime requirements:
+Two services run **outside** the monolith because they have fundamentally different runtime needs:
 
 ### Realtime Service (port 8830)
 
-- **What**: LiveKit WebRTC gateway + agents
-- **Why separate**: WebRTC requires persistent connections, media processing, different scaling pattern
-- **Communication**: REST API for token generation, Redis events for state sync
+- **Functionality**: LiveKit WebRTC gateway + agents
+- **Why separate**: WebRTC requires persistent connections, media processing, and different scaling patterns
+- **Communication method**: REST API for token generation, and Redis events for state sync
 
 ### Media Service (port 8831)
 
-- **What**: STT, TTS, image processing pipelines
-- **Why separate**: CPU/GPU intensive, needs independent resource allocation
-- **Communication**: HTTP API calls from core, results published as events
+- **Functionality**: STT, TTS, image processing pipelines
+- **Why separate**: CPU/GPU intensive, requires independent resource allocation
+- **Communication method**: HTTP API calls from core, with results published as events
 
 ## Port Allocation
 
 | Port | Service |
 |------|---------|
 | 8800 | Core Monolith |
-| 8830 | Realtime (LiveKit) |
-| 8831 | Media (STT/TTS) |
-| 3000 | Frontend dev server |
+| 8830 | Realtime Service (LiveKit) |
+| 8831 | Media Service (STT/TTS) |
+| 3000 | Frontend Dev Server |
 
 ## Configuration
 
-Use `pydantic-settings` with environment variables. Module-specific config uses prefixed env vars:
+Uses `pydantic-settings` with environment variables. Module-specific configs use prefixed environment variables:
 
 ```python
 from pydantic_settings import BaseSettings
@@ -171,9 +176,9 @@ class CoreSettings(BaseSettings):
     model_config = {"env_prefix": "CORE_"}
 ```
 
-## Health Check
+## Health Checks
 
-The monolith exposes a single health endpoint with per-module status:
+The monolith exposes a single health check endpoint that includes the status of its modules:
 
 ```json
 {
@@ -197,7 +202,7 @@ The monolith exposes a single health endpoint with per-module status:
 
 ## Module Registration
 
-Modules register themselves with the core application at startup:
+Modules register themselves with the core application on startup:
 
 ```python
 # core/src/app.py
@@ -206,23 +211,23 @@ from src.modules import auth, finance, quest, muse, scout, lore, dojo, roster, n
 def create_app() -> FastAPI:
     app = FastAPI()
 
-    # Register module routers (Phase 1)
+    # Register module routes (Phase 1)
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(finance.router, prefix="/api/finance", tags=["finance"])
     app.include_router(quest.router, prefix="/api/quest", tags=["quest"])
     app.include_router(muse.router, prefix="/api/muse", tags=["muse"])
     app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
-    # Register module routers (Phase 2)
+    # Register module routes (Phase 2)
     app.include_router(scout.router, prefix="/api/scout", tags=["scout"])
     app.include_router(lore.router, prefix="/api/lore", tags=["lore"])
     app.include_router(dojo.router, prefix="/api/dojo", tags=["dojo"])
 
-    # Register module routers (Phase 3)
+    # Register module routes (Phase 3)
     app.include_router(roster.router, prefix="/api/roster", tags=["roster"])
     app.include_router(nexus.router, prefix="/api/nexus", tags=["nexus"])
 
-    # Initialize event bus and hook engine
+    # Initialize Event Bus and Hook Engine
     app.state.event_bus = EventBus()
     app.state.hook_engine = HookEngine()
 
@@ -234,14 +239,16 @@ def create_app() -> FastAPI:
     return app
 ```
 
-## Future: Extracting a Module
+## Future Vision: Extracting a Module
 
 If a module outgrows the monolith (e.g., media processing needs GPU scaling), the extraction path is:
 
-1. Module already has clean boundaries (service layer, events, no cross-model imports)
+1. The module already has clear boundaries (service layer, events, no cross-model imports)
 2. Replace in-process service imports with HTTP client calls
 3. Replace in-process events with Redis Streams events
-4. Deploy as independent service
-5. No changes needed in other modules (they already use the service/event interface)
+4. Deploy as a separate service
+5. Other modules require no changes (they already use the service/event interface)
 
-This is the key advantage of enforcing module boundaries from day one.
+This is the core benefit of enforcing module boundaries from day one.
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2497ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3357ms

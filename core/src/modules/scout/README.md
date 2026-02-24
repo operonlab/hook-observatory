@@ -64,17 +64,45 @@ CREATE TABLE scout.topic_relations (
     PRIMARY KEY (source_topic_id, target_topic_id)
 );
 
--- 每日情報彙整
+-- 情報主題（動態管理，取代 V1 寫死的 6 個 domain）
+CREATE TABLE scout.briefing_topics (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name          TEXT NOT NULL,              -- 內部識別名（finance, ai, weather...）
+    display_name  TEXT NOT NULL,              -- 顯示名稱（金融市場、AI 動態、天氣...）
+    description   TEXT,                       -- 主題說明
+    enabled       BOOLEAN DEFAULT true,
+    priority      INT DEFAULT 0,             -- 排序（數字越大越優先）
+    prompt_template TEXT,                     -- 分析師提示詞模板（可自訂）
+    sources       JSONB DEFAULT '[]',        -- 偏好資料來源（RSS URLs, 搜尋關鍵字等）
+    schedule      TEXT DEFAULT 'daily',      -- daily / weekday / weekly
+    space_id      UUID NOT NULL,
+    created_at    TIMESTAMPTZ DEFAULT now(),
+    updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- 主題細項（子分類，例如「天氣」底下的「台北、東京、紐約」）
+CREATE TABLE scout.briefing_subtopics (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    topic_id      UUID REFERENCES scout.briefing_topics(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,              -- 細項名稱
+    parameters    JSONB DEFAULT '{}',        -- 細項參數（如 region: "台北", lat/lon 等）
+    enabled       BOOLEAN DEFAULT true,
+    created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- 每日情報彙整（改為關聯 briefing_topics）
 CREATE TABLE scout.briefings (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    date        DATE NOT NULL UNIQUE,
-    domain      TEXT NOT NULL,            -- finance / ai / tech / geopolitics / weather
+    date        DATE NOT NULL,
+    topic_id    UUID REFERENCES scout.briefing_topics(id), -- 關聯動態主題（取代寫死 domain）
+    domain      TEXT NOT NULL,            -- 向下相容欄位（= briefing_topics.name）
     raw_data    JSONB,                    -- 原始資料摘要
     analyses    JSONB,                    -- {claude: ..., codex: ..., gemini: ...}
     debate      TEXT,                     -- 交叉辯論結論
     embedding   vector(768),
     space_id    UUID NOT NULL,
-    created_at  TIMESTAMPTZ DEFAULT now()
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (date, topic_id)              -- 每天每個主題一份
 );
 
 -- 搜尋紀錄
@@ -94,6 +122,8 @@ CREATE INDEX idx_reports_tags ON scout.reports USING GIN (tags);
 CREATE INDEX idx_reports_created ON scout.reports (created_at DESC);
 CREATE INDEX idx_topics_embedding ON scout.topics USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX idx_briefings_date ON scout.briefings (date DESC);
+CREATE INDEX idx_briefings_topic ON scout.briefings (topic_id);
+CREATE INDEX idx_subtopics_topic ON scout.briefing_subtopics (topic_id);
 ```
 
 ## API 端點（`/api/scout/`）
@@ -125,13 +155,28 @@ CREATE INDEX idx_briefings_date ON scout.briefings (date DESC);
 | GET | `/topics/:id/related` | 相關主題 |
 | GET | `/topics/graph` | 主題關聯圖（nodes + edges） |
 
+### 情報主題管理
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | `/briefings/topics` | 主題列表（含啟用狀態、子分類數量） |
+| POST | `/briefings/topics` | 新增主題（名稱、說明、排程頻率） |
+| PUT | `/briefings/topics/:id` | 更新主題（可改名、啟停、調整提示詞） |
+| DELETE | `/briefings/topics/:id` | 刪除主題（連帶刪除子分類） |
+| PATCH | `/briefings/topics/:id/toggle` | 快速啟停主題 |
+| POST | `/briefings/topics/:id/subtopics` | 新增子分類（如天氣→台北） |
+| PUT | `/briefings/topics/:id/subtopics/:sid` | 更新子分類 |
+| DELETE | `/briefings/topics/:id/subtopics/:sid` | 刪除子分類 |
+
 ### 情報
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
-| GET | `/briefings` | 情報列表（日期範圍） |
-| GET | `/briefings/:date` | 指定日期情報 |
-| POST | `/briefings` | 建立/觸發情報產生 |
+| GET | `/briefings` | 情報列表（日期範圍、主題過濾） |
+| GET | `/briefings/:date` | 指定日期情報（全部主題） |
+| GET | `/briefings/:date/:topic` | 指定日期 + 指定主題的情報 |
+| POST | `/briefings` | 建立/觸發情報產生（可指定主題） |
+| POST | `/briefings/run` | 觸發完整情報流程（所有啟用主題） |
 
 ### 統計
 
@@ -155,6 +200,133 @@ core/src/modules/scout/
 ├── briefing_pipeline.py  ← 三分析師辯論管線
 └── events.py             ← 事件定義（scout.report.created 等）
 ```
+
+## Daily Briefing 主題管理（V2 新增）
+
+### 問題
+
+V1 的 6 個情報主題完全寫死在 `run.sh`（530 行），新增/修改主題需要改 shell 腳本。
+
+```
+V1（寫死）：finance | ai | tech | geopolitics | weather | devtools
+  ↓
+V2（動態）：使用者可透過 UI 自行管理主題 + 子分類
+```
+
+### 主題結構
+
+每個主題可以有多個子分類（subtopics），子分類攜帶特定參數：
+
+```yaml
+- name: weather
+  display_name: "天氣"
+  schedule: daily
+  subtopics:
+    - name: "台北"
+      parameters: { region: "Taipei", lat: 25.03, lon: 121.56 }
+    - name: "東京"
+      parameters: { region: "Tokyo", lat: 35.68, lon: 139.69 }
+    - name: "紐約"
+      parameters: { region: "New York", lat: 40.71, lon: -74.00 }
+
+- name: finance
+  display_name: "金融市場"
+  schedule: weekday
+  subtopics:
+    - name: "美股"
+      parameters: { market: "US", indices: ["SPX", "NDX", "DJI"] }
+    - name: "台股"
+      parameters: { market: "TW", indices: ["TAIEX"] }
+    - name: "加密貨幣"
+      parameters: { assets: ["BTC", "ETH", "SOL"] }
+
+- name: ai
+  display_name: "AI 動態"
+  schedule: daily
+  subtopics:
+    - name: "模型發布"
+      parameters: { sources: ["arxiv", "huggingface"] }
+    - name: "產品更新"
+      parameters: { companies: ["Anthropic", "OpenAI", "Google", "Meta"] }
+    - name: "開源工具"
+      parameters: { sources: ["github-trending"] }
+```
+
+### UI 頁面
+
+| 頁面 | 路徑 | 功能 |
+|------|------|------|
+| 主題管理 | `/scout/briefings/settings` | CRUD 主題 + 子分類，排程設定 |
+| 情報瀏覽 | `/scout/briefings` | 依日期檢視各主題情報 |
+| 情報詳情 | `/scout/briefings/:date/:topic` | 三分析師分析 + 辯論 |
+
+**主題管理 UI 概念**：
+
+```
+┌─── 情報主題管理 ────────────────────────┐
+│                                         │
+│  [+ 新增主題]                            │
+│                                         │
+│  ☑ 金融市場        weekday    3 subtopics│
+│    ├── ☑ 美股                           │
+│    ├── ☑ 台股                           │
+│    └── ☑ 加密貨幣                       │
+│    [+ 新增細項]                          │
+│                                         │
+│  ☑ AI 動態         daily      3 subtopics│
+│    ├── ☑ 模型發布                       │
+│    ├── ☑ 產品更新                       │
+│    └── ☑ 開源工具                       │
+│    [+ 新增細項]                          │
+│                                         │
+│  ☑ 天氣            daily      3 subtopics│
+│    ├── ☑ 台北                           │
+│    ├── ☑ 東京                           │
+│    └── ☑ 紐約                           │
+│    [+ 新增細項]                          │
+│                                         │
+│  ☐ 地緣政治        weekly     0 subtopics│
+│    (已停用)                              │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### 三分析師管線（保留 V1 設計）
+
+V1 的三分析師辯論模式完全保留，但改為讀取動態主題設定：
+
+```
+每日觸發（cron 或 API）
+    │
+    ├── 讀取 briefing_topics（enabled=true）
+    │
+    ├── 對每個 topic + subtopics：
+    │   ├── 資料收集（RSS + WebSearch + topic.sources）
+    │   │
+    │   ├── 三分析師獨立分析：
+    │   │   ├── Claude Haiku  → 分析 A
+    │   │   ├── Codex         → 分析 B
+    │   │   └── Gemini Flash  → 分析 C
+    │   │
+    │   ├── 交叉辯論：極端立場判定 + 被忽略角度
+    │   │
+    │   └── 寫入 scout.briefings
+    │
+    └── 發送通知（可選）
+```
+
+### V1 預設主題遷移
+
+首次啟動時自動建立 V1 的 6 個主題作為預設值：
+
+| V1 domain | V2 topic | 預設 subtopics |
+|-----------|----------|----------------|
+| finance | 金融市場 | 美股、台股、加密貨幣 |
+| ai | AI 動態 | 模型發布、產品更新、開源工具 |
+| tech | 科技產業 | 軟體、硬體、雲端 |
+| geopolitics | 地緣政治 | 美中、台海、歐洲 |
+| weather | 天氣 | 台北 |
+| devtools | 開發工具 | CLI、IDE、框架 |
 
 ## 遷移計劃
 

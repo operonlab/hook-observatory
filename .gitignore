@@ -23,9 +23,13 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# Backup
+backup/
+
 # Build
-apps/*/dist/
+workbench/dist/
 libs/typescript/dist/
+stations/*/dist/
 
 # Logs
 *.log
