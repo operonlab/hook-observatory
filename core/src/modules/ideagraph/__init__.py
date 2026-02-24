@@ -1,1 +1,1 @@
-"""Muse module — creative sparks and linking."""
+"""Ideagraph module — ideas and knowledge graph."""

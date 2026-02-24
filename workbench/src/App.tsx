@@ -10,6 +10,11 @@ const FinancePage = React.lazy(() => import("./modules/finance/pages"));
 const TaskflowPage = React.lazy(() => import("./modules/taskflow/pages"));
 const IdeagraphPage = React.lazy(() => import("./modules/ideagraph/pages"));
 const AdminPage = React.lazy(() => import("./modules/admin/pages"));
+const IntelflowPage = React.lazy(() => import("./modules/intelflow/pages"));
+const MemvaultPage = React.lazy(() => import("./modules/memvault/pages"));
+const SkillpathPage = React.lazy(() => import("./modules/skillpath/pages"));
+const WorkpoolPage = React.lazy(() => import("./modules/workpool/pages"));
+const MatchcorePage = React.lazy(() => import("./modules/matchcore/pages"));
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
@@ -120,6 +125,66 @@ function AppRoutes() {
             <Layout>
               <ModuleSuspense>
                 <AdminPage />
+              </ModuleSuspense>
+            </Layout>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/intelflow/*"
+        element={
+          <AuthGuard>
+            <Layout>
+              <ModuleSuspense>
+                <IntelflowPage />
+              </ModuleSuspense>
+            </Layout>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/memvault/*"
+        element={
+          <AuthGuard>
+            <Layout>
+              <ModuleSuspense>
+                <MemvaultPage />
+              </ModuleSuspense>
+            </Layout>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/skillpath/*"
+        element={
+          <AuthGuard>
+            <Layout>
+              <ModuleSuspense>
+                <SkillpathPage />
+              </ModuleSuspense>
+            </Layout>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/workpool/*"
+        element={
+          <AuthGuard>
+            <Layout>
+              <ModuleSuspense>
+                <WorkpoolPage />
+              </ModuleSuspense>
+            </Layout>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/matchcore/*"
+        element={
+          <AuthGuard>
+            <Layout>
+              <ModuleSuspense>
+                <MatchcorePage />
               </ModuleSuspense>
             </Layout>
           </AuthGuard>

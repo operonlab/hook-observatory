@@ -8,15 +8,15 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     "admin": ["*"],
     "user": [
         "finance.read", "finance.write",
-        "quest.read", "quest.write",
-        "muse.read", "muse.write",
+        "taskflow.read", "taskflow.write",
+        "ideagraph.read", "ideagraph.write",
         "plugin.use",
         "profile.read", "profile.write",
     ],
     "guest": [
         "finance.read",
-        "quest.read",
-        "muse.read",
+        "taskflow.read",
+        "ideagraph.read",
     ],
 }
 

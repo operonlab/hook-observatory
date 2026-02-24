@@ -48,5 +48,14 @@ app.include_router(ideagraph_router, prefix="/api/ideagraph", tags=["ideagraph"]
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(health_router, tags=["health"])
 
-# Phase 2: intelflow, memvault
-# Phase 3: skillpath, workpool, matchcore
+from src.modules.intelflow.routes import router as intelflow_router  # noqa: E402
+from src.modules.memvault.routes import router as memvault_router  # noqa: E402
+from src.modules.skillpath.routes import router as skillpath_router  # noqa: E402
+from src.modules.workpool.routes import router as workpool_router  # noqa: E402
+from src.modules.matchcore.routes import router as matchcore_router  # noqa: E402
+
+app.include_router(intelflow_router, prefix="/api/intelflow", tags=["intelflow"])
+app.include_router(memvault_router, prefix="/api/memvault", tags=["memvault"])
+app.include_router(skillpath_router, prefix="/api/skillpath", tags=["skillpath"])
+app.include_router(workpool_router, prefix="/api/workpool", tags=["workpool"])
+app.include_router(matchcore_router, prefix="/api/matchcore", tags=["matchcore"])

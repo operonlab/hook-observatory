@@ -1,1 +1,1 @@
-"""Muse schemas — placeholder."""
+"""Ideagraph schemas — placeholder."""

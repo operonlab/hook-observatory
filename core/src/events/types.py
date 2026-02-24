@@ -31,6 +31,43 @@ class IdeagraphEvents:
     LINK_VERIFIED = "ideagraph.link.verified"
 
 
+class AdminEvents:
+    HEALTH_CHECKED = "admin.health.checked"
+    USER_MANAGED = "admin.user.managed"
+    MODULE_TOGGLED = "admin.module.toggled"
+    CONFIG_UPDATED = "admin.config.updated"
+
+
+class IntelflowEvents:
+    FEED_ADDED = "intelflow.feed.added"
+    FEED_FETCHED = "intelflow.feed.fetched"
+    BRIEFING_GENERATED = "intelflow.briefing.generated"
+
+
+class MemvaultEvents:
+    MEMORY_STORED = "memvault.memory.stored"
+    MEMORY_RECALLED = "memvault.memory.recalled"
+    MEMORY_PRUNED = "memvault.memory.pruned"
+
+
+class SkillpathEvents:
+    SKILL_UNLOCKED = "skillpath.skill.unlocked"
+    PATH_PROGRESSED = "skillpath.path.progressed"
+    MILESTONE_REACHED = "skillpath.milestone.reached"
+
+
+class WorkpoolEvents:
+    RESOURCE_ALLOCATED = "workpool.resource.allocated"
+    RESOURCE_RELEASED = "workpool.resource.released"
+    CAPACITY_EXCEEDED = "workpool.capacity.exceeded"
+
+
+class MatchcoreEvents:
+    MATCH_REQUESTED = "matchcore.match.requested"
+    MATCH_FOUND = "matchcore.match.found"
+    SCORE_CALCULATED = "matchcore.score.calculated"
+
+
 class PluginEvents:
     INSTALLED = "plugin.installed"
     ENABLED = "plugin.enabled"

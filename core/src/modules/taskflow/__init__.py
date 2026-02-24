@@ -1,1 +1,1 @@
-"""Quest module — gamified task system."""
+"""Taskflow module — tasks and scheduling."""
