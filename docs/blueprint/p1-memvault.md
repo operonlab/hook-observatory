@@ -118,6 +118,13 @@ mcp/memvault/                         ← MCP Adapter（保持現有 9 個工具
 3. **Phase C**：升級 SessionEnd Hook 寫入 DB 而非 .md
 4. **Phase D**：Workbench Widget（Galaxy + 記憶瀏覽器）
 
+### 相關文件
+
+| 文件 | 用途 |
+|------|------|
+| [v2-priorities.md](./v2-priorities.md) | 藍圖索引 |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 共享層模式（EmbeddingService §8.1、SemanticSearchService §8.3、ForceGraph §9.1） |
+
 ---
 
 **下一步** → [P2：Intelflow 模組](./p2-intelflow.md)

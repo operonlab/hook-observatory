@@ -46,7 +46,7 @@ V1 Auth（`avatar-console/backend/auth-service/`）已實現：
 **DB Schema 擴充**：
 ```sql
 CREATE TABLE auth.oauth_accounts (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     provider    TEXT NOT NULL,             -- 'google', 'github'
     provider_id TEXT NOT NULL,             -- OAuth provider 的 user ID
@@ -115,10 +115,13 @@ core/src/modules/admin/           ← 使用者管理 API + 稽核
 3. **Phase C**：RBAC+ABAC 中間件 + Session Redis 管理
 4. **Phase D**：Admin UI（使用者管理 + 稽核日誌）
 
-### 相關架構文件
+### 相關文件
 
-- [docs/architecture/auth.md](../architecture/auth.md) — RBAC+ABAC 完整架構設計（DB schema、middleware pipeline、policy engine）
-- [v1-feature-inventory.md](./v1-feature-inventory.md) §1 — V1 Auth 完整 API 端點、Session 載荷、已知限制
+| 文件 | 用途 |
+|------|------|
+| [auth.md](../architecture/auth.md) | RBAC+ABAC 完整架構設計（DB schema、middleware pipeline、policy engine） |
+| [v1-feature-inventory.md](./v1-feature-inventory.md) §1 | V1 Auth 完整 API 端點、Session 載荷、已知限制 |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 共享層模式（StateMachine §3.4、JSONB §5.5） |
 
 ---
 

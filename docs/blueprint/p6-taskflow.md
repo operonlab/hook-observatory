@@ -38,7 +38,7 @@ V1 Quest MCP Server（`pulso-quest`）已有 10 個 tools：
 
 ```sql
 CREATE TABLE taskflow.tasks (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     space_id        UUID NOT NULL,
     parent_id       UUID REFERENCES taskflow.tasks(id),    -- 子任務
     title           TEXT NOT NULL,
@@ -94,7 +94,7 @@ CREATE TABLE taskflow.tasks (
 
 ```sql
 CREATE TABLE taskflow.task_updates (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     task_id     UUID NOT NULL REFERENCES taskflow.tasks(id) ON DELETE CASCADE,
     type        TEXT NOT NULL,              -- 'progress', 'blocker', 'note', 'status_change'
     content     TEXT NOT NULL,              -- 回報內容
@@ -239,6 +239,13 @@ mcp/taskflow-reports/                ← workshop-taskflow-reports MCP（報告 
 3. **Phase C**：日曆 UI + 週期性任務
 4. **Phase D**：自動報告產出（日誌 → 週報 → 月報）
 5. **Phase E**：MCP Server（2 個） + 與 Finance 的跨模組 event 整合（`taskflow.task.completed`）
+
+### 相關文件
+
+| 文件 | 用途 |
+|------|------|
+| [v2-priorities.md](./v2-priorities.md) | 藍圖索引 |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 共享層模式（TreeStructure §5.3、Tags §5.4、JSONB §5.5、StateMachine §3.4、LLMService §8.2、BulkOps §8.6、ScheduledReport §8.4、ExportService §8.5、CalendarView §9.2、ChartKit §9.4、ReportViewer §9.3） |
 
 ---
 

@@ -251,6 +251,32 @@ app.add_exception_handler(WorkshopError, workshop_error_handler)
 # 無需在每個路由中撰寫 try/except
 ```
 
+### 3.4 狀態機 (StateMachine) — 統一狀態轉換
+
+多個模組的實體具有明確的狀態生命週期，共享統一的狀態機抽象：
+
+```python
+# shared/state_machine.py
+class StateMachine:
+    def __init__(self, transitions: dict[str, list[str]]):
+        self.transitions = transitions
+
+    def can_transition(self, from_state: str, to_state: str) -> bool: ...
+    def transition(self, entity, to_state: str) -> None: ...  # 非法跳轉 → ConflictError
+```
+
+**各模組使用場景**：
+
+| 模組 | 實體 | 狀態流 |
+|------|------|--------|
+| auth | User | pending → active → suspended / banned |
+| taskflow | Task | todo → in_progress → review → done / cancelled / blocked |
+| ideagraph | Spark | draft → refined → archived |
+| ideagraph | Link | suggested → verified / rejected |
+| finance | Subscription | active → paused → cancelled |
+
+呼叫者只需 `machine.transition(entity, "done")`，非法轉換自動拋出 `ConflictError("taskflow.invalid_transition")`。
+
 ---
 
 ## 4. 封裝 (Encapsulation)
@@ -335,6 +361,59 @@ FinanceService
 
 Quest 的狀態機 (accept/complete) 不使用 BaseCRUD，但仍使用 `get_or_404` + `publish_crud_event`。
 
+### 5.3 Tree Structure — 自引用父子關係 (Adjacency List)
+
+多個實體使用 `parent_id` 自引用 FK 建立樹狀結構：
+
+```sql
+-- 通用 adjacency list pattern
+parent_id   UUID REFERENCES same_table(id),  -- NULL = 頂層
+sort_order  INT DEFAULT 0                    -- 同層排序
+```
+
+| 模組 | 實體 | 用途 |
+|------|------|------|
+| finance | categories | 樹狀分類（飲食 > 午餐 > 外送） |
+| taskflow | tasks | 子任務（parent_id → 父任務） |
+
+**共享查詢**：`build_tree_query(model, space_id)` — 遞迴 CTE 查詢整棵樹，回傳巢狀結構。
+
+### 5.4 Tags[] 標準化
+
+5 個模組使用 `TEXT[]` + GIN 索引存儲標籤：
+
+```sql
+tags  TEXT[] DEFAULT '{}',
+CREATE INDEX idx_{table}_tags ON {schema}.{table} USING GIN(tags);
+```
+
+| 模組 | 實體 | 標籤用途 |
+|------|------|---------|
+| finance | transactions | 消費標籤（午餐、報帳） |
+| taskflow | tasks | 任務分類（urgent、frontend） |
+| ideagraph | sparks | 想法標籤（AI、架構） |
+| intelflow | reports | 報告分類（company-intel） |
+| memvault | blocks | 記憶標籤（pattern、preference） |
+
+**前端對應**：`shared/components/TagsInput.tsx` 統一標籤輸入元件 + 統一的 `?tags=a,b` 查詢參數。
+
+### 5.5 JSONB 結構化彈性欄位
+
+需要半結構化資料的場景使用 JSONB：
+
+| 模組 | 欄位 | JSONB 內容 |
+|------|------|-----------|
+| taskflow | tasks.recurrence | `{"type": "weekly", "days": [1,3,5]}` |
+| auth | notification_preferences | `{"finance": {"enabled": true, "channels": ["pwa"]}}` |
+| auth | oauth_accounts.raw_data | 完整 OAuth profile 備份 |
+| memvault | kas_profiles | KAS 四維 Profile |
+
+**最佳實踐**：
+- Pydantic schema 中用 typed model 定義 JSONB 結構（非 `dict[str, Any]`）
+- PostgreSQL 端用 `jsonb_path_exists()` 查詢
+- 可枚舉的值不放進 JSONB（應為獨立欄位）
+- 前端用 zod schema 驗證 JSONB 結構
+
 ---
 
 ## 6. 後端 ↔ 前端契約
@@ -387,9 +466,229 @@ Quest 的狀態機 (accept/complete) 不使用 BaseCRUD，但仍使用 `get_or_4
 | `adapter.py` | BridgeAdapter ABC | 多型 (ABC) |
 | `auth.py` | webhook 簽章驗證 | 封裝 |
 
+### 未來：`core/src/shared/` (新增共享服務)
+
+| 檔案 | 內容 | 技術 |
+|------|----------|-----------|
+| `state_machine.py` | StateMachine 狀態轉換引擎 | 多型 + 宣告式規則 |
+| `embedding.py` | EmbeddingService (pgvector) | 封裝 + 策略模式 |
+| `llm.py` | LLMService 抽象層 | 多型 (Provider ABC) |
+| `semantic_search.py` | SemanticSearchService | 泛型 + 組合 |
+| `report_generator.py` | ScheduledReportGenerator | 範本方法 |
+| `export.py` | ExportService (CSV/JSON/Markdown) | 策略模式 |
+| `tree.py` | build_tree_query() 遞迴 CTE | 組合 (函式) |
+
+### 未來：`workbench/src/shared/components/` (新增共享元件)
+
+| 檔案 | 內容 | 技術 |
+|------|----------|-----------|
+| `ForceGraph.tsx` | D3 force-directed 圖譜 | 組合 (React + D3) |
+| `CalendarView.tsx` | FullCalendar 包裝器 | 組合 |
+| `ReportViewer.tsx` | Markdown 報告檢視器 | 組合 |
+| `ChartKit.tsx` | Recharts/ECharts 統一封裝 | 策略模式 |
+| `DashboardWidget.tsx` | Widget 協議元件 | 組合 (Slot pattern) |
+| `TagsInput.tsx` | 標籤輸入 + 過濾 | 封裝 |
+
 ---
 
-## 8. 涵蓋範圍
+## 8. 共享服務層 (Shared Services)
+
+> 跨模組的後端服務抽象。每個服務被 2+ 模組使用，統一放在 `core/src/shared/`。
+
+### 8.1 EmbeddingService — pgvector 向量服務
+
+統一管理向量生成與儲存，解決維度不一致問題：
+
+```python
+class EmbeddingService:
+    def __init__(self, provider: EmbeddingProvider, dimensions: int):
+        self.provider = provider       # ollama / openai / local
+        self.dimensions = dimensions   # 統一為 768d（Ollama nomic-embed-text）
+
+    async def embed(self, text: str) -> list[float]: ...
+    async def batch_embed(self, texts: list[str]) -> list[list[float]]: ...
+    async def similarity_search(self, query_vec, table, top_k=10, threshold=0.7): ...
+```
+
+**使用模組與維度規範**：
+
+| 模組 | 向量欄位 | 維度 | Provider |
+|------|---------|------|----------|
+| memvault | blocks.embedding | 768d | Ollama nomic-embed-text |
+| ideagraph | sparks.embedding | 768d | 同上（統一） |
+| intelflow | report_embeddings.embedding | 768d | 同上（統一） |
+
+> **決策**：統一使用 768d (Ollama nomic-embed-text)。若未來需要 1536d (OpenAI) 則透過 `EmbeddingProvider` 策略切換，不改介面。
+
+### 8.2 LLMService — LLM 抽象層
+
+5 個模組需要呼叫 LLM，統一抽象避免各自實作：
+
+```python
+class LLMService:
+    async def complete(self, prompt: str, model: str = "default", **kwargs) -> str: ...
+    async def structured_output(self, prompt: str, schema: type[BaseModel]) -> BaseModel: ...
+```
+
+| 模組 | 用途 | 呼叫方式 |
+|------|------|---------|
+| finance | 月度報告 AI 建議 | `structured_output(prompt, MonthlyInsight)` |
+| taskflow | 日誌/週報/月報 AI 觀察 | `complete(prompt)` |
+| ideagraph | Spark 精煉 + 連結推演 | `structured_output(prompt, RefinedSpark)` |
+| intelflow | 每日情報彙整 + 三分析師辯論 | `complete(prompt)` |
+| memvault | SessionEnd 記憶提煉 | `structured_output(prompt, MemoryBlock)` |
+
+### 8.3 SemanticSearchService — 跨模組語意搜尋
+
+統一的向量相似度搜尋介面，支援單模組搜尋和跨模組聯邦搜尋：
+
+```python
+class SemanticSearchService:
+    async def search(self, query: str, module: str, top_k: int = 10) -> list[SearchResult]: ...
+    async def federated_search(self, query: str, modules: list[str], top_k: int = 10) -> list[SearchResult]: ...
+```
+
+**聯邦搜尋**：同一個查詢在 memvault + ideagraph + intelflow 三個 schema 中搜尋，結果合併排序。
+
+### 8.4 ScheduledReportGenerator — 排程報告產生器
+
+finance（月報）和 taskflow（日誌/週報/月報）共享報告產生管線：
+
+```python
+class ScheduledReportGenerator(ABC):
+    schedule: str                            # cron 表達式
+    async def collect_data(self, period) -> dict: ...   # 資料收集
+    async def render(self, data: dict) -> str: ...      # 格式化輸出
+    async def enrich_with_ai(self, rendered: str) -> str: ...  # AI 增強（可選）
+    async def store(self, report: str) -> None: ...     # 寫入 DB
+```
+
+| 模組 | 報告 | 頻率 |
+|------|------|------|
+| taskflow | 日誌 | 每天 23:00 |
+| taskflow | 週報 | 每週日 22:00 |
+| taskflow | 月報 | 每月最後一天 |
+| finance | 月度消費報告 | 每月 1 號 |
+
+### 8.5 ExportService — 匯出服務
+
+多個模組需要匯出功能：
+
+```python
+class ExportService:
+    async def export(self, data: list[dict], format: str) -> bytes:
+        # format: "csv" / "json" / "markdown" / "pdf"
+```
+
+| 模組 | 匯出內容 | 格式 |
+|------|---------|------|
+| finance | 交易紀錄 | CSV, JSON |
+| taskflow | 報告 | Markdown, PDF |
+| intelflow | 搜尋報告 | Markdown |
+
+### 8.6 BulkOperationsMixin — 批量操作
+
+多個模組需要批量更新/刪除：
+
+```python
+class BulkOperationsMixin:
+    async def bulk_update(self, db, ids: list[UUID], updates: dict) -> int: ...
+    async def bulk_delete(self, db, ids: list[UUID]) -> int: ...
+```
+
+| 模組 | 操作 |
+|------|------|
+| taskflow | `bulk_update` — 批次更新任務狀態 |
+| ideagraph | `batch_verify` — 批量驗證 suggested links |
+| notification | `read-all` — 全部已讀 |
+
+---
+
+## 9. 共享前端元件 (Shared Frontend Components)
+
+> 跨模組的前端 UI 元件。每個元件被 2+ 模組使用，統一放在 `workbench/src/shared/components/`。
+
+### 9.1 ForceGraph — Galaxy/圖譜視覺化
+
+3 個模組使用 D3.js force-directed graph：
+
+```typescript
+interface ForceGraphProps<N extends BaseNode, L extends BaseLink> {
+  nodes: N[];
+  links: L[];
+  onNodeClick?: (node: N) => void;
+  onLinkClick?: (link: L) => void;
+  colorBy?: keyof N;
+  sizeBy?: keyof N;
+  layout?: "force" | "radial" | "tree";
+}
+```
+
+| 模組 | 用途 | 節點 | 邊 |
+|------|------|------|-----|
+| memvault | KAS Galaxy 星系圖 | Knowledge/Attitude/Skill 區塊 | 關聯線 |
+| ideagraph | Idea Galaxy 圖譜 | Spark 節點 | Link（suggested=虛線, verified=實線） |
+| intelflow | Topic 關聯圖 | 主題 | 主題關聯 |
+
+### 9.2 CalendarView — 日曆元件
+
+基於 FullCalendar 或 react-big-calendar 的統一封裝：
+
+| 模組 | 事件來源 |
+|------|---------|
+| taskflow | 任務（due_date, start_date） |
+| finance | 訂閱扣款日（next_billing） |
+
+### 9.3 ReportViewer — 報告檢視器
+
+統一的 Markdown 報告渲染元件（含統計卡片 + AI 建議區塊）：
+
+| 模組 | 報告類型 |
+|------|---------|
+| taskflow | 日誌 / 週報 / 月報 |
+| finance | 月度消費報告 |
+| intelflow | 每日情報 / 搜尋報告 |
+
+### 9.4 ChartKit — 圖表統一方案
+
+統一的圖表函式庫封裝（Recharts 或 ECharts）：
+
+```typescript
+<ChartKit type="pie" data={categoryData} />
+<ChartKit type="bar" data={monthlyData} />
+<ChartKit type="line" data={trendData} />
+<ChartKit type="progress" data={budgetData} />
+```
+
+| 模組 | 圖表類型 |
+|------|---------|
+| finance | 圓餅圖、柱狀圖、散佈圖、趨勢線、預算進度 |
+| taskflow | 完成率統計、工時分佈、來源分佈 |
+| intelflow | 主題時序圖、報告統計 |
+
+### 9.5 DashboardWidget 協議 — Widget 系統
+
+Workbench 首頁的 Widget 系統，每個模組可註冊 1+ Widget：
+
+```typescript
+interface DashboardWidget {
+  id: string;                    // "finance-summary" / "taskflow-today"
+  module: string;                // 所屬模組
+  title: string;
+  size: "small" | "medium" | "large";
+  component: React.ComponentType;
+  refreshInterval?: number;      // 自動重新整理間隔（秒）
+}
+
+// 模組註冊：
+export const financeWidgets: DashboardWidget[] = [
+  { id: "finance-summary", module: "finance", title: "本月摘要", size: "medium", component: FinanceSummaryWidget },
+];
+```
+
+---
+
+## 10. 涵蓋範圍
 
 | 數量 | 描述 |
 |--------|-------------|
@@ -397,5 +696,12 @@ Quest 的狀態機 (accept/complete) 不使用 BaseCRUD，但仍使用 `get_or_4
 | **~28** | 特殊方法 → 獨立小幫手 + 自定義服務 |
 | **8/10** | 核心模組使用 SpaceScopedModel |
 | **~60** | 遵循 `module.entity.action` 格式的事件型別 |
+| **5** | 使用 StateMachine 的實體（User, Task, Spark, Link, Subscription） |
+| **5** | 使用 Tags[] 標準化的模組 |
+| **3** | 使用 Tree Structure 的實體 |
+| **5** | 使用 LLMService 的模組 |
+| **3** | 使用 EmbeddingService (pgvector 768d) 的模組 |
 | **3+** | 使用 BridgeAdapter 多型的 Bridge 平台 |
-| **10** | 前端模組對應後端共享型別 |
+| **3** | 使用 ForceGraph 視覺化的模組 |
+| **3+** | 使用 ChartKit 的模組 |
+| **10** | 前端模組可註冊 DashboardWidget |

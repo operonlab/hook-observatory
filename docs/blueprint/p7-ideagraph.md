@@ -322,5 +322,6 @@ CREATE TABLE ideagraph.refinements (
 | [domain-catalog.md](../vision/domain-catalog.md) | ideagraph 服務定義 |
 | [p1-memvault.md](./p1-memvault.md) | memvault Galaxy UI 參考 |
 | [composition-model.md](../vision/composition-model.md) | 組合配方中 ideagraph 的角色 |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 共享層模式（EmbeddingService §8.1、Tags §5.4、StateMachine §3.4、LLMService §8.2、ForceGraph §9.1、BulkOps §8.6、SemanticSearch §8.3） |
 
 > 下一步：Auth 完成後接入 → 實作階段 1（Capture + Refine + 基礎 Graph UI）

@@ -36,7 +36,7 @@ V1 Finance MCP Server（`pulso-finance`）已有 10 個 tools：
 
 ```sql
 CREATE TABLE finance.transactions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     space_id        UUID NOT NULL,
     type            TEXT NOT NULL,              -- 'income' / 'expense'
     amount          DECIMAL(12,2) NOT NULL,
@@ -69,7 +69,7 @@ CREATE TABLE finance.transaction_tags (
 
 -- 複數照片附件（存 RustFS，DB 記關聯）
 CREATE TABLE finance.transaction_attachments (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     transaction_id  UUID REFERENCES finance.transactions(id) ON DELETE CASCADE,
     storage_key     TEXT NOT NULL,              -- RustFS object key (S3 path)
     filename        TEXT NOT NULL,              -- 原始檔名
@@ -91,7 +91,7 @@ CREATE TABLE finance.transaction_attachments (
 
 ```sql
 CREATE TABLE finance.categories (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     space_id    UUID NOT NULL,
     parent_id   UUID REFERENCES finance.categories(id),  -- NULL = 頂層
     name        TEXT NOT NULL,
@@ -134,7 +134,7 @@ CREATE TABLE finance.categories (
 
 ```sql
 CREATE TABLE finance.subscriptions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     space_id        UUID NOT NULL,
     name            TEXT NOT NULL,              -- e.g. 'Netflix', 'Claude Pro'
     amount          DECIMAL(12,2) NOT NULL,
@@ -160,7 +160,7 @@ CREATE TABLE finance.subscriptions (
 
 ```sql
 CREATE TABLE finance.budgets (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
     space_id        UUID NOT NULL,
     year_month      TEXT NOT NULL,              -- '2026-02'
     category_id     UUID REFERENCES finance.categories(id),  -- NULL = 總預算
@@ -265,6 +265,13 @@ mcp/finance-analytics/            ← workshop-finance-analytics MCP（分析 + 
 3. **Phase C**：MCP Server（2 個）切換到 Core API
 4. **Phase D**：Web UI（交易列表 + 分類管理 + 訂閱管理）
 5. **Phase E**：分析圖表 + 月度報告 + AI 建議
+
+### 相關文件
+
+| 文件 | 用途 |
+|------|------|
+| [v2-priorities.md](./v2-priorities.md) | 藍圖索引 |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 共享層模式（TreeStructure §5.3、Tags §5.4、StateMachine §3.4、LLMService §8.2、ExportService §8.5、ScheduledReport §8.4、ChartKit §9.4、CalendarView §9.2） |
 
 ---
 

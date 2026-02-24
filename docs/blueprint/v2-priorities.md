@@ -173,3 +173,4 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 | [architecture-decisions.md](../architecture/architecture-decisions.md) | ADR 決策紀錄 |
 | [auth.md](../architecture/auth.md) | Auth 架構設計文件 |
 | [notification.md](../architecture/notification.md) | 通知與橋接架構設計 |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 共享層 OOP 模式目錄（跨模組共用設計） |
