@@ -46,8 +46,12 @@ class IntelflowEvents:
 
 class MemvaultEvents:
     MEMORY_STORED = "memvault.memory.stored"
+    MEMORY_UPDATED = "memvault.memory.updated"
+    MEMORY_DELETED = "memvault.memory.deleted"
     MEMORY_RECALLED = "memvault.memory.recalled"
     MEMORY_PRUNED = "memvault.memory.pruned"
+    EMBEDDING_COMPUTED = "memvault.embedding.computed"
+    PROFILE_UPDATED = "memvault.profile.updated"
 
 
 class SkillpathEvents:

@@ -83,6 +83,7 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
         for key, value in update_data.items():
             setattr(instance, key, value)
         await db.flush()
+        await db.refresh(instance)  # reload server-side onupdate fields (e.g. updated_at)
         return instance
 
     async def delete(self, db: AsyncSession, entity_id: str) -> bool:
