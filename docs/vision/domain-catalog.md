@@ -125,24 +125,40 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 階段 4: + 訂單 / 報價 / 驗收
 ```
 
-詳見 [P6：Quest 排程與任務管理](../blueprint/p6-taskflow.md)
+詳見 [P6：Taskflow 排程與任務管理](../blueprint/p6-taskflow.md)
 
 ---
 
-#### ideagraph — 靈感與知識圖譜
+#### ideagraph — 靈感孵化與知識圖譜
 
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **MCP 伺服器** | `workshop-ideagraph` |
-| **V1 狀態** | MCP 伺服器運作中 (8 個工具) |
+| **被依賴於** | intelflow（情報→靈感轉入） |
+| **MCP 伺服器** | `workshop-ideagraph` + `workshop-ideagraph-ai` |
+| **整合 Skills** | pulso-muse (V1 MCP) |
+| **V1 狀態** | MCP 伺服器運作中 (8 個工具，僅 CRUD) |
 
 **功能能力**:
-- Spark (靈感筆記)：快速捕捉想法
-- Link (連結)：Spark 之間的分向連結
-- Graph (知識圖譜)：想法的可視化網絡
-- Inbox (收件匣)：待處理的靈感
-- Search (語義搜索)：跨所有 Spark 進行搜索
+- AI 輔助想法孵化管線（Capture → Refine → Connect → Verify）
+- Spark 原始/精煉分層（raw_content 不可變 + refined_content AI 產生）
+- Link 驗證狀態（suggested / verified / rejected，AI 建議→人類驗證）
+- 精煉歷史追蹤（refinements 表，版本化 diff）
+- Galaxy 風格知識圖譜視覺化（D3.js force-directed，星星=Spark、星座線=Link）
+- pgvector 語意搜尋（跨所有 Spark 語意比對）
+- 跨模組事件轉 Spark（finance/taskflow/memvault 事件可轉入）
+- **MCP 拆分**：`workshop-ideagraph`（CRUD ~8 tools）+ `workshop-ideagraph-ai`（AI 輔助 ~5 tools）
+
+**增長路徑**:
+```
+階段 1: Capture + Refine + 基礎 Graph UI（D3 force-directed）
+階段 2: + AI Suggest Links + Verify 流程
+階段 3: + Galaxy 3D 視覺化 + 時間軸回放
+階段 4: + 跨模組事件轉 Spark + Inbox
+階段 5: + 協作（Space 共享）+ 匯出（Markdown / Obsidian）
+```
+
+詳見 [P7：ideagraph 靈感孵化與知識圖譜](../blueprint/p7-ideagraph.md)
 
 ---
 
@@ -491,7 +507,7 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | admin | 基礎層 | 部分 V1 | `workshop-admin` | 待定 |
 | finance | 領域服務 | MCP 運作中 | `workshop-finance` + `workshop-finance-analytics` | ~18 |
 | taskflow | 領域服務 | MCP 運作中 | `workshop-taskflow` + `workshop-taskflow-reports` | ~15 |
-| ideagraph | 領域服務 | MCP 運作中 | `workshop-ideagraph` | 8 |
+| ideagraph | 領域服務 | MCP 運作中 | `workshop-ideagraph` + `workshop-ideagraph-ai` | ~13 |
 | intelflow | 領域服務 | 未開始 | `workshop-intelflow` | 待定 |
 | memvault | 領域服務 | MCP v0.2.0 | `kas-memory` | 8 |
 | skillpath | 領域服務 | 未開始 | `workshop-skillpath` | 待定 |
