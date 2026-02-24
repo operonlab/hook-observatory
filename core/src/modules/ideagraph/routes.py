@@ -1,10 +1,10 @@
-"""Muse routes — placeholder."""
+"""Ideagraph routes — placeholder."""
 
 from fastapi import APIRouter
 
-router = APIRouter(tags=["muse"])
+router = APIRouter(tags=["ideagraph"])
 
 
 @router.get("/status")
-async def muse_status():
-    return {"module": "muse", "status": "not_implemented"}
+async def ideagraph_status():
+    return {"module": "ideagraph", "status": "not_implemented"}

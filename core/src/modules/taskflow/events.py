@@ -1,3 +1,3 @@
-"""Quest event handlers."""
+"""Taskflow event handlers."""
 
-from src.events.types import QuestEvents  # noqa: F401
+from src.events.types import TaskflowEvents  # noqa: F401

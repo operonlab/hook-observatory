@@ -7,8 +7,8 @@ import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
 
 const FinancePage = React.lazy(() => import("./modules/finance/pages"));
-const QuestPage = React.lazy(() => import("./modules/quest/pages"));
-const MusePage = React.lazy(() => import("./modules/muse/pages"));
+const TaskflowPage = React.lazy(() => import("./modules/taskflow/pages"));
+const IdeagraphPage = React.lazy(() => import("./modules/ideagraph/pages"));
 const AdminPage = React.lazy(() => import("./modules/admin/pages"));
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
@@ -90,31 +90,31 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/quest/*"
+        path="/taskflow/*"
         element={
           <AuthGuard>
             <Layout>
               <ModuleSuspense>
-                <QuestPage />
+                <TaskflowPage />
               </ModuleSuspense>
             </Layout>
           </AuthGuard>
         }
       />
       <Route
-        path="/muse/*"
+        path="/ideagraph/*"
         element={
           <AuthGuard>
             <Layout>
               <ModuleSuspense>
-                <MusePage />
+                <IdeagraphPage />
               </ModuleSuspense>
             </Layout>
           </AuthGuard>
         }
       />
       <Route
-        path="/settings/*"
+        path="/admin/*"
         element={
           <AuthGuard>
             <Layout>

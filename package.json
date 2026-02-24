@@ -2,7 +2,7 @@
   "name": "workshop",
   "private": true,
   "workspaces": [
-    "dashboard",
+    "workbench",
     "libs/typescript"
   ],
   "scripts": {

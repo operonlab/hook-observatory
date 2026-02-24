@@ -1,10 +1,10 @@
-"""Quest routes — placeholder."""
+"""Taskflow routes — placeholder."""
 
 from fastapi import APIRouter
 
-router = APIRouter(tags=["quest"])
+router = APIRouter(tags=["taskflow"])
 
 
 @router.get("/status")
-async def quest_status():
-    return {"module": "quest", "status": "not_implemented"}
+async def taskflow_status():
+    return {"module": "taskflow", "status": "not_implemented"}

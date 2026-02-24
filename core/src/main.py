@@ -35,9 +35,18 @@ app.add_middleware(
 
 # Mount domain modules
 from src.modules.auth.routes import router as auth_router  # noqa: E402
+from src.modules.finance.routes import router as finance_router  # noqa: E402
+from src.modules.taskflow.routes import router as taskflow_router  # noqa: E402
+from src.modules.ideagraph.routes import router as ideagraph_router  # noqa: E402
+from src.modules.admin.routes import router as admin_router  # noqa: E402
 from src.routes.health import router as health_router  # noqa: E402
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(finance_router, prefix="/api/finance", tags=["finance"])
+app.include_router(taskflow_router, prefix="/api/taskflow", tags=["taskflow"])
+app.include_router(ideagraph_router, prefix="/api/ideagraph", tags=["ideagraph"])
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(health_router, tags=["health"])
 
-# Future: finance, quest, muse routers
+# Phase 2: intelflow, memvault
+# Phase 3: skillpath, workpool, matchcore

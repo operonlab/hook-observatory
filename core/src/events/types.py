@@ -16,16 +16,19 @@ class FinanceEvents:
     SUBSCRIPTION_RENEWED = "finance.subscription.renewed"
 
 
-class QuestEvents:
-    QUEST_CREATED = "quest.quest.created"
-    QUEST_ACCEPTED = "quest.quest.accepted"
-    QUEST_COMPLETED = "quest.quest.completed"
-    SKILL_UNLOCKED = "quest.skill.unlocked"
+class TaskflowEvents:
+    TASK_CREATED = "taskflow.task.created"
+    TASK_ACCEPTED = "taskflow.task.accepted"
+    TASK_COMPLETED = "taskflow.task.completed"
+    TASK_BLOCKED = "taskflow.task.blocked"
+    REPORT_GENERATED = "taskflow.report.generated"
 
 
-class MuseEvents:
-    SPARK_CREATED = "muse.spark.created"
-    LINK_FORMED = "muse.link.formed"
+class IdeagraphEvents:
+    SPARK_CAPTURED = "ideagraph.spark.captured"
+    SPARK_REFINED = "ideagraph.spark.refined"
+    LINK_SUGGESTED = "ideagraph.link.suggested"
+    LINK_VERIFIED = "ideagraph.link.verified"
 
 
 class PluginEvents:

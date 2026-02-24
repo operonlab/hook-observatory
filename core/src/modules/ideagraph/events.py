@@ -1,3 +1,3 @@
-"""Muse event handlers."""
+"""Ideagraph event handlers."""
 
-from src.events.types import MuseEvents  # noqa: F401
+from src.events.types import IdeagraphEvents  # noqa: F401
