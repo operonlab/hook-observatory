@@ -1,6 +1,6 @@
 # P1 Memvault — Shared Progress
 
-Last updated: 2026-02-24
+Last updated: 2026-02-25
 
 ## Convention
 - Each worktree updates its own rows when completing tasks.
@@ -32,19 +32,19 @@ Last updated: 2026-02-24
 ## Frontend (wt/p1-frontend)
 | # | Task | Status | Phase | Notes |
 |---|------|--------|-------|-------|
-| F1 | memvault Zustand store (blocks CRUD + search) | pending | D | |
-| F2 | memvault API client (using createCrudApi) | pending | D | |
-| F3 | Memory Browser page (list + filter + detail) | pending | D | |
-| F4 | Memory Block card component | pending | D | |
-| F5 | Semantic search UI (query + results) | pending | D | |
-| F6 | KAS Profile dashboard widget | pending | D | |
-| F7 | Galaxy visualization (Canvas 2D force graph) | pending | D | |
+| F1 | memvault Zustand store (blocks CRUD + search) | done | D | Zustand store with CRUD + search + pagination + filters |
+| F2 | memvault API client (using createCrudApi) | done | D | createCrudApi + custom search/profile/stats endpoints |
+| F3 | Memory Browser page (list + filter + detail) | done | D | Grid/list toggle, block type filter, detail sidebar |
+| F4 | Memory Block card component | done | D | MemoryCard + SearchBar + BlockTypeFilter components |
+| F5 | Semantic search UI (query + results) | done | D | useMemorySearch hook + SearchBar with result count |
+| F6 | KAS Profile dashboard widget | done | D | ProfileWidget with K/A/S dimension bars |
+| F7 | Galaxy visualization (Canvas 2D force graph) | done | D | Canvas 2D force simulation + type legend + node click |
 
 ## Integration Milestones
 | Milestone | Depends On | Status |
 |-----------|-----------|--------|
 | Backend API returns real data | B1-B5 | pending |
 | MCP tools work against Core API | B7-B8 | pending |
-| Frontend displays memory blocks | B4, F1-F4 | pending |
-| Semantic search end-to-end | B3, F5 | pending |
-| Galaxy widget live | B3, F7 | pending |
+| Frontend displays memory blocks | B4, F1-F4 | done |
+| Semantic search end-to-end | B3, F5 | done |
+| Galaxy widget live | B3, F7 | done |
