@@ -272,45 +272,68 @@ resources:
 
 ### 整合服務 (橋接層 Bridges)
 
-#### social-hooks — 社群平台連接器
+#### social-hooks — 社群平台連接器（Bridges）
 
 | 屬性 | 數值 |
 |----------|-------|
-| **分類** | 橋接層 (Bridge) |
-| **優先順序** | LINE > Telegram > Discord > Facebook > X |
-| **提供對象** | 透過事件總線 (Event Bus) 路由至所有核心模組 |
+| **分類** | 橋接層 (Bridge)，位於 `bridges/` |
+| **優先順序** | LINE > Telegram > Discord |
+| **性質** | 雙向通訊（接收使用者訊息 + 推送模組事件） |
+| **設計參考** | OpenClaw ChannelPlugin — Capability-Driven + Adapter 組合式 |
 
 **功能能力**:
-- 統一訊息：所有平台訊息 → 統一收件匣
-- 事件路由：根據規則將訊息路由至各個模組
-  - ` @Library/Developer/Xcode/iOS DeviceSupport/iPhone16,2 26.2.1 (23C71)/Symbols/System/Library/PrivateFrameworks/MemoryAccounting.framework/MemoryAccounting lunch 120` → finance
-  - ` @.cache/uv/simple-v20/pypi/pycryptodomex.rkyv buy milk` → taskflow
-  - ` @.tmux/logs/memory-guardian.log maybe we could...` → ideagraph
-- 雙向同步：模組事件 → 推送至平台
-- Bot 指令：每個模組均公開 Bot 指令
+- **Inbound 正規化**：所有平台訊息 → `MessageEnvelope`（統一格式）
+- **指令路由**：關鍵字自動路由至模組
+  - 「記帳 午餐 120」→ finance.transaction.create
+  - 「任務 買牛奶」→ taskflow.task.create
+  - 「想法 也許可以...」→ ideagraph.spark.capture
+- **Outbound 推播**：模組事件 → 格式化推送至平台
+- **Bot 指令**：每個模組公開 Bot 指令
+- **Capability 宣告**：每個 Bridge 宣告支援能力（rich_text / media / interactive / threading）
 
 **架構**:
 ```
-LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
-核心模組 → Event Bus → Social Bridge → LINE/Telegram/Discord
+外部平台 → webhook.py → MessageEnvelope → router.py → Core 模組
+Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
+```
+
+**增長路徑**:
+```
+階段 1: LINE Bridge（台灣使用率最高）
+階段 2: + Telegram Bridge
+階段 3: + Discord Bridge
 ```
 
 ---
 
-#### notification — 通知平台
+#### notification — 通知路由服務
 
 | 屬性 | 數值 |
 |----------|-------|
-| **分類** | 橋接層 (Bridge) |
+| **分類** | Hot-path 服務，位於 `core/services/notification/` |
 | **前提條件** | PWA (sw.js + manifest.json) |
-| **技術** | Web Push API + VAPID (主要), ntfy (後備) |
+| **技術** | Web Push API + VAPID (主要), ntfy (後備), Firebase (未來) |
+| **偏好儲存** | `auth.notification_preferences`（JSONB） |
 
 **功能能力**:
-- 推送通知：PWA 推送 (桌面 + 行動瀏覽器)
-- 通知偏好：按模組、按事件類型切換
-- 通知聚合：防止訊息轟炸、智能批次處理
-- 多通路派送：推送 + 電子郵件 + Social Hooks
-- 通知歷史：可追溯日誌
+- **事件→通知路由**：EventBus 事件 → 過濾 → 格式化 → 派送
+- **Channel Adapter 介面**：統一的 `ChannelAdapter` ABC，每個推播通道獨立實作
+- **使用者偏好**：按模組、按事件類型、按 channel 的三維開關
+- **聚合防轟炸**：同 group_key 短時間內合併（防 10 筆交易 = 10 條通知）
+- **勿擾時段**：quiet_hours 設定
+- **通知歷史**：完整派送日誌 + 已讀追蹤 + Badge 未讀數
+- **多通道派送**：PWA Push → ntfy → Email → Bridge（fallback chain）
+
+**增長路徑**:
+```
+階段 1: PWA Push (VAPID) + 偏好管理 + 通知歷史
+階段 2: + ntfy 備用 + 聚合 + 勿擾
+階段 3: + Email (SMTP/Resend)
+階段 4: + Firebase (行動端)
+階段 5: + AI 路由（自動選最佳 channel）
+```
+
+詳見 [通知與橋接架構](../architecture/notification.md)
 
 ---
 
