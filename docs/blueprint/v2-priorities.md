@@ -21,6 +21,7 @@ target_lang: zh-TW
 | **P5** | finance | 完整個人財務管理 | 記帳是每日剛需，V1 MCP-only 缺 UI/分析/預算 | [p5-finance.md](./p5-finance.md) |
 | **P6** | taskflow | 排程 + 日曆 + 任務追蹤 + 報告 | 多來源任務管理 + 自動產出日誌/週報/月報 | [p6-taskflow.md](./p6-taskflow.md) |
 | **P7** | ideagraph | AI 輔助靈感孵化 + 知識圖譜 | 想法散落各處，需要系統化捕捉→精煉→連結→驗證 | [p7-ideagraph.md](./p7-ideagraph.md) |
+| **P8** | notification + bridges | 通知推播 + 社群平台橋接 | 所有模組都需要通知使用者；LINE/Telegram 雙向互動是剛需 | [p8-notification.md](./p8-notification.md) |
 
 ### 依賴關係
 
@@ -29,12 +30,14 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
     │                                      ↑
     ├──► P1 (memvault) ──► P2 (intelflow)  │
     │                                      │
-    └──► P7 (ideagraph) ◄── memvault 可轉入 Spark
+    ├──► P7 (ideagraph) ◄── memvault 可轉入 Spark
+    │
+    └──► P8 (notification + bridges) ◄── 消費所有模組事件
                                            │
          P3 (stations) ───────────── 獨立，可並行
 ```
 
-> **注意**：P4 Auth 是所有 Domain 模組的前提，但 P1/P2/P7 因為已有 MCP 介面可先行開發後端邏輯，Auth 完成後再接入。
+> **注意**：P4 Auth 是所有 Domain 模組的前提，但 P1/P2/P7 因為已有 MCP 介面可先行開發後端邏輯，Auth 完成後再接入。P8 依賴 Auth（偏好儲存在 auth schema），但 PWA Push 可在 Auth 完成後立即啟用。
 
 ---
 
@@ -169,3 +172,4 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 | [domain-catalog.md](../vision/domain-catalog.md) | 服務目錄（所有模組總覽） |
 | [architecture-decisions.md](../architecture/architecture-decisions.md) | ADR 決策紀錄 |
 | [auth.md](../architecture/auth.md) | Auth 架構設計文件 |
+| [notification.md](../architecture/notification.md) | 通知與橋接架構設計 |
