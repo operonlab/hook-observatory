@@ -2,14 +2,16 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src.config import settings
 from src.middleware.session import SessionMiddleware
 from src.events.bus import event_bus
 from src.events.middleware import logging_middleware
 from src.hooks.bus import hook_bus
+from src.shared.errors import WorkshopError
 
 
 @asynccontextmanager
@@ -24,6 +26,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Workshop", version="0.1.0", lifespan=lifespan)
+
+
+@app.exception_handler(WorkshopError)
+async def workshop_error_handler(request: Request, exc: WorkshopError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "code": exc.code},
+    )
+
+
 app.add_middleware(SessionMiddleware)
 app.add_middleware(
     CORSMiddleware,

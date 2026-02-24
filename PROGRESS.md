@@ -1,6 +1,6 @@
 # P1 Memvault — Shared Progress
 
-Last updated: 2026-02-24
+Last updated: 2026-02-25
 
 ## Convention
 - Each worktree updates its own rows when completing tasks.
@@ -19,15 +19,15 @@ Last updated: 2026-02-24
 ## Backend (wt/p1-backend)
 | # | Task | Status | Phase | Notes |
 |---|------|--------|-------|-------|
-| B1 | memvault DB models (blocks, tags, embeddings, profiles) | pending | A | |
-| B2 | Alembic migration: create memvault schema | pending | A | |
-| B3 | memvault services.py (CRUD + semantic search) | pending | A | |
-| B4 | memvault routes.py (REST API endpoints) | pending | A | |
-| B5 | memvault schemas.py (Pydantic request/response) | pending | A | |
-| B6 | V1 data import script (memories/*.md → PostgreSQL) | pending | A | |
-| B7 | MCP adapter: mcp/memvault/server.py (thin wrapper over Core API) | pending | B | |
-| B8 | MCP adapter: preserve 9 existing tool names | pending | B | |
-| B9 | SessionEnd hook integration (write DB instead of .md) | pending | C | |
+| B1 | memvault DB models (blocks, tags, embeddings, profiles) | done | A | 4 models: MemoryBlock, Tag, KnowledgeDomain, KASProfile |
+| B2 | Alembic migration: create memvault schema | done | A | pgvector ext + HNSW index + 4 tables in memvault schema |
+| B3 | memvault services.py (CRUD + semantic search) | done | A | BaseCRUD services + semantic_search + tag sync + profile upsert |
+| B4 | memvault routes.py (REST API endpoints) | done | A | 15 endpoints under /api/memvault |
+| B5 | memvault schemas.py (Pydantic request/response) | done | A | Create/Update/Response for all entities + search types |
+| B6 | V1 data import script (memories/*.md → PostgreSQL) | done | A | 40 blocks + 9 domains + 4 profiles, idempotent |
+| B7 | MCP adapter: mcp/memvault/server.py (thin wrapper over Core API) | done | B | Python MCP server + httpx → Core API |
+| B8 | MCP adapter: preserve 9 existing tool names | done | B | All 9 tools + 2 resources preserved |
+| B9 | SessionEnd hook integration (write DB instead of .md) | done | C | V2 scripts in mcp/memvault/scripts/, Core API POST + V1 .md fallback |
 
 ## Frontend (wt/p1-frontend)
 | # | Task | Status | Phase | Notes |
@@ -43,8 +43,8 @@ Last updated: 2026-02-24
 ## Integration Milestones
 | Milestone | Depends On | Status |
 |-----------|-----------|--------|
-| Backend API returns real data | B1-B5 | pending |
-| MCP tools work against Core API | B7-B8 | pending |
+| Backend API returns real data | B1-B5 | done |
+| MCP tools work against Core API | B7-B8 | done |
 | Frontend displays memory blocks | B4, F1-F4 | pending |
 | Semantic search end-to-end | B3, F5 | pending |
 | Galaxy widget live | B3, F7 | pending |

@@ -7,7 +7,11 @@ from src.config import settings
 # Convert sync URL to async (postgresql:// → postgresql+psycopg://)
 _async_url = settings.db_url.replace("postgresql://", "postgresql+psycopg://")
 
-engine = create_async_engine(_async_url, echo=settings.debug, pool_pre_ping=True)
+engine = create_async_engine(
+    _async_url,
+    echo=settings.debug,
+    pool_pre_ping=False,  # psycopg3 async + pre_ping = greenlet bug
+)
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
