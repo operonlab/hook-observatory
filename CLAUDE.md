@@ -1,6 +1,10 @@
 ---
 doc_version: 5
 content_hash: f6ad7751
+source_hash: 4012b579
+source_lang: en
+target_lang: en
+translated_at: 2026-02-24
 ---
 
 # Workshop
@@ -31,9 +35,9 @@ Modular Monolith + Event-Driven workspace.
 - `infra/` — Docker, Nginx, observability configs
 - `scripts/` — Build/translate/deploy scripts
 - `lab/` — POC experiments
-- `docs/` — 架構 + 願景文件（繁體中文，source of truth）
-  - `docs/vision/` — 平台願景（宣言、領域目錄、ADRs、路線圖）
-  - `docs/architecture/` — 系統架構、ADRs、設計原則
+- `docs/` — Architecture + Vision Documentation (Traditional Chinese, source of truth)
+  - `docs/vision/` — Platform Vision (Manifesto, Domain Catalog, ADRs, Roadmap)
+  - `docs/architecture/` — System Architecture, ADRs, Design Principles
 - `docs-en/` — English backup (original English versions)
 
 ## Service Taxonomy
@@ -51,3 +55,6 @@ Modular Monolith + Event-Driven workspace.
 - **RBAC+ABAC**: Role-based + attribute-based permission hybrid
 - **Hook/Plugin**: Extensible via plugin manifest + hook bus
 - **Module Boundaries**: Modules communicate via events (writes) or service imports (reads)
+```
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3389ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3388ms

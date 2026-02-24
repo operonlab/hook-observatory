@@ -1,7 +1,7 @@
 ---
 doc_version: 5
 content_hash: f6ad7751
-source_hash: a4ed9d36
+source_hash: 4012b579
 source_lang: en
 target_lang: en
 translated_at: 2026-02-24
@@ -27,7 +27,8 @@ Modular Monolith + Event-Driven workspace.
   - `core/services/media/` — STT/TTS/image processing
 - `workbench/` — Single React application
 - `mcp/` — MCP adapter layer (thin wrappers over Core API)
-- `stations/` — Standalone local tools (system-monitor, llm-usage, envkit, sandbox-executor)
+- `stations/` — Standalone local tools (system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor)
+- `vendor/` — Third-party community tools (observability)
 - `bridges/` — External platform connectors (LINE, Telegram, Discord)
 - `plugins/` — Plugin packages
 - `libs/` — Shared libraries (python + typescript)
@@ -44,7 +45,8 @@ Modular Monolith + Event-Driven workspace.
 - **Domain Services** (DB-backed): finance, quest, muse, scout, lore, dojo, roster, nexus
 - **Bridges**: External connectors (social-hooks, notification)
 - **Hot-path Services**: media (STT/TTS/image), realtime (LiveKit)
-- **Stations**: Standalone local tools (system-monitor, llm-usage, envkit, sandbox-executor)
+- **Stations**: Standalone local tools (system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor)
+- **Vendor**: Third-party community tools (observability)
 - **Compositions**: Service assemblies for specific use cases (Legal Advisor, Church Music, Virtual CS, ERP/POS)
 
 ## Core Concepts
@@ -53,5 +55,6 @@ Modular Monolith + Event-Driven workspace.
 - **RBAC+ABAC**: Role-based + attribute-based permission hybrid
 - **Hook/Plugin**: Extensible via plugin manifest + hook bus
 - **Module Boundaries**: Modules communicate via events (writes) or service imports (reads)
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2567ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2727ms
+```
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3860ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2937ms

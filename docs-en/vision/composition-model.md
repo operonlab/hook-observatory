@@ -2,176 +2,180 @@
 doc_version: 3
 content_hash: 4ad88f87
 source_version: 3
-target_lang: zh-TW
-translated_at: 2026-02-23
+target_lang: en
+translated_at: 2026-02-24
+source_hash: da064234
+source_lang: zh-TW
 ---
 
-# 樂高組合模型 — Workshop 開發方法論
+# Lego Combo Model — Workshop Development Methodology
 
-> 服務是可重用的積木。專案是積木的組裝。不區分「專案」和「模組」——只有服務和組合。
+> Services are reusable blocks. Projects are assemblies of blocks. No distinction between "projects" and "modules" - only services and combinations.
 
 ---
 
-## 雙線夾擊
+## Dual-pronged Attack
 
-Workshop 的開發模型同時由上而下與由下而上推進：
+The Workshop development model proceeds both top-down and bottom-up simultaneously:
 
 ```
-由上而下（需求 → 藍圖 → 待辦清單）
+Top-down (Requirements → Blueprint → To-do List)
     │
     ▼         ┌───────────────────────────────┐
-    ├────────►│  匯合點：積木能力               │
-    │         │  ≥ 需求 = 可以出貨              │
+    ├────────►│  Convergence Point: Block Capabilities  │
+    │         │  ≥ Requirements = Ready to ship     │
     ▲         └───────────────────────────────┘
     │
-由下而上（打造可重用的服務積木）
+Bottom-up (Building reusable service blocks)
 ```
 
-### 由下而上：打造服務積木
+### Bottom-up: Building Service Blocks
 
-每個服務都是一塊樂高積木，具備：
-- 清晰的**能力邊界**（finance 處理金錢、quest 處理任務、nexus 處理配對）
-- 清晰的 **API 介面**（REST 端點 + MCP 工具 + 事件類型）
-- 清晰的**成長路徑**（漸進式複雜度 — 每個階段增加新能力）
+Each service is a Lego block with:
+- A clear **capability boundary** (finance handles money, quest handles tasks, nexus handles matching)
+- A clear **API interface** (REST endpoints + MCP tools + event types)
+- A clear **growth path** (progressive complexity — new capabilities added at each stage)
 
-### 由上而下：分析需求
+### Top-down: Analyzing Requirements
 
-當新需求到來時（「我想要一個法律顧問」、「我想要一個 POS 系統」）：
-1. 分析需要哪些能力
-2. 盤點哪些現有服務已經涵蓋
-3. 設計藍圖：需要擴展什麼、需要新增什麼
-4. 拆解為待辦項目
+When a new requirement arrives ("I want a legal advisor," "I want a POS system"):
+1. Analyze what capabilities are needed
+2. Inventory which existing services already cover them
+3. Design a blueprint: what needs to be extended, what needs to be added
+4. Break down into to-do items
 
-### 匯合點：複利效應
+### Convergence Point: Compounding Effect
 
-每個新專案都會擴展現有服務的能力：
-- 為法律顧問擴展 lore → RAG 能力強化了 lore 本身
-- 為虛擬客服擴展 nexus → 配對引擎變得更通用
+Each new project expands the capabilities of existing services:
+- Expanding lore for the legal advisor → The RAG capability strengthens lore itself
+- Expanding nexus for the virtual agent → The matching engine becomes more generic
 
-服務越多且越成熟，新專案組裝得越快——這就是**複利效應**。
+The more numerous and mature the services, the faster new projects can be assembled—this is the **compounding effect**.
 
 ---
 
-## 組合配方
+## Combination Recipes
 
-> 「專案」的本質：挑選服務積木 → 擴展所需能力 → 組裝成專用解決方案。
+> The essence of a "project": Select service blocks → Extend required capabilities → Assemble into a dedicated solution.
 
-### 配方一：法律顧問
+### Recipe One: Legal Advisor
 
 ```
-lore   ──► 法律文件 RAG（司法文書嵌入）
-scout  ──► 判例搜尋（司法資料庫 + 法規資料庫）
-muse   ──► 策略彙編（法律論證知識圖譜）
-media  ──► 紙本文件 OCR
+lore   ──► Legal document RAG (judicial document embedding)
+scout  ──► Case law search (judicial database + legal database)
+muse   ──► Strategy compilation (legal argument knowledge graph)
+media  ──► Paper document OCR
 ```
 
-| 服務 | 需擴展的能力 |
-|------|-------------|
-| lore | 法律文件嵌入管線（基於司法資料庫的 RAG） |
-| scout | 司法院裁判 / 全國法規資料庫連接器 |
-| muse | 策略彙編範本、法律論證知識圖譜 |
-| media | 法律文件 OCR（紙本 → 數位） |
+| Service | Capabilities to Extend |
+|---|---|
+| lore | Legal document embedding pipeline (RAG based on judicial database) |
+| scout | Judicial Yuan judgments / National laws database connector |
+| muse | Strategy compilation templates, legal argument knowledge graph |
+| media | Legal document OCR (paper → digital) |
 
-**預期流程**：
-1. 輸入案件詳情 → scout 搜尋相關判例和法條
-2. lore 透過 RAG 檢索過往類似分析
-3. muse 建構策略知識圖譜（論點 + 反論點）
-4. 模擬庭審：LLM 根據所有輸入進行推理
-5. 輸出：策略彙編文件
+**Expected Flow**:
+1. Input case details → scout searches for relevant precedents and laws
+2. lore retrieves past similar analyses via RAG
+3. muse constructs a strategy knowledge graph (arguments + counter-arguments)
+4. Simulate court hearing: LLM reasons based on all inputs
+5. Output: Strategy compilation document
 
-**資料來源**：台灣司法院裁判查詢系統、全國法規資料庫
+**Data Sources**: Taiwan Judicial Yuan Judgment Inquiry System, National Laws and Regulations Database
 
 ---
 
-### 配方二：教會音樂數位化
+### Recipe Two: Church Music Digitization
 
 ```
-media  ──► 樂譜 OCR（紙本 → MusicXML/MIDI）
-lore   ──► 音樂後設資料建檔（筆畫數、調性、拍號）
-muse   ──► 曲庫管理（索引、搜尋）
-media  ──► 音訊合成（伴奏 + 人聲）
+media  ──► Sheet music OCR (paper → MusicXML/MIDI)
+lore   ──► Music metadata indexing (stroke count, key, time signature)
+muse   ──► Music library management (indexing, search)
+media  ──► Audio synthesis (accompaniment + vocals)
 ```
 
-| 服務 | 需擴展的能力 |
-|------|-------------|
-| media | 樂譜 OCR → MusicXML/MIDI 輸出 |
-| media | 音訊合成（MIDI → 伴奏、旋律+歌詞 → 人聲） |
-| lore | 音樂後設資料索引（筆畫數、調性、拍號、原始出處） |
-| muse | 曲庫管理、搜尋/瀏覽介面 |
+| Service | Capabilities to Extend |
+|---|---|
+| media | Sheet music OCR → MusicXML/MIDI output |
+| media | Audio synthesis (MIDI → accompaniment, melody+lyrics → vocals) |
+| lore | Music metadata indexing (stroke count, key, time signature, original source) |
+| muse | Music library management, search/browse interface |
 
-**預期流程**：
-1. 掃描紙本樂譜 → media（樂譜 OCR） → 數位格式
-2. 存入 lore 並附帶後設資料
-3. 透過 muse 曲庫瀏覽/搜尋
-4. 透過 media 產生伴奏 / 合成人聲
-5. 人工審核：自動產生 → 人工編輯 → 發佈
+**Expected Flow**:
+1. Scan paper sheet music → media (sheet music OCR) → digital format
+2. Save to lore with associated metadata
+3. Browse/search through the muse music library
+4. Generate accompaniment / synthesize vocals via media
+5. Manual review: Auto-generate → Manual edit → Publish
 
 ---
 
-### 配方三：虛擬客服
+### Recipe Three: Virtual Agent
 
 ```
-media        ──► 產品目錄 OCR（紙本 → 結構化資料庫）
-nexus        ──► 需求 × 產品目錄 → 排序建議
-social-hooks ──► LINE Bot 作為客戶端前台
-quest        ──► 客戶詢問 → 自動建立任務追蹤
-finance      ──► 報價單產生（PDF/HTML）
+media        ──► Product catalog OCR (paper → structured database)
+nexus        ──► Requirements × Product Catalog → Ranked recommendations
+social-hooks ──► LINE Bot as client-side frontend
+quest        ──► Customer inquiry → Auto-create task for tracking
+finance      ──► Quote generation (PDF/HTML)
 ```
 
-| 服務 | 需擴展的能力 |
-|------|-------------|
-| media | 產品目錄 OCR → 結構化資料庫 |
-| nexus | 產品目錄 × 需求配對引擎 |
-| quest | 客戶詢問 → 自動建立任務追蹤 |
-| finance | 報價單產生（PDF/HTML） |
-| social-hooks | LINE Bot 客服對話流程 |
+| Service | Capabilities to Extend |
+|---|---|
+| media | Product catalog OCR → Structured database |
+| nexus | Product catalog × requirements matching engine |
+| quest | Customer inquiry → Auto-create task for tracking |
+| finance | Quote generation (PDF/HTML) |
+| social-hooks | LINE Bot customer service conversational flow |
 
 ---
 
-### 配方四：ERP / POS
+### Recipe Four: ERP / POS
 
 ```
-finance    ──► 庫存管理 + POS 交易流程
-quest      ──► 訂單生命週期（報價 → 接單 → 出貨）
-roster     ──► 機台/設備資源追蹤
-nexus      ──► 資源分配最佳化
+finance    ──► Inventory management + POS transaction flow
+quest      ──► Order lifecycle (quote → order acceptance → shipping)
+roster     ──► Machine/equipment resource tracking
+nexus      ──► Resource allocation optimization
 ```
 
-| 服務 | 需擴展的能力 |
-|------|-------------|
-| finance | 庫存管理、POS 交易流程、庫存追蹤 |
-| quest | 訂單生命週期（報價 → 接單 → 出貨 → 開票） |
-| roster | 機台/設備資源追蹤、維護排程 |
-| nexus | 資源分配最佳化（人力 + 機台） |
+| Service | Capabilities to Extend |
+|---|---|
+| finance | Inventory management, POS transaction flow, inventory tracking |
+| quest | Order lifecycle (quote → order acceptance → shipping → invoicing) |
+| roster | Machine/equipment resource tracking, maintenance scheduling |
+| nexus | Resource allocation optimization (manpower + machines) |
 
-**成長路徑**：這是 finance + quest + roster 各自成熟到 Phase 4 時的自然匯合點。
+**Growth Path**: This is the natural convergence point when finance + quest + roster each mature to Phase 4.
 
 ---
 
-## 決策流程：新需求到來時該怎麼做？
+## Decision Process: What to do when a new requirement arrives?
 
 ```
-新需求到來
+New requirement arrives
     │
     ▼
-盤點：需要哪些能力？
+Inventory: What capabilities are needed?
     │
-    ├──► 現有服務已涵蓋 → 直接組裝，撰寫組合配方
+    ├──► Covered by existing services → Assemble directly, write combination recipe
     │
-    ├──► 部分涵蓋 → 擴展現有服務能力 + 組裝
+    ├──► Partially covered → Extend existing service capabilities + Assemble
     │
-    └──► 全新領域 → 評估是否值得打造新服務積木
+    └──► Completely new domain → Evaluate if it's worth building a new service block
               │
-              ├──► 值得（會被多個配方重用） → 打造新服務
-              └──► 不值得（一次性需求） → Station 或 Script
+              ├──► Worth it (will be reused by multiple recipes) → Build new service
+              └──► Not worth it (one-time need) → Station or Script
 ```
 
-## 與其他架構文件的關係
+## Relationship with Other Architecture Documents
 
-| 文件 | 關係 |
-|------|------|
-| [principles.md](../architecture/principles.md) | 組合優於繼承、KISS、YAGNI 是此模型的理論基礎 |
-| [modular-monolith.md](../architecture/modular-monolith.md) | 服務積木的技術實現方式 |
-| [event-driven.md](../architecture/event-driven.md) | 服務透過事件鬆耦合——組合的黏著劑 |
-| [domain-catalog.md](./domain-catalog.md) | 所有服務積木的完整目錄 |
-| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | 積木內部的共享模式（OOP 模式） |
+| Document | Relationship |
+|---|---|
+| [principles.md](../architecture/principles.md) | Composition over inheritance, KISS, and YAGNI are the theoretical foundations of this model |
+| [modular-monolith.md](../architecture/modular-monolith.md) | The technical implementation method for service blocks |
+| [event-driven.md](../architecture/event-driven.md) | Services are loosely coupled via events—the glue for composition |
+| [domain-catalog.md](./domain-catalog.md) | The complete catalog of all service blocks |
+| [shared-layer-patterns.md](../architecture/shared-layer-patterns.md) | Shared patterns within blocks (OOP patterns) |
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2488ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2647ms

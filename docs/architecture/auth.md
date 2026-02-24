@@ -246,13 +246,32 @@ CREATE TABLE auth.sessions (
 4. **內部連接埠**：服務綁定至 `127.0.0.1`。所有外部流量均通過 Nginx。
 5. **CSRF 防護**：SameSite cookies + 針對變動性端點的選用 CSRF token。
 
-## 未來：OAuth 提供者
+## OAuth 提供者（第一階段導入）
 
-計劃為社群登入整合 OAuth（Google、GitHub）：
+Google 與 GitHub OAuth 已確定於第一階段（P4）導入，非未來規劃。
 
 ```
-瀏覽器 → /api/auth/oauth/google → 重新導向至 Google
-Google  → /api/auth/oauth/google/callback → Auth 模組建立/連結使用者
+瀏覽器 → /api/auth/oauth/{provider} → 重新導向至 Provider
+Provider → /api/auth/oauth/{provider}/callback → Auth 模組建立/連結使用者
 ```
 
-OAuth 將作為密碼驗證的補充而非取代。兩種方式都會建立相同的會話格式。
+**帳號連結**：相同 email 的不同 provider 自動連結到同一個使用者。
+
+```sql
+CREATE TABLE auth.oauth_accounts (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    provider    TEXT NOT NULL,             -- 'google', 'github'
+    provider_id TEXT NOT NULL,             -- OAuth provider 的 user ID
+    email       TEXT,
+    name        TEXT,
+    avatar_url  TEXT,
+    raw_data    JSONB,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(provider, provider_id)
+);
+```
+
+OAuth 作為密碼驗證的補充而非取代。兩種方式都會建立相同的會話格式。
+
+詳見 [P4：Auth 基礎建設](../blueprint/p4-auth.md)。

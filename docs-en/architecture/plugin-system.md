@@ -15,10 +15,10 @@ source_lang: zh-TW
 The plugin system borrows from three proven models:
 
 | Source | Borrowed Aspects |
-|---|---|
-| **Stable Diffusion WebUI** | Extension list, hook-based lifecycle, Git-based installation |
-| **Obsidian** | Plugin settings UI, sandboxed execution, community plugin library |
-| **VS Code** | Contribution points (UI slots), activation events, permission model |
+|--------|---------------|
+| **Stable Diffusion WebUI** | Extension list, Hook-based lifecycle, Git-based installation |
+| **Obsidian** | Plugin settings UI, Sandboxed execution, Community plugin library |
+| **VS Code** | Contribution points (UI slots), Activation events, Permission model |
 
 ## Plugin Manifest
 
@@ -71,7 +71,7 @@ Each plugin declares itself via `plugin.json`:
 ### Manifest Fields
 
 | Field | Required | Description |
-|---|---|---|
+|-------|----------|-------------|
 | `id` | Yes | Unique plugin identifier (kebab-case) |
 | `name` | Yes | Human-readable name |
 | `version` | Yes | SemVer version |
@@ -79,46 +79,46 @@ Each plugin declares itself via `plugin.json`:
 | `author` | Yes | Author or organization |
 | `repository` | Yes | Git repository URL |
 | `permissions` | Yes | Required permissions (intersected with user permissions) |
-| `hooks` | No | Backend hook registration |
-| `ui_slots` | No | Frontend UI slot registration |
-| `settings` | No | Plugin configuration structure (Schema) |
+| `hooks` | No | Backend hook registrations |
+| `ui_slots` | No | Frontend UI slot registrations |
+| `settings` | No | Plugin configuration schema |
 | `activationEvents` | No | Events that trigger plugin loading |
 | `minCoreVersion` | No | Minimum compatible core version |
 
 ## Hook Lifecycle
 
-Hooks follow the `before_*` / `after_*` pattern:
+Hooks follow a `before_*` / `after_*` pattern:
 
 ```
-Request Arrives
+Request arrives
     │
     ▼
 before_{action}  ← Plugin can validate, modify, or reject
     │
     ▼
-Core Action Executes
+Core action executes
     │
     ▼
 after_{action}   ← Plugin can extend, log, or trigger side effects
     │
     ▼
-Response is Sent
+Response is sent
 ```
 
 ### Available Hooks
 
-| Hook | Timing | Modifiable | Rejectable |
-|---|---|---|---|
-| `before_transaction_create` | Before transaction insertion | Yes (data) | Yes |
-| `after_transaction_create` | After transaction is committed | No | No |
-| `before_quest_complete` | Before marking quest complete | Yes (data) | Yes |
-| `after_quest_complete` | After quest is marked complete | No | No |
-| `before_spark_create` | Before Spark creation | Yes (data) | Yes |
-| `after_spark_create` | After Spark is committed | No | No |
-| `before_user_approve` | Before admin approves user | Yes (data) | Yes |
-| `after_user_approve` | After user is approved | No | No |
-| `on_startup` | On application startup | No | No |
-| `on_shutdown` | On application shutdown | No | No |
+| Hook | When | Modifiable | Rejectable |
+|------|--------|-----------|------------|
+| `before_transaction_create` | Before inserting a transaction | Yes (data) | Yes |
+| `after_transaction_create` | After a transaction is committed | No | No |
+| `before_quest_complete` | Before marking a quest as complete | Yes (data) | Yes |
+| `after_quest_complete` | After a quest is marked complete | No | No |
+| `before_spark_create` | Before creating a Spark | Yes (data) | Yes |
+| `after_spark_create` | After a Spark is committed | No | No |
+| `before_user_approve` | Before an admin approves a user | Yes (data) | Yes |
+| `after_user_approve` | After a user is approved | No | No |
+| `on_startup` | Application startup | No | No |
+| `on_shutdown` | Application shutdown | No | No |
 
 ### Hook Implementation
 
@@ -150,7 +150,8 @@ async def after_transaction_create(context: HookContext) -> None:
 ### HookContext
 
 ```python
- @.cache/uv/archive-v0/uj_7CuQMD1gog0o_f4ybB/huggingface_hub/dataclasses.py
+# from huggingface_hub.dataclasses import dataclass
+@dataclass
 class HookContext:
     event_type: str              # The hook being called
     data: dict                   # Mutable data (for before_* hooks)
@@ -175,7 +176,7 @@ class HookResult:
 Plugins are installed from Git repositories:
 
 ```bash
-# CLI (future)
+# CLI (Future)
 workshop plugin install https://github.com/workshop-plugins/expense-categorizer
 
 # API
@@ -189,9 +190,9 @@ POST /api/admin/plugins/install
 ### Installation Process
 
 ```
-1. Clone repository to core/plugins/<plugin-id>/
-2. Validate the plugin.json manifest
-3. Check permission compatibility
+1. Clone repository into core/plugins/<plugin-id>/
+2. Validate plugin.json manifest
+3. Check for permission compatibility
 4. Register hooks with the Hook Engine
 5. Register UI slots with the frontend runtime
 6. Publish event: admin.plugin.installed
@@ -226,10 +227,10 @@ effective_permissions = plugin.manifest.permissions ∩ current_user.permissions
 
 ### Rules
 
-1. A plugin **cannot** access modules beyond its declared permissions.
-2. A plugin **cannot** escalate to a level beyond the current user's permissions.
-3. Admin-only plugins must have `admin.*` permissions in the manifest.
-4. Permission violations are logged, and the action is rejected.
+1.  Plugins **cannot** access modules beyond their declared permissions.
+2.  Plugins **cannot** elevate to a level beyond the current user's permissions.
+3.  Admin-only plugins require `admin.*` permissions in their manifest.
+4.  Permission violations are logged, and the action is rejected.
 
 ### Example
 
@@ -242,7 +243,7 @@ Admin user (has all permissions):
 Regular user (has finance.*, quest.*):
   → Plugin gets: finance.read, finance.write, quest.read
 
-Guest user (only has *.read):
+Guest user (has only *.read):
   → Plugin gets: finance.read, quest.read
   → finance.write is silently excluded
 ```
@@ -254,6 +255,7 @@ Plugins inject frontend components into predefined slots:
 ### Slot Registration
 
 In `plugin.json`:
+
 ```json
 {
   "ui_slots": {
@@ -265,8 +267,8 @@ In `plugin.json`:
 ### Slot Rendering
 
 ```typescript
-// In the Finance Dashboard
-import { PluginSlot } from " @/plugins/PluginSlot";
+// In the finance dashboard
+import { PluginSlot } from "@/plugins/PluginSlot";
 
 export function FinanceDashboard() {
   return (
@@ -285,7 +287,7 @@ export function FinanceDashboard() {
 ### Available Slots
 
 | Slot Name | Location | Provided Context |
-|---|---|---|
+|-----------|----------|-----------------|
 | `shell.header.right` | Global header, right side | `{ user }` |
 | `shell.sidebar.bottom` | Global sidebar, bottom | `{ user }` |
 | `finance.dashboard.sidebar` | Finance dashboard sidebar | `{ userId }` |
@@ -313,7 +315,7 @@ my-plugin/
 
 ### 2. Define Manifest
 
-Start with the least privilege. Expand only when necessary.
+Start with the least privilege. Only expand when necessary.
 
 ### 3. Implement Hooks
 
@@ -350,6 +352,59 @@ export function CategoryBreakdown({ context }: Props) {
 ### 5. Local Testing
 
 ```bash
-# Copy the plugin to the core
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2611ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2467ms
+# Copy plugin into the core plugins directory
+cp -r my-plugin/ ~/workshop/core/plugins/my-plugin/
+
+# Restart the core to load the new plugin
+# Plugin hooks will be registered automatically on startup
+```
+
+### 6. Publish
+
+```bash
+git init && git add . && git commit -m "Initial plugin release"
+git remote add origin https://github.com/you/my-plugin
+git push -u origin main
+git tag v1.0.0 && git push --tags
+```
+
+## Hook Engine Internals
+
+```python
+class HookEngine:
+    """Manages plugin hook registration and execution."""
+
+    def __init__(self):
+        self._hooks: dict[str, list[PluginHook]] = defaultdict(list)
+
+    def register(self, plugin_id: str, hook_name: str, handler: Callable):
+        self._hooks[hook_name].append(PluginHook(plugin_id, handler))
+
+    async def run_before(self, hook_name: str, context: HookContext) -> HookResult:
+        """Run all before_* hooks. Any REJECT stops the chain."""
+        for hook in self._hooks.get(hook_name, []):
+            if not self._has_permission(hook.plugin_id, context.user):
+                continue
+            result = await hook.handler(context)
+            if result == HookResult.REJECT:
+                return result
+            if result.data:
+                context.data = result.data  # Apply modifications
+        return HookResult.CONTINUE(data=context.data)
+
+    async def run_after(self, hook_name: str, context: HookContext):
+        """Run all after_* hooks. Fire-and-forget."""
+        for hook in self._hooks.get(hook_name, []):
+            if not self._has_permission(hook.plugin_id, context.user):
+                continue
+            asyncio.create_task(hook.handler(context))
+```
+
+## Future Outlook
+
+-   **Plugin Marketplace**: A web UI for browsing and installing community plugins
+-   **Plugin Sandboxing**: Process-level isolation for untrusted plugins
+-   **Plugin Dependencies**: Allow plugins to depend on other plugins
+-   **Plugin API Versioning**: A stable hook API with deprecation warnings
+-   **Hot Reloading**: Reload plugin code without restarting the core
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2517ms

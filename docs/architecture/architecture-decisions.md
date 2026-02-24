@@ -255,3 +255,40 @@ libs/python/station-sdk/
 - ❌ 每個 station 獨立實作 → 重複代碼，格式不一致
 - ❌ Station 框架（強制繼承 BaseStation class）→ 過度工程化，限制靈活性
 - ✅ **輕量 SDK（可選依賴的工具函數庫）** → 平衡共用與獨立
+
+---
+
+## AD-9: Python-First + Selective Rust
+
+**決策**：Core Monolith 與大部分服務使用 Python。僅在 CPU-bound hot-path 場景選擇性地使用 Rust。
+
+**決策理由**：
+
+| 因素 | Python | Rust | Workshop 判斷 |
+|------|--------|------|-------------|
+| 開發速度（1人+AI） | 快 3-5x | 慢 | **Python 勝** — 單人團隊的最大瓶頸是開發速度，不是運行速度 |
+| AI/ML 生態系 | 原生（LiteLLM, Anthropic SDK, etc.） | 二等公民 | **Python 勝** — Workshop 重度使用 AI 服務 |
+| AI 程式碼生成品質 | Claude/Codex 最強語言 | 相對弱 | **Python 勝** — AI 輔助開發是核心生產力 |
+| I/O-bound 效能 | async FastAPI ≈ Rust | 微幅領先 | **平手** — Workshop 瓶頸在 DB/網路 I/O |
+| CPU-bound 效能 | 弱 | 極強 (10-100x) | Rust 勝 — 但 Workshop 極少 CPU 密集操作 |
+| 記憶體使用 | ~150-300MB | ~30-80MB | Rust 勝 — 但 Mac Mini 24GB 完全夠用 |
+
+**分工策略**：
+```
+Python 負責：                      Rust 負責：
+├── Core Monolith (FastAPI)        ├── 物件儲存 (RustFS — 已在用)
+├── MCP Servers (薄 HTTP 適配器)    ├── 未來: 媒體轉碼 hot-path
+├── Stations (本地工具)             └── 未來: 高吞吐量批處理
+├── Event Bus
+└── Bridges
+```
+
+**何時考慮 Rust**：
+- 效能 profiling 證明 Python 是瓶頸（而非 DB/網路）
+- 同時併發用戶 > 1000（個人工作站不太可能）
+- CPU-bound 的 hot-path 服務（媒體處理、大批量數據運算）
+
+**替代方案**：
+- ❌ 全 Rust 重寫 → 開發速度降 3-5x，AI 生態系支援差，收益有限（I/O-bound 場景差異小）
+- ❌ Go → 開發速度中等，但 AI/ML 生態系遠不及 Python
+- ✅ **Python-First + Selective Rust** → 開發速度最大化，在真正需要效能的地方用 Rust

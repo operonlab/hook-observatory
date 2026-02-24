@@ -45,12 +45,12 @@ The backend is a **single deployable unit** with clearly separated domain module
                     └────────────┘   └──────────────┘
 ```
 
-**Why choose a modular monolith over microservices:**
+**Why a modular monolith instead of microservices:**
 - Simpler deployment and operations (one process, one container)
 - No network latency between modules (in-process calls)
 - Easier debugging and tracing (single log stream)
 - Module boundaries enforce development discipline without operational overhead
-- A module can be easily extracted into a microservice later if it truly needs to scale independently
+- If a module does need to scale independently, it can be easily extracted into a microservice later
 
 ### 2. Module Ownership
 
@@ -72,19 +72,19 @@ Each module owns **one** business domain:
 ### 3. Module Boundary Rules
 
 **Hard Rules:**
-- A module **must not** directly import another module's models or database tables
-- A module **must not** write directly to another module's schema
-- Cross-module reads happen via **service imports** (calling another module's service layer)
-- Cross-module state changes happen via the **Event Bus**
+- Modules **must not** directly import models or database tables from another module
+- Modules **must not** write directly to another module's schema
+- Cross-module reads must go through **service imports** (calling another module's service layer)
+- Cross-module state changes must go through the **Event Bus**
 
 ```python
-# Correct: Module A reads Module B's data via a service import
+# Correct: Module A reads data from Module B via service import
 from src.modules.finance.services import get_user_balance
 
 # Correct: Module A notifies Module B via an event
 await event_bus.publish("quest.quest.completed", {"quest_id": "...", "user_id": "..."})
 
-# Incorrect: Module A directly imports Module B's models
+# Incorrect: Module A directly imports a model from Module B
 from src.modules.finance.models import Transaction  # Forbidden
 ```
 
@@ -105,7 +105,7 @@ CREATE SCHEMA nexus;      -- Owned by nexus module (Phase 3)
 CREATE SCHEMA admin;      -- Owned by admin module (Phase 1)
 ```
 
-Cross-schema queries are technically possible, but **architecturally forbidden**. If Module A needs data from Module B, it must call B's service layer.
+Cross-schema queries are technically possible but **architecturally forbidden**. If module A needs data from module B, it must call B's service layer.
 
 ## Module Structure
 
@@ -123,33 +123,33 @@ core/src/modules/<name>/
 └── deps.py              # FastAPI dependencies
 ```
 
-`services.py` is the **public interface** of each module. Other modules should import from here, and never from `models.py` or `routes.py`.
+`services.py` is the **public interface** for each module. Other modules should import from here, and never from `models.py` or `routes.py`.
 
 ## Inter-Module Communication
 
 | Pattern | When to Use | Example |
 |---------|------|---------|
 | Service Import (Sync) | Reading data from another module | `finance.services.get_balance(user_id)` |
-| Event Bus (Async) | State change that other modules may care about | `quest.quest.completed` triggers finance reward |
-| Shared types in `src.shared` | Common types used by 2+ modules | `UserId`, `Pagination`, `ErrorResponse` |
+| Event Bus (Async) | State changes that other modules might be interested in | `quest.quest.completed` triggers a finance reward |
+| Shared types in `src.shared` | Common types used by 2 or more modules | `UserId`, `Pagination`, `ErrorResponse` |
 
-See [Event-Driven Architecture](./event-driven.md) for detailed event patterns.
+For more details, see [Event-Driven Architecture](./event-driven.md) for detailed event patterns.
 
 ## Hot-Path Services
 
-Two services run **outside** the monolith because they have fundamentally different runtime needs:
+Two services run **outside** the monolith because they have fundamentally different runtime requirements:
 
 ### Realtime Service (port 8830)
 
-- **Functionality**: LiveKit WebRTC gateway + agents
-- **Why separate**: WebRTC requires persistent connections, media processing, and different scaling patterns
-- **Communication method**: REST API for token generation, and Redis events for state sync
+- **Functionality**: LiveKit WebRTC Gateway + agents
+- **Why it's separate**: WebRTC requires persistent connections, media processing, and has different scaling patterns
+- **Communication**: REST API for token generation, Redis events for state sync
 
 ### Media Service (port 8831)
 
 - **Functionality**: STT, TTS, image processing pipelines
-- **Why separate**: CPU/GPU intensive, requires independent resource allocation
-- **Communication method**: HTTP API calls from core, with results published as events
+- **Why it's separate**: CPU/GPU intensive, requires separate resource allocation
+- **Communication**: HTTP API calls from core, results published as events
 
 ## Port Allocation
 
@@ -162,7 +162,7 @@ Two services run **outside** the monolith because they have fundamentally differ
 
 ## Configuration
 
-Uses `pydantic-settings` with environment variables. Module-specific configs use prefixed environment variables:
+Uses `pydantic-settings` with environment variables. Module-specific configurations use prefixed environment variables:
 
 ```python
 from pydantic_settings import BaseSettings
@@ -178,7 +178,7 @@ class CoreSettings(BaseSettings):
 
 ## Health Checks
 
-The monolith exposes a single health check endpoint that includes the status of its modules:
+The monolith exposes a single health check endpoint that includes the status of each module:
 
 ```json
 {
@@ -239,16 +239,16 @@ def create_app() -> FastAPI:
     return app
 ```
 
-## Future Vision: Extracting a Module
+## Future Outlook: Extracting a Module
 
-If a module outgrows the monolith (e.g., media processing needs GPU scaling), the extraction path is:
+If a module outgrows the monolith (e.g., media processing needs GPU scaling), the extraction path is as follows:
 
-1. The module already has clear boundaries (service layer, events, no cross-model imports)
-2. Replace in-process service imports with HTTP client calls
-3. Replace in-process events with Redis Streams events
-4. Deploy as a separate service
-5. Other modules require no changes (they already use the service/event interface)
+1. The module already has a clear boundary (service layer, events, no cross-model imports).
+2. Replace in-process service imports with HTTP client calls.
+3. Replace in-process events with Redis Streams events.
+4. Deploy as a separate service.
+5. No changes are needed in other modules (they already use the service/event interface).
 
-This is the core benefit of enforcing module boundaries from day one.
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2497ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3357ms
+This is the core advantage of enforcing module boundaries from day one.
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2506ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2398ms

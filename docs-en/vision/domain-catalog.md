@@ -4,17 +4,17 @@ content_hash: 2ec4dc04
 source_version: 3
 target_lang: en
 translated_at: 2026-02-24
-source_hash: e891bdd9
+source_hash: ebf3ba3e
 source_lang: zh-TW
 ---
 
 # Service Catalog
 
-> A unified catalog for Workshop services. No distinction between "core modules" and "projects"——everything is a composable service building block.
+> A unified catalog for Workshop services. No distinction between "core modules" and "projects"—everything is a composable service building block.
 
 ---
 
-> For LEGO composition models and recipes, please see [vision/composition-model.md](./composition-model.md)
+> For more on the LEGO composition model and recipes, see [vision/composition-model.md](./composition-model.md)
 
 ---
 
@@ -31,14 +31,14 @@ source_lang: zh-TW
 | **MCP Server** | `workshop-auth` |
 | **V1 Status** | Exists (GitHub OAuth, Google OAuth, Email/Password) |
 
-**Functional Capabilities**:
-- Multi-provider login (GitHub, Google, Email, future: LINE Login)
+**Capabilities**:
+- Multi-provider login (GitHub, Google, Email, Future: LINE Login)
 - Session management (cookie-based, `workshop_session`)
 - Space management (create/invite/permissions)
 - Module-level access control (by space, by user, by module)
 - API key management (for MCP / external integrations)
 
-**Space Model** (shared scope):
+**Space Model** (Shared Scope):
 ```
 spaces: id, name, type(personal/family/friends/org), owner_id
 space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
@@ -54,7 +54,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **MCP Server** | `workshop-admin` (to be built) |
 | **V1 Status** | V1 had sysmon + agent-metrics (merged into gateway) |
 
-**Functional Capabilities**:
+**Capabilities**:
 - System health monitoring (evolved from sysmon)
 - User management
 - Module enable/disable control
@@ -71,20 +71,20 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 |----------|-------|
 | **Dependencies** | auth |
 | **MCP Server** | `workshop-finance` |
-| **V1 Status** | MCP server is operational (9 tools) |
+| **V1 Status** | MCP server operational (9 tools) |
 
-**Functional Capabilities**:
+**Capabilities**:
 - Personal/family bookkeeping (income/expense tracking)
 - Subscription management (subscription lifecycle)
-- Financial insights (monthly summaries, category analysis)
+- Financial insights (monthly summary, category analysis)
 - Budget planning (budgeting by category)
 
-**Growth Path** (progressive complexity):
+**Growth Path** (Progressive Complexity):
 ```
-Stage 1: Personal bookkeeping
-Stage 2: + Shared family ledger
-Stage 3: + Budgeting/Analysis
-Stage 4: + Inventory Management / POS
+Phase 1: Personal bookkeeping
+Phase 2: + Family shared ledger
+Phase 3: + Budgeting/Analysis
+Phase 4: + Inventory Management / POS
 ```
 
 ---
@@ -93,16 +93,16 @@ Stage 4: + Inventory Management / POS
 
 | Attribute | Value |
 |----------|-------|
-| **Dependencies** | auth, dojo (for quantified mode) |
-| **Bidirectional Link** | finance (task ↔ order) |
+| **Dependencies** | auth, dojo (for quantitative mode) |
+| **Bidirectional Link** | finance (Task ↔ Order) |
 | **MCP Server** | `workshop-quest` |
-| **V1 Status** | MCP server is operational (10 tools) |
+| **V1 Status** | MCP server operational (10 tools) |
 
-**Functional Capabilities**:
+**Capabilities**:
 - **Simple Mode**: To-do list (checkboxes, due dates)
-- **Quantified Mode**: Story points, skill requirements, complexity assessment
-- **Dispatch Mode**: Task pool + passive assignment + active acceptance
-- **Business Mode**: Task = Order, including quotes and acceptance
+- **Quantitative Mode**: Story points, skill requirements, complexity assessment
+- **Dispatch Mode**: Task pool + passive allocation + active acceptance
+- **Business Mode**: Task = Order, including quotation and acceptance
 
 **RPG Metaphor** (from Quest design document):
 - Equipment = Knowledge, Skills = Competencies, Attributes = Core Traits
@@ -110,10 +110,10 @@ Stage 4: + Inventory Management / POS
 
 **Growth Path**:
 ```
-Stage 1: Checkbox to-do list
-Stage 2: + Story points
-Stage 3: + Skill requirements + Task pool
-Stage 4: + Orders / Quotes / Acceptance
+Phase 1: Checkbox to-do list
+Phase 2: + Story points
+Phase 3: + Skill requirements + Task pool
+Phase 4: + Orders / Quotations / Acceptance
 ```
 
 ---
@@ -124,13 +124,13 @@ Stage 4: + Orders / Quotes / Acceptance
 |----------|-------|
 | **Dependencies** | auth |
 | **MCP Server** | `workshop-muse` |
-| **V1 Status** | MCP server is operational (8 tools) |
+| **V1 Status** | MCP server operational (8 tools) |
 
-**Functional Capabilities**:
-- Spark (Inspiration Note): Quickly capture ideas
+**Capabilities**:
+- Spark (Inspiration note): Quickly capture ideas
 - Link: Directed connections between Sparks
 - Graph (Knowledge Graph): A visual network of ideas
-- Inbox: unprocessed inspirations
+- Inbox: Ideas to be processed
 - Search (Semantic Search): Search across all Sparks
 
 ---
@@ -144,12 +144,12 @@ Stage 4: + Orders / Quotes / Acceptance
 | **Integrated Skills** | smart-search, daily-briefing, company-intel, competitive-intel, content-writer |
 | **V1 Status** | research_report service (port 8830) + smart-search skill v0.3.3 |
 
-**Functional Capabilities**:
-- RSS / social media source management
+**Capabilities**:
+- RSS / Social media source management
 - Automatic summary generation (LLM-driven)
 - Daily briefing push
-- Keyword / topic tracking
-- Integration with muse (intelligence → inspiration)
+- Keyword / Topic tracking
+- Integration with muse (Intelligence → Inspiration)
 
 ---
 
@@ -163,13 +163,13 @@ Stage 4: + Orders / Quotes / Acceptance
 | **Integrated Skills** | kas-memory (MCP), meeting-insights |
 | **V1 Status** | MCP server v0.2.0 (semantic search + user profile) |
 
-**Functional Capabilities**:
-- Session end → automatic memory extraction
-- User prompt submission → automatic recall of relevant memories
+**Capabilities**:
+- Session end → Automatic memory extraction
+- User prompt submission → Automatic recall of relevant memories
 - Semantic search (OpenAI embedding, switchable to Ollama)
 - Memory promotion / editing / tagging
 - KAS Profile (user trait summary)
-- **V2 Direction**: Better forgetting mechanisms, cross-space isolation, multi-agent support
+- **V2 Direction**: Better forgetting mechanism, cross-space isolation, multi-agent support
 
 ---
 
@@ -183,9 +183,9 @@ Stage 4: + Orders / Quotes / Acceptance
 | **Integrated Skills** | skill-catalog, skill-graph, skill-optimizer, model-mentor |
 | **V1 Status** | Does not exist |
 
-**Functional Capabilities**:
-- Skill definition and categorization (tech tree structure)
-- Learning path planning (prerequisite chains)
+**Capabilities**:
+- Skill definition and classification (tech tree structure)
+- Learning path planning (prerequisite chain)
 - Course/resource matching (skill gap → learning resources)
 - Competency validation (assessment, certification tracking)
 - Skill levels (Beginner → Intermediate → Advanced → Expert)
@@ -202,10 +202,10 @@ Stage 4: + Orders / Quotes / Acceptance
 | **Integrated Skills** | maestro, team-tasks, scheduler |
 | **V1 Status** | Does not exist |
 
-**Functional Capabilities**:
+**Capabilities**:
 - **Unified Resource Abstraction**: Human = Machine = Service = AI Agent
 - Common attributes: capabilities[], capacity, availability, cost_rate, status
-- Workload tracking (current load vs max capacity)
+- Workload tracking (current load vs. max capacity)
 - Scheduling / availability management
 
 **Unified Resource Model**:
@@ -218,10 +218,10 @@ resources:
 
 **Growth Path**:
 ```
-Stage 1: Personal task tracking
-Stage 2: + Team timesheets
-Stage 3: + Machine/Service resource pool
-Stage 4: + Full ERP resource management
+Phase 1: Personal task tracking
+Phase 2: + Team timesheets
+Phase 3: + Machine/service resource pool
+Phase 4: + Full ERP resource management
 ```
 
 ---
@@ -234,12 +234,12 @@ Stage 4: + Full ERP resource management
 | **MCP Server** | `workshop-nexus` (to be built) |
 | **V1 Status** | Does not exist |
 
-**Functional Capabilities**:
+**Capabilities**:
 - Talent × Position matching
-- Capability × Task pairing (the engine behind quest dispatch)
-- Learning resource recommendation (skill gap → course suggestions)
+- Competency × Task pairing (the engine behind quest dispatch)
+- Learning resource recommendation (skill gap → course suggestion)
 - Multi-dimensional scoring (skill match, availability, cost, history)
-- Three use cases with the same model: matching, allocation, learning paths
+- Three use cases for the same model: matching, allocation, learning path
 
 ---
 
@@ -251,16 +251,16 @@ Stage 4: + Full ERP resource management
 |----------|-------|
 | **Category** | Bridge |
 | **Priority** | LINE > Telegram > Discord > Facebook > X |
-| **Provided to** | Routed to all core modules via Event Bus |
+| **Provides to** | Routed to all core modules via Event Bus |
 
-**Functional Capabilities**:
-- Unified Messaging: All platform messages → unified inbox
-- Event Routing: Route messages to various modules based on rules
+**Capabilities**:
+- Unified messaging: All platform messages → unified inbox
+- Event routing: Route messages to modules based on rules
   - ` @Library/Developer/Xcode/iOS DeviceSupport/iPhone16,2 26.2.1 (23C71)/Symbols/System/Library/PrivateFrameworks/MemoryAccounting.framework/MemoryAccounting lunch 120` → finance
   - ` @.cache/uv/simple-v20/pypi/pycryptodomex.rkyv buy milk` → quest
   - ` @.tmux/logs/memory-guardian.log maybe we could...` → muse
-- Bidirectional Sync: Module events → push to platforms
-- Bot Commands: Each module exposes bot commands
+- Bidirectional sync: Module events → Push to platforms
+- Bot commands: Each module exposes bot commands
 
 **Architecture**:
 ```
@@ -278,12 +278,12 @@ Core Modules → Event Bus → Social Bridge → LINE/Telegram/Discord
 | **Prerequisite** | PWA (sw.js + manifest.json) |
 | **Technology** | Web Push API + VAPID (primary), ntfy (fallback) |
 
-**Functional Capabilities**:
-- Push Notifications: PWA push (desktop + mobile browser)
-- Notification Preferences: Toggle by module, by event type
-- Notification Aggregation: Prevents message bombing, intelligent batching
-- Multi-channel Delivery: Push + Email + Social Hooks
-- Notification History: Traceable log
+**Capabilities**:
+- Push notifications: PWA push (desktop + mobile browser)
+- Notification preferences: Toggle by module, by event type
+- Notification aggregation: Prevent message bombing, smart batching
+- Multi-channel delivery: Push + Email + Social Hooks
+- Notification history: Traceable log
 
 ---
 
@@ -291,28 +291,28 @@ Core Modules → Event Bus → Social Bridge → LINE/Telegram/Discord
 
 | Attribute | Value |
 |----------|-------|
-| **Category** | Hot-path service (located in `core/services/`) |
-| **Functional Capabilities**| STT, TTS, Image Processing, OCR |
+| **Category** | Hot-path Service (located in `core/services/`) |
+| **Capabilities** | STT, TTS, Image Processing, OCR |
 
 **Current**: Part of the core hot-path services.
 **Growth**: Can be extended for domain-specific processing (Music OCR, Legal Document OCR, Product Catalog OCR).
 
 ---
 
-### Stations (Independent Tools)
+### Stations (Standalone Tools)
 
-> Standalone local tools. Stations that need to push data to Core APIs or provide Widgets should reference `libs/python/station-sdk/` for shared scheduling, API push, widget formatting, and notification integration (see [AD-8](../architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)).
+> Standalone local tools. Stations that need to push data to the Core API or provide a Widget should reference `libs/python/station-sdk/` for shared scheduling, API push, Widget formatting, and notification integration (see [AD-8](../architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)).
 
 #### system-monitor — System Monitor
 
 | Attribute | Value |
 |----------|-------|
 | **Category** | Station |
-| **V1 Status** | Disk analysis is operational (`~/.claude/data/disk-report/`, daily launchd) |
-| **V2 Changes** | Frequency changed to weekly + new hardware resource pressure monitoring |
+| **V1 Status** | Disk analysis operational (`~/.claude/data/disk-report/`, daily launchd) |
+| **V2 Changes** | Frequency changed to weekly + added hardware resource pressure monitoring |
 
-**Functional Capabilities**:
-- Disk space analysis (weekly + monthly reports + manual on-demand scan)
+**Capabilities**:
+- Disk space analysis (weekly report + monthly report + manual real-time scan)
 - Hardware resource monitoring (CPU, RAM, Swap, Temperature, Battery)
 - Pressure level determination (normal → warning → critical → danger)
 - AI analysis report (two-layer LLM routing: API → offline fallback)
@@ -320,17 +320,17 @@ Core Modules → Event Bus → Social Bridge → LINE/Telegram/Discord
 
 ---
 
-#### llm-usage — LLM Usage Tracker
+#### llm-usage — LLM Usage Tracking
 
 | Attribute | Value |
 |----------|-------|
 | **Category** | Station |
-| **V1 Status** | model-policy (boost/normal switching) + LiteLLM Proxy |
-| **V2 Changes** | Unified token/cost tracking, integrate all providers |
+| **V1 Status** | model-policy (boost/normal toggle) + LiteLLM Proxy |
+| **V2 Changes** | Unified token/cost tracking, integrate all Providers |
 
-**Functional Capabilities**:
-- Unified tracking across providers (Anthropic + OpenAI + Google + Ollama)
-- Unified tracking across CLIs (Claude Code + Codex + Gemini + LiteLLM)
+**Capabilities**:
+- Unified cross-provider tracking (Anthropic + OpenAI + Google + Ollama)
+- Unified cross-CLI tracking (Claude Code + Codex + Gemini + LiteLLM)
 - Multi-dimensional cost analysis (by Provider, Model, Caller, Time, Purpose)
 - Cache efficiency statistics
 - Monthly budget tracking and alerts
@@ -343,15 +343,46 @@ Core Modules → Event Bus → Social Bridge → LINE/Telegram/Discord
 | Attribute | Value |
 |----------|-------|
 | **Category** | Station |
-| **V1 Status** | `~/dotfiles/` has a basic list, but lacks categorization, validation, one-click bootstrap |
-| **V2 Changes** | Complete categorized inventory + sequential bootstrap + validation + diff |
+| **V1 Status** | `~/dotfiles/` has a basic list, but lacks classification, validation, and one-click bootstrap |
+| **V2 Changes** | Complete classified inventory + sequential bootstrap + validation + diff |
 
-**Functional Capabilities**:
-- Categorized inventory (AI tools, terminal, development, services, applications)
-- Config mapping table (config file location for each tool + tracking status)
-- 8-stage Bootstrap Pipeline (installation process with dependency order)
+**Capabilities**:
+- Classified inventory (AI tools, terminal, development, services, applications)
+- Config map (config file location for each tool + tracking status)
+- 8-stage Bootstrap Pipeline (installation flow with dependency order)
 - Environment snapshot + validation (snapshot vs. actual environment comparison)
-- Two-machine Diff (compare environment differences between two machines)
+- Dual-machine Diff (compare environment differences between two machines)
+
+---
+
+#### tmux-webui — tmux Browser Control
+
+| Attribute | Value |
+|----------|-------|
+| **Category** | Station |
+| **V1 Status** | Operational (`~/Claude/projects/tmux-webui/`, port 8765) |
+
+**Capabilities**:
+- Manage tmux sessions / windows / panes from a browser
+- Send commands to a pane from the web
+- Real-time system metrics display (CPU, RAM, Disk, Network)
+- LLM usage at a glance
+
+---
+
+#### session-redactor — Transcript Sensitive Data Cleaner
+
+| Attribute | Value |
+|----------|-------|
+| **Category** | Station |
+| **V1 Status** | Operational (SessionEnd hook + Daily 4 AM sweep) |
+
+**Capabilities**:
+- SessionEnd hook automatically scans .jsonl transcripts
+- 16 types of sensitive pattern detection (API key, password, token, SSH, DB credentials)
+- Atomic write to ensure data integrity
+- SQLite to track cleaning history
+- First step in SessionEnd pipeline (redact → lore extract → observability)
 
 ---
 
@@ -362,16 +393,36 @@ Core Modules → Event Bus → Social Bridge → LINE/Telegram/Discord
 | **Category** | Station |
 | **V1 Status** | Operational (MCP Server, 2 tools) |
 
-**Functional Capabilities**:
+**Capabilities**:
 - Python/JS sandbox execution
-- SDK Helpers auto-injection (http_get/post, read_file/write_file, output)
+- SDK Helpers auto-injected (http_get/post, read_file/write_file, output)
 - Batch operations (replaces multiple individual tool calls)
+
+---
+
+### Third-party Tools (Vendor)
+
+> Third-party community tools that will not be refactored into the V2 architecture. Used directly, upstream updates via `git pull`.
+
+#### observability — Multi-Agent Observability
+
+| Attribute | Value |
+|----------|-------|
+| **Category** | Third-party (Vendor) |
+| **Source** | [ @disler](https://github.com/disler/claude-code-hooks-multi-agent-observability) |
+| **Technology** | Bun + SQLite + Vue.js |
+
+**Capabilities**:
+- Claude Code hooks real-time event tracking
+- Multi-agent session monitoring
+- WebSocket real-time dashboard
+- Event filtering and searching
 
 ---
 
 ## Composition Recipes
 
-> For complete composition recipes, please see [vision/composition-model.md](./composition-model.md)
+> For the complete set of composition recipes, see [vision/composition-model.md](./composition-model.md)
 
 Planned compositions:
 - **Legal Advisor** = lore + scout + muse + media
@@ -408,7 +459,7 @@ Planned compositions:
                           └─────────┘
 
      ┌─────────┐
-     │  admin  │ ← Reads from all services, writes to none
+     │  admin  │ ← Reads from all services, does not write to any service
      └─────────┘
 ```
 
@@ -423,25 +474,28 @@ Planned compositions:
 
 ## Service Index
 
-| Service | Type | Status | MCP Server | Tool Count |
+| Service | Type | Status | MCP Server | # Tools |
 |---------|------|--------|------------|-------|
 | auth | Foundation | V1 Exists | `workshop-auth` | TBD |
 | admin | Foundation | Partial V1 | `workshop-admin` | TBD |
 | finance | Domain Service | MCP Operational | `workshop-finance` | 9 |
 | quest | Domain Service | MCP Operational | `workshop-quest` | 10 |
 | muse | Domain Service | MCP Operational | `workshop-muse` | 8 |
-| scout | Domain Service | Not Started | `workshop-scout` | TBD |
+| scout | Domain Service | Not started | `workshop-scout` | TBD |
 | lore | Domain Service | MCP v0.2.0 | `kas-memory` | 8 |
-| dojo | Domain Service | Not Started | `workshop-dojo` | TBD |
-| roster | Domain Service | Not Started | `workshop-roster` | TBD |
-| nexus | Domain Service | Not Started | `workshop-nexus` | TBD |
-| social-hooks | Bridge | Not Started | — | — |
-| notification | Bridge | Not Started | — | — |
+| dojo | Domain Service | Not started | `workshop-dojo` | TBD |
+| roster | Domain Service | Not started | `workshop-roster` | TBD |
+| nexus | Domain Service | Not started | `workshop-nexus` | TBD |
+| social-hooks | Bridge | Not started | — | — |
+| notification | Bridge | Not started | — | — |
 | media | Hot-path | In core/services/ | — | — |
 | system-monitor | Station | V1 Operational | — | — |
 | llm-usage | Station | Partial V1 | — | — |
 | envkit | Station | Redesign | — | — |
+| tmux-webui | Station | V1 Operational | — | — |
+| session-redactor | Station | V1 Operational | — | — |
 | sandbox-executor | Station | V1 Operational | MCP (2 tools) | 2 |
+| observability | Vendor | Operational | — | — |
 
 ---
 
@@ -452,8 +506,9 @@ Planned compositions:
 | **Foundation** | auth, admin | PostgreSQL |
 | **Domain Service** | finance, quest, muse, scout, lore, dojo, roster, nexus | PostgreSQL (one schema per module) |
 | **Bridge** | social-hooks, notification | External + Event Bus |
-| **Hot-path Service** | media (STT/TTS/Image), real-time messaging (LiveKit) | Stateless processing |
-| **Station** | system-monitor, llm-usage, envkit, sandbox-executor | Local / Optional PostgreSQL |
+| **Hot-path Service** | media (STT/TTS/Image), Live Chat (LiveKit) | Stateless processing |
+| **Station** | system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor | Local / Optional PostgreSQL |
+| **Vendor** | observability ( @disler) | Runs independently |
 | **Composition** | Legal Advisor, Church Music, Virtual CS, ERP/POS | Combination of the above services |
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2437ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2448ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2424ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2567ms

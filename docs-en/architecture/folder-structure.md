@@ -4,7 +4,7 @@ content_hash: adfe14e5
 source_version: 4
 target_lang: en
 translated_at: 2026-02-24
-source_hash: 68ee2d28
+source_hash: d80d2646
 source_lang: zh-TW
 ---
 
@@ -16,7 +16,7 @@ Workshop organizes all functionality into three tiers:
 
 | Tier | Description | Location |
 |------|-------------|----------|
-| **Core Modules** | Business domains backed by a database (10 modules) | `core/src/modules/` |
+| **Core Modules** | Database-backed business domains (10 modules) | `core/src/modules/` |
 | **Stations** | Standalone local tools (no dependency on the core database) | `stations/` |
 | **Bridges** | External platform connectors | `bridges/` |
 
@@ -27,31 +27,31 @@ Workshop organizes all functionality into three tiers:
 ├── core/                        # Modular Monolith (Python/FastAPI)
 │   ├── src/
 │   │   ├── events/              # Event Bus Engine
-│   │   ├── hooks/               # Hooks/Plugins Engine
-│   │   ├── modules/             # Core Modules (10 domains)
-│   │   │   ├── auth/            # Authentication & Authorization
+│   │   ├── hooks/               # Hooks/Plugin Engine
+│   │   ├── modules/             # Core Modules (10 Domains)
+│   │   │   ├── auth/            # Auth & Authorization
 │   │   │   ├── finance/         # Accounting & Finance
 │   │   │   ├── quest/           # Quests & Scheduling
 │   │   │   ├── muse/            # Ideas & Knowledge Graph
 │   │   │   ├── scout/           # Daily Intelligence
 │   │   │   ├── lore/            # LLM Memory Persistence
-│   │   │   ├── dojo/            # Skill Tree & Learning Paths
+│   │   │   ├── dojo/            # Skill Trees & Learning Paths
 │   │   │   ├── roster/          # Resource Management
 │   │   │   ├── nexus/           # Matching Engine
 │   │   │   └── admin/           # Platform Administration
 │   │   ├── middleware/          # Auth, CORS, OTel Middleware
-│   │   ├── shared/              # Shared Types, Utilities
-│   │   └── routes/              # Route Aggregation
-│   ├── services/                # Hot-Path Services (Independently Deployed)
+│   │   ├── shared/              # Shared types, utils
+│   │   └── routes/              # Route aggregation
+│   ├── services/                # Hot-path services (deployed independently)
 │   │   ├── realtime/            # LiveKit WebRTC Gateway
 │   │   └── media/               # STT/TTS/Image Processing
-│   ├── plugins/                 # Installed Plugins
-│   ├── migrations/              # Database Migrations (all schemas)
+│   ├── plugins/                 # Installed plugins
+│   ├── migrations/              # Database migrations (all schemas)
 │   └── tests/
-├── workbench/                   # Single React Application
+├── workbench/                   # Single React application
 │   ├── src/
-│   │   ├── shell/               # Application Shell (Layout, Navigation, Auth)
-│   │   ├── modules/             # Domain UI Modules (corresponding to core modules)
+│   │   ├── shell/               # App shell (layout, navigation, auth)
+│   │   ├── modules/             # Domain UI modules (correspond to core modules)
 │   │   │   ├── auth/
 │   │   │   ├── finance/
 │   │   │   ├── quest/
@@ -62,39 +62,43 @@ Workshop organizes all functionality into three tiers:
 │   │   │   ├── roster/
 │   │   │   ├── nexus/
 │   │   │   └── admin/
-│   │   ├── plugins/             # Plugin UI Runtime + Slots
-│   │   └── shared/              # Shared Components, Hooks, Utilities
+│   │   ├── plugins/             # Plugin UI runtime + slots
+│   │   └── shared/              # Shared components, hooks, utils
 │   ├── public/
 │   ├── rsbuild.config.ts
 │   └── package.json
-├── mcp/                         # MCP Adaptation Layer (thin wrapper around Core API)
-├── stations/                    # Standalone Local Tools
-│   ├── system-monitor/          # Disk Analysis + Hardware Resource Monitoring
-│   ├── llm-usage/               # Unified LLM Token/Cost Tracking
-│   ├── envkit/                  # Environment Snapshot + One-click Migration
-│   └── sandbox-executor/        # Sandbox Code Execution MCP Server
-├── bridges/                     # External Platform Connectors
-│   └── (LINE, Telegram, Discord, Firebase — Planned)
-├── plugins/                     # Plugin Packages (git-based)
+├── mcp/                         # MCP adapter layer (thin wrappers around core APIs)
+├── stations/                    # Standalone local tools
+│   ├── system-monitor/          # Disk analysis + hardware resource monitoring
+│   ├── llm-usage/               # Unified LLM Token/Cost tracking
+│   ├── envkit/                  # Environment snapshots + one-click migration
+│   ├── tmux-webui/              # tmux browser control interface
+│   ├── session-redactor/        # Transcript sensitive data redaction
+│   └── sandbox-executor/        # Sandbox code execution MCP server
+├── vendor/                      # Third-party community tools (unmodified)
+│   └── observability/           # Multi-Agent Observability (@disler)
+├── bridges/                     # External platform connectors
+│   └── (LINE, Telegram, Discord, Firebase — planned)
+├── plugins/                     # Plugin packages (git-based)
 ├── libs/
-│   ├── python/                  # Python Shared Libraries
-│   └── typescript/              # TypeScript Shared Libraries
+│   ├── python/                  # Python shared libraries (corelib + station-sdk)
+│   └── typescript/              # TypeScript shared libraries
 ├── infra/
 │   ├── docker/                  # docker-compose, Dockerfiles
 │   ├── nginx/                   # Nginx config, routing rules
 │   ├── observability/           # LGTM/SigNoz config, dashboards
 │   └── scripts/                 # Deployment scripts, CI/CD helpers
 ├── docs/
-│   ├── architecture/            # System Architecture Docs
-│   ├── blueprint/               # Implementation Blueprints
-│   ├── reference/               # Reference Materials
-│   ├── vision/                  # Platform Vision (Manifesto, Domains, Composition Model, Roadmap)
-│   └── guides/                  # Developer Guides (Doc Management, Feature Lifecycle)
-├── scripts/                     # Build/Translate/Deploy Scripts
+│   ├── architecture/            # System architecture documents
+│   ├── blueprint/               # Implementation blueprints
+│   ├── reference/               # Reference materials
+│   ├── vision/                  # Platform vision (manifesto, domains, composition model, roadmap)
+│   └── guides/                  # Developer guides (doc management, feature lifecycle)
+├── scripts/                     # Build/translate/deploy scripts
 │   └── translate-docs.py       # Automatically translate docs to Traditional Chinese (zh-TW) via Gemini CLI
-├── lab/                         # POC Experiments
-├── pyproject.toml               # Python Workspace Root (uv)
-└── package.json                 # JS Workspace Root (pnpm)
+├── lab/                         # POC experiments
+├── pyproject.toml               # Python workspace root (uv)
+└── package.json                 # JS workspace root (pnpm)
 ```
 
 ## Naming Conventions
@@ -122,15 +126,15 @@ core/src/modules/<name>/
 
 ### 10 Core Modules
 
-| Module | Domain | Phase | DB Schema |
+| Module | Domain | Phase | Database Schema |
 |--------|--------|-------|-----------|
-| `auth` | Authentication & Authorization | 1 | `auth` |
+| `auth` | Auth & Authorization | 1 | `auth` |
 | `finance` | Accounting & Finance | 1 | `finance` |
 | `quest` | Quests & Scheduling | 1 | `quest` |
 | `muse` | Ideas & Knowledge Graph | 1 | `muse` |
 | `scout` | Daily Intelligence | 2 | `scout` |
 | `lore` | LLM Memory Persistence | 2 | `lore` |
-| `dojo` | Skill Tree & Learning Paths | 2 | `dojo` |
+| `dojo` | Skill Trees & Learning Paths | 2 | `dojo` |
 | `roster` | Resource Management | 3 | `roster` |
 | `nexus` | Matching Engine | 3 | `nexus` |
 | `admin` | Platform Administration | 1 | `admin` |
@@ -146,12 +150,12 @@ Each frontend module:
 ```
 workbench/src/modules/<name>/
 ├── components/          # Domain-specific components
-├── pages/               # Route-level pages
+├── pages/               # Route-level components
 ├── hooks/               # Domain-specific hooks
 ├── stores/              # Zustand state stores
 ├── api/                 # API client functions
 ├── types/               # Domain-specific types
-└── index.tsx            # Module entry (exports routes)
+└── index.tsx            # Module entrypoint (exports routes)
 ```
 
 ### Hot-Path Services (`core/services/`)
@@ -183,7 +187,7 @@ External platform connectors. Each bridge encapsulates a third-party API.
 bridges/<platform>/
 ├── __init__.py
 ├── client.py            # Platform API client
-├── webhook.py           # Ingress webhook handler
+├── webhook.py           # Incoming webhook handler
 ├── events.py            # Bridge-specific events
 └── schemas.py           # Platform-specific schemas
 ```
@@ -192,7 +196,7 @@ Planned bridges: LINE, Telegram, Discord, Firebase.
 
 ### MCP Adapters (`mcp/`)
 
-Thin wrapper layer that exposes Core API endpoints as MCP tools. The MCP server never touches the database directly.
+A thin wrapper layer that exposes core API endpoints as MCP tools. MCP servers never touch the database directly.
 
 ```
 mcp/<server-name>/
@@ -203,7 +207,7 @@ mcp/<server-name>/
 
 ### Stations (`stations/`)
 
-Standalone local tools that do not depend on the core database. Each station is self-contained.
+Standalone local tools. Stations that need to push data to the Core API or provide a Workbench Widget can optionally reference `libs/python/station-sdk/` (see [AD-8](./architecture-decisions.md#ad-8-station-sdk--工作站共享層)).
 
 ```
 stations/<name>/
@@ -211,6 +215,32 @@ stations/<name>/
 ├── README.md
 └── package.json / pyproject.toml
 ```
+
+**Station Classification**:
+
+| Station | Language | Uses SDK | Positioning |
+|---------|------|:--------:|------|
+| system-monitor | Python/Shell | ✅ | Disk + hardware monitoring, weekly report generation |
+| llm-usage | Python | ✅ | Unified LLM Token/Cost tracking |
+| envkit | Python/Shell | ❌ | Environment snapshot + one-click migration CLI |
+| tmux-webui | Python | ❌ | tmux browser control + system metrics |
+| session-redactor | Python | ❌ | SessionEnd hook for sensitive data redaction |
+| sandbox-executor | Node.js | ❌ | Batch execution MCP Server |
+
+### Third-Party Tools (`vendor/`)
+
+Third-party community tools that are not being refactored into the V2 architecture. Used directly, with upstream updates via `git pull`.
+
+```
+vendor/
+└── <name>/
+    └── README.md            # Note on source, purpose, and integration method
+```
+
+**Current**:
+| Tool | Source | Description |
+|------|------|------|
+| observability | [@disler](https://github.com/disler/claude-code-hooks-multi-agent-observability) | Real-time monitoring dashboard for Claude Code hooks |
 
 ### Plugins (`plugins/`)
 
@@ -227,12 +257,17 @@ plugins/
 
 ### Shared Libraries (`libs/`)
 
-Shared code used by **2 or more modules or services**. If there is only one consumer, keep it local to that consumer.
+Shared code used by **2 or more modules or services**. If there is only one user, keep the code in that user's directory.
 
 ```
 libs/
 ├── python/                  # Python shared libraries
-│   ├── src/corelib/         # Can be imported as `from corelib import ...`
+│   ├── corelib/             # Shared among Core modules (importable as `from corelib import ...`)
+│   ├── station-sdk/         # Shared SDK for Stations (optional dependency)
+│   │   ├── api_client.py    # Core API push (unified auth + endpoint)
+│   │   ├── scheduler.py     # launchd plist generation / management
+│   │   ├── widget_schema.py # Workbench Widget JSON standard format
+│   │   └── notifier.py      # Notification channel abstraction
 │   ├── pyproject.toml
 │   └── README.md
 └── typescript/              # TypeScript shared libraries
@@ -240,7 +275,7 @@ libs/
     │   ├── components/      # Shared UI components
     │   ├── hooks/           # Shared React hooks
     │   ├── types/           # Shared TypeScript types
-    │   └── utils/           # Shared utilities
+    │   └── utils/           # Shared utils
     ├── package.json
     └── README.md
 ```
@@ -257,7 +292,7 @@ infra/
 
 ### Documentation (`docs/`)
 
-Cross-domain documentation only. Domain-specific documentation lives in the `README.md` of each module/service.
+Only for cross-domain documentation. Domain-specific documentation is located in the `README.md` of each module/service.
 
 ```
 docs/
@@ -266,13 +301,13 @@ docs/
 ├── reference/               # Reference materials
 ├── vision/                  # Platform vision documents
 │   ├── workshop-manifesto.md    # What is Workshop
-│   ├── domain-catalog.md        # 10 Core Modules + 5 Project Ideas
-│   ├── composition-model.md     # Lego Composition Model
-│   └── roadmap.md               # Four-Phase Roadmap
-└── guides/                  # Developer Guides (Doc Management, Feature Lifecycle)
+│   ├── domain-catalog.md        # 10 core modules + 5 project ideas
+│   ├── composition-model.md     # Lego composition model
+│   └── roadmap.md               # Four-phase roadmap
+└── guides/                  # Developer guides (doc management, feature lifecycle)
 ```
 
-**Translation Workflow**: `docs/` is written in Traditional Chinese (source of truth). `docs-en/` is an English backup. Versioning is tracked via YAML frontmatter (`doc_version` + `content_hash`).
+**Translation Workflow**: `docs/` is written in Traditional Chinese (source of truth). `docs-en/` is the English backup. Version tracking is done via YAML frontmatter (`doc_version` + `content_hash`).
 
 ### Scripts (`scripts/`)
 
@@ -283,35 +318,35 @@ scripts/
 
 ### Lab (`lab/`)
 
-POC experiments and prototypes. Nothing here should be imported by production code.
+POC experiments and prototypes. Nothing here is imported by production code.
 
 | Rule | Example | Anti-Pattern |
 |------|---------|-------------|
-| Suffix with `<name>-poc` | `finance-poc/` | `finance/` (Conflicts with module) |
-| Each POC has a README.md | Documents goals, hypotheses, conclusions | No documentation, orphaned output |
+| `<name>-poc` suffix | `finance-poc/` | `finance/` (conflicts with module) |
+| Each POC has a README.md | Documents goal, hypothesis, conclusion | No documentation, orphaned output |
 
-Each lab directory:
+Each experiment directory:
 ```
 lab/<name>-poc/
-├── README.md              # Goals, hypotheses, conclusions (even if it failed)
+├── README.md              # Goal, hypothesis, conclusion (even if it failed)
 ├── outputs/               # Skill / script outputs (.md, .json, etc.)
 └── scripts/               # Quick validation scripts
 ```
 
-**Lifecycle**: `lab/<name>-poc/` → Validate → Promote to `core/src/modules/` + `workbench/src/modules/` → Archive or delete the lab project.
+**Lifecycle**: `lab/<name>-poc/` → validate → promote to `core/src/modules/` + `workbench/src/modules/` → archive or delete experiment.
 
 ## Domain Mapping
 
 Domains are mapped vertically between backend and frontend modules:
 
 ```
-                  core/src/modules/finance/           ← Backend Logic
+                  core/src/modules/finance/           ← Backend logic
 Finance Domain ──
                   workbench/src/modules/finance/      ← Frontend UI
 
-                  core/src/modules/auth/              ← Backend Logic
+                  core/src/modules/auth/              ← Backend logic
 Auth Domain ─────
-                  workbench/src/modules/auth/         ← Frontend UI (Login, Register)
+                  workbench/src/modules/auth/         ← Frontend UI (login, registration)
 
                   core/services/media/                ← Standalone service, no frontend
 Media Domain ────
@@ -320,12 +355,12 @@ Media Domain ────
 
 ## Core Principles
 
-1. **Three-Tier Classification** — Core Modules (DB-backed) / Stations (Local Tools) / Bridges (Connectors)
-2. **Modular Monolith** — Organize by business domain within a single deployable unit
-3. **Module Boundaries** — No cross-module model imports; use service layers or events
-4. **Shared Code is Explicit** — Only share content from `libs/` and `shared/`
-5. **Convention Over Configuration** — Consistent naming means less documentation is needed
-6. **One README.md Per Unit** — Every service and significant module has its own README
-7. **Traditional Chinese as Source of Truth** — `docs/` is written in Traditional Chinese (source of truth), with `docs-en/` as an English backup
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3063ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3393ms
+1.  **Four-Tier Classification** — Core Modules (DB-backed) / Stations (local tools) / Bridges (connectors) / Vendor (third-party)
+2.  **Modular Monolith** — Organized by business domain within a single deployable unit
+3.  **Module Boundaries** — No cross-module model imports; use service layers or events
+4.  **Shared Code is Explicit** — Only share content from `libs/` and `shared/`
+5.  **Convention over Configuration** — Consistent naming means less documentation is needed
+6.  **One README.md per Unit** — Every service and significant module has its own README
+7.  **Traditional Chinese as Source of Truth** — `docs/` is written in Traditional Chinese (source of truth), `docs-en/` is the English backup
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2536ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2452ms

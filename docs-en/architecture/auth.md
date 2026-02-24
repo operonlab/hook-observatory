@@ -12,7 +12,7 @@ source_lang: zh-TW
 
 ## Model: Hybrid RBAC + ABAC
 
-The `auth` module (part of the Core Monolith) handles authentication and authorization using a layered permissions model.
+The auth module (part of the Core Monolith) uses a layered permissions model to handle authentication and authorization.
 
 ```
                     ┌──────────────────────────────────────┐
@@ -43,8 +43,8 @@ The `auth` module (part of the Core Monolith) handles authentication and authori
 
 | Role | Permissions | Description |
 |------|------------|-------------|
-| `admin` | `*` (All) | Full platform access |
-| `user` | `finance.read`, `finance.write`, `quest.read`, `quest.write`, `muse.read`, `muse.write` | Standard activated user |
+| `admin` | `*` (all) | Full platform access |
+| `user` | `finance.read`, `finance.write`, `quest.read`, `quest.write`, `muse.read`, `muse.write` | Standard active user |
 | `guest` | `finance.read`, `quest.read`, `muse.read` | Read-only access |
 
 ### Permission Format
@@ -53,15 +53,15 @@ The `auth` module (part of the Core Monolith) handles authentication and authori
 {module}.{action}
 
 Examples:
-  finance.read        Read finance data
-  finance.write       Create/update finance records
+  finance.read        Read financial data
+  finance.write       Create/update financial records
   quest.read          View quests
   quest.write         Create/manage quests
   admin.users         Manage users
   admin.audit         View audit logs
 ```
 
-### RBAC Check
+### RBAC Checks
 
 ```python
 from core.modules.auth.permissions import require_permission
@@ -83,9 +83,9 @@ ABAC policies add dynamic, context-aware checks on top of RBAC.
 | `owner-only` | `resource.owner_id == user.id` | User can only edit their own transactions |
 | `status-check` | `resource.status in allowed_statuses` | Cannot modify archived quests |
 | `rate-limit` | `user.request_count < limit` | Max 100 API calls per minute |
-| `time-window` | `now() within allowed_hours` | Admin actions only during business hours |
+| `time-window` | `now() within allowed_hours` | Admin operations only during business hours |
 
-### ABAC Check
+### ABAC Checks
 
 ```python
 from core.modules.auth.policies import enforce_policy
@@ -102,7 +102,7 @@ async def update_transaction(txn_id: str, user: AuthUser = Depends(get_current_u
 
 ```python
 class PolicyEngine:
-    """Evaluates ABAC policies against request context."""
+    """Evaluates ABAC policies against the request context."""
 
     def evaluate(self, policy_name: str, context: PolicyContext) -> bool:
         policy = self.policies[policy_name]
@@ -137,10 +137,10 @@ response.set_cookie("session", token, httponly=True, secure=True, samesite="lax"
 data = serializer.loads(token, max_age=604800)  # 7 days
 ```
 
-**Why Signed Cookies over JWT:**
-- Server-side revocation (just invalidate the session record)
-- No giant token size in every request
-- Simpler implementation, fewer security pitfalls
+**Why Signed Cookies over JWTs:**
+- Server-side revocation (just need to invalidate the session record)
+- No large token payload on every request
+- Simpler implementation with fewer security pitfalls
 
 ### Session Storage
 
@@ -154,8 +154,8 @@ auth:session:{session_id} → {user_id, role, created_at, expires_at}
 
 ```
 Register → pending → (Admin approval) → active → (Normal usage)
-                                    → (Admin suspension) → suspended → (Admin unsuspension) → active
-                                    → (Admin ban) → banned (permanent)
+                                → (Admin suspension) → suspended → (Admin unsuspension) → active
+                                → (Admin ban) → banned (permanent)
 ```
 
 ### Status Impact
@@ -164,8 +164,8 @@ Register → pending → (Admin approval) → active → (Normal usage)
 |--------|-----------|-------------|-----------------|
 | pending | No | No | No |
 | active | Yes | Yes | Yes |
-| suspended | No (clears session) | No | No |
-| banned | No (clears session) | No | No |
+| suspended | No (sessions cleared) | No | No |
+| banned | No (sessions cleared) | No | No |
 
 ## Database Schema (auth module)
 
@@ -222,7 +222,7 @@ Admin → POST /api/admin/users/{id}/approve
 
 ```
 User → POST /api/auth/login {email, password}
-       Auth Module → Verify password → Create session → Set signed cookie
+       Auth Module → Validate password → Create session → Set signed cookie
 
 User → GET /api/finance/transactions (Cookie: session)
        Auth Middleware → Validate signed cookie
@@ -242,15 +242,15 @@ Admin → POST /api/admin/users/{id}/suspend
 
 ## Security Considerations
 
-1.  **Password Hashing**: Argon2id (preferred) or bcrypt. Never store in plaintext.
-2.  **Cookie Security**: `httponly=True`, `secure=True`, `samesite=lax`.
-3.  **Session Expiration**: 7-day default, configurable. Periodically cleaned by a background job.
-4.  **Internal Ports**: Services bind to `127.0.0.1`. All external traffic goes through Nginx.
-5.  **CSRF Protection**: SameSite cookies + optional CSRF tokens for mutating endpoints.
+1. **Password hashing**: Argon2id (preferred) or bcrypt. Never store plaintext.
+2. **Cookie Security**: `httponly=True`, `secure=True`, `samesite=lax`.
+3. **Session Expiration**: 7 days by default, configurable. Periodically cleaned up via a background job.
+4. **Internal Ports**: Services bind to `127.0.0.1`. All external traffic goes through Nginx.
+5. **CSRF Protection**: SameSite cookies + optional CSRF tokens for state-changing endpoints.
 
 ## Future: OAuth Providers
 
-Planning to integrate OAuth (Google, GitHub) for social login:
+Planning to integrate OAuth (Google, GitHub) for social logins:
 
 ```
 Browser → /api/auth/oauth/google → Redirect to Google
@@ -258,5 +258,5 @@ Google  → /api/auth/oauth/google/callback → Auth module creates/links user
 ```
 
 OAuth will supplement, not replace, password authentication. Both methods will create the same session format.
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2520ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2387ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2478ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2996ms

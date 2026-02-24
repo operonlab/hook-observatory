@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""Translate Workshop docs to any target language without mutating source docs.
+"""Translate Workshop .md files to any target language without mutating sources.
 
-Source of truth is English (docs/).
-Translations live in docs-<lang>/, mirroring the docs/ structure.
+Two strategies based on file location:
+  - docs/ files   → mirror to docs-<lang>/  (centralized architecture docs)
+  - other files   → in-place sibling        (module-level READMEs etc.)
 
 Tracks changes via source content hash stored in translation files.
 Translation only runs when source hash mismatches or target is missing.
 
 Usage:
-    # Translate all docs to English (default)
+    # Translate all .md files to zh-TW (default)
     python3 scripts/translate-docs.py
 
     # Translate to a specific language
     python3 scripts/translate-docs.py --lang ja
-    python3 scripts/translate-docs.py --lang ko
+    python3 scripts/translate-docs.py --lang en
 
     # Translate a specific file
     python3 scripts/translate-docs.py docs/vision/roadmap.md
+    python3 scripts/translate-docs.py core/README.md
 
     # Force re-translate everything
     python3 scripts/translate-docs.py --force
@@ -24,7 +26,7 @@ Usage:
     # Dry run — show what would change
     python3 scripts/translate-docs.py --dry-run
 
-    # Just mirror source files to docs-<lang>/ (no translation)
+    # Just mirror/create target files (no translation)
     python3 scripts/translate-docs.py --version-only
 
     # Status — show version comparison table
@@ -33,17 +35,21 @@ Usage:
     # Status for a specific language
     python3 scripts/translate-docs.py --status --lang ja
 
-Structure:
-    docs/vision/roadmap.md       → docs-en/vision/roadmap.md
-    docs/architecture/auth.md    → docs-ja/architecture/auth.md
-    CLAUDE.md                    → docs-en/CLAUDE.md
+Output mapping:
+    docs/vision/roadmap.md       → docs-en/vision/roadmap.md      (mirror)
+    docs/architecture/auth.md    → docs-ja/architecture/auth.md    (mirror)
+    core/README.md               → core/README.en.md               (in-place)
+    stations/envkit/README.md    → stations/envkit/README.ja.md    (in-place)
+    CLAUDE.md                    → CLAUDE.en.md                    (in-place)
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
+import signal
 import subprocess
 import sys
 from datetime import date
@@ -55,8 +61,17 @@ from typing import Optional
 WORKSHOP_ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = WORKSHOP_ROOT / "docs"
 
-# Directories to skip during discovery
-EXCLUDE_DIRS = {"api", "guides", "runbooks"}
+# Subdirectories to skip within docs/
+EXCLUDE_DOCS_SUBDIRS = {"api", "guides", "runbooks"}
+
+# Directories to skip during global discovery (dependencies, build artifacts, etc.)
+GLOBAL_EXCLUDE_DIRS = {
+    "node_modules", ".venv", "backup", ".git", "__pycache__",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache",
+}
+
+# Match translation output directories: docs-en/, docs-ja/, etc.
+DOCS_LANG_DIR_RE = re.compile(r"^docs-[a-zA-Z]")
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
@@ -71,6 +86,10 @@ LANG_NAMES = {
     "fr": "French",
     "de": "German",
 }
+
+# Match already-translated sibling files: README.en.md, v2-blueprint.zh-tw.md, etc.
+_LANG_SUFFIXES = "|".join(re.escape(k) for k in LANG_NAMES)
+TRANSLATED_FILE_RE = re.compile(rf"\.({_LANG_SUFFIXES})\.md$", re.IGNORECASE)
 
 TRANSLATE_PROMPT = """Translate the following Markdown document from {source_lang_name} to {target_lang_name}.
 
@@ -97,12 +116,19 @@ MCP_NOISE_RE = re.compile(
     r"Connection closed|"
     r"Loaded cached credentials|"
     r"could not determine executable to run|"
-    r"Server '.*' supports (tool|resource) updates\. Listening for changes\.\.\."
+    r"supports tool updates|"
+    r"supports resource updates|"
+    r"listening for chang"
     r")",
     re.IGNORECASE,
 )
 
 LATIN_TARGETS = {"en", "fr", "de", "es"}
+
+# Dynamic timeout: BASE + content_length / CHARS_PER_SEC, capped at MAX
+TIMEOUT_BASE_S = 60       # minimum timeout for any file
+TIMEOUT_CHARS_PER_SEC = 100  # ~1KB = 10s additional
+TIMEOUT_MAX_S = 600       # 10 minute hard cap
 
 
 # --- Frontmatter helpers ---
@@ -147,35 +173,55 @@ def content_hash(body: str) -> str:
 # --- File discovery ---
 
 def discover_sources(target: Optional[Path] = None) -> list[Path]:
-    """Find all translatable .md files in docs/."""
+    """Find all translatable .md files in the workshop.
+
+    Scans the entire WORKSHOP_ROOT, skipping:
+    - Dependency/build dirs (node_modules, .venv, __pycache__, etc.)
+    - Translation output dirs (docs-en/, docs-ja/, etc.)
+    - Already-translated sibling files (README.en.md, etc.)
+    - Excluded docs subdirs (api/, guides/, runbooks/)
+    """
     if target and target.is_file():
         return [target.resolve()]
-
-    sources = []
 
     if target and target.is_dir():
         scan_dir = target.resolve()
     else:
-        scan_dir = DOCS_DIR
+        scan_dir = WORKSHOP_ROOT
 
-    # Recursive scan
+    sources = []
     for md in sorted(scan_dir.rglob("*.md")):
-        try:
-            rel = md.relative_to(DOCS_DIR)
-            parts = rel.parts
-        except ValueError:
-            parts = ()
+        rel = md.relative_to(WORKSHOP_ROOT)
+        parts = rel.parts
 
-        if any(p in EXCLUDE_DIRS for p in parts):
+        # Skip dependency/build directories
+        if any(p in GLOBAL_EXCLUDE_DIRS for p in parts):
             continue
+
+        # Skip translation output directories (docs-en/, docs-ja/, etc.)
+        if parts and DOCS_LANG_DIR_RE.match(parts[0]):
+            continue
+
+        # Skip excluded subdirs within docs/
+        if parts and parts[0] == "docs" and any(p in EXCLUDE_DOCS_SUBDIRS for p in parts):
+            continue
+
+        # Skip already-translated sibling files (README.en.md, etc.)
+        if TRANSLATED_FILE_RE.search(md.name):
+            continue
+
         sources.append(md)
 
-    # Also include root-level .md if scanning whole project
-    if not target or (target.is_dir() and target.resolve() == DOCS_DIR):
-        for md in sorted(WORKSHOP_ROOT.glob("*.md")):
-            sources.append(md)
-
     return sources
+
+
+def is_docs_source(src: Path) -> bool:
+    """Check if source belongs to docs/ (uses mirror strategy)."""
+    try:
+        src.relative_to(DOCS_DIR)
+        return True
+    except ValueError:
+        return False
 
 
 def get_target_dir(lang: str) -> Path:
@@ -186,18 +232,17 @@ def get_target_dir(lang: str) -> Path:
 def get_target_path(src: Path, lang: str) -> Path:
     """Map source .md path to translation target path.
 
-    docs/vision/roadmap.md       → docs-en/vision/roadmap.md
-    docs/architecture/auth.md    → docs-ja/architecture/auth.md
-    CLAUDE.md                    → docs-en/CLAUDE.md
+    docs/ files  → mirror:    docs/vision/roadmap.md → docs-en/vision/roadmap.md
+    other files  → in-place:  core/README.md         → core/README.en.md
     """
-    target_dir = get_target_dir(lang)
-
-    if src.is_relative_to(DOCS_DIR):
+    if is_docs_source(src):
+        # Mirror strategy for docs/
+        target_dir = get_target_dir(lang)
         rel = src.relative_to(DOCS_DIR)
+        return target_dir / rel
     else:
-        rel = src.relative_to(WORKSHOP_ROOT)
-
-    return target_dir / rel
+        # In-place sibling strategy for module files
+        return src.parent / f"{src.stem}.{lang}.md"
 
 
 # --- Sync metadata ---
@@ -303,8 +348,10 @@ def _is_mcp_noise_only(stderr: str) -> bool:
     """Check if stderr contains only MCP server noise (non-fatal errors)."""
     if not stderr.strip():
         return True
+    # Remove ANSI escape sequences that may be emitted by CLI wrappers.
+    ansi_re = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
     for line in stderr.strip().splitlines():
-        line = line.strip()
+        line = ansi_re.sub("", line).strip()
         if not line:
             continue
         if not MCP_NOISE_RE.search(line):
@@ -320,11 +367,19 @@ def _looks_like_markdown(text: str) -> bool:
     return bool(re.search(r"(^#{1,6}\s|^---\s*$)", text, re.MULTILINE))
 
 
+def _compute_timeout(content_length: int) -> int:
+    """Compute dynamic timeout based on content length (in chars)."""
+    timeout = TIMEOUT_BASE_S + content_length // TIMEOUT_CHARS_PER_SEC
+    return min(timeout, TIMEOUT_MAX_S)
+
+
 def translate_file(src: Path, dst: Path, lang: str) -> bool:
     """Translate a single file via Gemini CLI."""
     text = src.read_text(encoding="utf-8")
     src_meta, _ = parse_frontmatter(text)
     source_lang = str(src_meta.get("target_lang", "en"))
+
+    timeout = _compute_timeout(len(text))
 
     prompt = TRANSLATE_PROMPT.format(
         source_lang_name=get_lang_name(source_lang),
@@ -333,11 +388,39 @@ def translate_file(src: Path, dst: Path, lang: str) -> bool:
     )
 
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             ["gemini", "-p", prompt],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=180,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except KeyboardInterrupt:
+            # Ensure child process group is terminated when user presses Ctrl+C.
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            raise
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                stdout, stderr = proc.communicate(timeout=3)
+            except Exception:
+                stdout, stderr = "", ""
+            print(f"\n  ERROR: Gemini CLI timed out ({timeout}s)")
+            return False
+
+        result = subprocess.CompletedProcess(
+            args=["gemini", "-p", prompt],
+            returncode=proc.returncode,
+            stdout=stdout,
+            stderr=stderr,
         )
 
         output = _strip_cli_noise(result.stdout).strip()
@@ -370,9 +453,8 @@ def translate_file(src: Path, dst: Path, lang: str) -> bool:
         dst.write_text(output + "\n", encoding="utf-8")
         return True
 
-    except subprocess.TimeoutExpired:
-        print(f"\n  ERROR: Gemini CLI timed out (180s)")
-        return False
+    except KeyboardInterrupt:
+        raise
     except FileNotFoundError:
         print(f"\n  ERROR: 'gemini' command not found. Install Gemini CLI first.")
         return False
@@ -383,33 +465,52 @@ def translate_file(src: Path, dst: Path, lang: str) -> bool:
 
 # --- Commands ---
 
+def _print_status_line(src: Path, lang: str):
+    """Print a single status line for a source file."""
+    rel = src.relative_to(WORKSHOP_ROOT)
+    src_hash = get_source_hash(src)
+    dst = get_target_path(src, lang)
+    dst_hash = get_target_source_hash(dst)
+
+    if not dst.exists():
+        status = "NO_TRANS"
+    elif dst_hash != src_hash:
+        status = "OUTDATED"
+    elif needs_retranslate_due_to_suspect_copy(src, dst, lang):
+        status = "SUSPECT"
+    else:
+        status = "OK"
+
+    print(f"  {str(rel):<53} {src_hash:<10} {status:<10}")
+
+
 def cmd_status(sources: list[Path], lang: str):
     """Show version comparison table for a specific language."""
     lang_name = get_lang_name(lang)
     target_dir = get_target_dir(lang)
 
+    docs_sources = [s for s in sources if is_docs_source(s)]
+    module_sources = [s for s in sources if not is_docs_source(s)]
+
     print(f"Language:  {lang_name} ({lang})")
-    print(f"Target:    {target_dir.relative_to(WORKSHOP_ROOT)}/")
+    print(f"Total:     {len(sources)} source files")
     print()
-    print(f"{'File':<55} {'Hash':<8} {'Status':<10}")
-    print("-" * 80)
 
-    for src in sources:
-        rel = src.relative_to(WORKSHOP_ROOT)
-        src_hash = get_source_hash(src)
-        dst = get_target_path(src, lang)
-        dst_hash = get_target_source_hash(dst)
+    if docs_sources:
+        print(f"=== docs/ → {target_dir.relative_to(WORKSHOP_ROOT)}/ (mirror) [{len(docs_sources)} files] ===")
+        print(f"  {'File':<53} {'Hash':<10} {'Status':<10}")
+        print(f"  {'-' * 73}")
+        for src in docs_sources:
+            _print_status_line(src, lang)
+        print()
 
-        if not dst.exists():
-            status = "NO_TRANS"
-        elif dst_hash != src_hash:
-            status = "OUTDATED"
-        elif needs_retranslate_due_to_suspect_copy(src, dst, lang):
-            status = "SUSPECT"
-        else:
-            status = "OK"
-
-        print(f"{str(rel):<55} {src_hash:<8} {status:<10}")
+    if module_sources:
+        print(f"=== modules → *.{lang}.md (in-place) [{len(module_sources)} files] ===")
+        print(f"  {'File':<53} {'Hash':<10} {'Status':<10}")
+        print(f"  {'-' * 73}")
+        for src in module_sources:
+            _print_status_line(src, lang)
+        print()
 
 
 def cmd_translate(sources: list[Path], lang: str,
@@ -423,9 +524,11 @@ def cmd_translate(sources: list[Path], lang: str,
     lang_name = get_lang_name(lang)
     target_dir = get_target_dir(lang)
 
-    print(f"Direction: docs/ source → {lang_name}")
-    print(f"Target:    {target_dir.relative_to(WORKSHOP_ROOT)}/")
-    print(f"Sources:   {len(sources)} files")
+    docs_count = sum(1 for s in sources if is_docs_source(s))
+    module_count = len(sources) - docs_count
+
+    print(f"Target:    {lang_name} ({lang})")
+    print(f"Sources:   {len(sources)} files ({docs_count} docs/ → {target_dir.relative_to(WORKSHOP_ROOT)}/, {module_count} modules → *.{lang}.md)")
     print()
 
     for src in sources:
@@ -439,8 +542,11 @@ def cmd_translate(sources: list[Path], lang: str,
             needs_translate = True
             print(f"  RETRY   {rel} (detected untranslated copy)")
 
-        # Step 1: mirror source file to docs-<lang>/ with same filename
-        did_mirror = mirror_source_to_target(src, dst, dry_run=dry_run)
+        # Step 1: mirror only when target is missing or a translation refresh is needed.
+        should_mirror = version_only or (not dst.exists()) or needs_translate
+        did_mirror = False
+        if should_mirror:
+            did_mirror = mirror_source_to_target(src, dst, dry_run=dry_run)
         if did_mirror:
             mirrored += 1
             print(f"  MIRROR  {rel} → {dst.relative_to(WORKSHOP_ROOT)}")
@@ -461,7 +567,7 @@ def cmd_translate(sources: list[Path], lang: str,
             continue
 
         print(f"  TRANSLATE  {rel} ({src_hash}) ...", end=" ", flush=True)
-        ok = translate_file(dst, dst, lang)
+        ok = translate_file(src, dst, lang)
 
         if ok:
             src_text = src.read_text(encoding="utf-8")
@@ -493,11 +599,11 @@ def cmd_translate(sources: list[Path], lang: str,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Mirror docs into docs-<lang>/ and translate without mutating source docs"
+        description="Translate all workshop .md files: docs/ mirror to docs-<lang>/, others in-place as *.lang.md"
     )
     parser.add_argument(
         "path", nargs="?", default=None,
-        help="File or directory to translate (default: all docs/)"
+        help="File or directory to translate (default: all .md files in workshop)"
     )
     parser.add_argument(
         "--lang", default="zh-TW",
@@ -513,7 +619,7 @@ def main():
     )
     parser.add_argument(
         "--version-only", action="store_true",
-        help="Only mirror source files to docs-<lang>/, skip translation"
+        help="Only create target files (mirror/sibling), skip translation"
     )
     parser.add_argument(
         "--status", action="store_true",
@@ -528,10 +634,14 @@ def main():
         print("No .md files found")
         sys.exit(0)
 
-    if args.status:
-        cmd_status(sources, args.lang)
-    else:
-        cmd_translate(sources, args.lang, args.force, args.dry_run, args.version_only)
+    try:
+        if args.status:
+            cmd_status(sources, args.lang)
+        else:
+            cmd_translate(sources, args.lang, args.force, args.dry_run, args.version_only)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user (Ctrl+C).")
+        sys.exit(130)
 
 
 if __name__ == "__main__":

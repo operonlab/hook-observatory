@@ -12,7 +12,7 @@ translated_at: 2026-02-23
 
 | 組件 | 選擇 | 版本 | 理由 |
 |-----------|--------|---------|-----------|
-| 語言 | Python | 3.12+ | 生態系統成熟度，AI/ML 整合 |
+| 語言 | Python | 3.12+ | AI/ML 生態系原生支援、開發速度最大化、AI 程式碼生成品質最佳（詳見 [AD-9](./architecture-decisions.md#ad-9-python-first--selective-rust)） |
 | 框架 | FastAPI | 0.115+ | 非同步優先，OpenAPI 自動生成，原生支援 Pydantic |
 | 套件管理工具 | uv | latest | 快速，支援 workspace，具有 lockfile |
 | ASGI 伺服器 | Uvicorn | 0.34+ | 生產級別，支援 HTTP/2 |

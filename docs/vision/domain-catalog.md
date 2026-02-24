@@ -68,22 +68,29 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **MCP 伺服器** | `workshop-finance` |
-| **V1 狀態** | MCP 伺服器運作中 (9 個工具) |
+| **MCP 伺服器** | `workshop-finance` + `workshop-finance-analytics` |
+| **V1 狀態** | MCP 伺服器運作中 (18 個工具) |
 
 **功能能力**:
-- 個人/家庭記帳 (收入/支出追蹤)
-- 訂閱管理 (訂閱生命週期)
-- 財務洞察 (每月摘要、類別分析)
-- 預算規劃 (按類別編列預算)
+- 一次性交易（付款方式：現金/信用卡/簽帳卡/電子支付/轉帳，具體卡片名稱）
+- 樹狀分類系統（parent_id 自引用，使用者可自訂）
+- 複數自訂標籤（transaction_tags 多對多）
+- 照片附件（複數照片存 RustFS，DB 記 storage_key 關聯）
+- 訂閱管理（週期性扣款，自動產生 transaction）
+- 預算功能（總預算 + 分類預算，即時比對超支警示）
+- 消費分析圖表（圓餅圖、柱狀圖、散佈圖、趨勢線、預算進度）
+- 月度消費報告（LLM 產生 AI 建議）
+- **MCP 拆分**：`workshop-finance`（CRUD ~10 tools）+ `workshop-finance-analytics`（分析+預算 ~8 tools）
 
 **增長路徑** (漸進式複雜度):
 ```
-階段 1: 個人記帳
-階段 2: + 家庭共享帳本
-階段 3: + 預算/分析
-階段 4: + 庫存管理 / POS
+階段 1: 個人記帳 + 樹狀分類 + 照片附件
+階段 2: + 訂閱自動記帳 + 預算
+階段 3: + 分析圖表 + AI 月報
+階段 4: + 家庭共享帳本 + 庫存管理 / POS
 ```
+
+詳見 [P5：Finance 記帳系統](../blueprint/p5-finance.md)
 
 ---
 
@@ -93,26 +100,32 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 |----------|-------|
 | **依賴項目** | auth, dojo (用於量化模式) |
 | **雙向連接** | finance (任務 ↔ 訂單) |
-| **MCP 伺服器** | `workshop-quest` |
-| **V1 狀態** | MCP 伺服器運作中 (10 個工具) |
+| **MCP 伺服器** | `workshop-quest` + `workshop-quest-reports` |
+| **V1 狀態** | MCP 伺服器運作中 (15 個工具) |
 
 **功能能力**:
-- **簡單模式**: 待辦清單 (核取方塊、到期日)
-- **量化模式**: 故事點數、技能需求、複雜度評估
-- **派送模式**: 任務池 + 被動分配 + 主動承接
-- **商務模式**: 任務 = 訂單，包含報價與驗收
+- 統一任務模型（personal / family / company 多來源）
+- 6 狀態狀態機（todo → in_progress → review → done / blocked / cancelled）
+- 子任務（parent_id 自引用）
+- 進度追蹤與回報（task_updates 表：progress / blocker / note / status_change）
+- 日曆檢視（月/週/日/議程 四種模式）
+- 週期性任務（recurrence JSONB：weekly / monthly / custom）
+- 自動報告產出（日誌、週報、月報 + LLM 觀察建議）
+- **MCP 拆分**：`workshop-quest`（CRUD ~10 tools）+ `workshop-quest-reports`（報告 ~5 tools）
 
-**RPG 隱喻** (取自 Quest 設計文件):
+**RPG 隱喻** (保留自 V1 設計):
 - 裝備 = 知識，技能 = 職能，屬性 = 核心特徵
 - 成就 = 往績，連勝/完成率 = 態度 (從行為推斷)
 
 **增長路徑**:
 ```
-階段 1: 核取方塊待辦事項
-階段 2: + 故事點數
-階段 3: + 技能需求 + 任務池
+階段 1: 核取方塊待辦 + 多來源 + 日曆
+階段 2: + 進度追蹤 + 自動日誌/週報/月報
+階段 3: + 技能需求 + 任務池 + 派送
 階段 4: + 訂單 / 報價 / 驗收
 ```
+
+詳見 [P6：Quest 排程與任務管理](../blueprint/p6-quest.md)
 
 ---
 
@@ -476,8 +489,8 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 |---------|------|--------|------------|-------|
 | auth | 基礎層 | V1 已存在 | `workshop-auth` | 待定 |
 | admin | 基礎層 | 部分 V1 | `workshop-admin` | 待定 |
-| finance | 領域服務 | MCP 運作中 | `workshop-finance` | 9 |
-| quest | 領域服務 | MCP 運作中 | `workshop-quest` | 10 |
+| finance | 領域服務 | MCP 運作中 | `workshop-finance` + `workshop-finance-analytics` | ~18 |
+| quest | 領域服務 | MCP 運作中 | `workshop-quest` + `workshop-quest-reports` | ~15 |
 | muse | 領域服務 | MCP 運作中 | `workshop-muse` | 8 |
 | scout | 領域服務 | 未開始 | `workshop-scout` | 待定 |
 | lore | 領域服務 | MCP v0.2.0 | `kas-memory` | 8 |

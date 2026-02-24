@@ -24,6 +24,48 @@ Workshop `stations/` 下的獨立工作站。提供 Web 介面管理 tmux sessio
 | **系統指標** | CPU / RAM / Disk / Network 即時狀態 |
 | **LLM 用量** | Claude 5h/7d、Codex 5h/7d、Gemini Pro 用量 |
 
+## V2 升級計畫（P3-E）
+
+> 參考 **Blink Shell** 和 **iSH** 的手機 SSH 操作體驗，打造觸控友善的 Web Terminal。
+
+### 虛擬按鍵列（Virtual Key Bar）
+
+螢幕底部常駐快捷鍵列，手機開發必備：
+
+| 類別 | 按鍵 | 用途 |
+|------|------|------|
+| 導航 | `←` `→` `↑` `↓` | 方向鍵（命令歷史、游標移動） |
+| 控制 | `Tab` `Esc` `Ctrl` `Alt` | 自動補全、取消、組合鍵 |
+| 開發常用 | `\|` `/` `-` `_` `~` `.` | Pipe、路徑、flag |
+| 組合 | `Ctrl+C` `Ctrl+D` `Ctrl+Z` `Ctrl+L` | 中斷、EOF、暫停、清屏 |
+
+**Ctrl 模式**：點擊 Ctrl → 高亮 → 點擊字母 → 送出 Ctrl+字母 → 自動退出。
+
+### 命令自動補全（Autocomplete）
+
+- **命令歷史**：tmux scrollback buffer 或 shell history
+- **路徑補全**：server 端 `os.listdir()` + glob match
+- **常用指令**：預設 + 使用者自訂清單
+- **tmux 指令**：`tmux ls`、`tmux split-window` 等
+
+### 觸控手勢
+
+| 手勢 | 動作 |
+|------|------|
+| 左右滑動 | 切換 tmux pane |
+| 雙指縮放 | 調整字體大小 |
+| 長按選取 | 複製文字 |
+| 底部上滑 | 展開/收合虛擬鍵盤 |
+
+### UI/UX 強化
+
+- **響應式佈局**：桌面多面板並排；手機單面板 + 滑動切換
+- **連線狀態**：斷線自動重連 + 視覺回饋
+- **字體調整**：可調整終端字體大小
+- **Pane 快速切換**：底部 tab bar 或側邊抽屜
+
+詳見 [P3-E 完整規劃](../../docs/blueprint/p3-stations.md)
+
 ## 啟動
 
 ```bash

@@ -1,5 +1,5 @@
 ---
-doc_version: 1
+doc_version: 2
 content_hash: pending
 target_lang: zh-TW
 ---
@@ -10,394 +10,94 @@ target_lang: zh-TW
 
 ---
 
-## 優先順序
+## 優先順序總覽
 
-| 順位 | 模組 | 目標 | 為什麼優先 |
-|------|------|------|-----------|
-| **P1** | lore (KAS Memory V2) | Claude Code 持久化記憶 | 每天都在用，改善記憶品質 = 改善所有工作品質 |
-| **P2** | scout (Smart Search V2) | 搜尋報告結構化儲存 + UI | 搜尋是高頻操作，散落 .md 檔已造成痛點 |
+| 順位 | 模組 | 目標 | 為什麼優先 | 詳細文件 |
+|------|------|------|-----------|---------|
+| **P1** | lore (KAS Memory V2) | Claude Code 持久化記憶 | 每天都在用，改善記憶品質 = 改善所有工作品質 | [p1-lore.md](./p1-lore.md) |
+| **P2** | scout (Smart Search V2) | 搜尋報告結構化儲存 + UI | 搜尋是高頻操作，散落 .md 檔已造成痛點 | [p2-scout.md](./p2-scout.md) |
+| **P3** | stations 整合 | 系統工具現代化 | 散落 V1 工具需統一管理 + tmux-webui 手機體驗 | [p3-stations.md](./p3-stations.md) |
+| **P4** | auth + admin | Google/GitHub OAuth + 管理系統 | 所有模組的前提基礎，V1 缺口多 | [p4-auth.md](./p4-auth.md) |
+| **P5** | finance | 完整個人財務管理 | 記帳是每日剛需，V1 MCP-only 缺 UI/分析/預算 | [p5-finance.md](./p5-finance.md) |
+| **P6** | quest | 排程 + 日曆 + 任務追蹤 + 報告 | 多來源任務管理 + 自動產出日誌/週報/月報 | [p6-quest.md](./p6-quest.md) |
+
+### 依賴關係
+
+```
+P4 (auth) ──────► P5 (finance) ──────► P6 (quest)
+    │                                      ↑
+    └──► P1 (lore) ──► P2 (scout)          │
+                                           │
+         P3 (stations) ───────────── 獨立，可並行
+```
+
+> **注意**：P4 Auth 是所有 Domain 模組的前提，但 P1/P2 因為已有 MCP 介面可先行開發後端邏輯，Auth 完成後再接入。
 
 ---
-
-## P1：Lore 模組 — KAS Memory V2
-
-### 現況分析
-
-KAS Memory 目前是獨立專案（`~/Claude/projects/kas-memory/`），採用檔案系統架構：
-
-| 層級 | 儲存 | 問題 |
-|------|------|------|
-| Layer A | `MEMORY.md`（always-loaded, 200 行上限） | 空間有限，需精挑細選 |
-| Layer B | `memories/YYYY-MM/*.md` + `tags.idx` | 純文字，併發寫入風險，無 ACID |
-| Layer C | `embeddings.json`（Ollama 768d） | 單檔 JSON，隨記憶增長效能下降 |
-
-**MCP Server**：9 個工具（kas_recall, kas_extract, kas_promote 等），TypeScript 實作
-**SessionEnd Hook**：`extract-async.sh` → Gemini Flash + Haiku 雙 LLM 提煉 → Galaxy 重建
-**Galaxy 視覺化**：`galaxy-data.json` → `galaxy-explorer.html`（K/A/S 三維星系圖）
-
-### V2 目標
-
-將 KAS Memory 從「檔案系統工具」重構為「Workshop Core 模組」，同時保持 MCP 介面。
-
-#### 1. 資料層遷移：File → PostgreSQL + pgvector
-
-```
-現況：memories/*.md + tags.idx + embeddings.json
-  ↓
-目標：PostgreSQL (schema: lore)
-  ├── lore_blocks       — 記憶區塊（取代 .md 檔案）
-  ├── lore_tags         — 標籤索引（取代 tags.idx）
-  ├── lore_embeddings   — 向量欄位（取代 embeddings.json，pgvector）
-  ├── knowledge_domains — 知識域（取代 knowledge/domains/*.md）
-  └── kas_profiles      — KAS 四維 Profile（取代 profile.json）
-```
-
-**優勢**：
-- ACID 保證（解決併發寫入問題）
-- pgvector 原生向量搜尋（取代自製 JSON cosine similarity）
-- SQL 查詢彈性（時間範圍、tag 組合、跨表 JOIN）
-- 與 Workshop 其他模組共享 PostgreSQL 基礎設施
-
-#### 2. KS 星系（Knowledge-Skill Galaxy）
-
-從提煉的記憶中自動發展知識域與技能圖譜：
-
-```
-Session 對話
-    │
-    ▼
-SessionEnd Hook 提煉
-    │
-    ├── 知識碎片 → Knowledge Domain 聚合
-    │     「學到了 pgvector 的 HNSW 索引」→ 累積到 Database 知識域
-    │
-    ├── 技能驗證 → Skill Tree 成長
-    │     「成功用 playwright 自動化測試」→ Browser Automation 技能 +1
-    │
-    └── 態度記錄 → Attitude Profile 演化
-          「決定採用漸進式重構而非全面重寫」→ 決策風格更新
-```
-
-**Galaxy 視覺化升級**：從靜態 HTML 升級為 Workbench Widget，即時反映最新狀態。
-
-#### 3. 多 Agent 態度系統（Attitude Dimension）
-
-KAS 的 A（Attitude）不只是記錄少爺的決策風格，更是多 Agent 協作的基礎：
-
-```
-┌──────────────────────────────────────────┐
-│           Memory Core (共享記憶池)         │
-├──────────┬──────────┬────────────────────┤
-│ Agent A  │ Agent B  │ Agent C            │
-│ 樂觀派   │ 悲觀派   │ 務實派              │
-│ 探索新方向│ 質疑風險  │ 權衡成本效益         │
-└──────────┴──────────┴────────────────────┘
-         │         │         │
-         └─────────┼─────────┘
-                   ▼
-            共識記憶 → 寫回 Memory
-```
-
-- 每個 Agent 可以帶有不同的 Attitude Profile（立場偏好）
-- 多 Agent 並發討論後，結論寫回共享記憶池
-- Attitude 維度追蹤：risk_preference, decision_style, communication_style
-
-#### 4. Recall 整合
-
-兩個「Recall」工具互補共存：
-
-| 工具 | 用途 | 整合方式 |
-|------|------|---------|
-| `kas_recall`（MCP） | 結構化記憶搜尋（tags + vector） | UserPromptSubmit hook 自動注入 |
-| `zippoxer/recall`（CLI TUI） | 歷史 session 全文搜尋 | 手動查詢；kas_recall miss 時建議使用 |
-
-**整合流程**：
-1. `kas_recall` 先搜結構化記憶
-2. 若命中率低 → 建議：「記憶中未找到相關內容，可用 `recall` 搜尋歷史 session 原文」
-3. 從 `recall` 找到的原文 → 可手動觸發 `kas_extract` 回填為結構化記憶
-
-### 技術架構
-
-```
-workbench/src/modules/lore/       ← Lore UI（Galaxy Widget、記憶瀏覽器）
-core/src/modules/lore/            ← Lore 後端（API + DB + 提煉引擎）
-mcp/lore/                         ← MCP Adapter（保持現有 9 個工具介面）
-```
-
-### 遷移策略
-
-1. **Phase A**：在 Core 中建立 lore schema + API，匯入現有 .md 記憶
-2. **Phase B**：切換 MCP Server 為 Core API 的薄適配器（而非直接讀檔案）
-3. **Phase C**：升級 SessionEnd Hook 寫入 DB 而非 .md
-4. **Phase D**：Workbench Widget（Galaxy + 記憶瀏覽器）
-
----
-
-## P2：Scout 模組 — Smart Search V2
-
-### 現況分析
-
-Smart Search 已有兩個元件：
-
-| 元件 | 位置 | 狀態 |
-|------|------|------|
-| `smart-search` Skill | `~/.claude/skills/smart-search/` | 運作中，v0.3.3 |
-| `research_report` Service | `~/Claude/services/research_report/` | 運作中，port 8830 |
-
-**已有的好東西**：
-- PostgreSQL + pgvector（schema `pulso_research`，768d Ollama embedding）
-- 完整 REST API（CRUD + semantic search + topic graph + dashboard）
-- 前端 Research Hub（port 3005）
-- 52 個 .md fallback 檔案待回填
-
-**V1 Daily Briefing 的優秀設計**（值得保留）：
-- 三 AI 分析師互相辯論（Claude + Codex + Gemini）
-- 五領域分類（finance / ai / tech / geopolitics / weather）
-- raw → analysis → debate 三層管線
-- 極端立場判定 + 被忽略角度挖掘
-
-### V2 目標
-
-將散落的搜尋/情報能力整合為 Workshop Core 的 `scout` 模組。
-
-#### 1. 資料層整合：獨立 Service → Core Module
-
-```
-現況：
-  ~/Claude/services/research_report/  (獨立 FastAPI, port 8830)
-  ~/Claude/skills/smart-search/*.md   (52 個 fallback 檔案)
-  ~/Claude/skills/daily-briefing/     (靜態 HTML)
-  ↓
-目標：
-  core/src/modules/scout/             (Core Module)
-  ├── schema: scout                   (PostgreSQL)
-  │   ├── reports          — 搜尋/研究報告
-  │   ├── report_embeddings — pgvector 向量（768d / 1536d）
-  │   ├── topics           — 主題分類
-  │   ├── topic_relations  — 主題關聯圖
-  │   ├── briefings        — 每日情報彙整
-  │   └── search_sessions  — 搜尋紀錄
-  │
-  └── API: /api/scout/
-      ├── reports/         — CRUD + 語意搜尋
-      ├── topics/          — 主題管理 + 關聯圖
-      ├── briefings/       — 每日情報
-      ├── search/          — 語意搜尋端點
-      └── dashboard/       — 統計 + 時序圖
-```
-
-#### 2. Smart Search Skill 對接
-
-```
-smart-search Skill (Claude Code)
-    │
-    ├── Pre-Search: POST /api/scout/search/check  ← 查重（pgvector 相似度）
-    │
-    ├── 執行搜尋（DeepWiki / Context7 / Perplexity / 9 平台社群）
-    │
-    └── Post-Search: POST /api/scout/reports      ← 寫入報告 + 自動 embedding
-                                                     不再 fallback 到 .md
-```
-
-#### 3. UI 升級：Research Hub → Workbench Module
-
-保留 V1 的好設計，以 Workbench 模組形式重建：
-
-| 頁面 | 功能 |
-|------|------|
-| `/scout` | 情報總覽（最新報告、趨勢圖、主題圖譜） |
-| `/scout/reports` | 報告列表（全文搜尋 + 語意搜尋 + tag 過濾） |
-| `/scout/reports/:id` | 報告詳情（Markdown 渲染 + 來源連結） |
-| `/scout/topics` | 主題圖譜（Force-directed graph 視覺化） |
-| `/scout/briefings` | 每日情報（三分析師辯論格式） |
-| Widget | Workbench 首頁摘要 Widget（最新 5 篇 + 趨勢） |
-
-#### 4. Daily Briefing 整合
-
-V1 的三 AI 辯論模式整合到 scout 模組：
-
-```
-每日觸發（cron 或手動）
-    │
-    ├── 資料收集：RSS + 社群 + WebSearch
-    │
-    ├── 三分析師獨立分析：
-    │   ├── Claude  → analysis/claude.md
-    │   ├── Codex   → analysis/codex.md
-    │   └── Gemini  → analysis/gemini.md
-    │
-    ├── 交叉辯論：debate/synthesis.md
-    │
-    └── 寫入 DB：POST /api/scout/briefings
-        （含 embedding，可語意搜尋歷史情報）
-```
-
-### 技術架構
-
-```
-workbench/src/modules/scout/      ← Scout UI（報告瀏覽、主題圖譜、情報總覽）
-core/src/modules/scout/           ← Scout 後端（API + DB + pgvector + 提煉）
-mcp/scout/                        ← MCP Adapter（供 Claude Code 直接操作）
-```
-
-### 遷移策略
-
-1. **Phase A**：在 Core 中建立 scout schema，匯入 research_report DB 資料 + 52 個 .md 回填
-2. **Phase B**：切換 smart-search Skill 端點從 `localhost:8830` → Core API
-3. **Phase C**：Workbench 模組（報告瀏覽器 + 主題圖譜）
-4. **Phase D**：Daily Briefing 整合（三分析師管線）
-
----
-
-## P3：Station 整合 — 系統監控 + LLM 用量 + 環境工具 + 情報主題管理
-
-### 概述
-
-將散落的 V1 工具整合到 Workshop `stations/` 目錄下，並為 scout 模組新增 Daily Briefing 動態主題管理。
-
-### P3-A：System Monitor — 磁碟 + 硬體監控
-
-**現況**：V1 磁碟分析運作良好（`~/.claude/data/disk-report/`，每日 launchd 排程）。
-
-**V2 變更**：
-- 頻率調整：每日 → 每週（週一 05:00 UTC）+ 月報
-- 新增硬體資源監控：CPU / RAM / Swap / 溫度 / 電池
-- 壓力等級判定 + 警報通知
-- Workbench Widget（系統健康卡片）
-- Core API 端點（`/api/stations/system-monitor/`）
-
-**技術架構**：
-```
-stations/system-monitor/
-├── collect.sh           ← 磁碟 + 硬體資料收集
-├── generate-report.sh   ← AI 分析報告（雙層 LLM 路由）
-└── config.json          ← 排程、門檻值、通知設定
-      ↓
-workbench Widget ← Core API ← 報告 DB / 即時狀態
-```
-
-### P3-B：LLM Usage — 統一 Token/Cost 追蹤
-
-**現況**：LLM 用量分散各處，model-policy 只看 CC 比率，LiteLLM 有資料但沒 UI。
-
-**V2 變更**：
-- LiteLLM DB 同步 → 統一 usage_records
-- 多維度分析：按 Provider / Model / Caller / 時間 / 用途
-- Cache 效率統計
-- 月度預算追蹤
-- model-policy 改讀統一 DB
-- Workbench Widget（成本儀表板）
-
-**技術架構**：
-```
-Claude Code ─┐
-Codex CLI   ─┼─► LiteLLM Proxy ─► collector.py ─► 統一 DB
-Gemini CLI  ─┘
-                                         ↓
-                    workbench Widget ← Core API
-```
-
-### P3-C：EnvKit — 環境快照 + 一鍵移植
-
-**現況**：`~/dotfiles/` 有基礎清單和腳本，但少爺認為 V1「不是我要的」。
-
-**V2 重新設計**：
-- 分類清冊（YAML，按 AI 工具 / 終端 / 開發 / 服務 / 應用分類）
-- Config 映射表（每個工具的設定檔位置 + git 追蹤狀態）
-- 8 階段 Bootstrap Pipeline（依賴順序安裝）
-- `envkit snapshot` / `envkit verify` / `envkit diff` CLI 工具
-- 與 `~/dotfiles/` 互補（dotfiles 管設定檔，envkit 管環境全貌）
-
-### P3-D：Daily Briefing 主題管理（scout 模組擴充）
-
-**現況**：V1 的 6 個情報主題完全寫死在 `run.sh`（530 行 shell 腳本）。
-
-**V2 變更**：
-- DB 表：`scout.briefing_topics` + `scout.briefing_subtopics`
-- 動態 CRUD：可新增/修改/啟停主題 + 子分類
-- 子分類參數化：例如天氣→輸入在意的地區（台北、東京、紐約）
-- 主題管理 UI：`/scout/briefings/settings`（樹狀結構，可勾選啟停）
-- 三分析師管線保留：改為讀取動態主題設定
-- V1 → V2 遷移：首次啟動自動建立 6 個預設主題
-
-### P3 遷移策略
-
-```
-P3-A (system-monitor): 複製 V1 腳本 → 改頻率 → 加硬體監控 → API + Widget
-P3-B (llm-usage):      解析 LiteLLM DB → 統一收集 → API + Widget
-P3-C (envkit):         盤點 ~/dotfiles/ → 產生 inventory.yaml → bootstrap pipeline
-P3-D (briefing 管理):  建立 DB 表 → 遷移寫死主題 → CRUD API → 管理 UI
-```
-
----
-
-## 與現有藍圖的關係
-
-| 現有文件 | 處置 |
-|---------|------|
-| `v2-blueprint.md` | 保留作為長期願景參考，但實際執行順序以本文件為準 |
-| `v2-worktree-todos.md` | 保留，待 P1/P2 完成後再回頭處理 |
-| `v1-feature-inventory.md` | 保留作為 V1 資產盤點參考 |
 
 ## Skill → Module 對應表
 
-> 現有 Claude Code Skills 中哪些會併入 Workshop 模組，作為 Phase 3+ 規劃參考。
+> 現有 Claude Code Skills 中哪些會併入 Workshop 模組，作為規劃參考。
 
-### scout — 搜尋與情報
-
-P2 優先模組。以下 Skills 產出的研究報告、分析結果都應持久化到 scout DB：
+### scout — 搜尋與情報（P2）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **smart-search** | 搜尋報告 (.md) | P2 主力。報告寫入 `scout.reports`，啟用 pgvector 語意搜尋 |
-| **daily-briefing** | 三分析師情報 (HTML) | P2 併入。寫入 `scout.briefings`，保留辯論格式 |
-| **company-intel** | 公司調查報告 | 報告結構相同，統一存入 `scout.reports`（tag: company-intel） |
+| **smart-search** | 搜尋報告 (.md) | 主力。報告寫入 `scout.reports`，啟用 pgvector 語意搜尋 |
+| **daily-briefing** | 三分析師情報 (HTML) | 併入。寫入 `scout.briefings`，保留辯論格式 |
+| **company-intel** | 公司調查報告 | 統一存入 `scout.reports`（tag: company-intel） |
 | **competitive-intel** | 競品分析報告 | 同上（tag: competitive-intel） |
 | **content-writer** | 有引用來源的文章 | 同上（tag: content-article），來源連結存入 `sources` JSONB |
 
 **合併效益**：所有研究成果可跨 skill 語意搜尋，避免「用 smart-search 查不到 company-intel 的產出」。
 
-### lore — 記憶與知識
-
-P1 優先模組。以下 Skills 產出可作為記憶來源：
+### lore — 記憶與知識（P1）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **kas-memory** (MCP) | 結構化記憶區塊 | P1 主力。遷移到 `lore.blocks` + pgvector |
+| **kas-memory** (MCP) | 結構化記憶區塊 | 主力。遷移到 `lore.blocks` + pgvector |
 | **meeting-insights** | 溝通模式分析 | 分析結果作為 lore block 寫入，追蹤溝通風格演變 |
 
-### dojo — 技能與學習
-
-Phase 2 模組。以下 Skills 產出可作為 dojo 資料源：
+### finance — 會計與財務（P5）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **skill-catalog** | 80+ skill 清冊 | → `dojo.skill_registry`（已安裝 skill 清單） |
-| **skill-graph** | skill 聯動圖 | → `dojo.skill_relations`（技能之間的關聯） |
-| **skill-optimizer** | 優化建議 | → `dojo.optimization_logs`（優化歷史追蹤） |
-| **model-mentor** | 模型推薦 | → `dojo.tool_proficiency`（工具熟練度記錄） |
+| **pulso-finance** (MCP) | 交易 CRUD + 訂閱 + 洞察 | V1 10 tools → V2 拆 2 MCP（CRUD + Analytics） |
+
+### quest — 任務與排程（P6）
+
+| Skill | 目前產出 | 整合方式 |
+|-------|---------|---------|
+| **pulso-quest** (MCP) | 任務 CRUD + 技能樹 | V1 10 tools → V2 拆 2 MCP（CRUD + Reports） |
+| **scheduler** | cron 排程 | 週期性任務整合到 quest.tasks.recurrence |
+
+### dojo — 技能與學習（未來）
+
+| Skill | 目前產出 | 整合方式 |
+|-------|---------|---------|
+| **skill-catalog** | 80+ skill 清冊 | → `dojo.skill_registry` |
+| **skill-graph** | skill 聯動圖 | → `dojo.skill_relations` |
+| **skill-optimizer** | 優化建議 | → `dojo.optimization_logs` |
+| **model-mentor** | 模型推薦 | → `dojo.tool_proficiency` |
 
 **願景**：追蹤「少爺和維恩一起磨練了哪些技能、各到什麼程度」，從 Galaxy 視覺化觀察成長軌跡。
 
-### roster — 資源管理
-
-Phase 3 模組。以下 Skills 對應 agent/resource 調度：
+### roster — 資源管理（未來）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **maestro** | 三 CLI 調度紀錄 | → `roster.agent_sessions`（agent 執行歷史） |
-| **team-tasks** | 多 agent 協調 | → `roster.task_allocations`（任務分配記錄） |
-| **scheduler** | 排程任務 | → `roster.schedules`（週期性任務管理） |
+| **maestro** | 三 CLI 調度紀錄 | → `roster.agent_sessions` |
+| **team-tasks** | 多 agent 協調 | → `roster.task_allocations` |
 
-### nexus — 媒合引擎
+### nexus — 媒合引擎（未來）
 
-Phase 3 模組。目前無直接對應 Skill，純新建。未來可整合：
+目前無直接對應 Skill，純新建。未來可整合：
 - quest 的任務分派 → nexus 評分引擎
 - dojo 的技能落差 → nexus 學習資源推薦
 
 ### media — 媒體處理（`core/services/media/`）
 
-已規劃為 hot-path service，以下 Skills 對應媒體處理能力：
+已規劃為 hot-path service：
 
 | Skill | 功能 | 對應 API |
 |-------|------|---------|
@@ -411,8 +111,6 @@ Phase 3 模組。目前無直接對應 Skill，純新建。未來可整合：
 
 ### 不併入模組的 Skills
 
-以下 Skills 保持獨立運作，不需要 API/UI/MCP：
-
 | 類別 | Skills | 理由 |
 |------|--------|------|
 | 開發流程 | blueprint, executor, forge, spec-kit, tdd-enforcer | 開發工具，不產出持久化資料 |
@@ -423,10 +121,38 @@ Phase 3 模組。目前無直接對應 Skill，純新建。未來可整合：
 
 ---
 
-## 設計原則（貫穿 P1/P2）
+## MCP Server 盤點
+
+| MCP Server | 模組 | Tools 數 | 狀態 |
+|------------|------|---------|------|
+| `kas-memory` | lore | 9 | V1 運作中 → V2 改為 Core API adapter |
+| `workshop-scout` | scout | 待定 | V2 新建 |
+| `workshop-auth` | auth | 待定 | V2 新建 |
+| `workshop-finance` | finance | ~10 | V1 運作中 → V2 拆分 |
+| `workshop-finance-analytics` | finance | ~8 | V2 新建（分析 + 預算） |
+| `workshop-quest` | quest | ~10 | V1 運作中 → V2 拆分 |
+| `workshop-quest-reports` | quest | ~5 | V2 新建（報告 + 分析） |
+| `workshop-admin` | admin | 待定 | V2 新建 |
+
+---
+
+## 設計原則（貫穿所有優先層級）
 
 1. **文件先行**：每個模組先有 README.md + API spec，再動手寫程式碼
 2. **整個重構，非搬運**：不是把 V1 程式碼搬到新目錄，而是根據 V2 架構原則重新設計
-3. **保留好設計**：V1 中驗證有效的設計（三分析師辯論、pgvector 語意搜尋）保留核心概念
+3. **保留好設計**：V1 中驗證有效的設計（authlib OAuth、MCP 10 tools、pgvector）保留核心概念
 4. **MCP 介面不中斷**：重構後端不影響 Claude Code 的日常使用（MCP 工具名稱和行為保持一致）
 5. **漸進切換**：新舊系統並存過渡期，逐步切換端點，確保零停機
+6. **超過 10 tools 就拆 MCP**：遵循 AD-2 切分規則，保持單一 MCP Server 的 context 負擔合理
+7. **照片存 RustFS、關聯存 DB**：二進位檔案不進 PostgreSQL，靠 storage_key 關聯
+
+---
+
+## 相關文件
+
+| 文件 | 用途 |
+|------|------|
+| [v1-feature-inventory.md](./v1-feature-inventory.md) | V1 功能清單，供重構參考 |
+| [domain-catalog.md](../vision/domain-catalog.md) | 服務目錄（所有模組總覽） |
+| [architecture-decisions.md](../architecture/architecture-decisions.md) | ADR 決策紀錄 |
+| [auth.md](../architecture/auth.md) | Auth 架構設計文件 |

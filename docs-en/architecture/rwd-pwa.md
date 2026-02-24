@@ -8,15 +8,15 @@ source_hash: fac097fb
 source_lang: zh-TW
 ---
 
-# RWD + PWA Development Specifications
+# RWD + PWA Development Guidelines
 
-The frontend application (`workbench/`) must adhere to these specifications.
+Frontend applications (`workbench/`) must adhere to these guidelines.
 
 ## Responsive Web Design (RWD)
 
 ### Breakpoints (Tailwind CSS)
 
-| Token | Minimum Width | Target |
+| Token | Min-width | Target |
 |-------|-----------|--------|
 | `sm`  | 640px     | Mobile Landscape |
 | `md`  | 768px     | Tablet |
@@ -25,16 +25,16 @@ The frontend application (`workbench/`) must adhere to these specifications.
 
 ### Rules
 
-1. **Mobile First**: Default styles target `<640px`. For wider screens, use `sm:`, `md:`, and `lg:`.
+1. **Mobile First**: Default styles target `<640px`. Use `sm:`, `md:`, `lg:` for wider screens.
 2. **Touch Targets**: All interactive elements must be a minimum of 44×44px.
-3. **No Horizontal Scrolling**: At any breakpoint. Test down to 320px.
-4. **Fluid Typography**: Use `rem` units (16px base). Scale with viewport size via `clamp()`.
+3. **No Horizontal Scrolling**: Ever, at any breakpoint. Test down to 320px.
+4. **Fluid Typography**: Use `rem` units (base 16px). Scale with viewport using `clamp()`.
 5. **Responsive Images**: Use `srcset` / `<picture>` or CSS `object-fit`.
 6. **Container Queries**: Prefer over media queries for component-level responsiveness.
 
-### Testing Checklist
+### Test Checklist
 
-- [ ] 320px (Small phone)
+- [ ] 320px (Small mobile)
 - [ ] 375px (iPhone SE)
 - [ ] 768px (iPad Portrait)
 - [ ] 1024px (iPad Landscape / Small Desktop)
@@ -62,13 +62,13 @@ The frontend application (`workbench/`) must adhere to these specifications.
 
 #### Service Worker
 
-Strategies by asset type:
+Strategies by Asset Type:
 
 | Asset | Strategy | Rationale |
 |-------|----------|-----------|
-| App shell (HTML/CSS/JS) | **Cache-first** | Load instantly, update in background |
+| App shell (HTML/CSS/JS) | **Cache-first** | Instant load, update in background |
 | API Responses | **Network-first**, with cache fallback | Prioritize fresh data |
-| Static Assets (images, fonts) | **Cache-first**, stale-while-revalidate | Changes infrequently |
+| Static Assets (images, fonts) | **Cache-first**, stale-while-revalidate | Changes rarely |
 
 ### HTML Requirements
 
@@ -88,19 +88,19 @@ Strategies by asset type:
 ### Offline Behavior
 
 - App shell loads from cache (instant)
-- Displays an offline indicator when network is unavailable
-- Queue mutations to replay on reconnection (future feature)
+- Show an offline indicator when network is unavailable
+- Queue mutations to be replayed on reconnect (future feature)
 
 ## Implementation in the Web App
 
-The workbench application (`workbench/`) serves as the reference implementation:
-- Tailwind breakpoint config from shared styles
+The workbench app (`workbench/`) serves as the reference implementation:
+- Tailwind breakpoint configuration from shared styles
 - PWA manifest and SW registration from the web app entry point
-- Dark/light theme variables (Catppuccin Mocha) implemented via CSS custom properties
+- Dark/light theme variables via CSS custom properties (Catppuccin Mocha)
 
 ## Theme: Catppuccin Mocha
 
-Default dark theme palette (CSS Custom Properties):
+Default dark theme palette (CSS custom properties):
 
 ```css
 :root {
@@ -121,5 +121,5 @@ Default dark theme palette (CSS Custom Properties):
   --teal: #94e2d5;
 }
 ```
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2695ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3350ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2508ms
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2536ms

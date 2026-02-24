@@ -70,7 +70,7 @@ services:
 - Zero-configuration, runs with just `docker compose up`
 - All backends are pre-connected to Grafana
 - Built-in OTel Collector, ready to receive OTLP
-- Sufficiently lightweight, suitable for local development
+- Lightweight enough for local development
 
 ### Production Environment: SigNoz
 
@@ -226,11 +226,11 @@ HTTP Request (trace A)
 
 | Panel | Metric | Purpose |
 |-------|--------|---------|
-| Event Throughput | `events.published.total` by type | Events per second by type |
-| Event Handling Latency | `events.handling.duration_ms` | Processor time consumption |
+| Event Throughput | `events.published.total` by type | Events per second per type |
+| Event Handling Latency | `events.handling.duration_ms` | Processor duration |
 | Event Error Rate | `events.handling.errors` | Failed event handlers |
 | Event Flow Diagram | Trace waterfall | Visualize event chains |
-| Top Event Types | `events.published.total` ranked | Which events are triggered most frequently |
+| Top Event Types | `events.published.total` ranked | Which event types trigger most frequently |
 
 ### Module Dashboard: Health by Module
 
@@ -238,7 +238,7 @@ HTTP Request (trace A)
 |-------|--------|---------|
 | Module Request Rate | `http.server.request.duration{http.route~"/api/<module>/*"}` | Throughput per module |
 | Module Error Rate | Same, filtered by status code | Errors per module |
-| Database Query Latency | `db.client.operation.duration` by module schema | Query performance |
+| DB Query Latency | `db.client.operation.duration` by module schema | Query performance |
 | Cache Hit Rate | `redis.cache.hit / (hit + miss)` | Cache effectiveness |
 
 ### Plugin Dashboard: Plugin Health
@@ -248,7 +248,7 @@ HTTP Request (trace A)
 | Hook Executions | `plugin.hook.executions` by plugin | Plugin activity |
 | Hook Latency | `plugin.hook.duration_ms` | Plugin performance impact |
 | Hook Rejections | `plugin.hook.rejections` | Plugin blocking behavior |
-| Permission Denied | `plugin.permission.denied` | Permission configuration errors |
+| Permissions Denied | `plugin.permission.denied` | Permission configuration errors |
 
 ## Configuration
 
@@ -309,10 +309,9 @@ service:
 
 | Alert | Condition | Severity |
 |-------|-----------|----------|
-| High Error Rate | `error_rate > 5%` for 5 minutes | Critical |
-| High Latency | `p99 > 2s` for 5 minutes | Warning |
+| High Error Rate | `error_rate > 5%` for 5 mins | Critical |
+| High Latency | `p99 > 2s` for 5 mins | Warning |
 | Event Bus Pending Backlog | `pending_events > 1000` | Warning |
 | Plugin Hook Timeout | `hook.duration > 5s` | Warning |
-| Database Connection Pool Exhausted | `pool.available == 0` | Critical |
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3086ms
-Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2439ms
+| DB Connection Pool Exhausted | `pool.available == 0` | Critical |
+Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2474ms
