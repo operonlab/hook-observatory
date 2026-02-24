@@ -166,6 +166,30 @@ class MemoryBlockService(
             for row in rows
         ]
 
+    async def text_search(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query: str,
+        top_k: int = 10,
+    ) -> list[SemanticSearchResult]:
+        """Fallback text search using ILIKE when embeddings are unavailable."""
+        pattern = f"%{query}%"
+        q = (
+            select(MemoryBlock)
+            .where(
+                MemoryBlock.space_id == space_id,
+                MemoryBlock.content.ilike(pattern),
+            )
+            .order_by(MemoryBlock.updated_at.desc())
+            .limit(top_k)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [
+            SemanticSearchResult(block=self.to_response(r), score=0.5)
+            for r in rows
+        ]
+
     async def update_embedding(
         self, db: AsyncSession, block_id: str, embedding: list[float]
     ) -> None:

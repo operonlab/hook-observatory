@@ -6,12 +6,12 @@ Usage:
     python3 scripts/import_v1_memories.py --kas-dir ~/Claude/projects/kas-memory --space-id default
 
 Reads:
-    - memories/YYYY-MM/*.md → memvault.blocks
-    - profile.json → memvault.kas_profiles (4 records: knowledge, attitude, skill, summary)
+    - memories/YYYY-MM/*.md  → memvault.blocks
+    - profile.json           → memvault.kas_profiles (single record per space)
     - knowledge/domains/*.md → memvault.knowledge_domains
     - tags rebuilt from blocks after import
 
-Idempotent: skips blocks whose session_id + topic already exist.
+Idempotent: skips blocks whose source_session + first 100 chars of content already exist.
 """
 
 import argparse
@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # Add core/src to path so we can import models
@@ -36,8 +36,33 @@ from modules.memvault.models import (  # noqa: E402
     MemoryBlock,
     Tag,
 )
+from modules.memvault.embedding import get_embeddings_batch  # noqa: E402
 
 logger = structlog.get_logger()
+
+EMBEDDING_BATCH_SIZE = 10
+
+# ======================== Type Mapping ========================
+
+_TYPE_MAP: dict[str, str] = {
+    "decision": "knowledge",
+    "technical": "knowledge",
+    "preference": "attitude",
+    "user-preference": "attitude",
+    "user-correction": "attitude",
+    "communication": "attitude",
+    "pattern": "skill",
+    "achievement": "knowledge",
+    "recent-focus": "knowledge",
+    "failed-approach": "knowledge",
+    "insight": "knowledge",
+}
+
+
+def normalize_type(raw: str) -> str:
+    """Map V1 free-form types to V2 block_type enum (knowledge|skill|attitude|general)."""
+    return _TYPE_MAP.get(raw.strip().lower(), "general")
+
 
 # ======================== Parsing ========================
 
@@ -49,18 +74,38 @@ FIELD_RE = re.compile(r"^\*\*(?P<key>[^*]+)\*\*:\s*(?P<value>.+)$")
 
 
 def parse_memory_file(path: Path) -> list[dict]:
-    """Parse a V1 memory .md file into a list of block dicts."""
+    """Parse a V1 memory .md file into a list of block dicts.
+
+    Each block contains:
+        source_session  : str   — session UUID from header
+        block_type      : str   — normalized V2 type
+        tags            : list[str]
+        content         : str   — "Topic: <topic>\\n\\n<bullet lines>"
+    """
     blocks: list[dict] = []
     current: dict | None = None
+    topic: str = ""
     content_lines: list[str] = []
 
-    def flush():
-        nonlocal current, content_lines
-        if current:
-            current["content"] = "\n".join(content_lines).strip()
-            if current["content"]:
-                blocks.append(current)
+    def flush() -> None:
+        nonlocal current, topic, content_lines
+        if current is None:
+            return
+        # Build content: prepend topic header if present
+        parts: list[str] = []
+        if topic:
+            parts.append(f"Topic: {topic}")
+        body = "\n".join(content_lines).strip()
+        if body:
+            if parts:
+                parts.append("")  # blank separator
+            parts.append(body)
+        full_content = "\n".join(parts).strip()
+        if full_content:
+            current["content"] = full_content
+            blocks.append(current)
         current = None
+        topic = ""
         content_lines = []
 
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -68,13 +113,12 @@ def parse_memory_file(path: Path) -> list[dict]:
         if m:
             flush()
             current = {
-                "session_id": m.group("session_id"),
-                "datetime": m.group("datetime"),
-                "topic": "",
-                "block_type": "technical",
+                "source_session": m.group("session_id"),
+                "block_type": "general",
                 "tags": [],
-                "project": None,
             }
+            topic = ""
+            content_lines = []
             continue
 
         if current is None:
@@ -85,13 +129,12 @@ def parse_memory_file(path: Path) -> list[dict]:
             key = fm.group("key").strip().lower()
             value = fm.group("value").strip()
             if key == "topic":
-                current["topic"] = value
+                topic = value
             elif key == "type":
                 current["block_type"] = normalize_type(value)
             elif key == "tags":
                 current["tags"] = [t.strip() for t in value.split(",") if t.strip()]
-            elif key == "project":
-                current["project"] = value
+            # "project" and other V1-only fields are intentionally dropped
         else:
             content_lines.append(line)
 
@@ -99,46 +142,66 @@ def parse_memory_file(path: Path) -> list[dict]:
     return blocks
 
 
-def normalize_type(raw: str) -> str:
-    """Map V1 free-form types to V2 enum."""
-    mapping = {
-        "decision": "decision",
-        "technical": "technical",
-        "preference": "preference",
-        "user-preference": "preference",
-        "user-correction": "preference",
-        "communication": "preference",
-        "pattern": "pattern",
-        "achievement": "insight",
-        "recent-focus": "insight",
-        "failed-approach": "technical",
-        "insight": "insight",
-    }
-    return mapping.get(raw.lower(), "technical")
-
-
 def parse_profile(path: Path) -> dict:
-    """Parse V1 profile.json."""
-    return json.loads(path.read_text(encoding="utf-8"))
+    """Parse V1 profile.json into (knowledge_score, attitude_score, skill_score).
+
+    V1 structure is a nested dict; we extract numeric sub-items and average them
+    to produce a 0-100 float for each KAS dimension.
+    """
+    raw: dict = json.loads(path.read_text(encoding="utf-8"))
+
+    def _extract_score(section: dict | None) -> float:
+        """Recursively find numeric leaf values and return mean * 100, capped 0-100."""
+        if not section or not isinstance(section, dict):
+            return 0.0
+        values: list[float] = []
+        for v in section.values():
+            if isinstance(v, (int, float)):
+                values.append(float(v))
+            elif isinstance(v, dict):
+                sub = _extract_score(v)
+                if sub > 0:
+                    values.append(sub)
+        if not values:
+            return 0.0
+        avg = sum(values) / len(values)
+        # Values may already be 0-1 or 0-100; normalise to 0-100
+        if avg <= 1.0:
+            avg *= 100
+        return round(min(max(avg, 0.0), 100.0), 2)
+
+    knowledge_score = _extract_score(raw.get("knowledge"))
+    attitude_score = _extract_score(raw.get("attitude"))
+    # V1 uses "skills" or "skill"
+    skill_score = _extract_score(raw.get("skills") or raw.get("skill"))
+
+    return {
+        "knowledge_score": knowledge_score,
+        "attitude_score": attitude_score,
+        "skill_score": skill_score,
+    }
 
 
 def parse_knowledge_domain(path: Path) -> dict:
-    """Parse a V1 knowledge domain .md file."""
-    text = path.read_text(encoding="utf-8")
-    name = path.stem  # filename without .md
-    # Extract key insights count as a rough maturity proxy
-    insights = text.count("- ")
-    # Extract description from first paragraph after header
-    lines = text.splitlines()
-    description = ""
-    for line in lines:
-        if line.startswith(">"):
-            description = line.lstrip("> ").strip()
-            break
+    """Parse a V1 knowledge domain .md file.
 
+    Returns:
+        name            : str           — filename stem
+        description     : str | None    — first blockquote line
+        insights_count  : int           — number of bullet points (maturity proxy)
+    """
+    content = path.read_text(encoding="utf-8")
+    name = path.stem
+    insights = content.count("- ")
+    description: str | None = None
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(">"):
+            description = stripped.lstrip("> ").strip() or None
+            break
     return {
         "name": name,
-        "description": description or None,
+        "description": description,
         "insights_count": insights,
     }
 
@@ -151,19 +214,25 @@ async def import_blocks(
     blocks: list[dict],
     space_id: str,
 ) -> tuple[int, int]:
-    """Import memory blocks. Returns (imported, skipped)."""
+    """Import memory blocks. Returns (imported, skipped).
+
+    Idempotency key: source_session + first 100 chars of content.
+    """
+    from uuid_utils import uuid7
+
     imported = 0
     skipped = 0
 
     async with session_factory() as db:
         for block in blocks:
-            # Idempotency check: session_id + topic
+            content_prefix = block["content"][:100]
+
             existing = (
                 await db.execute(
                     select(MemoryBlock.id).where(
                         MemoryBlock.space_id == space_id,
-                        MemoryBlock.session_id == block["session_id"],
-                        MemoryBlock.topic == block["topic"],
+                        MemoryBlock.source_session == block["source_session"],
+                        MemoryBlock.content.startswith(content_prefix),
                     )
                 )
             ).scalar_one_or_none()
@@ -172,70 +241,114 @@ async def import_blocks(
                 skipped += 1
                 continue
 
-            from uuid_utils import uuid7
-
             db.add(
                 MemoryBlock(
                     id=uuid7().hex,
                     space_id=space_id,
-                    session_id=block["session_id"],
-                    topic=block["topic"],
+                    source_session=block["source_session"],
                     content=block["content"],
                     block_type=block["block_type"],
-                    project=block["project"],
                     tags=block["tags"],
-                    source="import",
                 )
             )
             imported += 1
 
         await db.commit()
+
     return imported, skipped
 
 
-async def import_profiles(
+async def generate_embeddings(
     session_factory: async_sessionmaker,
-    profile_data: dict,
     space_id: str,
 ) -> int:
-    """Import KAS profile as 4 profile records. Returns count."""
+    """Generate Ollama embeddings for all blocks without one. Returns updated count."""
+    updated = 0
+
+    async with session_factory() as db:
+        # Fetch all blocks without embeddings
+        rows = (
+            await db.execute(
+                select(MemoryBlock.id, MemoryBlock.content)
+                .where(
+                    MemoryBlock.space_id == space_id,
+                    MemoryBlock.embedding.is_(None),
+                )
+                .order_by(MemoryBlock.created_at)
+            )
+        ).all()
+
+    if not rows:
+        return 0
+
+    logger.info("Generating embeddings", total=len(rows))
+
+    # Process in batches
+    for batch_start in range(0, len(rows), EMBEDDING_BATCH_SIZE):
+        batch = rows[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
+        texts = [row.content for row in batch]
+        embeddings = await get_embeddings_batch(texts)
+
+        async with session_factory() as db:
+            for row, embedding in zip(batch, embeddings):
+                if embedding is not None:
+                    await db.execute(
+                        update(MemoryBlock)
+                        .where(MemoryBlock.id == row.id)
+                        .values(embedding=embedding)
+                    )
+                    updated += 1
+            await db.commit()
+
+        logger.info(
+            "Embedding batch done",
+            batch_end=min(batch_start + EMBEDDING_BATCH_SIZE, len(rows)),
+            total=len(rows),
+            updated_so_far=updated,
+        )
+
+    return updated
+
+
+async def import_profile(
+    session_factory: async_sessionmaker,
+    scores: dict,
+    space_id: str,
+) -> str:
+    """Upsert KAS profile (single record per space). Returns 'created' or 'updated'."""
     from uuid_utils import uuid7
 
-    count = 0
     async with session_factory() as db:
-        for profile_type in ("knowledge", "attitude", "skill", "summary"):
-            data = profile_data.get(profile_type, profile_data.get("skills", {}))
-            if profile_type == "summary":
-                data = profile_data.get("memory", {})
+        existing_id = (
+            await db.execute(
+                select(KASProfile.id).where(KASProfile.space_id == space_id)
+            )
+        ).scalar_one_or_none()
 
-            # Upsert: check if exists
-            existing = (
-                await db.execute(
-                    select(KASProfile.id).where(
-                        KASProfile.space_id == space_id,
-                        KASProfile.profile_type == profile_type,
-                    )
+        if existing_id:
+            await db.execute(
+                update(KASProfile)
+                .where(KASProfile.id == existing_id)
+                .values(
+                    knowledge_score=scores["knowledge_score"],
+                    attitude_score=scores["attitude_score"],
+                    skill_score=scores["skill_score"],
                 )
-            ).scalar_one_or_none()
-
-            if existing:
-                await db.execute(
-                    text(
-                        "UPDATE memvault.kas_profiles SET data = :data, version = version + 1 WHERE id = :id"
-                    ).bindparams(data=json.dumps(data), id=existing)
+            )
+            await db.commit()
+            return "updated"
+        else:
+            db.add(
+                KASProfile(
+                    id=uuid7().hex,
+                    space_id=space_id,
+                    knowledge_score=scores["knowledge_score"],
+                    attitude_score=scores["attitude_score"],
+                    skill_score=scores["skill_score"],
                 )
-            else:
-                db.add(
-                    KASProfile(
-                        id=uuid7().hex,
-                        space_id=space_id,
-                        profile_type=profile_type,
-                        data=data,
-                    )
-                )
-            count += 1
-        await db.commit()
-    return count
+            )
+            await db.commit()
+            return "created"
 
 
 async def import_domains(
@@ -248,6 +361,7 @@ async def import_domains(
 
     imported = 0
     skipped = 0
+
     async with session_factory() as db:
         for domain in domains:
             existing = (
@@ -263,35 +377,37 @@ async def import_domains(
                 skipped += 1
                 continue
 
-            # Rough maturity: insights_count / 10 capped at 1.0
-            maturity = min(domain["insights_count"] / 10.0, 1.0)
+            # Rough maturity: bullet count / 10, capped at 1.0
+            maturity = round(min(domain["insights_count"] / 10.0, 1.0), 2)
             db.add(
                 KnowledgeDomain(
                     id=uuid7().hex,
                     space_id=space_id,
                     name=domain["name"],
                     description=domain["description"],
-                    maturity=round(maturity, 2),
+                    maturity=maturity,
                 )
             )
             imported += 1
+
         await db.commit()
+
     return imported, skipped
 
 
 async def rebuild_tags(
-    session_factory: async_sessionmaker, space_id: str
+    session_factory: async_sessionmaker,
+    space_id: str,
 ) -> int:
-    """Rebuild tag index from blocks."""
+    """Rebuild tag index from blocks.tags arrays. Returns tag count."""
     from uuid_utils import uuid7
-    from sqlalchemy import delete, func
 
     async with session_factory() as db:
-        # Delete existing tags
+        # Wipe existing tags for this space
         await db.execute(delete(Tag).where(Tag.space_id == space_id))
 
-        # Aggregate tags from blocks
-        tag_counts = (
+        # Aggregate all tag strings from the ARRAY column
+        tag_counts_sq = (
             select(
                 func.unnest(MemoryBlock.tags).label("tag_name"),
                 func.count().label("cnt"),
@@ -301,7 +417,7 @@ async def rebuild_tags(
             .subquery()
         )
 
-        rows = (await db.execute(select(tag_counts))).all()
+        rows = (await db.execute(select(tag_counts_sq))).all()
         for row in rows:
             db.add(
                 Tag(
@@ -311,6 +427,7 @@ async def rebuild_tags(
                     usage_count=row.cnt,
                 )
             )
+
         await db.commit()
         return len(rows)
 
@@ -318,7 +435,12 @@ async def rebuild_tags(
 # ======================== Main ========================
 
 
-async def main(kas_dir: str, space_id: str, db_url: str):
+async def main(
+    kas_dir: str,
+    space_id: str,
+    db_url: str,
+    skip_embeddings: bool,
+) -> None:
     kas_path = Path(kas_dir).expanduser()
     if not kas_path.exists():
         logger.error("KAS directory not found", path=str(kas_path))
@@ -330,44 +452,81 @@ async def main(kas_dir: str, space_id: str, db_url: str):
 
     logger.info("Starting V1 import", kas_dir=str(kas_path), space_id=space_id)
 
-    # 1. Parse memory files
+    # ── 1. Parse + import memory blocks ──────────────────────────────────────
     memory_dir = kas_path / "memories"
     all_blocks: list[dict] = []
     if memory_dir.exists():
         for md_file in sorted(memory_dir.rglob("*.md")):
-            blocks = parse_memory_file(md_file)
-            all_blocks.extend(blocks)
-            logger.info("Parsed", file=str(md_file.relative_to(kas_path)), blocks=len(blocks))
+            parsed = parse_memory_file(md_file)
+            all_blocks.extend(parsed)
+            logger.info(
+                "Parsed memory file",
+                file=str(md_file.relative_to(kas_path)),
+                blocks=len(parsed),
+            )
+    else:
+        logger.warning("memories/ directory not found", path=str(memory_dir))
 
     logger.info("Total blocks parsed", count=len(all_blocks))
 
-    # 2. Import blocks
-    imported, skipped = await import_blocks(session_factory, all_blocks, space_id)
-    logger.info("Blocks imported", imported=imported, skipped=skipped)
+    blocks_imported, blocks_skipped = await import_blocks(
+        session_factory, all_blocks, space_id
+    )
+    logger.info(
+        "Blocks imported", imported=blocks_imported, skipped=blocks_skipped
+    )
 
-    # 3. Import profile
+    # ── 2. Generate embeddings ────────────────────────────────────────────────
+    if skip_embeddings:
+        logger.info("Skipping embedding generation (--skip-embeddings flag)")
+        embeddings_updated = 0
+    else:
+        embeddings_updated = await generate_embeddings(session_factory, space_id)
+        logger.info("Embeddings generated", updated=embeddings_updated)
+
+    # ── 3. Import KAS profile ─────────────────────────────────────────────────
     profile_path = kas_path / "profile.json"
     if profile_path.exists():
-        profile_data = parse_profile(profile_path)
-        count = await import_profiles(session_factory, profile_data, space_id)
-        logger.info("Profiles imported", count=count)
+        scores = parse_profile(profile_path)
+        action = await import_profile(session_factory, scores, space_id)
+        logger.info(
+            "KAS profile imported",
+            action=action,
+            knowledge_score=scores["knowledge_score"],
+            attitude_score=scores["attitude_score"],
+            skill_score=scores["skill_score"],
+        )
+    else:
+        logger.warning("profile.json not found", path=str(profile_path))
 
-    # 4. Import knowledge domains
+    # ── 4. Import knowledge domains ───────────────────────────────────────────
     domains_dir = kas_path / "knowledge" / "domains"
+    domains_imported = domains_skipped = 0
     if domains_dir.exists():
-        domains = [parse_knowledge_domain(f) for f in sorted(domains_dir.glob("*.md"))]
-        d_imported, d_skipped = await import_domains(session_factory, domains, space_id)
-        logger.info("Domains imported", imported=d_imported, skipped=d_skipped)
+        domains = [
+            parse_knowledge_domain(f) for f in sorted(domains_dir.glob("*.md"))
+        ]
+        domains_imported, domains_skipped = await import_domains(
+            session_factory, domains, space_id
+        )
+        logger.info(
+            "Domains imported", imported=domains_imported, skipped=domains_skipped
+        )
+    else:
+        logger.warning("knowledge/domains/ directory not found", path=str(domains_dir))
 
-    # 5. Rebuild tags
+    # ── 5. Rebuild tag index ──────────────────────────────────────────────────
     tag_count = await rebuild_tags(session_factory, space_id)
     logger.info("Tags rebuilt", count=tag_count)
 
-    # Summary
+    # ── Summary ───────────────────────────────────────────────────────────────
     logger.info(
         "Import complete",
-        blocks=imported,
-        blocks_skipped=skipped,
+        blocks_imported=blocks_imported,
+        blocks_skipped=blocks_skipped,
+        embeddings_updated=embeddings_updated,
+        domains_imported=domains_imported,
+        domains_skipped=domains_skipped,
         tags=tag_count,
     )
 
@@ -388,8 +547,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--db-url",
-        default="postgresql://localhost/workshop",
+        default="postgresql://pulso:pulso_dev@localhost/workshop",
         help="PostgreSQL connection URL",
     )
+    parser.add_argument(
+        "--skip-embeddings",
+        action="store_true",
+        help="Skip Ollama embedding generation (useful for dry runs)",
+    )
     args = parser.parse_args()
-    asyncio.run(main(args.kas_dir, args.space_id, args.db_url))
+    asyncio.run(main(args.kas_dir, args.space_id, args.db_url, args.skip_embeddings))

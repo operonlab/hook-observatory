@@ -25,6 +25,7 @@ from .schemas import (
     SemanticSearchResult,
     TagResponse,
 )
+from .embedding import get_embedding
 from .services import (
     kas_profile_service,
     knowledge_domain_service,
@@ -81,6 +82,10 @@ async def create_block(
     db: AsyncSession = Depends(get_db),
 ):
     instance = await memory_block_service.create(db, space_id, body)
+    # Generate embedding asynchronously (best-effort)
+    embedding = await get_embedding(instance.content)
+    if embedding:
+        await memory_block_service.update_embedding(db, instance.id, embedding)
     await db.commit()
     return memory_block_service.to_response(instance)
 
@@ -119,9 +124,13 @@ async def semantic_search(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    # TODO: integrate EmbeddingService to convert query text → vector
-    # Placeholder: return empty results until EmbeddingService is ready
-    return []
+    query_embedding = await get_embedding(q)
+    if query_embedding is None:
+        # Fallback: ILIKE text search when Ollama is unavailable
+        return await memory_block_service.text_search(db, space_id, q, top_k)
+    return await memory_block_service.semantic_search(
+        db, space_id, query_embedding, top_k=top_k
+    )
 
 
 # ======================== Tags ========================
