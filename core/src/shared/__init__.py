@@ -1,1 +1,1 @@
-"""Shared utilities — DB, cache, helpers."""
+"""Shared utilities — DB, models, schemas, errors, services."""

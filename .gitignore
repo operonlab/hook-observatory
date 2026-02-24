@@ -37,6 +37,9 @@ stations/*/dist/
 # Claude
 CLAUDE.local.md
 
+# Worktrees
+.worktrees/
+
 # Lab (POC experiments) - relaxed rules
 lab/*/outputs/*.tmp
 lab/*/outputs/*.bin
