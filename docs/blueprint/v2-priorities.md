@@ -20,18 +20,21 @@ target_lang: zh-TW
 | **P4** | auth + admin | Google/GitHub OAuth + 管理系統 | 所有模組的前提基礎，V1 缺口多 | [p4-auth.md](./p4-auth.md) |
 | **P5** | finance | 完整個人財務管理 | 記帳是每日剛需，V1 MCP-only 缺 UI/分析/預算 | [p5-finance.md](./p5-finance.md) |
 | **P6** | taskflow | 排程 + 日曆 + 任務追蹤 + 報告 | 多來源任務管理 + 自動產出日誌/週報/月報 | [p6-taskflow.md](./p6-taskflow.md) |
+| **P7** | ideagraph | AI 輔助靈感孵化 + 知識圖譜 | 想法散落各處，需要系統化捕捉→精煉→連結→驗證 | [p7-ideagraph.md](./p7-ideagraph.md) |
 
 ### 依賴關係
 
 ```
 P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
     │                                      ↑
-    └──► P1 (memvault) ──► P2 (intelflow)  │
+    ├──► P1 (memvault) ──► P2 (intelflow)  │
+    │                                      │
+    └──► P7 (ideagraph) ◄── memvault 可轉入 Spark
                                            │
          P3 (stations) ───────────── 獨立，可並行
 ```
 
-> **注意**：P4 Auth 是所有 Domain 模組的前提，但 P1/P2 因為已有 MCP 介面可先行開發後端邏輯，Auth 完成後再接入。
+> **注意**：P4 Auth 是所有 Domain 模組的前提，但 P1/P2/P7 因為已有 MCP 介面可先行開發後端邏輯，Auth 完成後再接入。
 
 ---
 
@@ -70,6 +73,14 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 |-------|---------|---------|
 | **pulso-quest** (MCP) | 任務 CRUD + 技能樹 | V1 10 tools → V2 拆 2 MCP（CRUD + Reports） |
 | **scheduler** | cron 排程 | 週期性任務整合到 taskflow.tasks.recurrence |
+
+### ideagraph — 靈感孵化與知識圖譜（P7）
+
+| Skill | 目前產出 | 整合方式 |
+|-------|---------|---------|
+| **pulso-muse** (MCP) | Spark CRUD + 連結 + 語意搜尋 | V1 8 tools → V2 拆 2 MCP（CRUD + AI 輔助） |
+
+**合併效益**：從純 CRUD 升級為 Capture→Refine→Connect→Verify 管線，AI 自動精煉想法 + 推演連結，人類驗證後固化為知識圖譜。
 
 ### skillpath — 技能與學習（未來）
 
@@ -133,6 +144,8 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 | `workshop-taskflow` | taskflow | ~10 | V1 運作中 → V2 拆分 |
 | `workshop-taskflow-reports` | taskflow | ~5 | V2 新建（報告 + 分析） |
 | `workshop-admin` | admin | 待定 | V2 新建 |
+| `workshop-ideagraph` | ideagraph | ~8 | V1 pulso-muse → V2 重構（CRUD） |
+| `workshop-ideagraph-ai` | ideagraph | ~5 | V2 新建（AI 輔助：精煉 + 推演 + 驗證） |
 
 ---
 
