@@ -1,17 +1,17 @@
-# Scout 模組（前端）
+# Intelflow 模組（前端）
 
-> Research Hub + Daily Briefing — Scout 模組的 Workbench UI。
+> Research Hub + Daily Briefing — Intelflow 模組的 Workbench UI。
 
 ## 頁面規劃
 
 | 路由 | 頁面 | 說明 |
 |------|------|------|
-| `/scout` | 情報總覽 | 最新報告 + 趨勢圖 + 主題圖譜入口 |
-| `/scout/reports` | 報告列表 | 全文搜尋 + 語意搜尋 + tag/topic 過濾 |
-| `/scout/reports/:id` | 報告詳情 | Markdown 渲染 + 來源連結 + 相關報告 |
-| `/scout/topics` | 主題圖譜 | Force-directed graph 視覺化 + 主題鑽取 |
-| `/scout/briefings` | 每日情報 | 情報列表（日期選擇） |
-| `/scout/briefings/:date` | 情報詳情 | 三分析師分析 + 辯論結論 |
+| `/intelflow` | 情報總覽 | 最新報告 + 趨勢圖 + 主題圖譜入口 |
+| `/intelflow/reports` | 報告列表 | 全文搜尋 + 語意搜尋 + tag/topic 過濾 |
+| `/intelflow/reports/:id` | 報告詳情 | Markdown 渲染 + 來源連結 + 相關報告 |
+| `/intelflow/topics` | 主題圖譜 | Force-directed graph 視覺化 + 主題鑽取 |
+| `/intelflow/briefings` | 每日情報 | 情報列表（日期選擇） |
+| `/intelflow/briefings/:date` | 情報詳情 | 三分析師分析 + 辯論結論 |
 
 ## Workbench Widgets
 
@@ -64,16 +64,16 @@
 ## 目錄結構（規劃）
 
 ```
-workbench/src/modules/scout/
+workbench/src/modules/intelflow/
 ├── README.md             ← 本文件
 ├── index.tsx             ← 模組入口（導出路由）
 ├── pages/
-│   ├── Overview.tsx      ← /scout
-│   ├── ReportList.tsx    ← /scout/reports
-│   ├── ReportDetail.tsx  ← /scout/reports/:id
-│   ├── TopicGraph.tsx    ← /scout/topics
-│   ├── BriefingList.tsx  ← /scout/briefings
-│   └── BriefingDetail.tsx ← /scout/briefings/:date
+│   ├── Overview.tsx      ← /intelflow
+│   ├── ReportList.tsx    ← /intelflow/reports
+│   ├── ReportDetail.tsx  ← /intelflow/reports/:id
+│   ├── TopicGraph.tsx    ← /intelflow/topics
+│   ├── BriefingList.tsx  ← /intelflow/briefings
+│   └── BriefingDetail.tsx ← /intelflow/briefings/:date
 ├── components/
 │   ├── ReportCard.tsx    ← 報告卡片
 │   ├── TopicMap.tsx      ← 主題圖譜視覺化
@@ -85,11 +85,11 @@ workbench/src/modules/scout/
 │   ├── TrendChartWidget.tsx
 │   └── DailyBriefingWidget.tsx
 ├── hooks/
-│   └── useScout.ts       ← Scout API hooks
+│   └── useIntelflow.ts   ← Intelflow API hooks
 ├── stores/
-│   └── scoutStore.ts     ← Zustand store
+│   └── intelflowStore.ts ← Zustand store
 ├── api/
-│   └── client.ts         ← Scout API client
+│   └── client.ts         ← Intelflow API client
 └── types/
-    └── index.ts          ← Scout types
+    └── index.ts          ← Intelflow types
 ```

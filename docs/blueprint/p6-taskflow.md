@@ -6,7 +6,7 @@ target_lang: zh-TW
 
 > [← 返回優先藍圖總覽](./v2-priorities.md)
 
-# P6：Quest 排程與任務管理 — 日曆 + 追蹤 + 報告
+# P6：Taskflow 排程與任務管理 — 日曆 + 追蹤 + 報告
 
 ### 現況分析
 
@@ -37,10 +37,10 @@ V1 Quest MCP Server（`pulso-quest`）已有 10 個 tools：
 #### 1. 統一任務模型
 
 ```sql
-CREATE TABLE quest.tasks (
+CREATE TABLE taskflow.tasks (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     space_id        UUID NOT NULL,
-    parent_id       UUID REFERENCES quest.tasks(id),    -- 子任務
+    parent_id       UUID REFERENCES taskflow.tasks(id),    -- 子任務
     title           TEXT NOT NULL,
     description     TEXT,
 
@@ -93,9 +93,9 @@ CREATE TABLE quest.tasks (
 #### 2. 進度追蹤與回報
 
 ```sql
-CREATE TABLE quest.task_updates (
+CREATE TABLE taskflow.task_updates (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id     UUID NOT NULL REFERENCES quest.tasks(id) ON DELETE CASCADE,
+    task_id     UUID NOT NULL REFERENCES taskflow.tasks(id) ON DELETE CASCADE,
     type        TEXT NOT NULL,              -- 'progress', 'blocker', 'note', 'status_change'
     content     TEXT NOT NULL,              -- 回報內容
     old_status  TEXT,                       -- 狀態變更前
@@ -187,7 +187,7 @@ CREATE TABLE quest.task_updates (
 
 📋 下月重點
   - Auth 模組完成
-  - Scout 遷移啟動
+  - Intelflow 遷移啟動
 ```
 
 **產生方式**：
@@ -198,47 +198,47 @@ CREATE TABLE quest.task_updates (
 
 #### 5. MCP Server 設計
 
-Quest 預估 12-15 個 tools，拆成 2 個 MCP Server：
+Taskflow 預估 12-15 個 tools，拆成 2 個 MCP Server：
 
-**`workshop-quest`**（核心 CRUD + 排程，~10 tools）：
+**`workshop-taskflow`**（核心 CRUD + 排程，~10 tools）：
 | Tool | 功能 |
 |------|------|
-| `quest_create` | 建立任務（含子任務、標籤、排程） |
-| `quest_update` | 更新任務（含狀態變更） |
-| `quest_list` | 列出任務（過濾：狀態/來源/專案/日期/標籤） |
-| `quest_complete` | 標記完成（快捷操作） |
-| `quest_add_update` | 新增進度回報 |
-| `quest_list_blocked` | 列出阻塞項目 |
-| `quest_today` | 今日任務摘要 |
-| `quest_upcoming` | 未來 N 天任務 |
-| `quest_set_recurrence` | 設定週期性排程 |
-| `quest_bulk_update` | 批次更新狀態 |
+| `taskflow_create` | 建立任務（含子任務、標籤、排程） |
+| `taskflow_update` | 更新任務（含狀態變更） |
+| `taskflow_list` | 列出任務（過濾：狀態/來源/專案/日期/標籤） |
+| `taskflow_complete` | 標記完成（快捷操作） |
+| `taskflow_add_update` | 新增進度回報 |
+| `taskflow_list_blocked` | 列出阻塞項目 |
+| `taskflow_today` | 今日任務摘要 |
+| `taskflow_upcoming` | 未來 N 天任務 |
+| `taskflow_set_recurrence` | 設定週期性排程 |
+| `taskflow_bulk_update` | 批次更新狀態 |
 
-**`workshop-quest-reports`**（報告 + 分析，~5 tools）：
+**`workshop-taskflow-reports`**（報告 + 分析，~5 tools）：
 | Tool | 功能 |
 |------|------|
-| `quest_daily_log` | 產生/查閱日誌 |
-| `quest_weekly_report` | 產生/查閱週報 |
-| `quest_monthly_report` | 產生/查閱月報 |
-| `quest_stats` | 任務統計（完成率、工時分佈、趨勢） |
-| `quest_export` | 匯出報告（Markdown / PDF） |
+| `taskflow_daily_log` | 產生/查閱日誌 |
+| `taskflow_weekly_report` | 產生/查閱週報 |
+| `taskflow_monthly_report` | 產生/查閱月報 |
+| `taskflow_stats` | 任務統計（完成率、工時分佈、趨勢） |
+| `taskflow_export` | 匯出報告（Markdown / PDF） |
 
 ### 技術架構
 
 ```
-workbench/src/modules/quest/      ← Quest UI（任務列表、日曆、看板、報告）
-core/src/modules/quest/           ← Quest 後端（API + DB + 排程引擎 + 報告產生）
-mcp/quest/                        ← workshop-quest MCP（核心 CRUD + 排程）
-mcp/quest-reports/                ← workshop-quest-reports MCP（報告 + 分析）
+workbench/src/modules/taskflow/      ← Taskflow UI（任務列表、日曆、看板、報告）
+core/src/modules/taskflow/           ← Taskflow 後端（API + DB + 排程引擎 + 報告產生）
+mcp/taskflow/                        ← workshop-taskflow MCP（核心 CRUD + 排程）
+mcp/taskflow-reports/                ← workshop-taskflow-reports MCP（報告 + 分析）
 ```
 
 ### 遷移策略
 
-1. **Phase A**：建立 quest schema（tasks + task_updates）+ 基本 CRUD API
+1. **Phase A**：建立 taskflow schema（tasks + task_updates）+ 基本 CRUD API
 2. **Phase B**：狀態機 + 進度追蹤 + 回報功能
 3. **Phase C**：日曆 UI + 週期性任務
 4. **Phase D**：自動報告產出（日誌 → 週報 → 月報）
-5. **Phase E**：MCP Server（2 個） + 與 Finance 的跨模組 event 整合
+5. **Phase E**：MCP Server（2 個） + 與 Finance 的跨模組 event 整合（`taskflow.task.completed`）
 
 ---
 

@@ -10,7 +10,7 @@ target_lang: zh-TW
 
 ### 概述
 
-將散落的 V1 工具整合到 Workshop `stations/` 目錄下，並為 scout 模組新增 Daily Briefing 動態主題管理。
+將散落的 V1 工具整合到 Workshop `stations/` 目錄下，並為 intelflow 模組新增 Daily Briefing 動態主題管理。
 
 ### P3-A：System Monitor — 磁碟 + 硬體監控
 
@@ -68,15 +68,15 @@ Agent SDK / 自建服務 → LiteLLM Proxy → api_collector.py → DB
 - `envkit snapshot/backup/bootstrap/verify/diff` CLI
 - 穩定後歸檔 `~/dotfiles/`
 
-### P3-D：Daily Briefing 主題管理（scout 模組擴充）
+### P3-D：Daily Briefing 主題管理（intelflow 模組擴充）
 
 **現況**：V1 的 6 個情報主題完全寫死在 `run.sh`（530 行 shell 腳本）。
 
 **V2 變更**：
-- DB 表：`scout.briefing_topics` + `scout.briefing_subtopics`
+- DB 表：`intelflow.briefing_topics` + `intelflow.briefing_subtopics`
 - 動態 CRUD：可新增/修改/啟停主題 + 子分類
 - 子分類參數化：例如天氣→輸入在意的地區（台北、東京、紐約）
-- 主題管理 UI：`/scout/briefings/settings`（樹狀結構，可勾選啟停）
+- 主題管理 UI：`/intelflow/briefings/settings`（樹狀結構，可勾選啟停）
 - 三分析師管線保留：改為讀取動態主題設定
 - V1 → V2 遷移：首次啟動自動建立 6 個預設主題
 

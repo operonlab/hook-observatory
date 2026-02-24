@@ -268,4 +268,4 @@ mcp/finance-analytics/            ← workshop-finance-analytics MCP（分析 + 
 
 ---
 
-**下一步** → [P6：Quest 排程與任務管理](./p6-quest.md)
+**下一步** → [P6：Taskflow 排程與任務管理](./p6-taskflow.md)

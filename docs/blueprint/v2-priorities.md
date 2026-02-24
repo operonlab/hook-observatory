@@ -14,19 +14,19 @@ target_lang: zh-TW
 
 | 順位 | 模組 | 目標 | 為什麼優先 | 詳細文件 |
 |------|------|------|-----------|---------|
-| **P1** | lore (KAS Memory V2) | Claude Code 持久化記憶 | 每天都在用，改善記憶品質 = 改善所有工作品質 | [p1-lore.md](./p1-lore.md) |
-| **P2** | scout (Smart Search V2) | 搜尋報告結構化儲存 + UI | 搜尋是高頻操作，散落 .md 檔已造成痛點 | [p2-scout.md](./p2-scout.md) |
+| **P1** | memvault (KAS Memory V2) | Claude Code 持久化記憶 | 每天都在用，改善記憶品質 = 改善所有工作品質 | [p1-memvault.md](./p1-memvault.md) |
+| **P2** | intelflow (Smart Search V2) | 搜尋報告結構化儲存 + UI | 搜尋是高頻操作，散落 .md 檔已造成痛點 | [p2-intelflow.md](./p2-intelflow.md) |
 | **P3** | stations 整合 | 系統工具現代化 | 散落 V1 工具需統一管理 + tmux-webui 手機體驗 | [p3-stations.md](./p3-stations.md) |
 | **P4** | auth + admin | Google/GitHub OAuth + 管理系統 | 所有模組的前提基礎，V1 缺口多 | [p4-auth.md](./p4-auth.md) |
 | **P5** | finance | 完整個人財務管理 | 記帳是每日剛需，V1 MCP-only 缺 UI/分析/預算 | [p5-finance.md](./p5-finance.md) |
-| **P6** | quest | 排程 + 日曆 + 任務追蹤 + 報告 | 多來源任務管理 + 自動產出日誌/週報/月報 | [p6-quest.md](./p6-quest.md) |
+| **P6** | taskflow | 排程 + 日曆 + 任務追蹤 + 報告 | 多來源任務管理 + 自動產出日誌/週報/月報 | [p6-taskflow.md](./p6-taskflow.md) |
 
 ### 依賴關係
 
 ```
-P4 (auth) ──────► P5 (finance) ──────► P6 (quest)
+P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
     │                                      ↑
-    └──► P1 (lore) ──► P2 (scout)          │
+    └──► P1 (memvault) ──► P2 (intelflow)  │
                                            │
          P3 (stations) ───────────── 獨立，可並行
 ```
@@ -39,24 +39,24 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (quest)
 
 > 現有 Claude Code Skills 中哪些會併入 Workshop 模組，作為規劃參考。
 
-### scout — 搜尋與情報（P2）
+### intelflow — 搜尋與情報（P2）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **smart-search** | 搜尋報告 (.md) | 主力。報告寫入 `scout.reports`，啟用 pgvector 語意搜尋 |
-| **daily-briefing** | 三分析師情報 (HTML) | 併入。寫入 `scout.briefings`，保留辯論格式 |
-| **company-intel** | 公司調查報告 | 統一存入 `scout.reports`（tag: company-intel） |
+| **smart-search** | 搜尋報告 (.md) | 主力。報告寫入 `intelflow.reports`，啟用 pgvector 語意搜尋 |
+| **daily-briefing** | 三分析師情報 (HTML) | 併入。寫入 `intelflow.briefings`，保留辯論格式 |
+| **company-intel** | 公司調查報告 | 統一存入 `intelflow.reports`（tag: company-intel） |
 | **competitive-intel** | 競品分析報告 | 同上（tag: competitive-intel） |
 | **content-writer** | 有引用來源的文章 | 同上（tag: content-article），來源連結存入 `sources` JSONB |
 
 **合併效益**：所有研究成果可跨 skill 語意搜尋，避免「用 smart-search 查不到 company-intel 的產出」。
 
-### lore — 記憶與知識（P1）
+### memvault — 記憶與知識（P1）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **kas-memory** (MCP) | 結構化記憶區塊 | 主力。遷移到 `lore.blocks` + pgvector |
-| **meeting-insights** | 溝通模式分析 | 分析結果作為 lore block 寫入，追蹤溝通風格演變 |
+| **kas-memory** (MCP) | 結構化記憶區塊 | 主力。遷移到 `memvault.blocks` + pgvector |
+| **meeting-insights** | 溝通模式分析 | 分析結果作為 memvault block 寫入，追蹤溝通風格演變 |
 
 ### finance — 會計與財務（P5）
 
@@ -64,36 +64,36 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (quest)
 |-------|---------|---------|
 | **pulso-finance** (MCP) | 交易 CRUD + 訂閱 + 洞察 | V1 10 tools → V2 拆 2 MCP（CRUD + Analytics） |
 
-### quest — 任務與排程（P6）
+### taskflow — 任務與排程（P6）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
 | **pulso-quest** (MCP) | 任務 CRUD + 技能樹 | V1 10 tools → V2 拆 2 MCP（CRUD + Reports） |
-| **scheduler** | cron 排程 | 週期性任務整合到 quest.tasks.recurrence |
+| **scheduler** | cron 排程 | 週期性任務整合到 taskflow.tasks.recurrence |
 
-### dojo — 技能與學習（未來）
+### skillpath — 技能與學習（未來）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **skill-catalog** | 80+ skill 清冊 | → `dojo.skill_registry` |
-| **skill-graph** | skill 聯動圖 | → `dojo.skill_relations` |
-| **skill-optimizer** | 優化建議 | → `dojo.optimization_logs` |
-| **model-mentor** | 模型推薦 | → `dojo.tool_proficiency` |
+| **skill-catalog** | 80+ skill 清冊 | → `skillpath.skill_registry` |
+| **skill-graph** | skill 聯動圖 | → `skillpath.skill_relations` |
+| **skill-optimizer** | 優化建議 | → `skillpath.optimization_logs` |
+| **model-mentor** | 模型推薦 | → `skillpath.tool_proficiency` |
 
 **願景**：追蹤「少爺和維恩一起磨練了哪些技能、各到什麼程度」，從 Galaxy 視覺化觀察成長軌跡。
 
-### roster — 資源管理（未來）
+### workpool — 資源管理（未來）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **maestro** | 三 CLI 調度紀錄 | → `roster.agent_sessions` |
-| **team-tasks** | 多 agent 協調 | → `roster.task_allocations` |
+| **maestro** | 三 CLI 調度紀錄 | → `workpool.agent_sessions` |
+| **team-tasks** | 多 agent 協調 | → `workpool.task_allocations` |
 
-### nexus — 媒合引擎（未來）
+### matchcore — 媒合引擎（未來）
 
 目前無直接對應 Skill，純新建。未來可整合：
-- quest 的任務分派 → nexus 評分引擎
-- dojo 的技能落差 → nexus 學習資源推薦
+- taskflow 的任務分派 → matchcore 評分引擎
+- skillpath 的技能落差 → matchcore 學習資源推薦
 
 ### media — 媒體處理（`core/services/media/`）
 
@@ -125,13 +125,13 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (quest)
 
 | MCP Server | 模組 | Tools 數 | 狀態 |
 |------------|------|---------|------|
-| `kas-memory` | lore | 9 | V1 運作中 → V2 改為 Core API adapter |
-| `workshop-scout` | scout | 待定 | V2 新建 |
+| `kas-memory` | memvault | 9 | V1 運作中 → V2 改為 Core API adapter |
+| `workshop-intelflow` | intelflow | 待定 | V2 新建 |
 | `workshop-auth` | auth | 待定 | V2 新建 |
 | `workshop-finance` | finance | ~10 | V1 運作中 → V2 拆分 |
 | `workshop-finance-analytics` | finance | ~8 | V2 新建（分析 + 預算） |
-| `workshop-quest` | quest | ~10 | V1 運作中 → V2 拆分 |
-| `workshop-quest-reports` | quest | ~5 | V2 新建（報告 + 分析） |
+| `workshop-taskflow` | taskflow | ~10 | V1 運作中 → V2 拆分 |
+| `workshop-taskflow-reports` | taskflow | ~5 | V2 新建（報告 + 分析） |
 | `workshop-admin` | admin | 待定 | V2 新建 |
 
 ---

@@ -21,7 +21,7 @@ translated_at: 2026-02-23
 
 > 一個模組只做一件事，並且只有一個理由去改變。
 
-**Workshop 應用**：每個 Domain Service 管理單一業務領域。finance 僅處理金錢，quest 僅處理任務。跨領域邏輯透過 Event Bus 流動 —— 不會被塞進單個模組中。
+**Workshop 應用**：每個 Domain Service 管理單一業務領域。finance 僅處理金錢，taskflow 僅處理任務。跨領域邏輯透過 Event Bus 流動 —— 不會被塞進單個模組中。
 
 ### 2. DRY — 避免重複原則 (Don't Repeat Yourself) (+ 三次法則)
 
@@ -39,7 +39,7 @@ translated_at: 2026-02-23
 
 > 不要為假設性的未來需求進行開發。
 
-**Workshop 應用**：漸進式複雜度 (Progressive Complexity) 的技術基礎。Phase 1 的 quest 只是一個打勾清單 —— 不需要預先構建任務池調度引擎。每個 Phase 都是一個完整、可用的產品。
+**Workshop 應用**：漸進式複雜度 (Progressive Complexity) 的技術基礎。Phase 1 的 taskflow 只是一個打勾清單 —— 不需要預先構建任務池調度引擎。每個 Phase 都是一個完整、可用的產品。
 
 ### 5. SSOT — 單一真理來源 (Single Source of Truth)
 
@@ -80,7 +80,7 @@ translated_at: 2026-02-23
 
 > 能驗證假設的最迷你可以行版本。
 
-**Workshop 應用**：每個 Phase 都是一個 MVP。Phase 1 的 quest 只是個核取方塊 —— 如果它能運作，就是成功。不要追求「完美」 —— 追求「驗證核心假設」。
+**Workshop 應用**：每個 Phase 都是一個 MVP。Phase 1 的 taskflow 只是個核取方塊 —— 如果它能運作，就是成功。不要追求「完美」 —— 追求「驗證核心假設」。
 
 ### 11. 善用現有方案 (Prefer Existing Solutions)
 
@@ -114,7 +114,7 @@ translated_at: 2026-02-23
 | 原則 | Workshop 應用 |
 |-----------|---------------------|
 | **Bounded Context** (DDD) | 每個 Module = 一個擁有自己「語言」和數據模型的界限上下文 |
-| **Event-Driven** | 模組間透過事件通訊。`finance.transaction.created` → quest 可以訂閱 |
+| **Event-Driven** | 模組間透過事件通訊。`finance.transaction.created` → taskflow 可以訂閱 |
 | **Idempotency** (冪等性) | 事件處理程序必須是冪等的 —— 兩次接收相同的事件不會產生重複的影響 |
 | **Progressive Disclosure** | MCP 工具按需加載 (ToolSearch)，而不是塞爆系統提示詞 (system prompt) |
 | **12-Factor App** | 配置存放在環境變數 (`.env`)、無狀態服務、埠綁定、開發/生產環境一致性 |

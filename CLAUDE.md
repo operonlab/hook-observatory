@@ -22,7 +22,7 @@ Modular Monolith + Event-Driven workspace.
 
 ## Structure
 - `core/` — Modular Monolith (10 Core Modules + hot-path services)
-  - `core/src/modules/` — Domain modules (auth, finance, quest, muse, scout, lore, dojo, roster, nexus, admin)
+  - `core/src/modules/` — Domain modules (auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin)
   - `core/services/realtime/` — LiveKit WebRTC gateway
   - `core/services/media/` — STT/TTS/image processing
 - `workbench/` — Single React application
@@ -42,7 +42,7 @@ Modular Monolith + Event-Driven workspace.
 
 ## Service Taxonomy
 - **Foundation**: auth, admin
-- **Domain Services** (DB-backed): finance, quest, muse, scout, lore, dojo, roster, nexus
+- **Domain Services** (DB-backed): finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore
 - **Bridges**: External connectors (social-hooks, notification)
 - **Hot-path Services**: media (STT/TTS/image), realtime (LiveKit)
 - **Stations**: Standalone local tools (system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor)

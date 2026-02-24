@@ -31,7 +31,7 @@ translated_at: 2026-02-23
 「專案」與「模組」之間沒有區別 — 一切都是可組合的服務：
 
 ```
-Bottom-Up: Build service blocks (auth, finance, quest, muse, ...)
+Bottom-Up: Build service blocks (auth, finance, taskflow, ideagraph, ...)
 Top-Down:  Analyze requirements, design blueprints
 Meeting:   Compose services into solutions (Legal Advisor, ERP, ...)
 ```
@@ -41,7 +41,7 @@ Meeting:   Compose services into solutions (Legal Advisor, ERP, ...)
 | 類型 | 範例 | 資料駐留位置 |
 |------|----------|---------------|
 | **基礎 (Foundation)** | auth, admin | PostgreSQL |
-| **領域 (Domain)** | finance, quest, muse, scout, lore, dojo, roster, nexus | PostgreSQL (schema-per-module) |
+| **領域 (Domain)** | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore | PostgreSQL (schema-per-module) |
 | **橋接 (Bridge)** | social-hooks, notification | 外部 + Event Bus |
 | **工作站 (Station)** | system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 DB |
 | **第三方 (Vendor)** | observability (@disler) | 獨立運行 |
@@ -60,7 +60,7 @@ Social Bridges (LINE/TG/DC) ─────► FastAPI Core
 ```
 
 ### 階段摘要
-1. **Phase 1**：auth + finance + quest + muse + LINE bot + Widget Dashboard
-2. **Phase 2**：lore v2 + dojo + scout + church music
-3. **Phase 3**：roster + task dispatch + multi-platform social
+1. **Phase 1**：auth + finance + taskflow + ideagraph + LINE bot + Widget Dashboard
+2. **Phase 2**：memvault v2 + skillpath + intelflow + church music
+3. **Phase 3**：workpool + task dispatch + multi-platform social
 4. **Phase 4**：商業化 (ERP/POS/legal/virtual CS)

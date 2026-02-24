@@ -1,4 +1,4 @@
-# quest — 任務與日曆 UI
+# taskflow — 任務與日曆 UI
 
 > 任務管理、日曆檢視、進度追蹤、報告瀏覽。
 
@@ -6,19 +6,19 @@
 
 | 路徑 | 頁面 | 說明 |
 |------|------|------|
-| `/quest` | Dashboard | 今日任務 + 即將到期 + 阻塞項 |
-| `/quest/tasks` | TaskList | 任務列表（過濾：狀態/來源/專案/標籤） |
-| `/quest/tasks/new` | TaskForm | 新增任務（含子任務、排程、標籤） |
-| `/quest/tasks/:id` | TaskDetail | 任務詳情 + 進度回報歷史 |
-| `/quest/calendar` | CalendarView | 月/週/日/議程 四種檢視 |
-| `/quest/reports` | ReportList | 日誌/週報/月報列表 |
-| `/quest/reports/:type/:date` | ReportDetail | 報告詳情 |
-| `/quest/stats` | Statistics | 完成率趨勢、工時分佈 |
+| `/taskflow` | Dashboard | 今日任務 + 即將到期 + 阻塞項 |
+| `/taskflow/tasks` | TaskList | 任務列表（過濾：狀態/來源/專案/標籤） |
+| `/taskflow/tasks/new` | TaskForm | 新增任務（含子任務、排程、標籤） |
+| `/taskflow/tasks/:id` | TaskDetail | 任務詳情 + 進度回報歷史 |
+| `/taskflow/calendar` | CalendarView | 月/週/日/議程 四種檢視 |
+| `/taskflow/reports` | ReportList | 日誌/週報/月報列表 |
+| `/taskflow/reports/:type/:date` | ReportDetail | 報告詳情 |
+| `/taskflow/stats` | Statistics | 完成率趨勢、工時分佈 |
 
 ## 元件
 
 ```
-workbench/src/modules/quest/
+workbench/src/modules/taskflow/
 ├── pages/
 │   ├── Dashboard.tsx
 │   ├── TaskList.tsx
@@ -45,9 +45,9 @@ workbench/src/modules/quest/
 │   ├── useCalendar.ts
 │   └── useReports.ts
 ├── stores/
-│   └── questStore.ts            # Zustand
+│   └── taskflowStore.ts         # Zustand
 ├── api/
-│   └── questApi.ts
+│   └── taskflowApi.ts
 └── index.tsx
 ```
 
@@ -57,5 +57,5 @@ workbench/src/modules/quest/
 
 ## 參考
 
-- [Quest 後端模組](../../../core/src/modules/quest/README.md)
-- [P6 藍圖](../../../docs/blueprint/p6-quest.md)
+- [Taskflow 後端模組](../../../core/src/modules/taskflow/README.md)
+- [P6 藍圖](../../../docs/blueprint/p6-taskflow.md)

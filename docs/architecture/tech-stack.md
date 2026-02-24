@@ -48,13 +48,13 @@ translated_at: 2026-02-23
 PostgreSQL Instance
 ├── schema: auth         (users, sessions, spaces, permissions)     — 第一階段 (Phase 1)
 ├── schema: finance      (transactions, budgets, subscriptions)     — 第一階段 (Phase 1)
-├── schema: quest        (quests, tasks, dispatch, rewards)         — 第一階段 (Phase 1)
-├── schema: muse         (sparks, links, knowledge graph)           — 第一階段 (Phase 1)
-├── schema: scout        (feeds, briefings, topic tracking)         — 第二階段 (Phase 2)
-├── schema: lore         (memories, embeddings, profiles)           — 第二階段 (Phase 2)
-├── schema: dojo         (skill trees, learning paths, assessments) — 第二階段 (Phase 2)
-├── schema: roster       (resources, schedules, capacity)           — 第三階段 (Phase 3)
-├── schema: nexus        (match rules, scores, recommendations)     — 第三階段 (Phase 3)
+├── schema: taskflow        (quests, tasks, dispatch, rewards)         — 第一階段 (Phase 1)
+├── schema: ideagraph         (sparks, links, knowledge graph)           — 第一階段 (Phase 1)
+├── schema: intelflow        (feeds, briefings, topic tracking)         — 第二階段 (Phase 2)
+├── schema: memvault         (memories, embeddings, profiles)           — 第二階段 (Phase 2)
+├── schema: skillpath         (skill trees, learning paths, assessments) — 第二階段 (Phase 2)
+├── schema: workpool       (resources, schedules, capacity)           — 第三階段 (Phase 3)
+├── schema: matchcore        (match rules, scores, recommendations)     — 第三階段 (Phase 3)
 └── schema: admin        (audit_logs, settings, system health)      — 第一階段 (Phase 1)
 ```
 

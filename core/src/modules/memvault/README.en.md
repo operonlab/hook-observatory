@@ -1,10 +1,10 @@
-# Lore 模組（後端）
+# Memvault 模組（後端）
 
-> KAS Lore V2 — 從檔案系統遷移到 PostgreSQL + pgvector 的持久化記憶引擎。
+> KAS Memvault V2 — 從檔案系統遷移到 PostgreSQL + pgvector 的持久化記憶引擎。
 
 ## 定位
 
-Workshop Core 的 `lore` 模組，負責 Claude Code 的持久化記憶管理。承接現有 KAS Memory 系統（`~/Claude/projects/kas-memory/`），以 Workshop 架構原則重構。
+Workshop Core 的 `memvault` 模組，負責 Claude Code 的持久化記憶管理。承接現有 KAS Memory 系統（`~/Claude/projects/kas-memory/`），以 Workshop 架構原則重構。
 
 ## 核心能力
 
@@ -17,11 +17,11 @@ Workshop Core 的 `lore` 模組，負責 Claude Code 的持久化記憶管理。
 | **Galaxy 資料** | 生成 K/A/S 星系圖資料供前端視覺化 |
 | **多 Agent 態度** | 不同 Agent 可帶有不同 Attitude Profile 進行協作 |
 
-## DB Schema（`lore` schema）
+## DB Schema（`memvault` schema）
 
 ```sql
 -- 記憶區塊（核心表）
-CREATE TABLE lore.blocks (
+CREATE TABLE memvault.blocks (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id    TEXT NOT NULL,
     topic         TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE lore.blocks (
 );
 
 -- 知識域
-CREATE TABLE lore.knowledge_domains (
+CREATE TABLE memvault.knowledge_domains (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT UNIQUE NOT NULL,
     description TEXT,
@@ -49,7 +49,7 @@ CREATE TABLE lore.knowledge_domains (
 );
 
 -- KAS Profile
-CREATE TABLE lore.kas_profiles (
+CREATE TABLE memvault.kas_profiles (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     space_id        UUID UNIQUE NOT NULL,
     knowledge       JSONB NOT NULL DEFAULT '{}',   -- domains + depth
@@ -60,14 +60,14 @@ CREATE TABLE lore.kas_profiles (
 );
 
 -- 索引
-CREATE INDEX idx_blocks_tags ON lore.blocks USING GIN (tags);
-CREATE INDEX idx_blocks_embedding ON lore.blocks USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX idx_blocks_created ON lore.blocks (created_at DESC);
-CREATE INDEX idx_blocks_session ON lore.blocks (session_id);
-CREATE INDEX idx_domains_embedding ON lore.knowledge_domains USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_blocks_tags ON memvault.blocks USING GIN (tags);
+CREATE INDEX idx_blocks_embedding ON memvault.blocks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_blocks_created ON memvault.blocks (created_at DESC);
+CREATE INDEX idx_blocks_session ON memvault.blocks (session_id);
+CREATE INDEX idx_domains_embedding ON memvault.knowledge_domains USING hnsw (embedding vector_cosine_ops);
 ```
 
-## API 端點（`/api/lore/`）
+## API 端點（`/api/memvault/`）
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
@@ -89,7 +89,7 @@ CREATE INDEX idx_domains_embedding ON lore.knowledge_domains USING hnsw (embeddi
 ## 目錄結構（規劃）
 
 ```
-core/src/modules/lore/
+core/src/modules/memvault/
 ├── README.md           ← 本文件
 ├── __init__.py
 ├── routes.py           ← API 路由
@@ -99,7 +99,7 @@ core/src/modules/lore/
 ├── search.py           ← 混合搜尋引擎（BM25 + pgvector + RRF）
 ├── extractor.py        ← LLM 提煉引擎（Gemini Flash + Haiku pipeline）
 ├── galaxy.py           ← Galaxy 資料生成
-└── events.py           ← 事件定義（lore.block.created 等）
+└── events.py           ← 事件定義（memvault.block.created 等）
 ```
 
 ## 遷移計劃
@@ -113,7 +113,7 @@ core/src/modules/lore/
 ## 相依模組
 
 - **auth** — space_id 隔離
-- **mcp/lore** — MCP 工具對接
+- **mcp/memvault** — MCP 工具對接
 
 ## Skill 整合
 
@@ -121,7 +121,7 @@ core/src/modules/lore/
 
 | Skill | 整合方式 |
 |-------|---------|
-| **meeting-insights** | 溝通模式分析結果作為 lore block 寫入，追蹤溝通風格演變 |
+| **meeting-insights** | 溝通模式分析結果作為 memvault block 寫入，追蹤溝通風格演變 |
 
 ## 參考
 

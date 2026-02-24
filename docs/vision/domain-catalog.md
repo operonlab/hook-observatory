@@ -94,13 +94,13 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### quest — 任務與派送
+#### taskflow — 任務與派送
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, dojo (用於量化模式) |
+| **依賴項目** | auth, skillpath (用於量化模式) |
 | **雙向連接** | finance (任務 ↔ 訂單) |
-| **MCP 伺服器** | `workshop-quest` + `workshop-quest-reports` |
+| **MCP 伺服器** | `workshop-taskflow` + `workshop-taskflow-reports` |
 | **V1 狀態** | MCP 伺服器運作中 (15 個工具) |
 
 **功能能力**:
@@ -111,7 +111,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 - 日曆檢視（月/週/日/議程 四種模式）
 - 週期性任務（recurrence JSONB：weekly / monthly / custom）
 - 自動報告產出（日誌、週報、月報 + LLM 觀察建議）
-- **MCP 拆分**：`workshop-quest`（CRUD ~10 tools）+ `workshop-quest-reports`（報告 ~5 tools）
+- **MCP 拆分**：`workshop-taskflow`（CRUD ~10 tools）+ `workshop-taskflow-reports`（報告 ~5 tools）
 
 **RPG 隱喻** (保留自 V1 設計):
 - 裝備 = 知識，技能 = 職能，屬性 = 核心特徵
@@ -125,16 +125,16 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 階段 4: + 訂單 / 報價 / 驗收
 ```
 
-詳見 [P6：Quest 排程與任務管理](../blueprint/p6-quest.md)
+詳見 [P6：Quest 排程與任務管理](../blueprint/p6-taskflow.md)
 
 ---
 
-#### muse — 靈感與知識圖譜
+#### ideagraph — 靈感與知識圖譜
 
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **MCP 伺服器** | `workshop-muse` |
+| **MCP 伺服器** | `workshop-ideagraph` |
 | **V1 狀態** | MCP 伺服器運作中 (8 個工具) |
 
 **功能能力**:
@@ -146,12 +146,12 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### scout — 搜尋與情報
+#### intelflow — 搜尋與情報
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, lore (用於個人化) |
-| **MCP 伺服器** | `workshop-scout` (待建置) |
+| **依賴項目** | auth, memvault (用於個人化) |
+| **MCP 伺服器** | `workshop-intelflow` (待建置) |
 | **整合 Skills** | smart-search, daily-briefing, company-intel, competitive-intel, content-writer |
 | **V1 狀態** | research_report service (port 8830) + smart-search skill v0.3.3 |
 
@@ -160,16 +160,16 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 - 自動摘要生成 (LLM 驅動)
 - 每日簡報推送
 - 關鍵字 / 主題追蹤
-- 與 muse 整合 (情報 → 靈感)
+- 與 ideagraph 整合 (情報 → 靈感)
 
 ---
 
-#### lore — LLM 記憶持久化
+#### memvault — LLM 記憶持久化
 
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **被依賴於** | dojo, scout |
+| **被依賴於** | skillpath, intelflow |
 | **MCP 伺服器** | `kas-memory` (現有，8 個工具) |
 | **整合 Skills** | kas-memory (MCP), meeting-insights |
 | **V1 狀態** | MCP 伺服器 v0.2.0 (語義搜索 + 個人檔案) |
@@ -184,13 +184,13 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### dojo — 技能樹與學習路徑
+#### skillpath — 技能樹與學習路徑
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, lore |
-| **被依賴於** | nexus, roster |
-| **MCP 伺服器** | `workshop-dojo` (待建置) |
+| **依賴項目** | auth, memvault |
+| **被依賴於** | matchcore, workpool |
+| **MCP 伺服器** | `workshop-skillpath` (待建置) |
 | **整合 Skills** | skill-catalog, skill-graph, skill-optimizer, model-mentor |
 | **V1 狀態** | 不存在 |
 
@@ -203,13 +203,13 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
-#### roster — 資源管理
+#### workpool — 資源管理
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, dojo |
-| **被依賴於** | nexus |
-| **MCP 伺服器** | `workshop-roster` (待建置) |
+| **依賴項目** | auth, skillpath |
+| **被依賴於** | matchcore |
+| **MCP 伺服器** | `workshop-workpool` (待建置) |
 | **整合 Skills** | maestro, team-tasks, scheduler |
 | **V1 狀態** | 不存在 |
 
@@ -237,17 +237,17 @@ resources:
 
 ---
 
-#### nexus — 媒合引擎
+#### matchcore — 媒合引擎
 
 | 屬性 | 數值 |
 |----------|-------|
-| **依賴項目** | auth, dojo, roster |
-| **MCP 伺服器** | `workshop-nexus` (待建置) |
+| **依賴項目** | auth, skillpath, workpool |
+| **MCP 伺服器** | `workshop-matchcore` (待建置) |
 | **V1 狀態** | 不存在 |
 
 **功能能力**:
 - 人才 × 職位媒合
-- 能力 × 任務配對 (quest 派送背後的引擎)
+- 能力 × 任務配對 (taskflow 派送背後的引擎)
 - 學習資源推薦 (技能落差 → 課程建議)
 - 多維度評分 (技能匹配、可用性、成本、歷史紀錄)
 - 同一模型的三種使用案例：媒合、分配、學習路徑
@@ -268,8 +268,8 @@ resources:
 - 統一訊息：所有平台訊息 → 統一收件匣
 - 事件路由：根據規則將訊息路由至各個模組
   - ` @Library/Developer/Xcode/iOS DeviceSupport/iPhone16,2 26.2.1 (23C71)/Symbols/System/Library/PrivateFrameworks/MemoryAccounting.framework/MemoryAccounting lunch 120` → finance
-  - ` @.cache/uv/simple-v20/pypi/pycryptodomex.rkyv buy milk` → quest
-  - ` @.tmux/logs/memory-guardian.log maybe we could...` → muse
+  - ` @.cache/uv/simple-v20/pypi/pycryptodomex.rkyv buy milk` → taskflow
+  - ` @.tmux/logs/memory-guardian.log maybe we could...` → ideagraph
 - 雙向同步：模組事件 → 推送至平台
 - Bot 指令：每個模組均公開 Bot 指令
 
@@ -393,7 +393,7 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 - 16 種敏感模式偵測（API key、密碼、token、SSH、DB credentials）
 - Atomic write 保證資料完整性
 - SQLite 追蹤清理歷史
-- SessionEnd pipeline 第一步（redact → lore extract → observability）
+- SessionEnd pipeline 第一步（redact → memvault extract → observability）
 
 ---
 
@@ -436,10 +436,10 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 > 關於完整的組合配方，請參閱 [vision/composition-model.md](./composition-model.md)
 
 計劃中的組合：
-- **法律顧問 (Legal Advisor)** = lore + scout + muse + media
-- **教會音樂 (Church Music)** = media + lore + muse
-- **虛擬客服 (Virtual CS)** = nexus + social-hooks + quest + finance
-- **ERP/POS** = finance + quest + roster + nexus
+- **法律顧問 (Legal Advisor)** = memvault + intelflow + ideagraph + media
+- **教會音樂 (Church Music)** = media + memvault + ideagraph
+- **虛擬客服 (Virtual CS)** = matchcore + social-hooks + taskflow + finance
+- **ERP/POS** = finance + taskflow + workpool + matchcore
 
 ---
 
@@ -453,20 +453,20 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
           ┌──────────────┼──────────────┐
           │              │              │
      ┌────▼────┐   ┌────▼────┐   ┌────▼────┐
-     │ finance │◄──►  quest  │   │  muse   │
+     │ finance │◄──►  taskflow  │   │  ideagraph   │
      └─────────┘   └────┬────┘   └─────────┘
                         │
                    ┌────▼────┐
-                   │  scout  │
+                   │  intelflow  │
                    └─────────┘
 
      ┌─────────┐   ┌─────────┐   ┌─────────┐
-     │  lore   │──►│  dojo   │──►│ roster  │
+     │  memvault   │──►│  skillpath   │──►│ workpool  │
      └─────────┘   └────┬────┘   └────┬────┘
                         │              │
                         └──────┬───────┘
                           ┌────▼────┐
-                          │  nexus  │
+                          │  matchcore  │
                           └─────────┘
 
      ┌─────────┐
@@ -476,9 +476,9 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 
 **依賴鏈解讀**:
 1. `auth` 是所有事物的基礎
-2. `finance ↔ quest` 雙向連結 (任務可以是訂單，訂單也是一種任務類型)
-3. `lore → dojo → nexus → roster` 是從知識到執行的鏈條
-4. `scout` 依賴 `lore` 進行個人化
+2. `finance ↔ taskflow` 雙向連結 (任務可以是訂單，訂單也是一種任務類型)
+3. `memvault → skillpath → matchcore → workpool` 是從知識到執行的鏈條
+4. `intelflow` 依賴 `memvault` 進行個人化
 5. `admin` 是一個唯讀觀察者
 
 ---
@@ -490,13 +490,13 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | auth | 基礎層 | V1 已存在 | `workshop-auth` | 待定 |
 | admin | 基礎層 | 部分 V1 | `workshop-admin` | 待定 |
 | finance | 領域服務 | MCP 運作中 | `workshop-finance` + `workshop-finance-analytics` | ~18 |
-| quest | 領域服務 | MCP 運作中 | `workshop-quest` + `workshop-quest-reports` | ~15 |
-| muse | 領域服務 | MCP 運作中 | `workshop-muse` | 8 |
-| scout | 領域服務 | 未開始 | `workshop-scout` | 待定 |
-| lore | 領域服務 | MCP v0.2.0 | `kas-memory` | 8 |
-| dojo | 領域服務 | 未開始 | `workshop-dojo` | 待定 |
-| roster | 領域服務 | 未開始 | `workshop-roster` | 待定 |
-| nexus | 領域服務 | 未開始 | `workshop-nexus` | 待定 |
+| taskflow | 領域服務 | MCP 運作中 | `workshop-taskflow` + `workshop-taskflow-reports` | ~15 |
+| ideagraph | 領域服務 | MCP 運作中 | `workshop-ideagraph` | 8 |
+| intelflow | 領域服務 | 未開始 | `workshop-intelflow` | 待定 |
+| memvault | 領域服務 | MCP v0.2.0 | `kas-memory` | 8 |
+| skillpath | 領域服務 | 未開始 | `workshop-skillpath` | 待定 |
+| workpool | 領域服務 | 未開始 | `workshop-workpool` | 待定 |
+| matchcore | 領域服務 | 未開始 | `workshop-matchcore` | 待定 |
 | social-hooks | 橋接層 | 未開始 | — | — |
 | notification | 橋接層 | 未開始 | — | — |
 | media | 熱路徑 | 位於 core/services/ | — | — |
@@ -515,7 +515,7 @@ LINE/Telegram/Discord → Social Bridge → Event Bus → 核心模組
 | 類型 | 項目 | 資料存放地 |
 |------|-------|---------------|
 | **基礎層 (Foundation)** | auth, admin | PostgreSQL |
-| **領域服務 (Domain Service)** | finance, quest, muse, scout, lore, dojo, roster, nexus | PostgreSQL (每個模組一個 schema) |
+| **領域服務 (Domain Service)** | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore | PostgreSQL (每個模組一個 schema) |
 | **橋接層 (Bridge)** | social-hooks, notification | 外部 + 事件總線 (Event Bus) |
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
 | **工作站 (Station)** | system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 PostgreSQL |

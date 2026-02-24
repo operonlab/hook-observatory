@@ -55,7 +55,7 @@ Skill, Resource
 ```
 
 **誰繼承了 SpaceScopedModel (8 個模組, ~35 個實體)**：
-finance, quest, muse, scout, lore, dojo, roster, nexus
+finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore
 
 **誰繼承了 GlobalModel (2 個模組, ~4 個實體)**：
 admin (audit_log, setting), auth (user, api_key)
@@ -175,7 +175,7 @@ createCrudApi<EntityT, CreateT, UpdateT>(basePath: string) → {
 每個模組僅需一行代碼即可建立 API 用戶端：
 ```typescript
 const transactionApi = createCrudApi<Transaction, CreateTransaction, UpdateTransaction>("/api/finance/transactions");
-const questApi = createCrudApi<Quest, CreateQuest, UpdateQuest>("/api/quest/quests");
+const questApi = createCrudApi<Quest, CreateQuest, UpdateQuest>("/api/taskflow/quests");
 ```
 
 ### 2.4 前端：PaginatedResponse\<T\> (對應)
@@ -213,13 +213,13 @@ create() 流程：
 | 模組 | before_create | after_create | to_response | 自定義方法 |
 |--------|:---:|:---:|:---:|---|
 | finance | 金額驗證 | 發送 `transaction.created` 事件 | -- | monthly_insights() |
-| quest | 預設狀態=open | 發送 `quest.created` 事件 | 關聯任務計數 | dispatch(), accept(), complete() |
-| muse | -- | 發送 `spark.created` 事件 | -- | graph_traverse(), semantic_search() |
-| scout | -- | 排程摘要生成 | -- | generate_briefing() |
-| lore | Embedding 計算 | 發送事件 | -- | semantic_search(), auto_extract() |
-| dojo | 前置條件檢查 | 發送事件 | 關聯學習進度 | recommend() |
-| roster | 容量檢查 | 發送事件 | -- | check_availability() |
-| nexus | -- | 發送事件 + 觸發評分 | -- | score(), match() |
+| taskflow | 預設狀態=open | 發送 `taskflow.created` 事件 | 關聯任務計數 | dispatch(), accept(), complete() |
+| ideagraph | -- | 發送 `spark.created` 事件 | -- | graph_traverse(), semantic_search() |
+| intelflow | -- | 排程摘要生成 | -- | generate_briefing() |
+| memvault | Embedding 計算 | 發送事件 | -- | semantic_search(), auto_extract() |
+| skillpath | 前置條件檢查 | 發送事件 | 關聯學習進度 | recommend() |
+| workpool | 容量檢查 | 發送事件 | -- | check_availability() |
+| matchcore | -- | 發送事件 + 觸發評分 | -- | score(), match() |
 
 ### 3.2 Bridge 配接器 — 相同介面，不同平台
 

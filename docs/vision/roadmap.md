@@ -19,10 +19,10 @@ Phase 1              Phase 2              Phase 3              Phase 4
 Personal + Family    Knowledge + Growth   Team + Dispatch      Commercial
 ──────────────────►──────────────────►──────────────────►──────────────────►
 
-auth ✓               lore v2              roster               nexus v3
-finance              dojo                 quest dispatch       quest commercial
-quest (simple)       scout                nexus v2             legal advisor
-muse                 nexus v1             resource pool        virtual CS
+auth ✓               memvault v2              workpool               matchcore v3
+finance              skillpath                 taskflow dispatch       taskflow commercial
+taskflow (simple)       intelflow                matchcore v2             legal advisor
+ideagraph                 matchcore v1             resource pool        virtual CS
 notification         church music         social hooks v2      ERP/POS
 social hooks v1                                                full platform
 ```
@@ -39,8 +39,8 @@ social hooks v1                                                full platform
 |--------|--------|-------------------|
 | **auth** | 多登入提供商支持 + 空間模型 | 2 名以上使用者，包含個人與家庭空間 |
 | **finance** | 個人/家庭記帳 | 收支追蹤、訂閱管理、月度報表，妻子亦可使用 |
-| **quest** | 簡單模式待辦 | 複選框 + 截止日期 + 基礎 Widget |
-| **muse** | 想法筆記 | Spark 增刪查改 + 連結 + 圖譜視覺化 |
+| **taskflow** | 簡單模式待辦 | 複選框 + 截止日期 + 基礎 Widget |
+| **ideagraph** | 想法筆記 | Spark 增刪查改 + 連結 + 圖譜視覺化 |
 
 ### 橋接器
 
@@ -56,13 +56,13 @@ social hooks v1                                                full platform
 - [ ] 事件匯流排（進程內）
 - [ ] Dashboard Widget 框架 (react-grid-layout + Container Queries) — 模組頁面之外的補充視圖
 - [ ] LLM Chat 浮層 — 跨全域的 LLM 對話介面（類似 Gemini in Chrome）
-- [ ] 針對 finance, quest, muse 的 MCP Server（對接到核心 API）
+- [ ] 針對 finance, taskflow, ideagraph 的 MCP Server（對接到核心 API）
 - [ ] PWA + Service Worker（基礎已存在）
 - [ ] 基礎 CI/CD
 
 ### 第一階段交付成果
 
-- 模組頁面功能運作：finance、quest、muse 各有完整路由式 UI
+- 模組頁面功能運作：finance、taskflow、ideagraph 各有完整路由式 UI
 - 儀表板功能運作：首頁 Dashboard 至少 4 個 Widget（財務摘要、最近交易、任務列表、快速筆記）
 - LLM Chat 浮層功能運作：在任何頁面可呼叫 LLM 對話
 - LINE 機器人功能運作：基礎的 `@accounting`, `@todo` 指令
@@ -79,10 +79,10 @@ social hooks v1                                                full platform
 
 | 模組 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **lore** | KAS Memory v2 | 自動提取、語義搜尋、跨階段召回 |
-| **dojo** | 技能樹 v1 | 技能定義、等級、學習路徑 |
-| **scout** | 每日情報 v1 | RSS 訂閱、自動摘要、簡報 |
-| **nexus v1** | 基礎媒合 | 技能 × 學習資源推薦 |
+| **memvault** | KAS Memory v2 | 自動提取、語義搜尋、跨階段召回 |
+| **skillpath** | 技能樹 v1 | 技能定義、等級、學習路徑 |
+| **intelflow** | 每日情報 v1 | RSS 訂閱、自動摘要、簡報 |
+| **matchcore v1** | 基礎媒合 | 技能 × 學習資源推薦 |
 
 ### 站點
 
@@ -107,9 +107,9 @@ social hooks v1                                                full platform
 
 | 模組 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **roster** | 資源管理 v1 | 人類 + AI 代理人能力/負載追蹤 |
-| **quest dispatch** | 任務派遣 | 任務池 + 被動分配 + 主動領取 |
-| **nexus v2** | 進階媒合 | 人才 × 任務多維度評分 |
+| **workpool** | 資源管理 v1 | 人類 + AI 代理人能力/負載追蹤 |
+| **taskflow dispatch** | 任務派遣 | 任務池 + 被動分配 + 主動領取 |
+| **matchcore v2** | 進階媒合 | 人才 × 任務多維度評分 |
 
 ### 橋接器
 
@@ -133,10 +133,10 @@ social hooks v1                                                full platform
 
 | 專案 | 目標 | 建構於 |
 |---------|--------|----------|
-| **Quest Commercial** | 訂單/報價/驗收 | quest + finance |
+| **Quest Commercial** | 訂單/報價/驗收 | taskflow + finance |
 | **Legal Advisor** | 法律諮詢服務 | RAG + LLM 推理 |
-| **Virtual CS** | 虛擬客服 | nexus + social hooks |
-| **ERP/POS** | 庫存管理系統 | finance + quest + roster |
+| **Virtual CS** | 虛擬客服 | matchcore + social hooks |
+| **ERP/POS** | 庫存管理系統 | finance + taskflow + workpool |
 | **Full Platform** | 開放平台 | 所有模組 + 外掛系統 |
 
 ### 第四階段交付成果

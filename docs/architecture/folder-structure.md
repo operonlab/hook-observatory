@@ -29,13 +29,13 @@ Workshop 將所有功能組織成三個層級：
 │   │   ├── modules/             # 核心模組 (10 個領域)
 │   │   │   ├── auth/            # 認證與授權
 │   │   │   ├── finance/         # 會計與財務
-│   │   │   ├── quest/           # 任務與調度
-│   │   │   ├── muse/            # 想法與知識圖譜
-│   │   │   ├── scout/           # 每日情報
-│   │   │   ├── lore/            # LLM 記憶持久化
-│   │   │   ├── dojo/            # 技能樹與學習路徑
-│   │   │   ├── roster/          # 資源管理
-│   │   │   ├── nexus/           # 匹配引擎
+│   │   │   ├── taskflow/           # 任務與調度
+│   │   │   ├── ideagraph/            # 想法與知識圖譜
+│   │   │   ├── intelflow/           # 每日情報
+│   │   │   ├── memvault/            # LLM 記憶持久化
+│   │   │   ├── skillpath/            # 技能樹與學習路徑
+│   │   │   ├── workpool/          # 資源管理
+│   │   │   ├── matchcore/           # 匹配引擎
 │   │   │   └── admin/           # 平台管理
 │   │   ├── middleware/          # Auth, CORS, OTel 中間件
 │   │   ├── shared/              # 共享類型、工具
@@ -52,13 +52,13 @@ Workshop 將所有功能組織成三個層級：
 │   │   ├── modules/             # 領域 UI 模組 (對應核心模組)
 │   │   │   ├── auth/
 │   │   │   ├── finance/
-│   │   │   ├── quest/
-│   │   │   ├── muse/
-│   │   │   ├── scout/
-│   │   │   ├── lore/
-│   │   │   ├── dojo/
-│   │   │   ├── roster/
-│   │   │   ├── nexus/
+│   │   │   ├── taskflow/
+│   │   │   ├── ideagraph/
+│   │   │   ├── intelflow/
+│   │   │   ├── memvault/
+│   │   │   ├── skillpath/
+│   │   │   ├── workpool/
+│   │   │   ├── matchcore/
 │   │   │   └── admin/
 │   │   ├── plugins/             # 插件 UI 運行時 + 插槽
 │   │   └── shared/              # 共享組件、鉤子、工具
@@ -106,7 +106,7 @@ Workshop 將所有功能組織成三個層級：
 | 規則 | 範例 | 反面模式 |
 |------|---------|-------------|
 | 小寫、蛇形命名法 (snake_case) | `auth`, `finance` | `Auth`, `userAuth` |
-| 名詞或名詞短語 | `finance`, `quest` | `handle_payments` |
+| 名詞或名詞短語 | `finance`, `taskflow` | `handle_payments` |
 | 與資料庫 schema 名稱一致 | 模組 `finance` → schema `finance` | 不同的名稱 |
 
 每個模組目錄：
@@ -128,20 +128,20 @@ core/src/modules/<name>/
 |--------|--------|-------|-----------|
 | `auth` | 認證與授權 | 1 | `auth` |
 | `finance` | 會計與財務 | 1 | `finance` |
-| `quest` | 任務與調度 | 1 | `quest` |
-| `muse` | 想法與知識圖譜 | 1 | `muse` |
-| `scout` | 每日情報 | 2 | `scout` |
-| `lore` | LLM 記憶持久化 | 2 | `lore` |
-| `dojo` | 技能樹與學習路徑 | 2 | `dojo` |
-| `roster` | 資源管理 | 3 | `roster` |
-| `nexus` | 匹配引擎 | 3 | `nexus` |
+| `taskflow` | 任務與調度 | 1 | `taskflow` |
+| `ideagraph` | 想法與知識圖譜 | 1 | `ideagraph` |
+| `intelflow` | 每日情報 | 2 | `intelflow` |
+| `memvault` | LLM 記憶持久化 | 2 | `memvault` |
+| `skillpath` | 技能樹與學習路徑 | 2 | `skillpath` |
+| `workpool` | 資源管理 | 3 | `workpool` |
+| `matchcore` | 匹配引擎 | 3 | `matchcore` |
 | `admin` | 平台管理 | 1 | `admin` |
 
 ### 前端模組 (`workbench/src/modules/`)
 
 | 規則 | 範例 | 反面模式 |
 |------|---------|-------------|
-| 小寫、短橫線命名法 (kebab-case) | `finance`, `quest` | `Finance`, `questModule` |
+| 小寫、短橫線命名法 (kebab-case) | `finance`, `taskflow` | `Finance`, `questModule` |
 | 匹配後端模組 | `modules/finance` ↔ `core/src/modules/finance` | 不同名稱 |
 
 每個前端模組：

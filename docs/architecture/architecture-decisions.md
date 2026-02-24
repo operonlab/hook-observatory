@@ -48,15 +48,15 @@ Claude Code ──► MCP Server ──► FastAPI Core ──► Database
 
 **切分規則**：
 - 每個 Domain 至少分配 1 個 MCP Server
-- 超過 10 個 tools 的 MCP Servers 應進行切分 (例如：`workshop-quest-manage` + `workshop-quest-pool`)
+- 超過 10 個 tools 的 MCP Servers 應進行切分 (例如：`workshop-taskflow-manage` + `workshop-taskflow-pool`)
 - MCP Server tool 命名規則：`{domain}_{action}` (例如：`finance_add_transaction`)
 
 **現有 MCP Servers**：
 | 名稱 | Tool 數量 |
 |-------------|------------|
 | `workshop-finance` | 9 |
-| `workshop-quest` | 10 |
-| `workshop-muse` | 8 |
+| `workshop-taskflow` | 10 |
+| `workshop-ideagraph` | 8 |
 | `kas-memory` | 8 |
 
 ---
@@ -125,7 +125,7 @@ CREATE TABLE space_members (
 2. 使用者將 Widget 從 Gallery 拖曳到 Dashboard
 3. Widget 根據 Container 尺寸調整佈局
 4. Widget 透過 Core API 獲取數據
-5. Widgets 透過 EventBus 進行通訊 (例如：點擊 finance transaction → quest 顯示相關任務)
+5. Widgets 透過 EventBus 進行通訊 (例如：點擊 finance transaction → taskflow 顯示相關任務)
 
 **Widget 尺寸類別 (Size Classes)**：
 - **Small** (1×1 ~ 2×1)：單一數據指標、快速操作按鈕
@@ -139,9 +139,9 @@ CREATE TABLE space_members (
 **決策**：將 human、machine、service 與 AI agent 統一抽象化為單一的 Resource。
 
 **決策理由**：
-- quest 的 task dispatch 需要知道「誰能執行此任務」—— 而這個「誰」並不一定是人
+- taskflow 的 task dispatch 需要知道「誰能執行此任務」—— 而這個「誰」並不一定是人
 - 一個任務可以分配給 human (手動)、machine (cron job) 或 AI agent (Claude/Codex)
-- 統一的模型使得無論 resource type 為何，皆可套用相同的 nexus logic
+- 統一的模型使得無論 resource type 為何，皆可套用相同的 matchcore logic
 - 為未來的 ERP 場景 (machine capacity、personnel hours、AI agent parallelism) 奠定基礎
 
 **統一 Resource 模型**：
@@ -160,9 +160,9 @@ resources:
 ```
 
 **使用案例**：
-- **nexus**：`SELECT * FROM resources WHERE capabilities @> ARRAY['python'] AND current_load < capacity`
-- **roster**：Dashboard 顯示所有 resources 的負載狀態
-- **quest dispatch**：根據 task requirements × resource capabilities 進行自動配對
+- **matchcore**：`SELECT * FROM resources WHERE capabilities @> ARRAY['python'] AND current_load < capacity`
+- **workpool**：Dashboard 顯示所有 resources 的負載狀態
+- **taskflow dispatch**：根據 task requirements × resource capabilities 進行自動配對
 
 ---
 
@@ -174,7 +174,7 @@ resources:
 
 **決策理由**：
 - 保持清晰的 Module 邊界
-- 允許 asynchronous processing (finance 記錄無需等待 quest 更新)
+- 允許 asynchronous processing (finance 記錄無需等待 taskflow 更新)
 - 易於新增訂閱者 (新增 Bridge 不需要修改 Core)
 
 **事件格式 (Event Format)**：
@@ -203,10 +203,10 @@ resources:
 
 | Module | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
 |--------|---------|---------|---------|---------|
-| quest | Checkbox to-do | + Story points | + Skill requirements + Task pool | + Orders/quotation/acceptance |
+| taskflow | Checkbox to-do | + Story points | + Skill requirements + Task pool | + Orders/quotation/acceptance |
 | finance | Personal accounting | + Family shared ledger | + Budget/analysis | + Inventory/POS |
-| nexus | Manual pairing | + Conditional filtering | + AI recommendations | + Auto dispatch |
-| lore | Manual memory | + Auto extraction | + Semantic search | + Cross-space isolation |
+| matchcore | Manual pairing | + Conditional filtering | + AI recommendations | + Auto dispatch |
+| memvault | Manual memory | + Auto extraction | + Semantic search | + Cross-space isolation |
 
 **原則**：
 - 每個 Phase 都是可用且完整的產品 —— 而非半成品原型

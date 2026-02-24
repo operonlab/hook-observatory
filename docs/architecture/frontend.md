@@ -14,7 +14,7 @@ Workshop 前端是一個 Single React App，由三層共存組成：
 
 | 層級 | 名稱 | 說明 |
 |------|------|------|
-| **Layer 1** | 模組 SPA 頁面 | 每個模組有完整的路由與 UI（`/finance/*`, `/quest/*` 等） |
+| **Layer 1** | 模組 SPA 頁面 | 每個模組有完整的路由與 UI（`/finance/*`, `/taskflow/*` 等） |
 | **Layer 2** | Dashboard Widgets | 首頁儀表板，從各模組抽取 Widget 拖放組合（`/`） |
 | **Layer 3** | LLM Chat 浮層 | 跨全域的對話介面，浮在最上層，類似 Google Gemini 嵌入 Chrome |
 
@@ -33,13 +33,13 @@ workbench/                    單一 React App
 │   ├── modules/              領域 UI 模組 (10 個核心模組)
 │   │   ├── auth/
 │   │   ├── finance/
-│   │   ├── quest/
-│   │   ├── muse/
-│   │   ├── scout/
-│   │   ├── lore/
-│   │   ├── dojo/
-│   │   ├── roster/
-│   │   ├── nexus/
+│   │   ├── taskflow/
+│   │   ├── ideagraph/
+│   │   ├── intelflow/
+│   │   ├── memvault/
+│   │   ├── skillpath/
+│   │   ├── workpool/
+│   │   ├── matchcore/
 │   │   └── admin/
 │   ├── chat/                 LLM Chat 浮層 (Layer 3)
 │   ├── widgets/              Workbench Widget 元件庫 (Layer 2)
@@ -107,16 +107,16 @@ import { Routes, Route } from "react-router-dom";
 
 // 階段 1
 const Finance = lazy(() => import("../modules/finance"));
-const Quest = lazy(() => import("../modules/quest"));
-const Muse = lazy(() => import("../modules/muse"));
+const Quest = lazy(() => import("../modules/taskflow"));
+const Muse = lazy(() => import("../modules/ideagraph"));
 const Admin = lazy(() => import("../modules/admin"));
 // 階段 2
-const Scout = lazy(() => import("../modules/scout"));
-const Lore = lazy(() => import("../modules/lore"));
-const Dojo = lazy(() => import("../modules/dojo"));
+const Scout = lazy(() => import("../modules/intelflow"));
+const Lore = lazy(() => import("../modules/memvault"));
+const Dojo = lazy(() => import("../modules/skillpath"));
 // 階段 3
-const Roster = lazy(() => import("../modules/roster"));
-const Nexus = lazy(() => import("../modules/nexus"));
+const Roster = lazy(() => import("../modules/workpool"));
+const Nexus = lazy(() => import("../modules/matchcore"));
 
 export function Router() {
   return (
@@ -125,16 +125,16 @@ export function Router() {
         <Route path="/" element={<Dashboard />} />
         {/* 階段 1 */}
         <Route path="/finance/*" element={<Finance />} />
-        <Route path="/quest/*" element={<Quest />} />
-        <Route path="/muse/*" element={<Muse />} />
+        <Route path="/taskflow/*" element={<Quest />} />
+        <Route path="/ideagraph/*" element={<Muse />} />
         <Route path="/admin/*" element={<Admin />} />
         {/* 階段 2 */}
-        <Route path="/scout/*" element={<Scout />} />
-        <Route path="/lore/*" element={<Lore />} />
-        <Route path="/dojo/*" element={<Dojo />} />
+        <Route path="/intelflow/*" element={<Scout />} />
+        <Route path="/memvault/*" element={<Lore />} />
+        <Route path="/skillpath/*" element={<Dojo />} />
         {/* 階段 3 */}
-        <Route path="/roster/*" element={<Roster />} />
-        <Route path="/nexus/*" element={<Nexus />} />
+        <Route path="/workpool/*" element={<Roster />} />
+        <Route path="/matchcore/*" element={<Nexus />} />
         <Route path="/settings/*" element={<Settings />} />
       </Routes>
     </Suspense>
@@ -144,7 +144,7 @@ export function Router() {
 
 每個模組內部自行處理其子路由。
 
-> **`/` (Dashboard)** 是 Widget 儀表板視圖，從各模組抽取摘要 Widget 組合顯示。各模組的完整 UI 則在 `/finance/*`、`/quest/*` 等路由下。
+> **`/` (Dashboard)** 是 Widget 儀表板視圖，從各模組抽取摘要 Widget 組合顯示。各模組的完整 UI 則在 `/finance/*`、`/taskflow/*` 等路由下。
 
 ## 路由慣例
 
@@ -152,14 +152,14 @@ export function Router() {
 |---------|-------|-------|
 | `/` | 外殼 (儀表板) | 1 |
 | `/finance/*` | Finance 模組 | 1 |
-| `/quest/*` | Quest 模組 | 1 |
-| `/muse/*` | Muse 模組 | 1 |
+| `/taskflow/*` | Quest 模組 | 1 |
+| `/ideagraph/*` | Muse 模組 | 1 |
 | `/admin/*` | Admin 模組 | 1 |
-| `/scout/*` | Scout 模組 | 2 |
-| `/lore/*` | Lore 模組 | 2 |
-| `/dojo/*` | Dojo 模組 | 2 |
-| `/roster/*` | Roster 模組 | 3 |
-| `/nexus/*` | Nexus 模組 | 3 |
+| `/intelflow/*` | Scout 模組 | 2 |
+| `/memvault/*` | Lore 模組 | 2 |
+| `/skillpath/*` | Dojo 模組 | 2 |
+| `/workpool/*` | Roster 模組 | 3 |
+| `/matchcore/*` | Nexus 模組 | 3 |
 | `/settings/*` | 外殼 (全域設定) | 1 |
 
 ## API 通訊
@@ -255,7 +255,7 @@ Rsbuild 設定會在開發期間將 `/api/*` 代理到核心單體（Core Monoli
 
 ```
 ┌──────────────────────────────────────┐
-│  任何頁面 (/finance, /quest, ...)     │
+│  任何頁面 (/finance, /taskflow, ...)     │
 │                                      │
 │                  ┌───────────────────┐│
 │                  │  LLM Chat Panel  ││ ← 浮層，可收合/展開

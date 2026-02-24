@@ -232,16 +232,16 @@ effective_permissions = plugin.manifest.permissions ∩ current_user.permissions
 ### 範例
 
 ```
-插件聲明：["finance.read", "finance.write", "quest.read"]
+插件聲明：["finance.read", "finance.write", "taskflow.read"]
 
 管理員使用者（擁有所有權限）：
-  → 插件獲得：finance.read, finance.write, quest.read
+  → 插件獲得：finance.read, finance.write, taskflow.read
 
-一般使用者（擁有 finance.*, quest.*）：
-  → 插件獲得：finance.read, finance.write, quest.read
+一般使用者（擁有 finance.*, taskflow.*）：
+  → 插件獲得：finance.read, finance.write, taskflow.read
 
 訪客使用者（僅具有 *.read）：
-  → 插件獲得：finance.read, quest.read
+  → 插件獲得：finance.read, taskflow.read
   → finance.write 會被靜默排除
 ```
 
@@ -288,8 +288,8 @@ export function FinanceDashboard() {
 | `shell.sidebar.bottom` | 全域側邊欄，底部 | `{ user }` |
 | `finance.dashboard.sidebar` | 財務儀表板側邊欄 | `{ userId }` |
 | `finance.transaction.detail` | 交易詳情面板 | `{ transaction }` |
-| `quest.detail.actions` | 任務詳情動作區域 | `{ quest }` |
-| `muse.spark.toolbar` | Spark 編輯器工具列 | `{ spark }` |
+| `taskflow.detail.actions` | 任務詳情動作區域 | `{ taskflow }` |
+| `ideagraph.spark.toolbar` | Spark 編輯器工具列 | `{ spark }` |
 
 ## 插件開發指南
 

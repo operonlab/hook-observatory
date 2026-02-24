@@ -19,13 +19,13 @@ translated_at: 2026-02-23
                     │          Core Monolith (port 8800)   │
                     │                                     │
                     │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │  auth  │ │finance │ │  quest │  │
+                    │  │  auth  │ │finance │ │  taskflow │  │
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │  muse  │ │ scout  │ │  lore  │  │
+                    │  │  ideagraph  │ │ intelflow  │ │  memvault  │  │
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │  dojo  │ │ roster │ │ nexus  │  │
+                    │  │  skillpath  │ │ workpool │ │ matchcore  │  │
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐                        │
                     │  │ admin  │                        │
@@ -58,13 +58,13 @@ translated_at: 2026-02-23
 |--------|------|-----------------|-------|
 | `auth` | Users, sessions, spaces, permissions | `auth` | 1 |
 | `finance` | Transactions, budgets, subscriptions | `finance` | 1 |
-| `quest` | Quests, tasks, dispatch, rewards | `quest` | 1 |
-| `muse` | Sparks, links, knowledge graph | `muse` | 1 |
-| `scout` | RSS feeds, daily briefings, topic tracking | `scout` | 2 |
-| `lore` | LLM memories, semantic search, profiles | `lore` | 2 |
-| `dojo` | Skill trees, learning paths, assessments | `dojo` | 2 |
-| `roster` | Resources (human/machine/agent), scheduling | `roster` | 3 |
-| `nexus` | Talent-job matching, task pairing | `nexus` | 3 |
+| `taskflow` | Quests, tasks, dispatch, rewards | `taskflow` | 1 |
+| `ideagraph` | Sparks, links, knowledge graph | `ideagraph` | 1 |
+| `intelflow` | RSS feeds, daily briefings, topic tracking | `intelflow` | 2 |
+| `memvault` | LLM memories, semantic search, profiles | `memvault` | 2 |
+| `skillpath` | Skill trees, learning paths, assessments | `skillpath` | 2 |
+| `workpool` | Resources (human/machine/agent), scheduling | `workpool` | 3 |
+| `matchcore` | Talent-job matching, task pairing | `matchcore` | 3 |
 | `admin` | Platform management, audit logs, system health | `admin` | 1 |
 
 ### 3. 模組邊界規則
@@ -80,7 +80,7 @@ translated_at: 2026-02-23
 from src.modules.finance.services import get_user_balance
 
 # 正確：模組 A 透過事件通知模組 B
-await event_bus.publish("quest.quest.completed", {"quest_id": "...", "user_id": "..."})
+await event_bus.publish("taskflow.task.completed", {"quest_id": "...", "user_id": "..."})
 
 # 錯誤：模組 A 直接導入模組 B 的 models
 from src.modules.finance.models import Transaction  # 禁止行為
@@ -93,13 +93,13 @@ from src.modules.finance.models import Transaction  # 禁止行為
 ```sql
 CREATE SCHEMA auth;       -- 由 auth 模組擁有 (Phase 1)
 CREATE SCHEMA finance;    -- 由 finance 模組擁有 (Phase 1)
-CREATE SCHEMA quest;      -- 由 quest 模組擁有 (Phase 1)
-CREATE SCHEMA muse;       -- 由 muse 模組擁有 (Phase 1)
-CREATE SCHEMA scout;      -- 由 scout 模組擁有 (Phase 2)
-CREATE SCHEMA lore;       -- 由 lore 模組擁有 (Phase 2)
-CREATE SCHEMA dojo;       -- 由 dojo 模組擁有 (Phase 2)
-CREATE SCHEMA roster;     -- 由 roster 模組擁有 (Phase 3)
-CREATE SCHEMA nexus;      -- 由 nexus 模組擁有 (Phase 3)
+CREATE SCHEMA taskflow;      -- 由 taskflow 模組擁有 (Phase 1)
+CREATE SCHEMA ideagraph;       -- 由 ideagraph 模組擁有 (Phase 1)
+CREATE SCHEMA intelflow;      -- 由 intelflow 模組擁有 (Phase 2)
+CREATE SCHEMA memvault;       -- 由 memvault 模組擁有 (Phase 2)
+CREATE SCHEMA skillpath;       -- 由 skillpath 模組擁有 (Phase 2)
+CREATE SCHEMA workpool;     -- 由 workpool 模組擁有 (Phase 3)
+CREATE SCHEMA matchcore;      -- 由 matchcore 模組擁有 (Phase 3)
 CREATE SCHEMA admin;      -- 由 admin 模組擁有 (Phase 1)
 ```
 
@@ -128,7 +128,7 @@ core/src/modules/<name>/
 | 模式 | 適用時機 | 範例 |
 |---------|------|---------|
 | 服務導入 (同步) | 從另一個模組讀取資料 | `finance.services.get_balance(user_id)` |
-| Event Bus (非同步) | 其他模組可能感興趣的狀態變更 | `quest.quest.completed` 觸發 finance 獎勵 |
+| Event Bus (非同步) | 其他模組可能感興趣的狀態變更 | `taskflow.task.completed` 觸發 finance 獎勵 |
 | `src.shared` 中的共享類型 | 2 個以上模組使用的通用類型 | `UserId`, `Pagination`, `ErrorResponse` |
 
 詳情請參閱 [事件驅動架構 (Event-Driven Architecture)](./event-driven.md) 以了解詳細的事件模式。
@@ -186,13 +186,13 @@ class CoreSettings(BaseSettings):
   "modules": {
     "auth": "healthy",
     "finance": "healthy",
-    "quest": "healthy",
-    "muse": "healthy",
-    "scout": "healthy",
-    "lore": "healthy",
-    "dojo": "healthy",
-    "roster": "healthy",
-    "nexus": "healthy",
+    "taskflow": "healthy",
+    "ideagraph": "healthy",
+    "intelflow": "healthy",
+    "memvault": "healthy",
+    "skillpath": "healthy",
+    "workpool": "healthy",
+    "matchcore": "healthy",
     "admin": "healthy"
   }
 }
@@ -204,7 +204,7 @@ class CoreSettings(BaseSettings):
 
 ```python
 # core/src/app.py
-from src.modules import auth, finance, quest, muse, scout, lore, dojo, roster, nexus, admin
+from src.modules import auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin
 
 def create_app() -> FastAPI:
     app = FastAPI()
@@ -212,18 +212,18 @@ def create_app() -> FastAPI:
     # 註冊模組路由 (Phase 1)
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(finance.router, prefix="/api/finance", tags=["finance"])
-    app.include_router(quest.router, prefix="/api/quest", tags=["quest"])
-    app.include_router(muse.router, prefix="/api/muse", tags=["muse"])
+    app.include_router(taskflow.router, prefix="/api/taskflow", tags=["taskflow"])
+    app.include_router(ideagraph.router, prefix="/api/ideagraph", tags=["ideagraph"])
     app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
     # 註冊模組路由 (Phase 2)
-    app.include_router(scout.router, prefix="/api/scout", tags=["scout"])
-    app.include_router(lore.router, prefix="/api/lore", tags=["lore"])
-    app.include_router(dojo.router, prefix="/api/dojo", tags=["dojo"])
+    app.include_router(intelflow.router, prefix="/api/intelflow", tags=["intelflow"])
+    app.include_router(memvault.router, prefix="/api/memvault", tags=["memvault"])
+    app.include_router(skillpath.router, prefix="/api/skillpath", tags=["skillpath"])
 
     # 註冊模組路由 (Phase 3)
-    app.include_router(roster.router, prefix="/api/roster", tags=["roster"])
-    app.include_router(nexus.router, prefix="/api/nexus", tags=["nexus"])
+    app.include_router(workpool.router, prefix="/api/workpool", tags=["workpool"])
+    app.include_router(matchcore.router, prefix="/api/matchcore", tags=["matchcore"])
 
     # 初始化事件總線與 Hook 引擎
     app.state.event_bus = EventBus()
@@ -232,7 +232,7 @@ def create_app() -> FastAPI:
     # 註冊模組事件處理程序
     auth.register_events(app.state.event_bus)
     finance.register_events(app.state.event_bus)
-    quest.register_events(app.state.event_bus)
+    taskflow.register_events(app.state.event_bus)
 
     return app
 ```

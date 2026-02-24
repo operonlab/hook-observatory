@@ -66,8 +66,8 @@ class Event:
 
 | 組成部分 | 規則 | 範例 |
 |-----------|------|---------|
-| `domain` | 模組名稱 | `auth`, `finance`, `quest`, `muse` |
-| `entity` | 業務實體（單數） | `user`, `transaction`, `quest`, `spark` |
+| `domain` | 模組名稱 | `auth`, `finance`, `taskflow`, `ideagraph` |
+| `entity` | 業務實體（單數） | `user`, `transaction`, `taskflow`, `spark` |
 | `verb` | 過去式（事件已經發生） | `created`, `updated`, `deleted`, `completed` |
 
 ### 各模組標準事件
@@ -76,8 +76,8 @@ class Event:
 |--------|--------|
 | auth | `auth.user.registered`, `auth.user.approved`, `auth.user.suspended`, `auth.user.logged_in`, `auth.user.logged_out` |
 | finance | `finance.transaction.created`, `finance.transaction.updated`, `finance.budget.exceeded`, `finance.subscription.renewed` |
-| quest | `quest.quest.created`, `quest.quest.completed`, `quest.skill.leveled_up`, `quest.reward.claimed` |
-| muse | `muse.spark.created`, `muse.spark.linked`, `muse.graph.updated` |
+| taskflow | `taskflow.task.created`, `taskflow.task.completed`, `taskflow.skill.leveled_up`, `taskflow.reward.claimed` |
+| ideagraph | `ideagraph.spark.created`, `ideagraph.spark.linked`, `ideagraph.graph.updated` |
 | admin | `admin.setting.changed`, `admin.plugin.installed`, `admin.plugin.removed` |
 
 ### 系統事件
@@ -148,7 +148,7 @@ async def on_any_finance_event(event: Event):
     await audit_log.record(event)
 
 # 手動訂閱
-event_bus.subscribe("quest.quest.completed", handle_quest_completion)
+event_bus.subscribe("taskflow.task.completed", handle_quest_completion)
 ```
 
 ### 中間件 (Middleware)
@@ -209,7 +209,7 @@ Finance 模組：插入交易，publish("finance.transaction.created", {txn_id, 
     ├──► Quest 模組訂閱者：
     │       檢查使用者是否有進行中的支出任務
     │       如果達到門檻 → 完成任務
-    │       publish("quest.quest.completed", {quest_id, user_id})
+    │       publish("taskflow.task.completed", {quest_id, user_id})
     │       │
     │       ├──► Finance 模組訂閱者：發放獎勵積分
     │       │
