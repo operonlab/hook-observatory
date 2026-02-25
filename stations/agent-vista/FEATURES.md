@@ -1,7 +1,7 @@
 # Agent Vista — Feature Roadmap v2
 
 **Created**: 2026-02-25
-**Status**: A1-B4 Complete, A3 Complete — Route C next
+**Status**: A1-B4 + A3 + C1/C2/C4/C7/C8 Complete — C3/C5/C6 future
 **Baseline**: P0-P4 all done (46/46 tasks complete)
 
 ---
@@ -356,17 +356,55 @@ function playAlert(ctx: AudioContext) {
 
 ---
 
-## Future (Route C — Visual Evolution)
+## Route C — Visual Evolution
 
-Not in current scope, documented for reference:
+| # | Feature | Status | Description |
+|---|---------|--------|-------------|
+| C1 | Day/Night Cycle | **done** | 5-phase ambient lighting (night/dawn/day/dusk/evening), window glow, desk lamps |
+| C2 | Agent Interactions | **done** | Wave emoji when IDLE agents pass each other in corridors |
+| C3 | Weather System | future | Sync with real weather API, rain/sun outside windows |
+| C4 | Ambient Soundscape | **done** | Office white noise hum + random keyboard clicks scaled by typing agent count |
+| C5 | Custom Avatars | future | Per-session hairstyle/accessory configuration |
+| C6 | Timeline Replay | future | Historical playback of agent activity |
+| C7 | Desktop Notifications | **done** | Browser Notification API for permission_needed, session start/end, errors |
+| C8 | Token Cost Dashboard | **done** | Already in Dashboard.tsx — per-CLI cost estimation with blended $/MTok rates |
 
-| # | Feature | Description |
-|---|---------|-------------|
-| C1 | Day/Night Cycle | Floor/wall tint changes with system time, window lighting |
-| C2 | Agent Interactions | Wave on passing, group at whiteboard, coffee break together |
-| C3 | Weather System | Sync with real weather API, rain/sun outside windows |
-| C4 | Ambient Soundscape | Keyboard clicks, coffee machine hum, office white noise |
-| C5 | Custom Avatars | Per-session hairstyle/accessory configuration |
-| C6 | Timeline Replay | Historical playback of agent activity |
-| C7 | Desktop Notifications | Notification API for critical events |
-| C8 | Token Cost Dashboard | $ cost estimation per session/day/week |
+### C1: Day/Night Cycle
+
+- **DayNight.ts**: 5 phases with smooth cosine-interpolated transitions
+  - Night (23:00-05:00): deep blue overlay, 50% ambient, desk lamps + window glow
+  - Dawn (05:00-07:30): warm orange fading, light rising
+  - Day (07:30-17:00): no overlay, full brightness
+  - Dusk (17:00-19:00): warm orange/pink overlay, light dimming
+  - Evening (19:00-23:00): blue overlay deepening, lamps activate
+- **Renderer.ts**: `drawDayNightOverlay()`, `drawWindowGlow()`, `drawDeskLamps()`
+- **Dashboard.tsx**: DayNightIndicator with phase icon, time, light percentage
+
+### C2: Agent Interactions
+
+- Corridor proximity detection (< 3 tiles between IDLE agents)
+- Wave emoji bubble with 15s cooldown per pair
+- Lightweight: no FSM state changes, just transient bubble overlay
+
+### C4: Ambient Soundscape
+
+- **SoundEngine.ts**: `startAmbient()` (looped filtered white noise, 200Hz lowpass, very quiet)
+- `startKeyClicks()`: periodic keyboard click synthesis, frequency scales with typing agent count
+- Auto-starts on connect, stops on disconnect, respects mute toggle
+
+### C7: Desktop Notifications
+
+- **NotificationService.ts**: singleton service, permission requested on connect
+- Triggers: `tool_permission`, `session_start`, `session_end`
+- Respects tab focus (no notifications when app is visible)
+- 5s cooldown between notifications
+
+### Files Created
+- `frontend/src/engine/DayNight.ts` — time phase calculations
+- `frontend/src/engine/NotificationService.ts` — browser notification wrapper
+
+### Files Modified
+- `frontend/src/engine/Renderer.ts` — day/night overlay + window glow + desk lamps + proximity interactions
+- `frontend/src/engine/SoundEngine.ts` — ambient hum + keyboard clicks
+- `frontend/src/stores/wsStore.ts` — notification + ambient sound integration
+- `frontend/src/components/Dashboard.tsx` — DayNightIndicator component

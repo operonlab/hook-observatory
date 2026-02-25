@@ -112,3 +112,8 @@ Last updated: 2026-02-25
 | E11 | Sound notifications | done | Web Audio API synthesis — alert/ping/farewell/error/sparkle, mute toggle |
 | E12 | Minimap | done | 136×80px overview, agent dots, viewport indicator, click-to-navigate, M key toggle |
 | E13 | Multi-room office | done | 50×34 grid, 4 rooms (Code Studio/Research Lab/Build Lab/Break Room), cross corridors, room-based agent routing, 8 door portals, room labels, CLI→room mapping |
+| E14 | Day/Night cycle | done | 5-phase ambient lighting, window glow, desk lamps, Dashboard indicator |
+| E15 | Agent interactions | done | Corridor wave gesture when IDLE agents pass near each other |
+| E16 | Ambient soundscape | done | Filtered white noise office hum + typing keyboard clicks |
+| E17 | Desktop notifications | done | Browser Notification API for permission_needed, session start/end |
+| E18 | Station graduation | done | lab/agent-vista → stations/agent-vista, v0.2.0 tag |

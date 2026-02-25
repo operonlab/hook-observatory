@@ -5,6 +5,8 @@ import { useAgentStore } from './agentStore';
 import { useChatStore } from './chatStore';
 import type { AgentState, AnimationState } from '../types/agent';
 import type { CLIType, AgentEventType, AgentEvent } from '../types/event';
+import { notificationService } from '../engine/NotificationService';
+import { soundEngine } from '../engine/SoundEngine';
 
 interface ConnectionState {
   status: 'disconnected' | 'connecting' | 'connected';
@@ -35,11 +37,26 @@ async function pollEvents() {
     for (const entry of entries) {
       if (entry.new_agent) {
         store.agentOnline(entry.new_agent);
+        notificationService.notifySessionStart(
+          entry.new_agent.cli_type,
+          entry.new_agent.session_id ?? entry.new_agent.id,
+        );
       }
       if (entry.event.event_type === 'session_end') {
         store.agentOffline(entry.event.agent_id);
+        notificationService.notifySessionEnd(
+          entry.event.cli_type,
+          entry.event.session_id ?? entry.event.agent_id,
+        );
       } else {
         store.applyEvent(entry.event);
+        // Desktop notifications for critical events (C7)
+        if (entry.event.event_type === 'tool_permission') {
+          notificationService.notifyPermissionNeeded(
+            entry.event.cli_type,
+            entry.event.session_id ?? entry.event.agent_id,
+          );
+        }
       }
       useChatStore.getState().addEvent(entry.event);
       lastSeq = entry.seq;
@@ -90,6 +107,19 @@ export const useWSStore = create<ConnectionState>((set, get) => ({
       // Start polling for events
       pollTimer = setInterval(pollEvents, POLL_INTERVAL);
       set({ status: 'connected' });
+
+      // Request desktop notification permission (C7)
+      notificationService.requestPermission();
+      // Start ambient soundscape (C4)
+      soundEngine.startAmbient();
+      soundEngine.startKeyClicks(() => {
+        const agents = useAgentStore.getState().agents;
+        let count = 0;
+        for (const [, e] of agents) {
+          if (e.fsm.state === 'TYPE') count++;
+        }
+        return count;
+      });
     } catch {
       // Backend not available — retry after delay
       set({ status: 'disconnected' });
@@ -103,6 +133,7 @@ export const useWSStore = create<ConnectionState>((set, get) => ({
       pollTimer = null;
     }
     lastSeq = 0;
+    soundEngine.stopAmbient();
     set({ status: 'disconnected' });
   },
 
@@ -117,6 +148,17 @@ export const useWSStore = create<ConnectionState>((set, get) => ({
 
     store.initAgents(mockAgents);
     set({ status: 'connected' });
+
+    // Start ambient soundscape in mock mode too (C4)
+    soundEngine.startAmbient();
+    soundEngine.startKeyClicks(() => {
+      const agents = useAgentStore.getState().agents;
+      let count = 0;
+      for (const [, e] of agents) {
+        if (e.fsm.state === 'TYPE') count++;
+      }
+      return count;
+    });
 
     const tools = ['Read', 'Edit', 'Bash', 'Grep', 'Write', 'WebFetch', 'Task'];
     const toolInputs = ['src/App.tsx', 'internal/server/server.go', 'README.md', 'package.json', 'tsconfig.json', 'Makefile'];

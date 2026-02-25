@@ -8,6 +8,7 @@ import { useResourceStore } from '../stores/resourceStore';
 import { useWatchdogStore } from '../stores/watchdogStore';
 import type { AlertLevel } from '../stores/watchdogStore';
 import { useUIStore } from '../stores/uiStore';
+import { getDayNightState, phaseLabel } from '../engine/DayNight';
 
 const CLI_COLORS: Record<string, string> = {
   claude: '#4A90D9',
@@ -97,6 +98,8 @@ export default function Dashboard() {
           {WS_LABELS[wsStatus] ?? wsStatus}
         </span>
       </h2>
+
+      <DayNightIndicator />
 
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
         工作階段（{activeAgents.length} 活躍
@@ -497,6 +500,31 @@ function ResourceSection() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Day/Night Indicator (C1) ──
+
+const PHASE_ICONS: Record<string, string> = {
+  night: '🌙', dawn: '🌅', day: '☀️', dusk: '🌇', evening: '🌃',
+};
+
+function DayNightIndicator() {
+  const dn = getDayNightState();
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      fontSize: 10, color: '#888', marginBottom: 6, padding: '2px 0',
+    }}>
+      <span>{PHASE_ICONS[dn.phase] ?? ''} {phaseLabel(dn.phase)}</span>
+      <span style={{ color: '#666' }}>{timeStr}</span>
+      <span style={{ color: '#666', fontSize: 9 }}>
+        光照 {Math.round(dn.ambientLight * 100)}%
+      </span>
     </div>
   );
 }

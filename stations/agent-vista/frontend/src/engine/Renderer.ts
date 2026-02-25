@@ -11,6 +11,7 @@ import { getCustomSprite } from '../sprites/custom';
 import type { AgentEntry } from '../stores/agentStore';
 import { tryMonologue } from './Monologue';
 import { useUIStore } from '../stores/uiStore';
+import { getDayNightState, type DayNightState } from './DayNight';
 
 const FLOOR_A = '#2A2A3E';        // claude_studio floor (blue-dark)
 const FLOOR_B = '#24243A';
@@ -179,7 +180,20 @@ export class Renderer {
     // 8. CLI legend (bottom-left)
     this.drawLegend(agents);
 
-    // 9. Edit mode overlay
+    // 9. Day/Night cycle overlay + window glow + desk lamps
+    const dayNight = getDayNightState();
+    if (dayNight.overlayA > 0.005) {
+      this.drawDayNightOverlay(dayNight);
+    }
+    if (dayNight.windowGlowIntensity > 0.01) {
+      this.drawWindowGlow(map, dayNight);
+      this.drawDeskLamps(agents, dayNight);
+    }
+
+    // 10. Agent proximity interactions (C2: wave when passing in corridor)
+    this.drawProximityInteractions(agents);
+
+    // 11. Edit mode overlay
     if (editMode) this.drawEditOverlay(map);
   }
 
@@ -1121,6 +1135,154 @@ export class Renderer {
     ctx.fillStyle = '#FFE8A0';
     ctx.fillText(labelText, labelX, labelY);
     ctx.textAlign = 'start';
+  }
+
+  // ── Day/Night Cycle (C1) ──────────────────────
+
+  private drawDayNightOverlay(dn: DayNightState) {
+    const { ctx } = this;
+    const { overlayR, overlayG, overlayB, overlayA } = dn;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = `rgba(${Math.round(overlayR)}, ${Math.round(overlayG)}, ${Math.round(overlayB)}, ${overlayA})`;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.restore();
+  }
+
+  /** Warm glow along outer walls — simulates light from office windows at night */
+  private drawWindowGlow(map: TileMapData, dn: DayNightState) {
+    const { ctx, camera } = this;
+    const z = camera.zoom;
+    const intensity = dn.windowGlowIntensity;
+    if (intensity < 0.01) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+
+    // Glow along outer walls (y=0 top wall, y=max-1 bottom wall)
+    const glowSize = TILE * z * 1.5;
+    const alpha = intensity * 0.15;
+
+    // Top wall windows (every 4 tiles)
+    for (let tx = 2; tx < map.width - 2; tx += 4) {
+      if (tx === DOOR_POS.x || tx === DOOR_POS.x + 1) continue; // skip door
+      const { sx, sy } = camera.worldToScreen(tx * TILE, 0);
+      if (sx + glowSize < 0 || sx > this.canvas.width) continue;
+      const grad = ctx.createRadialGradient(
+        sx + TILE * z / 2, sy + TILE * z, 0,
+        sx + TILE * z / 2, sy + TILE * z, glowSize,
+      );
+      grad.addColorStop(0, `rgba(255, 220, 140, ${alpha})`);
+      grad.addColorStop(1, 'rgba(255, 220, 140, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(sx - glowSize, sy, glowSize * 3, glowSize * 2);
+    }
+
+    // Bottom wall windows
+    const bottomY = (map.height - 1);
+    for (let tx = 2; tx < map.width - 2; tx += 4) {
+      const { sx, sy } = camera.worldToScreen(tx * TILE, bottomY * TILE);
+      if (sx + glowSize < 0 || sx > this.canvas.width) continue;
+      const grad = ctx.createRadialGradient(
+        sx + TILE * z / 2, sy, 0,
+        sx + TILE * z / 2, sy, glowSize,
+      );
+      grad.addColorStop(0, `rgba(255, 220, 140, ${alpha * 0.7})`);
+      grad.addColorStop(1, 'rgba(255, 220, 140, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(sx - glowSize, sy - glowSize * 2, glowSize * 3, glowSize * 2);
+    }
+
+    ctx.restore();
+  }
+
+  /** Desk lamp glow near typing/working agents during evening/night */
+  private drawDeskLamps(agents: Map<string, AgentEntry>, dn: DayNightState) {
+    const { ctx, camera } = this;
+    const z = camera.zoom;
+    const intensity = dn.windowGlowIntensity;
+    if (intensity < 0.1) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+
+    for (const [, entry] of agents) {
+      const { fsm } = entry;
+      // Only show desk lamp for seated, active agents
+      if (fsm.state !== 'TYPE' && fsm.state !== 'THINK') continue;
+      if (fsm.despawning || fsm.spawning) continue;
+
+      const wx = fsm.pixelX * TILE + TILE / 2;
+      const wy = fsm.pixelY * TILE;
+      const { sx, sy } = camera.worldToScreen(wx, wy);
+
+      const lampR = TILE * z * 1.8;
+      const alpha = intensity * 0.12;
+      const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, lampR);
+      grad.addColorStop(0, `rgba(255, 240, 180, ${alpha})`);
+      grad.addColorStop(0.6, `rgba(255, 220, 140, ${alpha * 0.4})`);
+      grad.addColorStop(1, 'rgba(255, 220, 140, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(sx - lampR, sy - lampR, lampR * 2, lampR * 2);
+    }
+
+    ctx.restore();
+  }
+
+  // ── Proximity Interactions (C2) ──────────────────
+
+  private interactionCooldowns = new Map<string, number>();
+
+  private drawProximityInteractions(agents: Map<string, AgentEntry>) {
+    const now = Date.now();
+
+    // Check pairs of IDLE agents near each other in corridors
+    const idleAgents: AgentEntry[] = [];
+    for (const [, entry] of agents) {
+      const { fsm } = entry;
+      if (fsm.state === 'IDLE' && !fsm.spawning && !fsm.despawning && !fsm.exitTarget) {
+        if (isInCorridor(Math.round(fsm.pixelX), Math.round(fsm.pixelY))) {
+          idleAgents.push(entry);
+        }
+      }
+    }
+
+    for (let i = 0; i < idleAgents.length; i++) {
+      for (let j = i + 1; j < idleAgents.length; j++) {
+        const a = idleAgents[i].fsm;
+        const b = idleAgents[j].fsm;
+        const dx = a.pixelX - b.pixelX;
+        const dy = a.pixelY - b.pixelY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 3) { // within 3 tiles
+          const pairKey = [idleAgents[i].agent.id, idleAgents[j].agent.id].sort().join(':');
+          const lastWave = this.interactionCooldowns.get(pairKey) ?? 0;
+          if (now - lastWave < 15000) continue; // 15s cooldown per pair
+          this.interactionCooldowns.set(pairKey, now);
+
+          // Draw wave emoji above both agents briefly
+          // (This sets a transient visual; the next few frames will show it)
+          if (!a.bubble) {
+            a.bubble = '👋';
+            a.bubbleTimer = 2000;
+            a.bubbleSetAt = now;
+          }
+          if (!b.bubble) {
+            b.bubble = '👋';
+            b.bubbleTimer = 2000;
+            b.bubbleSetAt = now;
+          }
+        }
+      }
+    }
+
+    // Cleanup old cooldown entries
+    if (this.interactionCooldowns.size > 100) {
+      for (const [key, time] of this.interactionCooldowns) {
+        if (now - time > 30000) this.interactionCooldowns.delete(key);
+      }
+    }
   }
 
   // ── Edit Mode Overlay ──────────────────────
