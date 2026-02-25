@@ -110,6 +110,15 @@ func (t *AgentTracker) HandleEvent(evt protocol.AgentEvent) *protocol.AgentState
 	// Update timestamp
 	agent.LastActive = time.Now().UnixMilli()
 
+	// Extract project directory from event metadata for process correlation
+	if evt.Metadata != nil {
+		if pd, ok := evt.Metadata["project_dir"]; ok {
+			if pdStr, ok := pd.(string); ok && pdStr != "" {
+				agent.ProjectDir = pdStr
+			}
+		}
+	}
+
 	// Accumulate tokens
 	if evt.Tokens != nil {
 		agent.TokensTotal += evt.Tokens.Total
@@ -293,6 +302,115 @@ func displayName(cli protocol.CLIType, sessionID string) string {
 		short = short[len(short)-4:]
 	}
 	return fmt.Sprintf("%s-%s", cli, short)
+}
+
+// processRestingMs is the threshold for marking an agent as resting when its
+// CLI process is still alive but the session transcript hasn't updated.
+const processRestingMs = 3 * 60 * 1000 // 3 minutes
+
+// ReconcileProcesses cross-references running CLI processes with tracked agents.
+//
+// Two lifecycle transitions:
+//   - Process alive + session stale > 3 min → resting (go to rest room)
+//   - Process dead → offline immediately (walk to exit or fade out)
+//
+// procs must be non-nil; nil means "scan failed" and reconciliation is skipped.
+// An empty slice means "scan OK, no CLI processes running" — agents will be offlined.
+// Returns IDs of agents that went offline.
+func (t *AgentTracker) ReconcileProcesses(procs []protocol.ProcessInfo) []string {
+	if procs == nil {
+		return nil // no scan data — don't touch anything
+	}
+
+	now := time.Now()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var offlined []string
+	for id, a := range t.agents {
+		if a.Status == protocol.StatusOffline {
+			continue
+		}
+
+		elapsed := now.UnixMilli() - a.LastActive
+
+		// Grace period: don't touch agents that appeared very recently
+		// (process might still be starting up or monitor hasn't seen it yet).
+		if elapsed < 15_000 {
+			continue
+		}
+
+		if hasMatchingProcess(a, procs) {
+			// Process alive — check if session is stale → resting
+			if elapsed > processRestingMs && a.Status != protocol.StatusResting {
+				a.Status = protocol.StatusResting
+				a.Animation = protocol.AnimIdle
+				a.CurrentTool = ""
+				a.ToolDetail = ""
+
+				t.eventBuf = append(t.eventBuf, EventEntry{
+					Seq: t.nextSeq,
+					Event: protocol.AgentEvent{
+						CLIType:   a.CLIType,
+						SessionID: a.SessionID,
+						AgentID:   id,
+						Timestamp: now,
+						EventType: protocol.EventProcessResting,
+					},
+				})
+				t.nextSeq++
+
+				if t.redis != nil {
+					agentCopy := *a
+					t.redis.SaveAgent(&agentCopy)
+				}
+			}
+			continue
+		}
+
+		// No matching process — mark offline
+		a.Status = protocol.StatusOffline
+		a.Animation = protocol.AnimIdle
+		a.CurrentTool = ""
+		a.ToolDetail = ""
+		offlined = append(offlined, id)
+
+		t.eventBuf = append(t.eventBuf, EventEntry{
+			Seq: t.nextSeq,
+			Event: protocol.AgentEvent{
+				CLIType:   a.CLIType,
+				SessionID: a.SessionID,
+				AgentID:   id,
+				Timestamp: now,
+				EventType: protocol.EventSessionEnd,
+			},
+		})
+		t.nextSeq++
+
+		if t.redis != nil {
+			t.redis.RemoveAgent(id)
+		}
+	}
+	return offlined
+}
+
+// hasMatchingProcess checks if any running process matches the given agent.
+// Matching: same CLIType AND (ProjectDir/CWD prefix match, or either is empty).
+func hasMatchingProcess(agent *protocol.AgentState, procs []protocol.ProcessInfo) bool {
+	for _, p := range procs {
+		if p.CLIType != agent.CLIType {
+			continue
+		}
+		// If either side lacks directory info, match by CLI type alone
+		if agent.ProjectDir == "" || p.CWD == "" {
+			return true
+		}
+		// Prefix match in both directions (CWD might be parent or child of ProjectDir)
+		if strings.HasPrefix(p.CWD, agent.ProjectDir) || strings.HasPrefix(agent.ProjectDir, p.CWD) {
+			return true
+		}
+	}
+	return false
 }
 
 // SweepStale checks all agents and marks them as resting or offline

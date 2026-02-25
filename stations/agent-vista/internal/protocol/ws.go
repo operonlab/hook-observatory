@@ -40,6 +40,7 @@ type ProcessInfo struct {
 	CPU     float64 `json:"cpu"`     // percentage
 	RSS     uint64  `json:"rss"`     // bytes
 	Threads int32   `json:"threads"`
+	CWD     string  `json:"cwd,omitempty"` // working directory of root process
 }
 
 // WSResourceSnapshot is sent every 5 seconds with process resource data.

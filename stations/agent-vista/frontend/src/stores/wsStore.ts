@@ -48,6 +48,8 @@ async function pollEvents() {
           entry.event.cli_type,
           entry.event.session_id ?? entry.event.agent_id,
         );
+      } else if (entry.event.event_type === 'process_resting') {
+        store.agentResting(entry.event.agent_id);
       } else {
         store.applyEvent(entry.event);
         // Desktop notifications for critical events (C7)

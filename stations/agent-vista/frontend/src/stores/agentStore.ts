@@ -26,6 +26,7 @@ interface AgentStoreState {
   applyEvent: (evt: AgentEvent) => void;
   agentOnline: (agent: AgentState) => void;
   agentOffline: (id: string) => void;
+  agentResting: (id: string) => void;
 }
 
 /** Map agent status (from backend) to FSM animation state. */
@@ -133,23 +134,62 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     set({ agents: next });
   },
 
+  agentResting(id) {
+    const { agents } = get();
+    const entry = agents.get(id);
+    if (!entry) return;
+    if (entry.agent.status === 'resting' || entry.agent.status === 'offline') return;
+    if (entry.fsm.exitTarget || entry.fsm.despawning) return;
+    const office = useOfficeStore.getState();
+    // Transition to resting: release desk, claim rest spot, walk there
+    entry.agent.status = 'resting';
+    entry.fsm.state = 'IDLE';
+    entry.fsm.bubble = 'zzZ';
+    entry.fsm.bubbleTimer = 999999;
+    entry.fsm.zone = 'rest';
+    office.releaseSeat(id);
+    const restSpot = office.claimRestSpot(id);
+    if (restSpot) {
+      entry.fsm.seat = { x: restSpot.x, y: restSpot.y };
+    }
+    const next = new Map(agents);
+    next.set(id, { ...entry });
+    set({ agents: next });
+  },
+
   agentOffline(id) {
     const { agents } = get();
     const entry = agents.get(id);
     if (!entry) return;
     const office = useOfficeStore.getState();
-    const doorPos = office.door;
-    // Clear sub-agents and set exit target
+    const wasResting = entry.agent.status === 'resting';
+    // Clear sub-agents
     entry.fsm.subAgents = [];
-    entry.fsm.exitTarget = doorPos;
-    entry.fsm.state = 'WALK';
-    entry.fsm.seat = null;
+
+    if (wasResting) {
+      // Resting agents fade out in place — no long walk to door
+      entry.fsm.seat = null;
+      entry.fsm.despawning = true;
+      entry.fsm.spawnT = 0;
+      entry.fsm.state = 'IDLE';
+      entry.fsm.path = [];
+      entry.fsm.bubble = null;
+      entry.fsm.bubbleTimer = 0;
+      office.releaseRestSpot(id);
+    } else {
+      // Active agents walk to door for dramatic exit
+      const doorPos = office.door;
+      entry.fsm.exitTarget = doorPos;
+      entry.fsm.state = 'WALK';
+      entry.fsm.seat = null;
+      office.releaseSeat(id);
+    }
+
     const next = new Map(agents);
     next.set(id, { ...entry });
     set({ agents: next });
-    office.releaseSeat(id);
-    // Renderer triggers despawn when agent reaches door.
-    // This interval waits for despawn animation to finish, then removes agent.
+
+    // Wait for despawn animation to finish, then remove agent
     const checkDespawn = setInterval(() => {
       const e = get().agents.get(id);
       if (!e) { clearInterval(checkDespawn); return; }
@@ -160,7 +200,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         set({ agents: m });
       }
     }, 200);
-    // Safety: force remove after 10s even if walk fails
+    // Safety: force remove (shorter for fade-out, longer for walk)
     setTimeout(() => {
       clearInterval(checkDespawn);
       const m = new Map(get().agents);
@@ -168,7 +208,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         m.delete(id);
         set({ agents: m });
       }
-    }, 10000);
+    }, wasResting ? 3000 : 15000);
   },
 
   applyEvent(evt) {

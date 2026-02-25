@@ -59,4 +59,5 @@ type AgentState struct {
 	Position    Position       `json:"position"`
 	Animation   AnimationState `json:"animation"`
 	SubAgents   []AgentState   `json:"sub_agents,omitempty"`
+	ProjectDir  string         `json:"project_dir,omitempty"` // working directory for process correlation
 }

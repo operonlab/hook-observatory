@@ -14,7 +14,8 @@ export type AgentEventType =
   | "session_start"
   | "session_end"
   | "sub_agent_start"
-  | "sub_agent_end";
+  | "sub_agent_end"
+  | "process_resting";
 
 export type ToolStatus = "running" | "success" | "error";
 

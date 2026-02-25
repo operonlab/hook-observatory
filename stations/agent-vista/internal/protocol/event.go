@@ -26,8 +26,9 @@ const (
 	EventWaiting       AgentEventType = "waiting"
 	EventSessionStart  AgentEventType = "session_start"
 	EventSessionEnd    AgentEventType = "session_end"
-	EventSubAgentStart AgentEventType = "sub_agent_start"
-	EventSubAgentEnd   AgentEventType = "sub_agent_end"
+	EventSubAgentStart  AgentEventType = "sub_agent_start"
+	EventSubAgentEnd    AgentEventType = "sub_agent_end"
+	EventProcessResting AgentEventType = "process_resting"
 )
 
 // ToolStatus represents the outcome of a tool invocation.

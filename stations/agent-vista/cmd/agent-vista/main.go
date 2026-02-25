@@ -190,14 +190,15 @@ func main() {
 	}()
 
 	// Start process monitor: resource usage at configured interval
+	var pm *server.ProcessMonitor
 	if cfg.Monitor.Enabled {
 		monInterval := time.Duration(cfg.Monitor.IntervalSec) * time.Second
-		pm := server.NewProcessMonitor(b, monInterval, cfg.Verbose)
+		pm = server.NewProcessMonitor(b, monInterval, cfg.Verbose)
 		srv.SetProcessMonitor(pm)
 		go pm.Start(ctx)
 	}
 
-	// Stale agent sweep: mark idle agents as resting, then offline
+	// Stale agent sweep + process-aware lifecycle reconciliation
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -208,6 +209,20 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				// Process-aware lifecycle: cross-reference running processes with agents.
+				// Agents with no matching OS process are offlined immediately.
+				if pm != nil {
+					procs := pm.LatestSnapshot()
+					reconciled := tracker.ReconcileProcesses(procs)
+					for _, id := range reconciled {
+						b.Publish(protocol.WSMessage{
+							Type:           protocol.WSTypeAgentOffline,
+							AgentOfflineID: id,
+						})
+					}
+				}
+
+				// Time-based fallback: resting after 20min idle, offline after 60min
 				offlined := tracker.SweepStale(activeMs, restingMs)
 				for _, id := range offlined {
 					b.Publish(protocol.WSMessage{

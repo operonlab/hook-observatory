@@ -895,7 +895,7 @@ export class Renderer {
     const next = fsm.path[fsm.pathIdx];
     fsm.dir = directionTo(fsm.pos, next);
 
-    const speedMul = (fsm.zone === 'rest' && !fsm.exitTarget) ? 0.5 : 1;
+    const speedMul = fsm.exitTarget ? 1.5 : (fsm.zone === 'rest') ? 0.5 : 1;
     const speed = WALK_SPEED * speedMul * dt / 1000;
     const dx = next.x - fsm.pixelX;
     const dy = next.y - fsm.pixelY;

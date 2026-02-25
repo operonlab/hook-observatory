@@ -186,6 +186,14 @@ func (pm *ProcessMonitor) CollectOnce() []protocol.ProcessInfo {
 			}
 		}
 
+		// Extract CWD from root process for agent correlation
+		var cwd string
+		if rootProc, ok := pidMap[root.pid]; ok {
+			if c, err := rootProc.Cwd(); err == nil {
+				cwd = c
+			}
+		}
+
 		result = append(result, protocol.ProcessInfo{
 			PID:     root.pid,
 			Name:    string(root.cliType),
@@ -193,6 +201,7 @@ func (pm *ProcessMonitor) CollectOnce() []protocol.ProcessInfo {
 			CPU:     totalCPU,
 			RSS:     totalRSS,
 			Threads: totalThreads,
+			CWD:     cwd,
 		})
 
 		if pm.verbose {
@@ -201,6 +210,11 @@ func (pm *ProcessMonitor) CollectOnce() []protocol.ProcessInfo {
 		}
 	}
 
+	// Return non-nil empty slice on success (nil reserved for scan error).
+	// This lets callers distinguish "scan OK, no CLIs" from "scan failed".
+	if result == nil {
+		result = []protocol.ProcessInfo{}
+	}
 	return result
 }
 
