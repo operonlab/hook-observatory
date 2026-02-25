@@ -297,11 +297,11 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const { fsm, agent } = entry;
 
     if (evt.tokens) {
-      agent.tokens_total = evt.tokens.total;
+      agent.tokens_total += evt.tokens.total;
       entry.tokenBreakdown = {
-        input: evt.tokens.input,
-        output: evt.tokens.output,
-        cached: evt.tokens.cached ?? 0,
+        input: entry.tokenBreakdown.input + evt.tokens.input,
+        output: entry.tokenBreakdown.output + evt.tokens.output,
+        cached: entry.tokenBreakdown.cached + (evt.tokens.cached ?? 0),
       };
     }
     agent.last_active = Date.now();

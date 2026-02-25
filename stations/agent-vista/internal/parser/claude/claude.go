@@ -17,6 +17,7 @@ type Parser struct {
 	meta        protocol.SessionMeta
 	lineBuf     []byte // buffered incomplete line from previous read
 	initialized bool
+	lastUsage   *apiUsage // latest message.usage from assistant records (flushed at turn_duration)
 }
 
 // New creates a new Claude JSONL parser.
@@ -98,11 +99,7 @@ type record struct {
 	Data json.RawMessage `json:"data"`
 
 	// turn_duration fields (system/turn_duration)
-	DurationMs       int `json:"duration_ms"`
-	InputTokens      int `json:"input_tokens"`
-	OutputTokens     int `json:"output_tokens"`
-	CacheReadTokens  int `json:"cache_read_tokens"`
-	CacheWriteTokens int `json:"cache_write_tokens"`
+	DurationMs int `json:"duration_ms"`
 }
 
 // apiMsg wraps the Anthropic API message inside assistant/user records.
@@ -202,20 +199,28 @@ func (p *Parser) parseLine(line []byte) ([]protocol.AgentEvent, error) {
 func (p *Parser) parseSystem(rec record, ts time.Time, sid string) ([]protocol.AgentEvent, error) {
 	switch rec.Subtype {
 	case "turn_duration":
-		tokens := &protocol.TokenUsage{
-			Input:  rec.InputTokens,
-			Output: rec.OutputTokens,
-			Cached: rec.CacheReadTokens,
-			Total:  rec.InputTokens + rec.OutputTokens,
+		// Flush accumulated tokens from preceding assistant records.
+		// Token data lives in assistant message.usage, NOT in turn_duration fields.
+		if p.lastUsage != nil {
+			u := p.lastUsage
+			totalInput := u.InputTokens + u.CacheRead + u.CacheCreate
+			tokens := &protocol.TokenUsage{
+				Input:  totalInput,
+				Output: u.OutputTokens,
+				Cached: u.CacheRead,
+				Total:  totalInput + u.OutputTokens,
+			}
+			p.lastUsage = nil
+			return []protocol.AgentEvent{{
+				CLIType:   protocol.CLIClaude,
+				SessionID: sid,
+				AgentID:   agentID(sid),
+				Timestamp: ts,
+				EventType: protocol.EventIdle,
+				Tokens:    tokens,
+			}}, nil
 		}
-		return []protocol.AgentEvent{{
-			CLIType:   protocol.CLIClaude,
-			SessionID: sid,
-			AgentID:   agentID(sid),
-			Timestamp: ts,
-			EventType: protocol.EventIdle,
-			Tokens:    tokens,
-		}}, nil
+		return nil, nil
 	}
 
 	return nil, nil
@@ -229,6 +234,13 @@ func (p *Parser) parseAssistant(rec record, ts time.Time, sid string) ([]protoco
 	// Update model if we didn't have it
 	if p.meta.Model == "" && rec.Message.Model != "" {
 		p.meta.Model = rec.Message.Model
+	}
+
+	// Track latest usage — multiple assistant records per turn have
+	// increasing output_tokens; the last one contains the turn total.
+	// Flushed to a token event at the next turn_duration record.
+	if rec.Message.Usage != nil {
+		p.lastUsage = rec.Message.Usage
 	}
 
 	var events []protocol.AgentEvent

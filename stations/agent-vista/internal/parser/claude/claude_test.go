@@ -279,21 +279,23 @@ func TestParseSubAgent(t *testing.T) {
 }
 
 func TestParseTurnDuration(t *testing.T) {
-	// Line 1: progress — triggers auto-init → session_start only
-	// Line 2: system/turn_duration → idle event
-	// Total: 2 events
+	// Line 1: progress — triggers auto-init → session_start
+	// Line 2: assistant with message.usage — captures token data in lastUsage
+	// Line 3: system/turn_duration — flushes lastUsage → idle event with tokens
+	// Total: 3 events (session_start + message + idle)
 	lines := `{"type":"progress","timestamp":"2026-02-24T10:00:00.000Z","sessionId":"s1","data":{"type":"hook_progress"}}
-{"type":"system","subtype":"turn_duration","timestamp":"2026-02-24T10:01:00.000Z","sessionId":"s1","duration_ms":57000,"input_tokens":12450,"output_tokens":3280,"cache_read_tokens":8200,"cache_write_tokens":1500}
+{"type":"assistant","timestamp":"2026-02-24T10:00:30.000Z","sessionId":"s1","message":{"model":"claude-opus-4-6","role":"assistant","content":[{"type":"text","text":"Done."}],"usage":{"input_tokens":500,"output_tokens":3280,"cache_read_input_tokens":8200,"cache_creation_input_tokens":1500}}}
+{"type":"system","subtype":"turn_duration","timestamp":"2026-02-24T10:01:00.000Z","sessionId":"s1","durationMs":57000}
 `
 
 	p := New()
 	events, _ := p.ParseIncremental([]byte(lines))
 
-	if len(events) != 2 {
-		t.Fatalf("expected 2 events, got %d: %v", len(events), eventTypes(events))
+	if len(events) != 3 {
+		t.Fatalf("expected 3 events, got %d: %v", len(events), eventTypes(events))
 	}
 
-	// Find the idle event
+	// Find the idle event (emitted at turn_duration with flushed token data)
 	var idleEvt *protocol.AgentEvent
 	for i := range events {
 		if events[i].EventType == protocol.EventIdle {
@@ -308,8 +310,10 @@ func TestParseTurnDuration(t *testing.T) {
 	if idleEvt.Tokens == nil {
 		t.Fatal("Tokens is nil")
 	}
-	if idleEvt.Tokens.Input != 12450 {
-		t.Errorf("Tokens.Input = %d, want 12450", idleEvt.Tokens.Input)
+	// Total input = input_tokens + cache_read + cache_create = 500 + 8200 + 1500 = 10200
+	wantInput := 500 + 8200 + 1500
+	if idleEvt.Tokens.Input != wantInput {
+		t.Errorf("Tokens.Input = %d, want %d", idleEvt.Tokens.Input, wantInput)
 	}
 	if idleEvt.Tokens.Output != 3280 {
 		t.Errorf("Tokens.Output = %d, want 3280", idleEvt.Tokens.Output)
@@ -317,8 +321,9 @@ func TestParseTurnDuration(t *testing.T) {
 	if idleEvt.Tokens.Cached != 8200 {
 		t.Errorf("Tokens.Cached = %d, want 8200", idleEvt.Tokens.Cached)
 	}
-	if idleEvt.Tokens.Total != 12450+3280 {
-		t.Errorf("Tokens.Total = %d, want %d", idleEvt.Tokens.Total, 12450+3280)
+	wantTotal := wantInput + 3280
+	if idleEvt.Tokens.Total != wantTotal {
+		t.Errorf("Tokens.Total = %d, want %d", idleEvt.Tokens.Total, wantTotal)
 	}
 }
 
