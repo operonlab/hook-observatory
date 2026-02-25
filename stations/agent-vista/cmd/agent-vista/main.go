@@ -37,6 +37,7 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "don't auto-open browser (overrides config)")
 	watchFiles := flag.String("watch", "", "comma-separated transcript files to watch (for testing)")
 	dbURL := flag.String("db", "", "PostgreSQL DSN for layout persistence (overrides config, e.g. postgres://user:pass@localhost/dbname?sslmode=disable)")
+	redisURL := flag.String("redis", "", "Redis URL for agent state persistence (overrides config, e.g. redis://localhost:6379/0)")
 	verbose := flag.Bool("verbose", false, "verbose logging (overrides config)")
 	showVersion := flag.Bool("version", false, "show version and exit")
 	flag.Parse()
@@ -69,6 +70,8 @@ func main() {
 			cfg.NoBrowser = *noBrowser
 		case "db":
 			cfg.DatabaseURL = *dbURL
+		case "redis":
+			cfg.RedisURL = *redisURL
 		}
 	})
 
@@ -104,6 +107,18 @@ func main() {
 			if cfg.Verbose {
 				log.Printf("[layoutdb] layout persistence enabled")
 			}
+		}
+	}
+
+	// Optional Redis agent state persistence
+	if cfg.RedisURL != "" {
+		rs, err := server.NewRedisStore(cfg.RedisURL, cfg.Verbose)
+		if err != nil {
+			log.Printf("[redis] warning: failed to connect (%v) — running without Redis", err)
+		} else {
+			tracker.SetRedis(rs)
+			defer rs.Close()
+			log.Printf("[redis] agent state persistence enabled")
 		}
 	}
 

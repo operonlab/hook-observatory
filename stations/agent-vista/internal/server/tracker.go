@@ -22,6 +22,7 @@ type EventEntry struct {
 
 // AgentTracker maintains a map of agent states, updated by incoming AgentEvents.
 // Thread-safe for concurrent reads and writes.
+// When a RedisStore is attached, state changes are persisted to Redis.
 type AgentTracker struct {
 	mu     sync.RWMutex
 	agents map[string]*protocol.AgentState
@@ -30,6 +31,8 @@ type AgentTracker struct {
 	nextSeq  uint64
 
 	totalEvents atomic.Int64
+
+	redis *RedisStore // optional; nil = in-memory only
 }
 
 // NewAgentTracker creates a new tracker with an empty agent map.
@@ -37,6 +40,38 @@ func NewAgentTracker() *AgentTracker {
 	return &AgentTracker{
 		agents:   make(map[string]*protocol.AgentState),
 		eventBuf: make([]EventEntry, 0, maxEventBuffer),
+	}
+}
+
+// SetRedis attaches a Redis store for state persistence.
+// If agents exist in Redis, they are loaded into memory.
+func (t *AgentTracker) SetRedis(r *RedisStore) {
+	t.redis = r
+	if r == nil {
+		return
+	}
+
+	// Load persisted agents into memory
+	agents, err := r.LoadAll()
+	if err != nil {
+		fmt.Printf("[tracker] warning: failed to load agents from Redis: %v\n", err)
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := range agents {
+		a := agents[i]
+		// Skip agents that went offline (stale data)
+		if a.Status == protocol.StatusOffline {
+			r.RemoveAgent(a.ID)
+			continue
+		}
+		t.agents[a.ID] = &a
+	}
+
+	// Restore sequence counter from Redis
+	if seq := r.LoadSeq(); seq > 0 {
+		t.nextSeq = seq + 1
 	}
 }
 
@@ -161,6 +196,17 @@ func (t *AgentTracker) HandleEvent(evt protocol.AgentEvent) *protocol.AgentState
 	}
 	t.nextSeq++
 
+	// Persist to Redis (non-blocking — errors logged but not propagated)
+	if t.redis != nil {
+		if evt.EventType == protocol.EventSessionEnd {
+			t.redis.RemoveAgent(id)
+		} else {
+			agentCopy := *agent
+			t.redis.SaveAgent(&agentCopy)
+		}
+		t.redis.SaveSeq(t.nextSeq - 1)
+	}
+
 	if isNew {
 		copy := *agent
 		return &copy
@@ -279,11 +325,20 @@ func (t *AgentTracker) SweepStale(activeMs, restingMs int64) []string {
 				Event: offlineEvt,
 			})
 			t.nextSeq++
+			// Remove from Redis
+			if t.redis != nil {
+				t.redis.RemoveAgent(id)
+			}
 		} else if elapsed > activeMs && a.Status != protocol.StatusResting {
 			a.Status = protocol.StatusResting
 			a.Animation = protocol.AnimIdle
 			a.CurrentTool = ""
 			a.ToolDetail = ""
+			// Update resting status in Redis
+			if t.redis != nil {
+				agentCopy := *a
+				t.redis.SaveAgent(&agentCopy)
+			}
 		}
 	}
 	return offlined

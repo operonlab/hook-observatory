@@ -72,7 +72,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
   initAgents(list) {
     const office = useOfficeStore.getState();
-    const doorPos = office.door;
 
     // Dedup by agent.id (keep first occurrence)
     const seen = new Set<string>();
@@ -86,8 +85,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const active = deduped.filter(a => a.status !== 'offline' && a.status !== 'resting');
     const inactive = deduped.filter(a => a.status === 'offline' || a.status === 'resting');
 
-    // Place inactive agents at rest spots (no spawn animation)
     const agents = new Map<string, AgentEntry>();
+
+    // Place inactive agents at rest spots (no spawn animation)
     for (const a of inactive) {
       const restSpot = office.claimRestSpot(a.id);
       const pos = restSpot ? { x: restSpot.x, y: restSpot.y } : null;
@@ -99,23 +99,22 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       fsm.zone = 'rest';
       agents.set(a.id, { agent: a, fsm, tokenBreakdown: { input: 0, output: 0, cached: 0 }, projectDir: '' });
     }
-    set({ agents });
 
-    // Queue active agents to enter one by one from the door
-    active.forEach((a, i) => {
-      setTimeout(() => {
-        const room = cliToRoom(a.cli_type);
-        const seat = office.claimSeat(a.id, room);
-        const seatPos = seat ? { x: seat.tileX, y: seat.tileY } : null;
-        const fsm = createFSM(seatPos, doorPos);
-        fsm.zone = room;
-        // Initialize FSM state + bubble from backend agent data
-        initFSMFromAgent(a, fsm);
-        const next = new Map(get().agents);
-        next.set(a.id, { agent: a, fsm, tokenBreakdown: { input: 0, output: 0, cached: 0 }, projectDir: '' });
-        set({ agents: next });
-      }, i * 1500); // 1.5s between each agent
-    });
+    // Place active agents directly at their seats (no door animation on page load).
+    // Only truly NEW agents (via agentOnline) get the door entrance animation.
+    for (const a of active) {
+      const room = cliToRoom(a.cli_type);
+      const seat = office.claimSeat(a.id, room);
+      const seatPos = seat ? { x: seat.tileX, y: seat.tileY } : null;
+      const fsm = createFSM(seatPos, null); // null spawnAt → starts at seat
+      fsm.spawning = false;
+      fsm.spawnT = 1;
+      fsm.zone = room;
+      initFSMFromAgent(a, fsm);
+      agents.set(a.id, { agent: a, fsm, tokenBreakdown: { input: 0, output: 0, cached: 0 }, projectDir: '' });
+    }
+
+    set({ agents });
   },
 
   agentOnline(agent) {

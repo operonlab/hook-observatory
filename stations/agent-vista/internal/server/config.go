@@ -15,6 +15,7 @@ type Config struct {
 	NoBrowser   bool   `toml:"no_browser"`
 	LayoutPath  string `toml:"layout_path"`
 	DatabaseURL string `toml:"database_url"` // optional PostgreSQL DSN; empty = JSON file only
+	RedisURL    string `toml:"redis_url"`    // optional Redis URL; empty = in-memory only
 
 	Discovery DiscoveryConfig `toml:"discovery"`
 	Monitor   MonitorConfig   `toml:"monitor"`
