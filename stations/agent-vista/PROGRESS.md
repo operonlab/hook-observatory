@@ -117,3 +117,6 @@ Last updated: 2026-02-25
 | E16 | Ambient soundscape | done | Filtered white noise office hum + typing keyboard clicks |
 | E17 | Desktop notifications | done | Browser Notification API for permission_needed, session start/end |
 | E18 | Station graduation | done | lab/agent-vista → stations/agent-vista, v0.2.0 tag |
+| E19 | Weather system | done | Deterministic weather cycles (clear/cloudy/rain/snow), particle effects for rain+snow |
+| E20 | Custom avatars | done | Deterministic per-session accessories (hat/glasses/headphones/bowtie/antenna/crown/scarf) |
+| E21 | Timeline replay | done | Circular buffer recorder (5s interval, 720 frames/~1hr), scrubber UI with speed control |

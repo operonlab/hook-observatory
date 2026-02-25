@@ -8,10 +8,12 @@ import { getSpriteSheet, CHAR_W, CHAR_H, DESK_SPRITE, PLANT_SPRITE, SOFA_SPRITE,
 import { renderSprite, renderFurniture, clearSpriteCache } from '../sprites/cache';
 import { CLI_PALETTES, shiftPalette, type ColorPalette } from '../sprites/palette';
 import { getCustomSprite } from '../sprites/custom';
+import { getAccessory, drawAccessory } from '../sprites/accessories';
 import type { AgentEntry } from '../stores/agentStore';
 import { tryMonologue } from './Monologue';
 import { useUIStore } from '../stores/uiStore';
 import { getDayNightState, type DayNightState } from './DayNight';
+import { getWeatherState, WeatherParticleSystem, type WeatherState } from './Weather';
 
 const FLOOR_A = '#2A2A3E';        // claude_studio floor (blue-dark)
 const FLOOR_B = '#24243A';
@@ -44,6 +46,7 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private prevZoom = -1;
   private cliSessionCounters = new Map<string, number>();
+  private weatherParticles = new WeatherParticleSystem();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -125,6 +128,7 @@ export class Renderer {
       this.updateFSM(entry.fsm, dt, map, blocked);
       tryMonologue(id, entry);
       const customImg = getCustomSprite(entry.agent.cli_type, entry.agent.session_id);
+      const accessory = getAccessory(entry.agent.session_id ?? entry.agent.id);
       if (customImg) {
         scene.push({
           y: entry.fsm.pixelY,
@@ -139,6 +143,9 @@ export class Renderer {
           y: entry.fsm.pixelY,
           draw: () => {
             this.drawCharacter(entry.fsm, palette, 1);
+            if (accessory && !entry.fsm.spawning && !entry.fsm.despawning) {
+              this.drawCharacterAccessory(entry.fsm, accessory, 1);
+            }
             this.drawSelectionHighlight(id, entry.fsm, 1);
           },
         });
@@ -190,10 +197,22 @@ export class Renderer {
       this.drawDeskLamps(agents, dayNight);
     }
 
-    // 10. Agent proximity interactions (C2: wave when passing in corridor)
+    // 10. Weather particles (C3: rain/snow)
+    const weather = getWeatherState();
+    this.weatherParticles.resize(cw, ch);
+    this.weatherParticles.update(dt, weather);
+    if (weather.type === 'rain' || weather.type === 'snow') {
+      this.drawWeatherParticles(weather);
+    }
+    // Cloudy overlay
+    if (weather.type === 'cloudy') {
+      this.drawCloudyOverlay(weather);
+    }
+
+    // 11. Agent proximity interactions (C2: wave when passing in corridor)
     this.drawProximityInteractions(agents);
 
-    // 11. Edit mode overlay
+    // 12. Edit mode overlay
     if (editMode) this.drawEditOverlay(map);
   }
 
@@ -676,6 +695,19 @@ export class Renderer {
     if (alpha < 1) this.ctx.globalAlpha = alpha;
     this.ctx.drawImage(rendered, sx, sy);
     if (alpha < 1) this.ctx.globalAlpha = 1;
+  }
+
+  // ── Character Accessory (C5) ────────────────
+
+  private drawCharacterAccessory(fsm: FSMCtx, accessory: import('../sprites/accessories').Accessory, scale: number) {
+    const z = this.camera.zoom;
+    const effectiveZoom = Math.max(1, Math.round(z * scale));
+
+    const wx = fsm.pixelX * TILE + (TILE - CHAR_W * scale) / 2;
+    const wy = fsm.pixelY * TILE + (TILE - CHAR_H * scale);
+    const { sx, sy } = this.camera.worldToScreen(wx, wy);
+
+    drawAccessory(this.ctx, accessory, sx, sy, effectiveZoom);
   }
 
   // ── Selection Highlight ─────────────────────
@@ -1226,6 +1258,46 @@ export class Renderer {
       ctx.fillRect(sx - lampR, sy - lampR, lampR * 2, lampR * 2);
     }
 
+    ctx.restore();
+  }
+
+  // ── Weather Particles (C3) ──────────────────────
+
+  private drawWeatherParticles(weather: WeatherState) {
+    const { ctx } = this;
+    ctx.save();
+
+    if (weather.type === 'rain') {
+      for (const p of this.weatherParticles.particles) {
+        ctx.globalAlpha = p.opacity * 0.6;
+        ctx.strokeStyle = '#8AC8FF';
+        ctx.lineWidth = p.size * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + weather.windSpeed * 3, p.y + p.size * 3);
+        ctx.stroke();
+      }
+    } else if (weather.type === 'snow') {
+      for (const p of this.weatherParticles.particles) {
+        ctx.globalAlpha = p.opacity * 0.8;
+        ctx.fillStyle = '#E8F0FF';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /** Subtle darkening overlay for cloudy weather */
+  private drawCloudyOverlay(weather: WeatherState) {
+    const { ctx } = this;
+    const alpha = weather.intensity * 0.08;
+    if (alpha < 0.005) return;
+    ctx.save();
+    ctx.fillStyle = `rgba(40, 40, 60, ${alpha})`;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.restore();
   }
 

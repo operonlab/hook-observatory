@@ -5,6 +5,7 @@ import { Camera } from '../engine/Camera';
 import { Renderer } from '../engine/Renderer';
 import { useOfficeStore } from '../stores/officeStore';
 import { useAgentStore } from '../stores/agentStore';
+import { timelineRecorder } from '../engine/TimelineRecorder';
 
 export function usePixelEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
   const cameraRef = useRef<Camera | null>(null);
@@ -40,6 +41,9 @@ export function usePixelEngine(canvasRef: React.RefObject<HTMLCanvasElement | nu
       const { agents } = useAgentStore.getState();
 
       renderer.render(dt, map, furniture, seats, agents, editMode, restZone, selectedFurnitureIndex, selectedSeatIndex);
+
+      // Record timeline snapshot (C6)
+      timelineRecorder.record(agents);
 
       rafRef.current = requestAnimationFrame(loop);
     }

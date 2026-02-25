@@ -5,6 +5,7 @@ import { usePixelEngine } from '../hooks/usePixelEngine';
 import { useLayoutEditor } from '../hooks/useLayoutEditor';
 import BubbleOverlay from './BubbleOverlay';
 import Minimap from './Minimap';
+import TimelineBar from './TimelineBar';
 import { useUIStore } from '../stores/uiStore';
 
 export default function PixelOffice() {
@@ -51,6 +52,7 @@ export default function PixelOffice() {
       {minimapVisible && (
         <Minimap cameraRef={cameraRef} canvasWidth={size.w} canvasHeight={size.h} />
       )}
+      <TimelineBar />
     </>
   );
 }

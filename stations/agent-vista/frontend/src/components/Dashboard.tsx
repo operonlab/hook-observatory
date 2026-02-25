@@ -9,6 +9,7 @@ import { useWatchdogStore } from '../stores/watchdogStore';
 import type { AlertLevel } from '../stores/watchdogStore';
 import { useUIStore } from '../stores/uiStore';
 import { getDayNightState, phaseLabel } from '../engine/DayNight';
+import { getWeatherState, WEATHER_ICONS } from '../engine/Weather';
 
 const CLI_COLORS: Record<string, string> = {
   claude: '#4A90D9',
@@ -512,6 +513,7 @@ const PHASE_ICONS: Record<string, string> = {
 
 function DayNightIndicator() {
   const dn = getDayNightState();
+  const weather = getWeatherState();
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -522,9 +524,7 @@ function DayNightIndicator() {
     }}>
       <span>{PHASE_ICONS[dn.phase] ?? ''} {phaseLabel(dn.phase)}</span>
       <span style={{ color: '#666' }}>{timeStr}</span>
-      <span style={{ color: '#666', fontSize: 9 }}>
-        光照 {Math.round(dn.ambientLight * 100)}%
-      </span>
+      <span>{WEATHER_ICONS[weather.type]} {weather.label}</span>
     </div>
   );
 }
