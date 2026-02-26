@@ -8,6 +8,22 @@ import type {
   PaginatedResponse,
 } from "@/types";
 
+export interface SyncScanResult {
+  total: number;
+  synced: number;
+  failed: number;
+  skipped: number;
+  already: number;
+  log: string;
+}
+
+export interface SyncStats {
+  total: number;
+  synced: number;
+  failed: number;
+  skipped: number;
+}
+
 const USE_MOCK = (import.meta as unknown as { env: Record<string, string> }).env.VITE_USE_MOCK === "true";
 
 const crudApi = createCrudApi<MemoryBlock, MemoryBlockCreate, MemoryBlockUpdate>(
@@ -42,6 +58,15 @@ const realApi = {
     request<PaginatedResponse<MemoryBlock>>(
       `/memvault/blocks?block_type=${encodeURIComponent(blockType)}&page=${page}&page_size=${pageSize}`,
     ),
+
+  syncScan: (recent?: number): Promise<SyncScanResult> =>
+    request<SyncScanResult>(
+      `/memvault/sync/scan${recent ? `?recent=${recent}` : ""}`,
+      { method: "POST" },
+    ),
+
+  syncStats: (): Promise<SyncStats> =>
+    request<SyncStats>("/memvault/sync/stats"),
 };
 
 import { mockMemvaultApi } from "./mock";

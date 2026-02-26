@@ -275,4 +275,14 @@ export const mockMemvaultApi = {
     const filtered = mockBlocks.filter((b) => b.block_type === blockType);
     return paginate(filtered, page, pageSize);
   },
+
+  syncScan: async () => {
+    await delay(500);
+    return { total: 12, synced: 0, failed: 0, skipped: 0, already: 12, log: "[mock] all up-to-date" };
+  },
+
+  syncStats: async () => {
+    await delay();
+    return { total: 12, synced: 12, failed: 0, skipped: 0 };
+  },
 };

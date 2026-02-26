@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMemvaultStore } from "../stores";
 import { useMemorySearch } from "../hooks/useMemorySearch";
+import { memvaultApi, type SyncScanResult, type SyncStats } from "../api";
 import MemoryCard from "../components/MemoryCard";
 import SearchBar from "../components/SearchBar";
 import ProfileWidget from "../components/ProfileWidget";
@@ -78,6 +79,95 @@ function Pagination({
       >
         下一頁
       </button>
+    </div>
+  );
+}
+
+function SyncWidget({ onSynced }: { onSynced?: () => void }) {
+  const [stats, setStats] = useState<SyncStats | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [lastResult, setLastResult] = useState<SyncScanResult | null>(null);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      setStats(await memvaultApi.syncStats());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  const runScan = async () => {
+    setScanning(true);
+    setLastResult(null);
+    try {
+      const result = await memvaultApi.syncScan();
+      setLastResult(result);
+      await fetchStats();
+      if (result.synced > 0) onSynced?.();
+    } catch {
+      /* ignore */
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl border p-4"
+      style={{ backgroundColor: "var(--mantle)", borderColor: "var(--surface0)" }}
+    >
+      <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text)" }}>
+        Session 掃描
+      </h3>
+
+      {stats && (
+        <div className="grid grid-cols-2 gap-2 mb-3 text-xs" style={{ color: "var(--subtext0)" }}>
+          <div className="flex justify-between">
+            <span>已收錄</span>
+            <span style={{ color: "var(--green)" }}>{stats.synced}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Session 數</span>
+            <span style={{ color: "var(--text)" }}>{stats.total}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>失敗</span>
+            <span style={{ color: stats.failed > 0 ? "var(--red)" : "var(--subtext0)" }}>
+              {stats.failed}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>略過</span>
+            <span>{stats.skipped}</span>
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={runScan}
+        disabled={scanning}
+        className="w-full rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+        style={{
+          backgroundColor: scanning ? "var(--surface0)" : "var(--blue)",
+          color: scanning ? "var(--subtext0)" : "var(--base)",
+          cursor: scanning ? "wait" : "pointer",
+        }}
+      >
+        {scanning ? "掃描中..." : "掃描 Session"}
+      </button>
+
+      {lastResult && (
+        <p className="mt-2 text-xs" style={{ color: "var(--subtext0)" }}>
+          {lastResult.synced > 0
+            ? `新收錄 ${lastResult.synced} 筆記憶`
+            : `全部已收錄 (${lastResult.already} 筆)`}
+          {lastResult.failed > 0 && (
+            <span style={{ color: "var(--red)" }}> / {lastResult.failed} 失敗</span>
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -230,6 +320,7 @@ export default function MemoryBrowser() {
         {/* Sidebar */}
         <div className="hidden lg:flex lg:w-72 lg:flex-col lg:gap-4 lg:shrink-0">
           <ProfileWidget profile={profile} loading={loading && !profile} />
+          <SyncWidget onSynced={() => fetchBlocks()} />
 
           {/* Block detail panel */}
           {selectedBlock && (
