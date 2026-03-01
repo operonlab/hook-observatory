@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = "change-me-in-production"
 
+    def validate_secret_key(self) -> None:
+        """Raise if secret_key is the insecure default."""
+        if self.secret_key == "change-me-in-production":
+            raise ValueError(
+                "CORE_SECRET_KEY is set to the default value. "
+                "Set a secure random secret via CORE_SECRET_KEY environment variable."
+            )
+
     # CORS
     cors_origins: list[str] = [
         "http://localhost:3000",

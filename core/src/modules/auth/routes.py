@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -213,6 +213,8 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_db),
 ):
     """Handle OAuth callback: create/link user, set session."""
+    from authlib.integrations.base_client import OAuthError
+
     from .oauth import oauth
 
     client = oauth.create_client(provider)
@@ -222,7 +224,15 @@ async def oauth_callback(
             code="auth.oauth_not_configured",
         )
 
-    token = await client.authorize_access_token(request)
+    # authorize_access_token verifies the state parameter against request.session
+    # (provided by Starlette SessionMiddleware). Raises OAuthError on CSRF mismatch.
+    try:
+        token = await client.authorize_access_token(request)
+    except OAuthError as exc:
+        raise BadRequestError(
+            f"OAuth error: {exc.description or exc.error}",
+            code="auth.oauth_state_error",
+        ) from exc
 
     # Extract user info based on provider
     if provider == "google":
@@ -250,6 +260,13 @@ async def oauth_callback(
         raise BadRequestError(
             f"Unsupported provider: {provider}",
             code="auth.unsupported_provider",
+        )
+
+    # Validate provider_id is not empty
+    if not provider_id:
+        raise BadRequestError(
+            "OAuth provider returned empty user ID",
+            code="auth.oauth_empty_provider_id",
         )
 
     user, is_new = await user_service.get_or_create_oauth_user(
@@ -296,8 +313,8 @@ async def oauth_callback(
 @router.get("/admin/users")
 async def list_users(
     request: Request,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     status_filter: str | None = None,
     search: str | None = None,
     db: AsyncSession = Depends(get_db),

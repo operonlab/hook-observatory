@@ -27,8 +27,8 @@ export default function Login() {
 			setError("請填寫名稱");
 			return;
 		}
-		if (password.length < 6) {
-			setError("密碼至少需要 6 個字元");
+		if (password.length < 8) {
+			setError("密碼至少需要 8 個字元");
 			return;
 		}
 
@@ -163,7 +163,7 @@ export default function Login() {
 								color: "var(--text)",
 								minHeight: 44,
 							}}
-							placeholder="至少 6 個字元"
+							placeholder="至少 8 個字元"
 							autoComplete={
 								tab === "login" ? "current-password" : "new-password"
 							}

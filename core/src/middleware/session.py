@@ -64,6 +64,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 settings.session_cookie_name,
                 path="/",
                 httponly=True,
+                secure=True,
                 samesite="lax",
             )
         elif request.state._session_modified:
@@ -76,6 +77,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
                     max_age=settings.session_max_age,
                     path="/",
                     httponly=True,
+                    secure=True,
                     samesite="lax",
                 )
 

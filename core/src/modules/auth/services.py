@@ -258,7 +258,9 @@ class UserService:
             count_base = count_base.where(User.status == status_filter)
 
         if search:
-            pattern = f"%{search}%"
+            # Escape ILIKE special characters to prevent wildcard injection
+            escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
             base = base.where(
                 User.email.ilike(pattern) | User.display_name.ilike(pattern)
             )
