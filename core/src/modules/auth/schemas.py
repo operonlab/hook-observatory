@@ -4,8 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
-
 # --- Auth requests ---
+
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -18,15 +18,44 @@ class UserLogin(BaseModel):
     password: str
 
 
+class UserUpdate(BaseModel):
+    display_name: str | None = None
+    role: str | None = None
+    status: str | None = None
+
+
+class UserListQuery(BaseModel):
+    page: int = 1
+    page_size: int = 20
+    status: str | None = None
+    search: str | None = None
+
+
 # --- Auth responses ---
+
 
 class UserResponse(BaseModel):
     id: str
     email: str
-    name: str
+    display_name: str
+    avatar_url: str | None = None
     role: str = "user"
     status: str = "active"
     created_at: datetime
+
+
+class OAuthAccountResponse(BaseModel):
+    id: str
+    provider: str
+    provider_id: str
+    email: str | None = None
+    name: str | None = None
+    avatar_url: str | None = None
+    created_at: datetime
+
+
+class UserDetailResponse(UserResponse):
+    oauth_accounts: list[OAuthAccountResponse] = []
 
 
 class SessionResponse(BaseModel):
