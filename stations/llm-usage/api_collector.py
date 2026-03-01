@@ -21,6 +21,7 @@ import sys
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlencode
 
 SCRIPT_DIR = Path(__file__).parent
 DEFAULT_CONFIG = SCRIPT_DIR / "config.json"
@@ -47,9 +48,9 @@ def _litellm_request(
     """Make authenticated request to LiteLLM API."""
     url = f"{base_url}{endpoint}"
     if params:
-        qs = "&".join(f"{k}={v}" for k, v in params.items() if v is not None)
-        if qs:
-            url = f"{url}?{qs}"
+        filtered = {k: v for k, v in params.items() if v is not None}
+        if filtered:
+            url = f"{url}?{urlencode(filtered)}"
 
     headers = {
         "Authorization": f"Bearer {master_key}",
@@ -212,6 +213,11 @@ def collect_api_usage(config: dict, days: int = 30) -> dict:
     }
 
     if not master_key:
+        print(
+            f"WARNING: {master_key_env} environment variable is not set. "
+            "API usage collection requires a valid LiteLLM master key.",
+            file=sys.stderr,
+        )
         result["error"] = (
             f"Missing {master_key_env} environment variable. "
             "Set it to your LiteLLM master key."

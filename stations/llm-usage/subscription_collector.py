@@ -125,24 +125,21 @@ def _count_cc_sessions_today() -> int | None:
     if not projects_dir.exists():
         return None
 
-    count = 0
-
-    # Check for JSONL session files modified today
-    out = run(
-        f'find "{projects_dir}" -name "*.jsonl" -newer '
-        f'"$(date -v0H -v0M -v0S +%Y%m%d)" -type f 2>/dev/null | wc -l'
-    )
-
-    # Simpler approach: count dirs with recent modification
-    out = run(
-        f'find "{projects_dir}" -maxdepth 2 -name "*.jsonl" '
-        f'-mtime -1 2>/dev/null | wc -l'
-    )
+    # Count JSONL session files modified in the last day
     try:
-        count = int(out.strip())
-    except (ValueError, TypeError):
+        result = subprocess.run(
+            ["find", str(projects_dir), "-maxdepth", "2",
+             "-name", "*.jsonl", "-mtime", "-1"],
+            capture_output=True, text=True, timeout=10,
+        )
+        out = result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         return None
 
+    if not out:
+        return 0
+
+    count = len(out.splitlines())
     return count
 
 
