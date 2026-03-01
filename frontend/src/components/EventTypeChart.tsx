@@ -1,0 +1,57 @@
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import type { EventTypeStats } from "../api/client.ts";
+
+const COLORS = ["#89b4fa", "#a6e3a1", "#cba6f7", "#f9e2af", "#fab387", "#f38ba8", "#94e2d5", "#eba0ac", "#74c7ec"];
+
+interface Props {
+  data: EventTypeStats[];
+}
+
+export default function EventTypeChart({ data }: Props) {
+  if (!data.length) {
+    return <EmptyState />;
+  }
+
+  return (
+    <div
+      className="rounded-lg p-5"
+      style={{ backgroundColor: "#12121a", border: "1px solid rgba(255, 255, 255, 0.04)" }}
+    >
+      <h3 className="text-xs text-white/30 mb-4">事件類型分佈</h3>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={data} layout="vertical" margin={{ left: 20 }}>
+          <XAxis type="number" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis
+            type="category"
+            dataKey="event_type"
+            tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={120}
+          />
+          <Tooltip
+            contentStyle={{ background: "#1a1b2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, fontSize: 12 }}
+            labelStyle={{ color: "rgba(255,255,255,0.7)" }}
+            itemStyle={{ color: "#89b4fa" }}
+          />
+          <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+            {data.map((_, i) => (
+              <Cell key={i} fill={COLORS[i % COLORS.length]} fillOpacity={0.7} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div
+      className="flex h-[280px] items-center justify-center rounded-lg"
+      style={{ backgroundColor: "#12121a", border: "1px solid rgba(255, 255, 255, 0.04)" }}
+    >
+      <p className="text-xs text-white/20">尚無事件資料</p>
+    </div>
+  );
+}

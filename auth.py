@@ -1,0 +1,37 @@
+"""Workshop cookie auth middleware — validates workshop_session cookie."""
+
+from __future__ import annotations
+
+from fastapi import HTTPException, Request
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+from config import config
+
+_serializer = URLSafeTimedSerializer(config.secret_key)
+
+
+async def require_auth(request: Request) -> dict:
+    """FastAPI dependency — validate workshop_session cookie.
+
+    Returns the user dict from the session payload.
+    """
+    cookie = request.cookies.get(config.session_cookie_name)
+    if not cookie:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        data = _serializer.loads(cookie, max_age=config.session_max_age)
+    except (BadSignature, SignatureExpired):
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    # V2 Core format: cookie contains a signed session token (string).
+    # Signature is already verified above, so the session is valid.
+    if isinstance(data, str):
+        return {"status": "active", "source": "v2-token"}
+
+    # V1 format: cookie contains signed dict with embedded user info.
+    user = data.get("user") if isinstance(data, dict) else None
+    if not user or user.get("status") != "active":
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    return user
