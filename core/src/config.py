@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     session_cookie_name: str = "workshop_session"
     session_max_age: int = 7 * 24 * 60 * 60  # 7 days in seconds
 
+    # OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    oauth_redirect_base: str = "http://localhost:8800"
+
+    # Auth seed
+    admin_email: str = ""
+    admin_password: str = ""
+
     # Event Bus
     event_backend: str = "memory"  # "memory" | "redis"
 

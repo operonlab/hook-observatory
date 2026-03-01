@@ -7,6 +7,9 @@ class AuthEvents:
     USER_LOGGED_OUT = "auth.user.logged_out"
     USER_STATUS_CHANGED = "auth.user.status_changed"
     ROLE_ASSIGNED = "auth.role.assigned"
+    OAUTH_LINKED = "auth.oauth.linked"
+    SESSION_CREATED = "auth.session.created"
+    SESSION_REVOKED = "auth.session.revoked"
 
 
 class FinanceEvents:
