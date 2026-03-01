@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -128,8 +129,8 @@ def collect_disk(config: dict) -> dict:
         parts = df_out.split()
         if len(parts) >= 4:
             total_bytes = int(parts[1]) * 1024
-            used_k = int(parts[2])
-            free_bytes = total_bytes - (used_k * 1024)
+            avail_k = int(parts[3])
+            free_bytes = avail_k * 1024
 
     used_bytes = total_bytes - free_bytes
     total_gb = round(total_bytes / (1024**3), 1)
@@ -198,7 +199,8 @@ def _scan_top_dirs(home: Path, top_n: int = 10) -> list[dict]:
     """
     entries = []
     # List immediate children
-    children_out = run(f'ls -1d "{home}"/* "{home}"/.[!.]* 2>/dev/null')
+    q_home = shlex.quote(str(home))
+    children_out = run(f'ls -1d {q_home}/* {q_home}/.[!.]* 2>/dev/null')
     children = [p for p in children_out.splitlines() if p.strip()]
 
     # Run du on each child with a tight per-dir timeout (10s each)
@@ -234,20 +236,19 @@ def _scan_files(
     excludes: list[str],
 ) -> tuple[list[dict], list[dict]]:
     """Single-pass find for large + stale files."""
-    exclude_args = " ".join(f'-not -path "*/{e}/*"' for e in excludes)
+    exclude_args = " ".join(f'-not -path "*/{shlex.quote(e)}/*"' for e in excludes)
+    q_home = shlex.quote(str(home))
     cmd = (
-        f'find "{home}" {exclude_args} '
-        f"-type f -size +{min_mb}M "
-        f'2>/dev/null | head -500 '
-        f'| xargs -I{{}} stat -f "%z %Sm %Sa %N" -t "%Y-%m-%d" {{}} 2>/dev/null'
+        f'find {q_home} {exclude_args} '
+        f"-type f -size +{min_mb}M -print0 "
+        f"2>/dev/null | awk 'BEGIN{{RS=\"\\0\"; ORS=\"\\0\"}} NR<=500' "
+        f'| xargs -0 stat -f "%z %Sm %Sa %N" -t "%Y-%m-%d" 2>/dev/null'
     )
     # Allow up to 5 minutes for deep file scan (home dir can be huge)
     out = run(cmd, timeout=300)
 
     large = []
     stale = []
-    from datetime import timedelta
-
     cutoff_date = (datetime.now() - timedelta(days=stale_days)).strftime("%Y-%m-%d")
 
     for line in out.splitlines():
