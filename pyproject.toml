@@ -14,6 +14,39 @@ members = [
 [tool.hatch.build.targets.wheel]
 packages = []
 
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["core/src", "mcp", "scripts", "libs/python"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "S",     # flake8-bandit (security)
+    "ASYNC", # flake8-async
+    "RUF",   # ruff-specific
+]
+ignore = [
+    "S101",  # assert usage (OK in tests)
+    "S104",  # bind to 0.0.0.0 (handled by Nginx)
+    "S105",  # hardcoded passwords (pydantic-settings defaults)
+    "S106",  # hardcoded passwords in function args (OAuth URLs)
+    "B008",  # Depends() in defaults (FastAPI convention)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"core/migrations/**" = ["E501"]  # alembic auto-generated
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

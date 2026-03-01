@@ -4,12 +4,18 @@ from dataclasses import dataclass
 from typing import Any
 
 # --- RBAC: Static role -> permission mapping ---
+# Covers all 10 core modules
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     "admin": ["*"],
     "user": [
         "finance.read", "finance.write",
         "taskflow.read", "taskflow.write",
         "ideagraph.read", "ideagraph.write",
+        "intelflow.read", "intelflow.write",
+        "memvault.read", "memvault.write",
+        "skillpath.read", "skillpath.write",
+        "workpool.read", "workpool.write",
+        "matchcore.read", "matchcore.write",
         "plugin.use",
         "profile.read", "profile.write",
     ],
@@ -17,6 +23,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "finance.read",
         "taskflow.read",
         "ideagraph.read",
+        "intelflow.read",
+        "memvault.read",
     ],
 }
 
@@ -25,7 +33,6 @@ def has_permission(role: str, permission: str) -> bool:
     perms = ROLE_PERMISSIONS.get(role, [])
     if "*" in perms:
         return True
-    # Check exact match or wildcard (e.g., "finance.*" matches "finance.read")
     for p in perms:
         if p == permission:
             return True
@@ -50,7 +57,9 @@ class PolicyEngine:
         self._policies: list[dict] = []
 
     def add_policy(self, name: str, effect: str, condition):
-        self._policies.append({"name": name, "effect": effect, "condition": condition})
+        self._policies.append(
+            {"name": name, "effect": effect, "condition": condition}
+        )
 
     def evaluate(self, ctx: RequestContext) -> tuple[bool, str]:
         # RBAC check first
@@ -69,13 +78,17 @@ class PolicyEngine:
 # Default policies
 policy_engine = PolicyEngine()
 policy_engine.add_policy(
-    "suspended_users_blocked", "deny",
-    lambda ctx: ctx.user_status == "suspended"
+    "suspended_users_blocked",
+    "deny",
+    lambda ctx: ctx.user_status in ("suspended", "banned"),
 )
 policy_engine.add_policy(
-    "owner_only_write", "deny",
-    lambda ctx: (ctx.action.endswith(".write") and
-                 ctx.resource_owner is not None and
-                 ctx.resource_owner != ctx.user_id and
-                 ctx.user_role != "admin")
+    "owner_only_write",
+    "deny",
+    lambda ctx: (
+        ctx.action.endswith(".write")
+        and ctx.resource_owner is not None
+        and ctx.resource_owner != ctx.user_id
+        and ctx.user_role != "admin"
+    ),
 )

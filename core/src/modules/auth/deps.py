@@ -1,35 +1,23 @@
-"""Shared dependencies — password hashing, auth helpers."""
+"""Auth dependencies — password hashing (argon2id), auth helpers."""
 
-import hashlib
-import os
-import secrets
-
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import HTTPException, Request, status
 
-
-def hash_password(password: str, salt: bytes | None = None) -> tuple[str, str]:
-    """Hash a password with PBKDF2-HMAC-SHA256.
-
-    Returns (hex_hash, hex_salt).
-    """
-    if salt is None:
-        salt = os.urandom(32)
-    elif isinstance(salt, str):
-        salt = bytes.fromhex(salt)
-
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations=600_000)
-    return dk.hex(), salt.hex()
+_ph = PasswordHasher()
 
 
-def verify_password(password: str, stored_hash: str, stored_salt: str) -> bool:
-    """Verify a password against a stored hash+salt."""
-    dk = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode(),
-        bytes.fromhex(stored_salt),
-        iterations=600_000,
-    )
-    return secrets.compare_digest(dk.hex(), stored_hash)
+def hash_password(password: str) -> str:
+    """Hash password with Argon2id. Returns encoded hash (contains embedded salt)."""
+    return _ph.hash(password)
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify password against Argon2id hash."""
+    try:
+        return _ph.verify(stored_hash, password)
+    except VerifyMismatchError:
+        return False
 
 
 def get_current_user(request: Request) -> dict:
