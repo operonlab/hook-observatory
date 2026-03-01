@@ -1,0 +1,27 @@
+{
+  "schedule": {
+    "weekly": { "day": "monday", "hour_utc": 5, "minute": 0 },
+    "monthly": { "day_of_month": 1 }
+  },
+  "thresholds": {
+    "disk_usage_pct": { "warning": 75, "critical": 85, "danger": 95 },
+    "cpu_avg_pct":    { "warning": 70, "critical": 85, "danger": 95 },
+    "memory_pct":     { "warning": 75, "critical": 85, "danger": 95 },
+    "swap_gb":        { "warning": 2.0, "critical": 4.0, "danger": 8.0 },
+    "temperature_c":  { "warning": 80, "critical": 95, "danger": 105 },
+    "battery_pct":    { "warning": 30, "critical": 20, "danger": 10 }
+  },
+  "disk_scan": {
+    "large_file_min_mb": 10,
+    "stale_days": 90,
+    "top_n": 30,
+    "exclude_paths": [".Trash", ".git", "node_modules", "Library/Application Support/Code"]
+  },
+  "reports": {
+    "output_dir": "~/.claude/data/system-monitor/reports",
+    "retention": {
+      "weekly_days": 60,
+      "monthly_days": 365
+    }
+  }
+}
