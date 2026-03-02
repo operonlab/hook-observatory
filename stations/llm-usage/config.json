@@ -36,6 +36,16 @@
     "state_path": "~/.claude/data/model-policy/state.json",
     "config_path": "~/.claude/data/model-policy/config.json"
   },
+  "collection": {
+    "interval_seconds": 1800,
+    "snapshot_dir": "~/.claude/data/llm-usage/snapshots",
+    "latest_file": "~/.claude/data/llm-usage/latest.json",
+    "retention_days": 90
+  },
+  "server": {
+    "port": 9525,
+    "host": "127.0.0.1"
+  },
   "data_dir": "~/.claude/data/llm-usage",
   "retention_days": 90
 }

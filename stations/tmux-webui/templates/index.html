@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.svg">
+<link rel="stylesheet" href="/static/css/main.css">
+<title>tmux Web Controller</title>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>tmux web controller</h1>
+    <div class="header-controls">
+      <select id="sessions"><option value="">-- select session --</option></select>
+      <button class="btn" id="refresh-btn" title="Refresh sessions">refresh</button>
+      <button class="btn btn-accent" id="connect-btn" disabled>connect</button>
+      <span id="status"><span class="dot"></span> disconnected</span>
+      <div class="sep"></div>
+      <select id="layout-select" title="Layout preset">
+        <option value="2x2">2x2 Grid</option>
+        <option value="4col">4 Columns</option>
+        <option value="auto" selected>Auto</option>
+        <option value="1+2">1 + 2</option>
+        <option value="3col">3 Columns</option>
+        <option value="1x1">Single</option>
+      </select>
+      <button class="btn btn-sm" id="reset-layout" title="Reset resize weights">reset</button>
+      <button id="ek-toggle" title="Toggle extra keys">&#9000;</button>
+    </div>
+  </header>
+
+  <div class="win-tabs" id="win-tabs"></div>
+  <div id="pane-container">
+    <div class="welcome">select a tmux session to connect</div>
+  </div>
+  <div class="tmux-status" id="tmux-status"></div>
+
+  <!-- Mobile bottom pane tab bar -->
+  <div class="mobile-pane-tabs" id="mobile-pane-tabs"></div>
+
+  <footer>
+    <div class="footer-top">
+      <div class="quick-actions">
+        <button class="qbtn" data-key="y" title="Accept">y</button>
+        <button class="qbtn" data-key="n" title="Deny">n</button>
+        <button class="qbtn" data-key="C-c" title="Interrupt">Ctrl+C</button>
+        <button class="qbtn" data-key="Enter" title="Enter">Enter</button>
+        <button class="qbtn" data-key="Escape" title="Escape">Esc</button>
+      </div>
+      <span class="focused-label" id="focused-label">no pane</span>
+    </div>
+    <div class="tool-actions" id="tool-actions"></div>
+    <div class="skill-palette" id="skill-palette" style="display:none">
+      <div class="skill-search-row">
+        <input type="text" id="skill-search" placeholder="Filter skills..." />
+      </div>
+      <div id="skill-categories"></div>
+    </div>
+    <div class="extra-keys" id="extra-keys">
+      <!-- Modifier keys -->
+      <button class="ek mod" data-mod="C">Ctrl</button>
+      <button class="ek mod" data-mod="M">Alt</button>
+      <button class="ek mod" data-mod="S">Cmd</button>
+      <div class="ek-sep"></div>
+      <!-- Common keys -->
+      <button class="ek" data-ek="Tab">Tab</button>
+      <button class="ek" data-ek="Escape">Esc</button>
+      <div class="ek-sep"></div>
+      <!-- Dev chars (V2: added /, ., :, ;) -->
+      <button class="ek" data-ek="/" style="font-size:14px">/</button>
+      <button class="ek" data-ek="." style="font-size:14px">.</button>
+      <button class="ek" data-ek=":" style="font-size:14px">:</button>
+      <button class="ek" data-ek=";" style="font-size:14px">;</button>
+      <button class="ek" data-ek="|">|</button>
+      <button class="ek" data-ek="-">-</button>
+      <button class="ek" data-ek="_">_</button>
+      <button class="ek" data-ek="~">~</button>
+      <button class="ek" data-ek="BSpace">&#9003;</button>
+      <div class="ek-sep"></div>
+      <!-- Ctrl combos (standalone) -->
+      <button class="ek" data-ctrl="c" title="Ctrl+C" style="color:var(--yellow);font-size:10px">C-c</button>
+      <button class="ek" data-ctrl="d" title="Ctrl+D" style="color:var(--red);font-size:10px">C-d</button>
+      <button class="ek" data-ctrl="z" title="Ctrl+Z" style="color:var(--cyan);font-size:10px">C-z</button>
+      <button class="ek" data-ctrl="l" title="Ctrl+L" style="color:var(--green);font-size:10px">C-l</button>
+      <div class="ek-sep"></div>
+      <!-- Arrow pad + individual buttons -->
+      <div class="arrow-pad" id="arrow-pad"><div class="arrow-pad-label">&#8982;</div></div>
+      <button class="ek" data-ek="Up">&#9650;</button>
+      <button class="ek" data-ek="Down">&#9660;</button>
+      <button class="ek" data-ek="Left">&#9664;</button>
+      <button class="ek" data-ek="Right">&#9654;</button>
+    </div>
+    <div class="ac-wrap">
+      <div class="ac-list" id="ac-list"></div>
+      <div class="input-row">
+        <button id="toolbar-toggle" class="toolbar-toggle" title="Toggle toolbar">&#8943;</button>
+        <textarea id="input" rows="1" placeholder="Type a message..." disabled></textarea>
+        <button id="send-btn" disabled>Send</button>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- Gesture feedback indicator -->
+<div class="gesture-indicator" id="gesture-indicator"></div>
+
+<!-- JS modules (order matters: terminal first, then keys, then others, app last) -->
+<script src="/static/js/terminal.js"></script>
+<script src="/static/js/metrics.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/keys.js"></script>
+<script src="/static/js/autocomplete.js"></script>
+<script src="/static/js/gestures.js"></script>
+</body>
+</html>
