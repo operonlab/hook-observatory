@@ -6,8 +6,8 @@ Creates the sentinel schema with 4 tables:
   - sentinel.active_operations (agent operation tracking)
   - sentinel.subscriptions     (webhook subscriptions)
 
-Revision ID: i0a1b2c3d4e5
-Revises: h9a0b1c2d3e4
+Revision ID: j1a2b3c4d5e6
+Revises: i0a1b2c3d4e5, i0b1c2d3e4f5
 Create Date: 2026-03-02
 """
 
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "i0a1b2c3d4e5"
-down_revision = "h9a0b1c2d3e4"
+revision = "j1a2b3c4d5e6"
+down_revision = ("i0a1b2c3d4e5", "i0b1c2d3e4f5")
 branch_labels = None
 depends_on = None
 
@@ -37,7 +37,7 @@ def upgrade() -> None:
         sa.Column("response_ms", sa.Float, nullable=True),
         sa.Column("detail", sa.Text, nullable=True),
         sa.Column(
-            "created_at", sa.String(30), nullable=False, server_default=sa.text("now()::text")
+            "created_at", sa.String(50), nullable=False, server_default=sa.text("now()::text")
         ),
         schema="sentinel",
     )
@@ -61,9 +61,9 @@ def upgrade() -> None:
         sa.Column("diagnosis", JSONB, nullable=True),
         sa.Column("repair_result", JSONB, nullable=True),
         sa.Column(
-            "created_at", sa.String(30), nullable=False, server_default=sa.text("now()::text")
+            "created_at", sa.String(50), nullable=False, server_default=sa.text("now()::text")
         ),
-        sa.Column("resolved_at", sa.String(30), nullable=True),
+        sa.Column("resolved_at", sa.String(50), nullable=True),
         schema="sentinel",
     )
     op.create_index("idx_inc_service", "incidents", ["service"], schema="sentinel")
@@ -82,9 +82,9 @@ def upgrade() -> None:
         sa.Column("pid", sa.Integer, nullable=True),
         sa.Column("estimated_duration", sa.Integer, nullable=False, server_default=sa.text("300")),
         sa.Column(
-            "created_at", sa.String(30), nullable=False, server_default=sa.text("now()::text")
+            "created_at", sa.String(50), nullable=False, server_default=sa.text("now()::text")
         ),
-        sa.Column("resolved_at", sa.String(30), nullable=True),
+        sa.Column("resolved_at", sa.String(50), nullable=True),
         sa.Column("result", sa.String(20), nullable=True),
         schema="sentinel",
     )
@@ -101,7 +101,7 @@ def upgrade() -> None:
         sa.Column("events", JSONB, nullable=False, server_default=sa.text("'[\"*\"]'::jsonb")),
         sa.Column("active", sa.Boolean, nullable=False, server_default=sa.text("true")),
         sa.Column(
-            "created_at", sa.String(30), nullable=False, server_default=sa.text("now()::text")
+            "created_at", sa.String(50), nullable=False, server_default=sa.text("now()::text")
         ),
         schema="sentinel",
     )
