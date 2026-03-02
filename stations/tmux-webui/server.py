@@ -100,38 +100,22 @@ async def api_autocomplete_refresh():
 # ── PWA assets ──
 
 
-_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {s} {s}">' \
-    '<rect width="{s}" height="{s}" rx="20%" fill="#0a0a12"/>' \
-    '<text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" ' \
-    'font-family="monospace" font-weight="bold" font-size="{f}" fill="#8b6cef">&gt;_</text></svg>'
-
-
 @app.get("/manifest.json")
 async def pwa_manifest():
-    return {
-        "name": "tmux Web Controller",
-        "short_name": "tmux",
-        "start_url": "/",
-        "display": "standalone",
-        "background_color": "#0a0a12",
-        "theme_color": "#0a0a12",
-        "icons": [
-            {"src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml"},
-            {"src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml"},
-        ],
-    }
+    from fastapi.responses import FileResponse
+    return FileResponse(BASE_DIR / "manifest.json", media_type="application/manifest+json")
 
 
 @app.get("/icon-192.svg")
 async def pwa_icon_192():
-    from fastapi.responses import Response
-    return Response(content=_ICON_SVG.format(s=192, f=96), media_type="image/svg+xml")
+    from fastapi.responses import FileResponse
+    return FileResponse(BASE_DIR / "icon-192.svg", media_type="image/svg+xml")
 
 
 @app.get("/icon-512.svg")
 async def pwa_icon_512():
-    from fastapi.responses import Response
-    return Response(content=_ICON_SVG.format(s=512, f=256), media_type="image/svg+xml")
+    from fastapi.responses import FileResponse
+    return FileResponse(BASE_DIR / "icon-512.svg", media_type="image/svg+xml")
 
 
 # ── WebSocket handler ──

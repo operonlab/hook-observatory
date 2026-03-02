@@ -429,6 +429,8 @@ function setFocus(paneId) {
     const toolName = toolKey ? ` [${TOOL_PROFILES[toolKey].name}]` : '';
     focusLabel.textContent = info ? `${info.window_name}:${info.pane}${toolName}` : paneId;
     updateToolState(toolKey);
+    // Auto-resize tmux pane to match browser display cols/rows
+    setTimeout(() => { if (window._fitPane) window._fitPane(paneId); }, 50);
   }
   updateMobilePaneTabs();
 }
@@ -775,6 +777,7 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
   let fitTimer = null;
   function debouncedFit() { clearTimeout(fitTimer); fitTimer = setTimeout(fitAllPanes, 300); }
   window._fitAllPanes = debouncedFit;
+  window._fitPane = function(paneId) { measureChar(); fitPane(paneId); };
   window.addEventListener('resize', debouncedFit);
 })();
 

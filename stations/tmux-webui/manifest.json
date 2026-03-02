@@ -1,0 +1,21 @@
+{
+  "name": "tmux Web Controller",
+  "short_name": "tmux",
+  "start_url": "/v2/apps/tmux/",
+  "scope": "/v2/apps/tmux/",
+  "display": "standalone",
+  "theme_color": "#0a0a12",
+  "background_color": "#0a0a12",
+  "icons": [
+    {
+      "src": "icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
