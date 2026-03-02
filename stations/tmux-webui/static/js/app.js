@@ -24,7 +24,6 @@ window.tmuxState = {
   currentLayout: 'auto',
   customWeights: null,
   currentTool: null,
-  skillPaletteOpen: false,
   currentSession: '',
   activeWindowIdx: null,
 };
@@ -42,10 +41,6 @@ const sendBtn       = document.getElementById('send-btn');
 const focusLabel    = document.getElementById('focused-label');
 const layoutSelect  = document.getElementById('layout-select');
 const resetLayoutBtn = document.getElementById('reset-layout');
-const toolActionsEl = document.getElementById('tool-actions');
-const skillPalette  = document.getElementById('skill-palette');
-const skillSearchEl = document.getElementById('skill-search');
-const skillCatsEl   = document.getElementById('skill-categories');
 const winTabsEl     = document.getElementById('win-tabs');
 const mobilePaneTabs = document.getElementById('mobile-pane-tabs');
 
@@ -112,45 +107,7 @@ function detectTool(pane) {
 }
 
 // ========================================================================
-// 4. Skill Catalog
-// ========================================================================
-const SKILL_CATEGORIES = [
-  {key:'search',label:'Search & Research'},{key:'visual',label:'Visual & Design'},
-  {key:'document',label:'Documents & Files'},{key:'writing',label:'Writing & Content'},
-  {key:'devtools',label:'Dev & Engineering'},{key:'orchestr',label:'Orchestration'},
-  {key:'skillmgmt',label:'Skill Management'},{key:'notebook',label:'Notebooks'},
-  {key:'infra',label:'Infra & Config'},
-];
-
-const SKILL_CATALOG = [
-  {c:'search',l:'smart-search',h:1},{c:'search',l:'brainstorming',h:1},
-  {c:'search',l:'competitive-intel',h:1},{c:'search',l:'model-mentor',h:1},
-  {c:'search',l:'meeting-insights',h:1},
-  {c:'visual',l:'diagram-gen',h:1},{c:'visual',l:'image-gen',h:1},
-  {c:'visual',l:'image-edit',h:1},{c:'visual',l:'image-prompt',h:1},
-  {c:'visual',l:'canvas-design',h:1},{c:'visual',l:'frontend-design',h:1},
-  {c:'visual',l:'theme-factory',h:1},{c:'visual',l:'brand-guidelines',h:1},
-  {c:'visual',l:'ui-audit',h:0},
-  {c:'document',l:'pdf',h:1},{c:'document',l:'xlsx',h:1},
-  {c:'document',l:'pptx',h:1},{c:'document',l:'docx',h:1},{c:'document',l:'ocr',h:0},
-  {c:'writing',l:'content-writer',h:1},{c:'writing',l:'marketing-copy',h:1},
-  {c:'writing',l:'doc-coauthoring',h:1},{c:'writing',l:'readme-gen',h:0},
-  {c:'writing',l:'changelog-gen',h:0},
-  {c:'devtools',l:'systematic-debugging',h:1},{c:'devtools',l:'tdd',h:1},
-  {c:'devtools',l:'verification-before-completion',h:0},{c:'devtools',l:'spec-kit',h:1},
-  {c:'devtools',l:'mcp-builder',h:1},{c:'devtools',l:'git-worktrees',h:1},
-  {c:'orchestr',l:'maestro',h:1},{c:'orchestr',l:'team-tasks',h:1},
-  {c:'orchestr',l:'claude-code-headless',h:1},{c:'orchestr',l:'codex-headless',h:1},
-  {c:'orchestr',l:'gemini-cli-headless',h:1},{c:'orchestr',l:'scheduler',h:1},
-  {c:'skillmgmt',l:'create-skill',h:1},{c:'skillmgmt',l:'skill-optimizer',h:1},
-  {c:'skillmgmt',l:'skill-publisher',h:1},{c:'skillmgmt',l:'skill-catalog',h:0},
-  {c:'skillmgmt',l:'skill-tester',h:1},
-  {c:'notebook',l:'notebookllm',h:1},{c:'notebook',l:'notebookllm-visual',h:1},
-  {c:'infra',l:'sync-config',h:1},{c:'infra',l:'keybindings-help',h:0},
-];
-
-// ========================================================================
-// 5. Layout Presets
+// 4. Layout Presets
 // ========================================================================
 const LAYOUT_PRESETS = {
   '2x2':  { cols:[1,1], rows:[1,1] },
@@ -200,44 +157,12 @@ window.sendInput = function() {
 sendBtn.addEventListener('click', () => { window.acClose?.(); window.sendInput(); });
 
 // ========================================================================
-// 7. Tool Actions / Skill Palette
+// 7. Tool Detection
 // ========================================================================
 
-function renderToolActions(toolKey) {
-  // Tool actions disabled — slash command buttons not needed
+function updateToolState(toolKey) {
   S.currentTool = toolKey;
-  toolActionsEl.innerHTML = '';
 }
-
-function updateSkillsVisibility(toolKey) {
-  // Skill palette removed from DOM — no-op
-}
-
-function renderSkillPalette(filter) {
-  const lf = (filter || '').toLowerCase();
-  skillCatsEl.innerHTML = '';
-  for (const cat of SKILL_CATEGORIES) {
-    const skills = SKILL_CATALOG.filter(sk => sk.c === cat.key && (!lf || sk.l.includes(lf)));
-    if (skills.length === 0) continue;
-    const hdr = document.createElement('div');
-    hdr.className = 'skill-cat-header';
-    hdr.innerHTML = `<span class="arrow">\u25BC</span> ${cat.label} <span style="opacity:.4">(${skills.length})</span>`;
-    const body = document.createElement('div');
-    body.className = 'skill-cat-body';
-    hdr.addEventListener('click', () => { hdr.classList.toggle('collapsed'); body.classList.toggle('collapsed'); });
-    for (const sk of skills) {
-      const btn = document.createElement('button');
-      btn.className = 'sbtn';
-      btn.textContent = '/' + sk.l;
-      btn.addEventListener('click', () => window.sendSkillOrAction('/' + sk.l + (sk.h ? ' ' : '')));
-      body.appendChild(btn);
-    }
-    skillCatsEl.appendChild(hdr);
-    skillCatsEl.appendChild(body);
-  }
-}
-
-if (skillSearchEl) skillSearchEl.addEventListener('input', () => renderSkillPalette(skillSearchEl.value));
 
 // ========================================================================
 // 8. Layout Engine
@@ -503,7 +428,7 @@ function setFocus(paneId) {
     const toolKey = detectTool(info);
     const toolName = toolKey ? ` [${TOOL_PROFILES[toolKey].name}]` : '';
     focusLabel.textContent = info ? `${info.window_name}:${info.pane}${toolName}` : paneId;
-    renderToolActions(toolKey);
+    updateToolState(toolKey);
   }
   updateMobilePaneTabs();
 }
@@ -747,13 +672,10 @@ window.tmuxWs = (function() {
     S.currentSession = '';
     S.maximizedPane = '';
     S.currentTool = null;
-    S.skillPaletteOpen = false;
-    if (skillPalette) skillPalette.style.display = 'none';
     if (ws) { ws.close(); ws = null; }
     setStatus('', '');
     container.classList.remove('has-maximized');
     container.innerHTML = '<div class="welcome">select a tmux session to connect</div>';
-    toolActionsEl.innerHTML = '';
     S.paneEls = {};
     S.paneInfo = {};
     S.paneOrder = [];
@@ -791,30 +713,11 @@ connectBtn.addEventListener('click', () => {
 });
 
 // ========================================================================
-// 14. Quick Actions
-// ========================================================================
-
-document.querySelectorAll('.qbtn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const key = btn.dataset.key;
-    if (!window.tmuxWs.isConnected() || !S.focusedPane) return;
-    window.tmuxWs.send({ type:'key', pane:S.focusedPane, key });
-    if (S.paneEls[S.focusedPane]) S.paneEls[S.focusedPane].resetScroll();
-  });
-});
-
-// ========================================================================
-// 15. Keyboard Shortcuts
+// 14. Keyboard Shortcuts
 // ========================================================================
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && S.maximizedPane && document.activeElement !== inputEl) toggleMaximize(S.maximizedPane);
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k' && S.currentTool === 'claude' && skillPalette) {
-    e.preventDefault();
-    S.skillPaletteOpen = !S.skillPaletteOpen;
-    skillPalette.style.display = S.skillPaletteOpen ? '' : 'none';
-    if (S.skillPaletteOpen) { renderSkillPalette(); if (skillSearchEl) skillSearchEl.focus(); }
-  }
 });
 
 // ========================================================================

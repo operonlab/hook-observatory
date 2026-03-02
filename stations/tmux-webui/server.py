@@ -15,9 +15,10 @@ import argparse
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from autocomplete import complete
+from autocomplete import complete, get_cache_stats, init_cache, refresh_cache
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -47,7 +48,13 @@ logger = logging.getLogger("tmux-webui")
 
 BASE_DIR = Path(__file__).parent
 
-app = FastAPI(title="tmux Web Controller V2")
+@asynccontextmanager
+async def lifespan(app):
+    init_cache()
+    yield
+
+
+app = FastAPI(title="tmux Web Controller V2", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
@@ -80,8 +87,14 @@ async def api_windows(session: str):
 
 
 @app.get("/api/autocomplete")
-async def api_autocomplete(q: str = ""):
-    return complete(q)
+async def api_autocomplete(q: str = "", type: str = ""):
+    return complete(q, type_filter=type)
+
+
+@app.get("/api/autocomplete/refresh")
+async def api_autocomplete_refresh():
+    refresh_cache()
+    return get_cache_stats()
 
 
 # ── PWA assets ──
