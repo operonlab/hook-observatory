@@ -12,6 +12,9 @@ catalogs:
     '@types/react-dom':
       specifier: ^19.0.0
       version: 19.2.3
+    '@vitejs/plugin-react':
+      specifier: ^4.7.0
+      version: 4.7.0
     autoprefixer:
       specifier: ^10.4.0
       version: 10.4.27
@@ -33,6 +36,9 @@ catalogs:
     typescript:
       specifier: ^5.9.0
       version: 5.9.3
+    vite:
+      specifier: ^6.4.0
+      version: 6.4.1
     zustand:
       specifier: ^5.0.0
       version: 5.0.11
@@ -163,6 +169,9 @@ importers:
       react-router-dom:
         specifier: 'catalog:'
         version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      recharts:
+        specifier: ^2.15.4
+        version: 2.15.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
