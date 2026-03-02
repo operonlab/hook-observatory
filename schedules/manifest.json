@@ -1,0 +1,20 @@
+{
+  "$schema": "workshop-schedules-v1",
+  "prefix": "ws-",
+  "jobs": [
+    {
+      "name": "ws-memvault-synthesis",
+      "command": "~/workshop/schedules/runners/ws-memvault-synthesis.sh",
+      "schedule": { "calendar": { "Hour": 4, "Minute": 0 } },
+      "description": "每日 4AM: cluster → wisdom → decay → attitude pipeline",
+      "enabled": true
+    },
+    {
+      "name": "ws-session-archive",
+      "command": "~/workshop/schedules/runners/ws-session-archive.sh",
+      "schedule": { "calendar": { "Hour": 5, "Minute": 15 } },
+      "description": "每日 5:15AM: scan sessions + archive cold candidates with summaries + embeddings",
+      "enabled": true
+    }
+  ]
+}
