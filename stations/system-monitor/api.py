@@ -33,6 +33,7 @@ CONFIG = _load_config()
 REPORTS_DIR = Path(
     CONFIG.get("reports", {}).get("output_dir", "~/.claude/data/system-monitor/reports")
 ).expanduser()
+REPORTS_DIR_V1 = Path("~/Claude/disk-report").expanduser()
 ALERTS_DIR = Path(
     CONFIG.get("output_dir", "~/.claude/data/system-monitor")
 ).expanduser() / "alerts"
@@ -49,6 +50,10 @@ _cache: dict = {}
 _cache_time: float = 0
 CACHE_TTL = 30  # seconds
 
+# Snapshot auto-save rate limiting
+_last_snapshot_time: float = 0
+SNAPSHOT_INTERVAL = 300  # 5 minutes
+
 
 def _get_latest_data() -> dict:
     """Run collector and cache result."""
@@ -60,10 +65,11 @@ def _get_latest_data() -> dict:
         return _cache
 
     try:
-        from collector import collect_all, load_config
+        from collector import collect_all, collect_disk_fast, load_config
         config = load_config()
-        # Hardware-only for fast status (skip slow disk scan)
+        # Hardware + fast APFS-level disk (skip slow file scanning)
         data = collect_all(config, disk=False, hardware=True)
+        data["disk"] = collect_disk_fast(config)
         _cache = data
         _cache_time = now
         return data
@@ -82,39 +88,77 @@ async def health():
     return {"status": "ok", "service": "system-monitor", "version": "2.0.0"}
 
 
+def _save_snapshot(data: dict) -> None:
+    """Save a snapshot JSON for history tracking."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(UTC).strftime("%Y-%m-%d_%H%M%S")
+        path = DATA_DIR / f"snapshot-{ts}.json"
+        path.write_text(json.dumps(data, ensure_ascii=False))
+    except OSError:
+        pass
+
+
 @app.get("/status")
 async def status():
-    """Latest hardware metrics + pressure level."""
+    """Latest hardware metrics + pressure level. Auto-saves snapshot every 5 min."""
     import asyncio
+    import time
+
     data = await asyncio.get_event_loop().run_in_executor(None, _get_latest_data)
+
+    # Auto-save snapshot with rate limiting
+    global _last_snapshot_time
+    now = time.time()
+    if now - _last_snapshot_time >= SNAPSHOT_INTERVAL:
+        _last_snapshot_time = now
+        _save_snapshot(data)
+
     return data
+
+
+def _all_report_dirs() -> list[Path]:
+    """Return all report directories (V2 first, then V1)."""
+    dirs = [REPORTS_DIR]
+    if REPORTS_DIR_V1.is_dir():
+        dirs.append(REPORTS_DIR_V1)
+    return dirs
 
 
 @app.get("/reports")
 async def list_reports():
-    """List all available reports."""
+    """List all available reports from V1 + V2 directories."""
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    seen = set()
     reports = []
-    for f in sorted(REPORTS_DIR.glob("*.md"), reverse=True):
-        stat = f.stat()
-        reports.append({
-            "filename": f.name,
-            "size_bytes": stat.st_size,
-            "created": datetime.fromtimestamp(stat.st_ctime, tz=UTC).isoformat(),
-        })
+    for d in _all_report_dirs():
+        if not d.is_dir():
+            continue
+        for f in d.glob("*.md"):
+            if f.name in seen:
+                continue
+            seen.add(f.name)
+            stat = f.stat()
+            reports.append({
+                "filename": f.name,
+                "size_bytes": stat.st_size,
+                "created": datetime.fromtimestamp(stat.st_ctime, tz=UTC).isoformat(),
+            })
+    reports.sort(key=lambda r: r["created"], reverse=True)
     return {"reports": reports, "total": len(reports)}
 
 
 @app.get("/reports/{filename}", response_class=PlainTextResponse)
 async def get_report(filename: str):
-    """Get a single report content."""
+    """Get a single report content (searches V2 then V1)."""
     # Sanitize filename
     if "/" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
-    path = REPORTS_DIR / filename
-    if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="Report not found")
-    return path.read_text(encoding="utf-8")
+    for d in _all_report_dirs():
+        path = d / filename
+        if path.exists() and path.is_file():
+            return path.read_text(encoding="utf-8")
+    raise HTTPException(status_code=404, detail="Report not found")
 
 
 @app.get("/history")
