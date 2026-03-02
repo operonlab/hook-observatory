@@ -30,10 +30,6 @@ def _load_config() -> dict:
 
 CONFIG = _load_config()
 
-REPORTS_DIR = Path(
-    CONFIG.get("reports", {}).get("output_dir", "~/.claude/data/system-monitor/reports")
-).expanduser()
-REPORTS_DIR_V1 = Path("~/Claude/disk-report").expanduser()
 ALERTS_DIR = Path(
     CONFIG.get("output_dir", "~/.claude/data/system-monitor")
 ).expanduser() / "alerts"
@@ -117,48 +113,22 @@ async def status():
     return data
 
 
-def _all_report_dirs() -> list[Path]:
-    """Return all report directories (V2 first, then V1)."""
-    dirs = [REPORTS_DIR]
-    if REPORTS_DIR_V1.is_dir():
-        dirs.append(REPORTS_DIR_V1)
-    return dirs
+@app.get("/services")
+async def list_services():
+    """List launchd services."""
+    import asyncio
+
+    from collector import collect_services
+    services = await asyncio.get_event_loop().run_in_executor(None, collect_services)
+    return {"services": services, "total": len(services)}
 
 
-@app.get("/reports")
-async def list_reports():
-    """List all available reports from V1 + V2 directories."""
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    seen = set()
-    reports = []
-    for d in _all_report_dirs():
-        if not d.is_dir():
-            continue
-        for f in d.glob("*.md"):
-            if f.name in seen:
-                continue
-            seen.add(f.name)
-            stat = f.stat()
-            reports.append({
-                "filename": f.name,
-                "size_bytes": stat.st_size,
-                "created": datetime.fromtimestamp(stat.st_ctime, tz=UTC).isoformat(),
-            })
-    reports.sort(key=lambda r: r["created"], reverse=True)
-    return {"reports": reports, "total": len(reports)}
-
-
-@app.get("/reports/{filename}", response_class=PlainTextResponse)
-async def get_report(filename: str):
-    """Get a single report content (searches V2 then V1)."""
-    # Sanitize filename
-    if "/" in filename or ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
-    for d in _all_report_dirs():
-        path = d / filename
-        if path.exists() and path.is_file():
-            return path.read_text(encoding="utf-8")
-    raise HTTPException(status_code=404, detail="Report not found")
+@app.get("/guardian")
+async def guardian_log():
+    """Get memory guardian action log."""
+    from collector import collect_guardian_log
+    entries = collect_guardian_log()
+    return {"entries": entries, "total": len(entries)}
 
 
 @app.get("/history")

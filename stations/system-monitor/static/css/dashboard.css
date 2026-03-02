@@ -125,6 +125,45 @@ body {
   transform: translateX(16px);
 }
 
+/* ─── Tab Bar ─── */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  background: var(--mantle);
+  border-bottom: 1px solid var(--surface0);
+  padding: 0 1.5rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--subtext0);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  font-family: inherit;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
 /* ─── Main Container ─── */
 .container {
   max-width: 1280px;
@@ -293,59 +332,156 @@ body {
   margin-top: 0.15rem;
 }
 
-/* ─── Reports List ─── */
-.report-list {
-  max-height: 360px;
-  overflow-y: auto;
+/* ─── Filter Buttons ─── */
+.svc-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
 }
 
-.report-item {
+.filter-btn {
+  background: var(--surface0);
+  border: 1px solid transparent;
+  color: var(--subtext0);
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.filter-btn:hover {
+  color: var(--text);
+  background: var(--surface1);
+}
+
+.filter-btn.active {
+  background: var(--blue);
+  color: var(--crust);
+  border-color: var(--blue);
+}
+
+/* ─── Service & Guardian Tables ─── */
+.svc-table-wrap,
+.guardian-table-wrap {
+  overflow-x: auto;
+}
+
+.svc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.svc-table thead th {
+  text-align: left;
+  color: var(--subtext0);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--surface0);
+  white-space: nowrap;
 }
 
-.report-item:last-child {
+.svc-table tbody td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--surface0);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.svc-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.report-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 0;
-  cursor: pointer;
-  transition: color 0.15s;
+.svc-table tbody tr:hover {
+  background: rgba(69, 71, 90, 0.2);
 }
 
-.report-header:hover {
-  color: var(--blue);
-}
+.col-name { width: 40%; }
+.col-type { width: 15%; }
+.col-schedule { width: 25%; }
+.col-status { width: 20%; }
+.col-time { width: 18%; }
+.col-level { width: 10%; }
+.col-pressure { width: 12%; }
+.col-killed { width: 10%; }
+.col-freed { width: 12%; }
+.col-detail { width: 38%; }
 
-.report-name {
-  font-size: 0.8rem;
+/* ─── Type Badge ─── */
+.type-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
   font-weight: 500;
 }
 
-.report-meta {
+.type-service { background: rgba(137,180,250,0.15); color: var(--blue); }
+.type-periodic { background: rgba(203,166,247,0.15); color: var(--mauve); }
+.type-oneshot { background: rgba(108,112,134,0.15); color: var(--overlay0); }
+
+/* ─── Status Cell ─── */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.status-running .status-dot { background: var(--green); }
+.status-idle .status-dot { background: var(--subtext0); }
+.status-error .status-dot { background: var(--red); }
+.status-disabled .status-dot { background: var(--surface2); }
+.status-unloaded .status-dot { background: var(--surface1); }
+
+.status-text {
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
+.status-running .status-text { color: var(--green); }
+.status-idle .status-text { color: var(--subtext0); }
+.status-error .status-text { color: var(--red); }
+.status-disabled .status-text { color: var(--surface2); }
+.status-unloaded .status-text { color: var(--surface1); }
+
+/* ─── Guardian Level Badge ─── */
+.level-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.level-SWEEP { background: rgba(137,180,250,0.15); color: var(--blue); }
+.level-WARN { background: rgba(249,226,175,0.15); color: var(--yellow); }
+.level-KILL { background: rgba(243,139,168,0.15); color: var(--red); }
+
+.guardian-detail {
   font-size: 0.7rem;
   color: var(--subtext0);
-  display: flex;
-  gap: 0.75rem;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.report-content {
-  display: none;
-  padding: 0 0 0.75rem;
-  font-size: 0.8rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  color: var(--subtext1);
-  border-left: 2px solid var(--surface1);
-  padding-left: 1rem;
-  margin-left: 0.25rem;
+.guardian-detail-expand {
+  cursor: pointer;
 }
 
-.report-content.open {
-  display: block;
+.guardian-detail-expand:hover {
+  color: var(--text);
 }
 
 /* ─── Activity List ─── */

@@ -1,4 +1,4 @@
-/* System Monitor Dashboard — Auto-refresh + Chart.js */
+/* System Monitor Dashboard — Tab UI + Auto-refresh + Chart.js */
 
 // ─── HTML Escape ───
 function esc(s) {
@@ -29,6 +29,9 @@ const COLORS = {
 let autoRefresh = true;
 let refreshTimer = null;
 let historyChart = null;
+let currentTab = "overview";
+let servicesData = [];
+let currentCatFilter = "all";
 
 // ─── Helpers ───
 
@@ -94,12 +97,31 @@ function fmtDate(iso) {
   return d.toLocaleDateString("zh-TW") + " " + d.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
 }
 
-function fmtBytes(bytes) {
-  if (bytes == null) return "—";
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + " KB";
-  if (bytes < 1024 ** 3) return (bytes / (1024 ** 2)).toFixed(1) + " MB";
-  return (bytes / (1024 ** 3)).toFixed(1) + " GB";
+// ─── Tab Switching ───
+
+function setupTabs() {
+  const btns = document.querySelectorAll(".tab-btn");
+  btns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.tab;
+      if (tab === currentTab) return;
+
+      // Update buttons
+      btns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      // Update panels
+      document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+      const panel = document.getElementById("panel-" + tab);
+      if (panel) panel.classList.add("active");
+
+      currentTab = tab;
+
+      // Lazy-load tab data
+      if (tab === "services") fetchServices();
+      if (tab === "guardian") fetchGuardian();
+    });
+  });
 }
 
 // ─── Render Functions ───
@@ -107,10 +129,9 @@ function fmtBytes(bytes) {
 function renderStatus(data) {
   // System info
   const hw = data.hardware || {};
-  const sys = hw.system || {};
   const infoEl = document.getElementById("sys-info");
   if (infoEl) {
-    const parts = [data.hostname || sys.hostname, data.os_version || sys.os_version, data.chip || sys.chip].filter(Boolean);
+    const parts = [data.hostname, data.os_version, data.chip].filter(Boolean);
     infoEl.textContent = parts.join(" · ") || "—";
   }
 
@@ -302,7 +323,6 @@ function renderAlerts(data) {
     return;
   }
 
-  // Flatten nested structure: each file has { timestamp, overall_pressure, alerts: [...] }
   const flattened = [];
   for (const file of rawAlerts) {
     const ts = file.timestamp;
@@ -317,7 +337,6 @@ function renderAlerts(data) {
         });
       }
     } else {
-      // Fallback: treat the file itself as a single alert
       flattened.push({
         timestamp: ts,
         pressure: file.overall_pressure || file.pressure_level || file.level,
@@ -349,6 +368,7 @@ function renderTopProcesses(procs) {
     return;
   }
   list.innerHTML = procs
+    .slice(0, 3)
     .map((p) => {
       const cpuCls = p.cpu_pct >= 50 ? "val-hot" : p.cpu_pct >= 20 ? "val-warm" : "";
       const memCls = p.mem_mb >= 1024 ? "val-hot" : p.mem_mb >= 256 ? "val-warm" : "";
@@ -364,65 +384,115 @@ function renderTopProcesses(procs) {
     .join("");
 }
 
-function renderReports(data) {
-  const list = document.getElementById("report-list");
-  if (!list) return;
-  const reports = data.reports || [];
-  if (reports.length === 0) {
-    list.innerHTML = '<div class="empty">無報告</div>';
+// ─── Services Tab ───
+
+function renderServices(data) {
+  servicesData = data.services || [];
+  renderServicesTable();
+}
+
+function renderServicesTable() {
+  const tbody = document.getElementById("svc-tbody");
+  if (!tbody) return;
+
+  const filtered = currentCatFilter === "all"
+    ? servicesData
+    : servicesData.filter((s) => s.category === currentCatFilter);
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">無服務</td></tr>';
     return;
   }
-  list.innerHTML = reports
-    .map(
-      (r) =>
-        `<div class="report-item" data-file="${r.filename}">
-          <div class="report-header" onclick="toggleReport(this)">
-            <span class="report-name">${esc(r.filename)}</span>
-            <span class="report-meta">
-              <span>${fmtBytes(r.size_bytes)}</span>
-              <span>${fmtDate(r.created)}</span>
-            </span>
-          </div>
-          <div class="report-content"></div>
-        </div>`
-    )
+
+  tbody.innerHTML = filtered
+    .map((s) => {
+      // Type badge
+      const typeCls = `type-${s.type}`;
+      const typeLabels = { service: "常駐", periodic: "排程", oneshot: "單次" };
+      const typeLabel = typeLabels[s.type] || s.type;
+
+      // Status
+      let statusCls = "status-idle";
+      let statusLabel = "閒置";
+      if (s.status === "running") {
+        statusCls = "status-running";
+        statusLabel = "運行中";
+      } else if (s.status === "disabled") {
+        statusCls = "status-disabled";
+        statusLabel = "已停用";
+      } else if (s.status === "unloaded") {
+        statusCls = "status-unloaded";
+        statusLabel = "未載入";
+      } else if (s.status && s.status.startsWith("error")) {
+        statusCls = "status-error";
+        statusLabel = s.status;
+      }
+
+      const pidInfo = s.pid ? ` <span style="color:var(--subtext0);font-size:0.65rem">PID ${s.pid}</span>` : "";
+
+      return `<tr>
+        <td>${esc(s.name)}${pidInfo}</td>
+        <td><span class="type-badge ${typeCls}">${typeLabel}</span></td>
+        <td>${esc(s.schedule)}</td>
+        <td><span class="${statusCls}"><span class="status-dot"></span><span class="status-text">${statusLabel}</span></span></td>
+      </tr>`;
+    })
     .join("");
 }
 
-async function toggleReport(headerEl) {
-  const item = headerEl.closest(".report-item");
-  const contentEl = item.querySelector(".report-content");
-  if (contentEl.classList.contains("open")) {
-    contentEl.classList.remove("open");
+function setupServiceFilter() {
+  const filter = document.getElementById("svc-filter");
+  if (!filter) return;
+  filter.addEventListener("click", (e) => {
+    const btn = e.target.closest(".filter-btn");
+    if (!btn) return;
+    filter.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentCatFilter = btn.dataset.cat;
+    renderServicesTable();
+  });
+}
+
+// ─── Guardian Tab ───
+
+function renderGuardian(data) {
+  const tbody = document.getElementById("guardian-tbody");
+  if (!tbody) return;
+
+  const entries = data.entries || [];
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">無 Guardian 日誌</td></tr>';
     return;
   }
-  // Fetch content if not loaded
-  if (!contentEl.dataset.loaded) {
-    const filename = item.dataset.file;
-    try {
-      const res = await fetch("reports/" + encodeURIComponent(filename));
-      if (res.ok) {
-        contentEl.textContent = await res.text();
-      } else {
-        contentEl.textContent = "無法載入報告。";
-      }
-    } catch {
-      contentEl.textContent = "網路錯誤。";
-    }
-    contentEl.dataset.loaded = "1";
-  }
-  contentEl.classList.add("open");
+
+  tbody.innerHTML = entries
+    .map((e) => {
+      const levelCls = `level-${e.level}`;
+      const kills = e.kills || [];
+      const detail = kills.length > 0
+        ? kills.map((k) => `${k.process} (${k.mem_mb}MB)`).join(", ")
+        : "—";
+
+      return `<tr>
+        <td>${esc(e.timestamp)}</td>
+        <td><span class="level-badge ${levelCls}">${e.level}</span></td>
+        <td>${e.pressure_level}</td>
+        <td>${e.total_killed}</td>
+        <td>${e.freed_mb > 0 ? e.freed_mb + " MB" : "—"}</td>
+        <td><span class="guardian-detail" title="${esc(detail)}">${esc(detail)}</span></td>
+      </tr>`;
+    })
+    .join("");
 }
 
 // ─── Data Fetching ───
 
 async function fetchAll() {
   try {
-    const [statusRes, historyRes, alertsRes, reportsRes] = await Promise.allSettled([
+    const [statusRes, historyRes, alertsRes] = await Promise.allSettled([
       fetch("status").then((r) => r.json()),
       fetch("history").then((r) => r.json()),
       fetch("alerts").then((r) => r.json()),
-      fetch("reports").then((r) => r.json()),
     ]);
 
     if (statusRes.status === "fulfilled") {
@@ -431,9 +501,26 @@ async function fetchAll() {
     }
     if (historyRes.status === "fulfilled") renderHistory(historyRes.value);
     if (alertsRes.status === "fulfilled") renderAlerts(alertsRes.value);
-    if (reportsRes.status === "fulfilled") renderReports(reportsRes.value);
   } catch (err) {
     console.error("Fetch error:", err);
+  }
+}
+
+async function fetchServices() {
+  try {
+    const data = await fetch("services").then((r) => r.json());
+    renderServices(data);
+  } catch (err) {
+    console.error("Services fetch error:", err);
+  }
+}
+
+async function fetchGuardian() {
+  try {
+    const data = await fetch("guardian").then((r) => r.json());
+    renderGuardian(data);
+  } catch (err) {
+    console.error("Guardian fetch error:", err);
   }
 }
 
@@ -457,7 +544,12 @@ function setupToggle() {
 
 function startTimer() {
   stopTimer();
-  refreshTimer = setInterval(fetchAll, REFRESH_MS);
+  refreshTimer = setInterval(() => {
+    fetchAll();
+    // Also refresh current tab data
+    if (currentTab === "services") fetchServices();
+    if (currentTab === "guardian") fetchGuardian();
+  }, REFRESH_MS);
 }
 
 function stopTimer() {
@@ -470,7 +562,9 @@ function stopTimer() {
 // ─── Init ───
 
 document.addEventListener("DOMContentLoaded", () => {
+  setupTabs();
   setupToggle();
+  setupServiceFilter();
   fetchAll();
   startTimer();
 });
