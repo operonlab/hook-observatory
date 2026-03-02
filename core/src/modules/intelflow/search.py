@@ -44,21 +44,13 @@ async def semantic_search(
     query_embedding = await get_embedding(query)
     if query_embedding is None:
         return await _text_search_fallback(
-            db,
-            space_id,
-            query,
-            limit,
-            include_archived,
-            include_warm,
+            db, space_id, query, limit,
+            include_archived, include_warm,
         )
 
     # Phase 2 path: sub-table
     results = await _search_via_subtable(
-        db,
-        space_id,
-        query_embedding,
-        limit,
-        threshold,
+        db, space_id, query_embedding, limit, threshold,
     )
 
     if not results:
@@ -91,9 +83,7 @@ async def semantic_search(
     # Warm tier: text-based augmentation for older reports
     if include_warm and len(results) < limit:
         warm_results = await _warm_tier_search(
-            db,
-            space_id,
-            query,
+            db, space_id, query,
             limit - len(results),
         )
         results.extend(warm_results)
@@ -154,7 +144,10 @@ async def _warm_tier_search(
         select(Report)
         .where(
             Report.space_id == space_id,
-            (Report.title.ilike(pattern) | Report.content.ilike(pattern)),
+            (
+                Report.title.ilike(pattern)
+                | Report.content.ilike(pattern)
+            ),
             Report.created_at < hot_cutoff,
             Report.created_at >= warm_cutoff,
         )
@@ -229,7 +222,10 @@ async def _text_search_fallback(
     now = datetime.now(UTC)
     hot_cutoff = now - timedelta(days=tier.hot_days)
     warm_cutoff = now - timedelta(days=tier.warm_days)
-    ilike_cond = Report.title.ilike(pattern) | Report.content.ilike(pattern)
+    ilike_cond = (
+        Report.title.ilike(pattern)
+        | Report.content.ilike(pattern)
+    )
 
     # --- Hot tier ---
     hot_q = (
@@ -245,8 +241,7 @@ async def _text_search_fallback(
     hot_rows = (await db.execute(hot_q)).scalars().all()
     results: list[SemanticSearchResult] = [
         SemanticSearchResult(
-            report=_to_brief(r),
-            score=0.5,
+            report=_to_brief(r), score=0.5,
         )
         for r in hot_rows
     ]
@@ -265,21 +260,24 @@ async def _text_search_fallback(
             .order_by(Report.updated_at.desc())
             .limit(remaining)
         )
-        warm_rows = (await db.execute(warm_q)).scalars().all()
-        results.extend(
-            [
-                SemanticSearchResult(
-                    report=_to_brief(r),
-                    score=0.35,  # warm: 0.5 * 0.7
-                )
-                for r in warm_rows
-            ]
-        )
+        warm_rows = (
+            await db.execute(warm_q)
+        ).scalars().all()
+        results.extend([
+            SemanticSearchResult(
+                report=_to_brief(r),
+                score=0.35,  # warm: 0.5 * 0.7
+            )
+            for r in warm_rows
+        ])
 
     # --- Cold tier: archive table ---
     if include_archived and len(results) < limit:
         remaining = limit - len(results)
-        archive_ilike = ReportArchive.title.ilike(pattern) | ReportArchive.content.ilike(pattern)
+        archive_ilike = (
+            ReportArchive.title.ilike(pattern)
+            | ReportArchive.content.ilike(pattern)
+        )
         archive_q = (
             select(ReportArchive)
             .where(
@@ -290,23 +288,23 @@ async def _text_search_fallback(
             .order_by(ReportArchive.created_at.desc())
             .limit(remaining)
         )
-        archive_rows = (await db.execute(archive_q)).scalars().all()
-        results.extend(
-            [
-                SemanticSearchResult(
-                    report=ReportBrief(
-                        id=r.id,
-                        title=r.title,
-                        query=r.query,
-                        tags=r.tags or [],
-                        skill_name=r.skill_name,
-                        created_at=r.created_at,
-                    ),
-                    score=0.3,  # cold: archived result
-                )
-                for r in archive_rows
-            ]
-        )
+        archive_rows = (
+            await db.execute(archive_q)
+        ).scalars().all()
+        results.extend([
+            SemanticSearchResult(
+                report=ReportBrief(
+                    id=r.id,
+                    title=r.title,
+                    query=r.query,
+                    tags=r.tags or [],
+                    skill_name=r.skill_name,
+                    created_at=r.created_at,
+                ),
+                score=0.3,  # cold: archived result
+            )
+            for r in archive_rows
+        ])
 
     return results
 

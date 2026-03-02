@@ -3,9 +3,12 @@
 Used for cold data archiving: large content blobs (reports, briefings) are offloaded
 to S3 while metadata stays in PostgreSQL for queryability.
 
+Frozen tier adds zstd compression + SHA-256 integrity verification.
+
 Graceful degradation: returns None when RustFS is unavailable.
 """
 
+import hashlib
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -186,3 +189,122 @@ async def resolve_content(value: str | None) -> str | None:
         return value
     bucket, key = parse_s3_ref(value)
     return await download_blob(key, bucket=bucket)
+
+
+# ======================== Frozen Tier (zstd + SHA-256) ========================
+
+
+def compute_content_hash(data: str | bytes) -> str:
+    """Compute SHA-256 hash of content."""
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+
+def _zstd_compress(data: bytes) -> bytes:
+    """Compress data with zstandard. Falls back to raw if unavailable."""
+    try:
+        import zstandard as zstd
+
+        cctx = zstd.ZstdCompressor(level=3)
+        return cctx.compress(data)
+    except ImportError:
+        logger.warning("zstandard not installed — storing uncompressed")
+        return data
+
+
+def _zstd_decompress(data: bytes) -> bytes:
+    """Decompress zstd data. Falls back to raw if unavailable."""
+    try:
+        import zstandard as zstd
+
+        dctx = zstd.ZstdDecompressor()
+        return dctx.decompress(data)
+    except ImportError:
+        logger.warning("zstandard not installed — returning raw")
+        return data
+
+
+async def upload_blob_compressed(
+    key: str,
+    data: str | bytes,
+    bucket: str | None = None,
+) -> str | None:
+    """Upload zstd-compressed blob to S3. Returns S3 URI or None.
+
+    Used for frozen tier: content is compressed before upload.
+    Key should end with .json.zst by convention.
+    """
+    from src.shared.tier_config import S3_FROZEN_BUCKET
+
+    bucket = bucket or S3_FROZEN_BUCKET
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    compressed = _zstd_compress(data)
+
+    async with _s3_client() as client:
+        if client is None:
+            return None
+        try:
+            await client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=compressed,
+                ContentType="application/zstd",
+            )
+            uri = f"s3://{bucket}/{key}"
+            logger.info(
+                "Frozen upload %s (%d → %d bytes, %.0f%% ratio)",
+                key, len(data), len(compressed),
+                len(compressed) / len(data) * 100 if data else 0,
+            )
+            return uri
+        except Exception as e:
+            logger.error("Frozen upload failed for %s: %s", key, e)
+            return None
+
+
+async def download_and_decompress(
+    s3_uri: str,
+) -> bytes | None:
+    """Download and decompress a frozen blob from S3.
+
+    Args:
+        s3_uri: Full S3 URI (s3://bucket/key)
+
+    Returns:
+        Decompressed content as bytes, or None on failure.
+    """
+    bucket, key = parse_s3_ref(s3_uri)
+    async with _s3_client() as client:
+        if client is None:
+            return None
+        try:
+            resp = await client.get_object(
+                Bucket=bucket, Key=key,
+            )
+            compressed = await resp["Body"].read()
+            return _zstd_decompress(compressed)
+        except Exception as e:
+            logger.error(
+                "Frozen download failed for %s: %s", s3_uri, e,
+            )
+            return None
+
+
+async def verify_frozen_integrity(
+    s3_uri: str, expected_hash: str,
+) -> bool:
+    """Download frozen content and verify SHA-256 hash."""
+    data = await download_and_decompress(s3_uri)
+    if data is None:
+        return False
+    actual = compute_content_hash(data)
+    if actual != expected_hash:
+        logger.error(
+            "Integrity check FAILED for %s: "
+            "expected %s, got %s",
+            s3_uri, expected_hash, actual,
+        )
+        return False
+    return True
