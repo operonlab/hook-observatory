@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# dependencies = ["fastapi", "uvicorn", "jinja2", "websockets"]
+# dependencies = ["fastapi", "uvicorn", "jinja2", "websockets", "python-multipart"]
 # ///
 """
 tmux Web Controller V2 — Modular Edition
@@ -15,11 +15,13 @@ import argparse
 import asyncio
 import json
 import logging
+import re
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from autocomplete import complete, get_cache_stats, init_cache, refresh_cache
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -48,6 +50,8 @@ logging.basicConfig(
 logger = logging.getLogger("tmux-webui")
 
 BASE_DIR = Path(__file__).parent
+UPLOAD_DIR = Path.home() / "workshop" / "outputs" / "tmux-webui-uploads"
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
 
 # ── Disconnect layout reset (debounced 10s) ──
 
@@ -141,6 +145,29 @@ async def api_autocomplete(q: str = "", type: str = ""):
 async def api_autocomplete_refresh():
     refresh_cache()
     return get_cache_stats()
+
+
+@app.post("/api/upload")
+async def api_upload(file: UploadFile):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    # Read file with size check
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File too large (max 50MB)")
+
+    # Sanitize filename: keep only safe characters
+    name = Path(file.filename).name  # strip directory components
+    name = re.sub(r'[^\w\-.]', '_', name)  # replace unsafe chars
+    safe_name = f"{int(time.time())}_{name}"
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    dest = UPLOAD_DIR / safe_name
+    dest.write_bytes(content)
+
+    logger.info("Uploaded: %s (%d bytes)", dest, len(content))
+    return {"path": str(dest)}
 
 
 # ── PWA assets ──

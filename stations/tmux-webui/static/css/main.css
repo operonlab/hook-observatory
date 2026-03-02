@@ -12,8 +12,8 @@
   --kb-height:0px;
   --font-size:12px;
 }
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-mono);overflow:hidden;overscroll-behavior:none}
-#app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+html,body{height:100%;height:100dvh;background:var(--bg);color:var(--text);font-family:var(--font-mono);overflow:hidden;overscroll-behavior:none}
+#app{display:flex;flex-direction:column;height:100%}
 
 /* ── Header ── */
 header{
@@ -191,7 +191,16 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
   cursor:pointer;transition:all .15s;
 }
 .qbtn:hover{color:var(--text);border-color:var(--accent)}
-.qbtn[data-key="C-c"]:hover{border-color:var(--yellow);color:var(--yellow)}
+/* Functional button colors */
+.qbtn[data-key="Escape"]{color:var(--yellow);border-color:rgba(251,191,36,.3)}
+.qbtn[data-key="Escape"]:hover{border-color:var(--yellow)}
+.qbtn[data-key="Tab"]{color:var(--cyan);border-color:rgba(34,211,238,.3)}
+.qbtn[data-key="Tab"]:hover{border-color:var(--cyan)}
+.qbtn[data-key="DC"]{color:var(--red);border-color:rgba(248,113,113,.3)}
+.qbtn[data-key="DC"]:hover{border-color:var(--red)}
+.qbtn[data-key="Enter"]{color:var(--green);border-color:rgba(74,222,128,.3)}
+.qbtn[data-key="Enter"]:hover{border-color:var(--green)}
+.qbtn[data-key="C-c"]:hover{border-color:var(--accent)}
 /* Mini arrow pad in quick-actions */
 .arrow-pad-mini{
   width:48px;height:34px;border-radius:6px;background:var(--surface);
@@ -248,6 +257,15 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
 #input::placeholder{color:var(--dim)}
 #input.input-error{border-color:var(--red);animation:input-shake .3s}
 @keyframes input-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.upload-btn{
+  padding:8px 10px;background:var(--surface2);color:var(--dim);border:1px solid var(--border);
+  border-radius:var(--radius);font-size:15px;font-family:inherit;cursor:pointer;
+  transition:all .15s;line-height:1;flex-shrink:0;
+}
+.upload-btn:hover{color:var(--accent-h);border-color:var(--accent)}
+.upload-btn:disabled{opacity:.4;cursor:default}
+.upload-btn.uploading{opacity:.5;pointer-events:none;animation:upload-pulse 1s infinite}
+@keyframes upload-pulse{0%,100%{opacity:.5}50%{opacity:.2}}
 #send-btn{
   padding:8px 18px;background:var(--accent);color:#fff;border:none;
   border-radius:var(--radius);font-size:13px;font-family:inherit;cursor:pointer;
@@ -311,11 +329,11 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
 /* ── Touch / Responsive ── */
 @media(pointer:coarse){
   .qbtn,.ek,.win-tab{min-height:44px}
-  #send-btn{min-height:44px}
+  #send-btn,.upload-btn{min-height:44px}
 }
 @media(pointer:coarse) and (max-width:600px){
   .qbtn,.win-tab{min-height:34px}
-  #send-btn{min-height:36px}
+  #send-btn,.upload-btn{min-height:36px}
   .ek{min-height:36px}
 }
 
@@ -351,7 +369,7 @@ footer{padding-bottom:env(safe-area-inset-bottom)}
   /* Footer compact */
   footer{padding:3px 8px;padding-bottom:calc(4px + env(safe-area-inset-bottom))}
   footer.mobile-collapsed .footer-top{display:flex;flex-wrap:nowrap;gap:3px;margin-bottom:3px}
-  footer.mobile-collapsed .qbtn[data-key="Escape"]{display:none}
+  /* Esc always visible even when collapsed */
   footer.mobile-collapsed .focused-label{display:none}
   footer.mobile-collapsed .quick-actions{gap:3px;flex-wrap:nowrap}
   footer.mobile-collapsed .qbtn{padding:2px 8px;font-size:10px}
@@ -374,6 +392,7 @@ footer{padding-bottom:env(safe-area-inset-bottom)}
 
 /* ── PWA standalone mode ── */
 @media(display-mode: standalone){
+  footer{padding-bottom:calc(8px + env(safe-area-inset-bottom, 20px))!important}
   .footer-top{display:flex !important}
   .quick-actions{display:flex !important}
   .quick-actions .qbtn{display:inline-flex !important}
