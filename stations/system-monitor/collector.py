@@ -663,7 +663,49 @@ def collect_all(config: dict, *, disk: bool = True, hardware: bool = True) -> di
         result["hardware"] = hw_data
 
     result["pressure_level"] = overall_pressure(disk_data, hw_data)
+    result["top_processes"] = collect_top_processes()
     return result
+
+
+def collect_top_processes(top_n: int = 8) -> list[dict]:
+    """Get top processes by CPU + memory usage."""
+    # ps sorted by CPU, grab top entries
+    out = run(
+        "ps -eo pid,pcpu,pmem,rss,comm -r 2>/dev/null | head -30"
+    )
+    seen_names: dict[str, dict] = {}
+    for line in out.splitlines()[1:]:  # skip header
+        parts = line.split(None, 4)
+        if len(parts) < 5:
+            continue
+        pid = int(parts[0])
+        cpu = parse_float(parts[1])
+        mem_pct = parse_float(parts[2])
+        rss_kb = int(parts[3]) if parts[3].isdigit() else 0
+        name = parts[4].rsplit("/", 1)[-1]  # basename
+        # Aggregate by process name (combine multiple instances)
+        if name in seen_names:
+            seen_names[name]["cpu_pct"] += cpu
+            seen_names[name]["mem_pct"] += mem_pct
+            seen_names[name]["mem_mb"] += rss_kb / 1024
+            seen_names[name]["count"] += 1
+        else:
+            seen_names[name] = {
+                "name": name,
+                "pid": pid,
+                "cpu_pct": cpu,
+                "mem_pct": round(mem_pct, 1),
+                "mem_mb": rss_kb / 1024,
+                "count": 1,
+            }
+    procs = list(seen_names.values())
+    # Sort by combined resource weight (CPU% + mem%)
+    procs.sort(key=lambda p: p["cpu_pct"] + p["mem_pct"], reverse=True)
+    for p in procs:
+        p["cpu_pct"] = round(p["cpu_pct"], 1)
+        p["mem_pct"] = round(p["mem_pct"], 1)
+        p["mem_mb"] = round(p["mem_mb"], 1)
+    return procs[:top_n]
 
 
 def main() -> None:
