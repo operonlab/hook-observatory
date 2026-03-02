@@ -3,15 +3,21 @@
 Prefix: /api/intelflow (mounted in main.py)
 """
 
+import json
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db
 from src.shared.embedding import get_embedding
-from src.shared.errors import NotFoundError
+from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
+from src.shared.storage import (
+    compute_content_hash,
+    download_and_decompress,
+)
 
 from . import search as search_engine
 from .schemas import (
@@ -435,3 +441,195 @@ async def get_timeline(
 @router.get("/status")
 async def intelflow_status():
     return {"module": "intelflow", "status": "active"}
+
+
+# ======================== Frozen Tier (Thaw) ========================
+
+
+@router.get("/frozen/reports", summary="List frozen reports")
+async def list_frozen_reports(
+    space_id: str = Query("default"),
+    tag: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """List frozen report metadata (no content -- needs thaw)."""
+    from .models import ReportFrozen
+
+    q = select(ReportFrozen).where(
+        ReportFrozen.space_id == space_id,
+    )
+    if tag:
+        q = q.where(ReportFrozen.tags.contains([tag]))
+
+    count_q = select(func.count()).select_from(q.subquery())
+    total = (await db.execute(count_q)).scalar_one()
+
+    q = q.order_by(ReportFrozen.frozen_at.desc())
+    q = q.offset((page - 1) * page_size).limit(page_size)
+    rows = (await db.execute(q)).scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "space_id": r.space_id,
+                "created_at": r.created_at,
+                "frozen_at": r.frozen_at,
+                "title": r.title,
+                "query": r.query,
+                "tags": r.tags or [],
+                "summary": r.summary,
+                "skill_name": r.skill_name,
+                "content_size": r.content_size,
+                "tier": "frozen",
+            }
+            for r in rows
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get(
+    "/frozen/reports/{report_id}/thaw",
+    summary="Thaw frozen report",
+)
+async def thaw_frozen_report(
+    report_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch full content from S3 for a frozen report.
+
+    May take 1-3s for S3 download + decompression.
+    """
+    from .models import ReportFrozen
+
+    q = select(ReportFrozen).where(
+        ReportFrozen.id == report_id,
+    )
+    frozen = (await db.execute(q)).scalar_one_or_none()
+    if not frozen:
+        raise NotFoundError(
+            f"Frozen report {report_id} not found",
+            code="intelflow.frozen_not_found",
+        )
+
+    data = await download_and_decompress(frozen.s3_uri)
+    if data is None:
+        raise BadRequestError(
+            "Failed to retrieve frozen content from S3",
+            code="intelflow.thaw_failed",
+        )
+
+    # Verify integrity
+    actual_hash = compute_content_hash(data)
+    if actual_hash != frozen.content_hash:
+        raise BadRequestError(
+            f"Content hash mismatch: expected {frozen.content_hash}, got {actual_hash}",
+            code="intelflow.integrity_error",
+        )
+
+    content = json.loads(data.decode("utf-8"))
+    return {
+        "id": report_id,
+        "content": content,
+        "tier": "frozen",
+        "frozen_at": frozen.frozen_at,
+    }
+
+
+@router.get(
+    "/frozen/briefings",
+    summary="List frozen briefings",
+)
+async def list_frozen_briefings(
+    space_id: str = Query("default"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """List frozen briefing metadata (no content -- needs thaw)."""
+    from .models import BriefingFrozen
+
+    q = select(BriefingFrozen).where(
+        BriefingFrozen.space_id == space_id,
+    )
+
+    count_q = select(func.count()).select_from(q.subquery())
+    total = (await db.execute(count_q)).scalar_one()
+
+    q = q.order_by(BriefingFrozen.frozen_at.desc())
+    q = q.offset((page - 1) * page_size).limit(page_size)
+    rows = (await db.execute(q)).scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "space_id": r.space_id,
+                "created_at": r.created_at,
+                "frozen_at": r.frozen_at,
+                "date": str(r.date) if r.date else None,
+                "domain": r.domain,
+                "tags": r.tags or [],
+                "summary": r.summary,
+                "content_size": r.content_size,
+                "tier": "frozen",
+            }
+            for r in rows
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get(
+    "/frozen/briefings/{briefing_id}/thaw",
+    summary="Thaw frozen briefing",
+)
+async def thaw_frozen_briefing(
+    briefing_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch full content from S3 for a frozen briefing.
+
+    May take 1-3s for S3 download + decompression.
+    """
+    from .models import BriefingFrozen
+
+    q = select(BriefingFrozen).where(
+        BriefingFrozen.id == briefing_id,
+    )
+    frozen = (await db.execute(q)).scalar_one_or_none()
+    if not frozen:
+        raise NotFoundError(
+            f"Frozen briefing {briefing_id} not found",
+            code="intelflow.frozen_not_found",
+        )
+
+    data = await download_and_decompress(frozen.s3_uri)
+    if data is None:
+        raise BadRequestError(
+            "Failed to retrieve frozen content from S3",
+            code="intelflow.thaw_failed",
+        )
+
+    # Verify integrity
+    actual_hash = compute_content_hash(data)
+    if actual_hash != frozen.content_hash:
+        raise BadRequestError(
+            f"Content hash mismatch: expected {frozen.content_hash}, got {actual_hash}",
+            code="intelflow.integrity_error",
+        )
+
+    content = json.loads(data.decode("utf-8"))
+    return {
+        "id": briefing_id,
+        "content": content,
+        "tier": "frozen",
+        "frozen_at": frozen.frozen_at,
+    }
