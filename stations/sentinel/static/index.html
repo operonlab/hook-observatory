@@ -3,44 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0c0e14">
+    <meta name="theme-color" content="#08090d">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="服務哨兵">
+    <meta name="description" content="Workshop 服務健康監測與即時狀態追蹤">
     <title>服務哨兵 — Workshop</title>
     <link rel="manifest" href="static/manifest.json">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><path d='M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6l-8-4z'/></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="static/css/status.css">
 </head>
 <body>
     <div class="app">
+
         <!-- Header -->
         <header class="header">
             <div class="header__inner">
                 <div class="header__brand">
-                    <span class="header__icon">🛡️</span>
-                    <h1 class="header__title">服務哨兵</h1>
+                    <div class="header__icon-wrap">
+                        <svg class="header__shield" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6l-8-4z" fill="currentColor"/>
+                            <path d="M9 12l2 2 4-4" stroke="#08090d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="header__titles">
+                        <h1 class="header__title">服務哨兵</h1>
+                        <span class="header__subtitle">Workshop Sentinel</span>
+                    </div>
                 </div>
                 <div class="header__meta">
                     <span class="header__update" id="last-update">更新中…</span>
-                    <span class="header__pulse" id="pulse"></span>
+                    <div class="header__pulse-wrap" id="pulse">
+                        <div class="pulse-ring"></div>
+                        <div class="pulse-dot"></div>
+                    </div>
                 </div>
             </div>
         </header>
 
         <!-- Overall Banner -->
-        <section class="banner-wrap">
+        <section class="banner-wrap anim-item" style="--i:0">
             <div id="overall-banner" class="banner banner--loading">
-                <div class="banner__dot"></div>
+                <div class="banner__indicator">
+                    <div class="banner__dot"></div>
+                </div>
                 <span class="banner__text">正在檢查系統狀態…</span>
             </div>
         </section>
 
         <!-- Dashboard Grid -->
         <div class="dashboard">
+
             <!-- Left: Services -->
-            <section class="panel">
+            <section class="panel anim-item" style="--i:1">
                 <div class="panel__header">
                     <h2 class="panel__title">服務狀態</h2>
-                    <span class="panel__count" id="service-count"></span>
+                    <span class="panel__count mono" id="service-count"></span>
                 </div>
                 <div id="services-container" class="services">
                     <div class="skeleton-row"></div>
@@ -51,48 +73,68 @@
                 </div>
             </section>
 
-            <!-- Right: Timeline + Incidents -->
+            <!-- Right Column -->
             <div class="right-col">
-                <section class="panel">
+
+                <!-- 90-Day Uptime -->
+                <section class="panel anim-item" style="--i:2">
                     <div class="panel__header">
                         <h2 class="panel__title">正常運行時間</h2>
-                        <span class="panel__badge">90 天</span>
+                        <span class="panel__badge mono">90 天</span>
                     </div>
                     <div id="timelines-container" class="timelines">
                         <div class="skeleton-timeline"></div>
                     </div>
                     <div class="timeline-legend">
-                        <span class="legend-item"><span class="legend-dot legend-dot--operational"></span>正常</span>
-                        <span class="legend-item"><span class="legend-dot legend-dot--degraded"></span>降級</span>
-                        <span class="legend-item"><span class="legend-dot legend-dot--outage"></span>中斷</span>
-                        <span class="legend-item"><span class="legend-dot legend-dot--no_data"></span>無資料</span>
+                        <span class="legend-item">
+                            <span class="legend-dot legend-dot--operational"></span>正常
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-dot legend-dot--degraded"></span>降級
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-dot legend-dot--outage"></span>中斷
+                        </span>
+                        <span class="legend-item">
+                            <span class="legend-dot legend-dot--no_data"></span>無資料
+                        </span>
                     </div>
                 </section>
 
-                <section class="panel">
+                <!-- Recent Incidents -->
+                <section class="panel anim-item" style="--i:3">
                     <div class="panel__header">
                         <h2 class="panel__title">近期事件</h2>
                     </div>
                     <div id="incidents-container">
                         <div class="empty-state">
-                            <span class="empty-state__icon">✓</span>
+                            <div class="empty-state__icon">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
                             <span class="empty-state__text">目前沒有事件記錄</span>
                         </div>
                     </div>
                 </section>
+
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="footer">
-            <span>Workshop Sentinel v0.1.0</span>
+            <svg class="footer__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6l-8-4z" fill="currentColor" opacity="0.4"/>
+            </svg>
+            <span class="mono">Workshop Sentinel v0.1.0</span>
             <span class="footer__sep">·</span>
-            <span id="footer-uptime"></span>
+            <span class="mono" id="footer-uptime"></span>
         </footer>
+
     </div>
 
     <!-- Tooltip -->
-    <div id="tooltip" class="tooltip"></div>
+    <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
 
     <script src="static/js/status.js"></script>
 </body>

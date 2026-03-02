@@ -3,6 +3,8 @@
  * 每 30 秒輪詢 /api/sentinel/status, /uptime, /incidents
  */
 
+// ── API Base detection (supports /v2/apps/sentinel/ via Nginx) ──
+
 const API_BASE = (() => {
     const p = window.location.pathname;
     if (p.includes('/v2/apps/sentinel')) return '/v2/apps/sentinel';
@@ -11,44 +13,54 @@ const API_BASE = (() => {
 
 const POLL_INTERVAL = 30_000;
 const LOGIN_URL = '/v2/login';
+const MAX_INCIDENTS = 5;
+
+// ── Label maps ──
 
 const STATUS_LABELS = {
     all_operational: '所有系統正常運作',
-    maintenance: '排程維護中',
-    degraded: '部分服務效能降級',
-    partial_outage: '部分系統中斷',
-    major_outage: '重大系統中斷',
+    maintenance:     '排程維護中',
+    degraded:        '部分服務效能降級',
+    partial_outage:  '部分系統中斷',
+    major_outage:    '重大系統中斷',
 };
 
 const STATUS_LABELS_SHORT = {
-    operational: '正常',
-    degraded: '降級',
-    partial_outage: '部分中斷',
-    major_outage: '中斷',
-    maintenance: '維護中',
-    unknown: '未知',
+    operational:     '正常',
+    degraded:        '降級',
+    partial_outage:  '部分中斷',
+    major_outage:    '中斷',
+    maintenance:     '維護中',
+    unknown:         '未知',
 };
 
 const SERVICE_DISPLAY = {
-    core: 'Core API',
-    frontend: '前端 (Nginx)',
-    'frontend-memvault': '前端 — 記憶金庫',
-    'frontend-render': '前端渲染 (Deep)',
+    core:                      'Core API',
+    frontend:                  '前端 (Nginx)',
+    'frontend-memvault':       '前端 — 記憶金庫',
+    'frontend-render':         '前端渲染 (Deep)',
     'frontend-memvault-render': '記憶金庫渲染 (Deep)',
-    'hook-observatory': 'Hook 監控台',
-    'agent-vista': 'Agent Vista',
-    litellm: 'LiteLLM Proxy',
-    postgres: 'PostgreSQL',
-    redis: 'Redis',
-    rustfs: 'RustFS (S3)',
+    'hook-observatory':        'Hook 監控台',
+    'agent-vista':             'Agent Vista',
+    litellm:                   'LiteLLM Proxy',
+    postgres:                  'PostgreSQL',
+    redis:                     'Redis',
+    rustfs:                    'RustFS (S3)',
 };
 
 const INCIDENT_LABELS = {
     investigating: '調查中',
-    identified: '已定位',
-    repairing: '修復中',
-    resolved: '已解決',
-    escalated: '已升級',
+    identified:    '已定位',
+    repairing:     '修復中',
+    resolved:      '已解決',
+    escalated:     '已升級',
+};
+
+const TOOLTIP_STATUS_NAMES = {
+    operational: '正常',
+    degraded:    '降級',
+    outage:      '中斷',
+    no_data:     '無資料',
 };
 
 // ── Fetch helpers ──
@@ -72,10 +84,9 @@ async function fetchJSON(path) {
 function timeAgo(isoStr) {
     if (!isoStr) return '';
     const d = new Date(isoStr);
-    const now = Date.now();
-    const diff = Math.floor((now - d.getTime()) / 1000);
-    if (diff < 60) return '剛才';
-    if (diff < 3600) return `${Math.floor(diff / 60)} 分鐘前`;
+    const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diff < 60)    return '剛才';
+    if (diff < 3600)  return `${Math.floor(diff / 60)} 分鐘前`;
     if (diff < 86400) return `${Math.floor(diff / 3600)} 小時前`;
     return d.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
 }
@@ -83,11 +94,19 @@ function timeAgo(isoStr) {
 function formatTime(isoStr) {
     if (!isoStr) return '';
     return new Date(isoStr).toLocaleString('zh-TW', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
+        month:  'numeric',
+        day:    'numeric',
+        hour:   '2-digit',
         minute: '2-digit',
     });
+}
+
+// ── Inline SVG helpers ──
+
+function svgCheckCircle() {
+    return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
 }
 
 // ── Render: Overall Banner ──
@@ -108,7 +127,7 @@ function renderBanner(data) {
 
 function renderServices(data) {
     const container = document.getElementById('services-container');
-    const countEl = document.getElementById('service-count');
+    const countEl   = document.getElementById('service-count');
 
     if (!data?.services?.length) {
         container.innerHTML = '<div class="empty-state"><span class="empty-state__text">尚未偵測到服務</span></div>';
@@ -116,26 +135,26 @@ function renderServices(data) {
         return;
     }
 
-    const sorted = [...data.services].sort((a, b) => {
-        const order = { major_outage: 0, partial_outage: 1, degraded: 2, maintenance: 3, operational: 4, unknown: 5 };
-        return (order[a.status] ?? 9) - (order[b.status] ?? 9);
-    });
+    const ORDER = { major_outage: 0, partial_outage: 1, degraded: 2, maintenance: 3, operational: 4, unknown: 5 };
+    const sorted = [...data.services].sort((a, b) =>
+        (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9)
+    );
 
     const healthy = sorted.filter(s => s.status === 'operational').length;
-    countEl.textContent = `${healthy}/${sorted.length} 正常`;
+    countEl.textContent = `${healthy} / ${sorted.length} 正常`;
 
-    container.innerHTML = sorted.map(s => {
-        const name = SERVICE_DISPLAY[s.service] || s.service;
-        const latency = s.response_ms ? `${Math.round(s.response_ms)}ms` : '';
+    container.innerHTML = sorted.map((s, i) => {
+        const name        = SERVICE_DISPLAY[s.service] || s.service;
+        const latency     = s.response_ms ? `${Math.round(s.response_ms)}ms` : '—';
         const statusLabel = STATUS_LABELS_SHORT[s.status] || s.status;
         return `
-            <div class="svc">
+            <div class="svc svc--${s.status} anim-item" style="--i:${i + 2}">
                 <div class="svc__left">
-                    <span class="svc__dot dot--${s.status}"></span>
-                    <span class="svc__name">${name}</span>
+                    <span class="svc__dot dot--${s.status}" aria-hidden="true"></span>
+                    <span class="svc__name">${escHtml(name)}</span>
                 </div>
                 <div class="svc__right">
-                    <span class="svc__latency">${latency}</span>
+                    <span class="svc__latency mono">${latency}</span>
                     <span class="svc__badge badge--${s.status}">${statusLabel}</span>
                 </div>
             </div>
@@ -153,11 +172,13 @@ function renderTimelines(uptimeData) {
         return;
     }
 
+    const now = new Date();
+
     container.innerHTML = uptimeData.services.map(svc => {
-        const name = SERVICE_DISPLAY[svc.service] || svc.service;
+        const name   = SERVICE_DISPLAY[svc.service] || svc.service;
         const dayMap = Object.fromEntries(svc.days.map(d => [d.date, d]));
 
-        // Calculate overall uptime %
+        // Calculate 90-day average uptime %
         let totalPct = 0, totalDays = 0;
         for (const d of svc.days) {
             totalPct += d.uptime_pct;
@@ -165,24 +186,25 @@ function renderTimelines(uptimeData) {
         }
         const avgPct = totalDays > 0 ? (totalPct / totalDays).toFixed(2) : '—';
 
-        // Generate 90 cells
+        // Build 90 cells (oldest → newest, left → right)
         const cells = [];
-        const now = new Date();
         for (let i = 89; i >= 0; i--) {
             const d = new Date(now);
             d.setDate(d.getDate() - i);
-            const key = d.toISOString().slice(0, 10);
-            const day = dayMap[key];
+            const key    = d.toISOString().slice(0, 10);
+            const day    = dayMap[key];
             const status = day ? day.status : 'no_data';
-            const pct = day ? day.uptime_pct : 0;
-            cells.push(`<div class="tl-cell tl-cell--${status}" data-date="${key}" data-pct="${pct}" data-status="${status}"></div>`);
+            const pct    = day ? day.uptime_pct : 0;
+            cells.push(
+                `<div class="tl-cell tl-cell--${status}" data-date="${key}" data-pct="${pct}" data-status="${status}" tabindex="-1"></div>`
+            );
         }
 
         return `
             <div class="tl-row">
                 <div class="tl-row__header">
-                    <span class="tl-row__label">${name}</span>
-                    <span class="tl-row__pct">${avgPct}%</span>
+                    <span class="tl-row__label">${escHtml(name)}</span>
+                    <span class="tl-row__pct">${avgPct === '—' ? '—' : avgPct + '%'}</span>
                 </div>
                 <div class="tl-bar">${cells.join('')}</div>
             </div>
@@ -192,7 +214,7 @@ function renderTimelines(uptimeData) {
     attachTooltips();
 }
 
-// ── Render: Incidents ──
+// ── Render: Incidents — Vertical Timeline Style ──
 
 function renderIncidents(data) {
     const container = document.getElementById('incidents-container');
@@ -200,51 +222,90 @@ function renderIncidents(data) {
     if (!data?.items?.length) {
         container.innerHTML = `
             <div class="empty-state">
-                <span class="empty-state__icon">✓</span>
+                <div class="empty-state__icon">${svgCheckCircle()}</div>
                 <span class="empty-state__text">目前沒有事件記錄</span>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = data.items.map(inc => {
+    const items    = data.items.slice(0, MAX_INCIDENTS);
+    const hasMore  = data.items.length > MAX_INCIDENTS;
+    const isLast   = (i) => i === items.length - 1;
+
+    const listHtml = items.map((inc, i) => {
         const statusLabel = INCIDENT_LABELS[inc.status] || inc.status;
+        const svcName     = SERVICE_DISPLAY[inc.service] || inc.service;
+        const detailHtml  = inc.detail
+            ? `<div class="incident__detail">${escHtml(inc.detail)}</div>`
+            : '';
+        const connectorHtml = isLast(i) ? '' : '<div class="incident__connector"></div>';
+
         return `
             <div class="incident">
-                <div class="incident__top">
-                    <span class="incident__title">${inc.title}</span>
-                    <span class="incident__badge ibadge--${inc.status}">${statusLabel}</span>
+                <div class="incident__timeline-col">
+                    <div class="incident__dot incident__dot--${inc.status}"></div>
+                    ${connectorHtml}
                 </div>
-                <div class="incident__meta">${SERVICE_DISPLAY[inc.service] || inc.service} · ${formatTime(inc.created_at)}</div>
-                ${inc.detail ? `<div class="incident__detail">${inc.detail}</div>` : ''}
+                <div class="incident__body">
+                    <div class="incident__top">
+                        <span class="incident__title">${escHtml(inc.title)}</span>
+                        <span class="incident__badge ibadge--${inc.status}">${statusLabel}</span>
+                    </div>
+                    <div class="incident__meta mono">
+                        <span>${escHtml(svcName)}</span>
+                        <span class="incident__meta-sep">·</span>
+                        <span>${formatTime(inc.created_at)}</span>
+                    </div>
+                    ${detailHtml}
+                </div>
             </div>
         `;
     }).join('');
+
+    const moreHtml = hasMore
+        ? `<div class="incident-more"><a href="${API_BASE}/incidents">查看更多事件 →</a></div>`
+        : '';
+
+    container.innerHTML = `<div class="incident-list">${listHtml}</div>${moreHtml}`;
 }
 
-// ── Tooltip ──
+// ── Tooltip (timeline cells) ──
 
 function attachTooltips() {
     const tooltip = document.getElementById('tooltip');
-    const statusNames = { operational: '正常', degraded: '降級', outage: '中斷', no_data: '無資料' };
 
     document.querySelectorAll('.tl-cell').forEach(cell => {
         cell.addEventListener('mouseenter', e => {
             const { date, pct, status } = e.target.dataset;
-            tooltip.textContent = `${date} — ${pct}% 正常 (${statusNames[status] || status})`;
+            const statusName = TOOLTIP_STATUS_NAMES[status] || status;
+            const pctLabel   = status === 'no_data' ? '—' : `${pct}%`;
+            tooltip.textContent = `${date}  ·  ${pctLabel} 正常  (${statusName})`;
             tooltip.style.display = 'block';
         });
 
         cell.addEventListener('mousemove', e => {
-            const x = Math.min(e.clientX + 12, window.innerWidth - 220);
+            const x = Math.min(e.clientX + 14, window.innerWidth - 250);
+            const y = e.clientY - 38;
             tooltip.style.left = `${x}px`;
-            tooltip.style.top = `${e.clientY - 36}px`;
+            tooltip.style.top  = `${y}px`;
         });
 
         cell.addEventListener('mouseleave', () => {
             tooltip.style.display = 'none';
         });
     });
+}
+
+// ── Escape HTML ──
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 // ── Poll Loop ──
@@ -261,14 +322,18 @@ async function refresh() {
     renderTimelines(uptimeData);
     renderIncidents(incidentData);
 
-    // Update header time
+    // Update header timestamp
     const updateEl = document.getElementById('last-update');
     if (updateEl) {
-        updateEl.textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+        updateEl.textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW', {
+            hour:   '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        })}`;
     }
 }
 
-// ── PWA registration ──
+// ── PWA: Service Worker registration ──
 
 if ('serviceWorker' in navigator) {
     const swPath = `${window.location.pathname.replace(/\/$/, '')}/static/sw.js`;
