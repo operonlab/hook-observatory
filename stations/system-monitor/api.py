@@ -115,12 +115,140 @@ async def status():
 
 @app.get("/services")
 async def list_services():
-    """List launchd services."""
+    """List all services from plist + launcher + Docker."""
     import asyncio
 
     from collector import collect_services
     services = await asyncio.get_event_loop().run_in_executor(None, collect_services)
     return {"services": services, "total": len(services)}
+
+
+@app.post("/services/{label:path}/enable")
+async def enable_service(label: str):
+    """Enable (launchctl load) a service by label."""
+    import subprocess
+
+    agents_dir = Path.home() / "Library" / "LaunchAgents"
+
+    # Find plist (could be .plist.disabled)
+    disabled_path = None
+    enabled_path = None
+    for p in agents_dir.iterdir():
+        if not p.name.endswith((".plist", ".plist.disabled")):
+            continue
+        try:
+            import plistlib
+            with open(p, "rb") as f:
+                plist = plistlib.load(f)
+            if plist.get("Label") == label:
+                if p.name.endswith(".disabled"):
+                    disabled_path = p
+                else:
+                    enabled_path = p
+                break
+        except Exception:
+            continue
+
+    if disabled_path:
+        # Rename .plist.disabled → .plist
+        new_path = disabled_path.parent / disabled_path.name.replace(".plist.disabled", ".plist")
+        disabled_path.rename(new_path)
+        enabled_path = new_path
+
+    if not enabled_path:
+        raise HTTPException(status_code=404, detail=f"找不到服務: {label}")
+
+    result = subprocess.run(
+        ["launchctl", "load", str(enabled_path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        return {"status": "error", "label": label, "detail": result.stderr.strip()}
+    return {"status": "ok", "label": label, "action": "enabled"}
+
+
+@app.post("/services/{label:path}/disable")
+async def disable_service(label: str):
+    """Disable (launchctl unload) a service by label."""
+    import subprocess
+
+    agents_dir = Path.home() / "Library" / "LaunchAgents"
+
+    plist_path = None
+    for p in agents_dir.glob("*.plist"):
+        try:
+            import plistlib
+            with open(p, "rb") as f:
+                plist = plistlib.load(f)
+            if plist.get("Label") == label:
+                plist_path = p
+                break
+        except Exception:
+            continue
+
+    if not plist_path:
+        raise HTTPException(status_code=404, detail=f"找不到服務: {label}")
+
+    result = subprocess.run(
+        ["launchctl", "unload", str(plist_path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        return {"status": "error", "label": label, "detail": result.stderr.strip()}
+
+    # Rename to .disabled
+    disabled_path = plist_path.parent / (plist_path.name + ".disabled")
+    plist_path.rename(disabled_path)
+    return {"status": "ok", "label": label, "action": "disabled"}
+
+
+@app.post("/services/{label:path}/restart")
+async def restart_service(label: str):
+    """Restart a launchd service (unload + load)."""
+    import subprocess
+
+    agents_dir = Path.home() / "Library" / "LaunchAgents"
+
+    plist_path = None
+    for p in agents_dir.glob("*.plist"):
+        try:
+            import plistlib
+            with open(p, "rb") as f:
+                plist = plistlib.load(f)
+            if plist.get("Label") == label:
+                plist_path = p
+                break
+        except Exception:
+            continue
+
+    if not plist_path:
+        raise HTTPException(status_code=404, detail=f"找不到服務: {label}")
+
+    # Unload
+    subprocess.run(
+        ["launchctl", "unload", str(plist_path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    # Load
+    result = subprocess.run(
+        ["launchctl", "load", str(plist_path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        return {"status": "error", "label": label, "detail": result.stderr.strip()}
+    return {"status": "ok", "label": label, "action": "restarted"}
+
+
+@app.get("/services/{label:path}/logs")
+async def service_logs(label: str, lines: int = 50):
+    """Get recent log lines for a service."""
+    import asyncio
+
+    from collector import get_service_logs
+    data = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: get_service_logs(label, lines)
+    )
+    return data
 
 
 @app.get("/guardian")

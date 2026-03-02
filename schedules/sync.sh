@@ -50,25 +50,25 @@ echo "  Registry : $REGISTRY"
 echo "  Mode     : $(${DRY_RUN} && echo 'DRY RUN' || echo 'LIVE')$(${FORCE} && echo ' + FORCE' || echo '')"
 echo ""
 
-# Read manifest prefix
-PREFIX="$("$JQ" -r '.prefix // "ws-"' "$MANIFEST")"
-
-# Read manifest jobs into arrays
+# v2 schema: no prefix restriction — manifest is the single source of truth
+# Read all manifest job names (labels used for matching)
 MANIFEST_NAMES=()
-while IFS= read -r name; do
+MANIFEST_LABELS=()
+while IFS=$'\t' read -r name label; do
   [[ -n "$name" ]] && MANIFEST_NAMES+=("$name")
-done < <("$JQ" -r '.jobs[] | select(.enabled == true) | .name' "$MANIFEST")
+  [[ -n "$label" ]] && MANIFEST_LABELS+=("$label")
+done < <("$JQ" -r '.jobs[] | select(.enabled == true) | [.name, (.label // "")] | @tsv' "$MANIFEST")
 
-# Read existing ws- jobs from registry
+# Read all jobs from registry (no longer filtered by prefix)
 REGISTRY_NAMES=()
 if [[ -f "$REGISTRY" ]]; then
   while IFS= read -r name; do
     [[ -n "$name" ]] && REGISTRY_NAMES+=("$name")
-  done < <("$JQ" -r '.[].name | select(startswith("'"$PREFIX"'"))' "$REGISTRY")
+  done < <("$JQ" -r '.[].name' "$REGISTRY")
 fi
 
 echo "  Manifest jobs (enabled): ${MANIFEST_NAMES[*]:-none}"
-echo "  Registry jobs (ws-*)   : ${REGISTRY_NAMES[*]:-none}"
+echo "  Registry jobs          : ${REGISTRY_NAMES[*]:-none}"
 echo ""
 
 # Helper: check if value exists in a space-separated list
