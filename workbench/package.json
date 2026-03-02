@@ -1,28 +1,40 @@
 {
-  "name": "@workshop/web",
+  "name": "@workshop/workbench",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "description": "Single React application with domain modules",
   "scripts": {
     "dev": "rsbuild dev",
-    "build": "rsbuild build",
-    "preview": "rsbuild preview"
+    "build": "rsbuild build && sed -i '' \"s/__CACHE_VERSION__/$(git rev-parse --short HEAD)/g\" dist/sw.js && sh scripts/gen-module-html.sh",
+    "preview": "rsbuild preview",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --fix src/",
+    "format": "biome format --write src/"
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-router-dom": "^7.0.0",
-    "zustand": "^5.0.0"
+    "3d-force-graph": "^1.79.1",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "lucide-react": "^0.575.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "catalog:",
+    "remark-gfm": "^4.0.1",
+    "three": "^0.183.1",
+    "zustand": "catalog:"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
     "@rsbuild/core": "^1.0.0",
     "@rsbuild/plugin-react": "^1.0.0",
-    "typescript": "^5.7.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/three": "^0.183.1",
+    "autoprefixer": "catalog:",
+    "postcss": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:"
   }
 }
