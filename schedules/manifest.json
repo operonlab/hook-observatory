@@ -1,19 +1,115 @@
 {
-  "$schema": "workshop-schedules-v1",
-  "prefix": "ws-",
+  "$schema": "workshop-schedules-v2",
+  "description": "Unified schedule manifest — single source of truth for all scheduled jobs and daemons",
   "jobs": [
     {
       "name": "ws-memvault-synthesis",
+      "label": "com.joneshong.scheduler.ws-memvault-synthesis",
       "command": "~/workshop/schedules/runners/ws-memvault-synthesis.sh",
       "schedule": { "calendar": { "Hour": 4, "Minute": 0 } },
       "description": "每日 4AM: cluster → wisdom → decay → attitude pipeline",
+      "category": "workshop",
+      "type": "periodic",
       "enabled": true
     },
     {
       "name": "ws-session-archive",
+      "label": "com.joneshong.scheduler.ws-session-archive",
       "command": "~/workshop/schedules/runners/ws-session-archive.sh",
       "schedule": { "calendar": { "Hour": 5, "Minute": 15 } },
       "description": "每日 5:15AM: scan sessions + archive cold candidates with summaries + embeddings",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "daily-briefing",
+      "label": "com.joneshong.scheduler.daily-briefing",
+      "command": "~/.claude/scripts/daily-briefing/run.sh",
+      "schedule": { "calendar": { "Hour": 7, "Minute": 0 } },
+      "description": "每日情報簡報：金融、AI、科技、地緣政治（7:00 AM）",
+      "category": "jonathan",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "dotfiles-sync",
+      "label": "com.joneshong.scheduler.dotfiles-sync",
+      "command": "~/dotfiles/scripts/sync-detect.sh",
+      "schedule": { "interval": 259200 },
+      "description": "每 3 天自動偵測系統設定變更，同步到 GitHub dotfiles repo",
+      "category": "jonathan",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "disk-report",
+      "label": "com.joneshong.disk-report",
+      "command": "~/.claude/data/disk-report/scripts/generate-report.sh",
+      "schedule": { "calendar": { "Hour": 5, "Minute": 0 } },
+      "description": "每日 5AM 磁碟空間報告",
+      "category": "jonathan",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "blink-reinstall",
+      "label": "com.joneshong.blink-reinstall",
+      "command": "~/Blink-Shell-GPL-Builder/reinstall-blink-auto.sh",
+      "schedule": { "interval": 259200 },
+      "description": "每 3 天自動重裝 Blink Shell（GPL build）",
+      "category": "jonathan",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "llm-usage",
+      "label": "com.joneshong.llm-usage",
+      "command": "/opt/homebrew/bin/node ~/.claude/data/llm-usage/server.js",
+      "schedule": { "run_at_load": true },
+      "description": "LLM 用量追蹤 server（KeepAlive daemon）",
+      "category": "jonathan",
+      "type": "daemon",
+      "enabled": true
+    },
+    {
+      "name": "auth-service",
+      "label": "com.joneshong.auth-service",
+      "command": "~/.openclaw/workspace/openclaw_avator/backend/scripts/run-auth-service.sh",
+      "schedule": { "run_at_load": true },
+      "description": "OpenClaw Auth Service（KeepAlive daemon）",
+      "category": "jonathan",
+      "type": "daemon",
+      "enabled": true
+    },
+    {
+      "name": "orchestrator",
+      "label": "com.joneshong.orchestrator",
+      "command": "~/Claude/services/orchestrator/scripts/run.sh",
+      "schedule": { "run_at_load": true },
+      "description": "服務 Orchestrator（KeepAlive daemon）",
+      "category": "jonathan",
+      "type": "daemon",
+      "enabled": true
+    },
+    {
+      "name": "tmux-webui",
+      "label": "com.joneshong.tmux-webui",
+      "command": "/opt/homebrew/bin/uv run ~/Claude/projects/tmux-webui/server.py --host 127.0.0.1 --port 8765",
+      "schedule": { "run_at_load": true },
+      "description": "tmux Web UI — WebSocket bridge（KeepAlive daemon, port 8765）",
+      "category": "jonathan",
+      "type": "daemon",
+      "enabled": true
+    },
+    {
+      "name": "workshop-launcher",
+      "label": "com.workshop.launcher",
+      "command": "/bin/bash ~/workshop/scripts/workshop-services.sh daemon",
+      "schedule": { "run_at_load": true },
+      "description": "Workshop 服務啟動器（KeepAlive daemon, Core API + Redis）",
+      "category": "workshop",
+      "type": "daemon",
       "enabled": true
     }
   ]

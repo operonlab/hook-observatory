@@ -403,10 +403,12 @@ body {
   background: rgba(69, 71, 90, 0.2);
 }
 
-.col-name { width: 40%; }
-.col-type { width: 15%; }
-.col-schedule { width: 25%; }
-.col-status { width: 20%; }
+.col-expand { width: 2rem; cursor: pointer; text-align: center; color: var(--subtext0); user-select: none; }
+.col-name { width: 32%; }
+.col-type { width: 10%; }
+.col-schedule { width: 18%; }
+.col-status { width: 15%; }
+.col-actions { width: 10%; white-space: nowrap; }
 .col-time { width: 18%; }
 .col-level { width: 10%; }
 .col-pressure { width: 12%; }
@@ -426,6 +428,7 @@ body {
 .type-service { background: rgba(137,180,250,0.15); color: var(--blue); }
 .type-periodic { background: rgba(203,166,247,0.15); color: var(--mauve); }
 .type-oneshot { background: rgba(108,112,134,0.15); color: var(--overlay0); }
+.type-container { background: rgba(148,226,213,0.15); color: var(--teal); }
 
 /* ─── Status Cell ─── */
 .status-dot {
@@ -442,6 +445,7 @@ body {
 .status-error .status-dot { background: var(--red); }
 .status-disabled .status-dot { background: var(--surface2); }
 .status-unloaded .status-dot { background: var(--surface1); }
+.status-stopped .status-dot { background: var(--yellow); }
 
 .status-text {
   font-size: 0.75rem;
@@ -453,6 +457,7 @@ body {
 .status-error .status-text { color: var(--red); }
 .status-disabled .status-text { color: var(--surface2); }
 .status-unloaded .status-text { color: var(--surface1); }
+.status-stopped .status-text { color: var(--yellow); }
 
 /* ─── Guardian Level Badge ─── */
 .level-badge {
@@ -568,4 +573,160 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--surface2);
+}
+
+/* ─── Service Count Badge ─── */
+.svc-count {
+  font-size: 0.7rem;
+  color: var(--subtext0);
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+/* ─── Filter Row ─── */
+.svc-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+/* ─── Source Badge ─── */
+.source-badge {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+.source-plist { background: rgba(180,190,254,0.15); color: var(--lavender); }
+.source-launcher { background: rgba(166,227,161,0.15); color: var(--green); }
+.source-docker { background: rgba(148,226,213,0.15); color: var(--teal); }
+
+/* ─── Action Buttons ─── */
+.actions-cell {
+  white-space: nowrap;
+}
+
+.action-btn {
+  background: var(--surface0);
+  border: 1px solid var(--surface1);
+  color: var(--subtext0);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.action-btn:hover {
+  background: var(--surface1);
+  color: var(--text);
+}
+
+.action-enable:hover { color: var(--green); border-color: var(--green); }
+.action-restart:hover { color: var(--blue); border-color: var(--blue); }
+.action-disable:hover { color: var(--red); border-color: var(--red); }
+
+/* ─── Expandable Row ─── */
+.svc-row {
+  cursor: default;
+}
+
+.svc-row .col-expand {
+  cursor: pointer;
+  font-size: 0.7rem;
+  color: var(--subtext0);
+  transition: color 0.15s;
+}
+
+.svc-row .col-expand:hover {
+  color: var(--text);
+}
+
+.svc-row.expanded {
+  background: rgba(69, 71, 90, 0.15);
+}
+
+.svc-detail-row {
+  background: rgba(49, 50, 68, 0.4);
+}
+
+.svc-detail-row td {
+  padding: 0 !important;
+}
+
+.svc-detail {
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+}
+
+.svc-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .svc-detail-grid { grid-template-columns: 1fr; }
+}
+
+.detail-item {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  align-items: baseline;
+}
+
+.detail-label {
+  color: var(--subtext0);
+  white-space: nowrap;
+  min-width: 4rem;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  color: var(--text);
+  word-break: break-all;
+}
+
+.detail-value.mono {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.7rem;
+}
+
+/* ─── Log Preview ─── */
+.svc-log-preview {
+  border: 1px solid var(--surface0);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  background: var(--surface0);
+  font-size: 0.7rem;
+  color: var(--subtext0);
+}
+
+.log-content {
+  padding: 0.5rem 0.75rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.65rem;
+  line-height: 1.6;
+  color: var(--subtext1);
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--crust);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
 }
