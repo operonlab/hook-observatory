@@ -5,6 +5,7 @@ import ExpensePieChart from '../components/charts/ExpensePieChart'
 import MonthlyBarChart from '../components/charts/MonthlyBarChart'
 import TrendLineChart from '../components/charts/TrendLineChart'
 import type { CategoryBreakdown, MonthlySummary, MonthlyTrend } from '../types'
+import { fmtAmt } from '../types'
 
 export default function AnalyticsPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
@@ -104,7 +105,7 @@ export default function AnalyticsPage() {
               className="text-lg font-semibold tabular-nums mt-0.5"
               style={{ color: 'var(--fn-income)' }}
             >
-              ${summary.total_income.toLocaleString()}
+              ${fmtAmt(summary.total_income)}
             </div>
           </div>
           <div
@@ -121,7 +122,7 @@ export default function AnalyticsPage() {
               className="text-lg font-semibold tabular-nums mt-0.5"
               style={{ color: 'var(--fn-expense)' }}
             >
-              ${summary.total_expense.toLocaleString()}
+              ${fmtAmt(summary.total_expense)}
             </div>
           </div>
           <div
@@ -140,7 +141,7 @@ export default function AnalyticsPage() {
                 color: summary.net >= 0 ? 'var(--fn-income)' : 'var(--fn-expense)',
               }}
             >
-              ${summary.net.toLocaleString()}
+              ${fmtAmt(summary.net)}
             </div>
           </div>
         </div>

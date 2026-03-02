@@ -5,6 +5,7 @@ import CategoryTree from '../components/CategoryTree'
 import TransactionForm from '../components/TransactionForm'
 import TransactionList from '../components/TransactionList'
 import type { Category, MonthlySummary, Transaction } from '../types'
+import { fmtAmt } from '../types'
 
 export default function TransactionsPage() {
   const [showForm, setShowForm] = useState(false)
@@ -68,7 +69,7 @@ export default function TransactionsPage() {
               className="text-lg font-semibold tabular-nums mt-0.5"
               style={{ color: 'var(--fn-income)' }}
             >
-              ${summary.total_income.toLocaleString()}
+              ${fmtAmt(summary.total_income)}
             </div>
           </div>
           <div
@@ -85,7 +86,7 @@ export default function TransactionsPage() {
               className="text-lg font-semibold tabular-nums mt-0.5"
               style={{ color: 'var(--fn-expense)' }}
             >
-              ${summary.total_expense.toLocaleString()}
+              ${fmtAmt(summary.total_expense)}
             </div>
           </div>
           <div
@@ -104,7 +105,7 @@ export default function TransactionsPage() {
                 color: summary.net >= 0 ? 'var(--fn-income)' : 'var(--fn-expense)',
               }}
             >
-              ${summary.net.toLocaleString()}
+              ${fmtAmt(summary.net)}
             </div>
           </div>
         </div>

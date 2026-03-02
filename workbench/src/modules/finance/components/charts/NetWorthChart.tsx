@@ -8,6 +8,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { NetWorthPoint } from '../../types'
+import { fmtAmt } from '../../types'
 
 interface NetWorthChartProps {
   data: NetWorthPoint[]
@@ -73,7 +74,7 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
               investment: '投資',
               credit_card: '信用卡',
             }
-            return [`$${value.toLocaleString()}`, labels[name] ?? name]
+            return [`$${fmtAmt(value)}`, labels[name] ?? name]
           }}
         />
         <Area

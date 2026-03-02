@@ -9,6 +9,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { MonthlyTrend } from '../../types'
+import { fmtAmt } from '../../types'
 
 interface MonthlyBarChartProps {
   data: MonthlyTrend[]
@@ -56,7 +57,7 @@ export default function MonthlyBarChart({ data }: MonthlyBarChartProps) {
             color: '#cdd6f4',
           }}
           formatter={(value: number, name: string) => [
-            `$${value.toLocaleString()}`,
+            `$${fmtAmt(value)}`,
             name === 'income' ? '收入' : '支出',
           ]}
           labelFormatter={(label) => `${label} 月`}

@@ -1,5 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import type { CategoryBreakdown } from '../../types'
+import { fmtAmt } from '../../types'
 
 const COLORS = [
   'var(--fn-chart-1)',
@@ -57,7 +58,7 @@ export default function ExpensePieChart({ data }: ExpensePieChartProps) {
               fontSize: 12,
               color: '#cdd6f4',
             }}
-            formatter={(value: number) => [`$${value.toLocaleString()}`, '金額']}
+            formatter={(value: number) => [`$${fmtAmt(value)}`, '金額']}
           />
         </PieChart>
       </ResponsiveContainer>

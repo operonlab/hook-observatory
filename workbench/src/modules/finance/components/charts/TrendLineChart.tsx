@@ -8,6 +8,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { MonthlyTrend } from '../../types'
+import { fmtAmt } from '../../types'
 
 interface TrendLineChartProps {
   data: MonthlyTrend[]
@@ -60,7 +61,7 @@ export default function TrendLineChart({ data }: TrendLineChartProps) {
               expense: '支出',
               net: '淨額',
             }
-            return [`$${value.toLocaleString()}`, labels[name] ?? name]
+            return [`$${fmtAmt(value)}`, labels[name] ?? name]
           }}
           labelFormatter={(label) => `${label} 月`}
         />

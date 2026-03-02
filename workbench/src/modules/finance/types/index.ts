@@ -290,3 +290,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   e_payment: '電子支付',
   bank_transfer: '銀行轉帳',
 }
+
+/** Format a numeric amount for display (max 0 fraction digits for TWD) */
+export const fmtAmt = (v: number | string): string =>
+  Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
