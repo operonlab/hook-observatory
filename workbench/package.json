@@ -19,6 +19,7 @@
     "lucide-react": "^0.575.0",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-grid-layout": "^2.2.2",
     "react-markdown": "^10.1.0",
     "react-router-dom": "catalog:",
     "remark-gfm": "^4.0.1",
