@@ -1,7 +1,7 @@
-const CACHE_NAME = "workshop-v1";
-const APP_SHELL = ["/", "/manifest.json", "/icons/icon-192.svg"];
+const CACHE_NAME = "workshop-__CACHE_VERSION__";
+const APP_SHELL = ["/v2/manifest.json", "/v2/icons/icon-192.svg"];
 
-// Install: cache app shell
+// Install: cache app shell (excluding index.html to ensure fresh loads)
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
@@ -9,7 +9,7 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activate: cleanup old caches
+// Activate: cleanup ALL old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -21,15 +21,43 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for API, cache-first for static
+// Fetch strategy:
+//   - Auth / health              → network-only
+//   - API GET (cacheable list)   → stale-while-revalidate (memvault + intelflow reads)
+//   - API (other / mutations)    → network-only
+//   - Navigation (HTML)          → network-first (fallback to cache for offline)
+//   - Hashed assets (.js/.css)   → cache-first (immutable)
+//   - Other static               → stale-while-revalidate
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // Network-first for API requests
+  // Pass-through for proxied station apps (hook-observatory, etc.)
+  // These are separate apps with their own frontend; SW should not interfere.
+  if (url.pathname.startsWith("/v2/apps/")) return;
+
+  // Cache-first for Google Fonts (immutable once loaded)
   if (
-    url.pathname.startsWith("/auth") ||
-    url.pathname.startsWith("/api") ||
-    url.pathname.startsWith("/health")
+    url.hostname === "fonts.googleapis.com" ||
+    url.hostname === "fonts.gstatic.com"
+  ) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        });
+      }),
+    );
+    return;
+  }
+
+  // Network-only for auth, health, and mutation requests
+  if (
+    url.pathname.startsWith("/v2/auth") ||
+    url.pathname.startsWith("/v2/health")
   ) {
     event.respondWith(
       fetch(event.request).catch(
@@ -42,17 +70,103 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cache-first for static assets
+  // Stale-while-revalidate for cacheable API GET requests
+  const CACHEABLE_API_PREFIXES = [
+    "/v2/api/memvault/blocks",
+    "/v2/api/memvault/profile",
+    "/v2/api/memvault/kg/",
+    "/v2/api/memvault/skills",
+    "/v2/api/memvault/attitudes",
+    "/v2/api/intelflow/dashboard",
+    "/v2/api/intelflow/reports",
+    "/v2/api/intelflow/topics",
+    "/v2/api/intelflow/timeline",
+  ];
+  if (
+    url.pathname.startsWith("/v2/api") &&
+    event.request.method === "GET" &&
+    CACHEABLE_API_PREFIXES.some((p) => url.pathname.startsWith(p))
+  ) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.match(event.request).then((cached) => {
+          const fetchPromise = fetch(event.request)
+            .then((response) => {
+              if (response.ok) {
+                cache.put(event.request, response.clone());
+              }
+              return response;
+            })
+            .catch(
+              () => cached || new Response(JSON.stringify({ error: "offline" }), {
+                status: 503,
+                headers: { "Content-Type": "application/json" },
+              }),
+            );
+          return cached || fetchPromise;
+        }),
+      ),
+    );
+    return;
+  }
+
+  // Network-only for other API requests (POST/PATCH/DELETE, uncached endpoints)
+  if (url.pathname.startsWith("/v2/api")) {
+    event.respondWith(
+      fetch(event.request).catch(
+        () => new Response(JSON.stringify({ error: "offline" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    return;
+  }
+
+  // Network-first for navigation requests (HTML pages)
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+    return;
+  }
+
+  // Cache-first for content-hashed assets (filename contains 8+ char hash)
+  const isHashedAsset = /\.[a-f0-9]{8,}\.(js|css|woff2?|png|svg|jpg|webp)(\?|$)/.test(url.pathname);
+  if (isHashedAsset) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((response) => {
+          if (response.ok && url.origin === self.location.origin) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        });
+      }),
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for other static assets
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((response) => {
-        // Only cache successful same-origin responses
+      const fetchPromise = fetch(event.request).then((response) => {
         if (response.ok && url.origin === self.location.origin) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
       });
+      return cached || fetchPromise;
     }),
   );
 });

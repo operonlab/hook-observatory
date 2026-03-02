@@ -1,45 +1,23 @@
-import { useEffect, useState } from "react";
+import { useSWR } from "../hooks/useSWR.ts";
 import { api } from "../api/client.ts";
-import type { SummaryStats, EventTypeStats, ToolStats, SessionStats, TimelineBucket, HealthResponse } from "../api/client.ts";
 import StatsOverview from "../components/StatsOverview.tsx";
 import EventTypeChart from "../components/EventTypeChart.tsx";
 import TimelineChart from "../components/TimelineChart.tsx";
 import ToolUsageChart from "../components/ToolUsageChart.tsx";
 import SessionList from "../components/SessionList.tsx";
 
+const REFRESH = 10_000;
+
 export default function Dashboard() {
-  const [summary, setSummary] = useState<SummaryStats | null>(null);
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [byEvent, setByEvent] = useState<EventTypeStats[]>([]);
-  const [byTool, setByTool] = useState<ToolStats[]>([]);
-  const [sessions, setSessions] = useState<SessionStats[]>([]);
-  const [timeline, setTimeline] = useState<TimelineBucket[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const { data: summary, error: e1, refresh: r1 } = useSWR("summary", api.summary, { refreshInterval: REFRESH });
+  const { data: health, error: e2, refresh: r2 } = useSWR("health", api.health, { refreshInterval: REFRESH });
+  const { data: byEvent, error: e3, refresh: r3 } = useSWR("byEvent", api.byEvent, { refreshInterval: REFRESH, fallback: [] });
+  const { data: byTool, error: e4, refresh: r4 } = useSWR("byTool", () => api.byTool(), { refreshInterval: REFRESH, fallback: [] });
+  const { data: sessions, error: e5, refresh: r5 } = useSWR("sessions", () => api.bySession(), { refreshInterval: REFRESH, fallback: [] });
+  const { data: timeline, error: e6, refresh: r6 } = useSWR("timeline", () => api.timeline(), { refreshInterval: REFRESH, fallback: [] });
 
-  const fetchAll = () => {
-    Promise.all([
-      api.summary().catch(() => null),
-      api.health().catch(() => null),
-      api.byEvent().catch(() => []),
-      api.byTool().catch(() => []),
-      api.bySession().catch(() => []),
-      api.timeline().catch(() => []),
-    ]).then(([sum, hp, evt, tool, sess, tl]) => {
-      setSummary(sum);
-      setHealth(hp);
-      setByEvent(evt as EventTypeStats[]);
-      setByTool(tool as ToolStats[]);
-      setSessions(sess as SessionStats[]);
-      setTimeline(tl as TimelineBucket[]);
-      setError(null);
-    }).catch((e) => setError(e.message));
-  };
-
-  useEffect(() => {
-    fetchAll();
-    const timer = setInterval(fetchAll, 10_000); // Auto-refresh every 10s
-    return () => clearInterval(timer);
-  }, []);
+  const error = e1 || e2 || e3 || e4 || e5 || e6;
+  const refreshAll = () => { r1(); r2(); r3(); r4(); r5(); r6(); };
 
   return (
     <div className="space-y-6">
@@ -47,7 +25,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-medium text-white/80">Dashboard</h1>
         <button
-          onClick={fetchAll}
+          onClick={refreshAll}
           className="text-[11px] text-white/25 hover:text-white/50 transition-colors"
         >
           重新整理
@@ -65,14 +43,14 @@ export default function Dashboard() {
 
       {/* Charts row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <EventTypeChart data={byEvent} />
-        <TimelineChart data={timeline} />
+        <EventTypeChart data={byEvent ?? []} />
+        <TimelineChart data={timeline ?? []} />
       </div>
 
       {/* Second row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ToolUsageChart data={byTool} />
-        <SessionList data={sessions} />
+        <ToolUsageChart data={byTool ?? []} />
+        <SessionList data={sessions ?? []} />
       </div>
     </div>
   );

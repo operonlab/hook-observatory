@@ -1,4 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import ChartTooltip from "./ChartTooltip.tsx";
 import type { TimelineBucket } from "../api/client.ts";
 
 interface Props {
@@ -54,10 +55,7 @@ export default function TimelineChart({ data }: Props) {
             tickLine={false}
             width={40}
           />
-          <Tooltip
-            contentStyle={{ background: "#1a1b2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, fontSize: 12 }}
-            labelStyle={{ color: "rgba(255,255,255,0.7)" }}
-          />
+          <Tooltip content={<ChartTooltip />} />
           <Area
             type="monotone"
             dataKey="count"
