@@ -667,7 +667,7 @@ def collect_all(config: dict, *, disk: bool = True, hardware: bool = True) -> di
     return result
 
 
-def collect_top_processes(top_n: int = 8) -> list[dict]:
+def collect_top_processes(top_n: int = 3) -> list[dict]:
     """Get top processes by CPU + memory usage."""
     # ps sorted by CPU, grab top entries
     out = run(
@@ -706,6 +706,208 @@ def collect_top_processes(top_n: int = 8) -> list[dict]:
         p["mem_pct"] = round(p["mem_pct"], 1)
         p["mem_mb"] = round(p["mem_mb"], 1)
     return procs[:top_n]
+
+
+def collect_services() -> list[dict]:
+    """Enumerate launchd services from ~/Library/LaunchAgents/."""
+    import plistlib
+
+    agents_dir = Path.home() / "Library" / "LaunchAgents"
+    if not agents_dir.is_dir():
+        return []
+
+    # Get running services from launchctl
+    launchctl_out = run("launchctl list 2>/dev/null")
+    running: dict[str, dict] = {}
+    for line in launchctl_out.splitlines()[1:]:  # skip header
+        parts = line.split("\t")
+        if len(parts) >= 3:
+            pid_str, status_str, label = parts[0], parts[1], parts[2]
+            running[label] = {
+                "pid": int(pid_str) if pid_str != "-" else None,
+                "exit_status": int(status_str) if status_str.lstrip("-").isdigit() else 0,
+            }
+
+    services = []
+    for plist_path in sorted(agents_dir.glob("*.plist")):
+        try:
+            with open(plist_path, "rb") as f:
+                plist = plistlib.load(f)
+        except Exception:
+            continue
+
+        label = plist.get("Label", plist_path.stem)
+        # Determine category
+        if "pulso" in label:
+            category = "pulso"
+        elif "joneshong" in label:
+            category = "jonathan"
+        elif "workshop" in label:
+            category = "workshop"
+        elif "homebrew" in label or "nginx" in label:
+            category = "infra"
+        else:
+            category = "third-party"
+
+        # Determine type + schedule
+        has_keepalive = bool(plist.get("KeepAlive"))
+        start_interval = plist.get("StartInterval")
+        start_cal = plist.get("StartCalendarInterval")
+
+        if start_interval:
+            svc_type = "periodic"
+            if start_interval < 60:
+                schedule = f"每 {start_interval} 秒"
+            elif start_interval < 3600:
+                schedule = f"每 {start_interval // 60} 分鐘"
+            elif start_interval < 86400:
+                schedule = f"每 {start_interval // 3600} 小時"
+            else:
+                schedule = f"每 {start_interval // 86400} 天"
+        elif start_cal:
+            svc_type = "periodic"
+            cal = start_cal if isinstance(start_cal, dict) else (start_cal[0] if isinstance(start_cal, list) and start_cal else {})
+            parts_cal = []
+            if "Weekday" in cal:
+                days = ["日", "一", "二", "三", "四", "五", "六"]
+                parts_cal.append(f"週{days[cal['Weekday'] % 7]}")
+            if "Hour" in cal:
+                parts_cal.append(f"{cal['Hour']:02d}:{cal.get('Minute', 0):02d}")
+            schedule = " ".join(parts_cal) if parts_cal else "排程"
+        elif has_keepalive or plist.get("RunAtLoad"):
+            svc_type = "service"
+            schedule = "常駐"
+        else:
+            svc_type = "oneshot"
+            schedule = "手動"
+
+        # Determine status
+        run_info = running.get(label, {})
+        pid = run_info.get("pid")
+        is_disabled = plist_path.name.endswith(".disabled")
+
+        if is_disabled:
+            status = "disabled"
+        elif pid is not None:
+            status = "running"
+        elif label in running:
+            exit_s = run_info.get("exit_status", 0)
+            status = "idle" if exit_s == 0 else f"error({exit_s})"
+        else:
+            status = "unloaded"
+
+        # Short name
+        name = label.replace("com.joneshong.", "").replace("com.pulso.", "").replace("com.workshop.", "").replace("homebrew.mxcl.", "")
+
+        services.append({
+            "label": label,
+            "name": name,
+            "category": category,
+            "type": svc_type,
+            "schedule": schedule,
+            "status": status,
+            "pid": pid,
+        })
+
+    # Also add disabled plists
+    for plist_path in sorted(agents_dir.glob("*.plist.disabled")):
+        try:
+            with open(plist_path, "rb") as f:
+                plist = plistlib.load(f)
+        except Exception:
+            continue
+
+        label = plist.get("Label", plist_path.stem.replace(".plist", ""))
+        # Skip if already processed
+        if any(s["label"] == label for s in services):
+            continue
+
+        if "pulso" in label:
+            category = "pulso"
+        elif "joneshong" in label:
+            category = "jonathan"
+        elif "workshop" in label:
+            category = "workshop"
+        else:
+            category = "third-party"
+
+        name = label.replace("com.joneshong.", "").replace("com.pulso.", "").replace("com.workshop.", "").replace("homebrew.mxcl.", "")
+        services.append({
+            "label": label,
+            "name": name,
+            "category": category,
+            "type": "service",
+            "schedule": "—",
+            "status": "disabled",
+            "pid": None,
+        })
+
+    # Sort by category then name
+    cat_order = {"workshop": 0, "jonathan": 1, "pulso": 2, "infra": 3, "third-party": 4}
+    services.sort(key=lambda s: (cat_order.get(s["category"], 9), s["name"]))
+    return services
+
+
+def collect_guardian_log(max_entries: int = 50) -> list[dict]:
+    """Parse memory-guardian log into structured entries."""
+    log_path = Path.home() / ".tmux" / "logs" / "memory-guardian.log"
+    if not log_path.exists():
+        return []
+
+    entries = []
+    current_entry = None
+
+    for line in log_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line == "---":
+            if current_entry:
+                entries.append(current_entry)
+                current_entry = None
+            continue
+
+        # New pressure event: [02/21 17:00:32] PRESSURE: level=35 ...
+        m = re.match(r"\[(\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})\]\s+(PRESSURE|DONE):\s+(.*)", line)
+        if m:
+            ts_str, event_type, detail = m.group(1), m.group(2), m.group(3)
+            if event_type == "PRESSURE":
+                level_m = re.search(r"level=(\d+)", detail)
+                level_val = int(level_m.group(1)) if level_m else 0
+                if level_val < 15:
+                    severity = "KILL"
+                elif level_val < 40:
+                    severity = "WARN"
+                else:
+                    severity = "SWEEP"
+                current_entry = {
+                    "timestamp": ts_str,
+                    "level": severity,
+                    "pressure_level": level_val,
+                    "kills": [],
+                    "total_killed": 0,
+                    "freed_mb": 0,
+                }
+            elif event_type == "DONE" and current_entry:
+                total_m = re.search(r"total_killed=(\d+)", detail)
+                freed_m = re.search(r"freed≈(\d+)MB", detail)
+                current_entry["total_killed"] = int(total_m.group(1)) if total_m else 0
+                current_entry["freed_mb"] = int(freed_m.group(1)) if freed_m else 0
+            continue
+
+        # Kill line: KILL Chrome 分頁 PID 989 (302MB)
+        kill_m = re.match(r"KILL\s+(.+?)\s+PID\s+(\d+)\s+\((\d+)MB\)", line)
+        if kill_m and current_entry:
+            current_entry["kills"].append({
+                "process": kill_m.group(1),
+                "pid": int(kill_m.group(2)),
+                "mem_mb": int(kill_m.group(3)),
+            })
+
+    if current_entry:
+        entries.append(current_entry)
+
+    # Return most recent first
+    entries.reverse()
+    return entries[:max_entries]
 
 
 def main() -> None:

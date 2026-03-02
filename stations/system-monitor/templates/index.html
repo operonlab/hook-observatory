@@ -29,124 +29,190 @@
     </div>
   </header>
 
-  <div class="container">
+  <!-- ─── Tab Bar ─── -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="overview">總覽</button>
+    <button class="tab-btn" data-tab="services">服務</button>
+    <button class="tab-btn" data-tab="guardian">Guardian</button>
+  </nav>
 
-    <!-- ─── Row 1: Gauge Cards ─── -->
-    <div class="gauge-grid">
+  <!-- ═══ Tab: 總覽 ═══ -->
+  <div class="tab-panel active" id="panel-overview">
+    <div class="container">
 
-      <!-- CPU -->
-      <div class="card">
-        <div class="card-title">
-          <span>CPU</span>
-          <span id="cpu-pressure-badge"></span>
-        </div>
-        <div class="gauge-container">
-          <div class="gauge-ring">
-            <svg viewBox="0 0 36 36">
-              <circle class="track" cx="18" cy="18" r="15.9"/>
-              <circle class="fill" id="cpu-gauge" cx="18" cy="18" r="15.9"
-                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
-            </svg>
-            <div class="gauge-value" id="cpu-pct">—</div>
+      <!-- Row 1: Gauge Cards -->
+      <div class="gauge-grid">
+
+        <!-- CPU -->
+        <div class="card">
+          <div class="card-title">
+            <span>CPU</span>
+            <span id="cpu-pressure-badge"></span>
           </div>
-          <div class="gauge-details" id="cpu-details"></div>
+          <div class="gauge-container">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="track" cx="18" cy="18" r="15.9"/>
+                <circle class="fill" id="cpu-gauge" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+              </svg>
+              <div class="gauge-value" id="cpu-pct">—</div>
+            </div>
+            <div class="gauge-details" id="cpu-details"></div>
+          </div>
+        </div>
+
+        <!-- Memory -->
+        <div class="card">
+          <div class="card-title">
+            <span>記憶體</span>
+            <span id="mem-pressure-badge"></span>
+          </div>
+          <div class="gauge-container">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="track" cx="18" cy="18" r="15.9"/>
+                <circle class="fill" id="mem-gauge" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+              </svg>
+              <div class="gauge-value" id="mem-pct">—</div>
+            </div>
+            <div class="gauge-details" id="mem-details"></div>
+          </div>
+        </div>
+
+        <!-- Disk -->
+        <div class="card">
+          <div class="card-title">
+            <span>磁碟</span>
+            <span id="disk-pressure-badge"></span>
+          </div>
+          <div class="gauge-container">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="track" cx="18" cy="18" r="15.9"/>
+                <circle class="fill" id="disk-gauge" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+              </svg>
+              <div class="gauge-value" id="disk-pct">—</div>
+            </div>
+            <div class="gauge-details" id="disk-details"></div>
+          </div>
+        </div>
+
+        <!-- Battery / Temp (hidden when unavailable) -->
+        <div class="card" id="batt-card" style="display:none">
+          <div class="card-title">
+            <span>電池 / 溫度</span>
+          </div>
+          <div class="gauge-container">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="track" cx="18" cy="18" r="15.9"/>
+                <circle class="fill" id="batt-gauge" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+              </svg>
+              <div class="gauge-value" id="batt-pct">—</div>
+            </div>
+            <div class="gauge-details" id="batt-details"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Row 2: History Chart -->
+      <div class="card full-card">
+        <div class="card-title">
+          <span>歷史（最近 30 筆）</span>
+          <span class="spinner" id="chart-spinner" style="display:none"></span>
+        </div>
+        <div class="chart-container">
+          <canvas id="history-chart"></canvas>
         </div>
       </div>
 
-      <!-- Memory -->
-      <div class="card">
-        <div class="card-title">
-          <span>記憶體</span>
-          <span id="mem-pressure-badge"></span>
-        </div>
-        <div class="gauge-container">
-          <div class="gauge-ring">
-            <svg viewBox="0 0 36 36">
-              <circle class="track" cx="18" cy="18" r="15.9"/>
-              <circle class="fill" id="mem-gauge" cx="18" cy="18" r="15.9"
-                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
-            </svg>
-            <div class="gauge-value" id="mem-pct">—</div>
+      <!-- Row 3: Top Processes + Alerts -->
+      <div class="two-col">
+        <div class="card" id="top-procs-card">
+          <div class="card-title">最近執行</div>
+          <div class="activity-list" id="top-procs-list">
+            <div class="empty">載入中…</div>
           </div>
-          <div class="gauge-details" id="mem-details"></div>
         </div>
-      </div>
 
-      <!-- Disk -->
-      <div class="card">
-        <div class="card-title">
-          <span>磁碟</span>
-          <span id="disk-pressure-badge"></span>
-        </div>
-        <div class="gauge-container">
-          <div class="gauge-ring">
-            <svg viewBox="0 0 36 36">
-              <circle class="track" cx="18" cy="18" r="15.9"/>
-              <circle class="fill" id="disk-gauge" cx="18" cy="18" r="15.9"
-                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
-            </svg>
-            <div class="gauge-value" id="disk-pct">—</div>
+        <div class="card">
+          <div class="card-title">警報</div>
+          <div class="alert-list" id="alert-list">
+            <div class="empty">載入中…</div>
           </div>
-          <div class="gauge-details" id="disk-details"></div>
-        </div>
-      </div>
-
-      <!-- Battery / Temp (hidden when unavailable) -->
-      <div class="card" id="batt-card" style="display:none">
-        <div class="card-title">
-          <span>電池 / 溫度</span>
-        </div>
-        <div class="gauge-container">
-          <div class="gauge-ring">
-            <svg viewBox="0 0 36 36">
-              <circle class="track" cx="18" cy="18" r="15.9"/>
-              <circle class="fill" id="batt-gauge" cx="18" cy="18" r="15.9"
-                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
-            </svg>
-            <div class="gauge-value" id="batt-pct">—</div>
-          </div>
-          <div class="gauge-details" id="batt-details"></div>
         </div>
       </div>
 
     </div>
+  </div>
 
-    <!-- ─── Row 2: History Chart ─── -->
-    <div class="card full-card">
-      <div class="card-title">
-        <span>歷史（最近 30 筆）</span>
-        <span class="spinner" id="chart-spinner" style="display:none"></span>
-      </div>
-      <div class="chart-container">
-        <canvas id="history-chart"></canvas>
-      </div>
-    </div>
-
-    <!-- ─── Row 3: Top Processes ─── -->
-    <div class="card full-card" id="top-procs-card">
-      <div class="card-title">最近執行</div>
-      <div class="activity-list" id="top-procs-list">
-        <div class="empty">載入中…</div>
-      </div>
-    </div>
-
-    <!-- ─── Row 4+5: Alerts + Reports ─── -->
-    <div class="two-col">
+  <!-- ═══ Tab: 服務 ═══ -->
+  <div class="tab-panel" id="panel-services">
+    <div class="container">
       <div class="card">
-        <div class="card-title">警報</div>
-        <div class="alert-list" id="alert-list">
-          <div class="empty">載入中…</div>
+        <div class="card-title">
+          <span>服務管理</span>
+          <span class="spinner" id="svc-spinner" style="display:none"></span>
+        </div>
+        <div class="svc-filter" id="svc-filter">
+          <button class="filter-btn active" data-cat="all">全部</button>
+          <button class="filter-btn" data-cat="workshop">workshop</button>
+          <button class="filter-btn" data-cat="jonathan">jonathan</button>
+          <button class="filter-btn" data-cat="pulso">pulso</button>
+          <button class="filter-btn" data-cat="infra">infra</button>
+          <button class="filter-btn" data-cat="third-party">third-party</button>
+        </div>
+        <div class="svc-table-wrap">
+          <table class="svc-table" id="svc-table">
+            <thead>
+              <tr>
+                <th class="col-name">名稱</th>
+                <th class="col-type">類型</th>
+                <th class="col-schedule">排程</th>
+                <th class="col-status">狀態</th>
+              </tr>
+            </thead>
+            <tbody id="svc-tbody">
+              <tr><td colspan="4" class="empty">載入中…</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
+    </div>
+  </div>
 
+  <!-- ═══ Tab: Guardian ═══ -->
+  <div class="tab-panel" id="panel-guardian">
+    <div class="container">
       <div class="card">
-        <div class="card-title">報告</div>
-        <div class="report-list" id="report-list">
-          <div class="empty">載入中…</div>
+        <div class="card-title">
+          <span>Memory Guardian 日誌</span>
+          <span class="spinner" id="guardian-spinner" style="display:none"></span>
+        </div>
+        <div class="guardian-table-wrap">
+          <table class="svc-table" id="guardian-table">
+            <thead>
+              <tr>
+                <th class="col-time">時間</th>
+                <th class="col-level">等級</th>
+                <th class="col-pressure">壓力值</th>
+                <th class="col-killed">終止數</th>
+                <th class="col-freed">釋放</th>
+                <th class="col-detail">詳情</th>
+              </tr>
+            </thead>
+            <tbody id="guardian-tbody">
+              <tr><td colspan="6" class="empty">載入中…</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
-
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
