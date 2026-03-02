@@ -708,13 +708,146 @@ def collect_top_processes(top_n: int = 3) -> list[dict]:
     return procs[:top_n]
 
 
+def _load_registry() -> dict[str, dict]:
+    """Load scheduler registry.json and index by label."""
+    registry_path = Path.home() / "workshop" / "outputs" / "scheduler" / "registry.json"
+    if not registry_path.exists():
+        return {}
+    try:
+        entries = json.loads(registry_path.read_text())
+        return {e["label"]: e for e in entries if "label" in e}
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
+def _parse_launcher_services() -> list[dict]:
+    """Parse workshop-services.sh SERVICES and DOCKER_CONTAINERS arrays."""
+    launcher_path = Path.home() / "workshop" / "scripts" / "workshop-services.sh"
+    if not launcher_path.exists():
+        return []
+
+    content = launcher_path.read_text()
+    results = []
+    log_base = "/opt/homebrew/var/log/workshop"
+    pid_dir = "/opt/homebrew/var/run/workshop"
+
+    # Parse SERVICES array
+    in_services = False
+    in_docker = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("SERVICES=("):
+            in_services = True
+            continue
+        if stripped.startswith("DOCKER_CONTAINERS=("):
+            in_docker = True
+            continue
+        if stripped == ")":
+            in_services = False
+            in_docker = False
+            continue
+
+        if in_services and stripped.startswith('"') and "|" in stripped:
+            raw = stripped.strip('"').strip()
+            if raw.startswith("#"):
+                continue
+            parts = raw.split("|")
+            if len(parts) >= 6:
+                name, svc_type, cmd, port, health, workdir = parts[:6]
+                # Check PID file for running status
+                pid = None
+                pidfile = Path(pid_dir) / f"{name}.pid"
+                if pidfile.exists():
+                    try:
+                        candidate = int(pidfile.read_text().strip())
+                        check = subprocess.run(
+                            ["kill", "-0", str(candidate)],
+                            capture_output=True, timeout=2,
+                        )
+                        if check.returncode == 0:
+                            pid = candidate
+                    except (ValueError, subprocess.TimeoutExpired):
+                        pass
+                results.append({
+                    "name": name,
+                    "source": "launcher",
+                    "category": "workshop",
+                    "type": "service",
+                    "schedule": "常駐",
+                    "status": "running" if pid else "stopped",
+                    "pid": pid,
+                    "port": int(port) if port.isdigit() else None,
+                    "command": cmd.split("/")[-1] if "/" in cmd else cmd,
+                    "command_full": cmd,
+                    "log_path": f"{log_base}/{name}/",
+                    "description": f"Workshop 服務 ({svc_type}, port {port})",
+                })
+
+        if in_docker and stripped.startswith('"') and "|" in stripped:
+            raw = stripped.strip('"').strip()
+            if raw.startswith("#"):
+                continue
+            parts = raw.split("|")
+            if len(parts) >= 3:
+                name, port = parts[0], parts[1]
+                # Check Docker container status
+                state = run(
+                    f"docker inspect --format '{{{{.State.Status}}}}' {name} 2>/dev/null",
+                    timeout=5,
+                )
+                pid = None
+                if state == "running":
+                    pid_str = run(
+                        f"docker inspect --format '{{{{.State.Pid}}}}' {name} 2>/dev/null",
+                        timeout=5,
+                    )
+                    if pid_str.isdigit():
+                        pid = int(pid_str)
+                results.append({
+                    "name": name.replace("ws-infra-", "").replace("-1", ""),
+                    "label": f"docker.{name}",
+                    "source": "docker",
+                    "category": "infra",
+                    "type": "container",
+                    "schedule": "常駐",
+                    "status": state if state else "unknown",
+                    "pid": pid,
+                    "port": int(port) if port.isdigit() else None,
+                    "command": f"docker:{name}",
+                    "command_full": f"docker start {name}",
+                    "log_path": None,
+                    "description": f"Docker 容器 (port {port})",
+                })
+
+    return results
+
+
+def _short_command(plist: dict) -> str:
+    """Extract a short display command from plist ProgramArguments or Program."""
+    args = plist.get("ProgramArguments", [])
+    if args:
+        # Show last path component of first arg + remaining args (truncated)
+        base = args[0].rsplit("/", 1)[-1]
+        rest = " ".join(args[1:])
+        full = f"{base} {rest}".strip()
+        return full[:80]
+    prog = plist.get("Program", "")
+    if prog:
+        return prog.rsplit("/", 1)[-1]
+    return "—"
+
+
+def _plist_log_path(plist: dict) -> str | None:
+    """Extract log path from plist StandardOutPath or StandardErrorPath."""
+    return plist.get("StandardOutPath") or plist.get("StandardErrorPath")
+
+
 def collect_services() -> list[dict]:
-    """Enumerate launchd services from ~/Library/LaunchAgents/."""
+    """Unified service collector: cross-references plist, registry, and launcher."""
     import plistlib
 
     agents_dir = Path.home() / "Library" / "LaunchAgents"
-    if not agents_dir.is_dir():
-        return []
+    registry = _load_registry()
 
     # Get running services from launchctl
     launchctl_out = run("launchctl list 2>/dev/null")
@@ -729,15 +862,25 @@ def collect_services() -> list[dict]:
             }
 
     services = []
-    for plist_path in sorted(agents_dir.glob("*.plist")):
+    seen_labels: set[str] = set()
+
+    # --- Source 1: plist files ---
+    all_plists = sorted(agents_dir.glob("*.plist")) if agents_dir.is_dir() else []
+    all_plists += sorted(agents_dir.glob("*.plist.disabled")) if agents_dir.is_dir() else []
+
+    for plist_path in all_plists:
         try:
             with open(plist_path, "rb") as f:
                 plist = plistlib.load(f)
         except Exception:
             continue
 
-        label = plist.get("Label", plist_path.stem)
-        # Determine category
+        label = plist.get("Label", plist_path.stem.replace(".plist", ""))
+        if label in seen_labels:
+            continue
+        seen_labels.add(label)
+
+        # Category
         if "pulso" in label:
             category = "pulso"
         elif "joneshong" in label:
@@ -749,7 +892,7 @@ def collect_services() -> list[dict]:
         else:
             category = "third-party"
 
-        # Determine type + schedule
+        # Type + schedule
         has_keepalive = bool(plist.get("KeepAlive"))
         start_interval = plist.get("StartInterval")
         start_cal = plist.get("StartCalendarInterval")
@@ -781,10 +924,10 @@ def collect_services() -> list[dict]:
             svc_type = "oneshot"
             schedule = "手動"
 
-        # Determine status
+        # Status
+        is_disabled = plist_path.name.endswith(".disabled")
         run_info = running.get(label, {})
         pid = run_info.get("pid")
-        is_disabled = plist_path.name.endswith(".disabled")
 
         if is_disabled:
             status = "disabled"
@@ -796,7 +939,12 @@ def collect_services() -> list[dict]:
         else:
             status = "unloaded"
 
-        # Short name
+        # Enrich from registry
+        reg = registry.get(label, {})
+        description = reg.get("description", "")
+        log_path = _plist_log_path(plist)
+        command = _short_command(plist)
+
         name = label.replace("com.joneshong.", "").replace("com.pulso.", "").replace("com.workshop.", "").replace("homebrew.mxcl.", "")
 
         services.append({
@@ -807,45 +955,93 @@ def collect_services() -> list[dict]:
             "schedule": schedule,
             "status": status,
             "pid": pid,
+            "source": "plist",
+            "description": description,
+            "command": command,
+            "log_path": log_path,
+            "plist_path": str(plist_path),
         })
 
-    # Also add disabled plists
-    for plist_path in sorted(agents_dir.glob("*.plist.disabled")):
-        try:
-            with open(plist_path, "rb") as f:
-                plist = plistlib.load(f)
-        except Exception:
+    # --- Source 2: launcher services (workshop-services.sh) ---
+    launcher_svcs = _parse_launcher_services()
+    for svc in launcher_svcs:
+        # Skip if already covered by a plist with the workshop.launcher label
+        label = svc.get("label", f"launcher.{svc['name']}")
+        if label in seen_labels:
             continue
+        seen_labels.add(label)
+        svc.setdefault("label", label)
+        svc.setdefault("plist_path", None)
+        services.append(svc)
 
-        label = plist.get("Label", plist_path.stem.replace(".plist", ""))
-        # Skip if already processed
-        if any(s["label"] == label for s in services):
-            continue
-
-        if "pulso" in label:
-            category = "pulso"
-        elif "joneshong" in label:
-            category = "jonathan"
-        elif "workshop" in label:
-            category = "workshop"
-        else:
-            category = "third-party"
-
-        name = label.replace("com.joneshong.", "").replace("com.pulso.", "").replace("com.workshop.", "").replace("homebrew.mxcl.", "")
-        services.append({
-            "label": label,
-            "name": name,
-            "category": category,
-            "type": "service",
-            "schedule": "—",
-            "status": "disabled",
-            "pid": None,
-        })
-
-    # Sort by category then name
+    # Sort: workshop > jonathan > pulso > infra > third-party
     cat_order = {"workshop": 0, "jonathan": 1, "pulso": 2, "infra": 3, "third-party": 4}
     services.sort(key=lambda s: (cat_order.get(s["category"], 9), s["name"]))
     return services
+
+
+def get_service_logs(label: str, lines: int = 50) -> dict:
+    """Read recent log lines for a service by label."""
+    import plistlib
+
+    log_path = None
+
+    # Try plist StandardOutPath
+    agents_dir = Path.home() / "Library" / "LaunchAgents"
+    for ext in ("*.plist", "*.plist.disabled"):
+        for p in agents_dir.glob(ext):
+            try:
+                with open(p, "rb") as f:
+                    plist = plistlib.load(f)
+                if plist.get("Label") == label:
+                    log_path = plist.get("StandardOutPath") or plist.get("StandardErrorPath")
+                    break
+            except Exception:
+                continue
+
+    # Try launcher log dir
+    if not log_path:
+        registry = _load_registry()
+        reg = registry.get(label, {})
+        if reg.get("name"):
+            launcher_log = Path(f"/opt/homebrew/var/log/workshop/{reg['name']}")
+            if launcher_log.is_dir():
+                from datetime import date
+                today = date.today().isoformat()
+                today_log = launcher_log / f"{today}.log"
+                if today_log.exists():
+                    log_path = str(today_log)
+
+    # Try matching by name from launcher
+    if not log_path:
+        # Extract name from label
+        name = label.replace("launcher.", "").replace("docker.", "")
+        launcher_log_dir = Path(f"/opt/homebrew/var/log/workshop/{name}")
+        if launcher_log_dir.is_dir():
+            from datetime import date
+            today = date.today().isoformat()
+            today_log = launcher_log_dir / f"{today}.log"
+            if today_log.exists():
+                log_path = str(today_log)
+
+    if not log_path:
+        return {"label": label, "log_path": None, "lines": [], "error": "找不到日誌路徑"}
+
+    log_file = Path(log_path).expanduser()
+    if not log_file.exists():
+        return {"label": label, "log_path": str(log_path), "lines": [], "error": "日誌檔案不存在"}
+
+    try:
+        content = log_file.read_text(errors="replace")
+        all_lines = content.splitlines()
+        return {
+            "label": label,
+            "log_path": str(log_path),
+            "lines": all_lines[-lines:],
+            "total_lines": len(all_lines),
+        }
+    except OSError as e:
+        return {"label": label, "log_path": str(log_path), "lines": [], "error": str(e)}
 
 
 def collect_guardian_log(max_entries: int = 50) -> list[dict]:

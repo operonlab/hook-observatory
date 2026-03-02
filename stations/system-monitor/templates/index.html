@@ -157,28 +157,39 @@
       <div class="card">
         <div class="card-title">
           <span>服務管理</span>
+          <span class="svc-count" id="svc-count"></span>
           <span class="spinner" id="svc-spinner" style="display:none"></span>
         </div>
-        <div class="svc-filter" id="svc-filter">
-          <button class="filter-btn active" data-cat="all">全部</button>
-          <button class="filter-btn" data-cat="workshop">workshop</button>
-          <button class="filter-btn" data-cat="jonathan">jonathan</button>
-          <button class="filter-btn" data-cat="pulso">pulso</button>
-          <button class="filter-btn" data-cat="infra">infra</button>
-          <button class="filter-btn" data-cat="third-party">third-party</button>
+        <div class="svc-filter-row">
+          <div class="svc-filter" id="svc-filter">
+            <button class="filter-btn active" data-cat="all">全部</button>
+            <button class="filter-btn" data-cat="workshop">workshop</button>
+            <button class="filter-btn" data-cat="jonathan">jonathan</button>
+            <button class="filter-btn" data-cat="pulso">pulso</button>
+            <button class="filter-btn" data-cat="infra">infra</button>
+            <button class="filter-btn" data-cat="third-party">third-party</button>
+          </div>
+          <div class="svc-filter" id="svc-source-filter">
+            <button class="filter-btn active" data-src="all">全部來源</button>
+            <button class="filter-btn" data-src="plist">plist</button>
+            <button class="filter-btn" data-src="launcher">launcher</button>
+            <button class="filter-btn" data-src="docker">docker</button>
+          </div>
         </div>
         <div class="svc-table-wrap">
           <table class="svc-table" id="svc-table">
             <thead>
               <tr>
+                <th class="col-expand"></th>
                 <th class="col-name">名稱</th>
                 <th class="col-type">類型</th>
                 <th class="col-schedule">排程</th>
                 <th class="col-status">狀態</th>
+                <th class="col-actions">操作</th>
               </tr>
             </thead>
             <tbody id="svc-tbody">
-              <tr><td colspan="4" class="empty">載入中…</td></tr>
+              <tr><td colspan="6" class="empty">載入中…</td></tr>
             </tbody>
           </table>
         </div>
