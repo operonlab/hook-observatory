@@ -1,8 +1,27 @@
-export default function IntelflowPage() {
+import { Routes, Route } from "react-router-dom";
+import IntelflowLayout from "../components/IntelflowLayout";
+import Dashboard from "./Dashboard";
+import ReportList from "./ReportList";
+import ReportDetail from "./ReportDetail";
+import SemanticSearch from "./SemanticSearch";
+import SmartQA from "./SmartQA";
+import TopicsOverview from "./TopicsOverview";
+import TopicDetail from "./TopicDetail";
+import BriefingSettings from "./BriefingSettings";
+
+export default function IntelflowPages() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-[var(--text)]">情報研究</h1>
-      <p className="text-[var(--subtext0)] mt-2">Coming soon...</p>
-    </div>
+    <Routes>
+      <Route element={<IntelflowLayout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="reports" element={<ReportList />} />
+        <Route path="reports/:id" element={<ReportDetail />} />
+        <Route path="search" element={<SemanticSearch />} />
+        <Route path="qa" element={<SmartQA />} />
+        <Route path="topics" element={<TopicsOverview />} />
+        <Route path="topics/:id" element={<TopicDetail />} />
+        <Route path="briefings/settings" element={<BriefingSettings />} />
+      </Route>
+    </Routes>
   );
 }

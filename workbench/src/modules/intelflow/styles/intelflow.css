@@ -1,0 +1,111 @@
+/* Intelflow — Dark Luxury Editorial Theme
+   Scoped under .intelflow to avoid conflicts with global Catppuccin theme */
+
+.intelflow {
+  /* Backgrounds */
+  --if-bg: #0A0A0A;
+  --if-bg-elevated: #141414;
+  --if-bg-surface: #1A1A1A;
+  --if-border: #2A2A2A;
+
+  /* Brand accent */
+  --if-accent: #C9A962;
+  --if-accent-alpha: rgba(201, 169, 98, 0.25);
+
+  /* Text hierarchy */
+  --if-text: #FFFFFF;
+  --if-text-secondary: #B0B0B0;
+  --if-text-tertiary: #848484;
+  --if-text-muted: #6A6A6A;
+  --if-text-dim: #4A4A4A;
+  --if-text-on-accent: #0A0A0A;
+
+  /* AI answer surface */
+  --if-ai-bg: #0D1A0D;
+  --if-ai-border: #1A3A1A;
+
+  /* Semantic score colors */
+  --if-score-high: #4ADE80;
+  --if-score-high-bg: #1A2A1A;
+  --if-score-mid: #FACC15;
+  --if-score-mid-bg: #2A2A1A;
+  --if-score-low: #F87171;
+  --if-score-low-bg: #2A1A1A;
+
+  /* Typography */
+  --if-font-display: 'Cormorant Garamond', Georgia, serif;
+  --if-font-ui: 'Inter', system-ui, sans-serif;
+  --if-font-mono: 'JetBrains Mono', monospace;
+
+  /* Apply base styles */
+  background-color: var(--if-bg);
+  color: var(--if-text);
+  font-family: var(--if-font-ui);
+  min-height: 100%;
+}
+
+/* Zero border-radius across all intelflow elements */
+.intelflow *,
+.intelflow *::before,
+.intelflow *::after {
+  border-radius: 0 !important;
+}
+
+/* Scrollbar styling for intelflow */
+.intelflow ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.intelflow ::-webkit-scrollbar-track {
+  background: var(--if-bg);
+}
+
+.intelflow ::-webkit-scrollbar-thumb {
+  background: var(--if-border);
+}
+
+.intelflow ::-webkit-scrollbar-thumb:hover {
+  background: var(--if-text-tertiary);
+}
+
+/* ─── RWD: Mobile layout ─── */
+
+/* Prevent horizontal overflow at module root */
+.intelflow {
+  overflow-x: hidden;
+}
+
+/* Bottom tab bar safe area padding for iOS notch */
+.intelflow-bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Main content area — on mobile add padding-bottom to
+   account for the bottom tab bar height (~56px) so content
+   doesn't get clipped behind it */
+@media (max-width: 767px) {
+  .intelflow > main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Ensure pre/code blocks don't cause horizontal scroll on mobile */
+.intelflow pre {
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre;
+  word-break: normal;
+}
+
+/* Prose content improvements for mobile readability */
+.intelflow article p {
+  line-height: 1.75;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Tables: make all tables in intelflow scrollable on mobile */
+.intelflow table {
+  min-width: 320px;
+}
