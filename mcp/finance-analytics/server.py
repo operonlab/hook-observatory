@@ -346,7 +346,7 @@ async def handle_budget_set(args: dict) -> list[TextContent]:
     if "category_budgets" in args:
         body["category_budgets"] = args["category_budgets"]
 
-    result = await api_post("/budgets", body)
+    await api_post("/budgets", body)
 
     lines = [
         f"Budget set for {args['year_month']}.\n",

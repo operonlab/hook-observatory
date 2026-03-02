@@ -35,13 +35,11 @@ select = [
 ignore = [
     "S101",  # assert usage (OK in tests)
     "S104",  # bind to 0.0.0.0 (handled by Nginx)
-    "S105",  # hardcoded passwords (pydantic-settings defaults)
-    "S106",  # hardcoded passwords in function args (OAuth URLs)
-    "B008",  # Depends() in defaults (FastAPI convention)
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "core/migrations/**" = ["E501"]  # alembic auto-generated
+"mcp/**/server.py" = ["RUF001", "E501"]  # Chinese descriptions + long inputSchema lines
 
 [tool.ruff.format]
 quote-style = "double"
