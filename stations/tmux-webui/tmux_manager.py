@@ -126,6 +126,16 @@ async def kill_window(session: str, window: int) -> bool:
     return rc == 0
 
 
+async def resize_pane(target: str, cols: int, rows: int) -> bool:
+    """Resize a tmux pane to the given cols x rows."""
+    rc, _, stderr = await _run([
+        "tmux", "resize-pane", "-t", target, "-x", str(cols), "-y", str(rows),
+    ])
+    if rc != 0:
+        logger.warning("resize-pane failed for %s: %s", target, stderr.strip())
+    return rc == 0
+
+
 async def select_pane(session: str, direction: str) -> bool:
     """Select pane by direction: -L, -R, -U, -D."""
     flag_map = {"left": "-L", "right": "-R", "up": "-U", "down": "-D"}

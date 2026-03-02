@@ -204,35 +204,13 @@ sendBtn.addEventListener('click', () => { window.acClose?.(); window.sendInput()
 // ========================================================================
 
 function renderToolActions(toolKey) {
-  if (toolKey === S.currentTool) return;
+  // Tool actions disabled — slash command buttons not needed
   S.currentTool = toolKey;
   toolActionsEl.innerHTML = '';
-  if (!toolKey || !TOOL_PROFILES[toolKey]) {
-    updateSkillsVisibility(toolKey);
-    return;
-  }
-  const prof = TOOL_PROFILES[toolKey];
-  const lbl = document.createElement('span');
-  lbl.className = 'tool-label';
-  lbl.textContent = prof.name;
-  toolActionsEl.appendChild(lbl);
-  for (const a of prof.actions) {
-    const btn = document.createElement('button');
-    btn.className = 'tbtn';
-    btn.textContent = a.l;
-    btn.title = a.s;
-    btn.addEventListener('click', () => window.sendSkillOrAction(a.s));
-    toolActionsEl.appendChild(btn);
-  }
-  updateSkillsVisibility(toolKey);
 }
 
 function updateSkillsVisibility(toolKey) {
-  if (toolKey !== 'claude' && S.skillPaletteOpen) {
-    S.skillPaletteOpen = false;
-    skillPalette.style.display = 'none';
-  }
-  if (toolKey !== 'claude') skillPalette.style.display = 'none';
+  // Skill palette removed from DOM — no-op
 }
 
 function renderSkillPalette(filter) {
@@ -259,7 +237,7 @@ function renderSkillPalette(filter) {
   }
 }
 
-skillSearchEl.addEventListener('input', () => renderSkillPalette(skillSearchEl.value));
+if (skillSearchEl) skillSearchEl.addEventListener('input', () => renderSkillPalette(skillSearchEl.value));
 
 // ========================================================================
 // 8. Layout Engine
@@ -315,6 +293,7 @@ function applyLayout() {
 
   rebuildResizeHandles();
   updateMobilePaneTabs();
+  if (window._fitAllPanes) window._fitAllPanes();
 }
 
 // ── Resize handles (identical logic to V1) ──
@@ -769,7 +748,7 @@ window.tmuxWs = (function() {
     S.maximizedPane = '';
     S.currentTool = null;
     S.skillPaletteOpen = false;
-    skillPalette.style.display = 'none';
+    if (skillPalette) skillPalette.style.display = 'none';
     if (ws) { ws.close(); ws = null; }
     setStatus('', '');
     container.classList.remove('has-maximized');
@@ -830,11 +809,11 @@ document.querySelectorAll('.qbtn').forEach(btn => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && S.maximizedPane && document.activeElement !== inputEl) toggleMaximize(S.maximizedPane);
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k' && S.currentTool === 'claude') {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k' && S.currentTool === 'claude' && skillPalette) {
     e.preventDefault();
     S.skillPaletteOpen = !S.skillPaletteOpen;
     skillPalette.style.display = S.skillPaletteOpen ? '' : 'none';
-    if (S.skillPaletteOpen) { renderSkillPalette(); skillSearchEl.focus(); }
+    if (S.skillPaletteOpen) { renderSkillPalette(); if (skillSearchEl) skillSearchEl.focus(); }
   }
 });
 
@@ -847,7 +826,44 @@ resetLayoutBtn.addEventListener('click', () => { S.customWeights = null; applyLa
 window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayout !== 'auto') rebuildResizeHandles(); updateMobilePaneTabs(); });
 
 // ========================================================================
-// 17. Init
+// 17. Terminal Fit (sync WebUI size → tmux pane size)
+// ========================================================================
+
+(function() {
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-family:var(--font-mono);font-size:var(--font-size);line-height:1.5;';
+  probe.textContent = 'X';
+  document.body.appendChild(probe);
+  let charW = 0, lineH = 0;
+  function measureChar() {
+    const r = probe.getBoundingClientRect();
+    charW = r.width; lineH = r.height;
+  }
+  function fitPane(paneId) {
+    const pe = S.paneEls[paneId];
+    if (!pe || !charW || !lineH) return;
+    const cols = Math.floor(pe.terminal.clientWidth / charW);
+    const rows = Math.floor(pe.terminal.clientHeight / lineH);
+    if (cols > 0 && rows > 0 && window.tmuxWs.isConnected()) {
+      window.tmuxWs.send({ type: 'fit', pane: paneId, cols, rows });
+    }
+  }
+  function fitAllPanes() {
+    measureChar();
+    const panes = S.paneOrder.length ? S.paneOrder.filter(id => S.paneEls[id]) : Object.keys(S.paneEls);
+    for (const id of panes) {
+      const pe = S.paneEls[id];
+      if (pe && pe.box.style.display !== 'none' && !pe.box.classList.contains('dragging')) fitPane(id);
+    }
+  }
+  let fitTimer = null;
+  function debouncedFit() { clearTimeout(fitTimer); fitTimer = setTimeout(fitAllPanes, 300); }
+  window._fitAllPanes = debouncedFit;
+  window.addEventListener('resize', debouncedFit);
+})();
+
+// ========================================================================
+// 18. Init
 // ========================================================================
 
 loadLayoutPref();

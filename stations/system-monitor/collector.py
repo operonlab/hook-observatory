@@ -103,32 +103,40 @@ def classify_pressure(
 
 
 def collect_disk_fast(config: dict) -> dict:
-    """Fast disk metrics — APFS container level only (no file scanning)."""
+    """Fast disk metrics — df-based (accurate for actual usable disk space)."""
     thresholds = config.get("thresholds", {}).get(
         "disk_usage_pct", {"warning": 75, "critical": 85, "danger": 95}
     )
 
-    container_raw = run("diskutil apfs list 2>/dev/null", timeout=10)
     total_bytes = 0
     free_bytes = 0
 
-    for line in container_raw.splitlines():
-        if "Size (Capacity Ceiling)" in line:
-            m = re.search(r"(\d+)\s*B\b", line)
-            if m:
-                total_bytes = int(m.group(1))
-        elif "Capacity Not Allocated" in line:
-            m = re.search(r"(\d+)\s*B\b", line)
-            if m:
-                free_bytes = int(m.group(1))
+    # Primary: df on Data volume (most accurate on APFS)
+    df_out = run("df -k /System/Volumes/Data 2>/dev/null | tail -1")
+    parts = df_out.split()
+    if len(parts) >= 4:
+        total_bytes = int(parts[1]) * 1024
+        free_bytes = int(parts[3]) * 1024
 
-    # Fallback to df
+    # Fallback: APFS container (pick the largest one)
     if total_bytes == 0:
-        df_out = run("df -k / | tail -1")
-        parts = df_out.split()
-        if len(parts) >= 4:
-            total_bytes = int(parts[1]) * 1024
-            free_bytes = int(parts[3]) * 1024
+        container_raw = run("diskutil apfs list 2>/dev/null", timeout=10)
+        max_total = 0
+        cur_total = 0
+        cur_free = 0
+        for line in container_raw.splitlines():
+            if "Size (Capacity Ceiling)" in line:
+                m = re.search(r"(\d+)\s*B\b", line)
+                if m:
+                    cur_total = int(m.group(1))
+            elif "Capacity Not Allocated" in line:
+                m = re.search(r"(\d+)\s*B\b", line)
+                if m:
+                    cur_free = int(m.group(1))
+                    if cur_total > max_total:
+                        max_total = cur_total
+                        total_bytes = cur_total
+                        free_bytes = cur_free
 
     used_bytes = total_bytes - free_bytes
     usage_pct = round(used_bytes * 100 / total_bytes, 1) if total_bytes else 0
@@ -149,29 +157,35 @@ def collect_disk(config: dict) -> dict:
     )
     scan_cfg = config.get("disk_scan", {})
 
-    # -- APFS container level (accurate) --
-    container_raw = run("diskutil apfs list 2>/dev/null")
+    # -- Disk space (df-based, accurate on APFS) --
     total_bytes = 0
     free_bytes = 0
 
-    for line in container_raw.splitlines():
-        if "Size (Capacity Ceiling)" in line:
-            m = re.search(r"(\d+)\s*B\b", line)
-            if m:
-                total_bytes = int(m.group(1))
-        elif "Capacity Not Allocated" in line:
-            m = re.search(r"(\d+)\s*B\b", line)
-            if m:
-                free_bytes = int(m.group(1))
+    df_out = run("df -k /System/Volumes/Data 2>/dev/null | tail -1")
+    parts = df_out.split()
+    if len(parts) >= 4:
+        total_bytes = int(parts[1]) * 1024
+        free_bytes = int(parts[3]) * 1024
 
-    # Fallback to df
+    # Fallback: APFS container (pick the largest one)
     if total_bytes == 0:
-        df_out = run("df -k / | tail -1")
-        parts = df_out.split()
-        if len(parts) >= 4:
-            total_bytes = int(parts[1]) * 1024
-            avail_k = int(parts[3])
-            free_bytes = avail_k * 1024
+        container_raw = run("diskutil apfs list 2>/dev/null")
+        max_total = 0
+        cur_total = 0
+        cur_free = 0
+        for line in container_raw.splitlines():
+            if "Size (Capacity Ceiling)" in line:
+                m = re.search(r"(\d+)\s*B\b", line)
+                if m:
+                    cur_total = int(m.group(1))
+            elif "Capacity Not Allocated" in line:
+                m = re.search(r"(\d+)\s*B\b", line)
+                if m:
+                    cur_free = int(m.group(1))
+                    if cur_total > max_total:
+                        max_total = cur_total
+                        total_bytes = cur_total
+                        free_bytes = cur_free
 
     used_bytes = total_bytes - free_bytes
     total_gb = round(total_bytes / (1024**3), 1)
@@ -180,6 +194,7 @@ def collect_disk(config: dict) -> dict:
     usage_pct = round(used_bytes * 100 / total_bytes, 1) if total_bytes else 0
 
     # -- APFS volume distribution --
+    container_raw = run("diskutil apfs list 2>/dev/null")
     volumes = []
     vol_name = ""
     for line in container_raw.splitlines():
@@ -471,16 +486,14 @@ def _collect_memory(thresholds: dict) -> dict:
     wired_pages = get_pages("Pages wired down")
     compressed_pages = get_pages("Pages occupied by compressor")
 
-    # App memory ≈ active + wired + compressed
+    # App memory ≈ active + wired + compressed (matches Activity Monitor)
     app_bytes = (active_pages + wired_pages + compressed_pages) * page_size
-    used_bytes = (
-        (active_pages + inactive_pages + wired_pages + compressed_pages + speculative_pages)
-        * page_size
-    )
-    used_gb = round(used_bytes / (1024**3), 1)
     app_gb = round(app_bytes / (1024**3), 1)
+    # used_gb reflects app memory (what Activity Monitor shows as "Memory Used")
+    used_gb = app_gb
 
-    usage_pct = round(used_bytes * 100 / total_bytes, 1) if total_bytes else 0
+    # Percentage based on app memory, not including inactive/speculative cache
+    usage_pct = round(app_bytes * 100 / total_bytes, 1) if total_bytes else 0
 
     # memory_pressure utility
     pressure_out = run("memory_pressure 2>/dev/null | head -1")
