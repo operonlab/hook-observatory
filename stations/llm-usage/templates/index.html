@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1e1e2e">
+<title>LLM Usage Dashboard</title>
+<link rel="stylesheet" href="static/css/dashboard.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <h1>LLM Usage Dashboard</h1>
+      <span class="period" id="period"></span>
+    </div>
+    <div class="header-right">
+      <span class="updated" id="updated"></span>
+      <button class="btn" id="refresh-btn" title="Refresh">&#8635; Refresh</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="trends">Trends</button>
+    <button class="tab" data-tab="models">Models</button>
+  </nav>
+
+  <!-- Tab 1: Overview -->
+  <section class="tab-panel active" id="panel-overview">
+    <div class="card-row">
+      <div class="card">
+        <h3>Subscription</h3>
+        <div class="card-value" id="sub-total">—</div>
+        <div class="card-detail" id="sub-list"></div>
+      </div>
+      <div class="card">
+        <h3>API Spend</h3>
+        <div class="card-value" id="api-spend">—</div>
+        <div class="budget-bar-wrap">
+          <div class="budget-bar" id="budget-bar"></div>
+        </div>
+        <div class="card-detail" id="budget-detail"></div>
+      </div>
+      <div class="card">
+        <h3>Total</h3>
+        <div class="card-value" id="total-cost">—</div>
+        <div class="card-detail" id="total-split"></div>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="card wide">
+        <h3>Quota Status</h3>
+        <div class="quota-grid" id="quota-grid"></div>
+      </div>
+    </div>
+
+    <div class="card-row">
+      <div class="card wide">
+        <h3>Cache Efficiency</h3>
+        <div class="cache-grid" id="cache-grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab 2: Trends -->
+  <section class="tab-panel" id="panel-trends">
+    <div class="days-selector">
+      <button class="day-btn" data-days="7">7d</button>
+      <button class="day-btn" data-days="14">14d</button>
+      <button class="day-btn active" data-days="30">30d</button>
+      <button class="day-btn" data-days="90">90d</button>
+    </div>
+    <div class="trend-stats" id="trend-stats"></div>
+    <div class="card-row">
+      <div class="card chart-card">
+        <h3>Daily Cost</h3>
+        <canvas id="chart-daily"></canvas>
+      </div>
+      <div class="card chart-card">
+        <h3>Cumulative Cost</h3>
+        <canvas id="chart-cumulative"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab 3: Models -->
+  <section class="tab-panel" id="panel-models">
+    <div class="card-row">
+      <div class="card chart-card">
+        <h3>Cost by Model (Top 8)</h3>
+        <canvas id="chart-by-model"></canvas>
+      </div>
+      <div class="card chart-card">
+        <h3>Cost by Provider</h3>
+        <canvas id="chart-by-provider"></canvas>
+      </div>
+    </div>
+    <div class="card wide">
+      <h3>Model Details</h3>
+      <div class="table-wrap">
+        <table id="model-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Provider</th>
+              <th class="num">Requests</th>
+              <th class="num">Tokens In</th>
+              <th class="num">Tokens Out</th>
+              <th class="num sortable" data-sort="cost">Cost &#9660;</th>
+              <th class="num">Cache Hit %</th>
+            </tr>
+          </thead>
+          <tbody id="model-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="static/js/dashboard.js"></script>
+</body>
+</html>

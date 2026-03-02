@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Monitor</title>
+  <link rel="stylesheet" href="static/css/dashboard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ─── Header ─── -->
+  <header class="header">
+    <div class="header-left">
+      <h1>System Monitor</h1>
+      <span class="header-info" id="sys-info">Loading…</span>
+      <span id="pressure-badge"></span>
+    </div>
+    <div class="header-right">
+      <span id="last-updated">—</span>
+      <div class="toggle-wrap" id="auto-refresh-toggle" title="Auto-refresh every 30s">
+        <div class="toggle-track active" id="toggle-track">
+          <div class="toggle-thumb"></div>
+        </div>
+        <span>Auto</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- ─── Row 1: Gauge Cards ─── -->
+    <div class="gauge-grid">
+
+      <!-- CPU -->
+      <div class="card">
+        <div class="card-title">
+          <span>CPU</span>
+          <span id="cpu-pressure-badge"></span>
+        </div>
+        <div class="gauge-container">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 36 36">
+              <circle class="track" cx="18" cy="18" r="15.9"/>
+              <circle class="fill" id="cpu-gauge" cx="18" cy="18" r="15.9"
+                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+            </svg>
+            <div class="gauge-value" id="cpu-pct">—</div>
+          </div>
+          <div class="gauge-details" id="cpu-details"></div>
+        </div>
+      </div>
+
+      <!-- Memory -->
+      <div class="card">
+        <div class="card-title">
+          <span>Memory</span>
+          <span id="mem-pressure-badge"></span>
+        </div>
+        <div class="gauge-container">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 36 36">
+              <circle class="track" cx="18" cy="18" r="15.9"/>
+              <circle class="fill" id="mem-gauge" cx="18" cy="18" r="15.9"
+                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+            </svg>
+            <div class="gauge-value" id="mem-pct">—</div>
+          </div>
+          <div class="gauge-details" id="mem-details"></div>
+        </div>
+      </div>
+
+      <!-- Disk -->
+      <div class="card">
+        <div class="card-title">
+          <span>Disk</span>
+          <span id="disk-pressure-badge"></span>
+        </div>
+        <div class="gauge-container">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 36 36">
+              <circle class="track" cx="18" cy="18" r="15.9"/>
+              <circle class="fill" id="disk-gauge" cx="18" cy="18" r="15.9"
+                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+            </svg>
+            <div class="gauge-value" id="disk-pct">—</div>
+          </div>
+          <div class="gauge-details" id="disk-details"></div>
+        </div>
+      </div>
+
+      <!-- Battery / Temp -->
+      <div class="card">
+        <div class="card-title">
+          <span>Battery / Temp</span>
+        </div>
+        <div class="gauge-container">
+          <div class="gauge-ring">
+            <svg viewBox="0 0 36 36">
+              <circle class="track" cx="18" cy="18" r="15.9"/>
+              <circle class="fill" id="batt-gauge" cx="18" cy="18" r="15.9"
+                stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+            </svg>
+            <div class="gauge-value" id="batt-pct">—</div>
+          </div>
+          <div class="gauge-details" id="batt-details"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ─── Row 2: History Chart ─── -->
+    <div class="card full-card">
+      <div class="card-title">
+        <span>History (last 30 snapshots)</span>
+        <span class="spinner" id="chart-spinner" style="display:none"></span>
+      </div>
+      <div class="chart-container">
+        <canvas id="history-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ─── Row 3+4: Alerts + Reports ─── -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Alerts</div>
+        <div class="alert-list" id="alert-list">
+          <div class="empty">Loading…</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Reports</div>
+        <div class="report-list" id="report-list">
+          <div class="empty">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="static/js/dashboard.js"></script>
+</body>
+</html>

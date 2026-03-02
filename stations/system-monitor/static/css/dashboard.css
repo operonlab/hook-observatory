@@ -1,0 +1,391 @@
+/* Catppuccin Mocha Theme — System Monitor Dashboard */
+:root {
+  --base: #1e1e2e;
+  --mantle: #181825;
+  --crust: #11111b;
+  --text: #cdd6f4;
+  --subtext0: #a6adc8;
+  --subtext1: #bac2de;
+  --surface0: #313244;
+  --surface1: #45475a;
+  --surface2: #585b70;
+  --overlay0: #6c7086;
+  --green: #a6e3a1;
+  --yellow: #f9e2af;
+  --red: #f38ba8;
+  --maroon: #eba0ac;
+  --mauve: #cba6f7;
+  --blue: #89b4fa;
+  --teal: #94e2d5;
+  --peach: #fab387;
+  --lavender: #b4befe;
+  --flamingo: #f2cdcd;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--base);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ─── Header ─── */
+.header {
+  background: var(--mantle);
+  border-bottom: 1px solid var(--surface0);
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.header h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.header-info {
+  font-size: 0.75rem;
+  color: var(--subtext0);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--subtext0);
+}
+
+/* ─── Pressure Badge ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-normal { background: rgba(166,227,161,0.15); color: var(--green); }
+.badge-warning { background: rgba(249,226,175,0.15); color: var(--yellow); }
+.badge-critical { background: rgba(243,139,168,0.15); color: var(--red); }
+.badge-danger { background: rgba(203,166,247,0.15); color: var(--mauve); }
+
+/* ─── Toggle Switch ─── */
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-track {
+  width: 36px;
+  height: 20px;
+  background: var(--surface1);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.toggle-track.active {
+  background: var(--green);
+}
+
+.toggle-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--text);
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+}
+
+.toggle-track.active .toggle-thumb {
+  transform: translateX(16px);
+}
+
+/* ─── Main Container ─── */
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+/* ─── Card Grid ─── */
+.gauge-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 1024px) {
+  .gauge-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .gauge-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Card ─── */
+.card {
+  background: var(--mantle);
+  border: 1px solid var(--surface0);
+  border-radius: 8px;
+  padding: 1.25rem;
+  transition: border-color 0.2s;
+}
+
+.card:hover {
+  border-color: var(--surface1);
+}
+
+.card-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--subtext0);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ─── Circular Gauge ─── */
+.gauge-container {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.gauge-ring {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.gauge-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.gauge-ring .track {
+  fill: none;
+  stroke: var(--surface0);
+  stroke-width: 6;
+}
+
+.gauge-ring .fill {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s ease, stroke 0.3s;
+}
+
+.gauge-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.gauge-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.gauge-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  padding: 0.15rem 0;
+}
+
+.gauge-detail-row .label {
+  color: var(--subtext0);
+}
+
+.gauge-detail-row .value {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Full-Width Cards ─── */
+.full-card {
+  margin-bottom: 1.5rem;
+}
+
+.chart-container {
+  position: relative;
+  height: 280px;
+}
+
+/* ─── Two Column Layout ─── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .two-col { grid-template-columns: 1fr; }
+}
+
+/* ─── Alerts List ─── */
+.alert-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--surface0);
+  font-size: 0.8rem;
+}
+
+.alert-item:last-child {
+  border-bottom: none;
+}
+
+.alert-time {
+  color: var(--subtext0);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 5.5rem;
+}
+
+.alert-detail {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+}
+
+.alert-sub {
+  font-size: 0.7rem;
+  color: var(--subtext0);
+  margin-top: 0.15rem;
+}
+
+/* ─── Reports List ─── */
+.report-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.report-item {
+  border-bottom: 1px solid var(--surface0);
+}
+
+.report-item:last-child {
+  border-bottom: none;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.report-header:hover {
+  color: var(--blue);
+}
+
+.report-name {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.report-meta {
+  font-size: 0.7rem;
+  color: var(--subtext0);
+  display: flex;
+  gap: 0.75rem;
+}
+
+.report-content {
+  display: none;
+  padding: 0 0 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--subtext1);
+  border-left: 2px solid var(--surface1);
+  padding-left: 1rem;
+  margin-left: 0.25rem;
+}
+
+.report-content.open {
+  display: block;
+}
+
+/* ─── Empty State ─── */
+.empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--subtext0);
+  font-size: 0.8rem;
+}
+
+/* ─── Loading Spinner ─── */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--surface1);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--mantle);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--surface2);
+}

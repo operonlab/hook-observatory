@@ -27,7 +27,10 @@ from pathlib import Path
 try:
     import uvicorn
     from fastapi import FastAPI, Query
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.templating import Jinja2Templates
+    from starlette.requests import Request
 except ImportError:
     print(
         "ERROR: fastapi and uvicorn are required.\n"
@@ -50,6 +53,9 @@ app = FastAPI(
     description="Dual-track LLM usage tracking — subscription + API",
     version="2.0.0",
 )
+
+app.mount("/static", StaticFiles(directory=SCRIPT_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=SCRIPT_DIR / "templates")
 
 _config: dict = {}
 _collector: UnifiedCollector | None = None
@@ -77,6 +83,12 @@ def _read_latest() -> dict | None:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Serve the dashboard UI."""
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/summary")

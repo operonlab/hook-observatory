@@ -119,10 +119,12 @@ EnvKit 的三個核心任務：
 
 | 容器 | 映像檔 | 用途 |
 |------|--------|------|
-| **pulso-postgres** | `postgres:16-alpine` | 主資料庫 |
-| **pulso-redis** | `redis:7-alpine` | Cache + Event Bus |
-| **pulso-lgtm** | `grafana/otel-lgtm:latest` | Observability (Grafana + LGTM) |
-| **rustfs** | `rustfs/rustfs:latest` | 物件儲存 (S3-compatible) |
+| **ws-infra-postgres-1** | `pgvector/pgvector:pg16` | 主資料庫 |
+| **ws-infra-redis-1** | `redis:7-alpine` | Cache + Event Bus |
+| **ws-infra-lgtm-1** | `grafana/otel-lgtm:latest` | Observability (Grafana + LGTM) |
+| **ws-infra-rustfs-1** | `rustfs/rustfs:latest` | 物件儲存 (S3-compatible) |
+
+所有基礎設施由 `docker compose -p ws-infra` 統一管理，定義於 `infra/docker/docker-compose.yml`。
 
 備份策略：`docker-compose.yml` + volume 備份
 
