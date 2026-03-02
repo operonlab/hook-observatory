@@ -36,6 +36,8 @@ const sessionsEl    = document.getElementById('sessions');
 const statusEl      = document.getElementById('status');
 const inputEl       = document.getElementById('input');
 const sendBtn       = document.getElementById('send-btn');
+const uploadBtn     = document.getElementById('upload-btn');
+const fileInput     = document.getElementById('file-input');
 const focusLabel    = document.getElementById('focused-label');
 const layoutSelect  = document.getElementById('layout-select');
 const resetLayoutBtn = document.getElementById('reset-layout');
@@ -142,10 +144,16 @@ window.flashInputError = function(msg) {
 };
 
 window.sendInput = function() {
-  const text = inputEl.value;
+  let text = inputEl.value;
   if (!text) return;
   if (!window.tmuxWs || !window.tmuxWs.isConnected()) { window.flashInputError('Not connected'); return; }
   if (!S.focusedPane) { window.flashInputError('No pane selected'); return; }
+
+  // Auto-relay: dispatch to other panes async when focused on Claude Code via Web UI
+  if (S.currentTool === 'claude' && !text.startsWith('/tmux-relay')) {
+    text = '/tmux-relay async dispatch to a free pane: ' + text;
+  }
+
   window.tmuxWs.send({ type:'input', pane:S.focusedPane, text });
   inputEl.value = '';
   inputEl.style.height = 'auto';
@@ -153,6 +161,46 @@ window.sendInput = function() {
 };
 
 sendBtn.addEventListener('click', () => { window.acClose?.(); window.sendInput(); });
+
+// ── File Upload ──
+
+uploadBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  uploadBtn.classList.add('uploading');
+  uploadBtn.disabled = true;
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const basePath = location.pathname.replace(/\/+$/, '') || '';
+    const res = await fetch(basePath + '/api/upload', { method: 'POST', body: form });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const { path } = await res.json();
+    const insert = `@${path} `;
+
+    // Insert at cursor position
+    const start = inputEl.selectionStart || inputEl.value.length;
+    const end = inputEl.selectionEnd || start;
+    inputEl.value = inputEl.value.slice(0, start) + insert + inputEl.value.slice(end);
+    inputEl.selectionStart = inputEl.selectionEnd = start + insert.length;
+    inputEl.focus();
+  } catch (err) {
+    window.flashInputError(err.message || 'Upload failed');
+  } finally {
+    uploadBtn.classList.remove('uploading');
+    uploadBtn.disabled = false;
+    fileInput.value = '';  // reset so same file can be re-selected
+  }
+});
 
 // ========================================================================
 // 7. Tool Detection
@@ -585,6 +633,7 @@ window.tmuxWs = (function() {
       statusEl.innerHTML = `<span class="dot"></span> ${text}`;
       inputEl.disabled = false;
       sendBtn.disabled = false;
+      uploadBtn.disabled = false;
       inputEl.focus();
       reconnectDelay = 1000;
     } else if (state === 'reconnecting') {
@@ -593,6 +642,7 @@ window.tmuxWs = (function() {
       statusEl.innerHTML = '<span class="dot"></span> disconnected';
       inputEl.disabled = true;
       sendBtn.disabled = true;
+      uploadBtn.disabled = true;
       focusLabel.textContent = 'no pane';
       winTabsEl.innerHTML = '';
       winTabsEl.style.display = 'none';

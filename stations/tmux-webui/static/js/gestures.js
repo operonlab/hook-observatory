@@ -3,7 +3,6 @@
  * - Swipe left/right: switch tmux pane
  * - Pinch zoom: adjust font size
  * - Long press: trigger text selection
- * - Bottom swipe up: toggle virtual keyboard
  */
 
 (function() {
@@ -121,31 +120,6 @@
       showIndicator(dx > 0 ? '\u25B6' : '\u25C0');
     }
   }, { passive: true });
-
-  // ── Bottom swipe up: toggle virtual keyboard ──
-
-  let bottomSwipeY = 0;
-  const footer = document.querySelector('footer');
-
-  if (footer) {
-    footer.addEventListener('touchstart', (e) => {
-      if (e.touches.length !== 1) return;
-      bottomSwipeY = e.touches[0].clientY;
-    }, { passive: true });
-
-    footer.addEventListener('touchend', (e) => {
-      if (e.changedTouches.length !== 1) return;
-      const dy = bottomSwipeY - e.changedTouches[0].clientY;
-      if (dy > 60) {
-        // Swipe up → expand footer & show extra keys
-        footer.classList.remove('mobile-collapsed');
-        window.applyEkVisibility?.(true);
-      } else if (dy < -60) {
-        // Swipe down → collapse
-        footer.classList.add('mobile-collapsed');
-      }
-    }, { passive: true });
-  }
 
   // ── Virtual keyboard height tracking ──
 

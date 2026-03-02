@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="/v2/apps/tmux/manifest.json">
 <link rel="apple-touch-icon" href="/v2/apps/tmux/icon-192.svg">
-<link rel="stylesheet" href="static/css/main.css">
+<link rel="stylesheet" href="static/css/main.css?v=2">
 <title>tmux Web Controller</title>
 </head>
 <body>
@@ -88,6 +88,8 @@
     <div class="ac-wrap">
       <div class="ac-list" id="ac-list"></div>
       <div class="input-row">
+        <input type="file" id="file-input" accept="image/*,application/pdf,text/*,.json,.csv,.log,.md,.py,.js,.ts,.sh" hidden>
+        <button class="upload-btn" id="upload-btn" title="Upload file" disabled>&#x1F4CE;</button>
         <textarea id="input" rows="1" placeholder="Type a message..." disabled></textarea>
         <button id="send-btn" disabled>Send</button>
       </div>
@@ -99,11 +101,11 @@
 <div class="gesture-indicator" id="gesture-indicator"></div>
 
 <!-- JS modules (order matters: terminal first, then keys, then others, app last) -->
-<script src="static/js/terminal.js"></script>
-<script src="static/js/metrics.js"></script>
-<script src="static/js/app.js"></script>
-<script src="static/js/keys.js"></script>
-<script src="static/js/autocomplete.js"></script>
-<script src="static/js/gestures.js"></script>
+<script src="static/js/terminal.js?v=2"></script>
+<script src="static/js/metrics.js?v=2"></script>
+<script src="static/js/app.js?v=2"></script>
+<script src="static/js/keys.js?v=2"></script>
+<script src="static/js/autocomplete.js?v=2"></script>
+<script src="static/js/gestures.js?v=2"></script>
 </body>
 </html>
