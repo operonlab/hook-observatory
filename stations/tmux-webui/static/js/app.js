@@ -33,8 +33,6 @@ window.tmuxState = {
 // ========================================================================
 const container     = document.getElementById('pane-container');
 const sessionsEl    = document.getElementById('sessions');
-const connectBtn    = document.getElementById('connect-btn');
-const refreshBtn    = document.getElementById('refresh-btn');
 const statusEl      = document.getElementById('status');
 const inputEl       = document.getElementById('input');
 const sendBtn       = document.getElementById('send-btn');
@@ -356,19 +354,26 @@ function reorderDOM() {
 }
 
 function toggleMaximize(paneId) {
+  const appEl = document.getElementById('app');
   if (S.maximizedPane === paneId) {
     S.maximizedPane = '';
     container.classList.remove('has-maximized');
+    appEl.classList.remove('fullscreen-mode');
     Object.values(S.paneEls).forEach(pe => { pe.box.classList.remove('maximized'); pe.box.querySelector('.pane-header').draggable = true; });
     rebuildResizeHandles();
   } else {
     S.maximizedPane = paneId;
     container.classList.add('has-maximized');
+    appEl.classList.add('fullscreen-mode');
     Object.values(S.paneEls).forEach(pe => { pe.box.classList.remove('maximized'); pe.box.querySelector('.pane-header').draggable = false; });
     if (S.paneEls[paneId]) S.paneEls[paneId].box.classList.add('maximized');
     setFocus(paneId);
     container.querySelectorAll('.resize-handle').forEach(h => h.remove());
   }
+  // Refit after layout change (double RAF ensures CSS is applied)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { if (window._fitAllPanes) window._fitAllPanes(); });
+  });
 }
 
 function buildPaneEl(p) {
@@ -578,18 +583,14 @@ window.tmuxWs = (function() {
     statusEl.className = state;
     if (state === 'connected') {
       statusEl.innerHTML = `<span class="dot"></span> ${text}`;
-      connectBtn.textContent = 'disconnect';
-      connectBtn.classList.remove('btn-accent');
       inputEl.disabled = false;
       sendBtn.disabled = false;
       inputEl.focus();
-      reconnectDelay = 1000; // Reset on successful connection
+      reconnectDelay = 1000;
     } else if (state === 'reconnecting') {
       statusEl.innerHTML = `<span class="dot"></span> reconnecting (${Math.round(reconnectDelay/1000)}s)...`;
     } else {
       statusEl.innerHTML = '<span class="dot"></span> disconnected';
-      connectBtn.textContent = 'connect';
-      connectBtn.classList.add('btn-accent');
       inputEl.disabled = true;
       sendBtn.disabled = true;
       focusLabel.textContent = 'no pane';
@@ -677,6 +678,7 @@ window.tmuxWs = (function() {
     if (ws) { ws.close(); ws = null; }
     setStatus('', '');
     container.classList.remove('has-maximized');
+    document.getElementById('app').classList.remove('fullscreen-mode');
     container.innerHTML = '<div class="welcome">select a tmux session to connect</div>';
     S.paneEls = {};
     S.paneInfo = {};
@@ -690,7 +692,7 @@ window.tmuxWs = (function() {
 // 13. Sessions
 // ========================================================================
 
-async function loadSessions() {
+async function loadSessions(autoConnect = false) {
   try {
     const basePath = location.pathname.replace(/\/+$/, '') || '';
     const res = await fetch(basePath + '/api/sessions');
@@ -702,16 +704,24 @@ async function loadSessions() {
       opt.textContent = `${s.name}  [${s.windows}w]${s.attached ? ' (attached)' : ''}`;
       sessionsEl.appendChild(opt);
     });
+
+    // Auto-connect: prefer "default", fallback to first available
+    if (autoConnect && list.length > 0 && !S.currentSession) {
+      const target = list.find(s => s.name === 'default') || list[0];
+      sessionsEl.value = target.name;
+      window.tmuxWs.connect(target.name);
+    }
   } catch(e) {
     sessionsEl.innerHTML = '<option value="">tmux not available</option>';
   }
 }
 
-sessionsEl.addEventListener('change', () => { connectBtn.disabled = !sessionsEl.value; });
-refreshBtn.addEventListener('click', loadSessions);
-connectBtn.addEventListener('click', () => {
+// Session select: switch connection directly
+sessionsEl.addEventListener('change', () => {
+  const s = sessionsEl.value;
+  if (!s) return;
   if (S.currentSession) window.tmuxWs.disconnect();
-  else { const s = sessionsEl.value; if (s) window.tmuxWs.connect(s); }
+  window.tmuxWs.connect(s);
 });
 
 // ========================================================================
@@ -734,6 +744,14 @@ document.querySelectorAll('.qbtn').forEach(btn => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && S.maximizedPane && document.activeElement !== inputEl) toggleMaximize(S.maximizedPane);
 });
+
+// Exit fullscreen button
+const exitFsBtn = document.getElementById('exit-fullscreen');
+if (exitFsBtn) {
+  exitFsBtn.addEventListener('click', () => {
+    if (S.maximizedPane) toggleMaximize(S.maximizedPane);
+  });
+}
 
 // ========================================================================
 // 16. Layout Controls
@@ -760,8 +778,11 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
   function fitPane(paneId) {
     const pe = S.paneEls[paneId];
     if (!pe || !charW || !lineH) return;
-    const cols = Math.floor(pe.terminal.clientWidth / charW);
-    const rows = Math.floor(pe.terminal.clientHeight / lineH);
+    const cs = getComputedStyle(pe.terminal);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const cols = Math.floor((pe.terminal.clientWidth - padX) / charW) - 1;
+    const rows = Math.floor((pe.terminal.clientHeight - padY) / lineH);
     if (cols > 0 && rows > 0 && window.tmuxWs.isConnected()) {
       window.tmuxWs.send({ type: 'fit', pane: paneId, cols, rows });
     }
@@ -782,8 +803,12 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
 })();
 
 // ========================================================================
-// 18. Init
+// 18. (reserved)
+// ========================================================================
+
+// ========================================================================
+// 19. Init
 // ========================================================================
 
 loadLayoutPref();
-loadSessions();
+loadSessions(true); // auto-connect to "default" or first session

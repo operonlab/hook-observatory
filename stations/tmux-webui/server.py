@@ -32,6 +32,7 @@ from tmux_manager import (
     list_windows,
     new_window,
     resize_pane,
+    select_layout,
     select_pane,
     send_keys,
     status_metrics,
@@ -47,6 +48,51 @@ logging.basicConfig(
 logger = logging.getLogger("tmux-webui")
 
 BASE_DIR = Path(__file__).parent
+
+# ── Disconnect layout reset (debounced 10s) ──
+
+_disconnect_timers: dict[str, asyncio.Task] = {}
+_active_connections: dict[str, int] = {}  # session -> connection count
+
+
+async def _reset_layout_delayed(session: str, delay: float = 10.0):
+    """After delay, reset all windows in session to even-horizontal layout."""
+    try:
+        await asyncio.sleep(delay)
+        # Only reset if no active connections remain
+        if _active_connections.get(session, 0) > 0:
+            return
+        windows = await list_windows(session)
+        for w in windows:
+            target = f"{session}:{w['index']}"
+            await select_layout(target, "even-horizontal")
+        logger.info("Reset layout to even-horizontal for session '%s'", session)
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        logger.error("Reset layout error: %s", exc)
+    finally:
+        _disconnect_timers.pop(session, None)
+
+
+def _on_ws_connect(session: str):
+    """Track connection and cancel pending reset."""
+    _active_connections[session] = _active_connections.get(session, 0) + 1
+    timer = _disconnect_timers.pop(session, None)
+    if timer:
+        timer.cancel()
+        logger.info("Cancelled layout reset for session '%s' (reconnected)", session)
+
+
+def _on_ws_disconnect(session: str):
+    """Start debounced reset timer if no connections remain."""
+    count = _active_connections.get(session, 1) - 1
+    _active_connections[session] = max(0, count)
+    if count <= 0 and session not in _disconnect_timers:
+        _disconnect_timers[session] = asyncio.create_task(
+            _reset_layout_delayed(session)
+        )
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -130,6 +176,8 @@ async def ws_handler(websocket: WebSocket):
         await websocket.send_json({"type": "error", "message": "No session specified"})
         await websocket.close()
         return
+
+    _on_ws_connect(session)
 
     cfg = get_config()
     poll_interval = cfg.get("poll_interval", 0.4)
@@ -337,6 +385,7 @@ async def ws_handler(websocket: WebSocket):
         logger.error("WebSocket error: %s", exc)
     finally:
         poll_task.cancel()
+        _on_ws_disconnect(session)
 
 
 # ── Main ──

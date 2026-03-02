@@ -5,7 +5,6 @@
 
 (function() {
   const extraKeysEl = document.getElementById('extra-keys');
-  const ekToggleBtn = document.getElementById('ek-toggle');
   const arrowPad = document.getElementById('arrow-pad');
   const activeModifiers = new Set();
   const modLockTimers = {};
@@ -89,14 +88,15 @@
     });
   });
 
-  // ── Arrow Touchpad ──
+  // ── Arrow Touchpad (shared logic for all .arrow-pad elements) ──
 
-  if (arrowPad) {
+  function initArrowPad(pad) {
+    if (!pad) return;
     const THRESHOLD = 18;
     let tracking = false, lastX = 0, lastY = 0, dirClass = '';
 
     function clearDir() {
-      if (dirClass) { arrowPad.classList.remove(dirClass); dirClass = ''; }
+      if (dirClass) { pad.classList.remove(dirClass); dirClass = ''; }
     }
 
     function handleMove(cx, cy) {
@@ -114,26 +114,26 @@
       lastX = cx; lastY = cy;
       clearDir();
       dirClass = cls;
-      arrowPad.classList.add(cls);
+      pad.classList.add(cls);
       sendEk(key);
     }
 
-    arrowPad.addEventListener('touchstart', (e) => {
+    pad.addEventListener('touchstart', (e) => {
       e.preventDefault();
       const t = e.touches[0];
       tracking = true; lastX = t.clientX; lastY = t.clientY;
     }, { passive: false });
 
-    arrowPad.addEventListener('touchmove', (e) => {
+    pad.addEventListener('touchmove', (e) => {
       e.preventDefault();
       if (!tracking) return;
       handleMove(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: false });
 
-    arrowPad.addEventListener('touchend', () => { tracking = false; clearDir(); });
+    pad.addEventListener('touchend', () => { tracking = false; clearDir(); });
 
     // Mouse fallback
-    arrowPad.addEventListener('mousedown', (e) => {
+    pad.addEventListener('mousedown', (e) => {
       e.preventDefault();
       tracking = true; lastX = e.clientX; lastY = e.clientY;
       const onMove = (ev) => handleMove(ev.clientX, ev.clientY);
@@ -147,35 +147,45 @@
     });
   }
 
-  // ── Extra Keys Toggle ──
+  // Init both arrow pads (extra-keys + quick-actions)
+  initArrowPad(arrowPad);
+  initArrowPad(document.getElementById('quick-arrow-pad'));
+
+  // ── Extra Keys Visibility ──
 
   function isTouch() { return matchMedia('(pointer:coarse)').matches; }
+  function isPWA() { return matchMedia('(display-mode: standalone)').matches; }
 
+  // Auto-show on touch devices and PWA (tablet+); phone PWA relies on quick-actions
   function loadEkPref() {
+    const isPhone = window.matchMedia('(max-width:600px)').matches;
+    if (isPWA() && !isPhone) return true;
     const stored = localStorage.getItem('tmux-webui-show-extra-keys');
     if (stored !== null) return stored === '1';
-    return isTouch();
+    return isTouch() && !isPhone;
   }
 
-  function applyEkVisibility(show) {
-    extraKeysEl.classList.toggle('visible', show);
-    ekToggleBtn.classList.toggle('active', show);
-  }
+  extraKeysEl.classList.toggle('visible', loadEkPref());
 
-  applyEkVisibility(loadEkPref());
-
-  ekToggleBtn.addEventListener('click', () => {
-    const show = !extraKeysEl.classList.contains('visible');
-    applyEkVisibility(show);
-    localStorage.setItem('tmux-webui-show-extra-keys', show ? '1' : '0');
-  });
-
-  // Mobile: start collapsed (extra keys hidden)
+  // Mobile: start collapsed (compact quick-actions, hide extra keys)
   if (window.matchMedia('(max-width:600px)').matches) {
     const footerEl = document.querySelector('footer');
     if (footerEl) footerEl.classList.add('mobile-collapsed');
   }
 
-  // Expose
-  window.applyEkVisibility = applyEkVisibility;
+  // ── Extra Keys Toggle Button ──
+  const ekToggle = document.getElementById('ek-toggle');
+  if (ekToggle) {
+    ekToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      const show = !extraKeysEl.classList.contains('visible');
+      extraKeysEl.classList.toggle('visible', show);
+      localStorage.setItem('tmux-webui-show-extra-keys', show ? '1' : '0');
+      // Remove mobile-collapsed when showing extra keys
+      const footerEl = document.querySelector('footer');
+      if (footerEl && show) footerEl.classList.remove('mobile-collapsed');
+      else if (footerEl && !show && window.matchMedia('(max-width:600px)').matches) footerEl.classList.add('mobile-collapsed');
+      if (window._fitAllPanes) window._fitAllPanes();
+    });
+  }
 })();

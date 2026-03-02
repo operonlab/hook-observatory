@@ -136,6 +136,14 @@ async def resize_pane(target: str, cols: int, rows: int) -> bool:
     return rc == 0
 
 
+async def select_layout(target: str, layout: str = "even-horizontal") -> bool:
+    """Apply a tmux layout preset to a window. e.g. even-horizontal, even-vertical, tiled."""
+    rc, _, stderr = await _run(["tmux", "select-layout", "-t", target, layout])
+    if rc != 0:
+        logger.warning("select-layout failed for %s: %s", target, stderr.strip())
+    return rc == 0
+
+
 async def select_pane(session: str, direction: str) -> bool:
     """Select pane by direction: -L, -R, -U, -D."""
     flag_map = {"left": "-L", "right": "-R", "up": "-U", "down": "-D"}
