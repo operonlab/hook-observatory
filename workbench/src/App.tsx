@@ -1,20 +1,21 @@
-import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import Layout from "@/shell/Layout";
-import Home from "@/pages/Home";
-import Login from "@/pages/Login";
-import NotFound from "@/pages/NotFound";
+import React, { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useAuth } from '@/hooks/useAuth'
+import { useManifest } from '@/hooks/useManifest'
+import AppsPage from '@/pages/AppsPage'
+import Login from '@/pages/Login'
+import NotFound from '@/pages/NotFound'
+import AppShell from '@/shell/AppShell'
 
-const FinancePage = React.lazy(() => import("./modules/finance/pages"));
-const TaskflowPage = React.lazy(() => import("./modules/taskflow/pages"));
-const IdeagraphPage = React.lazy(() => import("./modules/ideagraph/pages"));
-const AdminPage = React.lazy(() => import("./modules/admin/pages"));
-const IntelflowPage = React.lazy(() => import("./modules/intelflow/pages"));
-const MemvaultPage = React.lazy(() => import("./modules/memvault/pages"));
-const SkillpathPage = React.lazy(() => import("./modules/skillpath/pages"));
-const WorkpoolPage = React.lazy(() => import("./modules/workpool/pages"));
-const MatchcorePage = React.lazy(() => import("./modules/matchcore/pages"));
+const FinancePage = React.lazy(() => import('./modules/finance/pages'))
+const TaskflowPage = React.lazy(() => import('./modules/taskflow/pages'))
+const IdeagraphPage = React.lazy(() => import('./modules/ideagraph/pages'))
+const AdminPage = React.lazy(() => import('./modules/admin/pages'))
+const IntelflowPage = React.lazy(() => import('./modules/intelflow/pages'))
+const MemvaultPage = React.lazy(() => import('./modules/memvault/pages'))
+const SkillpathPage = React.lazy(() => import('./modules/skillpath/pages'))
+const WorkpoolPage = React.lazy(() => import('./modules/workpool/pages'))
+const MatchcorePage = React.lazy(() => import('./modules/matchcore/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
@@ -22,63 +23,71 @@ function ModuleSuspense({ children }: { children: React.ReactNode }) {
       fallback={
         <div
           className="flex min-h-[40vh] items-center justify-center"
-          style={{ backgroundColor: "var(--base)" }}
+          style={{ backgroundColor: 'var(--base)' }}
         >
           <div
             className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-            style={{ borderColor: "var(--blue)", borderTopColor: "transparent" }}
+            style={{
+              borderColor: 'var(--accent)',
+              borderTopColor: 'transparent',
+            }}
           />
         </div>
       }
     >
       {children}
     </React.Suspense>
-  );
+  )
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, initialized } = useAuth();
+  const { isAuthenticated, initialized } = useAuth()
 
   if (!initialized) {
     return (
       <div
         className="flex min-h-screen items-center justify-center"
-        style={{ backgroundColor: "var(--base)" }}
+        style={{ backgroundColor: 'var(--base)' }}
       >
         <div
           className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-          style={{ borderColor: "var(--blue)", borderTopColor: "transparent" }}
+          style={{
+            borderColor: 'var(--accent)',
+            borderTopColor: 'transparent',
+          }}
         />
       </div>
-    );
+    )
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace />
   }
 
-  return <>{children}</>;
+  return <>{children}</>
 }
 
 function AppRoutes() {
-  const { checkSession, initialized } = useAuth();
+  const { checkSession, initialized } = useAuth()
+  useManifest()
 
   useEffect(() => {
     if (!initialized) {
-      void checkSession();
+      void checkSession()
     }
-  }, [checkSession, initialized]);
+  }, [checkSession, initialized])
 
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Navigate to="/apps" replace />} />
       <Route
-        path="/"
+        path="/apps"
         element={
           <AuthGuard>
-            <Layout>
-              <Home />
-            </Layout>
+            <AppShell>
+              <AppsPage />
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -86,11 +95,11 @@ function AppRoutes() {
         path="/finance/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <FinancePage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -98,11 +107,11 @@ function AppRoutes() {
         path="/taskflow/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <TaskflowPage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -110,11 +119,11 @@ function AppRoutes() {
         path="/ideagraph/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <IdeagraphPage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -122,11 +131,11 @@ function AppRoutes() {
         path="/admin/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <AdminPage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -134,11 +143,11 @@ function AppRoutes() {
         path="/intelflow/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <IntelflowPage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -146,11 +155,11 @@ function AppRoutes() {
         path="/memvault/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <MemvaultPage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -158,11 +167,11 @@ function AppRoutes() {
         path="/skillpath/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <SkillpathPage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -170,11 +179,11 @@ function AppRoutes() {
         path="/workpool/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <WorkpoolPage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -182,11 +191,11 @@ function AppRoutes() {
         path="/matchcore/*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <ModuleSuspense>
                 <MatchcorePage />
               </ModuleSuspense>
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
@@ -194,20 +203,20 @@ function AppRoutes() {
         path="*"
         element={
           <AuthGuard>
-            <Layout>
+            <AppShell>
               <NotFound />
-            </Layout>
+            </AppShell>
           </AuthGuard>
         }
       />
     </Routes>
-  );
+  )
 }
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={__BASE_PATH__ || '/'}>
       <AppRoutes />
     </BrowserRouter>
-  );
+  )
 }
