@@ -1,4 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import ChartTooltip from "./ChartTooltip.tsx";
 import type { EventTypeStats } from "../api/client.ts";
 
 const COLORS = ["#89b4fa", "#a6e3a1", "#cba6f7", "#f9e2af", "#fab387", "#f38ba8", "#94e2d5", "#eba0ac", "#74c7ec"];
@@ -29,11 +30,7 @@ export default function EventTypeChart({ data }: Props) {
             tickLine={false}
             width={120}
           />
-          <Tooltip
-            contentStyle={{ background: "#1a1b2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, fontSize: 12 }}
-            labelStyle={{ color: "rgba(255,255,255,0.7)" }}
-            itemStyle={{ color: "#89b4fa" }}
-          />
+          <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" radius={[0, 4, 4, 0]}>
             {data.map((_, i) => (
               <Cell key={i} fill={COLORS[i % COLORS.length]} fillOpacity={0.7} />
