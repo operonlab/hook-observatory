@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0f1117">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0c0e14">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>服務哨兵 — Workshop</title>
     <link rel="manifest" href="static/manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
@@ -28,55 +27,61 @@
         </header>
 
         <!-- Overall Banner -->
-        <section class="banner-section">
+        <section class="banner-wrap">
             <div id="overall-banner" class="banner banner--loading">
                 <div class="banner__dot"></div>
                 <span class="banner__text">正在檢查系統狀態…</span>
             </div>
         </section>
 
-        <!-- Service Grid -->
-        <section class="section">
-            <div class="section__header">
-                <h2 class="section__title">服務狀態</h2>
-                <span class="section__count" id="service-count"></span>
-            </div>
-            <div id="services-container" class="services">
-                <div class="skeleton-row"></div>
-                <div class="skeleton-row"></div>
-                <div class="skeleton-row"></div>
-            </div>
-        </section>
-
-        <!-- 90-Day Uptime Timeline -->
-        <section class="section">
-            <div class="section__header">
-                <h2 class="section__title">正常運行時間</h2>
-                <span class="section__badge">90 天</span>
-            </div>
-            <div id="timelines-container" class="timelines">
-                <div class="skeleton-timeline"></div>
-            </div>
-            <div class="timeline-legend">
-                <span class="legend-item"><span class="legend-dot legend-dot--operational"></span>正常</span>
-                <span class="legend-item"><span class="legend-dot legend-dot--degraded"></span>降級</span>
-                <span class="legend-item"><span class="legend-dot legend-dot--outage"></span>中斷</span>
-                <span class="legend-item"><span class="legend-dot legend-dot--no_data"></span>無資料</span>
-            </div>
-        </section>
-
-        <!-- Incidents -->
-        <section class="section">
-            <div class="section__header">
-                <h2 class="section__title">近期事件</h2>
-            </div>
-            <div id="incidents-container">
-                <div class="empty-state">
-                    <span class="empty-state__icon">✓</span>
-                    <span class="empty-state__text">目前沒有事件記錄</span>
+        <!-- Dashboard Grid -->
+        <div class="dashboard">
+            <!-- Left: Services -->
+            <section class="panel">
+                <div class="panel__header">
+                    <h2 class="panel__title">服務狀態</h2>
+                    <span class="panel__count" id="service-count"></span>
                 </div>
+                <div id="services-container" class="services">
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                </div>
+            </section>
+
+            <!-- Right: Timeline + Incidents -->
+            <div class="right-col">
+                <section class="panel">
+                    <div class="panel__header">
+                        <h2 class="panel__title">正常運行時間</h2>
+                        <span class="panel__badge">90 天</span>
+                    </div>
+                    <div id="timelines-container" class="timelines">
+                        <div class="skeleton-timeline"></div>
+                    </div>
+                    <div class="timeline-legend">
+                        <span class="legend-item"><span class="legend-dot legend-dot--operational"></span>正常</span>
+                        <span class="legend-item"><span class="legend-dot legend-dot--degraded"></span>降級</span>
+                        <span class="legend-item"><span class="legend-dot legend-dot--outage"></span>中斷</span>
+                        <span class="legend-item"><span class="legend-dot legend-dot--no_data"></span>無資料</span>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel__header">
+                        <h2 class="panel__title">近期事件</h2>
+                    </div>
+                    <div id="incidents-container">
+                        <div class="empty-state">
+                            <span class="empty-state__icon">✓</span>
+                            <span class="empty-state__text">目前沒有事件記錄</span>
+                        </div>
+                    </div>
+                </section>
             </div>
-        </section>
+        </div>
 
         <!-- Footer -->
         <footer class="footer">
