@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Pause, RefreshCw, XCircle } from 'lucide-rea
 import { useEffect, useState } from 'react'
 import { subscriptionApi } from '../api'
 import type { BillingCycle, Subscription, SubscriptionStatus } from '../types'
+import { fmtAmt } from '../types'
 
 const CYCLE_LABELS: Record<BillingCycle, string> = {
   weekly: '每週',
@@ -64,7 +65,7 @@ export default function SubscriptionList({ onEdit }: SubscriptionListProps) {
             每月訂閱總計
           </span>
           <div className="text-lg font-medium" style={{ color: 'var(--fn-expense)' }}>
-            ${totalMonthly.toLocaleString()}
+            ${fmtAmt(totalMonthly)}
           </div>
         </div>
         <span className="text-[11px]" style={{ color: 'var(--fn-text-muted)' }}>
@@ -114,7 +115,7 @@ export default function SubscriptionList({ onEdit }: SubscriptionListProps) {
                       className="text-[13px] font-medium shrink-0"
                       style={{ color: 'var(--fn-expense)' }}
                     >
-                      ${sub.amount.toLocaleString()}/{CYCLE_LABELS[sub.billing_cycle]}
+                      ${fmtAmt(sub.amount)}/{CYCLE_LABELS[sub.billing_cycle]}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">

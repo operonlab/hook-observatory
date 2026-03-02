@@ -8,7 +8,7 @@ import {
 import { useEffect, useState } from 'react'
 import { transactionApi } from '../api'
 import type { Transaction, TransactionType } from '../types'
-import { PAYMENT_METHOD_LABELS } from '../types'
+import { fmtAmt, PAYMENT_METHOD_LABELS } from '../types'
 
 const TYPE_CONFIG: Record<
   TransactionType,
@@ -60,7 +60,7 @@ export default function TransactionList({ month, walletId, onEdit }: Transaction
 
   const formatAmount = (txn: Transaction) => {
     const sign = txn.type === 'income' ? '+' : txn.type === 'expense' ? '-' : ''
-    return `${sign}$${txn.amount.toLocaleString()}`
+    return `${sign}$${fmtAmt(txn.amount)}`
   }
 
   return (

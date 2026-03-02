@@ -1,5 +1,5 @@
 import type { Wallet } from '../types'
-import { WALLET_TYPE_CONFIG } from '../types'
+import { fmtAmt, WALLET_TYPE_CONFIG } from '../types'
 import PrivacyToggle from './PrivacyToggle'
 
 interface WalletCardProps {
@@ -50,7 +50,7 @@ export default function WalletCard({ wallet, onEdit, onPrivacyToggle }: WalletCa
           className="text-xl font-semibold tabular-nums"
           style={{ color: isNegative ? 'var(--fn-expense)' : 'var(--fn-text)' }}
         >
-          ${wallet.current_balance.toLocaleString()}
+          ${fmtAmt(wallet.current_balance)}
         </div>
 
         {wallet.type === 'credit_card' && wallet.credit_limit && (
@@ -80,7 +80,7 @@ export default function WalletCard({ wallet, onEdit, onPrivacyToggle }: WalletCa
               />
             </div>
             <div className="text-[10px]" style={{ color: 'var(--fn-text-muted)' }}>
-              額度 ${wallet.credit_limit.toLocaleString()}
+              額度 ${fmtAmt(wallet.credit_limit)}
             </div>
           </div>
         )}

@@ -4,6 +4,7 @@ import { analyticsApi } from '../api'
 import MonthlyBarChart from '../components/charts/MonthlyBarChart'
 import NetWorthChart from '../components/charts/NetWorthChart'
 import type { MonthlySummary, MonthlyTrend, NetWorthPoint } from '../types'
+import { fmtAmt } from '../types'
 
 export default function ReportPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
@@ -108,7 +109,7 @@ export default function ReportPage() {
               className="text-base font-semibold tabular-nums mt-0.5"
               style={{ color: 'var(--fn-income)' }}
             >
-              ${summary.total_income.toLocaleString()}
+              ${fmtAmt(summary.total_income)}
             </div>
           </div>
           <div
@@ -125,7 +126,7 @@ export default function ReportPage() {
               className="text-base font-semibold tabular-nums mt-0.5"
               style={{ color: 'var(--fn-expense)' }}
             >
-              ${summary.total_expense.toLocaleString()}
+              ${fmtAmt(summary.total_expense)}
             </div>
           </div>
           <div
@@ -144,7 +145,7 @@ export default function ReportPage() {
                 color: summary.net >= 0 ? 'var(--fn-income)' : 'var(--fn-expense)',
               }}
             >
-              ${summary.net.toLocaleString()}
+              ${fmtAmt(summary.net)}
             </div>
           </div>
           <div
@@ -194,7 +195,7 @@ export default function ReportPage() {
                 </span>
                 <div className="flex items-center gap-4">
                   <span className="text-xs tabular-nums" style={{ color: 'var(--fn-text-muted)' }}>
-                    餘額 ${w.current_balance.toLocaleString()}
+                    餘額 ${fmtAmt(w.current_balance)}
                   </span>
                   <span
                     className="text-xs tabular-nums"
@@ -202,7 +203,7 @@ export default function ReportPage() {
                       color: w.change >= 0 ? 'var(--fn-income)' : 'var(--fn-expense)',
                     }}
                   >
-                    {w.change >= 0 ? '+' : ''}${w.change.toLocaleString()}
+                    {w.change >= 0 ? '+' : ''}${fmtAmt(w.change)}
                   </span>
                 </div>
               </div>

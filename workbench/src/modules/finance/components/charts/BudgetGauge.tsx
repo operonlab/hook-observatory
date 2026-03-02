@@ -1,5 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import type { Budget } from '../../types'
+import { fmtAmt } from '../../types'
 
 interface BudgetGaugeProps {
   budget: Budget
@@ -53,7 +54,7 @@ export default function BudgetGauge({ budget }: BudgetGaugeProps) {
           {budget.category_name ?? '總預算'}
         </div>
         <div className="text-xs tabular-nums" style={{ color: 'var(--fn-text-secondary)' }}>
-          ${budget.spent_amount.toLocaleString()} / ${budget.budget_amount.toLocaleString()}
+          ${fmtAmt(budget.spent_amount)} / ${fmtAmt(budget.budget_amount)}
         </div>
       </div>
     </div>

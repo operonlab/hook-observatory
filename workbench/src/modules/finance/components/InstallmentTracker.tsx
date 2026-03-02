@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { installmentApi } from '../api'
 import type { InstallmentPlan, InstallmentStatus } from '../types'
+import { fmtAmt } from '../types'
 
 const STATUS_CONFIG: Record<InstallmentStatus, { label: string; color: string }> = {
   active: { label: '進行中', color: 'var(--fn-transfer)' },
@@ -64,7 +65,7 @@ export default function InstallmentTracker() {
           未還分期總額
         </span>
         <div className="text-lg font-medium" style={{ color: 'var(--fn-expense)' }}>
-          ${totalRemaining.toLocaleString()}
+          ${fmtAmt(totalRemaining)}
         </div>
       </div>
 
@@ -108,9 +109,9 @@ export default function InstallmentTracker() {
               >
                 <span>
                   {plan.paid_count}/{plan.num_installments} 期 · 每期 $
-                  {plan.installment_amount.toLocaleString()}
+                  {fmtAmt(plan.installment_amount)}
                 </span>
-                <span>總額 ${plan.total_amount.toLocaleString()}</span>
+                <span>總額 ${fmtAmt(plan.total_amount)}</span>
               </div>
 
               {/* Progress bar */}

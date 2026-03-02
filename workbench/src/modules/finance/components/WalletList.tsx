@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { walletApi } from '../api'
 import type { Wallet } from '../types'
+import { fmtAmt } from '../types'
 import WalletCard from './WalletCard'
 
 interface WalletListProps {
@@ -28,7 +29,7 @@ export default function WalletList({ onEdit, onAdd }: WalletListProps) {
 
   const totalBalance = wallets
     .filter((w) => w.is_active)
-    .reduce((sum, w) => sum + w.current_balance, 0)
+    .reduce((sum, w) => sum + Number(w.current_balance), 0)
 
   if (loading) {
     return (
@@ -57,7 +58,7 @@ export default function WalletList({ onEdit, onAdd }: WalletListProps) {
             color: totalBalance >= 0 ? 'var(--fn-accent)' : 'var(--fn-expense)',
           }}
         >
-          ${totalBalance.toLocaleString()}
+          ${fmtAmt(totalBalance)}
         </div>
       </div>
 

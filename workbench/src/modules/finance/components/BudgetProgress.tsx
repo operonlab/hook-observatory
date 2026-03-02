@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { budgetApi } from '../api'
 import type { Budget } from '../types'
+import { fmtAmt } from '../types'
 
 interface BudgetProgressProps {
   yearMonth?: string
@@ -77,10 +78,10 @@ export default function BudgetProgress({ yearMonth }: BudgetProgressProps) {
                 className="text-xl font-semibold tabular-nums"
                 style={{ color: 'var(--fn-text)' }}
               >
-                ${totalBudget.spent_amount.toLocaleString()}
+                ${fmtAmt(totalBudget.spent_amount)}
               </span>
               <span className="text-[13px] ml-1" style={{ color: 'var(--fn-text-muted)' }}>
-                / ${totalBudget.budget_amount.toLocaleString()}
+                / ${fmtAmt(totalBudget.budget_amount)}
               </span>
             </div>
             <span
@@ -104,7 +105,7 @@ export default function BudgetProgress({ yearMonth }: BudgetProgressProps) {
           </div>
           {totalBudget.remaining_amount > 0 && (
             <div className="text-[11px]" style={{ color: 'var(--fn-text-muted)' }}>
-              剩餘 ${totalBudget.remaining_amount.toLocaleString()}
+              剩餘 ${fmtAmt(totalBudget.remaining_amount)}
             </div>
           )}
         </div>
@@ -130,7 +131,7 @@ export default function BudgetProgress({ yearMonth }: BudgetProgressProps) {
                   {b.category_name ?? '未分類'}
                 </span>
                 <span className="text-xs tabular-nums" style={{ color: 'var(--fn-text-tertiary)' }}>
-                  ${b.spent_amount.toLocaleString()} / ${b.budget_amount.toLocaleString()}
+                  ${fmtAmt(b.spent_amount)} / ${fmtAmt(b.budget_amount)}
                 </span>
               </div>
               <div

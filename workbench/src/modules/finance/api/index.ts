@@ -100,7 +100,10 @@ export const installmentApi = {
 }
 
 export const budgetApi = {
-  list: (yearMonth: string) => request<Budget[]>(`/finance/budgets?year_month=${yearMonth}`),
+  list: (yearMonth: string) =>
+    request<PaginatedResponse<Budget>>(`/finance/budgets?year_month=${yearMonth}`).then(
+      (res) => res.items,
+    ),
 
   set: (data: BudgetSet) =>
     request<Budget>('/finance/budgets', {
@@ -113,16 +116,14 @@ export const budgetApi = {
 
 export const analyticsApi = {
   summary: (yearMonth?: string) => {
-    const qs = yearMonth ? `?year_month=${yearMonth}` : ''
-    return request<MonthlySummary>(`/finance/summary${qs}`)
+    const ym = yearMonth ?? new Date().toISOString().slice(0, 7)
+    return request<MonthlySummary>(`/finance/summary/${ym}`)
   },
 
   insights: (months = 6) => request<MonthlyTrend[]>(`/finance/insights?months=${months}`),
 
   categoryBreakdown: (yearMonth: string) =>
-    request<CategoryBreakdown[]>(`/finance/summary?year_month=${yearMonth}`).then(
-      (s) => (s as unknown as MonthlySummary).by_category,
-    ),
+    request<MonthlySummary>(`/finance/summary/${yearMonth}`).then((s) => s.by_category),
 
   netWorth: () => request<NetWorthPoint[]>('/finance/wallets/net-worth'),
 }
