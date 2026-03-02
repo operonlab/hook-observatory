@@ -22,6 +22,7 @@
     "react-grid-layout": "^2.2.2",
     "react-markdown": "^10.1.0",
     "react-router-dom": "catalog:",
+    "recharts": "^2.15.4",
     "remark-gfm": "^4.0.1",
     "three": "^0.183.1",
     "zustand": "catalog:"

@@ -1,0 +1,13 @@
+[project]
+name = "finance-analytics-mcp"
+version = "0.1.0"
+description = "Finance Analytics MCP adapter — analytics + budget thin wrapper over Core API"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
