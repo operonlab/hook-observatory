@@ -17,7 +17,6 @@ Configure in ~/.claude.json:
     }
 """
 
-import json
 import os
 from typing import Any
 
@@ -68,16 +67,19 @@ async def api_delete(path: str) -> bool:
 
 
 async def api_post_file(path: str, file_path: str, filename: str, content_type: str) -> dict:
+    import aiofiles
+
     async with httpx.AsyncClient(timeout=60) as client:
-        with open(file_path, "rb") as f:
-            files = {"file": (filename, f, content_type)}
-            resp = await client.post(
-                f"{BASE}{path}",
-                files=files,
-                params={"space_id": SPACE_ID},
-            )
-            resp.raise_for_status()
-            return resp.json()
+        async with aiofiles.open(file_path, "rb") as f:
+            data = await f.read()
+        files = {"file": (filename, data, content_type)}
+        resp = await client.post(
+            f"{BASE}{path}",
+            files=files,
+            params={"space_id": SPACE_ID},
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
 def text_result(text: str) -> list[TextContent]:
@@ -473,7 +475,9 @@ async def handle_upload_attachment(args: dict) -> list[TextContent]:
     filename = args.get("filename", os.path.basename(file_path))
     content_type = args.get("content_type", "image/jpeg")
 
-    if not os.path.exists(file_path):
+    import anyio
+
+    if not await anyio.Path(file_path).exists():
         return text_result(f"File not found: {file_path}")
 
     result = await api_post_file(

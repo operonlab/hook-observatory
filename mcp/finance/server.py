@@ -17,7 +17,6 @@ Configure in ~/.claude.json:
     }
 """
 
-import json
 import os
 from typing import Any
 
@@ -535,7 +534,7 @@ async def handle_toggle_privacy(args: dict) -> list[TextContent]:
     if not path:
         return text_result(f"Unknown entity type: {entity_type}")
 
-    result = await api_put(path, {"is_private": is_private})
+    await api_put(path, {"is_private": is_private})
     state = "private 🔒" if is_private else "public"
     return text_result(f"{entity_type} {entity_id[:8]} set to {state}.")
 
