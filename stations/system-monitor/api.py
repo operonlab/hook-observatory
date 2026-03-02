@@ -13,7 +13,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.requests import Request
 
 SCRIPT_DIR = Path(__file__).parent
 
@@ -38,6 +41,8 @@ DATA_DIR = Path(
 ).expanduser()
 
 app = FastAPI(title="System Monitor API", version="2.0.0")
+app.mount("/static", StaticFiles(directory=SCRIPT_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=SCRIPT_DIR / "templates")
 
 # Cache for latest collection
 _cache: dict = {}
@@ -64,6 +69,12 @@ def _get_latest_data() -> dict:
         return data
     except Exception as e:
         return {"error": str(e), "timestamp": datetime.now(UTC).isoformat()}
+
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Serve the dashboard UI."""
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/health")
