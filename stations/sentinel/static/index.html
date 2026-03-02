@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workshop Status</title>
+    <link rel="stylesheet" href="/static/css/status.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Overall Banner -->
+        <header class="header">
+            <h1 class="header__title">Workshop Status</h1>
+            <div id="overall-banner" class="banner banner--operational">
+                <span class="banner__icon"></span>
+                <span class="banner__text">All Systems Operational</span>
+            </div>
+        </header>
+
+        <!-- Service List -->
+        <section class="services" id="service-list">
+            <h2 class="section-title">Services</h2>
+            <div class="service-grid" id="services-container">
+                <!-- Populated by JS -->
+                <div class="loading">Loading status...</div>
+            </div>
+        </section>
+
+        <!-- 90-Day Timeline -->
+        <section class="timeline-section" id="timeline-section">
+            <h2 class="section-title">Uptime — Last 90 Days</h2>
+            <div id="timelines-container">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- Incident History -->
+        <section class="incidents" id="incidents-section">
+            <h2 class="section-title">Recent Incidents</h2>
+            <div id="incidents-container">
+                <div class="no-incidents">No recent incidents</div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>Powered by Workshop Sentinel</p>
+        </footer>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip" style="display:none;"></div>
+
+    <script src="/static/js/status.js"></script>
+</body>
+</html>

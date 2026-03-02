@@ -1,0 +1,21 @@
+[project]
+name = "workshop-sentinel"
+version = "0.1.0"
+description = "Self-healing health monitoring station for Workshop services"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.0",
+    "asyncpg>=0.30.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "pydantic>=2.10.0",
+    "aiofiles>=24.1.0",
+]
+
+[project.scripts]
+sentinel = "main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
