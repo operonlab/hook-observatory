@@ -94,12 +94,12 @@ _PW_ROOT_CHECK = (
 DEEP_CHECKS: list[DeepCheck] = [
     DeepCheck(
         name="frontend-render",
-        url="http://localhost:8080/v2/",
+        url="http://127.0.0.1:8080/v2/",
         playwright_code=_PW_ROOT_CHECK,
     ),
     DeepCheck(
         name="frontend-memvault-render",
-        url="http://localhost:8080/v2/memvault/",
+        url="http://127.0.0.1:8080/v2/memvault/",
         playwright_code=_PW_ROOT_CHECK,
     ),
 ]
@@ -195,30 +195,37 @@ async def run_light_check(check: LightCheck) -> CheckResult:
 
 
 async def run_deep_check(check: DeepCheck) -> CheckResult:
-    """Execute a Playwright CLI deep check."""
+    """Execute a Playwright CLI deep check.
+
+    Playwright CLI v1.59+ requires session-based usage:
+    1. open <url>  — launches headless browser with session ID
+    2. run-code    — executes JS check
+    3. close       — cleans up session
+    """
+    session_id = f"sentinel-{check.name}"
     start = time.monotonic()
     try:
-        # Navigate
-        nav_proc = await asyncio.create_subprocess_exec(
+        # Open browser session with target URL (headless by default)
+        open_proc = await asyncio.create_subprocess_exec(
             "npx",
             "@playwright/cli",
-            "--headless",
-            "navigate",
+            f"-s={session_id}",
+            "open",
             check.url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await asyncio.wait_for(nav_proc.communicate(), timeout=15)
+        await asyncio.wait_for(open_proc.communicate(), timeout=15)
 
-        if nav_proc.returncode != 0:
+        if open_proc.returncode != 0:
             elapsed = (time.monotonic() - start) * 1000
-            return CheckResult(check.name, "deep", "unhealthy", elapsed, "Navigation failed")
+            return CheckResult(check.name, "deep", "unhealthy", elapsed, "Browser open failed")
 
         # Run code check
         code_proc = await asyncio.create_subprocess_exec(
             "npx",
             "@playwright/cli",
-            "--headless",
+            f"-s={session_id}",
             "run-code",
             check.playwright_code,
             stdout=asyncio.subprocess.PIPE,
@@ -248,6 +255,20 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         return CheckResult(
             check.name, "deep", "unhealthy", (time.monotonic() - start) * 1000, str(e)[:200]
         )
+    finally:
+        # Always clean up the browser session
+        try:
+            close_proc = await asyncio.create_subprocess_exec(
+                "npx",
+                "@playwright/cli",
+                f"-s={session_id}",
+                "close",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(close_proc.communicate(), timeout=5)
+        except Exception:
+            pass
 
 
 async def run_all_light_checks() -> list[CheckResult]:
