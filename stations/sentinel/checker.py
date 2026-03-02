@@ -50,12 +50,12 @@ LIGHT_CHECKS: list[LightCheck] = [
     ),
     LightCheck(
         name="frontend",
-        url="http://127.0.0.1/v2/",
+        url="http://127.0.0.1:8080/v2/",
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-memvault",
-        url="http://127.0.0.1/v2/memvault/",
+        url="http://127.0.0.1:8080/v2/memvault/",
         expect_contains='<div id="root">',
     ),
     LightCheck(
@@ -88,19 +88,18 @@ LIGHT_CHECKS: list[LightCheck] = [
 
 
 _PW_ROOT_CHECK = (
-    'async (page) => { await page.waitForSelector("#root > *",'
-    " {timeout:10000}); return 'ok'; }"
+    "async (page) => { await page.waitForSelector(\"#root > *\", {timeout:10000}); return 'ok'; }"
 )
 
 DEEP_CHECKS: list[DeepCheck] = [
     DeepCheck(
         name="frontend-render",
-        url="http://localhost/v2/",
+        url="http://localhost:8080/v2/",
         playwright_code=_PW_ROOT_CHECK,
     ),
     DeepCheck(
         name="frontend-memvault-render",
-        url="http://localhost/v2/memvault/",
+        url="http://localhost:8080/v2/memvault/",
         playwright_code=_PW_ROOT_CHECK,
     ),
 ]

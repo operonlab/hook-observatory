@@ -1,0 +1,99 @@
+# ws-infra — Workshop Infrastructure Stack
+# Usage: docker compose -p ws-infra up -d
+# All 4 foundation services for the Workshop platform.
+# Container names follow compose convention: ws-infra-{service}-1
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: joneshong
+      POSTGRES_PASSWORD: dev_12345
+      POSTGRES_DB: workshop
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U joneshong -d workshop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3100:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    volumes:
+      - lgtm-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    volumes:
+      - rustfs-data:/data
+      - rustfs-logs:/logs
+    environment:
+      RUSTFS_ROOT_USER: rustfsadmin
+      RUSTFS_ROOT_PASSWORD: rustfsadmin
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -o /dev/null -w '%{http_code}' http://localhost:9000/ | grep -q 403"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  filebrowser:
+    image: filebrowser/filebrowser:v2
+    restart: unless-stopped
+    ports:
+      - "8850:80"
+    volumes:
+      - filebrowser-data:/srv
+      - filebrowser-db:/database
+    environment:
+      FB_BASEURL: /v2/apps/files
+      FB_DATABASE: /database/filebrowser.db
+      FB_ROOT: /srv
+      FB_NOAUTH: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/apps/files/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pg-data:
+  redis-data:
+  lgtm-data:
+  rustfs-data:
+  rustfs-logs:
+  filebrowser-data:
+  filebrowser-db:
