@@ -45,6 +45,15 @@
   <div class="mobile-pane-tabs" id="mobile-pane-tabs"></div>
 
   <footer>
+    <div class="footer-top">
+      <div class="quick-actions">
+        <button class="qbtn" data-key="C-c" title="Interrupt">Ctrl+C</button>
+        <button class="qbtn" data-key="S-Tab" title="Shift+Tab">&#8679;Tab</button>
+        <button class="qbtn" data-key="Enter" title="Enter">Enter</button>
+        <button class="qbtn" data-key="Escape" title="Escape">Esc</button>
+      </div>
+      <span class="focused-label" id="focused-label">no pane</span>
+    </div>
     <div class="extra-keys" id="extra-keys">
       <!-- Modifier keys -->
       <button class="ek mod" data-mod="C">Ctrl</button>
@@ -66,6 +75,7 @@
       <button class="ek" data-ek="BSpace">&#9003;</button>
       <div class="ek-sep"></div>
       <!-- Ctrl combos (standalone) -->
+      <button class="ek" data-ek="BTab" title="Shift+Tab" style="font-size:10px">⇧Tab</button>
       <button class="ek" data-ctrl="c" title="Ctrl+C" style="color:var(--yellow);font-size:10px">C-c</button>
       <button class="ek" data-ctrl="d" title="Ctrl+D" style="color:var(--red);font-size:10px">C-d</button>
       <button class="ek" data-ctrl="z" title="Ctrl+Z" style="color:var(--cyan);font-size:10px">C-z</button>
@@ -77,7 +87,6 @@
     <div class="ac-wrap">
       <div class="ac-list" id="ac-list"></div>
       <div class="input-row">
-        <span class="focused-label" id="focused-label">no pane</span>
         <textarea id="input" rows="1" placeholder="Type a message..." disabled></textarea>
         <button id="send-btn" disabled>Send</button>
       </div>

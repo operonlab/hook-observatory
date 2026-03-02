@@ -713,7 +713,20 @@ connectBtn.addEventListener('click', () => {
 });
 
 // ========================================================================
-// 14. Keyboard Shortcuts
+// 14. Quick-Action Buttons
+// ========================================================================
+
+document.querySelectorAll('.qbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.key;
+    if (!window.tmuxWs.isConnected() || !S.focusedPane) return;
+    window.tmuxWs.send({ type:'key', pane:S.focusedPane, key });
+    if (S.paneEls[S.focusedPane]) S.paneEls[S.focusedPane].resetScroll();
+  });
+});
+
+// ========================================================================
+// 15. Keyboard Shortcuts
 // ========================================================================
 
 document.addEventListener('keydown', (e) => {
