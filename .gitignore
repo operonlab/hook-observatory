@@ -36,6 +36,10 @@ stations/*/dist/
 
 # Claude
 CLAUDE.local.md
+.claude/settings.local.json
+
+# Playwright CLI session artifacts
+.playwright-cli/
 
 # Worktrees
 .worktrees/

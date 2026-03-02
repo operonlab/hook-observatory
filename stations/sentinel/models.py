@@ -33,7 +33,7 @@ class HealthCheck(Base):
     response_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default=text("now()::text")
+        String(50), nullable=False, server_default=text("now()::text")
     )
 
 
@@ -63,9 +63,9 @@ class Incident(Base):
     diagnosis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     repair_result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default=text("now()::text")
+        String(50), nullable=False, server_default=text("now()::text")
     )
-    resolved_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    resolved_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
 
 class ActiveOperation(Base):
@@ -87,9 +87,9 @@ class ActiveOperation(Base):
     pid: Mapped[int | None] = mapped_column(nullable=True)
     estimated_duration: Mapped[int] = mapped_column(nullable=False, default=300)  # seconds
     created_at: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default=text("now()::text")
+        String(50), nullable=False, server_default=text("now()::text")
     )
-    resolved_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    resolved_at: Mapped[str | None] = mapped_column(String(50), nullable=True)
     result: Mapped[str | None] = mapped_column(
         String(20), nullable=True
     )  # success / failure / timeout
@@ -113,5 +113,5 @@ class Subscription(Base):
     )
     active: Mapped[bool] = mapped_column(nullable=False, default=True)
     created_at: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default=text("now()::text")
+        String(50), nullable=False, server_default=text("now()::text")
     )
