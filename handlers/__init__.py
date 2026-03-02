@@ -40,45 +40,45 @@ Handler = Callable[[str, str, dict, str], HookResult]
 
 REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "PreToolUse": [
-        ("AskUserQuestion",  voice_notify.handle),
-        ("Bash",             verify_commit.handle),
-        ("Bash",             bash_safety.handle),
-        ("Bash",             sentinel_notify.handle),
-        ("Write|Edit",       skill_security.handle),
-        (None,               observability.handle),
+        ("AskUserQuestion", voice_notify.handle),
+        ("Bash", verify_commit.handle),
+        ("Bash", bash_safety.handle),
+        ("Bash", sentinel_notify.handle),
+        ("Write|Edit", skill_security.handle),
+        (None, observability.handle),
     ],
     "PostToolUse": [
-        ("Edit|Write",       auto_format.handle),
-        ("Skill",            external.skill_tracker),
-        (None,               observability.handle),
+        ("Edit|Write", auto_format.handle),
+        ("Skill", external.skill_tracker),
+        (None, observability.handle),
     ],
     "Stop": [
-        (None,               relay_signal.handle),
-        (None,               voice_notify.handle),
-        (None,               observability.handle),
+        (None, relay_signal.handle),
+        (None, voice_notify.handle),
+        (None, observability.handle),
     ],
     "SessionEnd": [
-        (None,               external.redact_session),
-        (None,               external.extract),
-        (None,               observability.handle),
+        (None, external.redact_session),
+        (None, external.extract),
+        (None, observability.handle),
     ],
     "UserPromptSubmit": [
-        (None,               external.recall),
-        (None,               observability.handle),
+        (None, external.recall),
+        (None, observability.handle),
     ],
     "SessionStart": [
-        (None,               external.sync_login),
-        (None,               cleanup_versions.handle),
-        (None,               observability.handle),
+        (None, external.sync_login),
+        (None, cleanup_versions.handle),
+        (None, observability.handle),
     ],
     "SubagentStart": [
-        (None,               observability.handle),
+        (None, observability.handle),
     ],
     "SubagentStop": [
-        (None,               observability.handle),
+        (None, observability.handle),
     ],
     "PreCompact": [
-        (None,               observability.handle),
+        (None, observability.handle),
     ],
 }
 
