@@ -11,7 +11,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db
-from src.shared.errors import NotFoundError
+from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .embedding import get_embedding
@@ -374,3 +374,108 @@ async def sync_scan():
 @router.get("/status")
 async def memvault_status():
     return {"module": "memvault", "status": "active", "phase": "A"}
+
+
+# ======================== Frozen Tier (Thaw) ========================
+
+
+@router.get("/frozen", summary="List frozen blocks")
+async def list_frozen_blocks(
+    space_id: str = Query("default"),
+    block_type: str | None = Query(None),
+    tag: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """List frozen block metadata (no content -- needs thaw)."""
+    from .models import BlockFrozen
+
+    q = select(BlockFrozen).where(
+        BlockFrozen.space_id == space_id,
+    )
+    if block_type:
+        q = q.where(BlockFrozen.block_type == block_type)
+    if tag:
+        q = q.where(BlockFrozen.tags.contains([tag]))
+
+    count_q = select(func.count()).select_from(q.subquery())
+    total = (await db.execute(count_q)).scalar_one()
+
+    q = q.order_by(BlockFrozen.frozen_at.desc())
+    q = q.offset((page - 1) * page_size).limit(page_size)
+    rows = (await db.execute(q)).scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "space_id": r.space_id,
+                "created_at": r.created_at,
+                "frozen_at": r.frozen_at,
+                "block_type": r.block_type,
+                "tags": r.tags or [],
+                "summary": r.summary,
+                "content_size": r.content_size,
+                "tier": "frozen",
+            }
+            for r in rows
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get(
+    "/frozen/{block_id}/thaw",
+    summary="Thaw frozen block",
+)
+async def thaw_frozen_block(
+    block_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch full content from S3 for a frozen block.
+
+    May take 1-3s for S3 download + decompression.
+    """
+    import json
+
+    from src.shared.storage import (
+        compute_content_hash,
+        download_and_decompress,
+    )
+
+    from .models import BlockFrozen
+
+    q = select(BlockFrozen).where(BlockFrozen.id == block_id)
+    frozen = (await db.execute(q)).scalar_one_or_none()
+    if not frozen:
+        raise NotFoundError(
+            f"Frozen block {block_id} not found",
+            code="memvault.frozen_not_found",
+        )
+
+    data = await download_and_decompress(frozen.s3_uri)
+    if data is None:
+        raise BadRequestError(
+            "Failed to retrieve frozen content from S3",
+            code="memvault.thaw_failed",
+        )
+
+    # Verify integrity
+    actual_hash = compute_content_hash(data)
+    if actual_hash != frozen.content_hash:
+        raise BadRequestError(
+            f"Content hash mismatch: expected "
+            f"{frozen.content_hash}, got {actual_hash}",
+            code="memvault.integrity_error",
+        )
+
+    content = json.loads(data.decode("utf-8"))
+    return {
+        "id": block_id,
+        "content": content,
+        "tier": "frozen",
+        "frozen_at": frozen.frozen_at,
+    }

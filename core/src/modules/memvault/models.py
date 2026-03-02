@@ -151,3 +151,45 @@ class ProfileScore(SpaceScopedModel):
     knowledge_score: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
     attitude_score: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
     skill_score: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
+
+
+# ======================== Frozen Tables ========================
+
+
+class BlockFrozen(Base):
+    """Frozen memory block — minimal metadata in PG, full content in S3.
+
+    Legal retention tier. Content is zstd-compressed JSON in
+    workshop-frozen bucket.
+    """
+
+    __tablename__ = "blocks_frozen"
+    __table_args__ = (
+        Index("idx_bf_space_created", "space_id", "created_at"),
+        Index("idx_bf_tags", "tags", postgresql_using="gin"),
+        Index("idx_bf_frozen", "frozen_at"),
+        Index("idx_bf_type", "block_type"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    space_id: Mapped[str] = mapped_column(String(32))
+    created_by: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    created_at: Mapped[str] = mapped_column(Text)
+    archived_at: Mapped[str] = mapped_column(Text)
+    frozen_at: Mapped[str] = mapped_column(Text)
+    block_type: Mapped[str] = mapped_column(String(50))
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]")
+    )
+    source_session: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    s3_uri: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    content_size: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
