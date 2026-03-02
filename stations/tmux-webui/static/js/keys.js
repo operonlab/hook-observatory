@@ -170,16 +170,11 @@
     localStorage.setItem('tmux-webui-show-extra-keys', show ? '1' : '0');
   });
 
-  // Mobile toolbar toggle
-  const footerEl = document.querySelector('footer');
-  const toolbarToggleBtn = document.getElementById('toolbar-toggle');
+  // Mobile: start collapsed (extra keys hidden)
   if (window.matchMedia('(max-width:600px)').matches) {
-    footerEl.classList.add('mobile-collapsed');
+    const footerEl = document.querySelector('footer');
+    if (footerEl) footerEl.classList.add('mobile-collapsed');
   }
-  toolbarToggleBtn?.addEventListener('click', () => {
-    const collapsed = footerEl.classList.toggle('mobile-collapsed');
-    toolbarToggleBtn.classList.toggle('active', !collapsed);
-  });
 
   // Expose
   window.applyEkVisibility = applyEkVisibility;

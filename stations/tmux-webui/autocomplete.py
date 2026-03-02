@@ -1,16 +1,260 @@
-"""Autocomplete engine: path, command history, skill completion."""
+"""Enhanced autocomplete engine with periodic scanning of Claude Code resources."""
 
+import json
 import logging
 import os
-import re
+import threading
+import time
+from pathlib import Path
 
 logger = logging.getLogger("tmux-webui")
+
+
+# ── YAML frontmatter parser ──
+
+
+def _parse_yaml_frontmatter(filepath: str) -> dict:
+    """Extract YAML frontmatter from a markdown file."""
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read(4096)
+
+        result = {}
+        if content.startswith("---"):
+            end = content.find("\n---", 3)
+            if end != -1:
+                fm_text = content[3:end].strip()
+                lines = fm_text.split("\n")
+                i = 0
+                while i < len(lines):
+                    line = lines[i]
+                    if ":" in line and not line.startswith(" "):
+                        key, _, val = line.partition(":")
+                        val = val.strip().strip('"').strip("'")
+                        # Handle YAML block scalars (>-, >, |-, |)
+                        if val in (">-", ">", "|-", "|"):
+                            parts = []
+                            i += 1
+                            while i < len(lines) and (
+                                lines[i].startswith("  ") or lines[i].strip() == ""
+                            ):
+                                parts.append(lines[i].strip())
+                                i += 1
+                            result[key.strip()] = " ".join(
+                                p for p in parts if p
+                            )
+                            continue
+                        else:
+                            result[key.strip()] = val
+                    i += 1
+                body = content[end + 4 :].strip()
+            else:
+                body = content
+        else:
+            body = content
+
+        if "name" not in result:
+            for line in body.split("\n"):
+                if line.startswith("# "):
+                    result["name"] = line[2:].strip()
+                    break
+
+        if "description" not in result:
+            for line in body.split("\n"):
+                line = line.strip()
+                if line and not line.startswith("#") and not line.startswith("---"):
+                    result["description"] = line[:120]
+                    break
+
+        return result
+    except Exception:
+        return {}
+
+
+# ── Resource scanners ──
+
+
+def _scan_skills() -> list[dict]:
+    """Scan ~/.claude/skills/*/SKILL.md for skill info."""
+    skills_dir = os.path.expanduser("~/.claude/skills")
+    if not os.path.isdir(skills_dir):
+        return []
+
+    results = []
+    try:
+        for entry in sorted(os.listdir(skills_dir)):
+            skill_md = os.path.join(skills_dir, entry, "SKILL.md")
+            if not os.path.isfile(skill_md):
+                continue
+            fm = _parse_yaml_frontmatter(skill_md)
+            desc = fm.get("description", "")
+            results.append({
+                "name": entry,
+                "display_name": fm.get("name", entry),
+                "description": desc[:100] if desc else "",
+                "type": "skill",
+                "icon": "/",
+            })
+    except Exception as e:
+        logger.debug("Failed to scan skills: %s", e)
+
+    return results
+
+
+def _scan_commands() -> list[dict]:
+    """Scan ~/.claude/commands/*.md for command info."""
+    commands_dir = os.path.expanduser("~/.claude/commands")
+    if not os.path.isdir(commands_dir):
+        return []
+
+    results = []
+    try:
+        for entry in sorted(os.listdir(commands_dir)):
+            if not entry.endswith(".md"):
+                continue
+            cmd_path = os.path.join(commands_dir, entry)
+            fm = _parse_yaml_frontmatter(cmd_path)
+            name = entry[:-3]
+            desc = fm.get("description", "")
+            results.append({
+                "name": name,
+                "display_name": fm.get("name", name),
+                "description": desc[:100] if desc else "",
+                "type": "command",
+                "icon": "/",
+            })
+    except Exception as e:
+        logger.debug("Failed to scan commands: %s", e)
+
+    return results
+
+
+def _scan_agents() -> list[dict]:
+    """Scan ~/.claude/agents/*.md for agent info."""
+    agents_dir = os.path.expanduser("~/.claude/agents")
+    if not os.path.isdir(agents_dir):
+        return []
+
+    results = []
+    try:
+        for entry in sorted(os.listdir(agents_dir)):
+            if not entry.endswith(".md"):
+                continue
+            agent_path = os.path.join(agents_dir, entry)
+            fm = _parse_yaml_frontmatter(agent_path)
+            name = entry[:-3]
+            model = fm.get("model", "")
+            max_turns = fm.get("maxTurns", "")
+            desc_parts = []
+            if model:
+                desc_parts.append(model)
+            if max_turns:
+                desc_parts.append(f"max {max_turns} turns")
+            results.append({
+                "name": name,
+                "display_name": fm.get("name", name),
+                "description": ", ".join(desc_parts) if desc_parts else "",
+                "type": "agent",
+                "icon": "@",
+            })
+    except Exception as e:
+        logger.debug("Failed to scan agents: %s", e)
+
+    return results
+
+
+def _scan_mcp_servers() -> list[dict]:
+    """Read MCP server names from settings files."""
+    servers = {}
+    settings_paths = [
+        os.path.expanduser("~/.claude/settings.json"),
+        str(Path(__file__).resolve().parents[2] / ".mcp.json"),
+    ]
+
+    for path in settings_paths:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            mcp_servers = data.get("mcpServers", {})
+            for name, config in mcp_servers.items():
+                if name not in servers:
+                    cmd = config.get("command", "")
+                    servers[name] = {
+                        "name": name,
+                        "display_name": name,
+                        "description": f"MCP: {cmd}" if cmd else "MCP server",
+                        "type": "mcp",
+                        "icon": "@",
+                    }
+        except Exception:
+            continue
+
+    return list(servers.values())
+
+
+# ── Resource cache ──
+
+
+class ResourceCache:
+    """Cache for scanned Claude Code resources with periodic refresh."""
+
+    def __init__(self, scan_interval: int = 300):
+        self.scan_interval = scan_interval
+        self.skills: list[dict] = []
+        self.commands: list[dict] = []
+        self.agents: list[dict] = []
+        self.mcp_servers: list[dict] = []
+        self._lock = threading.Lock()
+        self._timer: threading.Timer | None = None
+
+    def start_periodic_scan(self):
+        self._scan()
+        self._schedule_next()
+
+    def _schedule_next(self):
+        self._timer = threading.Timer(self.scan_interval, self._periodic)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _periodic(self):
+        self._scan()
+        self._schedule_next()
+
+    def force_refresh(self):
+        self._scan()
+
+    def _scan(self):
+        skills = _scan_skills()
+        commands = _scan_commands()
+        agents = _scan_agents()
+        mcp_servers = _scan_mcp_servers()
+        with self._lock:
+            self.skills = skills
+            self.commands = commands
+            self.agents = agents
+            self.mcp_servers = mcp_servers
+        logger.info(
+            "Resource scan: %d skills, %d commands, %d agents, %d MCP servers",
+            len(skills), len(commands), len(agents), len(mcp_servers),
+        )
+
+    def get_slash_items(self) -> list[dict]:
+        with self._lock:
+            return list(self.skills) + list(self.commands)
+
+    def get_at_items(self) -> list[dict]:
+        with self._lock:
+            return list(self.agents) + list(self.mcp_servers)
+
+
+_cache = ResourceCache()
+
 
 # ── Path completion ──
 
 
-def complete_path(partial: str, max_results: int = 20) -> list[dict]:
-    """Complete filesystem paths from a partial string."""
+def complete_path(partial: str, max_results: int = 15) -> list[dict]:
+    """Complete filesystem paths."""
     expanded = os.path.expanduser(partial)
 
     if os.path.isdir(expanded) and not partial.endswith("/"):
@@ -34,7 +278,6 @@ def complete_path(partial: str, max_results: int = 20) -> list[dict]:
             full = os.path.join(base_dir, entry)
             is_dir = os.path.isdir(full)
             display = entry + ("/" if is_dir else "")
-            # Reconstruct the completed path
             if expanded.endswith("/"):
                 completed = partial + display
             else:
@@ -44,186 +287,111 @@ def complete_path(partial: str, max_results: int = 20) -> list[dict]:
                     if is_dir:
                         completed += "/"
             results.append({
-                "text": completed,
-                "display": display,
-                "type": "dir" if is_dir else "file",
-                "category": "path",
+                "name": completed,
+                "display_name": display,
+                "description": "directory" if is_dir else "file",
+                "type": "path",
+                "icon": "/",
             })
             if len(results) >= max_results:
                 break
-    except PermissionError:
+    except (PermissionError, FileNotFoundError):
         pass
-    except FileNotFoundError:
-        pass
 
     return results
 
 
-# ── Command history completion ──
-
-_history_cache: list[str] = []
-_history_mtime: float = 0
+# ── Fuzzy matching ──
 
 
-def _load_history() -> list[str]:
-    """Load unique commands from zsh history (most recent first)."""
-    global _history_cache, _history_mtime
+def _fuzzy_score(query: str, text: str) -> int:
+    """Score a fuzzy match. Returns -1 for no match."""
+    q = query.lower()
+    t = text.lower()
 
-    hist_path = os.path.expanduser("~/.zsh_history")
-    if not os.path.exists(hist_path):
-        return _history_cache
+    if not q:
+        return 100
 
-    try:
-        mtime = os.path.getmtime(hist_path)
-        if mtime == _history_mtime and _history_cache:
-            return _history_cache
+    if t.startswith(q):
+        return 1000 - len(t)
 
-        _history_mtime = mtime
-        commands = []
-        seen = set()
+    if q in t:
+        return 500 - t.index(q)
 
-        with open(hist_path, "rb") as f:
-            raw = f.read()
+    qi = 0
+    score = 0
+    for ch in t:
+        if qi < len(q) and ch == q[qi]:
+            qi += 1
+            score += 1
 
-        # zsh history format: ": timestamp:0;command"
-        for line in raw.decode("utf-8", errors="replace").splitlines():
-            m = re.match(r"^: \d+:\d+;(.+)$", line)
-            cmd = m.group(1).strip() if m else line.strip()
-            if cmd and cmd not in seen:
-                seen.add(cmd)
-                commands.append(cmd)
-
-        # Most recent first
-        commands.reverse()
-        _history_cache = commands[:5000]
-        return _history_cache
-
-    except Exception as e:
-        logger.debug("Failed to load zsh history: %s", e)
-        return _history_cache
+    return score if qi == len(q) else -1
 
 
-def complete_command(partial: str, max_results: int = 15) -> list[dict]:
-    """Complete from zsh command history."""
-    history = _load_history()
-    query = partial.lower()
-    results = []
+def _rank_and_filter(items: list[dict], query: str, max_results: int = 15) -> list[dict]:
+    """Filter and rank items by fuzzy match score."""
+    if not query:
+        return items[:max_results]
 
-    for cmd in history:
-        if query in cmd.lower():
-            results.append({
-                "text": cmd,
-                "display": cmd[:80] + ("..." if len(cmd) > 80 else ""),
-                "type": "history",
-                "category": "history",
-            })
-            if len(results) >= max_results:
-                break
+    scored = []
+    for item in items:
+        score = _fuzzy_score(query, item["name"])
+        if score >= 0:
+            scored.append((score, item))
 
-    return results
+    scored.sort(key=lambda x: -x[0])
+    return [item for _, item in scored[:max_results]]
 
 
-# ── Skill completion ──
-
-_skill_cache: list[dict] = []
-_skill_mtime: float = 0
-
-# Category mapping for known skills
-SKILL_CATEGORIES = {
-    "smart-search": "Search", "brainstorming": "Search",
-    "competitive-intel": "Search", "model-mentor": "Search",
-    "meeting-insights": "Search", "company-intel": "Search",
-    "diagram-gen": "Visual", "image-gen": "Visual",
-    "image-edit": "Visual", "image-prompt": "Visual",
-    "canvas-design": "Visual", "frontend-design": "Visual",
-    "theme-factory": "Visual", "brand-guidelines": "Visual",
-    "ui-audit": "Visual",
-    "pdf": "Document", "xlsx": "Document", "pptx": "Document", "docx": "Document",
-    "ocr": "Document",
-    "content-writer": "Writing", "marketing-copy": "Writing",
-    "doc-coauthoring": "Writing", "readme-gen": "Writing",
-    "changelog-gen": "Writing", "social-content": "Writing",
-    "systematic-debugging": "Dev", "tdd": "Dev",
-    "verification-before-completion": "Dev", "spec-kit": "Dev",
-    "mcp-builder": "Dev", "git-worktrees": "Dev",
-    "maestro": "Orchestr", "team-tasks": "Orchestr",
-    "claude-code-headless": "Orchestr", "codex-cli-headless": "Orchestr",
-    "gemini-cli-headless": "Orchestr", "scheduler": "Orchestr",
-    "create-skill": "Skills", "skill-optimizer": "Skills",
-    "skill-publisher": "Skills", "skill-catalog": "Skills",
-    "skill-tester": "Skills",
-    "notebookllm": "Notebook", "notebookllm-visual": "Notebook",
-    "sync-config": "Infra", "keybindings-help": "Infra",
-}
+# ── Public API ──
 
 
-def _scan_skills() -> list[dict]:
-    """Scan ~/.claude/skills/ for available skills."""
-    global _skill_cache, _skill_mtime
-
-    skills_dir = os.path.expanduser("~/.claude/skills")
-    if not os.path.isdir(skills_dir):
-        return _skill_cache
-
-    try:
-        mtime = os.path.getmtime(skills_dir)
-        if mtime == _skill_mtime and _skill_cache:
-            return _skill_cache
-
-        _skill_mtime = mtime
-        skills = []
-        for entry in sorted(os.listdir(skills_dir)):
-            skill_md = os.path.join(skills_dir, entry, "SKILL.md")
-            if os.path.isfile(skill_md):
-                cat = SKILL_CATEGORIES.get(entry, "Other")
-                skills.append({
-                    "name": entry,
-                    "category": cat,
-                })
-
-        _skill_cache = skills
-        return _skill_cache
-    except Exception as e:
-        logger.debug("Failed to scan skills: %s", e)
-        return _skill_cache
+def init_cache():
+    """Initialize the resource cache with periodic scanning."""
+    _cache.start_periodic_scan()
 
 
-def complete_skill(partial: str, max_results: int = 20) -> list[dict]:
-    """Complete skill names from ~/.claude/skills/."""
-    skills = _scan_skills()
-    query = partial.lower().lstrip("/")
-    results = []
-
-    for sk in skills:
-        if query in sk["name"].lower():
-            results.append({
-                "text": "/" + sk["name"],
-                "display": "/" + sk["name"],
-                "type": "skill",
-                "category": sk["category"],
-            })
-            if len(results) >= max_results:
-                break
-
-    return results
+def refresh_cache():
+    """Force refresh the cache."""
+    _cache.force_refresh()
 
 
-# ── Unified completion ──
+def get_cache_stats() -> dict:
+    """Get cache statistics."""
+    with _cache._lock:
+        return {
+            "skills": len(_cache.skills),
+            "commands": len(_cache.commands),
+            "agents": len(_cache.agents),
+            "mcp_servers": len(_cache.mcp_servers),
+        }
 
 
-def complete(text: str) -> list[dict]:
-    """Route completion based on input pattern."""
-    text = text.strip()
-    if not text:
+def complete(query: str, type_filter: str = "") -> list[dict]:
+    """Route completion based on trigger and type filter.
+
+    type_filter: "slash" for / items, "at" for @ items, "path" for paths
+    """
+    query = query.strip()
+    if not query:
         return []
 
-    # Skill completion: starts with /
-    if text.startswith("/"):
-        return complete_skill(text)
+    if type_filter == "slash" or (not type_filter and query.startswith("/")):
+        search = query.lstrip("/")
+        items = _cache.get_slash_items()
+        return _rank_and_filter(items, search)
 
-    # Path completion: starts with ~, /, or .
-    if text.startswith(("~", "/", "./")):
-        return complete_path(text)
+    if type_filter == "at" or (not type_filter and query.startswith("@")):
+        search = query.lstrip("@")
+        items = _cache.get_at_items()
+        return _rank_and_filter(items, search)
 
-    # Otherwise: command history
-    return complete_command(text)
+    if type_filter == "path" or (
+        not type_filter and query.startswith(("~", "./"))
+    ):
+        return complete_path(query)
+
+    if "/" in query:
+        return complete_path(query)
+
+    return []

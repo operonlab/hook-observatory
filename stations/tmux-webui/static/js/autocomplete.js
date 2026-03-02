@@ -1,6 +1,6 @@
 /**
- * autocomplete.js — Frontend autocomplete UI
- * Integrates with server-side path/command/skill completion via WebSocket
+ * autocomplete.js — Enhanced autocomplete with / and @ triggers
+ * Scans Claude Code skills, commands, agents, MCP servers via HTTP API
  */
 
 (function() {
@@ -9,29 +9,87 @@
   let acIdx = -1;
   let acItems = [];
   let debounceTimer = null;
+  let currentToken = null;
+
+  const basePath = location.pathname.replace(/\/+$/, '') || '';
+
+  // ── Token detection ──
+
+  function getTokenAtCursor() {
+    const text = inputEl.value;
+    const cursor = inputEl.selectionStart ?? text.length;
+
+    // Walk backward from cursor to find token start
+    let start = cursor;
+    while (start > 0 && text[start - 1] !== ' ' && text[start - 1] !== '\n') {
+      start--;
+    }
+
+    const token = text.substring(start, cursor);
+    if (!token) return null;
+
+    // Path patterns
+    if (token.startsWith('~/') || token.startsWith('./')) {
+      return { type: 'path', query: token, start, end: cursor };
+    }
+
+    // Slash trigger → skills + commands
+    if (token.startsWith('/') && !token.includes('/', 1)) {
+      return { type: 'slash', query: token, start, end: cursor };
+    }
+
+    // @ trigger → agents + MCP servers
+    if (token.startsWith('@')) {
+      return { type: 'at', query: token, start, end: cursor };
+    }
+
+    return null;
+  }
+
+  // ── API call ──
+
+  async function fetchCompletions(query, type) {
+    try {
+      const params = new URLSearchParams({ q: query, type });
+      const res = await fetch(`${basePath}/api/autocomplete?${params}`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  // ── Render ──
 
   function acOpen(items) {
     acItems = items;
     acList.innerHTML = '';
+
     items.forEach((item, i) => {
       const div = document.createElement('div');
       div.className = 'ac-item' + (i === acIdx ? ' active' : '');
 
-      const text = document.createElement('span');
-      text.textContent = item.display;
-      div.appendChild(text);
+      const icon = document.createElement('span');
+      icon.className = 'ac-icon';
+      icon.textContent = item.icon || (item.type === 'path' ? '/' : '/');
+      div.appendChild(icon);
 
-      if (item.category) {
-        const cat = document.createElement('span');
-        cat.className = 'ac-cat';
-        cat.textContent = item.category;
-        div.appendChild(cat);
+      const name = document.createElement('span');
+      name.className = 'ac-name';
+      name.textContent = item.display_name || item.name;
+      div.appendChild(name);
+
+      if (item.description) {
+        const desc = document.createElement('span');
+        desc.className = 'ac-desc';
+        desc.textContent = item.description;
+        div.appendChild(desc);
       }
 
-      const typeBadge = document.createElement('span');
-      typeBadge.className = 'ac-type ' + (item.type || '');
-      typeBadge.textContent = item.type || '';
-      div.appendChild(typeBadge);
+      const badge = document.createElement('span');
+      badge.className = 'ac-badge ' + (item.type || '');
+      badge.textContent = item.type || '';
+      div.appendChild(badge);
 
       div.addEventListener('mousedown', (e) => {
         e.preventDefault();
@@ -39,6 +97,7 @@
       });
       acList.appendChild(div);
     });
+
     acList.classList.toggle('open', items.length > 0);
   }
 
@@ -46,76 +105,63 @@
     acList.classList.remove('open');
     acIdx = -1;
     acItems = [];
+    currentToken = null;
   }
 
   function acSelect(item) {
-    if (item.type === 'skill') {
-      // Skills that end with space → fill input; otherwise send directly
-      if (item.text.endsWith(' ')) {
-        inputEl.value = item.text;
-        inputEl.focus();
-      } else {
-        inputEl.value = '';
-        window.sendSkillOrAction?.(item.text);
-      }
-    } else if (item.type === 'history') {
-      inputEl.value = item.text;
-      inputEl.focus();
+    if (!currentToken) { acClose(); return; }
+
+    const text = inputEl.value;
+    let replacement;
+
+    if (item.type === 'skill' || item.type === 'command') {
+      replacement = '/' + item.name + ' ';
+    } else if (item.type === 'agent' || item.type === 'mcp') {
+      replacement = '@' + item.name + ' ';
+    } else if (item.type === 'path') {
+      replacement = item.name;
     } else {
-      // Path: replace current token
-      inputEl.value = item.text;
-      inputEl.focus();
+      replacement = item.name;
     }
+
+    const before = text.substring(0, currentToken.start);
+    const after = text.substring(currentToken.end);
+    inputEl.value = before + replacement + after;
+    const newCursor = currentToken.start + replacement.length;
+    inputEl.selectionStart = inputEl.selectionEnd = newCursor;
+    inputEl.focus();
     acClose();
   }
 
-  function acFilter() {
+  // ── Filter logic ──
+
+  async function acFilter() {
     const val = inputEl.value;
     if (!val || val.includes('\n')) { acClose(); return; }
 
-    // Debounce for path/command completion (needs server round-trip)
-    clearTimeout(debounceTimer);
+    const token = getTokenAtCursor();
+    if (!token) { acClose(); return; }
 
-    if (val.startsWith('/')) {
-      // Skill completion: request via WebSocket
-      debounceTimer = setTimeout(() => {
-        if (window.tmuxWs && window.tmuxWs.isConnected()) {
-          window.tmuxWs.send({ type: 'autocomplete', query: val });
-        }
-      }, 100);
-    } else if (val.startsWith('~') || val.startsWith('./') || val.startsWith('/')) {
-      // Path completion
-      debounceTimer = setTimeout(() => {
-        if (window.tmuxWs && window.tmuxWs.isConnected()) {
-          window.tmuxWs.send({ type: 'autocomplete', query: val });
-        }
-      }, 150);
-    } else if (val.length >= 2) {
-      // Command history
-      debounceTimer = setTimeout(() => {
-        if (window.tmuxWs && window.tmuxWs.isConnected()) {
-          window.tmuxWs.send({ type: 'autocomplete', query: val });
-        }
-      }, 200);
-    } else {
-      acClose();
-    }
+    currentToken = token;
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      const results = await fetchCompletions(token.query, token.type);
+      if (results.length === 0) {
+        acClose();
+        return;
+      }
+      acIdx = -1;
+      acOpen(results);
+    }, 80);
   }
 
-  // Handle autocomplete results from server
-  window.handleAutocomplete = function(results) {
-    if (!results || results.length === 0) {
-      acClose();
-      return;
-    }
-    acIdx = -1;
-    acOpen(results);
-  };
+  // ── Keyboard navigation ──
 
-  // Keyboard navigation in autocomplete
   inputEl.addEventListener('keydown', (e) => {
     if (acList.classList.contains('open')) {
       const items = acList.querySelectorAll('.ac-item');
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         acIdx = Math.min(acIdx + 1, items.length - 1);
