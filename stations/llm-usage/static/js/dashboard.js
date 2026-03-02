@@ -1,4 +1,4 @@
-/* LLM Usage Dashboard — vanilla JS + Chart.js */
+/* LLM 用量儀表板 — vanilla JS + Chart.js */
 (function () {
   'use strict';
 
@@ -28,9 +28,9 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
   const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
-  const fmt = (n, d = 2) => typeof n === 'number' ? '$' + n.toFixed(d) : '—';
-  const fmtPct = (n) => typeof n === 'number' ? n.toFixed(1) + '%' : '—';
-  const fmtNum = (n) => typeof n === 'number' ? n.toLocaleString() : '—';
+  const fmt = (n, d = 2) => typeof n === 'number' ? '$' + n.toFixed(d) : '\u2014';
+  const fmtPct = (n) => typeof n === 'number' ? n.toFixed(1) + '%' : '\u2014';
+  const fmtNum = (n) => typeof n === 'number' ? n.toLocaleString() : '\u2014';
 
   async function fetchJSON(path) {
     try {
@@ -48,7 +48,6 @@
       btn.classList.add('active');
       const panel = $('#panel-' + btn.dataset.tab);
       if (panel) panel.classList.add('active');
-      // Resize charts when tab becomes visible
       setTimeout(() => Object.values(charts).forEach(c => c?.resize()), 50);
     });
   });
@@ -76,7 +75,7 @@
   }
 
   function updateTimestamp() {
-    $('#updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+    $('#updated').textContent = '\u66F4\u65B0\uFF1A' + new Date().toLocaleTimeString();
   }
 
   // ── Load functions ──
@@ -109,16 +108,16 @@
   // ── Render: Overview ──
   function renderOverview(summary, budget, cache, subscription) {
     // Subscription card
-    if (subscription) {
-      const clis = subscription.clis || [];
-      const total = clis.reduce((s, c) => s + (c.monthly_cost_usd || 0), 0);
-      $('#sub-total').textContent = fmt(total);
-      $('#sub-list').innerHTML = clis.map(c =>
-        `<div>${esc(c.name)}: ${fmt(c.monthly_cost_usd)} ${c.active ? '&#10003;' : '&#10007;'}</div>`
+    if (summary && summary.subscription) {
+      const sub = summary.subscription;
+      $('#sub-total').textContent = fmt(sub.total_monthly_usd);
+      const providers = sub.providers || [];
+      $('#sub-list').innerHTML = providers.map(p =>
+        `<div>${esc(p.cli)}: ${fmt(p.cost_usd)} (${esc(p.plan)})</div>`
       ).join('');
     }
 
-    // Budget card
+    // Budget card (API spend = ccusage actual)
     if (budget) {
       const pct = budget.used_pct || 0;
       $('#api-spend').textContent = fmt(budget.used_usd);
@@ -127,21 +126,17 @@
       bar.className = 'budget-bar' +
         (pct >= 100 ? ' danger' : pct >= budget.warning_threshold_pct ? ' warn' : '');
       $('#budget-detail').textContent =
-        `${fmtPct(pct)} of ${fmt(budget.budget_usd)} budget` +
-        (budget.over_warning ? ' ⚠️' : '');
+        `${fmtPct(pct)} / ${fmt(budget.budget_usd)} \u9810\u7B97` +
+        (budget.over_warning ? ' \u26A0' : '');
     }
 
     // Total card
-    if (summary) {
-      const subCost = summary.subscription_total_usd || 0;
-      const apiCost = summary.api_month_to_date_usd || 0;
-      const total = subCost + apiCost;
-      $('#total-cost').textContent = fmt(total);
-      const subPct = total > 0 ? (subCost / total * 100).toFixed(0) : 0;
-      const apiPct = total > 0 ? (apiCost / total * 100).toFixed(0) : 0;
+    if (summary && summary.combined) {
+      const c = summary.combined;
+      $('#total-cost').textContent = fmt(c.total_monthly_usd);
       $('#total-split').innerHTML =
-        `<div>Subscription: ${fmt(subCost)} (${subPct}%)</div>` +
-        `<div>API: ${fmt(apiCost)} (${apiPct}%)</div>`;
+        `<div>\u8A02\u95B1: ${fmt(c.subscription_usd)} (${c.subscription_pct}%)</div>` +
+        `<div>API: ${fmt(c.api_usd)} (${c.api_pct}%)</div>`;
     }
 
     // Quota
@@ -152,15 +147,15 @@
       $('#cache-grid').innerHTML = `
         <div class="cache-item">
           <div class="cache-value">${fmtPct(cache.cache_hit_rate_pct)}</div>
-          <div class="cache-label">Cache Hit Rate</div>
+          <div class="cache-label">\u5FEB\u53D6\u547D\u4E2D\u7387</div>
         </div>
         <div class="cache-item">
           <div class="cache-value">${fmtNum(cache.cached_tokens)}</div>
-          <div class="cache-label">Cached Tokens</div>
+          <div class="cache-label">\u5FEB\u53D6 Token</div>
         </div>
         <div class="cache-item">
           <div class="cache-value">${fmt(cache.estimated_savings_usd)}</div>
-          <div class="cache-label">Est. Savings</div>
+          <div class="cache-label">\u9810\u4F30\u7BC0\u7701</div>
         </div>
       `;
     }
@@ -168,33 +163,47 @@
 
   function renderQuota(subscription) {
     const grid = $('#quota-grid');
-    if (!subscription) { grid.innerHTML = '<div class="loading">No data</div>'; return; }
+    if (!subscription) { grid.innerHTML = '<div class="loading">\u7121\u8CC7\u6599</div>'; return; }
 
     let html = '';
-    const clis = subscription.clis || [];
-    for (const cli of clis) {
-      const quotas = cli.quotas || {};
-      for (const [key, q] of Object.entries(quotas)) {
-        const pct = q.used_pct || 0;
-        const cls = pct >= 90 ? 'critical' : pct >= 70 ? 'high' : '';
+    const providers = subscription.providers || [];
+    for (const p of providers) {
+      // Claude Code quotas
+      if (p.quota_5h_pct != null) {
+        const pct5 = p.quota_5h_pct || 0;
+        const cls5 = pct5 >= 90 ? 'critical' : pct5 >= 70 ? 'high' : '';
         html += `
           <div class="quota-item">
             <div class="quota-label">
-              <span>${esc(cli.name)} ${esc(key)}</span>
-              <span>${fmtPct(pct)}</span>
+              <span>${esc(p.cli)} 5h</span>
+              <span>${fmtPct(pct5)}</span>
             </div>
-            <div class="quota-bar-wrap"><div class="quota-bar ${cls}" style="width:${Math.min(pct, 100)}%"></div></div>
+            <div class="quota-bar-wrap"><div class="quota-bar ${cls5}" style="width:${Math.min(pct5, 100)}%"></div></div>
+          </div>`;
+      }
+      if (p.quota_7d_pct != null) {
+        const pct7 = p.quota_7d_pct || 0;
+        const cls7 = pct7 >= 90 ? 'critical' : pct7 >= 70 ? 'high' : '';
+        html += `
+          <div class="quota-item">
+            <div class="quota-label">
+              <span>${esc(p.cli)} 7d</span>
+              <span>${fmtPct(pct7)}</span>
+            </div>
+            <div class="quota-bar-wrap"><div class="quota-bar ${cls7}" style="width:${Math.min(pct7, 100)}%"></div></div>
           </div>`;
       }
     }
 
     // Model policy
-    const policy = subscription.model_policy || 'normal';
+    const cc = providers.find(p => p.cli === 'claude-code');
+    const mode = cc?.current_mode || '\u6B63\u5E38';
+    const modeLabel = mode === 'boost' ? 'BOOST' : '\u6B63\u5E38';
     html += `<div class="quota-item" style="justify-content:center;align-items:center">
-      <span class="policy-badge ${esc(policy)}">${esc(policy)}</span>
+      <span class="policy-badge ${esc(mode)}">${esc(modeLabel)}</span>
     </div>`;
 
-    grid.innerHTML = html;
+    grid.innerHTML = html || '<div class="loading">\u7121\u8CC7\u6599</div>';
   }
 
   // ── Render: Trends ──
@@ -203,20 +212,16 @@
 
     const daily = data.daily || [];
     const labels = daily.map(d => d.date?.slice(5) || '');
-    const costs = daily.map(d => d.total_cost_usd || 0);
-    const ma7 = daily.map(d => d.moving_avg_7d || null);
-
-    // Cumulative
-    let cumulative = [];
-    let running = 0;
-    for (const c of costs) { running += c; cumulative.push(+running.toFixed(4)); }
+    const costs = daily.map(d => d.cost_usd || 0);
+    const ma7 = daily.map(d => d.cost_7d_avg_usd || null);
+    const cumulative = daily.map(d => d.cumulative_cost_usd || 0);
 
     // Stats
-    const stats = data.stats || {};
+    const stats = data.summary || {};
     $('#trend-stats').innerHTML = `
-      <span class="trend-stat">Total: <strong>${fmt(stats.total_cost_usd)}</strong></span>
-      <span class="trend-stat">Avg/day: <strong>${fmt(stats.avg_daily_cost_usd)}</strong></span>
-      <span class="trend-stat">Projected: <strong>${fmt(stats.projected_monthly_usd)}</strong></span>
+      <span class="trend-stat">\u5408\u8A08: <strong>${fmt(stats.total_cost_usd)}</strong></span>
+      <span class="trend-stat">\u65E5\u5747: <strong>${fmt(stats.avg_daily_cost_usd)}</strong></span>
+      <span class="trend-stat">\u6708\u63A8\u4F30: <strong>${fmt(stats.projected_monthly_usd)}</strong></span>
     `;
 
     // Daily chart
@@ -227,7 +232,7 @@
         labels,
         datasets: [
           {
-            label: 'Daily Cost',
+            label: '\u6BCF\u65E5\u82B1\u8CBB',
             data: costs,
             backgroundColor: C.blue + '99',
             borderColor: C.blue,
@@ -236,7 +241,7 @@
             order: 2,
           },
           {
-            label: '7d Avg',
+            label: '7\u65E5\u5747\u7DDA',
             data: ma7,
             type: 'line',
             borderColor: C.peach,
@@ -258,7 +263,7 @@
       data: {
         labels,
         datasets: [{
-          label: 'Cumulative',
+          label: '\u7D2F\u8A08',
           data: cumulative,
           borderColor: C.teal,
           backgroundColor: C.teal + '20',
@@ -276,7 +281,7 @@
   function renderModels(data) {
     if (!data) return;
 
-    const models = data.by_model || [];
+    const models = data.models || [];
     const providers = data.by_provider || [];
 
     // Top 8 models — horizontal bar
@@ -287,8 +292,8 @@
       data: {
         labels: top8.map(m => m.model || 'unknown'),
         datasets: [{
-          label: 'Cost',
-          data: top8.map(m => m.total_cost_usd || 0),
+          label: '\u82B1\u8CBB',
+          data: top8.map(m => m.cost_usd || 0),
           backgroundColor: CHART_COLORS.slice(0, top8.length),
           borderRadius: 4,
         }],
@@ -334,18 +339,18 @@
   function renderModelTable(models) {
     const tbody = $('#model-tbody');
     if (!models || models.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="loading">No data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="loading">\u7121\u8CC7\u6599</td></tr>';
       return;
     }
 
     tbody.innerHTML = models.map(m => `
       <tr>
-        <td>${esc(m.model || '—')}</td>
-        <td>${esc(m.provider || '—')}</td>
+        <td>${esc(m.model || '\u2014')}</td>
+        <td>${esc(m.provider || '\u2014')}</td>
         <td class="num">${fmtNum(m.requests)}</td>
         <td class="num">${fmtNum(m.tokens_in)}</td>
         <td class="num">${fmtNum(m.tokens_out)}</td>
-        <td class="num">${fmt(m.total_cost_usd)}</td>
+        <td class="num">${fmt(m.cost_usd)}</td>
         <td class="num">${fmtPct(m.cache_hit_rate)}</td>
       </tr>
     `).join('');
@@ -354,7 +359,6 @@
   // Table sort
   $$('th.sortable').forEach(th => {
     th.addEventListener('click', () => {
-      // Re-fetch and sort is simpler than local sort for this size
       loadModels();
     });
   });
