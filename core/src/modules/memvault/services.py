@@ -4,6 +4,7 @@ This is the PUBLIC API of the memvault module.
 Other modules import from here, never from models.py.
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select, text, update
@@ -14,6 +15,7 @@ from src.events.types import MemvaultEvents
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
+from src.shared.tier_config import get_threshold
 
 from .models import (
     EMBEDDING_DIM,
@@ -139,11 +141,16 @@ class MemoryBlockService(
         threshold: float = 0.5,
         tags: list[str] | None = None,
         block_type: str | None = None,
+        include_warm: bool = True,
     ) -> list[SemanticSearchResult]:
         """Vector similarity search using pgvector cosine distance.
 
         Tries block_embeddings sub-table first (Phase 2 path);
-        falls back to inline blocks.embedding for backward compatibility.
+        falls back to inline blocks.embedding for backward compat.
+
+        When include_warm=True (default), augments results with
+        warm-tier text search (score x 0.7) for blocks between
+        hot_days and warm_days age that no longer have HNSW indexes.
         """
         if len(query_embedding) != EMBEDDING_DIM:
             raise BadRequestError(
@@ -153,15 +160,38 @@ class MemoryBlockService(
 
         # Phase 2 path: search via embedding sub-table
         results = await self._search_via_subtable(
-            db, space_id, query_embedding, top_k, threshold, tags, block_type
+            db,
+            space_id,
+            query_embedding,
+            top_k,
+            threshold,
+            tags,
+            block_type,
         )
-        if results:
-            return results
+        if not results:
+            # Fallback: inline embedding column (pre-Phase 2)
+            results = await self._search_via_inline(
+                db,
+                space_id,
+                query_embedding,
+                top_k,
+                threshold,
+                tags,
+                block_type,
+            )
 
-        # Fallback: inline embedding column (pre-Phase 2 or partial migration)
-        return await self._search_via_inline(
-            db, space_id, query_embedding, top_k, threshold, tags, block_type
-        )
+        # Warm tier: text-based augmentation for older blocks
+        if include_warm and len(results) < top_k:
+            warm_results = await self._warm_tier_search(
+                db,
+                space_id,
+                top_k - len(results),
+                tags,
+                block_type,
+            )
+            results.extend(warm_results)
+
+        return results
 
     async def _search_via_subtable(
         self,
@@ -182,6 +212,7 @@ class MemoryBlockService(
             .join(BlockEmbedding, BlockEmbedding.block_id == MemoryBlock.id)
             .where(
                 MemoryBlock.space_id == space_id,
+                MemoryBlock.embedding.isnot(None),
                 distance < (1 - threshold),
             )
             .order_by(distance)
@@ -239,6 +270,49 @@ class MemoryBlockService(
             for row in rows
         ]
 
+    async def _warm_tier_search(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        remaining: int,
+        tags: list[str] | None,
+        block_type: str | None,
+    ) -> list[SemanticSearchResult]:
+        """Search warm-tier blocks (no HNSW, still in main table).
+
+        Warm tier: hot_days < age <= warm_days.
+        Uses ILIKE on content; score = best_hnsw_score * 0.7
+        (capped at 0.5 * 0.7 = 0.35 for text matches).
+        """
+        tier = get_threshold("memvault")
+        now = datetime.now(UTC)
+        hot_cutoff = now - timedelta(days=tier.hot_days)
+        warm_cutoff = now - timedelta(days=tier.warm_days)
+
+        q = (
+            select(MemoryBlock)
+            .where(
+                MemoryBlock.space_id == space_id,
+                MemoryBlock.created_at < hot_cutoff,
+                MemoryBlock.created_at >= warm_cutoff,
+            )
+            .order_by(MemoryBlock.updated_at.desc())
+            .limit(remaining)
+        )
+        if tags:
+            q = q.where(MemoryBlock.tags.contains(tags))
+        if block_type:
+            q = q.where(MemoryBlock.block_type == block_type)
+
+        rows = (await db.execute(q)).scalars().all()
+        return [
+            SemanticSearchResult(
+                block=self.to_response(r),
+                score=0.35,  # warm tier: 0.5 * 0.7
+            )
+            for r in rows
+        ]
+
     async def text_search(
         self,
         db: AsyncSession,
@@ -246,28 +320,67 @@ class MemoryBlockService(
         query: str,
         top_k: int = 10,
         include_archived: bool = False,
+        include_warm: bool = True,
     ) -> list[SemanticSearchResult]:
-        """Fallback text search using ILIKE when embeddings are unavailable.
+        """Fallback text search using ILIKE.
 
-        When include_archived=True, also searches blocks_archive table.
+        Tier-aware search:
+          Hot  (age <= hot_days): score 0.5
+          Warm (hot_days < age <= warm_days): score 0.35
+          Cold (archive table, include_archived): score 0.3
         """
         pattern = f"%{query}%"
-        q = (
+        tier = get_threshold("memvault")
+        now = datetime.now(UTC)
+        hot_cutoff = now - timedelta(days=tier.hot_days)
+        warm_cutoff = now - timedelta(days=tier.warm_days)
+
+        # --- Hot tier: recent blocks (full index coverage) ---
+        hot_q = (
             select(MemoryBlock)
             .where(
                 MemoryBlock.space_id == space_id,
                 MemoryBlock.content.ilike(pattern),
+                MemoryBlock.created_at >= hot_cutoff,
             )
             .order_by(MemoryBlock.updated_at.desc())
             .limit(top_k)
         )
-        rows = (await db.execute(q)).scalars().all()
-        results = [
-            SemanticSearchResult(block=self.to_response(r), score=0.5)
-            for r in rows
+        hot_rows = (await db.execute(hot_q)).scalars().all()
+        results: list[SemanticSearchResult] = [
+            SemanticSearchResult(
+                block=self.to_response(r),
+                score=0.5,
+            )
+            for r in hot_rows
         ]
 
-        # Phase 3: search archived blocks if requested and under limit
+        # --- Warm tier: older blocks still in main table ---
+        if include_warm and len(results) < top_k:
+            remaining = top_k - len(results)
+            warm_q = (
+                select(MemoryBlock)
+                .where(
+                    MemoryBlock.space_id == space_id,
+                    MemoryBlock.content.ilike(pattern),
+                    MemoryBlock.created_at < hot_cutoff,
+                    MemoryBlock.created_at >= warm_cutoff,
+                )
+                .order_by(MemoryBlock.updated_at.desc())
+                .limit(remaining)
+            )
+            warm_rows = (await db.execute(warm_q)).scalars().all()
+            results.extend(
+                [
+                    SemanticSearchResult(
+                        block=self.to_response(r),
+                        score=0.35,  # warm: 0.5 * 0.7
+                    )
+                    for r in warm_rows
+                ]
+            )
+
+        # --- Cold tier: archive table ---
         if include_archived and len(results) < top_k:
             remaining = top_k - len(results)
             archive_q = (
@@ -275,29 +388,32 @@ class MemoryBlockService(
                 .where(
                     BlockArchive.space_id == space_id,
                     BlockArchive.content.ilike(pattern),
+                    ~BlockArchive.content.like("s3://%"),
                 )
                 .order_by(BlockArchive.created_at.desc())
                 .limit(remaining)
             )
             archive_rows = (await db.execute(archive_q)).scalars().all()
-            results.extend([
-                SemanticSearchResult(
-                    block=MemoryBlockResponse(
-                        id=r.id,
-                        space_id=r.space_id,
-                        created_by=r.created_by,
-                        created_at=r.created_at,
-                        updated_at=r.updated_at,
-                        content=r.content,
-                        block_type=r.block_type,
-                        tags=r.tags or [],
-                        source_session=r.source_session,
-                        confidence=r.confidence or 0.0,
-                    ),
-                    score=0.3,  # lower score to indicate archived result
-                )
-                for r in archive_rows
-            ])
+            results.extend(
+                [
+                    SemanticSearchResult(
+                        block=MemoryBlockResponse(
+                            id=r.id,
+                            space_id=r.space_id,
+                            created_by=r.created_by,
+                            created_at=r.created_at,
+                            updated_at=r.updated_at,
+                            content=r.content,
+                            block_type=r.block_type,
+                            tags=r.tags or [],
+                            source_session=r.source_session,
+                            confidence=r.confidence or 0.0,
+                        ),
+                        score=0.3,  # cold: archived result
+                    )
+                    for r in archive_rows
+                ]
+            )
 
         return results
 
@@ -314,9 +430,7 @@ class MemoryBlockService(
                 code="memvault.invalid_embedding_dim",
             )
         result = await db.execute(
-            update(MemoryBlock)
-            .where(MemoryBlock.id == block_id)
-            .values(embedding=embedding)
+            update(MemoryBlock).where(MemoryBlock.id == block_id).values(embedding=embedding)
         )
         if result.rowcount == 0:
             raise NotFoundError("Block not found", code="memvault.block_not_found")
@@ -335,15 +449,9 @@ class MemoryBlockService(
 class TagService:
     """Lightweight tag aggregation — no BaseCRUD needed."""
 
-    async def list_tags(
-        self, db: AsyncSession, space_id: str
-    ) -> list[TagResponse]:
+    async def list_tags(self, db: AsyncSession, space_id: str) -> list[TagResponse]:
         """List all tags for a space, ordered by usage count."""
-        q = (
-            select(Tag)
-            .where(Tag.space_id == space_id)
-            .order_by(Tag.usage_count.desc())
-        )
+        q = select(Tag).where(Tag.space_id == space_id).order_by(Tag.usage_count.desc())
         rows = (await db.execute(q)).scalars().all()
         return [TagResponse(name=r.name, usage_count=r.usage_count) for r in rows]
 
@@ -404,9 +512,7 @@ class KnowledgeDomainService(
 class ProfileScoreService:
     """Single profile score per space — K/A/S aggregate scores."""
 
-    async def get_by_space(
-        self, db: AsyncSession, space_id: str
-    ) -> ProfileScoreResponse | None:
+    async def get_by_space(self, db: AsyncSession, space_id: str) -> ProfileScoreResponse | None:
         q = select(ProfileScore).where(ProfileScore.space_id == space_id)
         instance = (await db.execute(q)).scalar_one_or_none()
         if not instance:

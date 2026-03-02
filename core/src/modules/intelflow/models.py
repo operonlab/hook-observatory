@@ -80,13 +80,9 @@ class Report(SpaceScopedModel):
     query: Mapped[str] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text)
     sources: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), server_default=text("'{}'::text[]")
-    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     skill_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(EMBEDDING_DIM), nullable=True
-    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     # Relationships
     topics: Mapped[list["Topic"]] = relationship(
@@ -118,9 +114,7 @@ class Topic(SpaceScopedModel):
     name: Mapped[str] = mapped_column(Text)
     display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(EMBEDDING_DIM), nullable=True
-    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     # Relationships
     reports: Mapped[list["Report"]] = relationship(
@@ -251,9 +245,7 @@ class Briefing(SpaceScopedModel):
     raw_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     analyses: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     debate: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(EMBEDDING_DIM), nullable=True
-    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     # Relationships
     topic: Mapped["BriefingTopic | None"] = relationship(lazy="selectin")
@@ -285,9 +277,7 @@ class ReportArchive(Base):
     query: Mapped[str] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text)  # may be S3 ref for COLD-BLOB
     sources: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), server_default=text("'{}'::text[]")
-    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     skill_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     archived_at: Mapped[str] = mapped_column(Text)
     archive_type: Mapped[str] = mapped_column(
@@ -319,6 +309,69 @@ class BriefingArchive(Base):
     archive_type: Mapped[str] = mapped_column(
         String(20), server_default=text("'cold-archive'")
     )  # cold-archive | cold-blob
+
+
+# ======================== Frozen Tables ========================
+
+
+class ReportFrozen(Base):
+    """Frozen report — minimal metadata in PG, full content in S3.
+
+    Legal retention tier. Content is zstd-compressed JSON in
+    workshop-frozen bucket.
+    """
+
+    __tablename__ = "reports_frozen"
+    __table_args__ = (
+        Index("idx_rf_space_created", "space_id", "created_at"),
+        Index("idx_rf_tags", "tags", postgresql_using="gin"),
+        Index("idx_rf_frozen", "frozen_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    space_id: Mapped[str] = mapped_column(String(32))
+    created_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text)
+    archived_at: Mapped[str] = mapped_column(Text)
+    frozen_at: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    skill_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    s3_uri: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    content_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class BriefingFrozen(Base):
+    """Frozen briefing — minimal metadata in PG, full content in S3.
+
+    Legal retention tier. Content is zstd-compressed JSON in
+    workshop-frozen bucket.
+    """
+
+    __tablename__ = "briefings_frozen"
+    __table_args__ = (
+        Index("idx_brf_date", "date"),
+        Index("idx_brf_frozen", "frozen_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    space_id: Mapped[str] = mapped_column(String(32))
+    created_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text)
+    archived_at: Mapped[str] = mapped_column(Text)
+    frozen_at: Mapped[str] = mapped_column(Text)
+    date: Mapped[str | None] = mapped_column(Date, nullable=True)
+    domain: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    s3_uri: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    content_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 # ======================== Search Sessions ========================
