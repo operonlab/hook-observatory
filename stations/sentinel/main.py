@@ -281,7 +281,7 @@ app.include_router(router)
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
 
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     async def serve_index():
         from starlette.responses import FileResponse
 
