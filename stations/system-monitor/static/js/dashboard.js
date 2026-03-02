@@ -341,24 +341,24 @@ function renderAlerts(data) {
     .join("");
 }
 
-function renderActivity(data) {
-  const list = document.getElementById("activity-list");
+function renderTopProcesses(procs) {
+  const list = document.getElementById("top-procs-list");
   if (!list) return;
-  const snaps = (data.snapshots || []).slice(0, 10);
-  if (snaps.length === 0) {
-    list.innerHTML = '<div class="empty">無活動記錄</div>';
+  if (!procs || procs.length === 0) {
+    list.innerHTML = '<div class="empty">無執行資料</div>';
     return;
   }
-  list.innerHTML = snaps
-    .map((s) => {
-      const badge = makeBadge(s.pressure_level);
-      const cpuStr = s.cpu_usage_pct != null ? fmtPct(s.cpu_usage_pct) : "—";
-      const memStr = s.memory_usage_pct != null ? fmtPct(s.memory_usage_pct) : "—";
-      const diskStr = s.disk_usage_pct != null ? fmtPct(s.disk_usage_pct) : "—";
+  list.innerHTML = procs
+    .map((p) => {
+      const cpuCls = p.cpu_pct >= 50 ? "val-hot" : p.cpu_pct >= 20 ? "val-warm" : "";
+      const memCls = p.mem_mb >= 1024 ? "val-hot" : p.mem_mb >= 256 ? "val-warm" : "";
+      const countBadge = p.count > 1 ? ` <span class="proc-count">×${p.count}</span>` : "";
       return `<div class="activity-item">
-        <span class="activity-time">${fmtDate(s.timestamp)}</span>
-        ${badge}
-        <span class="activity-metrics">CPU ${cpuStr} · 記憶體 ${memStr} · 磁碟 ${diskStr}</span>
+        <span class="proc-name">${esc(p.name)}${countBadge}</span>
+        <span class="proc-stats">
+          <span class="${cpuCls}">CPU ${p.cpu_pct}%</span>
+          <span class="${memCls}">${p.mem_mb >= 1024 ? (p.mem_mb / 1024).toFixed(1) + " GB" : Math.round(p.mem_mb) + " MB"}</span>
+        </span>
       </div>`;
     })
     .join("");
@@ -425,11 +425,11 @@ async function fetchAll() {
       fetch("reports").then((r) => r.json()),
     ]);
 
-    if (statusRes.status === "fulfilled") renderStatus(statusRes.value);
-    if (historyRes.status === "fulfilled") {
-      renderHistory(historyRes.value);
-      renderActivity(historyRes.value);
+    if (statusRes.status === "fulfilled") {
+      renderStatus(statusRes.value);
+      renderTopProcesses(statusRes.value.top_processes);
     }
+    if (historyRes.status === "fulfilled") renderHistory(historyRes.value);
     if (alertsRes.status === "fulfilled") renderAlerts(alertsRes.value);
     if (reportsRes.status === "fulfilled") renderReports(reportsRes.value);
   } catch (err) {

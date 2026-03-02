@@ -367,19 +367,34 @@ body {
   border-bottom: none;
 }
 
-.activity-time {
-  color: var(--subtext0);
-  font-size: 0.7rem;
+.proc-name {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  flex-shrink: 0;
-  min-width: 7rem;
 }
 
-.activity-metrics {
-  color: var(--text);
+.proc-count {
+  font-size: 0.65rem;
+  color: var(--subtext0);
+  font-weight: 400;
+}
+
+.proc-stats {
+  display: flex;
+  gap: 1rem;
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
+  color: var(--subtext0);
+  flex-shrink: 0;
 }
+
+.val-warm { color: var(--yellow); }
+.val-hot { color: var(--red); }
 
 /* ─── Empty State ─── */
 .empty {
