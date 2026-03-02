@@ -1,12 +1,11 @@
 {
   "name": "workshop",
   "private": true,
-  "workspaces": [
-    "workbench",
-    "libs/typescript"
-  ],
   "scripts": {
     "dev": "echo 'Use: pnpm --filter <app> dev'",
     "build": "echo 'Use: pnpm --filter <app> build'"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "core-js"]
   }
 }
