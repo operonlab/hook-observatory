@@ -1,6 +1,7 @@
 // Office layout store — tile map, furniture, seats, rest zone, edit mode
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   createDefaultOffice,
   rebuildWalkableGrid,
@@ -47,9 +48,10 @@ interface OfficeState {
   releaseRestSpot: (agentId: string) => void;
 }
 
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const defaults = createDefaultOffice();
 
-export const useOfficeStore = create<OfficeState>((set, get) => ({
+export const useOfficeStore = create<OfficeState>()(persist((set, get) => ({
   map: defaults.map,
   furniture: defaults.furniture,
   seats: defaults.seats,
@@ -218,7 +220,7 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
         door_x: door.x,
         door_y: door.y,
       };
-      const res = await fetch('/api/layout', {
+      const res = await fetch(`${API_BASE}/api/layout`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -238,7 +240,7 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
 
   async loadLayout() {
     try {
-      const res = await fetch('/api/layout');
+      const res = await fetch(`${API_BASE}/api/layout`);
       if (res.status === 404) return false; // no saved layout
       if (!res.ok) return false;
       const row = await res.json();
@@ -333,5 +335,21 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
     const next = new Map(get().restAssignments);
     next.delete(agentId);
     set({ restAssignments: next });
+  },
+}), {
+  name: 'agent-vista-office',
+  partialize: (state) => ({
+    furniture: state.furniture,
+    seats: state.seats,
+    restZone: state.restZone,
+    door: state.door,
+    layoutVersion: state.layoutVersion,
+  }),
+  onRehydrateStorage: () => (state) => {
+    if (!state) return;
+    const { furniture } = state;
+    const W = state.map.width;
+    const H = state.map.height;
+    state.map = { width: W, height: H, walkable: rebuildWalkableGrid(W, H, furniture) };
   },
 }));

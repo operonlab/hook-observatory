@@ -24,8 +24,10 @@ interface EventEntry {
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastSeq = 0;
 
-const API_BASE = window.location.origin;
+// Derive API base from Vite base URL — works both in dev (/) and behind nginx (/apps/vista/)
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const POLL_INTERVAL = 1500; // 1.5s
+const AGENTS_CACHE_KEY = 'agent-vista-agents-cache';
 
 async function pollEvents() {
   try {
@@ -75,6 +77,15 @@ export const useWSStore = create<ConnectionState>((set, get) => ({
     if (get().status !== 'disconnected') return;
     set({ status: 'connecting' });
 
+    // SWR: show stale cached agents immediately while revalidating
+    try {
+      const cached = localStorage.getItem(AGENTS_CACHE_KEY);
+      if (cached) {
+        const stale = JSON.parse(cached) as AgentState[];
+        useAgentStore.getState().initAgents(stale);
+      }
+    } catch { /* ignore corrupt cache */ }
+
     try {
       // Fetch agents + latest seq in parallel
       const [agents, stats] = await Promise.all([
@@ -85,6 +96,9 @@ export const useWSStore = create<ConnectionState>((set, get) => ({
       // Filter out offline agents
       const visible = (agents as AgentState[]).filter(a => a.status !== 'offline');
       store.initAgents(visible);
+
+      // Persist fresh snapshot for next SWR cycle
+      try { localStorage.setItem(AGENTS_CACHE_KEY, JSON.stringify(visible)); } catch { /* quota */ }
 
       // Send synthetic chat events for initial agent state
       const chat = useChatStore.getState();
@@ -112,7 +126,8 @@ export const useWSStore = create<ConnectionState>((set, get) => ({
 
       // Request desktop notification permission (C7)
       notificationService.requestPermission();
-      // Start ambient soundscape (C4)
+      // Start ambient soundscape (C4) — deferred until user interaction
+      soundEngine.enableAfterGesture();
       soundEngine.startAmbient();
       soundEngine.startKeyClicks(() => {
         const agents = useAgentStore.getState().agents;
