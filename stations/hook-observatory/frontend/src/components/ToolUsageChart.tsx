@@ -1,4 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import ChartTooltip from "./ChartTooltip.tsx";
 import type { ToolStats } from "../api/client.ts";
 
 interface Props {
@@ -34,9 +35,7 @@ export default function ToolUsageChart({ data }: Props) {
             tickLine={false}
             width={110}
           />
-          <Tooltip
-            contentStyle={{ background: "#1a1b2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, fontSize: 12 }}
-          />
+          <Tooltip content={<ChartTooltip />} />
           <Bar dataKey="count" fill="#94e2d5" fillOpacity={0.6} radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
