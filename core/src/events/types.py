@@ -15,8 +15,17 @@ class AuthEvents:
 class FinanceEvents:
     TRANSACTION_CREATED = "finance.transaction.created"
     TRANSACTION_UPDATED = "finance.transaction.updated"
+    TRANSACTION_DELETED = "finance.transaction.deleted"
     BUDGET_EXCEEDED = "finance.budget.exceeded"
+    WALLET_SYNCED = "finance.wallet.synced"
+    WALLET_RECONCILED = "finance.wallet.reconciled"
+    INSTALLMENT_CREATED = "finance.installment.created"
+    INSTALLMENT_COMPLETED = "finance.installment.completed"
+    INSTALLMENT_DUE = "finance.installment.due"
+    INSTALLMENT_CANCELLED = "finance.installment.cancelled"
+    TRANSFER_COMPLETED = "finance.transfer.completed"
     SUBSCRIPTION_RENEWED = "finance.subscription.renewed"
+    PRIVACY_TOGGLED = "finance.privacy.toggled"
 
 
 class TaskflowEvents:
