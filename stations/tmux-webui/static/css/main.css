@@ -157,6 +157,16 @@ footer{
   flex-shrink:0;padding:4px 12px 6px;
   background:var(--surface);border-top:1px solid var(--border);
 }
+.footer-top{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.quick-actions{display:flex;gap:6px;flex-wrap:wrap}
+.focused-label{font-size:11px;color:var(--accent-h);margin-left:auto;white-space:nowrap}
+.qbtn{
+  padding:4px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surface2);color:var(--dim);font-size:11px;font-family:inherit;
+  cursor:pointer;transition:all .15s;
+}
+.qbtn:hover{color:var(--text);border-color:var(--accent)}
+.qbtn[data-key="C-c"]:hover{border-color:var(--yellow);color:var(--yellow)}
 
 /* ── Autocomplete dropdown ── */
 .ac-wrap{position:relative}
@@ -190,10 +200,6 @@ footer{
 .ac-badge.mcp{background:rgba(251,191,36,.15);color:var(--yellow)}
 .ac-badge.path{background:rgba(139,108,239,.1);color:var(--dim)}
 .input-row{display:flex;gap:8px;align-items:center}
-.focused-label{
-  font-size:10px;color:var(--accent-h);white-space:nowrap;flex-shrink:0;
-  max-width:140px;overflow:hidden;text-overflow:ellipsis;padding:0 2px;
-}
 #input{
   flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border);
   border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:inherit;
@@ -273,11 +279,11 @@ footer{
 
 /* ── Touch / Responsive ── */
 @media(pointer:coarse){
-  .ek,.win-tab{min-height:44px}
+  .qbtn,.ek,.win-tab{min-height:44px}
   #send-btn{min-height:44px}
 }
 @media(pointer:coarse) and (max-width:600px){
-  .win-tab{min-height:34px}
+  .qbtn,.win-tab{min-height:34px}
   #send-btn{min-height:36px}
   .ek{min-height:36px}
 }
@@ -294,6 +300,7 @@ footer{padding-bottom:env(safe-area-inset-bottom)}
   select{flex:1}
   #pane-container{grid-template-columns:1fr!important;grid-template-rows:auto!important}
   .resize-handle{display:none!important}
+  .qbtn{min-height:40px;font-size:12px}
 }
 
 /* ── Phone ≤600px ── */
@@ -312,6 +319,12 @@ footer{padding-bottom:env(safe-area-inset-bottom)}
 
   /* Footer compact */
   footer{padding:3px 8px 4px}
+  footer.mobile-collapsed .footer-top{display:flex;flex-wrap:nowrap;gap:3px;margin-bottom:3px}
+  footer.mobile-collapsed .qbtn[data-key="Enter"],
+  footer.mobile-collapsed .qbtn[data-key="Escape"]{display:none}
+  footer.mobile-collapsed .focused-label{display:none}
+  footer.mobile-collapsed .quick-actions{gap:3px;flex-wrap:nowrap}
+  footer.mobile-collapsed .qbtn{padding:2px 8px;font-size:10px}
   footer.mobile-collapsed .extra-keys{display:none!important}
 
   .win-tabs{padding:0 8px 2px;gap:1px}
@@ -328,6 +341,7 @@ footer{padding-bottom:env(safe-area-inset-bottom)}
   .ek{min-width:34px;font-size:11px;padding:3px 4px}
   .arrow-pad{width:56px;height:38px}
   #input{font-size:14px}
+  footer.mobile-collapsed .qbtn{padding:2px 6px;font-size:9px}
 }
 
 /* ── Gesture feedback ── */
