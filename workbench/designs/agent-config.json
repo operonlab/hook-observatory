@@ -1,0 +1,22 @@
+{
+  "agents": [
+    {
+      "id": "agent-apps",
+      "file": "workshop-apps.pen",
+      "screens": ["Login", "Home / App Launcher", "AppShell with Header"],
+      "theme": "Catppuccin Mocha"
+    },
+    {
+      "id": "agent-intelflow",
+      "file": "workshop-intelflow.pen",
+      "screens": ["Dashboard", "ReportList", "ReportDetail", "SemanticSearch", "SmartQA", "TopicsOverview", "TopicDetail"],
+      "theme": "Gold/Black"
+    },
+    {
+      "id": "agent-memvault",
+      "file": "workshop-memvault.pen",
+      "screens": ["Memory Browser", "Galaxy"],
+      "theme": "Midnight Blue"
+    }
+  ]
+}

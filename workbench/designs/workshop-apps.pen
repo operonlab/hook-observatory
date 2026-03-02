@@ -1,0 +1,297 @@
+{
+  "version": "2.8",
+  "children": [
+    {
+      "type": "frame",
+      "id": "rLSxo",
+      "x": 0,
+      "y": 0,
+      "name": "Screen 1 — Login",
+      "width": 1440,
+      "height": 900,
+      "fill": "#1e1e2e",
+      "layout": "vertical",
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "dlzTB",
+          "name": "Login Card",
+          "width": 384,
+          "fill": "#181825",
+          "cornerRadius": 16,
+          "stroke": {
+            "thickness": 1,
+            "fill": "#313244"
+          },
+          "layout": "vertical",
+          "padding": 24,
+          "children": [
+            {
+              "type": "text",
+              "id": "TQKy6",
+              "name": "Logo",
+              "fill": "#b4befe",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Workshop",
+              "textAlign": "center",
+              "fontFamily": "Cormorant Garamond",
+              "fontSize": 30,
+              "fontWeight": "700"
+            },
+            {
+              "type": "frame",
+              "id": "XwsoY",
+              "name": "spacer1",
+              "width": "fill_container",
+              "height": 24
+            },
+            {
+              "type": "frame",
+              "id": "107xb",
+              "name": "Tab Container",
+              "width": "fill_container",
+              "fill": "#313244",
+              "cornerRadius": 8,
+              "padding": 4,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "3ZV5t",
+                  "name": "Tab Login",
+                  "width": "fill_container",
+                  "height": 44,
+                  "fill": "#181825",
+                  "cornerRadius": 6,
+                  "layout": "vertical",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "g1Hr8",
+                      "name": "tabLoginText",
+                      "fill": "#cdd6f4",
+                      "content": "登入",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "b3fCB",
+                  "name": "Tab Register",
+                  "width": "fill_container",
+                  "height": 44,
+                  "cornerRadius": 6,
+                  "layout": "vertical",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "UIpgE",
+                      "name": "tabRegisterText",
+                      "fill": "#a6adc8",
+                      "content": "註冊",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "zCnEt",
+              "name": "spacer2",
+              "width": "fill_container",
+              "height": 20
+            },
+            {
+              "type": "frame",
+              "id": "hRhH4",
+              "name": "Form Fields",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "wRkiA",
+                  "name": "Email Field",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "edbir",
+                      "name": "label1",
+                      "fill": "#a6adc8",
+                      "content": "電子郵件",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "8T1Gr",
+                      "name": "Email Input",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#1e1e2e",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#313244"
+                      },
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "justifyContent": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "aKgUG",
+                          "name": "placeholder1",
+                          "fill": "#45475a",
+                          "content": "name@example.com",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "l4SMt",
+                  "name": "Password Field",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ziBM1",
+                      "name": "label2",
+                      "fill": "#a6adc8",
+                      "content": "密碼",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BkdZ3",
+                      "name": "Password Input",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#1e1e2e",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#313244"
+                      },
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "justifyContent": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "hr9i3",
+                          "name": "placeholder2",
+                          "fill": "#45475a",
+                          "content": "至少 6 個字元",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Z7PkT",
+              "name": "spacer3",
+              "width": "fill_container",
+              "height": 16
+            },
+            {
+              "type": "frame",
+              "id": "8QUxC",
+              "name": "Error Area",
+              "width": "fill_container",
+              "fill": "#f38ba815",
+              "cornerRadius": 8,
+              "layout": "vertical",
+              "padding": [
+                8,
+                12
+              ],
+              "justifyContent": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "q5uQP",
+                  "name": "errorText",
+                  "fill": "#f38ba8",
+                  "content": "請填寫所有必填欄位",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "L4HJy",
+              "name": "spacer4",
+              "width": "fill_container",
+              "height": 16
+            },
+            {
+              "type": "frame",
+              "id": "hl5em",
+              "name": "Submit Button",
+              "width": "fill_container",
+              "height": 44,
+              "fill": "#b4befe",
+              "cornerRadius": 8,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "rhYQv",
+                  "name": "submitText",
+                  "fill": "#11111b",
+                  "content": "登入",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
