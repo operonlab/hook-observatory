@@ -1,0 +1,1 @@
+"""Finance-specific FastAPI dependencies."""
