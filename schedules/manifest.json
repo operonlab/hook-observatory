@@ -111,6 +111,16 @@
       "category": "workshop",
       "type": "daemon",
       "enabled": true
+    },
+    {
+      "name": "ws-drift-check",
+      "label": "com.joneshong.scheduler.ws-drift-check",
+      "command": "/bin/bash ~/.claude/skills/system-map/scripts/check-drift.sh",
+      "schedule": { "calendar": { "Weekday": 1, "Hour": 6, "Minute": 0 } },
+      "description": "每週一 6AM: 系統狀態漂移偵測（baseline diff → stdout log）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }

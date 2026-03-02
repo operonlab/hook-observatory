@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.middleware.sessions import SessionMiddleware as StarletteSessionMiddleware
 
 from src.config import settings
@@ -38,6 +39,14 @@ async def workshop_error_handler(request: Request, exc: WorkshopError) -> JSONRe
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail, "code": exc.code},
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Conflict: duplicate or constraint violation", "code": "conflict"},
     )
 
 

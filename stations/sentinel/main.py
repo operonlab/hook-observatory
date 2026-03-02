@@ -75,6 +75,9 @@ async def _light_check_loop() -> None:
 
             healthy = sum(1 for r in results if r.status == "healthy")
             logger.info("Light check: %d/%d healthy", healthy, len(results))
+
+            # Clean up expired locks for virtual services not in check lists
+            intervention_engine.sweep_expired_locks()
         except asyncio.CancelledError:
             raise
         except Exception:

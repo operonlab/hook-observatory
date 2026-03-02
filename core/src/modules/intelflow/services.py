@@ -59,7 +59,7 @@ class ReportService(BaseCRUDService[Report, ReportCreate, ReportUpdate, ReportRe
     model = Report
 
     def before_create(self, data: ReportCreate, **kwargs: Any) -> dict:
-        return data.model_dump()
+        return data.model_dump(exclude={"created_at"})
 
     def after_create(self, instance: Report) -> None:
         event_bus.publish(

@@ -84,6 +84,19 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:9000/",
         timeout=5.0,
     ),
+    # ── App Services (stations) ──
+    LightCheck(
+        name="system-monitor",
+        url="http://127.0.0.1:9526/",
+    ),
+    LightCheck(
+        name="tmux-webui",
+        url="http://127.0.0.1:9527/",
+    ),
+    LightCheck(
+        name="llm-usage",
+        url="http://127.0.0.1:9525/",
+    ),
 ]
 
 
@@ -202,7 +215,11 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
     2. run-code    — executes JS check
     3. close       — cleans up session
     """
-    session_id = f"sentinel-{check.name}"
+    # Keep session ID short — macOS Unix socket path limit is 104 chars.
+    # Playwright stores sockets in /var/folders/…/playwright-cli/<hash>/<session>.sock
+    # which is ~85 chars base, so session ID must be ≤18 chars.
+    _SHORT_NAMES = {"frontend-render": "fe", "frontend-memvault-render": "mv"}
+    session_id = f"sn-{_SHORT_NAMES.get(check.name, check.name[:8])}"
     start = time.monotonic()
     try:
         # Open browser session with target URL (headless by default)
@@ -299,6 +316,6 @@ def merge_status(light: str | None, deep: str | None) -> str:
         return "major_outage"
     if deep in ("unhealthy", "timeout"):
         return "degraded"
-    if light == "healthy" and (deep is None or deep == "healthy"):
+    if (light is None or light == "healthy") and (deep is None or deep == "healthy"):
         return "operational"
     return "partial_outage"
