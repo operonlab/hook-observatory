@@ -30,6 +30,7 @@ from tmux_manager import (
     list_sessions,
     list_windows,
     new_window,
+    resize_pane,
     select_pane,
     send_keys,
     status_metrics,
@@ -309,6 +310,12 @@ async def ws_handler(websocket: WebSocket):
                     await websocket.send_json({
                         "type": "panes", "panes": visible_panes(cur_panes),
                     })
+
+            elif action == "fit":
+                cols = data.get("cols")
+                rows = data.get("rows")
+                if cols and rows:
+                    await resize_pane(target, int(cols), int(rows))
 
             elif action == "select_pane_direction":
                 direction = data.get("direction", "")

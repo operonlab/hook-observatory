@@ -118,7 +118,7 @@ select:focus{outline:none;border-color:var(--accent)}
 
 /* Terminal */
 .pane-terminal{
-  flex:1;overflow-y:auto;padding:6px 10px;background:var(--bg);
+  flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 10px;background:var(--bg);
   font-size:var(--font-size);line-height:1.5;white-space:pre-wrap;word-break:break-all;
   scrollbar-width:thin;scrollbar-color:var(--border) transparent;
 }
@@ -166,8 +166,6 @@ footer{
   cursor:pointer;transition:all .15s;
 }
 .qbtn:hover{color:var(--text);border-color:var(--accent)}
-.qbtn[data-key="y"]:hover{border-color:var(--green);color:var(--green)}
-.qbtn[data-key="n"]:hover{border-color:var(--red);color:var(--red)}
 .qbtn[data-key="C-c"]:hover{border-color:var(--yellow);color:var(--yellow)}
 
 /* Tool actions */

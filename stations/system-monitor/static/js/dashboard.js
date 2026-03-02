@@ -171,20 +171,36 @@ function renderStatus(data) {
   const diskBadge = document.getElementById("disk-pressure-badge");
   if (diskBadge) diskBadge.innerHTML = makeBadge(disk.pressure_level);
 
-  // Battery / Temp
+  // Battery / Temp — only show when available
   const batt = hw.battery || {};
   const temp = hw.temperature || {};
-  const battPct = batt.percent ?? 0;
-  setGauge("batt-gauge", battPct);
-  const battPctEl = document.getElementById("batt-pct");
-  if (battPctEl) battPctEl.textContent = batt.percent != null ? fmtPct(battPct) : "N/A";
-  const battDet = document.getElementById("batt-details");
-  if (battDet) {
-    const charging = batt.charging ? "⚡ 充電中" : "🔋 電池";
-    battDet.innerHTML =
-      detailRow("狀態", charging) +
-      detailRow("CPU 溫度", temp.cpu_temp_c != null ? temp.cpu_temp_c + "°C" : "—") +
-      detailRow("GPU 溫度", temp.gpu_temp_c != null ? temp.gpu_temp_c + "°C" : "—");
+  const battCard = document.getElementById("batt-card");
+  const hasBatt = batt.available === true;
+  const hasTemp = temp.available === true;
+
+  if (battCard) {
+    battCard.style.display = (hasBatt || hasTemp) ? "" : "none";
+  }
+
+  if (hasBatt || hasTemp) {
+    const battPct = batt.percent ?? 0;
+    setGauge("batt-gauge", hasBatt ? battPct : 0);
+    const battPctEl = document.getElementById("batt-pct");
+    if (battPctEl) battPctEl.textContent = hasBatt ? fmtPct(battPct) : "—";
+    const battDet = document.getElementById("batt-details");
+    if (battDet) {
+      let html = "";
+      if (hasBatt) {
+        const charging = batt.charging ? "⚡ 充電中" : "🔋 電池";
+        html += detailRow("狀態", charging);
+        if (batt.condition) html += detailRow("健康", batt.condition);
+        if (batt.cycle_count != null) html += detailRow("循環次數", batt.cycle_count);
+      }
+      if (hasTemp) {
+        html += detailRow("CPU 溫度", temp.cpu_temp_c + "°C");
+      }
+      battDet.innerHTML = html;
+    }
   }
 }
 
@@ -325,6 +341,29 @@ function renderAlerts(data) {
     .join("");
 }
 
+function renderActivity(data) {
+  const list = document.getElementById("activity-list");
+  if (!list) return;
+  const snaps = (data.snapshots || []).slice(0, 10);
+  if (snaps.length === 0) {
+    list.innerHTML = '<div class="empty">無活動記錄</div>';
+    return;
+  }
+  list.innerHTML = snaps
+    .map((s) => {
+      const badge = makeBadge(s.pressure_level);
+      const cpuStr = s.cpu_usage_pct != null ? fmtPct(s.cpu_usage_pct) : "—";
+      const memStr = s.memory_usage_pct != null ? fmtPct(s.memory_usage_pct) : "—";
+      const diskStr = s.disk_usage_pct != null ? fmtPct(s.disk_usage_pct) : "—";
+      return `<div class="activity-item">
+        <span class="activity-time">${fmtDate(s.timestamp)}</span>
+        ${badge}
+        <span class="activity-metrics">CPU ${cpuStr} · 記憶體 ${memStr} · 磁碟 ${diskStr}</span>
+      </div>`;
+    })
+    .join("");
+}
+
 function renderReports(data) {
   const list = document.getElementById("report-list");
   if (!list) return;
@@ -387,7 +426,10 @@ async function fetchAll() {
     ]);
 
     if (statusRes.status === "fulfilled") renderStatus(statusRes.value);
-    if (historyRes.status === "fulfilled") renderHistory(historyRes.value);
+    if (historyRes.status === "fulfilled") {
+      renderHistory(historyRes.value);
+      renderActivity(historyRes.value);
+    }
     if (alertsRes.status === "fulfilled") renderAlerts(alertsRes.value);
     if (reportsRes.status === "fulfilled") renderReports(reportsRes.value);
   } catch (err) {

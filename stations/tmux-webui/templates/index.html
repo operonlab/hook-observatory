@@ -47,21 +47,14 @@
   <footer>
     <div class="footer-top">
       <div class="quick-actions">
-        <button class="qbtn" data-key="y" title="Accept">y</button>
-        <button class="qbtn" data-key="n" title="Deny">n</button>
         <button class="qbtn" data-key="C-c" title="Interrupt">Ctrl+C</button>
+        <button class="qbtn" data-key="S-Tab" title="Shift+Tab">&#8679;Tab</button>
         <button class="qbtn" data-key="Enter" title="Enter">Enter</button>
         <button class="qbtn" data-key="Escape" title="Escape">Esc</button>
       </div>
       <span class="focused-label" id="focused-label">no pane</span>
     </div>
     <div class="tool-actions" id="tool-actions"></div>
-    <div class="skill-palette" id="skill-palette" style="display:none">
-      <div class="skill-search-row">
-        <input type="text" id="skill-search" placeholder="Filter skills..." />
-      </div>
-      <div id="skill-categories"></div>
-    </div>
     <div class="extra-keys" id="extra-keys">
       <!-- Modifier keys -->
       <button class="ek mod" data-mod="C">Ctrl</button>
@@ -70,7 +63,6 @@
       <div class="ek-sep"></div>
       <!-- Common keys -->
       <button class="ek" data-ek="Tab">Tab</button>
-      <button class="ek" data-ek="Escape">Esc</button>
       <div class="ek-sep"></div>
       <!-- Dev chars (V2: added /, ., :, ;) -->
       <button class="ek" data-ek="/" style="font-size:14px">/</button>
@@ -89,12 +81,8 @@
       <button class="ek" data-ctrl="z" title="Ctrl+Z" style="color:var(--cyan);font-size:10px">C-z</button>
       <button class="ek" data-ctrl="l" title="Ctrl+L" style="color:var(--green);font-size:10px">C-l</button>
       <div class="ek-sep"></div>
-      <!-- Arrow pad + individual buttons -->
+      <!-- Arrow pad (swipe direction) -->
       <div class="arrow-pad" id="arrow-pad"><div class="arrow-pad-label">&#8982;</div></div>
-      <button class="ek" data-ek="Up">&#9650;</button>
-      <button class="ek" data-ek="Down">&#9660;</button>
-      <button class="ek" data-ek="Left">&#9664;</button>
-      <button class="ek" data-ek="Right">&#9654;</button>
     </div>
     <div class="ac-wrap">
       <div class="ac-list" id="ac-list"></div>

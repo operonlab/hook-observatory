@@ -91,8 +91,8 @@
         </div>
       </div>
 
-      <!-- Battery / Temp -->
-      <div class="card">
+      <!-- Battery / Temp (hidden when unavailable) -->
+      <div class="card" id="batt-card" style="display:none">
         <div class="card-title">
           <span>電池 / 溫度</span>
         </div>
@@ -122,7 +122,15 @@
       </div>
     </div>
 
-    <!-- ─── Row 3+4: Alerts + Reports ─── -->
+    <!-- ─── Row 3: Recent Activity ─── -->
+    <div class="card full-card" id="recent-activity-card">
+      <div class="card-title">最近活動</div>
+      <div class="activity-list" id="activity-list">
+        <div class="empty">載入中…</div>
+      </div>
+    </div>
+
+    <!-- ─── Row 4+5: Alerts + Reports ─── -->
     <div class="two-col">
       <div class="card">
         <div class="card-title">警報</div>
