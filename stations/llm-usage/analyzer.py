@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """
-LLM Usage Analyzer — unified dual-track analysis engine.
+LLM Usage Analyzer — unified analysis engine powered by ccusage.
 
-Combines subscription (fixed monthly) + API (pay-per-use) data into:
+Combines subscription (fixed monthly) + ccusage (Claude Code actual spend) into:
 - summary: current month overview
-- trends: 7/30 day time series
+- trends: daily time series with 7d moving average
 - by-model: per-model cost breakdown
-
-Usage:
-    python3 analyzer.py summary               # Monthly overview
-    python3 analyzer.py trends --days 7        # 7-day trend
-    python3 analyzer.py by-model               # Per-model breakdown
-    python3 analyzer.py --output FILE          # Write to file
 """
 
 from __future__ import annotations
@@ -21,7 +15,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from api_collector import collect_api_usage, load_config
+from api_collector import load_config
+from ccusage_adapter import get_daily_data, get_model_breakdown, get_month_to_date
 from subscription_collector import collect_all as collect_subscriptions
 
 SCRIPT_DIR = Path(__file__).parent
@@ -36,22 +31,19 @@ DEFAULT_CONFIG = SCRIPT_DIR / "config.json"
 def generate_summary(config: dict) -> dict:
     """Generate current month dual-track summary."""
     sub_data = collect_subscriptions(config)
-    api_data = collect_api_usage(config, days=30)
+    mtd = get_month_to_date()
 
     # Subscription totals
     sub_total = sub_data.get("total_monthly_cost_usd", 0)
     providers = sub_data.get("providers", [])
 
-    # API totals
-    mtd = api_data.get("month_to_date", {})
+    # ccusage month-to-date
     api_total = mtd.get("total_cost_usd", 0)
-    api_budget = mtd.get("budget_usd", 0)
-    api_budget_pct = mtd.get("budget_used_pct", 0)
 
-    # Combined
+    # Combined (subscription + actual Claude Code spend)
     combined_total = round(sub_total + api_total, 2)
 
-    summary = {
+    return {
         "type": "summary",
         "timestamp": datetime.now(UTC).isoformat(),
         "period": datetime.now(UTC).strftime("%Y-%m"),
@@ -73,17 +65,11 @@ def generate_summary(config: dict) -> dict:
         },
         "api": {
             "month_to_date_usd": api_total,
-            "budget_usd": api_budget,
-            "budget_used_pct": api_budget_pct,
-            "total_requests": mtd.get("total_requests", 0),
             "total_tokens_in": mtd.get("total_tokens_in", 0),
             "total_tokens_out": mtd.get("total_tokens_out", 0),
             "cache_hit_rate": mtd.get("cache_hit_rate", 0),
-            "cache_savings_usd": mtd.get(
-                "estimated_cache_savings_usd", 0,
-            ),
-            "available": api_data.get("litellm_available", False),
-            "error": api_data.get("error"),
+            "cache_savings_usd": mtd.get("estimated_cache_savings_usd", 0),
+            "available": True,
         },
         "combined": {
             "total_monthly_usd": combined_total,
@@ -102,8 +88,6 @@ def generate_summary(config: dict) -> dict:
         },
     }
 
-    return summary
-
 
 # ---------------------------------------------------------------------------
 # Trends
@@ -111,18 +95,20 @@ def generate_summary(config: dict) -> dict:
 
 
 def generate_trends(config: dict, days: int = 30) -> dict:
-    """Generate daily cost trend data."""
-    api_data = collect_api_usage(config, days=days)
-
-    daily = api_data.get("daily", [])
+    """Generate daily cost trend data from ccusage."""
+    daily = get_daily_data(days=days)
 
     # Calculate running totals and moving averages
     running_total = 0.0
     enriched_daily = []
     for i, day in enumerate(daily):
-        running_total += day.get("cost_usd", 0)
+        cost = day.get("cost_usd", 0)
+        running_total += cost
         entry = {
-            **day,
+            "date": day["date"],
+            "cost_usd": cost,
+            "tokens_in": day.get("tokens_in", 0),
+            "tokens_out": day.get("tokens_out", 0),
             "cumulative_cost_usd": round(running_total, 4),
         }
 
@@ -137,7 +123,7 @@ def generate_trends(config: dict, days: int = 30) -> dict:
     # Projection for rest of month
     days_elapsed = len(daily) or 1
     avg_daily_cost = running_total / days_elapsed
-    days_in_month = 30  # approximation
+    days_in_month = 30
     projected_monthly = round(avg_daily_cost * days_in_month, 2)
 
     return {
@@ -149,15 +135,8 @@ def generate_trends(config: dict, days: int = 30) -> dict:
             "total_cost_usd": round(running_total, 4),
             "avg_daily_cost_usd": round(avg_daily_cost, 4),
             "projected_monthly_usd": projected_monthly,
-            "total_requests": sum(
-                d.get("requests", 0) for d in daily
-            ),
-            "total_tokens": sum(
-                d.get("tokens_in", 0) + d.get("tokens_out", 0) for d in daily
-            ),
         },
-        "available": api_data.get("litellm_available", False),
-        "error": api_data.get("error"),
+        "available": True,
     }
 
 
@@ -167,10 +146,8 @@ def generate_trends(config: dict, days: int = 30) -> dict:
 
 
 def generate_by_model(config: dict, days: int = 30) -> dict:
-    """Generate per-model cost breakdown."""
-    api_data = collect_api_usage(config, days=days)
-
-    models = api_data.get("by_model", [])
+    """Generate per-model cost breakdown from ccusage."""
+    models = get_model_breakdown(days=days)
     total_cost = sum(m.get("cost_usd", 0) for m in models)
 
     # Add percentage of total
@@ -213,8 +190,7 @@ def generate_by_model(config: dict, days: int = 30) -> dict:
         "model_count": len(models),
         "models": models,
         "by_provider": provider_list,
-        "available": api_data.get("litellm_available", False),
-        "error": api_data.get("error"),
+        "available": True,
     }
 
 
