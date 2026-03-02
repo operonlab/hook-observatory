@@ -134,6 +134,20 @@ class InterventionEngine:
         t = self.get_tracker(service)
         return t.state == State.INTERVENING
 
+    def sweep_expired_locks(self) -> None:
+        """Periodically clean up expired locks for services not in check lists.
+
+        Called from the main loop alongside light checks to ensure virtual
+        services (workshop-services, frontend-build, etc.) transition back
+        from MAINTENANCE once their lock expires.
+        """
+        for t in list(self.trackers.values()):
+            if t.state == State.MAINTENANCE:
+                if not self._has_active_lock(t.service) and not t.agent_id:
+                    t.state = State.HEALTHY
+                    t.first_failure_at = 0.0
+                    logger.info("Service %s → HEALTHY (lock expired, sweep)", t.service)
+
     def get_all_statuses(self) -> dict[str, dict]:
         """Get all service statuses for API response."""
         result = {}

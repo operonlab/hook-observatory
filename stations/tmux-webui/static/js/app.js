@@ -150,8 +150,9 @@ window.sendInput = function() {
   if (!S.focusedPane) { window.flashInputError('No pane selected'); return; }
 
   // Auto-relay: dispatch via server-side /api/relay (zero-blocking async)
+  const basePath = location.pathname.replace(/\/+$/, '') || '';
   if (S.currentTool === 'claude' && !text.startsWith('/')) {
-    fetch('/api/relay', {
+    fetch(basePath + '/api/relay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command: text }),

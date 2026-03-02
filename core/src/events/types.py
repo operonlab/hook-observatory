@@ -34,6 +34,9 @@ class FinanceEvents:
     # 轉帳
     TRANSFER_COMPLETED = "finance.transfer.completed"
 
+    # 訂閱
+    SUBSCRIPTION_RENEWED = "finance.subscription.renewed"
+
     # 隱密
     PRIVACY_TOGGLED = "finance.privacy.toggled"
 

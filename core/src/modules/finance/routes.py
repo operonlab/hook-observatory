@@ -64,7 +64,7 @@ async def list_wallets(
         db,
         space_id,
         PaginationParams(page=page, page_size=page_size),
-        user_id=user.get("user_id"),
+        user_id=user.get("id"),
         include_inactive=include_inactive,
     )
 
@@ -88,7 +88,7 @@ async def create_wallet(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await wallet_service.create(db, space_id, data, user_id=user.get("user_id"))
+    instance = await wallet_service.create(db, space_id, data, user_id=user.get("id"))
     await db.commit()
     return wallet_service.to_response(instance)
 
@@ -115,7 +115,7 @@ async def sync_wallet(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    result = await wallet_service.sync(db, wallet_id, data, space_id, user_id=user.get("user_id"))
+    result = await wallet_service.sync(db, wallet_id, data, space_id, user_id=user.get("id"))
     await db.commit()
     return result
 
@@ -126,7 +126,7 @@ async def reconcile_wallet(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    return await wallet_service.reconcile(db, wallet_id, user_id=user.get("user_id"))
+    return await wallet_service.reconcile(db, wallet_id, user_id=user.get("id"))
 
 
 # ======================== Categories ========================
@@ -146,10 +146,10 @@ async def list_categories(
             db,
             space_id,
             PaginationParams(page=page, page_size=page_size),
-            user_id=user.get("user_id"),
+            user_id=user.get("id"),
         )
         return result.items
-    return await category_service.list_tree(db, space_id, user_id=user.get("user_id"))
+    return await category_service.list_tree(db, space_id, user_id=user.get("id"))
 
 
 @router.post("/categories", response_model=CategoryResponse, status_code=201)
@@ -159,7 +159,7 @@ async def create_category(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await category_service.create(db, space_id, data, user_id=user.get("user_id"))
+    instance = await category_service.create(db, space_id, data, user_id=user.get("id"))
     await db.commit()
     return category_service.to_response(instance)
 
@@ -210,7 +210,7 @@ async def list_transactions(
         db,
         space_id,
         PaginationParams(page=page, page_size=page_size),
-        user_id=user.get("user_id"),
+        user_id=user.get("id"),
         year_month=year_month,
         txn_type=type,
         category_id=category_id,
@@ -239,7 +239,7 @@ async def create_transaction(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await transaction_service.create(db, space_id, data, user_id=user.get("user_id"))
+    instance = await transaction_service.create(db, space_id, data, user_id=user.get("id"))
     await db.commit()
     return transaction_service.to_response(instance)
 
@@ -285,7 +285,7 @@ async def list_subscriptions(
         db,
         space_id,
         PaginationParams(page=page, page_size=page_size),
-        user_id=user.get("user_id"),
+        user_id=user.get("id"),
         status=status,
     )
 
@@ -309,7 +309,7 @@ async def create_subscription(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await subscription_service.create(db, space_id, data, user_id=user.get("user_id"))
+    instance = await subscription_service.create(db, space_id, data, user_id=user.get("id"))
     await db.commit()
     return subscription_service.to_response(instance)
 
@@ -344,7 +344,7 @@ async def list_installment_plans(
         db,
         space_id,
         PaginationParams(page=page, page_size=page_size),
-        user_id=user.get("user_id"),
+        user_id=user.get("id"),
         status=status,
     )
 
@@ -368,9 +368,7 @@ async def create_installment_plan(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await installment_plan_service.create(
-        db, space_id, data, user_id=user.get("user_id")
-    )
+    instance = await installment_plan_service.create(db, space_id, data, user_id=user.get("id"))
     await db.commit()
     return installment_plan_service.to_response(instance)
 
@@ -405,7 +403,7 @@ async def list_budgets(
         db,
         space_id,
         PaginationParams(page=page, page_size=page_size),
-        user_id=user.get("user_id"),
+        user_id=user.get("id"),
         year_month=year_month,
     )
 
@@ -417,7 +415,7 @@ async def upsert_budget(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await budget_service.upsert(db, space_id, data, user_id=user.get("user_id"))
+    instance = await budget_service.upsert(db, space_id, data, user_id=user.get("id"))
     await db.commit()
     return budget_service.to_response(instance)
 
@@ -429,7 +427,7 @@ async def get_budget_status(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    return await budget_service.get_status(db, space_id, year_month, user_id=user.get("user_id"))
+    return await budget_service.get_status(db, space_id, year_month, user_id=user.get("id"))
 
 
 # ======================== Transfer ========================
@@ -454,7 +452,7 @@ async def execute_transfer(
         payment_detail=data.payment_detail,
         fee=data.fee,
         transacted_at=data.transacted_at,
-        user_id=user.get("user_id"),
+        user_id=user.get("id"),
     )
     await db.commit()
     return [transaction_service.to_response(out_txn), transaction_service.to_response(in_txn)]
@@ -470,6 +468,4 @@ async def get_monthly_summary(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    return await summary_service.monthly_summary(
-        db, space_id, year_month, user_id=user.get("user_id")
-    )
+    return await summary_service.monthly_summary(db, space_id, year_month, user_id=user.get("id"))

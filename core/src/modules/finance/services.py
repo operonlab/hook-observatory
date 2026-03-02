@@ -185,7 +185,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         await db.flush()
         await db.refresh(snapshot)
 
-        event_bus.publish(
+        await event_bus.publish(
             Event(
                 type=FinanceEvents.WALLET_SYNCED,
                 data={"wallet_id": wallet_id, "synced_balance": str(data.synced_balance)},
@@ -272,7 +272,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             )
         ).scalar_one()
 
-        event_bus.publish(
+        await event_bus.publish(
             Event(
                 type=FinanceEvents.WALLET_RECONCILED,
                 data={
@@ -304,7 +304,8 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
 
     def to_response(self, instance: Category) -> CategoryResponse:
         children = []
-        if hasattr(instance, "children") and instance.children:
+        # Check __dict__ to avoid triggering async-incompatible lazy load
+        if "children" in instance.__dict__ and instance.children:
             children = [self.to_response(c) for c in instance.children if c.is_active]
         return CategoryResponse(
             id=instance.id,
@@ -380,7 +381,8 @@ class TransactionService(
 
     def to_response(self, instance: Transaction) -> TransactionResponse:
         tags = []
-        if hasattr(instance, "tags") and instance.tags:
+        # Check __dict__ to avoid triggering async-incompatible lazy load
+        if "tags" in instance.__dict__ and instance.tags:
             tags = [t.tag for t in instance.tags]
         return TransactionResponse(
             id=instance.id,
@@ -430,7 +432,7 @@ class TransactionService(
 
         await db.flush()
 
-        event_bus.publish(
+        await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_CREATED,
                 data={
@@ -487,7 +489,7 @@ class TransactionService(
         await db.flush()
         await db.refresh(instance)
 
-        event_bus.publish(
+        await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_UPDATED,
                 data={
@@ -518,7 +520,7 @@ class TransactionService(
         await db.delete(instance)
         await db.flush()
 
-        event_bus.publish(
+        await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_DELETED,
                 data={"transaction_id": txn_id},
@@ -682,12 +684,17 @@ class InstallmentPlanService(
         )
 
     def after_create(self, instance: InstallmentPlan) -> None:
-        event_bus.publish(
-            Event(
-                type=FinanceEvents.INSTALLMENT_CREATED,
-                data={"plan_id": instance.id, "num_installments": instance.num_installments},
-                source="finance",
-                user_id=instance.created_by,
+        # Fire-and-forget: after_create is sync, so schedule the coroutine
+        import asyncio
+
+        _task = asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=FinanceEvents.INSTALLMENT_CREATED,
+                    data={"plan_id": instance.id, "num_installments": instance.num_installments},
+                    source="finance",
+                    user_id=instance.created_by,
+                )
             )
         )
 
@@ -849,7 +856,7 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
             )
 
             if actual > b.budget_amount:
-                event_bus.publish(
+                await event_bus.publish(
                     Event(
                         type=FinanceEvents.BUDGET_EXCEEDED,
                         data={
@@ -955,7 +962,7 @@ class TransferService:
 
         await db.flush()
 
-        event_bus.publish(
+        await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSFER_COMPLETED,
                 data={

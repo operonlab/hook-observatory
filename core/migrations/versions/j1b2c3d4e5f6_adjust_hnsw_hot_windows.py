@@ -21,10 +21,18 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Drop the old 90-day partial HNSW index on memvault.blocks
+    # Ensure IMMUTABLE wrapper exists (created in f7a8b9c0d1e2, safe to re-create)
     op.execute(
-        "DROP INDEX IF EXISTS memvault.idx_blocks_embedding_recent;"
+        """
+        CREATE OR REPLACE FUNCTION hot_cutoff(ivl interval)
+        RETURNS timestamptz AS $$
+            SELECT now() - ivl;
+        $$ LANGUAGE sql IMMUTABLE;
+        """
     )
+
+    # Drop the old 90-day partial HNSW index on memvault.blocks
+    op.execute("DROP INDEX IF EXISTS memvault.idx_blocks_embedding_recent;")
 
     # Recreate with 14-day window to match Hot tier boundary
     op.execute(
@@ -32,7 +40,7 @@ def upgrade() -> None:
         CREATE INDEX idx_blocks_embedding_recent
         ON memvault.blocks USING hnsw (embedding vector_cosine_ops)
         WITH (m = 16, ef_construction = 64)
-        WHERE created_at > now() - interval '14 days';
+        WHERE created_at > hot_cutoff(interval '14 days');
         """
     )
 
@@ -46,9 +54,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop the 14-day partial HNSW index
-    op.execute(
-        "DROP INDEX IF EXISTS memvault.idx_blocks_embedding_recent;"
-    )
+    op.execute("DROP INDEX IF EXISTS memvault.idx_blocks_embedding_recent;")
 
     # Restore original 90-day window
     op.execute(
@@ -56,6 +62,6 @@ def downgrade() -> None:
         CREATE INDEX idx_blocks_embedding_recent
         ON memvault.blocks USING hnsw (embedding vector_cosine_ops)
         WITH (m = 16, ef_construction = 64)
-        WHERE created_at > now() - interval '90 days';
+        WHERE created_at > hot_cutoff(interval '90 days');
         """
     )
