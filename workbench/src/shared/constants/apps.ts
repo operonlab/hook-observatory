@@ -83,6 +83,16 @@ export const APP_LIST: AppInfo[] = [
     status: "coming-soon",
   },
   {
+    id: "filebrowser",
+    name: "檔案管理",
+    description: "遠端檔案瀏覽、上傳下載、線上編輯",
+    icon: "📁",
+    path: "/filebrowser",
+    color: "#f5c2e7",
+    status: "external",
+    externalUrl: "/v2/apps/files/",
+  },
+  {
     id: "hook-observatory",
     name: "Hook 監控台",
     description: "Claude Code Hook 事件監控、統計分析",

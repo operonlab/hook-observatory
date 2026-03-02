@@ -33,21 +33,25 @@ export default function BubbleOverlay({ canvasRef, cameraRef }: Props) {
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef(0);
 
-  // Hit-test on canvas click
+  // Hit-test on canvas click (mouse + touch tap)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    function onClick(e: MouseEvent) {
+    // Track touch start position to distinguish tap from drag
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const TAP_THRESHOLD = 10;
+
+    function hitTest(clientX: number, clientY: number) {
       const camera = cameraRef.current;
       if (!camera) return;
       const { agents: agentMap } = useAgentStore.getState();
 
       const rect = canvas!.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+      const mx = clientX - rect.left;
+      const my = clientY - rect.top;
 
-      // Find the closest character to the click
       let bestId: string | null = null;
       let bestDist = Infinity;
 
@@ -80,8 +84,37 @@ export default function BubbleOverlay({ canvasRef, cameraRef }: Props) {
       }
     }
 
+    function onClick(e: MouseEvent) {
+      hitTest(e.clientX, e.clientY);
+    }
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (e.changedTouches.length === 1) {
+        const tx = e.changedTouches[0].clientX;
+        const ty = e.changedTouches[0].clientY;
+        const dx = tx - touchStartX;
+        const dy = ty - touchStartY;
+        if (Math.sqrt(dx * dx + dy * dy) < TAP_THRESHOLD) {
+          hitTest(tx, ty);
+        }
+      }
+    }
+
     canvas.addEventListener('click', onClick);
-    return () => canvas.removeEventListener('click', onClick);
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchend', onTouchEnd);
+    };
   }, [canvasRef, cameraRef]);
 
   // Track screen position of expanded agent
@@ -215,7 +248,8 @@ function ExpandedBubble({ entry, onClose }: { entry: AgentEntry; onClose: () => 
 }
 
 const panelStyle: React.CSSProperties = {
-  width: 280,
+  width: 'min(280px, calc(100vw - 24px))',
+  maxWidth: 280,
   maxHeight: 200,
   padding: 10,
   background: 'rgba(20, 20, 35, 0.95)',

@@ -1,6 +1,7 @@
 """BaseCRUDService — generic CRUD with Template Method hooks."""
 
-from typing import Any, Generic, Sequence, TypeVar
+from collections.abc import Sequence
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,14 +41,19 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
         pagination: PaginationParams | None = None,
     ) -> PaginatedResponse[ResponseT]:
         p = pagination or PaginationParams()
-        count_q = select(func.count()).select_from(self.model).where(
-            self.model.space_id == space_id  # type: ignore[attr-defined]
+        count_q = (
+            select(func.count())
+            .select_from(self.model)
+            .where(
+                self.model.space_id == space_id  # type: ignore[attr-defined]
+            )
         )
         total = (await db.execute(count_q)).scalar_one()
 
         q = (
             select(self.model)
             .where(self.model.space_id == space_id)  # type: ignore[attr-defined]
+            .order_by(self.model.created_at.desc())  # type: ignore[attr-defined]
             .offset((p.page - 1) * p.page_size)
             .limit(p.page_size)
         )
@@ -79,7 +85,9 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
         instance = await db.get(self.model, entity_id)
         if not instance:
             return None
-        update_data = data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
+        update_data = (
+            data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
+        )
         for key, value in update_data.items():
             setattr(instance, key, value)
         await db.flush()

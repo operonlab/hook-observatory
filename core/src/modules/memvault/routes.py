@@ -3,33 +3,35 @@
 Prefix: /api/memvault (mounted in main.py)
 """
 
-from datetime import datetime
+import math
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db
 from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
+from .embedding import get_embedding
 from .schemas import (
-    KASProfileResponse,
-    KASProfileUpdate,
     KnowledgeDomainCreate,
     KnowledgeDomainResponse,
     KnowledgeDomainUpdate,
     MemoryBlockCreate,
     MemoryBlockResponse,
     MemoryBlockUpdate,
+    ProfileScoreResponse,
+    ProfileScoreUpdate,
     SemanticSearchParams,  # noqa: F401 — available for future use
     SemanticSearchResult,
     TagResponse,
 )
-from .embedding import get_embedding
 from .services import (
-    kas_profile_service,
     knowledge_domain_service,
     memory_block_service,
+    profile_score_service,
     tag_service,
 )
 
@@ -87,6 +89,7 @@ async def create_block(
     if embedding:
         await memory_block_service.update_embedding(db, instance.id, embedding)
     await db.commit()
+    await db.refresh(instance)
     return memory_block_service.to_response(instance)
 
 
@@ -100,6 +103,7 @@ async def update_block(
     if not instance:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
     await db.commit()
+    await db.refresh(instance)
     return memory_block_service.to_response(instance)
 
 
@@ -128,9 +132,7 @@ async def semantic_search(
     if query_embedding is None:
         # Fallback: ILIKE text search when Ollama is unavailable
         return await memory_block_service.text_search(db, space_id, q, top_k)
-    return await memory_block_service.semantic_search(
-        db, space_id, query_embedding, top_k=top_k
-    )
+    return await memory_block_service.semantic_search(db, space_id, query_embedding, top_k=top_k)
 
 
 # ======================== Tags ========================
@@ -157,9 +159,7 @@ async def sync_tags(
 # ======================== Knowledge Domains ========================
 
 
-@router.get(
-    "/domains", response_model=PaginatedResponse[KnowledgeDomainResponse]
-)
+@router.get("/domains", response_model=PaginatedResponse[KnowledgeDomainResponse])
 async def list_domains(
     space_id: str = Query("default"),
     page: int = Query(1, ge=1),
@@ -170,9 +170,7 @@ async def list_domains(
     return await knowledge_domain_service.list(db, space_id, pagination)
 
 
-@router.post(
-    "/domains", response_model=KnowledgeDomainResponse, status_code=201
-)
+@router.post("/domains", response_model=KnowledgeDomainResponse, status_code=201)
 async def create_domain(
     body: KnowledgeDomainCreate,
     space_id: str = Query("default"),
@@ -183,9 +181,7 @@ async def create_domain(
     return knowledge_domain_service.to_response(instance)
 
 
-@router.patch(
-    "/domains/{domain_id}", response_model=KnowledgeDomainResponse
-)
+@router.patch("/domains/{domain_id}", response_model=KnowledgeDomainResponse)
 async def update_domain(
     domain_id: str,
     body: KnowledgeDomainUpdate,
@@ -198,23 +194,23 @@ async def update_domain(
     return knowledge_domain_service.to_response(instance)
 
 
-# ======================== KAS Profile ========================
+# ======================== Profile Score ========================
 
 
-@router.get("/profile", response_model=KASProfileResponse)
+@router.get("/profile", response_model=ProfileScoreResponse)
 async def get_profile(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    profile = await kas_profile_service.get_by_space(db, space_id)
+    profile = await profile_score_service.get_by_space(db, space_id)
     if not profile:
         # Return a default empty profile instead of 404
-        return KASProfileResponse(
+        return ProfileScoreResponse(
             id="",
             space_id=space_id,
             created_by=None,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             knowledge_score=0.0,
             attitude_score=0.0,
             skill_score=0.0,
@@ -222,15 +218,154 @@ async def get_profile(
     return profile
 
 
-@router.put("/profile", response_model=KASProfileResponse)
+@router.put("/profile", response_model=ProfileScoreResponse)
 async def upsert_profile(
-    body: KASProfileUpdate,
+    body: ProfileScoreUpdate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await kas_profile_service.upsert(db, space_id, body)
+    result = await profile_score_service.upsert(db, space_id, body)
     await db.commit()
     return result
+
+
+@router.post("/profile/recalculate", response_model=ProfileScoreResponse)
+async def recalculate_profile(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recalculate KAS scores from actual KG data."""
+    from .kg_models import AttitudeFact, Cluster, SkillInvocation, Triple, WisdomNode
+
+    # Knowledge score: based on triples + clusters + wisdom
+    triple_count = (
+        await db.execute(
+            select(func.count()).select_from(Triple).where(Triple.space_id == space_id)
+        )
+    ).scalar() or 0
+    cluster_count = (
+        await db.execute(
+            select(func.count()).select_from(Cluster).where(Cluster.space_id == space_id)
+        )
+    ).scalar() or 0
+    wisdom_count = (
+        await db.execute(
+            select(func.count()).select_from(WisdomNode).where(WisdomNode.space_id == space_id)
+        )
+    ).scalar() or 0
+
+    # K score: log-scaled, 100 triples = ~50, 1000+ = ~80, + bonus for clusters/wisdom
+    k_base = min(math.log10(max(triple_count, 1)) / math.log10(2000) * 70, 70)
+    k_cluster_bonus = min(cluster_count * 2, 15)
+    k_wisdom_bonus = min(wisdom_count * 2, 15)
+    knowledge_score = round(min(k_base + k_cluster_bonus + k_wisdom_bonus, 100), 1)
+
+    # Attitude score: based on attitude count + confidence
+    attitude_result = await db.execute(
+        select(func.count(), func.avg(AttitudeFact.confidence)).where(
+            AttitudeFact.space_id == space_id, AttitudeFact.superseded_by.is_(None)
+        )
+    )
+    att_row = attitude_result.one()
+    att_count = att_row[0] or 0
+    att_avg_conf = att_row[1] or 0.0
+    a_base = min(math.log10(max(att_count, 1)) / math.log10(500) * 60, 60)
+    a_conf_bonus = att_avg_conf * 40
+    attitude_score = round(min(a_base + a_conf_bonus, 100), 1)
+
+    # Skill score: based on invocations + success rate + unique skills
+    skill_result = await db.execute(
+        select(
+            func.count(),
+            func.count(func.distinct(SkillInvocation.skill_name)),
+            func.avg(case((SkillInvocation.outcome == "success", 1.0), else_=0.0)),
+        ).where(SkillInvocation.space_id == space_id)
+    )
+    skill_row = skill_result.one()
+    inv_count = skill_row[0] or 0
+    unique_skills = skill_row[1] or 0
+    avg_success = skill_row[2] or 0.0
+    s_base = min(math.log10(max(inv_count, 1)) / math.log10(500) * 50, 50)
+    s_variety_bonus = min(unique_skills * 2, 25)
+    s_success_bonus = avg_success * 25
+    skill_score = round(min(s_base + s_variety_bonus + s_success_bonus, 100), 1)
+
+    # Upsert profile
+    result = await profile_score_service.upsert(
+        db,
+        space_id,
+        ProfileScoreUpdate(
+            knowledge_score=knowledge_score,
+            attitude_score=attitude_score,
+            skill_score=skill_score,
+        ),
+    )
+    await db.commit()
+    return result
+
+
+# ======================== Sync ========================
+
+
+@router.get("/sync/stats")
+async def sync_stats(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return extraction stats based on DB data.
+
+    Counts distinct source_sessions across blocks and triples to show
+    how many sessions have been successfully ingested.
+    """
+    from .kg_models import Triple
+    from .models import MemoryBlock
+
+    await db.execute(
+        select(func.count(func.distinct(MemoryBlock.source_session))).where(
+            MemoryBlock.space_id == space_id, MemoryBlock.source_session.isnot(None)
+        )
+    )
+
+    await db.execute(
+        select(func.count(func.distinct(Triple.source_session))).where(
+            Triple.space_id == space_id, Triple.source_session.isnot(None)
+        )
+    )
+
+    # Union of unique sessions across both tables
+    from sqlalchemy import union
+
+    block_q = select(MemoryBlock.source_session).where(
+        MemoryBlock.space_id == space_id, MemoryBlock.source_session.isnot(None)
+    )
+    triple_q = select(Triple.source_session).where(
+        Triple.space_id == space_id, Triple.source_session.isnot(None)
+    )
+    combined = union(block_q, triple_q).subquery()
+    total_synced = (await db.execute(select(func.count()).select_from(combined))).scalar() or 0
+
+    return {
+        "total": total_synced,
+        "synced": total_synced,
+        "failed": 0,
+        "skipped": 0,
+    }
+
+
+@router.post("/sync/scan")
+async def sync_scan():
+    """Session extraction is handled automatically by the SessionEnd hook pipeline.
+
+    This endpoint returns a stub result. Use extract-v2-async.sh hook for live extraction.
+    """
+    return {
+        "total": 0,
+        "synced": 0,
+        "failed": 0,
+        "skipped": 0,
+        "already": 0,
+        "log": "Session extraction is handled automatically by SessionEnd hook pipeline.",
+    }
 
 
 # ======================== Status ========================

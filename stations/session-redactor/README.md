@@ -35,7 +35,7 @@ SessionEnd Hook 觸發
 | `patterns.py` | `src/session_redactor/` | 16 種敏感模式定義 |
 | `scanner.py` | `src/session_redactor/` | 每日 4 AM 完整掃描 |
 | `db.py` | `src/session_redactor/` | SQLite 追蹤歷史 |
-| SQLite DB | `~/.local/share/pulso/session_redactor.sqlite` | 清理紀錄 |
+| SQLite DB | `~/.local/share/workshop/session_redactor.sqlite` | 清理紀錄 |
 
 ## 偵測的敏感模式（16 種）
 
@@ -106,4 +106,4 @@ stations/session-redactor/
 
 - V1 位置：`~/Claude/projects/session-redactor/`
 - Hook 設定：`~/.claude/settings.json`（SessionEnd entries）
-- SQLite DB：`~/.local/share/pulso/session_redactor.sqlite`
+- SQLite DB：`~/.local/share/workshop/session_redactor.sqlite`

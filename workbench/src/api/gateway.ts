@@ -1,9 +1,31 @@
 import type { User } from "@/types";
 
-const BASE = "";
+const BASE = __BASE_PATH__;
 
 interface AuthResponse {
   user: User;
+}
+
+interface RawUser {
+  id: string;
+  email: string;
+  display_name: string;
+  avatar_url: string | null;
+  role: string;
+  status: string;
+  created_at: string;
+}
+
+function mapUser(raw: RawUser): User {
+  return {
+    id: raw.id,
+    email: raw.email,
+    name: raw.display_name || raw.email,
+    avatar_url: raw.avatar_url,
+    role: raw.role,
+    status: raw.status,
+    created_at: raw.created_at,
+  };
 }
 
 async function request<T>(
@@ -30,39 +52,45 @@ async function request<T>(
   return res.json();
 }
 
-export function register(
+export async function register(
   email: string,
   password: string,
   name: string,
 ): Promise<AuthResponse> {
-  return request<AuthResponse>("/auth/register", {
+  const r = await request<{ user: RawUser }>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, name }),
   });
+  return { user: mapUser(r.user) };
 }
 
-export function login(
+export async function login(
   email: string,
   password: string,
 ): Promise<AuthResponse> {
-  return request<AuthResponse>("/auth/login", {
+  const r = await request<{ user: RawUser }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  return { user: mapUser(r.user) };
 }
 
 export async function logout(): Promise<void> {
-  const res = await fetch("/auth/logout", {
+  const res = await fetch(`${BASE}/auth/logout`, {
     method: "POST",
     credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
   });
   if (!res.ok) {
     throw new Error(`Logout failed: ${res.status}`);
   }
 }
 
-export function getSession(): Promise<AuthResponse> {
-  return request<AuthResponse>("/auth/session", {
+export async function getSession(): Promise<AuthResponse> {
+  const r = await request<{ user: RawUser }>("/auth/session", {
     method: "GET",
   });
+  return { user: mapUser(r.user) };
 }

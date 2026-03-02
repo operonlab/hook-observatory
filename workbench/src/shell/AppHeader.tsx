@@ -1,17 +1,14 @@
-import { LayoutDashboard, LayoutGrid, LogOut, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, LayoutGrid, LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { APP_LIST } from '@/shared/constants/apps'
 import AppLauncher from '@/shell/AppLauncher'
-import { useChatStore } from '@/stores/chat'
 
 export default function AppHeader() {
   const { user, logout } = useAuth()
   const location = useLocation()
   const [showLauncher, setShowLauncher] = useState(false)
-  const chatToggle = useChatStore((s) => s.toggle)
-  const chatOpen = useChatStore((s) => s.open)
 
   const isAppsPage = location.pathname === '/apps'
 
@@ -89,15 +86,6 @@ export default function AppHeader() {
             onClick={() => window.dispatchEvent(new CustomEvent('toggle-dashboard'))}
           />
         )}
-
-        {/* Chat toggle (global) */}
-        <HeaderButton
-          icon={<MessageCircle size={16} />}
-          active={chatOpen}
-          accentColor={accentColor}
-          aria-label="Chat"
-          onClick={chatToggle}
-        />
 
         {/* App Switcher */}
         <HeaderButton

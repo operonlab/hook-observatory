@@ -40,6 +40,11 @@ CLAUDE.local.md
 # Worktrees
 .worktrees/
 
+# Outputs (skill/script working artifacts, not source code)
+outputs/
+
 # Lab (POC experiments) - relaxed rules
 lab/*/outputs/*.tmp
 lab/*/outputs/*.bin
+
+# Rigour

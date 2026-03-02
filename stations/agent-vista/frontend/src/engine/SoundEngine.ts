@@ -11,9 +11,11 @@ class SoundEngine {
   private _ambientRunning = false;
   private keyClickTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Lazy-init AudioContext (must be called after user interaction) */
+  private _userInteracted = false;
+
+  /** Lazy-init AudioContext (deferred until user interaction to comply with autoplay policy) */
   private getCtx(): AudioContext | null {
-    if (this._muted) return null;
+    if (this._muted || !this._userInteracted) return null;
     if (!this.ctx) {
       try {
         this.ctx = new AudioContext();
@@ -25,6 +27,22 @@ class SoundEngine {
       this.ctx.resume();
     }
     return this.ctx;
+  }
+
+  /** Call once to enable audio after user gesture (click/touch/keypress) */
+  enableAfterGesture() {
+    if (this._userInteracted) return;
+    const handler = () => {
+      this._userInteracted = true;
+      document.removeEventListener('click', handler);
+      document.removeEventListener('touchstart', handler);
+      document.removeEventListener('keydown', handler);
+      // Resume suspended context if already created
+      if (this.ctx?.state === 'suspended') this.ctx.resume();
+    };
+    document.addEventListener('click', handler, { once: false });
+    document.addEventListener('touchstart', handler, { once: false });
+    document.addEventListener('keydown', handler, { once: false });
   }
 
   get muted() { return this._muted; }

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Memvault MCP Server — thin adapter over Core API.
 
-Preserves the 9 existing tool names from V1 kas-memory MCP server.
-Each tool = one HTTP call to Core API (localhost:8800).
+Each tool = one HTTP call to Core API (localhost:8801).
 
 Usage:
     python3 mcp/memvault/server.py
@@ -12,7 +11,7 @@ Configure in ~/.claude.json:
         "command": "python3",
         "args": ["/path/to/workshop/mcp/memvault/server.py"],
         "env": {
-            "CORE_API_URL": "http://localhost:8800",
+            "CORE_API_URL": "http://localhost:8801",
             "MEMVAULT_SPACE_ID": "default"
         }
     }
@@ -27,7 +26,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8800")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
 SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 BASE = f"{CORE_API}/api/memvault"
 
@@ -96,20 +95,26 @@ def text_result(text: str) -> list[TextContent]:
 async def list_tools() -> list[Tool]:
     return [
         Tool(
-            name="kas_recall",
-            description="根據 query 搜尋相關記憶（keyword + semantic hybrid search with RRF）",
+            name="memvault_recall",
+            description="根據 query 搜尋相關記憶（keyword + semantic hybrid search with RRF）。mode='cascade' 啟用四層 Cascade Recall",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "搜尋查詢"},
                     "max_results": {"type": "integer", "default": 5},
                     "min_score": {"type": "number", "default": 0.3},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["default", "cascade"],
+                        "default": "default",
+                        "description": "cascade = 四層 KG Cascade Recall",
+                    },
                 },
                 "required": ["query"],
             },
         ),
         Tool(
-            name="kas_extract",
+            name="memvault_extract",
             description="從 session transcript 提煉記憶並存入 memvault",
             inputSchema={
                 "type": "object",
@@ -127,7 +132,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="kas_search_tags",
+            name="memvault_search_tags",
             description="根據 tags 精確篩選記憶 blocks",
             inputSchema={
                 "type": "object",
@@ -139,7 +144,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="kas_memory_stats",
+            name="memvault_memory_stats",
             description="查看記憶系統統計（block 數量、tag 分佈、品質指標）",
             inputSchema={
                 "type": "object",
@@ -149,7 +154,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="kas_promote",
+            name="memvault_promote",
             description="執行 knowledge promotion（高頻 tag → 知識域晉升）",
             inputSchema={
                 "type": "object",
@@ -161,7 +166,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="kas_memory_edit",
+            name="memvault_memory_edit",
             description="檢視/刪除/修改特定記憶 block",
             inputSchema={
                 "type": "object",
@@ -177,7 +182,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="kas_sync_embeddings",
+            name="memvault_sync_embeddings",
             description="同步所有記憶 blocks 的 embeddings（pgvector 768d）",
             inputSchema={
                 "type": "object",
@@ -187,7 +192,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="kas_profile",
+            name="memvault_profile",
             description="查看或重建 KAS Profile（Knowledge/Attitude/Skills 三維量化）",
             inputSchema={
                 "type": "object",
@@ -197,7 +202,7 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
-            name="kas_skill_search",
+            name="memvault_skill_search",
             description="搜尋已安裝的 skills（根據 trigger 關鍵字、名稱、domain 匹配）",
             inputSchema={
                 "type": "object",
@@ -206,6 +211,85 @@ async def list_tools() -> list[Tool]:
                     "max_results": {"type": "integer", "default": 5},
                 },
                 "required": ["query"],
+            },
+        ),
+        # ---- KG Tools ----
+        Tool(
+            name="memvault_kg_search",
+            description="KG Triple 語意搜尋（semantic search over knowledge graph triples）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜尋查詢"},
+                    "top_k": {"type": "integer", "default": 10},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="memvault_kg_clusters",
+            description="列出 KG 聚類摘要（knowledge graph clusters）",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="memvault_kg_wisdom",
+            description="查詢 Wisdom nodes（跨 cluster 提煉的高層洞見）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "confidence": {
+                        "type": "string",
+                        "enum": ["HIGH", "MEDIUM", "LOW"],
+                        "description": "篩選 confidence 等級",
+                    },
+                    "tag": {"type": "string", "description": "篩選 tag"},
+                },
+            },
+        ),
+        Tool(
+            name="memvault_kg_cascade_recall",
+            description="四層 Cascade Recall：L2 Wisdom → L1 Clusters → L0 Triples → Blocks",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜尋查詢"},
+                    "top_k": {"type": "integer", "default": 5},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="memvault_attitude_current",
+            description="查詢當前有效的態度事實（attitude facts，非 superseded）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "description": "篩選態度類別"},
+                },
+            },
+        ),
+        Tool(
+            name="memvault_attitude_evolve",
+            description="態度演化：輸入新 fact，系統判斷 ADD / UPDATE / NOOP（Mem0 pattern）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "fact": {"type": "string", "description": "態度事實內容"},
+                    "category": {"type": "string", "description": "態度類別"},
+                    "source_session": {"type": "string", "description": "來源 session ID"},
+                },
+                "required": ["fact", "category"],
+            },
+        ),
+        Tool(
+            name="memvault_skill_proficiency",
+            description="查詢 Skill 熟練度排行（按 proficiency score 降序）",
+            inputSchema={
+                "type": "object",
+                "properties": {},
             },
         ),
     ]
@@ -218,24 +302,38 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     try:
         match name:
-            case "kas_recall":
+            case "memvault_recall":
                 return await handle_recall(arguments)
-            case "kas_extract":
+            case "memvault_extract":
                 return await handle_extract(arguments)
-            case "kas_search_tags":
+            case "memvault_search_tags":
                 return await handle_search_tags(arguments)
-            case "kas_memory_stats":
+            case "memvault_memory_stats":
                 return await handle_stats(arguments)
-            case "kas_promote":
+            case "memvault_promote":
                 return await handle_promote(arguments)
-            case "kas_memory_edit":
+            case "memvault_memory_edit":
                 return await handle_edit(arguments)
-            case "kas_sync_embeddings":
+            case "memvault_sync_embeddings":
                 return await handle_sync_embeddings(arguments)
-            case "kas_profile":
+            case "memvault_profile":
                 return await handle_profile(arguments)
-            case "kas_skill_search":
+            case "memvault_skill_search":
                 return await handle_skill_search(arguments)
+            case "memvault_kg_search":
+                return await handle_kg_search(arguments)
+            case "memvault_kg_clusters":
+                return await handle_kg_clusters(arguments)
+            case "memvault_kg_wisdom":
+                return await handle_kg_wisdom(arguments)
+            case "memvault_kg_cascade_recall":
+                return await handle_kg_cascade_recall(arguments)
+            case "memvault_attitude_current":
+                return await handle_attitude_current(arguments)
+            case "memvault_attitude_evolve":
+                return await handle_attitude_evolve(arguments)
+            case "memvault_skill_proficiency":
+                return await handle_skill_proficiency(arguments)
             case _:
                 return text_result(f"Unknown tool: {name}")
     except httpx.HTTPStatusError as e:
@@ -243,7 +341,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     except httpx.ConnectError:
         return text_result(
             f"Cannot connect to Core API at {CORE_API}. "
-            "Start the server: cd core && uvicorn src.main:app --port 8800"
+            "Start the server: cd core && uvicorn src.main:app --port 8801"
         )
 
 
@@ -251,9 +349,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 
 async def handle_recall(args: dict) -> list[TextContent]:
-    """kas_recall → GET /search (semantic) + GET /blocks (keyword fallback)."""
+    """memvault_recall → semantic search, or cascade recall when mode='cascade'."""
     query = args["query"]
     max_results = args.get("max_results", 5)
+    mode = args.get("mode", "default")
+
+    # Redirect to KG Cascade Recall when mode=cascade
+    if mode == "cascade":
+        return await handle_kg_cascade_recall({"query": query, "top_k": max_results})
 
     # Try semantic search (now GET)
     result = await api_get("/search", {"q": query, "top_k": str(max_results)})
@@ -271,15 +374,14 @@ async def handle_recall(args: dict) -> list[TextContent]:
     if not blocks.get("items"):
         return text_result(f"No matching memories found for: {query}")
     blocks_text = "\n\n---\n\n".join(
-        f"**{b['block_type']}**\n"
-        f"Tags: {', '.join(b.get('tags', []))}\n{b['content'][:300]}..."
+        f"**{b['block_type']}**\nTags: {', '.join(b.get('tags', []))}\n{b['content'][:300]}..."
         for b in blocks["items"]
     )
     return text_result(f"Found {blocks['total']} memories (listing)\n\n{blocks_text}")
 
 
 async def handle_extract(args: dict) -> list[TextContent]:
-    """kas_extract → POST /blocks (create a new memory block)."""
+    """memvault_extract → POST /blocks (create a new memory block)."""
     body = {
         "content": args["content"],
         "block_type": args.get("block_type", "general"),
@@ -296,7 +398,7 @@ async def handle_extract(args: dict) -> list[TextContent]:
 
 
 async def handle_search_tags(args: dict) -> list[TextContent]:
-    """kas_search_tags → GET /blocks?tags=..."""
+    """memvault_search_tags → GET /blocks?tags=..."""
     tags = args["tags"]
     params = {"tags": ",".join(tags), "page_size": "20"}
     result = await api_get("/blocks", params)
@@ -305,8 +407,7 @@ async def handle_search_tags(args: dict) -> list[TextContent]:
         return text_result(f"No blocks matched tags: {', '.join(tags)}")
 
     blocks_text = "\n\n---\n\n".join(
-        f"**{b['block_type']}**\n"
-        f"Tags: {', '.join(b.get('tags', []))}\n{b['content'][:500]}"
+        f"**{b['block_type']}**\nTags: {', '.join(b.get('tags', []))}\n{b['content'][:500]}"
         for b in result["items"]
     )
     return text_result(
@@ -315,7 +416,7 @@ async def handle_search_tags(args: dict) -> list[TextContent]:
 
 
 async def handle_stats(args: dict) -> list[TextContent]:
-    """kas_memory_stats → GET /blocks + /tags + /profile."""
+    """memvault_memory_stats → GET /blocks + /tags + /profile."""
     blocks = await api_get("/blocks", {"page_size": "1"})
     tags = await api_get("/tags")
     profile = await api_get("/profile")
@@ -323,10 +424,10 @@ async def handle_stats(args: dict) -> list[TextContent]:
     tag_list = "\n".join(f"  {t['name']}: {t['usage_count']}" for t in tags[:20])
 
     return text_result(
-        f"# KAS Memory Stats\n\n"
+        f"# Memvault Memory Stats\n\n"
         f"- Total blocks: {blocks.get('total', 0)}\n"
         f"- Unique tags: {len(tags)}\n\n"
-        f"## KAS Scores\n"
+        f"## Profile Scores\n"
         f"- Knowledge Score: {profile.get('knowledge_score', 0)}\n"
         f"- Attitude Score: {profile.get('attitude_score', 0)}\n"
         f"- Skill Score: {profile.get('skill_score', 0)}\n\n"
@@ -335,7 +436,7 @@ async def handle_stats(args: dict) -> list[TextContent]:
 
 
 async def handle_promote(args: dict) -> list[TextContent]:
-    """kas_promote → POST /tags/sync + check frequency → POST /domains."""
+    """memvault_promote → POST /tags/sync + check frequency → POST /domains."""
     threshold = args.get("threshold", 3)
     dry_run = args.get("dry_run", False)
     target_tag = args.get("tag")
@@ -369,11 +470,11 @@ async def handle_promote(args: dict) -> list[TextContent]:
     if not promoted:
         return text_result("All qualifying tags are already knowledge domains.")
 
-    return text_result(f"Knowledge promotion:\n" + "\n".join(promoted))
+    return text_result("Knowledge promotion:\n" + "\n".join(promoted))
 
 
 async def handle_edit(args: dict) -> list[TextContent]:
-    """kas_memory_edit → GET/PATCH/DELETE /blocks/:id."""
+    """memvault_memory_edit → GET/PATCH/DELETE /blocks/:id."""
     block_id = args["block_id"]
     action = args["action"]
 
@@ -394,27 +495,25 @@ async def handle_edit(args: dict) -> list[TextContent]:
         new_tags = args.get("new_tags", [])
         result = await api_patch(f"/blocks/{block_id}", {"tags": new_tags})
         return text_result(
-            f"Block {block_id} tags updated.\n"
-            f"New tags: {', '.join(result.get('tags', []))}"
+            f"Block {block_id} tags updated.\nNew tags: {', '.join(result.get('tags', []))}"
         )
 
     return text_result(f"Unknown action: {action}")
 
 
 async def handle_sync_embeddings(args: dict) -> list[TextContent]:
-    """kas_sync_embeddings — placeholder until EmbeddingService is ready."""
+    """memvault_sync_embeddings — placeholder until EmbeddingService is ready."""
     # TODO: iterate blocks without embeddings, compute via Ollama, update via API
     return text_result(
         "Embedding sync not yet implemented in V2.\n"
         "Waiting for shared EmbeddingService (Ollama nomic-embed-text 768d).\n"
-        "Use V1 kas_sync_embeddings for now."
+        "Embedding sync not yet implemented. Use external script for now."
     )
 
 
 async def handle_profile(args: dict) -> list[TextContent]:
-    """kas_profile → GET /profile (single flat profile)."""
-    rebuild = args.get("rebuild", False)
-    profile = await api_get("/profile")
+    """memvault_profile → GET /profile (single flat profile)."""
+    profile = await api_get("/profile", params={"rebuild": args.get("rebuild", False)})
 
     return text_result(
         f"# KAS Profile\n\n"
@@ -426,7 +525,7 @@ async def handle_profile(args: dict) -> list[TextContent]:
 
 
 async def handle_skill_search(args: dict) -> list[TextContent]:
-    """kas_skill_search — searches ~/.claude/skills/ directory.
+    """memvault_skill_search — searches ~/.claude/skills/ directory.
 
     This tool reads the local skill index, not the Core API.
     Preserved for backward compatibility.
@@ -478,6 +577,170 @@ async def handle_skill_search(args: dict) -> list[TextContent]:
     return text_result(f'Found {len(results)} skills for "{query}":\n\n{text_parts}')
 
 
+# ======================== KG Tool Implementations ========================
+
+
+async def handle_kg_search(args: dict) -> list[TextContent]:
+    """memvault_kg_search → GET /kg/triples/search."""
+    query = args["query"]
+    top_k = args.get("top_k", 10)
+
+    result = await api_get("/kg/triples/search", {"q": query, "top_k": str(top_k)})
+    if not result:
+        return text_result(f"No KG triples found for: {query}")
+
+    triples_text = "\n".join(
+        f"  [{i + 1}] {t['subject']} —[{t['predicate']}]→ {t['object']}"
+        + (f" (topic: {t['topic']})" if t.get("topic") else "")
+        for i, t in enumerate(result)
+    )
+    return text_result(f'Found {len(result)} KG triples for "{query}":\n\n{triples_text}')
+
+
+async def handle_kg_clusters(args: dict) -> list[TextContent]:
+    """memvault_kg_clusters → GET /kg/clusters."""
+    result = await api_get("/kg/clusters")
+    if not result:
+        return text_result("No KG clusters found.")
+
+    clusters_text = "\n\n---\n\n".join(
+        f"**{c['name']}** (size: {c['size']}, verdict: {c.get('verdict', 'UNVERIFIED')})\n"
+        f"{c.get('summary', '(no summary)')}"
+        for c in result
+    )
+    return text_result(f"# KG Clusters ({len(result)} total)\n\n{clusters_text}")
+
+
+async def handle_kg_wisdom(args: dict) -> list[TextContent]:
+    """memvault_kg_wisdom → GET /kg/wisdom."""
+    params: dict = {}
+    if args.get("confidence"):
+        params["confidence"] = args["confidence"]
+    if args.get("tag"):
+        params["tag"] = args["tag"]
+
+    result = await api_get("/kg/wisdom", params if params else None)
+    if not result:
+        return text_result("No wisdom nodes found.")
+
+    wisdom_text = "\n\n---\n\n".join(
+        f"**[{w['confidence']}]** {w['wisdom']}\n"
+        f"Bridge: {w['bridge_entity']} | Evidence: {w.get('evidence_count', '?')}"
+        + (f"\nTags: {', '.join(w.get('tags', []))}" if w.get("tags") else "")
+        for w in result
+    )
+    return text_result(f"# Wisdom Nodes ({len(result)} total)\n\n{wisdom_text}")
+
+
+async def handle_kg_cascade_recall(args: dict) -> list[TextContent]:
+    """memvault_kg_cascade_recall → GET /kg/recall."""
+    query = args["query"]
+    top_k = args.get("top_k", 5)
+
+    result = await api_get("/kg/recall", {"q": query, "top_k": str(top_k)})
+    layers = result.get("layers_searched", [])
+
+    parts: list[str] = [
+        f'# Cascade Recall: "{query}"',
+        f"Layers searched: {', '.join(layers) or 'none'}",
+        "",
+    ]
+
+    wisdom = result.get("wisdom", [])
+    if wisdom:
+        parts.append(f"## L2 Wisdom ({len(wisdom)})")
+        for w in wisdom:
+            parts.append(f"  [{w['confidence']}] {w['wisdom']}")
+        parts.append("")
+
+    clusters = result.get("clusters", [])
+    if clusters:
+        parts.append(f"## L1 Clusters ({len(clusters)})")
+        for c in clusters:
+            parts.append(f"  {c['name']} (size: {c['size']})")
+        parts.append("")
+
+    triples = result.get("triples", [])
+    if triples:
+        parts.append(f"## L0 Triples ({len(triples)})")
+        for t in triples:
+            parts.append(f"  {t['subject']} —[{t['predicate']}]→ {t['object']}")
+        parts.append("")
+
+    blocks = result.get("blocks", [])
+    if blocks:
+        parts.append(f"## Memory Blocks ({len(blocks)})")
+        for b in blocks:
+            content = b.get("content", "")[:200]
+            parts.append(f"  [{b.get('block_type', '?')}] {content}...")
+        parts.append("")
+
+    if not (wisdom or clusters or triples or blocks):
+        parts.append("No results found across all layers.")
+
+    return text_result("\n".join(parts))
+
+
+async def handle_attitude_current(args: dict) -> list[TextContent]:
+    """memvault_attitude_current → GET /kg/attitudes."""
+    params: dict = {}
+    if args.get("category"):
+        params["category"] = args["category"]
+
+    result = await api_get("/kg/attitudes", params if params else None)
+    if not result:
+        return text_result("No active attitude facts found.")
+
+    facts_text = "\n\n---\n\n".join(
+        f"**[{a['category']}]** {a['fact']}\n"
+        f"Confidence: {a.get('confidence', 0.5):.2f} | Operation: {a.get('operation', 'ADD')}"
+        for a in result
+    )
+    return text_result(f"# Current Attitudes ({len(result)} active)\n\n{facts_text}")
+
+
+async def handle_attitude_evolve(args: dict) -> list[TextContent]:
+    """memvault_attitude_evolve → POST /kg/attitudes/evolve."""
+    body: dict = {
+        "fact": args["fact"],
+        "category": args["category"],
+    }
+    if args.get("source_session"):
+        body["source_session"] = args["source_session"]
+
+    result = await api_post("/kg/attitudes/evolve", body)
+    operation = result.get("operation", "?")
+    fact_id = result.get("fact_id", "?")
+    message = result.get("message", "")
+    previous_id = result.get("previous_id")
+
+    lines = [
+        f"Attitude evolve: **{operation}**",
+        f"Fact ID: {fact_id}",
+        f"Message: {message}",
+    ]
+    if previous_id:
+        lines.append(f"Supersedes: {previous_id}")
+
+    return text_result("\n".join(lines))
+
+
+async def handle_skill_proficiency(args: dict) -> list[TextContent]:
+    """memvault_skill_proficiency → GET /kg/skills/proficiency."""
+    result = await api_get("/kg/skills/proficiency")
+    if not result:
+        return text_result("No skill proficiency data found.")
+
+    rows = "\n".join(
+        f"  {i + 1:2d}. {p['skill_name']:<40s} "
+        f"proficiency={p.get('proficiency', 0):.2f}  "
+        f"invocations={p.get('invocation_count', 0)}  "
+        f"success_rate={p.get('success_rate', 0):.0%}"
+        for i, p in enumerate(result)
+    )
+    return text_result(f"# Skill Proficiency Ranking ({len(result)} skills)\n\n{rows}")
+
+
 # ======================== Resources ========================
 
 
@@ -487,13 +750,13 @@ async def list_resources():
 
     return [
         Resource(
-            uri="kas://memories/recent",
+            uri="memvault://memories/recent",
             name="recent-memories",
             description="最近 14 天的記憶",
             mimeType="text/markdown",
         ),
         Resource(
-            uri="kas://knowledge/domains",
+            uri="memvault://knowledge/domains",
             name="knowledge-domains",
             description="所有知識域",
             mimeType="text/markdown",
@@ -508,8 +771,7 @@ async def read_resource(uri: str) -> str:
         if not blocks.get("items"):
             return "No recent memories."
         return "\n\n---\n\n".join(
-            f"## {b['block_type']}\n"
-            f"**Tags**: {', '.join(b.get('tags', []))}\n\n{b['content']}"
+            f"## {b['block_type']}\n**Tags**: {', '.join(b.get('tags', []))}\n\n{b['content']}"
             for b in blocks["items"]
         )
 
@@ -530,7 +792,6 @@ async def read_resource(uri: str) -> str:
 
 
 async def main():
-    from mcp.server.stdio import stdio_server
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())

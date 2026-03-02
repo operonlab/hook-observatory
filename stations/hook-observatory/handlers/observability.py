@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime
+from datetime import datetime
 
 from .base import ALLOW, HOME, HookResult
 
@@ -23,9 +23,12 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 
     os.makedirs(SPOOL_DIR, exist_ok=True)
 
-    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    line = json.dumps({"event_type": event_type, "ts": ts, "data": json.loads(raw_input)},
-                       ensure_ascii=False, separators=(",", ":"))
+    ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    line = json.dumps(
+        {"event_type": event_type, "ts": ts, "data": json.loads(raw_input)},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
     try:
         with open(SPOOL_FILE, "a") as f:

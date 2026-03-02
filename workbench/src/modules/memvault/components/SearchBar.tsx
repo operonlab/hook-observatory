@@ -37,6 +37,7 @@ export default function SearchBar({
             backgroundColor: "var(--base)",
             borderColor: "var(--surface0)",
             color: "var(--text)",
+            minHeight: 44,
           }}
           onFocus={(e) => {
             e.currentTarget.style.borderColor = "var(--blue)";
@@ -49,12 +50,14 @@ export default function SearchBar({
         <button
           onClick={onSearch}
           disabled={isDisabled}
-          className="rounded-lg px-4 py-2.5 text-sm font-medium transition-opacity"
+          className="rounded-lg px-4 py-2.5 text-sm font-medium transition-opacity shrink-0"
           style={{
             backgroundColor: isDisabled ? "var(--surface0)" : "var(--blue)",
             color: isDisabled ? "var(--subtext1)" : "var(--crust)",
             cursor: isDisabled ? "not-allowed" : "pointer",
             opacity: isDisabled ? 0.6 : 1,
+            minHeight: 44,
+            minWidth: 64,
           }}
         >
           {loading ? (
@@ -76,8 +79,8 @@ export default function SearchBar({
           {onClear && (
             <button
               onClick={onClear}
-              className="text-xs underline-offset-2 hover:underline"
-              style={{ color: "var(--subtext0)" }}
+              className="text-xs underline-offset-2 hover:underline py-1"
+              style={{ color: "var(--subtext0)", minHeight: 44 }}
             >
               清除
             </button>

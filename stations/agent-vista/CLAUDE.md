@@ -30,10 +30,18 @@ This project uses two parallel worktrees. **Respect file ownership**:
 - `PROGRESS.md` — both worktrees read and update their own section
 
 ## Commands
-- `make dev-backend` — run Go server
-- `make dev-frontend` — run Vite dev server
+- `make dev-backend` — run Go server (dev mode, no embed)
+- `make dev-frontend` — run Vite dev server (HMR)
 - `make test` — run all tests
-- `make build` — build Go binary
+- `make build` — build Go binary only (NO frontend rebuild)
+- `make build-all` — **full rebuild**: frontend → cp dist → Go binary (ALWAYS use this after frontend changes)
+
+## CRITICAL: Build Pipeline
+Frontend is embedded via `//go:embed all:dist` in `web/embed.go`. After ANY frontend change:
+1. MUST use `make build-all` (not `make build`, not separate steps)
+2. MUST restart the binary (`pkill -f agent-vista && ./bin/agent-vista &`)
+3. MUST hard-refresh browser (`Cmd+Shift+R`) to bypass JS cache
+See DEV-GUIDE.md for detailed troubleshooting.
 
 ## Key Decisions
 - Single binary daemon, frontend embedded via Go embed

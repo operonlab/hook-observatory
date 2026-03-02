@@ -149,9 +149,24 @@ window.sendInput = function() {
   if (!window.tmuxWs || !window.tmuxWs.isConnected()) { window.flashInputError('Not connected'); return; }
   if (!S.focusedPane) { window.flashInputError('No pane selected'); return; }
 
-  // Auto-relay: dispatch to other panes async when focused on Claude Code via Web UI
-  if (S.currentTool === 'claude' && !text.startsWith('/tmux-relay')) {
-    text = '/tmux-relay async dispatch to a free pane: ' + text;
+  // Auto-relay: dispatch via server-side /api/relay (zero-blocking async)
+  if (S.currentTool === 'claude' && !text.startsWith('/')) {
+    fetch('/api/relay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: text }),
+    })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(data => {
+        inputEl.placeholder = `✓ Dispatched → ${data.pane}`;
+        setTimeout(() => { inputEl.placeholder = 'Type a message...'; }, 3000);
+      })
+      .catch(err => {
+        window.flashInputError('Relay: ' + err.message);
+      });
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    return;
   }
 
   window.tmuxWs.send({ type:'input', pane:S.focusedPane, text });

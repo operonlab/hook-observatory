@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useSwipeGesture } from '@/modules/dashboard/hooks/useSwipeGesture'
 import Home from '@/pages/Home'
 
 const DashboardCanvas = React.lazy(() => import('@/modules/dashboard/components/DashboardCanvas'))
 
-import React from 'react'
-
 export default function AppsPage() {
-  const [panel, setPanel] = useState(0)
+  // Panel 0 = Dashboard (left), Panel 1 = Home (right, default)
+  const [panel, setPanel] = useState(1)
 
   // Listen for toggle-dashboard custom event from AppHeader
   useEffect(() => {
@@ -18,12 +17,12 @@ export default function AppsPage() {
     return () => window.removeEventListener('toggle-dashboard', handler)
   }, [])
 
-  const goToDashboard = useCallback(() => setPanel(1), [])
-  const goToHome = useCallback(() => setPanel(0), [])
+  const goToDashboard = useCallback(() => setPanel(0), [])
+  const goToHome = useCallback(() => setPanel(1), [])
 
   const swipeHandlers = useSwipeGesture({
-    onSwipeLeft: goToDashboard,
-    onSwipeRight: goToHome,
+    onSwipeRight: goToDashboard,
+    onSwipeLeft: goToHome,
   })
 
   return (
@@ -37,12 +36,7 @@ export default function AppsPage() {
           transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
-        {/* Panel 0: Home (app grid) */}
-        <div className="h-full w-1/2 overflow-y-auto">
-          <Home />
-        </div>
-
-        {/* Panel 1: Dashboard Canvas */}
+        {/* Panel 0: Dashboard Canvas (left) */}
         <div className="h-full w-1/2 overflow-y-auto">
           <React.Suspense
             fallback={
@@ -63,6 +57,11 @@ export default function AppsPage() {
             <DashboardCanvas />
           </React.Suspense>
         </div>
+
+        {/* Panel 1: Home (right, default) */}
+        <div className="h-full w-1/2 overflow-y-auto">
+          <Home />
+        </div>
       </div>
 
       {/* Bottom dots indicator (mobile) */}
@@ -78,7 +77,7 @@ export default function AppsPage() {
                 panel === i ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.2)',
               transform: panel === i ? 'scale(1.2)' : 'scale(1)',
             }}
-            aria-label={i === 0 ? '應用列表' : 'Dashboard'}
+            aria-label={i === 0 ? 'Dashboard' : '應用列表'}
           />
         ))}
       </div>

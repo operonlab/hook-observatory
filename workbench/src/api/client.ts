@@ -1,6 +1,6 @@
 import type { PaginatedResponse, ErrorResponse } from "@/types";
 
-const API_BASE = "/api";
+const API_BASE = `${__BASE_PATH__}/api`;
 
 class ApiError extends Error {
   code: string;

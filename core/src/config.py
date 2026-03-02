@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Database & Cache
-    db_url: str = "postgresql://localhost/workshop"
+    db_url: str = "postgresql://joneshong:REDACTED@localhost/workshop"
     redis_url: str = "redis://localhost:6379/0"
 
     # Security
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Session
     session_cookie_name: str = "workshop_session"
-    session_max_age: int = 7 * 24 * 60 * 60  # 7 days in seconds
+    session_max_age: int = 30 * 24 * 60 * 60  # 30 days in seconds
 
     # OAuth
     google_client_id: str = ""
@@ -47,6 +47,12 @@ class Settings(BaseSettings):
 
     # Event Bus
     event_backend: str = "memory"  # "memory" | "redis"
+
+    # S3 Object Storage (RustFS)
+    s3_endpoint: str = "http://localhost:9000"
+    s3_access_key: str = "rustfsadmin"
+    s3_secret_key: str = "rustfsadmin"
+    s3_archive_bucket: str = "workshop-archive"
 
     # Plugins
     plugin_dir: str = "plugins"

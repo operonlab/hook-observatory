@@ -14,9 +14,9 @@ export default function BlockTypeFilter({ activeType, onChange, counts }: BlockT
     <div className="flex flex-wrap gap-2">
       <button
         onClick={() => onChange(null)}
-        className="rounded-lg px-3 py-1.5 text-sm font-medium cursor-pointer transition-colors"
-        style={
-          activeType === null
+        className="rounded-lg px-3 py-2 text-sm font-medium cursor-pointer transition-colors"
+        style={{
+          ...(activeType === null
             ? {
                 backgroundColor: "color-mix(in srgb, var(--text) 18%, transparent)",
                 color: "var(--text)",
@@ -26,8 +26,9 @@ export default function BlockTypeFilter({ activeType, onChange, counts }: BlockT
                 backgroundColor: "var(--surface0)",
                 color: "var(--subtext0)",
                 border: "1px solid transparent",
-              }
-        }
+              }),
+          minHeight: 44,
+        }}
       >
         全部{counts !== undefined ? ` (${Object.values(counts).reduce((a, b) => a + b, 0)})` : ""}
       </button>
@@ -41,9 +42,9 @@ export default function BlockTypeFilter({ activeType, onChange, counts }: BlockT
           <button
             key={type}
             onClick={() => onChange(type)}
-            className="rounded-lg px-3 py-1.5 text-sm font-medium cursor-pointer transition-colors"
-            style={
-              isActive
+            className="rounded-lg px-3 py-2 text-sm font-medium cursor-pointer transition-colors"
+            style={{
+              ...(isActive
                 ? {
                     backgroundColor: `color-mix(in srgb, ${config.color} 18%, transparent)`,
                     color: config.color,
@@ -53,8 +54,9 @@ export default function BlockTypeFilter({ activeType, onChange, counts }: BlockT
                     backgroundColor: "var(--surface0)",
                     color: "var(--subtext0)",
                     border: "1px solid transparent",
-                  }
-            }
+                  }),
+              minHeight: 44,
+            }}
           >
             {config.label}
             {count !== undefined ? ` (${count})` : ""}

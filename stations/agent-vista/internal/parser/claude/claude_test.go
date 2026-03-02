@@ -327,6 +327,71 @@ func TestParseTurnDuration(t *testing.T) {
 	}
 }
 
+func TestParseMultiAPICallTokenAccumulation(t *testing.T) {
+	// Simulates a tool-loop turn with multiple API calls.
+	// Each API call produces 2 streaming chunks with IDENTICAL usage (dedup needed).
+	// Two API calls with different usage should be accumulated (not replaced).
+	//
+	// Line 1: progress — session_start
+	// Line 2: assistant (API call 1, chunk 1) — text, usage A
+	// Line 3: assistant (API call 1, chunk 2) — tool_use, usage A (duplicate)
+	// Line 4: user — tool_result
+	// Line 5: assistant (API call 2, chunk 1) — text, usage B
+	// Line 6: assistant (API call 2, chunk 2) — tool_use, usage B (duplicate)
+	// Line 7: user — tool_result
+	// Line 8: system/turn_duration — flushes accumulated A+B
+	lines := `{"type":"progress","timestamp":"2026-02-24T10:00:00.000Z","sessionId":"s1","data":{"type":"hook_progress"}}
+{"type":"assistant","timestamp":"2026-02-24T10:00:05.000Z","sessionId":"s1","message":{"model":"claude-opus-4-6","role":"assistant","content":[{"type":"text","text":"Reading file..."}],"usage":{"input_tokens":100,"output_tokens":200,"cache_read_input_tokens":5000,"cache_creation_input_tokens":500}}}
+{"type":"assistant","timestamp":"2026-02-24T10:00:05.000Z","sessionId":"s1","message":{"model":"claude-opus-4-6","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/tmp/x"}}],"usage":{"input_tokens":100,"output_tokens":200,"cache_read_input_tokens":5000,"cache_creation_input_tokens":500}}}
+{"type":"user","timestamp":"2026-02-24T10:00:06.000Z","sessionId":"s1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"file contents"}],"is_error":false}]}}
+{"type":"assistant","timestamp":"2026-02-24T10:00:10.000Z","sessionId":"s1","message":{"model":"claude-opus-4-6","role":"assistant","content":[{"type":"text","text":"Writing edit..."}],"usage":{"input_tokens":150,"output_tokens":300,"cache_read_input_tokens":6000,"cache_creation_input_tokens":800}}}
+{"type":"assistant","timestamp":"2026-02-24T10:00:10.000Z","sessionId":"s1","message":{"model":"claude-opus-4-6","role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"/tmp/x"}}],"usage":{"input_tokens":150,"output_tokens":300,"cache_read_input_tokens":6000,"cache_creation_input_tokens":800}}}
+{"type":"user","timestamp":"2026-02-24T10:00:11.000Z","sessionId":"s1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"ok"}],"is_error":false}]}}
+{"type":"system","subtype":"turn_duration","timestamp":"2026-02-24T10:01:00.000Z","sessionId":"s1","durationMs":55000}
+`
+
+	p := New()
+	events, err := p.ParseIncremental([]byte(lines))
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+
+	// Find the idle event
+	var idleEvt *protocol.AgentEvent
+	for i := range events {
+		if events[i].EventType == protocol.EventIdle {
+			idleEvt = &events[i]
+			break
+		}
+	}
+	if idleEvt == nil {
+		t.Fatal("no idle event found")
+	}
+	if idleEvt.Tokens == nil {
+		t.Fatal("Tokens is nil")
+	}
+
+	// Usage A: input=100, output=200, cache_read=5000, cache_create=500
+	// Usage B: input=150, output=300, cache_read=6000, cache_create=800
+	// Accumulated: input=250, output=500, cache_read=11000, cache_create=1300
+	// TotalInput = 250 + 11000 + 1300 = 12550
+	// Total = 12550 + 500 = 13050
+	wantInput := 250 + 11000 + 1300
+	if idleEvt.Tokens.Input != wantInput {
+		t.Errorf("Tokens.Input = %d, want %d", idleEvt.Tokens.Input, wantInput)
+	}
+	if idleEvt.Tokens.Output != 500 {
+		t.Errorf("Tokens.Output = %d, want 500", idleEvt.Tokens.Output)
+	}
+	if idleEvt.Tokens.Cached != 11000 {
+		t.Errorf("Tokens.Cached = %d, want 11000", idleEvt.Tokens.Cached)
+	}
+	wantTotal := wantInput + 500
+	if idleEvt.Tokens.Total != wantTotal {
+		t.Errorf("Tokens.Total = %d, want %d", idleEvt.Tokens.Total, wantTotal)
+	}
+}
+
 func TestReset(t *testing.T) {
 	p := New()
 	p.ParseIncremental([]byte(`{"type":"progress","timestamp":"2026-02-24T10:00:00.000Z","sessionId":"s1","cwd":"/tmp","version":"1.0","data":{"type":"hook_progress"}}` + "\n"))

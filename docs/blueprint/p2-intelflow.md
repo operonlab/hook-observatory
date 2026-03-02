@@ -18,7 +18,7 @@ Smart Search 已有兩個元件：
 | `research_report` Service | `~/Claude/services/research_report/` | 運作中，port 8830 |
 
 **已有的好東西**：
-- PostgreSQL + pgvector（schema `pulso_research`，768d Ollama embedding）
+- PostgreSQL + pgvector（schema `workshop_research`，768d Ollama embedding）
 - 完整 REST API（CRUD + semantic search + topic graph + dashboard）
 - 前端 Research Hub（port 3005）
 - 52 個 .md fallback 檔案待回填

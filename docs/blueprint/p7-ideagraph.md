@@ -69,7 +69,7 @@ target_lang: zh-TW
 
 ## V1 現況分析
 
-V1 `pulso-muse` MCP Server 有 8 個工具：
+V1 `workshop-muse` MCP Server 有 8 個工具：
 
 | 工具 | 功能 | V2 處置 |
 |------|------|--------|
@@ -186,15 +186,15 @@ CREATE TABLE ideagraph.refinements (
 
 ---
 
-## Galaxy 風格 UI（參考 KAS Memory）
+## Galaxy 風格 UI（參考 Memvault）
 
 ### 視覺化設計
 
-參考 memvault 的 KAS Galaxy 星系圖，ideagraph 採用相同的互動範式：
+參考 memvault 的 Galaxy 星系圖，ideagraph 採用相同的互動範式：
 
 | 元素 | Galaxy 對應 | ideagraph 實現 |
 |------|------------|---------------|
-| **星星** | KAS 知識點 | 每個 Spark = 一顆星 |
+| **星星** | 記憶知識點 | 每個 Spark = 一顆星 |
 | **星星大小** | 知識深度 | 連結數量（越多越大） |
 | **星星顏色** | K/A/S 維度 | Spark type（concept=藍、project=綠、idea=金、question=紫） |
 | **星星亮度** | 成熟度 | status（draft=暗淡、refined=正常、verified links 多=明亮） |
@@ -288,7 +288,7 @@ CREATE TABLE ideagraph.refinements (
          → 想法開始自動連結，形成知識網絡
 
 階段 3: + Galaxy 3D 視覺化 + 時間軸回放
-         → KAS Memory 等級的視覺體驗
+         → Memvault 等級的視覺體驗
 
 階段 4: + 跨模組事件轉 Spark + Inbox
          → 全平台的想法匯流中心
@@ -307,7 +307,7 @@ CREATE TABLE ideagraph.refinements (
 | **誰寫入** | AI（SessionEnd hook） | 人類（少爺口述/打字） |
 | **結構** | Block（獨立記憶區塊） | Spark + Link（圖譜結構） |
 | **搜尋** | 語意召回（自動） | 語意搜尋（主動） |
-| **視覺化** | KAS Galaxy（K/A/S 維度） | Idea Galaxy（概念關聯維度） |
+| **視覺化** | Memvault Galaxy（K/A/S 維度） | Idea Galaxy（概念關聯維度） |
 | **交互** | memvault block → ideagraph spark | 記憶中的想法值得獨立追蹤時轉入 |
 
 **不是競爭，是互補**：memvault 記住「我們討論過什麼」，ideagraph 追蹤「我想做什麼」。

@@ -113,10 +113,17 @@ func (s *Server) spaHandler() http.Handler {
 			path = "index.html"
 		}
 		if _, err := fs.Stat(s.frontendFS, path); err == nil {
+			// Hashed assets → immutable cache; HTML → no-store
+			if strings.HasPrefix(path, "assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-store")
+			}
 			fileServer.ServeHTTP(w, r)
 			return
 		}
 		// Fallback: serve index.html for SPA client-side routing
+		w.Header().Set("Cache-Control", "no-store")
 		r.URL.Path = "/"
 		fileServer.ServeHTTP(w, r)
 	})
@@ -267,6 +274,12 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.layoutDB == nil {
+		// No DB configured — GET returns 404 (same as empty DB), PUT returns 503
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"no layout saved"}`, http.StatusNotFound)
+			return
+		}
 		http.Error(w, `{"error":"database not configured"}`, http.StatusServiceUnavailable)
 		return
 	}

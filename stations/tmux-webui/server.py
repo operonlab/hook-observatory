@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from contextlib import asynccontextmanager
@@ -52,6 +53,12 @@ logger = logging.getLogger("tmux-webui")
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = Path.home() / "workshop" / "outputs" / "tmux-webui-uploads"
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+
+# ── Relay scripts (shared with MCP server) ──
+
+RELAY_SCRIPTS_DIR = Path.home() / ".claude/skills/tmux-relay/scripts"
+RELAY_PANE_POOL = RELAY_SCRIPTS_DIR / "pane_pool.sh"
+RELAY_SH = RELAY_SCRIPTS_DIR / "relay.sh"
 
 # ── Disconnect layout reset (debounced 10s) ──
 
@@ -168,6 +175,90 @@ async def api_upload(file: UploadFile):
 
     logger.info("Uploaded: %s (%d bytes)", dest, len(content))
     return {"path": str(dest)}
+
+
+# ── Relay dispatch ──
+
+
+async def _run_relay_script(script: Path, *args: str, timeout: float = 30) -> str:
+    """Run a relay shell script and return stdout."""
+    proc = await asyncio.create_subprocess_exec(
+        "bash", str(script), *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        raise HTTPException(status_code=504, detail=f"Script timed out: {script.name}")
+    if proc.returncode != 0:
+        err = stderr.decode().strip()
+        raise HTTPException(status_code=500, detail=f"{script.name} failed: {err}")
+    return stdout.decode().strip()
+
+
+@app.post("/api/relay")
+async def api_relay(request: Request):
+    """Dispatch a command to a relay pane (same logic as MCP relay_dispatch)."""
+    body = await request.json()
+    command = body.get("command", "").strip()
+    if not command:
+        raise HTTPException(status_code=400, detail="command is required")
+    timeout_val = body.get("timeout", 600)
+
+    # 1. Acquire a pane
+    raw = await _run_relay_script(RELAY_PANE_POOL, "acquire", "1", timeout=30)
+    panes = [p.strip() for p in raw.splitlines() if p.strip()]
+    if not panes:
+        raise HTTPException(status_code=503, detail="No relay panes available")
+    pane = panes[0]
+
+    # 2. Check status → recycle if busy
+    try:
+        status = await _run_relay_script(RELAY_PANE_POOL, "status", pane, timeout=10)
+    except HTTPException:
+        status = "unknown"
+
+    if status.startswith("busy"):
+        try:
+            await _run_relay_script(RELAY_PANE_POOL, "recycle", pane, timeout=30)
+            for _ in range(10):
+                await asyncio.sleep(1.5)
+                try:
+                    status = await _run_relay_script(
+                        RELAY_PANE_POOL, "status", pane, timeout=10,
+                    )
+                except HTTPException:
+                    status = "unknown"
+                if status == "idle":
+                    break
+        except HTTPException:
+            raise HTTPException(status_code=503, detail=f"Cannot recycle pane {pane}")
+
+    # 3. Dispatch (background)
+    signal_file = f"/tmp/relay-webui-{int(time.time() * 1000)}-{os.getpid()}.done"
+    await asyncio.create_subprocess_exec(
+        "bash", str(RELAY_SH),
+        pane, "", command,
+        "--no-forward",
+        "--signal", signal_file,
+        "--timeout", str(timeout_val),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+
+    logger.info("Relay dispatched to %s: %s", pane, command[:80])
+    return {"pane": pane, "signal_file": signal_file}
+
+
+@app.get("/api/relay/check")
+async def api_relay_check(signal_file: str):
+    """Check if a dispatched relay command has completed."""
+    if os.path.exists(signal_file):
+        return {"status": "completed", "signal_file": signal_file}
+    return {"status": "running", "signal_file": signal_file}
 
 
 # ── PWA assets ──

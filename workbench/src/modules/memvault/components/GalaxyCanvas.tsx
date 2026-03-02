@@ -1,7 +1,7 @@
 import { useRef, useEffect } from "react";
 import ForceGraph3D from "3d-force-graph";
 import * as THREE from "three";
-import type { GalaxyNode, GalaxyLink, BlockType } from "../types";
+import type { GalaxyNode, GalaxyLink, GalaxyLayer, BlockType } from "../types";
 
 interface GalaxyCanvasProps {
   nodes: GalaxyNode[];
@@ -25,7 +25,41 @@ function resolveColors() {
   for (const [bt, v] of Object.entries(CSS_VAR_MAP)) {
     types[bt as BlockType] = g(v);
   }
-  return { types, selected: g("--peach") };
+  return {
+    types,
+    selected: g("--peach"),
+    teal: g("--teal"),
+    blue: g("--blue"),
+    peach: g("--peach"),
+  };
+}
+
+function nodeSize(n: any): number {
+  const layer = n.layer as GalaxyLayer;
+  switch (layer) {
+    case "wisdom": return 4 + (n.confidence || 0.5) * 6;
+    case "clusters": return 3;
+    case "triples": return 1 + (n.confidence || 0.5) * 0.5;
+    default: return 2 + (n.confidence || 0.5) * 12;
+  }
+}
+
+function nodeColor(n: any, colors: ReturnType<typeof resolveColors>): string {
+  const layer = n.layer as GalaxyLayer;
+  switch (layer) {
+    case "wisdom": return colors.peach;
+    case "clusters": return colors.blue;
+    case "triples": return colors.teal;
+    default: return colors.types[n.type as BlockType] || colors.types.general;
+  }
+}
+
+function nodeOpacity(n: any): number {
+  const layer = n.layer as GalaxyLayer;
+  switch (layer) {
+    case "clusters": return 0.35;
+    default: return 0.9;
+  }
 }
 
 export default function GalaxyCanvas({
@@ -53,19 +87,17 @@ export default function GalaxyCanvas({
     const colors = colorsRef.current;
 
     const graph = ForceGraph3D()(containerRef.current)
-      .backgroundColor("#0b0b14")
+      .backgroundColor("#0F111E")
       // ── Nodes ──
-      .nodeVal((n: any) => 2 + n.confidence * 12)
-      .nodeColor((n: any) =>
-        colors.types[n.type as BlockType] || colors.types.general,
-      )
+      .nodeVal((n: any) => nodeSize(n))
+      .nodeColor((n: any) => nodeColor(n, colors))
       .nodeOpacity(0.9)
       .nodeResolution(16)
       .nodeThreeObjectExtend(true)
       .nodeThreeObject((n: any) => {
         if (n.id !== selectedIdRef.current) return undefined as any;
-        const nodeVal = 2 + (n.confidence || 0) * 12;
-        const r = Math.cbrt(nodeVal) * graph.nodeRelSize();
+        const nVal = nodeSize(n);
+        const r = Math.cbrt(nVal) * graph.nodeRelSize();
         const torus = new THREE.Mesh(
           new THREE.TorusGeometry(r * 1.6, r * 0.1, 12, 48),
           new THREE.MeshBasicMaterial({
@@ -79,9 +111,10 @@ export default function GalaxyCanvas({
       })
       .nodeLabel((n: any) => {
         const conf = Math.round((n.confidence || 0) * 100);
+        const layerLabel = n.layer || "block";
         return `<div style="text-align:center;font-family:system-ui;padding:4px 8px">
           <div style="font-size:13px;font-weight:600">${n.label || ""}</div>
-          <div style="font-size:11px;opacity:0.7;margin-top:2px">${n.type} · ${conf}%</div>
+          <div style="font-size:11px;opacity:0.7;margin-top:2px">${layerLabel} · ${conf}%</div>
         </div>`;
       })
       // ── Links + particles ──
@@ -152,6 +185,7 @@ export default function GalaxyCanvas({
         label: n.label,
         type: n.type,
         confidence: n.confidence,
+        layer: n.layer,
       })),
       links: links.map((l) => ({
         source: l.source,

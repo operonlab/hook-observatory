@@ -13,7 +13,7 @@ import type { AgentEntry } from '../stores/agentStore';
 import { tryMonologue } from './Monologue';
 import { useUIStore } from '../stores/uiStore';
 import { getDayNightState, type DayNightState } from './DayNight';
-import { getWeatherState, WeatherParticleSystem, type WeatherState } from './Weather';
+import { getWeatherState, getWeatherTint, getWeatherSkyColor, getWindowSkyColor, type WeatherState } from './Weather';
 
 const FLOOR_A = '#2A2A3E';        // claude_studio floor (blue-dark)
 const FLOOR_B = '#24243A';
@@ -46,7 +46,7 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private prevZoom = -1;
   private cliSessionCounters = new Map<string, number>();
-  private weatherParticles = new WeatherParticleSystem();
+  // Weather particles removed — ambient tint only
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -75,18 +75,36 @@ export class Renderer {
       this.prevZoom = zoom;
     }
 
+    const dpr = Math.min(devicePixelRatio || 1, 2);
     const cw = window.innerWidth;
     const ch = window.innerHeight;
-    if (this.canvas.width !== cw || this.canvas.height !== ch) {
-      this.canvas.width = cw;
-      this.canvas.height = ch;
+    const bw = Math.round(cw * dpr);
+    const bh = Math.round(ch * dpr);
+    if (this.canvas.width !== bw || this.canvas.height !== bh) {
+      this.canvas.width = bw;
+      this.canvas.height = bh;
+      this.canvas.style.width = cw + 'px';
+      this.canvas.style.height = ch + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.imageSmoothingEnabled = false;
     }
 
-    ctx.clearRect(0, 0, cw, ch);
+    // 0. Weather sky background (visible through windows only)
+    const weather = getWeatherState();
+    const dayNight = getDayNightState();
+    this.drawSkyBackground(weather, dayNight, cw, ch);
 
-    // 1. Floor
+    // 0b. Ground plane — replaces sky in void areas (top-down = looking at ground, not sky)
+    this.drawGroundPlane(dayNight);
+
+    // 0c. Environmental decoration (trees, lamps, parking, sidewalk)
+    this.drawEnvironment(dayNight);
+
+    // 1. Floor (rooms, corridors, walls — office interior sits ON the ground)
     this.drawFloor(map);
+
+    // 1a. Outer wall windows — sky/weather visible through windows
+    this.drawOuterWindows(map, weather, dayNight);
 
     // 1b. Door portal at entrance + all room door portals
     this.drawDoor(map);
@@ -188,7 +206,6 @@ export class Renderer {
     this.drawLegend(agents);
 
     // 9. Day/Night cycle overlay + window glow + desk lamps
-    const dayNight = getDayNightState();
     if (dayNight.overlayA > 0.005) {
       this.drawDayNightOverlay(dayNight);
     }
@@ -197,19 +214,16 @@ export class Renderer {
       this.drawDeskLamps(agents, dayNight);
     }
 
-    // 10. Weather particles (C3: rain/snow)
-    const weather = getWeatherState();
-    this.weatherParticles.resize(cw, ch);
-    this.weatherParticles.update(dt, weather);
-    if (weather.type === 'rain' || weather.type === 'snow') {
-      this.drawWeatherParticles(weather);
-    }
-    // Cloudy overlay
-    if (weather.type === 'cloudy') {
-      this.drawCloudyOverlay(weather);
+    // 10. Weather ambient tint (C3: subtle color overlay)
+    const weatherTint = getWeatherTint(weather);
+    if (weatherTint.alpha > 0.005) {
+      ctx.save();
+      ctx.fillStyle = `rgba(${weatherTint.r}, ${weatherTint.g}, ${weatherTint.b}, ${weatherTint.alpha})`;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
     }
 
-    // 11. Agent proximity interactions (C2: wave when passing in corridor)
+    // 12. Agent proximity interactions (C2: wave when passing in corridor)
     this.drawProximityInteractions(agents);
 
     // 12. Edit mode overlay
@@ -255,14 +269,19 @@ export class Renderer {
         const isDoorGap = doorGaps.has(`${tx},${ty}`);
         const isPartitionWall = (isPartitionV || isPartitionH) && !isDoorGap;
 
-        // Skip void tiles (not outer wall, not room, not corridor, not partition)
-        if (!isOuterWall && !inRoom && !inCorr && !isPartitionWall) continue;
+        // Corner tiles where vertical partitions meet horizontal corridor edges
+        // (22,14), (22,19), (27,14), (27,19) fall outside all zone definitions
+        const isCornerTile =
+          (tx === 22 || tx === 27) && (ty === 14 || ty === 19);
+
+        // Skip void tiles (not outer wall, not room, not corridor, not partition, not corner, not door gap)
+        if (!isOuterWall && !inRoom && !inCorr && !isPartitionWall && !isDoorGap && !isCornerTile) continue;
 
         const { sx, sy } = camera.worldToScreen(tx * TILE, ty * TILE);
         if (sx + TILE * z < 0 || sy + TILE * z < 0) continue;
         if (sx > this.canvas.width || sy > this.canvas.height) continue;
 
-        if (isOuterWall || isPartitionWall) {
+        if (isOuterWall || isPartitionWall || isCornerTile) {
           ctx.fillStyle = WALL_COLOR;
         } else if (inRoom) {
           const id = inRoom.id as RoomId;
@@ -285,6 +304,105 @@ export class Renderer {
         ctx.strokeStyle = 'rgba(255,255,255,0.03)';
         ctx.strokeRect(sx, sy, TILE * z, TILE * z);
       }
+    }
+  }
+
+  // ── Outer Wall Windows (weather sky visible) ──────────────────
+
+  private drawOuterWindows(map: TileMapData, weather: WeatherState, dayNight: DayNightState) {
+    const { ctx, camera } = this;
+    const z = camera.zoom;
+    const skyColor = getWindowSkyColor(weather, dayNight.ambientLight, dayNight.phase);
+    const t = Date.now() / 1000;
+
+    const inset = TILE * z * 0.22;
+    const winW = TILE * z - inset * 2;
+    const winH = TILE * z - inset * 2;
+    const frameColor = '#2A2A45';
+
+    const drawWindow = (sx: number, sy: number) => {
+      const wx = sx + inset;
+      const wy = sy + inset;
+
+      // Sky fill
+      ctx.fillStyle = skyColor;
+      ctx.fillRect(wx, wy, winW, winH);
+
+      // Weather details inside window
+      if (weather.type === 'rain') {
+        ctx.strokeStyle = `rgba(120, 160, 220, ${0.3 + weather.intensity * 0.3})`;
+        ctx.lineWidth = 1;
+        for (let d = 0; d < 3; d++) {
+          const dx = wx + winW * (0.2 + d * 0.3);
+          const dy = ((t * 60 + d * 40) % winH) + wy;
+          ctx.beginPath();
+          ctx.moveTo(dx, dy);
+          ctx.lineTo(dx - 0.5, dy + winH * 0.2);
+          ctx.stroke();
+        }
+      } else if (weather.type === 'snow') {
+        ctx.fillStyle = `rgba(220, 230, 250, ${0.3 + weather.intensity * 0.3})`;
+        for (let d = 0; d < 3; d++) {
+          const dx = wx + winW * (0.15 + d * 0.3) + Math.sin(t * 0.8 + d) * 2;
+          const dy = ((t * 15 + d * 30) % winH) + wy;
+          ctx.fillRect(dx, dy, Math.max(1, z * 0.5), Math.max(1, z * 0.5));
+        }
+      } else if (weather.type === 'clear' && dayNight.ambientLight < 0.7) {
+        // Stars at night
+        ctx.fillStyle = 'rgba(200, 215, 255, 0.6)';
+        ctx.fillRect(wx + winW * 0.3, wy + winH * 0.25, 1, 1);
+        ctx.fillRect(wx + winW * 0.7, wy + winH * 0.55, 1, 1);
+        const twinkle = 0.3 + 0.3 * Math.sin(t * 2);
+        ctx.fillStyle = `rgba(200, 215, 255, ${twinkle})`;
+        ctx.fillRect(wx + winW * 0.5, wy + winH * 0.4, 1, 1);
+      }
+
+      // Window cross-frame
+      ctx.strokeStyle = frameColor;
+      ctx.lineWidth = Math.max(1, z * 0.5);
+      ctx.strokeRect(wx, wy, winW, winH);
+      // Cross divider
+      ctx.beginPath();
+      ctx.moveTo(wx + winW / 2, wy);
+      ctx.lineTo(wx + winW / 2, wy + winH);
+      ctx.moveTo(wx, wy + winH / 2);
+      ctx.lineTo(wx + winW, wy + winH / 2);
+      ctx.stroke();
+    };
+
+    // Top wall (y=0) — windows every 3 tiles
+    for (let tx = 2; tx < map.width - 2; tx += 3) {
+      if (tx === DOOR_POS.x || tx === DOOR_POS.x + 1) continue;
+      const { sx, sy } = camera.worldToScreen(tx * TILE, 0);
+      if (sx + TILE * z < 0 || sx > this.canvas.width) continue;
+      if (sy + TILE * z < 0 || sy > this.canvas.height) continue;
+      drawWindow(sx, sy);
+    }
+
+    // Bottom wall (y=height-1)
+    const by = map.height - 1;
+    for (let tx = 2; tx < map.width - 2; tx += 3) {
+      const { sx, sy } = camera.worldToScreen(tx * TILE, by * TILE);
+      if (sx + TILE * z < 0 || sx > this.canvas.width) continue;
+      if (sy + TILE * z < 0 || sy > this.canvas.height) continue;
+      drawWindow(sx, sy);
+    }
+
+    // Left wall (x=0)
+    for (let ty = 2; ty < map.height - 2; ty += 3) {
+      const { sx, sy } = camera.worldToScreen(0, ty * TILE);
+      if (sx + TILE * z < 0 || sx > this.canvas.width) continue;
+      if (sy + TILE * z < 0 || sy > this.canvas.height) continue;
+      drawWindow(sx, sy);
+    }
+
+    // Right wall (x=width-1)
+    const rx = map.width - 1;
+    for (let ty = 2; ty < map.height - 2; ty += 3) {
+      const { sx, sy } = camera.worldToScreen(rx * TILE, ty * TILE);
+      if (sx + TILE * z < 0 || sx > this.canvas.width) continue;
+      if (sy + TILE * z < 0 || sy > this.canvas.height) continue;
+      drawWindow(sx, sy);
     }
   }
 
@@ -919,8 +1037,8 @@ export class Renderer {
     if (fsm.despawning) return;
     const z = this.camera.zoom;
 
-    // Extract last 4 chars of session_id (random portion of UUID v7)
-    const label = agent.session_id?.slice(-4) ?? agent.id.slice(-4);
+    // Extract first 4 chars of session_id (matches Dashboard shortLabel)
+    const label = agent.session_id?.slice(0, 4) ?? agent.id.slice(0, 4);
 
     const wx = fsm.pixelX * TILE + TILE / 2;
     const wy = fsm.pixelY * TILE - 2;
@@ -1261,46 +1379,6 @@ export class Renderer {
     ctx.restore();
   }
 
-  // ── Weather Particles (C3) ──────────────────────
-
-  private drawWeatherParticles(weather: WeatherState) {
-    const { ctx } = this;
-    ctx.save();
-
-    if (weather.type === 'rain') {
-      for (const p of this.weatherParticles.particles) {
-        ctx.globalAlpha = p.opacity * 0.6;
-        ctx.strokeStyle = '#8AC8FF';
-        ctx.lineWidth = p.size * 0.5;
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x + weather.windSpeed * 3, p.y + p.size * 3);
-        ctx.stroke();
-      }
-    } else if (weather.type === 'snow') {
-      for (const p of this.weatherParticles.particles) {
-        ctx.globalAlpha = p.opacity * 0.8;
-        ctx.fillStyle = '#E8F0FF';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    ctx.restore();
-  }
-
-  /** Subtle darkening overlay for cloudy weather */
-  private drawCloudyOverlay(weather: WeatherState) {
-    const { ctx } = this;
-    const alpha = weather.intensity * 0.08;
-    if (alpha < 0.005) return;
-    ctx.save();
-    ctx.fillStyle = `rgba(40, 40, 60, ${alpha})`;
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.restore();
-  }
-
   // ── Proximity Interactions (C2) ──────────────────
 
   private interactionCooldowns = new Map<string, number>();
@@ -1377,6 +1455,423 @@ export class Renderer {
     ctx.fillStyle = 'rgba(255,200,50,0.9)';
     ctx.font = '12px monospace';
     ctx.fillText('編輯模式 — 右鍵:移動 | 左鍵:選取 | R:旋轉 | []:寬度 | {}:高度', 12, this.canvas.height - 12);
+  }
+
+  // ── Ground Plane + Environment (top-down = looking at ground) ─────────
+  //
+  // Stardew Valley / Sims approach: fill the visible world with ground texture
+  // so void areas show asphalt/grass instead of sky. The office SITS ON the ground.
+  // Edge treatment: trees, hedges, parking lines create natural boundaries.
+
+  private static envGenerated = false;
+  private static envTrees: { wx: number; wy: number; r: number; type: number }[] = [];
+  private static envLamps: { wx: number; wy: number }[] = [];
+
+  private drawGroundPlane(dayNight: DayNightState) {
+    const { ctx, camera } = this;
+    const z = camera.zoom;
+    const amb = dayNight.ambientLight;
+
+    // Ground extends well beyond office: 20 tiles margin on each side
+    const margin = 20 * TILE;
+    const gx = -margin;
+    const gy = -margin;
+    const gw = 50 * TILE + margin * 2;
+    const gh = 34 * TILE + margin * 2;
+
+    const { sx, sy } = camera.worldToScreen(gx, gy);
+    const sw = gw * z;
+    const sh = gh * z;
+
+    // ── Base ground: WARM earth tone (contrast with cool blue-purple office interior) ──
+    const t = Math.max(0, Math.min(1, (amb - 0.5) / 0.5));
+    const lerpC = (n: number, d: number) => Math.round(n + (d - n) * t);
+    // Night: warm dark brown (#2F2A24), Day: warm tan (#6B6355)
+    ctx.fillStyle = `rgb(${lerpC(0x2F, 0x6B)}, ${lerpC(0x2A, 0x63)}, ${lerpC(0x24, 0x55)})`;
+    ctx.fillRect(sx, sy, sw, sh);
+
+    // ── Ground texture: mixed pavement + grass patches ──
+    const tileSize = TILE * z;
+    const viewLeft = Math.max(gx, Math.floor((camera.x / z) / TILE) * TILE - TILE);
+    const viewTop = Math.max(gy, Math.floor((camera.y / z) / TILE) * TILE - TILE);
+    const viewRight = Math.min(gx + gw, viewLeft + (this.canvas.width / z) + TILE * 2);
+    const viewBottom = Math.min(gy + gh, viewTop + (this.canvas.height / z) + TILE * 2);
+
+    for (let wy = viewTop; wy < viewBottom; wy += TILE) {
+      for (let wx = viewLeft; wx < viewRight; wx += TILE) {
+        // Skip tiles inside office (drawn by drawFloor)
+        if (wx >= 0 && wx < 50 * TILE && wy >= 0 && wy < 34 * TILE) continue;
+        const { sx: tsx, sy: tsy } = camera.worldToScreen(wx, wy);
+        const hash = ((wx * 73 + wy * 137) >>> 0) % 100;
+
+        // Grass patches (softer green areas)
+        if (hash < 20) {
+          ctx.fillStyle = amb > 0.6 ? 'rgba(60,90,50,0.25)' : 'rgba(30,50,25,0.3)';
+          ctx.fillRect(tsx, tsy, tileSize, tileSize);
+        }
+        // Subtle tile grid (pavement seams)
+        ctx.strokeStyle = amb > 0.6 ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.08)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(tsx + 0.5, tsy + 0.5, tileSize - 1, tileSize - 1);
+      }
+    }
+
+    // ── Sidewalk ring around office (2 tiles wide, clearly lighter) ──
+    // Night: #454038 (warm gray), Day: #8A8478 (light warm gray)
+    ctx.fillStyle = `rgb(${lerpC(0x45, 0x8A)}, ${lerpC(0x40, 0x84)}, ${lerpC(0x38, 0x78)})`;
+    for (let tx = -2; tx <= 51; tx++) {
+      for (let ty = -2; ty <= 35; ty++) {
+        // Only draw tiles in the 2-tile border around office
+        const inOffice = tx >= 0 && tx < 50 && ty >= 0 && ty < 34;
+        const inBorder = tx >= -2 && tx < 52 && ty >= -2 && ty < 36;
+        if (inBorder && !inOffice) {
+          const { sx: swx, sy: swy } = camera.worldToScreen(tx * TILE, ty * TILE);
+          ctx.fillRect(swx, swy, tileSize, tileSize);
+        }
+      }
+    }
+    // Sidewalk edge lines (darker border for definition)
+    ctx.strokeStyle = amb > 0.6 ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = Math.max(1, z);
+    const { sx: olx, sy: oly } = camera.worldToScreen(-2 * TILE, -2 * TILE);
+    const osw = 54 * TILE * z;
+    const osh = 38 * TILE * z;
+    ctx.strokeRect(olx, oly, osw, osh);
+
+    // ── Parking lot area (south of office, 3-8 tiles down) ──
+    // Darker asphalt for parking
+    ctx.fillStyle = `rgb(${lerpC(0x28, 0x50)}, ${lerpC(0x26, 0x4E)}, ${lerpC(0x22, 0x48)})`;
+    const { sx: pkx, sy: pky } = camera.worldToScreen(0, 36 * TILE);
+    ctx.fillRect(pkx, pky, 50 * TILE * z, 5 * TILE * z);
+    // Parking lines (white markings)
+    ctx.fillStyle = amb > 0.6 ? 'rgba(255,255,255,0.35)' : 'rgba(200,200,180,0.2)';
+    const lineW = Math.max(1, z);
+    for (let tx = 2; tx < 48; tx += 4) {
+      const { sx: lx, sy: ly } = camera.worldToScreen(tx * TILE, 36 * TILE);
+      ctx.fillRect(lx, ly, lineW, 5 * TILE * z);
+    }
+    // Horizontal boundary lines
+    const { sx: hx1, sy: hy1 } = camera.worldToScreen(0, 36 * TILE);
+    ctx.fillRect(hx1, hy1, 50 * TILE * z, lineW);
+    const { sx: hx2, sy: hy2 } = camera.worldToScreen(0, 41 * TILE);
+    ctx.fillRect(hx2, hy2, 50 * TILE * z, lineW);
+
+    // ── Road (3 tiles wide, south of parking) ──
+    ctx.fillStyle = `rgb(${lerpC(0x22, 0x48)}, ${lerpC(0x22, 0x48)}, ${lerpC(0x24, 0x4C)})`;
+    const { sx: rdx, sy: rdy } = camera.worldToScreen(-margin, 42 * TILE);
+    ctx.fillRect(rdx, rdy, gw * z, 3 * TILE * z);
+    // Yellow center dashed line
+    ctx.fillStyle = amb > 0.6 ? 'rgba(240,220,80,0.6)' : 'rgba(180,160,50,0.4)';
+    const dashLen = 4 * z;
+    const dashGap = 3 * z;
+    const { sy: rdcy } = camera.worldToScreen(0, 43 * TILE + TILE / 2);
+    for (let d = rdx; d < rdx + gw * z; d += dashLen + dashGap) {
+      ctx.fillRect(d, rdcy - z / 2, dashLen, Math.max(1, z));
+    }
+    // White edge lines
+    ctx.fillStyle = amb > 0.6 ? 'rgba(255,255,255,0.3)' : 'rgba(180,180,180,0.15)';
+    const { sy: rety } = camera.worldToScreen(0, 42 * TILE);
+    ctx.fillRect(rdx, rety, gw * z, lineW);
+    const { sy: reby } = camera.worldToScreen(0, 45 * TILE);
+    ctx.fillRect(rdx, reby - lineW, gw * z, lineW);
+
+    // ── Edge fade (dark gradient at ground edges to hide boundaries) ──
+    const fadeSize = 8 * TILE * z;
+    const { sx: fsx, sy: fsy } = camera.worldToScreen(gx, gy);
+    // Top
+    const topGrad = ctx.createLinearGradient(0, fsy, 0, fsy + fadeSize);
+    topGrad.addColorStop(0, 'rgba(0,0,0,0.7)');
+    topGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = topGrad;
+    ctx.fillRect(fsx, fsy, sw, fadeSize);
+    // Bottom
+    const botGrad = ctx.createLinearGradient(0, fsy + sh - fadeSize, 0, fsy + sh);
+    botGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    botGrad.addColorStop(1, 'rgba(0,0,0,0.7)');
+    ctx.fillStyle = botGrad;
+    ctx.fillRect(fsx, fsy + sh - fadeSize, sw, fadeSize);
+    // Left
+    const leftGrad = ctx.createLinearGradient(fsx, 0, fsx + fadeSize, 0);
+    leftGrad.addColorStop(0, 'rgba(0,0,0,0.7)');
+    leftGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = leftGrad;
+    ctx.fillRect(fsx, fsy, fadeSize, sh);
+    // Right
+    const rightGrad = ctx.createLinearGradient(fsx + sw - fadeSize, 0, fsx + sw, 0);
+    rightGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    rightGrad.addColorStop(1, 'rgba(0,0,0,0.7)');
+    ctx.fillStyle = rightGrad;
+    ctx.fillRect(fsx + sw - fadeSize, fsy, fadeSize, sh);
+  }
+
+  private drawEnvironment(dayNight: DayNightState) {
+    const { ctx, camera } = this;
+    const z = camera.zoom;
+    const amb = dayNight.ambientLight;
+    const isNight = amb < 0.5;
+
+    if (!Renderer.envGenerated) {
+      this.generateEnvironment();
+    }
+
+    // ── Trees (pixel-art style: visible even at night) ──
+    for (const tree of Renderer.envTrees) {
+      const { sx, sy } = camera.worldToScreen(tree.wx, tree.wy);
+      // Frustum cull with generous margin
+      const size = tree.r * 3 * z;
+      if (sx + size < 0 || sy + size < 0 || sx - size > this.canvas.width || sy - size > this.canvas.height) continue;
+
+      const r = tree.r * z;
+
+      // Shadow on ground
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + r * 0.7, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Trunk (visible brown)
+      const trunkW = Math.max(2, 3 * z);
+      const trunkH = r * 0.9;
+      ctx.fillStyle = isNight ? '#4A3A28' : '#6E5638';
+      ctx.fillRect(sx - trunkW / 2, sy - trunkH * 0.2, trunkW, trunkH);
+
+      // Canopy (circle — brighter, game-style colors)
+      ctx.beginPath();
+      ctx.arc(sx, sy - r * 0.3, r, 0, Math.PI * 2);
+      if (tree.type === 0) {
+        ctx.fillStyle = isNight ? '#2A5535' : '#4A9A4A';
+      } else if (tree.type === 1) {
+        ctx.fillStyle = isNight ? '#1E4028' : '#357A35';
+      } else {
+        ctx.fillStyle = isNight ? '#4A3820' : '#B88A40';
+      }
+      ctx.fill();
+
+      // Canopy highlight (lighter top-left arc)
+      ctx.beginPath();
+      ctx.arc(sx - r * 0.2, sy - r * 0.5, r * 0.55, 0, Math.PI * 2);
+      ctx.fillStyle = isNight ? 'rgba(60,120,60,0.3)' : 'rgba(120,200,90,0.3)';
+      ctx.fill();
+
+      // Dark bottom edge for depth
+      ctx.beginPath();
+      ctx.arc(sx, sy - r * 0.1, r * 0.9, 0.2, Math.PI - 0.2);
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fill();
+    }
+
+    // ── Street lamps (with warm glow at night) ──
+    for (const lamp of Renderer.envLamps) {
+      const { sx, sy } = camera.worldToScreen(lamp.wx, lamp.wy);
+      if (sx < -100 || sy < -100 || sx > this.canvas.width + 100 || sy > this.canvas.height + 100) continue;
+
+      // Pole
+      const poleH = 14 * z;
+      const poleW = Math.max(1, Math.ceil(z * 0.8));
+      ctx.fillStyle = isNight ? '#505058' : '#7A7A80';
+      ctx.fillRect(sx - poleW / 2, sy - poleH, poleW, poleH);
+
+      // Lamp head (T-shape top)
+      ctx.fillStyle = isNight ? '#606068' : '#9A9AA0';
+      ctx.fillRect(sx - 2.5 * z, sy - poleH - z, 5 * z, z);
+
+      // Lamp bulb (bright even at night)
+      ctx.fillStyle = isNight ? '#FFE88C' : '#E8D870';
+      ctx.fillRect(sx - z, sy - poleH - z * 0.5, 2 * z, Math.max(1, z * 0.5));
+
+      // Warm glow (night/dusk) — brighter and more visible
+      if (amb < 0.7) {
+        const glowR = 28 * z;
+        const glowAlpha = (1 - amb) * 0.4;
+        // Lamp glow cone
+        const grad = ctx.createRadialGradient(sx, sy - poleH, z, sx, sy - poleH, glowR);
+        grad.addColorStop(0, `rgba(255, 220, 140, ${glowAlpha})`);
+        grad.addColorStop(0.4, `rgba(255, 200, 100, ${glowAlpha * 0.25})`);
+        grad.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(sx - glowR, sy - poleH - glowR, glowR * 2, glowR * 2);
+
+        // Ground light pool (warm circle on pavement)
+        const poolR = 22 * z;
+        const poolGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, poolR);
+        poolGrad.addColorStop(0, `rgba(255, 220, 140, ${glowAlpha * 0.5})`);
+        poolGrad.addColorStop(0.6, `rgba(255, 200, 100, ${glowAlpha * 0.12})`);
+        poolGrad.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        ctx.fillStyle = poolGrad;
+        ctx.fillRect(sx - poolR, sy - poolR, poolR * 2, poolR * 2);
+      }
+    }
+  }
+
+  private generateEnvironment() {
+    const officeW = 50 * TILE;
+    const officeH = 34 * TILE;
+    const margin = 20 * TILE;
+
+    const trees: typeof Renderer.envTrees = [];
+    const lamps: typeof Renderer.envLamps = [];
+
+    // ── Tree ring around the edges (natural boundary) ──
+    const edgeInset = 3 * TILE; // Trees start 3 tiles from ground edge
+    const treeSpacing = 2.5 * TILE;
+
+    // Top edge trees (larger radius: 8-14, clearly visible)
+    for (let x = -margin + edgeInset; x < officeW + margin - edgeInset; x += treeSpacing) {
+      const jitter = ((x * 73.1) % 8) - 4;
+      trees.push({ wx: x + jitter, wy: -margin + edgeInset + ((x * 31.7) % 6) - 3, r: 9 + ((x * 17.3) % 5), type: ((x * 7) | 0) % 3 });
+    }
+    // Second row (denser, slightly smaller)
+    for (let x = -margin + edgeInset + treeSpacing / 2; x < officeW + margin - edgeInset; x += treeSpacing * 1.3) {
+      const jitter = ((x * 41.3) % 6) - 3;
+      trees.push({ wx: x + jitter, wy: -margin + edgeInset + TILE * 2 + ((x * 23.1) % 5), r: 7 + ((x * 11.7) % 4), type: ((x * 11) | 0) % 3 });
+    }
+
+    // Bottom edge trees (south of road)
+    for (let x = -margin + edgeInset; x < officeW + margin - edgeInset; x += treeSpacing) {
+      const jitter = ((x * 53.7) % 8) - 4;
+      trees.push({ wx: x + jitter, wy: 46 * TILE + ((x * 19.3) % 6), r: 9 + ((x * 13.1) % 5), type: ((x * 13) | 0) % 3 });
+    }
+
+    // Left edge trees
+    for (let y = -margin + edgeInset; y < officeH + margin - edgeInset; y += treeSpacing) {
+      const jitter = ((y * 67.3) % 8) - 4;
+      trees.push({ wx: -margin + edgeInset + ((y * 29.1) % 6) - 3, wy: y + jitter, r: 9 + ((y * 19.7) % 5), type: ((y * 9) | 0) % 3 });
+    }
+
+    // Right edge trees
+    for (let y = -margin + edgeInset; y < officeH + margin - edgeInset; y += treeSpacing) {
+      const jitter = ((y * 43.7) % 8) - 4;
+      trees.push({ wx: officeW + margin - edgeInset - ((y * 37.3) % 6), wy: y + jitter, r: 9 + ((y * 23.1) % 5), type: ((y * 17) | 0) % 3 });
+    }
+
+    // ── Scattered trees near office (visible at normal zoom) ──
+    // Along sidewalk — close enough to see without scrolling
+    for (let tx = -4; tx <= 53; tx += 6) {
+      trees.push({ wx: tx * TILE, wy: -4 * TILE, r: 8, type: ((tx * 3) | 0) % 3 });
+      trees.push({ wx: tx * TILE, wy: 38 * TILE, r: 8, type: ((tx * 7) | 0) % 3 });
+    }
+    for (let ty = -2; ty <= 35; ty += 6) {
+      trees.push({ wx: -4 * TILE, wy: ty * TILE, r: 8, type: ((ty * 5) | 0) % 3 });
+      trees.push({ wx: 53 * TILE, wy: ty * TILE, r: 8, type: ((ty * 11) | 0) % 3 });
+    }
+
+    // Parking lot trees
+    const parkingTrees = [
+      { wx: 8 * TILE, wy: 38 * TILE }, { wx: 20 * TILE, wy: 38 * TILE },
+      { wx: 32 * TILE, wy: 38 * TILE }, { wx: 44 * TILE, wy: 38 * TILE },
+    ];
+    for (const pt of parkingTrees) {
+      trees.push({ wx: pt.wx, wy: pt.wy, r: 7, type: 0 });
+    }
+
+    // ── Street lamps around office ──
+    // Along sidewalk, every 8 tiles
+    for (let tx = 3; tx < 48; tx += 8) {
+      lamps.push({ wx: tx * TILE, wy: -0.5 * TILE }); // north side
+      lamps.push({ wx: tx * TILE, wy: 34.5 * TILE }); // south side
+    }
+    // Along road
+    for (let tx = -8; tx < 58; tx += 10) {
+      lamps.push({ wx: tx * TILE, wy: 42 * TILE });
+    }
+
+    Renderer.envTrees = trees;
+    Renderer.envLamps = lamps;
+    Renderer.envGenerated = true;
+  }
+
+  // ── Weather Sky Background (C3) ──────────────────
+
+  private drawSkyBackground(weather: WeatherState, dayNight: DayNightState, cw: number, ch: number) {
+    const { ctx } = this;
+
+    // Fill entire canvas with weather-themed sky color
+    ctx.fillStyle = getWeatherSkyColor(weather, dayNight.ambientLight, dayNight.phase);
+    ctx.fillRect(0, 0, cw, ch);
+
+    const t = Date.now() / 1000;
+
+    // Weather-specific animated effects (covered by floor tiles in office areas)
+    if (weather.type === 'clear' && dayNight.ambientLight < 0.7) {
+      // Night stars
+      ctx.save();
+      for (let i = 0; i < 80; i++) {
+        const seed = i * 173.7;
+        const x = (seed * 11.3) % cw;
+        const y = (seed * 7.1) % ch;
+        const twinkle = 0.2 + 0.35 * Math.sin(t * 1.5 + seed);
+        ctx.fillStyle = `rgba(180, 200, 240, ${twinkle})`;
+        const size = i % 4 === 0 ? 2 : 1;
+        ctx.fillRect(x, y, size, size);
+      }
+      ctx.restore();
+    }
+
+    if (weather.type === 'rain') {
+      ctx.save();
+      ctx.strokeStyle = `rgba(100, 140, 200, ${0.12 + weather.intensity * 0.12})`;
+      ctx.lineWidth = 1;
+      const dropCount = 50 + Math.floor(weather.intensity * 80);
+      for (let i = 0; i < dropCount; i++) {
+        const seed = i * 137.5;
+        const x = ((seed * 7.3 + t * 80) % (cw + 200)) - 100;
+        const y = ((seed * 3.7 + t * 280) % (ch + 100)) - 50;
+        const len = 6 + (i % 5) * 3;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 1, y + len);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (weather.type === 'snow') {
+      ctx.save();
+      const flakeCount = 35 + Math.floor(weather.intensity * 45);
+      for (let i = 0; i < flakeCount; i++) {
+        const seed = i * 97.3;
+        const x = ((seed * 5.1 + Math.sin(t * 0.4 + i) * 25 + t * 12) % (cw + 80)) - 40;
+        const y = ((seed * 2.9 + t * 30) % (ch + 80)) - 40;
+        const size = 1 + (i % 3);
+        const alpha = 0.15 + 0.2 * Math.sin(t + seed);
+        ctx.fillStyle = `rgba(210, 220, 240, ${alpha})`;
+        ctx.fillRect(x, y, size, size);
+      }
+      ctx.restore();
+    }
+
+    if (weather.type === 'cloudy') {
+      ctx.save();
+      // White clouds on bright daytime sky, darker on night sky
+      const isDay = dayNight.ambientLight > 0.8;
+      ctx.fillStyle = isDay
+        ? `rgba(255, 255, 255, ${0.08 + weather.intensity * 0.12})`
+        : `rgba(30, 30, 40, ${0.08 + weather.intensity * 0.1})`;
+      const cloudCount = 6 + Math.floor(weather.intensity * 6);
+      for (let i = 0; i < cloudCount; i++) {
+        const seed = i * 211.5;
+        const x = ((seed * 3.3 + t * 6) % (cw + 300)) - 150;
+        const y = (seed * 2.1) % ch;
+        const w = 50 + (i % 4) * 25;
+        const h = 12 + (i % 3) * 6;
+        ctx.beginPath();
+        ctx.ellipse(x, y, w, h, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    if (weather.type === 'fog') {
+      ctx.save();
+      for (let i = 0; i < 5; i++) {
+        const y = ((i * ch / 5) + Math.sin(t * 0.3 + i) * 20) % (ch + 40) - 20;
+        const alpha = 0.025 + weather.intensity * 0.035;
+        ctx.fillStyle = `rgba(140, 140, 160, ${alpha})`;
+        ctx.fillRect(0, y, cw, 25 + i * 8);
+      }
+      ctx.restore();
+    }
+
   }
 
   // ── Palette ────────────────────────────────

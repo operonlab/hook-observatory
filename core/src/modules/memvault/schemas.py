@@ -6,10 +6,17 @@ from pydantic import BaseModel, Field
 
 from src.shared.schemas import PaginatedResponse, SpaceScopedResponse  # noqa: F401
 
-
 # --- Enums as string literals (lightweight, no enum import needed) ---
 
 BLOCK_TYPES = {"knowledge", "skill", "attitude", "general"}
+
+# Pipeline may produce finer-grained types — normalize to canonical KAS types
+BLOCK_TYPE_ALIASES: dict[str, str] = {
+    "insight": "knowledge",
+    "achievement": "knowledge",
+    "technical": "knowledge",
+    "decision": "knowledge",
+}
 
 
 # ======================== MemoryBlock ========================
@@ -79,16 +86,16 @@ class KnowledgeDomainResponse(SpaceScopedResponse):
     block_count: int
 
 
-# ======================== KASProfile ========================
+# ======================== ProfileScore ========================
 
 
-class KASProfileResponse(SpaceScopedResponse):
+class ProfileScoreResponse(SpaceScopedResponse):
     knowledge_score: float = 0.0
     attitude_score: float = 0.0
     skill_score: float = 0.0
 
 
-class KASProfileUpdate(BaseModel):
+class ProfileScoreUpdate(BaseModel):
     knowledge_score: float | None = Field(default=None, ge=0.0, le=100.0)
     attitude_score: float | None = Field(default=None, ge=0.0, le=100.0)
     skill_score: float | None = Field(default=None, ge=0.0, le=100.0)

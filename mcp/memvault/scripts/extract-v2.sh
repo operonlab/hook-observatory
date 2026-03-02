@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# KAS Memory V2 — extraction pipeline with Core API backend
+# Memvault — extraction pipeline with Core API backend
 # Same dual-LLM extraction as V1, but writes to PostgreSQL via memvault Core API
 # instead of markdown files.
 #
@@ -11,20 +11,19 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # 0. Configuration & logging
 # ---------------------------------------------------------------------------
-LOG_DIR="$HOME/Claude/kas-memory/logs"
+LOG_DIR="$HOME/Claude/memvault/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/extract-v2.log"
 exec 2> >(tee -a "$LOG_FILE" >&2)
 echo "" >> "$LOG_FILE"
-echo "[kas-memory-v2] ====== $(date '+%Y-%m-%d %H:%M:%S') ======" >&2
+echo "[memvault] ====== $(date '+%Y-%m-%d %H:%M:%S') ======" >&2
 
 # Core API config
-MEMVAULT_API_URL="${MEMVAULT_API_URL:-http://localhost:8800}"
-KAS_SPACE_ID="${KAS_SPACE_ID:-default}"
+MEMVAULT_API_URL="${MEMVAULT_API_URL:-http://localhost:8801}"
+MEMVAULT_SPACE_ID="${MEMVAULT_SPACE_ID:-default}"
 
-# V1 fallback paths (used when Core API is down)
-V1_MEMORIES_DIR="${MEMORIES_DIR:-$HOME/Claude/kas-memory/memories}"
-V1_TAGS_IDX="$(dirname "$V1_MEMORIES_DIR")/tags.idx"
+# JSONL fallback path (used when Core API is down)
+FALLBACK_DIR="$HOME/Claude/memvault/extractions"
 
 # ---------------------------------------------------------------------------
 # 1. Read stdin JSON and extract fields
@@ -36,16 +35,16 @@ TRANSCRIPT_PATH="$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')"
 CWD="$(echo "$INPUT_JSON" | jq -r '.cwd // empty')"
 
 if [[ -z "$SESSION_ID" || -z "$TRANSCRIPT_PATH" ]]; then
-  echo "[kas-memory-v2] Missing session_id or transcript_path, skipping." >&2
+  echo "[memvault] Missing session_id or transcript_path, skipping." >&2
   exit 0
 fi
 
 if [[ ! -f "$TRANSCRIPT_PATH" ]]; then
-  echo "[kas-memory-v2] Transcript file not found: $TRANSCRIPT_PATH" >&2
+  echo "[memvault] Transcript file not found: $TRANSCRIPT_PATH" >&2
   exit 0
 fi
 
-echo "[kas-memory-v2] Processing session $SESSION_ID ..." >&2
+echo "[memvault] Processing session $SESSION_ID ..." >&2
 
 # ---------------------------------------------------------------------------
 # 2. Read JSONL transcript, filter user/assistant messages
@@ -70,7 +69,7 @@ CONVERSATION="$(jq -r '
 ' "$TRANSCRIPT_PATH" 2>/dev/null)" || true
 
 if [[ -z "$CONVERSATION" ]]; then
-  echo "[kas-memory-v2] No conversation content found, skipping." >&2
+  echo "[memvault] No conversation content found, skipping." >&2
   exit 0
 fi
 
@@ -82,11 +81,11 @@ ASSISTANT_COUNT="$(echo "$CONVERSATION" | grep -c '^ASSISTANT: ' || true)"
 
 if [[ "$USER_COUNT" -lt 3 ]] || [[ "$ASSISTANT_COUNT" -lt 3 ]]; then
   PAIR_COUNT=$(( USER_COUNT < ASSISTANT_COUNT ? USER_COUNT : ASSISTANT_COUNT ))
-  echo "[kas-memory-v2] Only $PAIR_COUNT exchange(s), skipping (need >= 3)." >&2
+  echo "[memvault] Only $PAIR_COUNT exchange(s), skipping (need >= 3)." >&2
   exit 0
 fi
 
-echo "[kas-memory-v2] Found $USER_COUNT user + $ASSISTANT_COUNT assistant messages." >&2
+echo "[memvault] Found $USER_COUNT user + $ASSISTANT_COUNT assistant messages." >&2
 
 # ---------------------------------------------------------------------------
 # 4. Truncate conversation to last ~30000 chars
@@ -95,7 +94,7 @@ CONV_LEN="${#CONVERSATION}"
 if [[ "$CONV_LEN" -gt 30000 ]]; then
   CONVERSATION="${CONVERSATION: -30000}"
   CONVERSATION="$(echo "$CONVERSATION" | tail -n +2)"
-  echo "[kas-memory-v2] Truncated conversation from $CONV_LEN to ~30000 chars." >&2
+  echo "[memvault] Truncated conversation from $CONV_LEN to ~30000 chars." >&2
 fi
 
 # ---------------------------------------------------------------------------
@@ -134,6 +133,10 @@ cat > "$PROMPT_FILE" <<PROMPT_EOF
 - [記憶點 2]
 - [記憶點 N]
 
+**Attitudes**: [使用者表達的偏好/信念/原則，格式 category|fact，0-5 條]
+  - category 只限: tool_behavior | config | architecture | workflow | preference | technical | naming | syntax | performance
+  - 只提取有明確證據的態度，不猜測。沒有就留空
+
 ---
 
 以下是對話 transcript：
@@ -142,41 +145,41 @@ ${CONVERSATION}
 PROMPT_EOF
 
 # Prevent recall.sh from firing on our internal claude -p calls
-export KAS_SKIP_RECALL=1
+export MEMVAULT_SKIP_RECALL=1
 
-KAS_LLM="${KAS_LLM:-gemini}"
+MEMVAULT_LLM="${MEMVAULT_LLM:-gemini}"
 
-if [[ "$KAS_LLM" == "gemini" ]]; then
-  KAS_MODEL="${KAS_MODEL:-gemini-2.5-flash}"
-elif [[ "$KAS_LLM" == "claude" ]]; then
-  KAS_MODEL="${KAS_MODEL:-haiku}"
-elif [[ "$KAS_LLM" == "codex" ]]; then
-  KAS_MODEL="${KAS_MODEL:-}"
+if [[ "$MEMVAULT_LLM" == "gemini" ]]; then
+  MEMVAULT_MODEL="${MEMVAULT_MODEL:-gemini-2.5-pro}"
+elif [[ "$MEMVAULT_LLM" == "claude" ]]; then
+  MEMVAULT_MODEL="${MEMVAULT_MODEL:-haiku}"
+elif [[ "$MEMVAULT_LLM" == "codex" ]]; then
+  MEMVAULT_MODEL="${MEMVAULT_MODEL:-}"
 fi
 
-echo "[kas-memory-v2] Calling $KAS_LLM (${KAS_MODEL:-default}) for extraction ..." >&2
+echo "[memvault] Calling $MEMVAULT_LLM (${MEMVAULT_MODEL:-default}) for extraction ..." >&2
 
-if [[ "$KAS_LLM" == "gemini" ]]; then
-  LLM_OUTPUT="$(cat "$PROMPT_FILE" | gemini -m "$KAS_MODEL" -p "按照以下指示分析對話並提煉記憶：" 2>/dev/null)" || {
-    echo "[kas-memory-v2] Gemini call failed (exit $?), skipping." >&2
+if [[ "$MEMVAULT_LLM" == "gemini" ]]; then
+  LLM_OUTPUT="$(cat "$PROMPT_FILE" | gemini -m "$MEMVAULT_MODEL" -p "按照以下指示分析對話並提煉記憶：" 2>/dev/null)" || {
+    echo "[memvault] Gemini call failed (exit $?), skipping." >&2
     exit 0
   }
-elif [[ "$KAS_LLM" == "claude" ]]; then
-  LLM_OUTPUT="$(claude -p --model "$KAS_MODEL" < "$PROMPT_FILE" 2>/dev/null)" || {
-    echo "[kas-memory-v2] Claude call failed (exit $?), skipping." >&2
+elif [[ "$MEMVAULT_LLM" == "claude" ]]; then
+  LLM_OUTPUT="$(claude -p --model "$MEMVAULT_MODEL" < "$PROMPT_FILE" 2>/dev/null)" || {
+    echo "[memvault] Claude call failed (exit $?), skipping." >&2
     exit 0
   }
-elif [[ "$KAS_LLM" == "codex" ]]; then
+elif [[ "$MEMVAULT_LLM" == "codex" ]]; then
   CODEX_ARGS="--skip-git-repo-check"
-  if [[ -n "$KAS_MODEL" ]]; then
-    CODEX_ARGS="$CODEX_ARGS -m $KAS_MODEL"
+  if [[ -n "$MEMVAULT_MODEL" ]]; then
+    CODEX_ARGS="$CODEX_ARGS -m $MEMVAULT_MODEL"
   fi
   LLM_OUTPUT="$(cat "$PROMPT_FILE" | codex exec $CODEX_ARGS 2>/dev/null)" || {
-    echo "[kas-memory-v2] Codex call failed (exit $?), skipping." >&2
+    echo "[memvault] Codex call failed (exit $?), skipping." >&2
     exit 0
   }
 else
-  echo "[kas-memory-v2] Unknown LLM: $KAS_LLM, skipping." >&2
+  echo "[memvault] Unknown LLM: $MEMVAULT_LLM, skipping." >&2
   exit 0
 fi
 
@@ -186,23 +189,23 @@ fi
 TRIMMED="$(echo "$LLM_OUTPUT" | sed '/^[[:space:]]*$/d' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
 
 if [[ "$TRIMMED" == "SKIP" ]]; then
-  echo "[kas-memory-v2] LLM returned SKIP — nothing worth remembering." >&2
+  echo "[memvault] LLM returned SKIP — nothing worth remembering." >&2
   exit 0
 fi
 
 if [[ -z "$TRIMMED" ]]; then
-  echo "[kas-memory-v2] LLM returned empty response, skipping." >&2
+  echo "[memvault] LLM returned empty response, skipping." >&2
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
 # 6.5. Refinement pass — Haiku validates, fixes format, improves quality
 # ---------------------------------------------------------------------------
-KAS_REFINE="${KAS_REFINE:-1}"
-KAS_REFINE_MODEL="${KAS_REFINE_MODEL:-haiku}"
+MEMVAULT_REFINE="${MEMVAULT_REFINE:-1}"
+MEMVAULT_REFINE_MODEL="${MEMVAULT_REFINE_MODEL:-sonnet}"
 
-if [[ "$KAS_REFINE" == "1" ]]; then
-  echo "[kas-memory-v2] Refinement pass: calling Claude ($KAS_REFINE_MODEL) ..." >&2
+if [[ "$MEMVAULT_REFINE" == "1" ]]; then
+  echo "[memvault] Refinement pass: calling Claude ($MEMVAULT_REFINE_MODEL) ..." >&2
 
   cat > "$REFINE_FILE" <<REFINE_EOF
 你是記憶品質審查員。以下是從 Claude Code 對話中提煉的記憶草稿。
@@ -210,12 +213,13 @@ if [[ "$KAS_REFINE" == "1" ]]; then
 
 ## 審查規則
 
-1. **格式驗證** — 確保有且僅有以下欄位：## Session, **Topic**, **Type**, **Tags**, **Project**, 以及 bullet points
+1. **格式驗證** — 確保有且僅有以下欄位：## Session, **Topic**, **Type**, **Tags**, **Project**, bullet points, 以及可選的 **Attitudes**
 2. **Type 正規化** — 只允許一個值：failed-approach | user-correction | decision | communication | technical | achievement | recent-focus
 3. **Tags 品質** — 3-8 個小寫標籤，禁止泛泛單詞（ai, technical, design, code, tool, system, project, workflow），必須用複合標籤（ai-memory, css-design, cli-tool）
 4. **記憶點品質** — 每條必須具體可操作，刪除空泛的（如「偏好使用繁體中文」若已是已知事實）
 5. **去重** — 合併重複或高度相似的記憶點
 6. **精簡** — 總記憶點控制在 3-7 條，寧精不濫
+7. **Attitudes 驗證** — category 必須在以下 9 個枚舉值中：tool_behavior, config, architecture, workflow, preference, technical, naming, syntax, performance。刪除不確定或猜測性態度，刪除 category 不在枚舉中的條目
 
 ## 輸出格式
 
@@ -230,13 +234,16 @@ if [[ "$KAS_REFINE" == "1" ]]; then
 
 - ...
 
+**Attitudes**: (可選，0-5 條，格式: category|fact)
+  - category|fact
+
 ## 待審查的記憶草稿
 
 ${TRIMMED}
 REFINE_EOF
 
-  REFINED_OUTPUT="$(claude -p --model "$KAS_REFINE_MODEL" < "$REFINE_FILE" 2>/dev/null)" || {
-    echo "[kas-memory-v2] Refinement call failed (exit $?), using raw extraction." >&2
+  REFINED_OUTPUT="$(claude -p --model "$MEMVAULT_REFINE_MODEL" < "$REFINE_FILE" 2>/dev/null)" || {
+    echo "[memvault] Refinement call failed (exit $?), using raw extraction." >&2
     REFINED_OUTPUT=""
   }
 
@@ -244,20 +251,20 @@ REFINE_EOF
   REFINED_FIRST_LINE="$(echo "$REFINED_TRIMMED" | head -1 | tr -d '[:space:]')"
 
   if [[ "$REFINED_FIRST_LINE" == "SKIP" ]]; then
-    echo "[kas-memory-v2] Refinement returned SKIP — Haiku judged not worth keeping." >&2
+    echo "[memvault] Refinement returned SKIP — Haiku judged not worth keeping." >&2
     exit 0
   fi
 
   if [[ -n "$REFINED_TRIMMED" ]] && echo "$REFINED_TRIMMED" | grep -q '## Session:'; then
     REFINED_BLOCK="$(echo "$REFINED_TRIMMED" | sed -n '/^## Session:/,$p')"
     if [[ -n "$REFINED_BLOCK" ]]; then
-      echo "[kas-memory-v2] Refinement accepted — using Haiku-refined output." >&2
+      echo "[memvault] Refinement accepted — using Haiku-refined output." >&2
       TRIMMED="$REFINED_BLOCK"
     else
-      echo "[kas-memory-v2] Refinement block extraction failed, using raw extraction." >&2
+      echo "[memvault] Refinement block extraction failed, using raw extraction." >&2
     fi
   else
-    echo "[kas-memory-v2] Refinement output invalid, using raw extraction." >&2
+    echo "[memvault] Refinement output invalid, using raw extraction." >&2
   fi
 fi
 
@@ -269,6 +276,46 @@ CLEAN_OUTPUT="$(echo "$CLEAN_OUTPUT" | sed '/^```/d')"
 CLEAN_OUTPUT="$(echo "$CLEAN_OUTPUT" | sed -E 's/^(\*\*Type\*\*: [a-zA-Z-]+) \|.*/\1/')"
 
 # ---------------------------------------------------------------------------
+# 7.5. Extract attitudes and POST to Core API
+# ---------------------------------------------------------------------------
+VALID_CATEGORIES="tool_behavior|config|architecture|workflow|preference|technical|naming|syntax|performance"
+
+ATTITUDE_LINES="$(echo "$CLEAN_OUTPUT" | sed -n '/^\*\*Attitudes\*\*:/,/^\*\*[^A]\|^---$\|^## /p' | grep '^ *- ' | sed 's/^ *- //')" || true
+
+if [[ -n "$ATTITUDE_LINES" ]]; then
+  ATTITUDE_COUNT=0
+  while IFS= read -r line; do
+    ATTITUDE_CATEGORY="$(echo "$line" | cut -d'|' -f1 | sed 's/^ *//;s/ *$//')"
+    ATTITUDE_FACT="$(echo "$line" | cut -d'|' -f2- | sed 's/^ *//;s/ *$//')"
+
+    # Validate category against enum
+    if ! echo "$ATTITUDE_CATEGORY" | grep -qE "^($VALID_CATEGORIES)$"; then
+      echo "[memvault] Attitude skipped — invalid category: $ATTITUDE_CATEGORY" >&2
+      continue
+    fi
+
+    if [[ -z "$ATTITUDE_FACT" ]]; then
+      continue
+    fi
+
+    ATTITUDE_PAYLOAD="$(jq -n \
+      --arg fact "$ATTITUDE_FACT" \
+      --arg category "$ATTITUDE_CATEGORY" \
+      --arg source_session "$SESSION_ID" \
+      '{fact: $fact, category: $category, source_session: $source_session}')"
+
+    curl -s --connect-timeout 3 --max-time 10 \
+      -X POST "${MEMVAULT_API_URL}/api/memvault/kg/attitudes/evolve?space_id=${MEMVAULT_SPACE_ID}" \
+      -H "Content-Type: application/json" \
+      -d "$ATTITUDE_PAYLOAD" >/dev/null 2>&1 || true
+
+    ATTITUDE_COUNT=$((ATTITUDE_COUNT + 1))
+    echo "[memvault] Attitude evolve: [$ATTITUDE_CATEGORY] $ATTITUDE_FACT" >&2
+  done <<< "$ATTITUDE_LINES"
+  echo "[memvault] $ATTITUDE_COUNT attitude(s) sent to Core API." >&2
+fi
+
+# ---------------------------------------------------------------------------
 # 8. Parse LLM output into structured fields
 # ---------------------------------------------------------------------------
 ENTRY_TOPIC="$(echo "$CLEAN_OUTPUT" | grep '^\*\*Topic\*\*:' | head -1 | sed 's/^\*\*Topic\*\*: //')" || true
@@ -276,14 +323,14 @@ ENTRY_TYPE="$(echo "$CLEAN_OUTPUT" | grep '^\*\*Type\*\*:' | head -1 | sed 's/^\
 ENTRY_TAGS="$(echo "$CLEAN_OUTPUT" | grep '^\*\*Tags\*\*:' | head -1 | sed 's/^\*\*Tags\*\*: //')" || true
 ENTRY_PROJECT="$(echo "$CLEAN_OUTPUT" | grep '^\*\*Project\*\*:' | head -1 | sed 's/^\*\*Project\*\*: //')" || true
 
-# Extract content: everything from first "- " line onwards, excluding trailing "---"
-ENTRY_CONTENT="$(echo "$CLEAN_OUTPUT" | sed -n '/^- /,$p' | sed '/^---$/,$d')"
+# Extract content: everything from first "- " line onwards, excluding Attitudes block and trailing "---"
+ENTRY_CONTENT="$(echo "$CLEAN_OUTPUT" | sed -n '/^- /,$p' | sed '/^\*\*Attitudes\*\*:/,$d' | sed '/^---$/,$d')"
 if [[ -z "$ENTRY_CONTENT" ]]; then
   ENTRY_CONTENT="$(echo "$CLEAN_OUTPUT" | sed -n '/^## Session:/,$p')"
 fi
 
 if [[ -z "$ENTRY_TOPIC" || -z "$ENTRY_CONTENT" ]]; then
-  echo "[kas-memory-v2] Failed to parse LLM output — missing topic or content, skipping." >&2
+  echo "[memvault] Failed to parse LLM output — missing topic or content, skipping." >&2
   exit 0
 fi
 
@@ -300,7 +347,7 @@ esac
 # Build tags JSON array via jq
 TAGS_JSON="$(echo "$ENTRY_TAGS" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep -v '^$' | jq -R . | jq -s .)"
 
-echo "[kas-memory-v2] Parsed: topic='$ENTRY_TOPIC' type=$ENTRY_TYPE→$V2_TYPE tags=$ENTRY_TAGS" >&2
+echo "[memvault] Parsed: topic='$ENTRY_TOPIC' type=${ENTRY_TYPE} -> ${V2_TYPE} tags=$ENTRY_TAGS" >&2
 
 # ---------------------------------------------------------------------------
 # 9. POST to Core API (with V1 fallback)
@@ -326,89 +373,72 @@ PAYLOAD="$(jq -n \
 )"
 
 # Attempt Core API call
-API_RESPONSE_FILE="$(mktemp /tmp/kas-api-resp-XXXXXX.json)"
+API_RESPONSE_FILE="$(mktemp /tmp/memvault-api-resp-XXXXXX.json)"
 HTTP_CODE="$(curl -s -o "$API_RESPONSE_FILE" -w '%{http_code}' \
   --connect-timeout 3 \
   --max-time 10 \
-  -X POST "${MEMVAULT_API_URL}/api/memvault/blocks?space_id=${KAS_SPACE_ID}" \
+  -X POST "${MEMVAULT_API_URL}/api/memvault/blocks?space_id=${MEMVAULT_SPACE_ID}" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" 2>/dev/null)" || HTTP_CODE="000"
 
 if [[ "$HTTP_CODE" == "201" ]]; then
   BLOCK_ID="$(jq -r '.id // empty' "$API_RESPONSE_FILE" 2>/dev/null)" || true
-  echo "[kas-memory-v2] Block created via Core API (id=$BLOCK_ID)." >&2
+  echo "[memvault] Block created via Core API (id=$BLOCK_ID)." >&2
 
   # Sync tags in background (non-critical)
   curl -s --connect-timeout 3 --max-time 5 \
-    -X POST "${MEMVAULT_API_URL}/api/memvault/tags/sync?space_id=${KAS_SPACE_ID}" \
+    -X POST "${MEMVAULT_API_URL}/api/memvault/tags/sync?space_id=${MEMVAULT_SPACE_ID}" \
     >/dev/null 2>&1 || true
 
-  echo "[kas-memory-v2] Done (via Core API)." >&2
+  echo "[memvault] Done (via Core API)." >&2
   rm -f "$API_RESPONSE_FILE"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# 10. Core API failed — fallback to V1 .md file writing
+# 10. Core API failed — fallback to JSONL file (graceful degradation)
 # ---------------------------------------------------------------------------
-echo "[kas-memory-v2] Core API returned HTTP $HTTP_CODE, falling back to V1 .md write." >&2
+echo "[memvault] Core API returned HTTP $HTTP_CODE, falling back to JSONL." >&2
 API_ERROR="$(jq -r '.detail // .message // empty' "$API_RESPONSE_FILE" 2>/dev/null)" || true
 if [[ -n "$API_ERROR" ]]; then
-  echo "[kas-memory-v2] API error: $API_ERROR" >&2
+  echo "[memvault] API error: $API_ERROR" >&2
 fi
 rm -f "$API_RESPONSE_FILE"
 
-# V1 duplicate check
+# Write structured JSONL (can be re-ingested when Core API is back)
 YEAR_MONTH="$(date '+%Y-%m')"
-DAY_FILE="$(date '+%Y-%m-%d').md"
-TARGET_DIR="$V1_MEMORIES_DIR/$YEAR_MONTH"
-TARGET_FILE="$TARGET_DIR/$DAY_FILE"
-mkdir -p "$TARGET_DIR"
+TODAY="$(date '+%Y-%m-%d')"
+FALLBACK_FILE="$FALLBACK_DIR/$YEAR_MONTH/$TODAY.jsonl"
+mkdir -p "$FALLBACK_DIR/$YEAR_MONTH"
 
-if [[ -f "$TARGET_FILE" ]] && grep -q "## Session: ${SESSION_ID}" "$TARGET_FILE"; then
-  echo "[kas-memory-v2] Session $SESSION_ID already in $DAY_FILE (V1 fallback dedup)." >&2
+# Dedup check
+if [[ -f "$FALLBACK_FILE" ]] && grep -q "\"session_id\":\"$SESSION_ID\"" "$FALLBACK_FILE"; then
+  echo "[memvault] Session $SESSION_ID already in fallback JSONL, skipping." >&2
   exit 0
 fi
 
-# V1 communication dedup
-BLOCK_TYPE_RAW="$(echo "$CLEAN_OUTPUT" | grep '^\*\*Type\*\*:' | head -1 | sed 's/^\*\*Type\*\*: //' | tr -d ' ')" || true
-if [[ "$BLOCK_TYPE_RAW" == "communication" ]]; then
-  CONTENT_LOWER="$(echo "$CLEAN_OUTPUT" | tr '[:upper:]' '[:lower:]')"
-  if echo "$CONTENT_LOWER" | grep -q '繁體中文' || echo "$CONTENT_LOWER" | grep -q 'traditional.chinese'; then
-    RECENT_COMM="$(find "$V1_MEMORIES_DIR" -name '*.md' 2>/dev/null -exec grep -l '繁體中文' {} \; 2>/dev/null | head -1)" || true
-    if [[ -n "$RECENT_COMM" ]]; then
-      echo "[kas-memory-v2] Communication dedup: language preference already recorded, skipping." >&2
-      exit 0
-    fi
-  fi
-fi
+# Build JSONL entry
+FALLBACK_ENTRY="$(jq -n \
+  --arg topic "$ENTRY_TOPIC" \
+  --arg content "$ENTRY_CONTENT" \
+  --arg block_type "$V2_TYPE" \
+  --arg session_id "$SESSION_ID" \
+  --arg project "${ENTRY_PROJECT:-$CWD}" \
+  --arg timestamp "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+  --argjson tags "$TAGS_JSON" \
+  '{
+    session_id: $session_id,
+    topic: $topic,
+    content: $content,
+    block_type: $block_type,
+    project: $project,
+    tags: $tags,
+    timestamp: $timestamp,
+    source: "session_end",
+    ingested: false
+  }'
+)"
 
-# Write to .md (V1 format)
-{
-  echo ""
-  echo "$CLEAN_OUTPUT"
-  echo ""
-} >> "$TARGET_FILE"
-
-# Write to tags.idx (V1 format)
-if [[ -n "$ENTRY_TAGS" ]]; then
-  printf '%s\t%s\t%s\t%s\t%s\n' "$YEAR_MONTH/$DAY_FILE" "$SESSION_ID" "$ENTRY_TYPE" "$ENTRY_TOPIC" "$ENTRY_TAGS" >> "$V1_TAGS_IDX"
-  echo "[kas-memory-v2] V1 fallback: index entry added to tags.idx" >&2
-fi
-
-echo "[kas-memory-v2] V1 fallback: memories saved to $TARGET_FILE" >&2
-
-# V1 auto-promote (only in fallback mode)
-KAS_AUTO_PROMOTE="${KAS_AUTO_PROMOTE:-1}"
-PROMOTE_SCRIPT="$HOME/Claude/projects/kas-memory/scripts/promote.sh"
-if [[ "$KAS_AUTO_PROMOTE" == "1" ]] && [[ -x "$PROMOTE_SCRIPT" ]]; then
-  PROMOTE_DRYRUN="$(bash "$PROMOTE_SCRIPT" --dry-run 2>&1)" || true
-  if echo "$PROMOTE_DRYRUN" | grep -q "qualifying for promotion"; then
-    echo "[kas-memory-v2] V1 fallback: running auto-promote ..." >&2
-    bash "$PROMOTE_SCRIPT" 2>&1 | while IFS= read -r line; do
-      echo "[kas-memory-v2] promote: $line" >&2
-    done || true
-  fi
-fi
-
-echo "[kas-memory-v2] Done (V1 fallback)." >&2
+echo "$FALLBACK_ENTRY" >> "$FALLBACK_FILE"
+echo "[memvault] Fallback: extraction saved to $FALLBACK_FILE" >&2
+echo "[memvault] Done (JSONL fallback)." >&2

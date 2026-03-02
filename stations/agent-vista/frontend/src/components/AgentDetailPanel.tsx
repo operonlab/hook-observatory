@@ -4,6 +4,7 @@ import React from 'react';
 import { useUIStore } from '../stores/uiStore';
 import { useAgentStore } from '../stores/agentStore';
 import { CLI_PALETTES } from '../sprites/palette';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -115,6 +116,30 @@ const panelStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
+const tabletPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  width: 240,
+};
+
+const mobileSheetStyle: React.CSSProperties = {
+  position: 'fixed',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  width: '100%',
+  height: '60vh',
+  background: 'rgba(20, 20, 35, 0.97)',
+  borderTop: '1px solid #333',
+  borderRadius: '12px 12px 0 0',
+  fontFamily: 'monospace',
+  padding: 16,
+  overflowY: 'auto',
+  zIndex: 25,
+  backdropFilter: 'blur(6px)',
+  boxShadow: '0 -4px 16px rgba(0,0,0,0.3)',
+  boxSizing: 'border-box',
+};
+
 const closeBtn: React.CSSProperties = {
   position: 'absolute',
   top: 12,
@@ -158,6 +183,7 @@ export default function AgentDetailPanel() {
   const detailOpen = useUIStore(s => s.detailPanelOpen);
   const selectAgent = useUIStore(s => s.selectAgent);
   const agents = useAgentStore(s => s.agents);
+  const bp = useBreakpoint();
 
   if (!selectedId || !detailOpen) return null;
   const entry = agents.get(selectedId);
@@ -168,8 +194,10 @@ export default function AgentDetailPanel() {
   const cliBadgeLetter = agent.cli_type === 'claude' ? 'C' : agent.cli_type === 'codex' ? 'X' : 'G';
   const cliLabel = agent.cli_type === 'claude' ? 'Claude Code' : agent.cli_type === 'codex' ? 'Codex CLI' : 'Gemini CLI';
 
+  const style = bp === 'mobile' ? mobileSheetStyle : bp === 'tablet' ? tabletPanelStyle : panelStyle;
+
   return (
-    <div style={panelStyle}>
+    <div style={style}>
       {/* Close button */}
       <button onClick={() => selectAgent(null)} style={closeBtn}>
         ✕

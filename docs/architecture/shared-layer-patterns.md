@@ -406,7 +406,7 @@ CREATE INDEX idx_{table}_tags ON {schema}.{table} USING GIN(tags);
 | taskflow | tasks.recurrence | `{"type": "weekly", "days": [1,3,5]}` |
 | auth | notification_preferences | `{"finance": {"enabled": true, "channels": ["pwa"]}}` |
 | auth | oauth_accounts.raw_data | 完整 OAuth profile 備份 |
-| memvault | kas_profiles | KAS 四維 Profile |
+| memvault | profile_scores | Profile Score（知識/態度/技能） |
 
 **最佳實踐**：
 - Pydantic schema 中用 typed model 定義 JSONB 結構（非 `dict[str, Any]`）
@@ -626,7 +626,7 @@ interface ForceGraphProps<N extends BaseNode, L extends BaseLink> {
 
 | 模組 | 用途 | 節點 | 邊 |
 |------|------|------|-----|
-| memvault | KAS Galaxy 星系圖 | Knowledge/Attitude/Skill 區塊 | 關聯線 |
+| memvault | Memvault Galaxy 星系圖 | Knowledge/Attitude/Skill 區塊 | 關聯線 |
 | ideagraph | Idea Galaxy 圖譜 | Spark 節點 | Link（suggested=虛線, verified=實線） |
 | intelflow | Topic 關聯圖 | 主題 | 主題關聯 |
 

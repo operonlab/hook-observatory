@@ -10,8 +10,9 @@
   --surface1: #45475a;
   --text: #cdd6f4;
   --subtext0: #a6adc8;
-  --blue: #89b4fa;
+  --blue: #bdd4fa;
   --lavender: #b4befe;
+  --accent: #b4befe;
   --mauve: #cba6f7;
   --green: #a6e3a1;
   --red: #f38ba8;
@@ -19,6 +20,8 @@
   --yellow: #f9e2af;
   --teal: #94e2d5;
   --sky: #89dceb;
+  --flamingo: #f2cdcd;
+  --maroon: #eba0ac;
 }
 
 @layer base {
@@ -60,7 +63,7 @@
 
 /* Focus styles */
 *:focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

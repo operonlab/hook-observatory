@@ -1,6 +1,7 @@
 """Hook Bus — before/after lifecycle hooks for plugins."""
 
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 Handler = Callable[..., Coroutine[Any, Any, Any]]
 

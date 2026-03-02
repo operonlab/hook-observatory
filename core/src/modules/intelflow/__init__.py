@@ -1,1 +1,3 @@
-"""Intelflow module — daily intelligence and RSS feeds."""
+"""Intelflow module — Smart Search V2, research reports, daily briefings, topic graph."""
+
+from .routes import router  # noqa: F401
