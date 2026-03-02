@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from auth import require_auth
 from database import get_session, persist
 from fastapi import APIRouter, Depends, Query
 from models import ActiveOperation, Incident, Subscription
@@ -39,7 +40,7 @@ def set_engine(engine_ref):
     _engine = engine_ref
 
 
-# ── GET /api/sentinel/health ──
+# ── GET /api/sentinel/health (public — used by other services) ──
 
 
 @router.get("/api/sentinel/health", response_model=HealthResponse)
@@ -47,11 +48,11 @@ async def health():
     return HealthResponse(status="ok")
 
 
-# ── GET /api/sentinel/status ──
+# ── GET /api/sentinel/status (auth required) ──
 
 
 @router.get("/api/sentinel/status", response_model=OverallStatus)
-async def overall_status():
+async def overall_status(_user: dict = Depends(require_auth)):
     from main import intervention_engine
 
     statuses = intervention_engine.get_all_statuses()
@@ -92,11 +93,11 @@ async def overall_status():
     )
 
 
-# ── GET /api/sentinel/status/{service} ──
+# ── GET /api/sentinel/status/{service} (auth required) ──
 
 
 @router.get("/api/sentinel/status/{service}", response_model=ServiceStatus)
-async def service_status(service: str):
+async def service_status(service: str, _user: dict = Depends(require_auth)):
     from main import intervention_engine
 
     statuses = intervention_engine.get_all_statuses()
@@ -113,7 +114,7 @@ async def service_status(service: str):
     )
 
 
-# ── POST /api/sentinel/notify ──
+# ── POST /api/sentinel/notify (public — used by agents) ──
 
 
 @router.post("/api/sentinel/notify", response_model=NotifyResponse)
@@ -145,7 +146,7 @@ async def notify_operation(req: NotifyRequest, db: AsyncSession = Depends(get_se
     )
 
 
-# ── POST /api/sentinel/resolve ──
+# ── POST /api/sentinel/resolve (public — used by agents) ──
 
 
 @router.post("/api/sentinel/resolve", response_model=ResolveResponse)
@@ -176,7 +177,7 @@ async def resolve_operation(req: ResolveRequest, db: AsyncSession = Depends(get_
     return ResolveResponse(message="Resolved (no matching operation found)")
 
 
-# ── GET /api/sentinel/incidents ──
+# ── GET /api/sentinel/incidents (auth required) ──
 
 
 @router.get("/api/sentinel/incidents", response_model=IncidentListResponse)
@@ -184,6 +185,7 @@ async def list_incidents(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_session),
+    _user: dict = Depends(require_auth),
 ):
     try:
         # Count
@@ -221,11 +223,15 @@ async def list_incidents(
         return IncidentListResponse(items=[], total=0, page=page, page_size=page_size)
 
 
-# ── GET /api/sentinel/incidents/{id} ──
+# ── GET /api/sentinel/incidents/{id} (auth required) ──
 
 
 @router.get("/api/sentinel/incidents/{incident_id}", response_model=IncidentResponse)
-async def get_incident(incident_id: str, db: AsyncSession = Depends(get_session)):
+async def get_incident(
+    incident_id: str,
+    db: AsyncSession = Depends(get_session),
+    _user: dict = Depends(require_auth),
+):
     from fastapi import HTTPException
 
     result = await db.execute(select(Incident).where(Incident.id == incident_id))
@@ -244,11 +250,15 @@ async def get_incident(incident_id: str, db: AsyncSession = Depends(get_session)
     )
 
 
-# ── GET /api/sentinel/uptime ──
+# ── GET /api/sentinel/uptime (auth required) ──
 
 
 @router.get("/api/sentinel/uptime", response_model=UptimeResponse)
-async def get_uptime(days: int = Query(90, ge=1, le=365), db: AsyncSession = Depends(get_session)):
+async def get_uptime(
+    days: int = Query(90, ge=1, le=365),
+    db: AsyncSession = Depends(get_session),
+    _user: dict = Depends(require_auth),
+):
     """Per-service per-day uptime percentage from health_checks table."""
     try:
         result = await db.execute(
@@ -287,11 +297,15 @@ async def get_uptime(days: int = Query(90, ge=1, le=365), db: AsyncSession = Dep
         return UptimeResponse(services=[])
 
 
-# ── POST /api/sentinel/subscribe ──
+# ── POST /api/sentinel/subscribe (auth required) ──
 
 
 @router.post("/api/sentinel/subscribe", response_model=SubscribeResponse)
-async def subscribe(req: SubscribeRequest, db: AsyncSession = Depends(get_session)):
+async def subscribe(
+    req: SubscribeRequest,
+    db: AsyncSession = Depends(get_session),
+    _user: dict = Depends(require_auth),
+):
     sub_id = uuid.uuid4().hex[:16]
     now = datetime.now(UTC).isoformat()
 
@@ -320,11 +334,14 @@ async def subscribe(req: SubscribeRequest, db: AsyncSession = Depends(get_sessio
     return SubscribeResponse(id=sub_id, message="Subscribed successfully")
 
 
-# ── GET /api/sentinel/operations ──
+# ── GET /api/sentinel/operations (auth required) ──
 
 
 @router.get("/api/sentinel/operations", response_model=list[ActiveOperationResponse])
-async def list_operations(db: AsyncSession = Depends(get_session)):
+async def list_operations(
+    db: AsyncSession = Depends(get_session),
+    _user: dict = Depends(require_auth),
+):
     try:
         result = await db.execute(
             select(ActiveOperation)

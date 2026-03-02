@@ -39,6 +39,10 @@ class Config:
     port: int = 4101
     host: str = "127.0.0.1"
     database_url: str = "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
+    secret_key: str = "change-me-in-production"
+    session_cookie_name: str = "workshop_session"
+    session_max_age: int = 604800  # 7 days
+    login_url: str = "/v2/login"
     spool: SpoolConfig = field(default_factory=SpoolConfig)
     check: CheckConfig = field(default_factory=CheckConfig)
     lock_dir: Path = field(default_factory=lambda: LOCK_DIR)
@@ -81,6 +85,10 @@ def load_config(path: Path | None = None) -> Config:
         cfg.host = v
     if v := os.environ.get("SENTINEL_DATABASE_URL"):
         cfg.database_url = v
+    if v := os.environ.get("SENTINEL_SECRET_KEY"):
+        cfg.secret_key = v
+    if v := os.environ.get("CORE_SECRET_KEY"):
+        cfg.secret_key = v
 
     return cfg
 

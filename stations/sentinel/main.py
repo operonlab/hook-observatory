@@ -15,7 +15,7 @@ from checker import (
     run_all_light_checks,
 )
 from database import async_session, drain_spool_loop, engine, persist
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from models import Base
@@ -282,8 +282,19 @@ static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
 
     @app.api_route("/", methods=["GET", "HEAD"])
-    async def serve_index():
-        from starlette.responses import FileResponse
+    async def serve_index(request: Request):
+        from starlette.responses import FileResponse, RedirectResponse
+
+        cookie = request.cookies.get(config.session_cookie_name)
+        if not cookie:
+            return RedirectResponse(url=config.login_url, status_code=302)
+
+        from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+        try:
+            URLSafeTimedSerializer(config.secret_key).loads(cookie, max_age=config.session_max_age)
+        except (BadSignature, SignatureExpired):
+            return RedirectResponse(url=config.login_url, status_code=302)
 
         return FileResponse(static_dir / "index.html", media_type="text/html")
 

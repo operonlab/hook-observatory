@@ -1,0 +1,19 @@
+{
+  "name": "服務哨兵 — Workshop",
+  "short_name": "服務哨兵",
+  "description": "Workshop 服務健康監測與自動修復",
+  "start_url": "/v2/apps/sentinel/",
+  "scope": "/v2/apps/sentinel/",
+  "display": "standalone",
+  "background_color": "#0c0e14",
+  "theme_color": "#0c0e14",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

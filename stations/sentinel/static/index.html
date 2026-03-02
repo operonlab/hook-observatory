@@ -3,52 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Workshop Status</title>
+    <meta name="theme-color" content="#0f1117">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>服務哨兵 — Workshop</title>
+    <link rel="manifest" href="static/manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
     <link rel="stylesheet" href="static/css/status.css">
 </head>
 <body>
-    <div class="container">
-        <!-- Overall Banner -->
+    <div class="app">
+        <!-- Header -->
         <header class="header">
-            <h1 class="header__title">Workshop Status</h1>
-            <div id="overall-banner" class="banner banner--operational">
-                <span class="banner__icon"></span>
-                <span class="banner__text">All Systems Operational</span>
+            <div class="header__inner">
+                <div class="header__brand">
+                    <span class="header__icon">🛡️</span>
+                    <h1 class="header__title">服務哨兵</h1>
+                </div>
+                <div class="header__meta">
+                    <span class="header__update" id="last-update">更新中…</span>
+                    <span class="header__pulse" id="pulse"></span>
+                </div>
             </div>
         </header>
 
-        <!-- Service List -->
-        <section class="services" id="service-list">
-            <h2 class="section-title">Services</h2>
-            <div class="service-grid" id="services-container">
-                <!-- Populated by JS -->
-                <div class="loading">Loading status...</div>
+        <!-- Overall Banner -->
+        <section class="banner-section">
+            <div id="overall-banner" class="banner banner--loading">
+                <div class="banner__dot"></div>
+                <span class="banner__text">正在檢查系統狀態…</span>
             </div>
         </section>
 
-        <!-- 90-Day Timeline -->
-        <section class="timeline-section" id="timeline-section">
-            <h2 class="section-title">Uptime — Last 90 Days</h2>
-            <div id="timelines-container">
-                <!-- Populated by JS -->
+        <!-- Service Grid -->
+        <section class="section">
+            <div class="section__header">
+                <h2 class="section__title">服務狀態</h2>
+                <span class="section__count" id="service-count"></span>
+            </div>
+            <div id="services-container" class="services">
+                <div class="skeleton-row"></div>
+                <div class="skeleton-row"></div>
+                <div class="skeleton-row"></div>
             </div>
         </section>
 
-        <!-- Incident History -->
-        <section class="incidents" id="incidents-section">
-            <h2 class="section-title">Recent Incidents</h2>
+        <!-- 90-Day Uptime Timeline -->
+        <section class="section">
+            <div class="section__header">
+                <h2 class="section__title">正常運行時間</h2>
+                <span class="section__badge">90 天</span>
+            </div>
+            <div id="timelines-container" class="timelines">
+                <div class="skeleton-timeline"></div>
+            </div>
+            <div class="timeline-legend">
+                <span class="legend-item"><span class="legend-dot legend-dot--operational"></span>正常</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--degraded"></span>降級</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--outage"></span>中斷</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--no_data"></span>無資料</span>
+            </div>
+        </section>
+
+        <!-- Incidents -->
+        <section class="section">
+            <div class="section__header">
+                <h2 class="section__title">近期事件</h2>
+            </div>
             <div id="incidents-container">
-                <div class="no-incidents">No recent incidents</div>
+                <div class="empty-state">
+                    <span class="empty-state__icon">✓</span>
+                    <span class="empty-state__text">目前沒有事件記錄</span>
+                </div>
             </div>
         </section>
 
+        <!-- Footer -->
         <footer class="footer">
-            <p>Powered by Workshop Sentinel</p>
+            <span>Workshop Sentinel v0.1.0</span>
+            <span class="footer__sep">·</span>
+            <span id="footer-uptime"></span>
         </footer>
     </div>
 
     <!-- Tooltip -->
-    <div id="tooltip" class="tooltip" style="display:none;"></div>
+    <div id="tooltip" class="tooltip"></div>
 
     <script src="static/js/status.js"></script>
 </body>
