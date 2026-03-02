@@ -68,6 +68,11 @@ function fmtGB(bytes) {
   return (bytes / (1024 ** 3)).toFixed(1) + " GB";
 }
 
+function fmtGBVal(gb) {
+  if (gb == null) return "—";
+  return gb.toFixed(1) + " GB";
+}
+
 function fmtPct(v) {
   if (v == null) return "—";
   return Math.round(v) + "%";
@@ -105,7 +110,7 @@ function renderStatus(data) {
   const sys = hw.system || {};
   const infoEl = document.getElementById("sys-info");
   if (infoEl) {
-    const parts = [sys.hostname, sys.os_version, sys.chip].filter(Boolean);
+    const parts = [data.hostname || sys.hostname, data.os_version || sys.os_version, data.chip || sys.chip].filter(Boolean);
     infoEl.textContent = parts.join(" · ") || "—";
   }
 
@@ -115,7 +120,7 @@ function renderStatus(data) {
 
   // Last updated
   const updEl = document.getElementById("last-updated");
-  if (updEl) updEl.textContent = "Updated: " + fmtTime(data.timestamp);
+  if (updEl) updEl.textContent = "更新時間：" + fmtTime(data.timestamp);
 
   // CPU
   const cpu = hw.cpu || {};
@@ -125,14 +130,13 @@ function renderStatus(data) {
   if (cpuPctEl) cpuPctEl.textContent = fmtPct(cpuPct);
   const cpuDet = document.getElementById("cpu-details");
   if (cpuDet) {
-    const la = cpu.load_avg || {};
     cpuDet.innerHTML =
-      detailRow("Load 1m", la["1m"] ?? "—") +
-      detailRow("Load 5m", la["5m"] ?? "—") +
-      detailRow("Load 15m", la["15m"] ?? "—");
+      detailRow("負載 1 分鐘", cpu.load_avg_1m ?? "—") +
+      detailRow("負載 5 分鐘", cpu.load_avg_5m ?? "—") +
+      detailRow("負載 15 分鐘", cpu.load_avg_15m ?? "—");
   }
   const cpuBadge = document.getElementById("cpu-pressure-badge");
-  if (cpuBadge) cpuBadge.innerHTML = makeBadge(cpu.pressure_level);
+  if (cpuBadge) cpuBadge.innerHTML = makeBadge(cpu.pressure);
 
   // Memory
   const mem = hw.memory || {};
@@ -143,13 +147,13 @@ function renderStatus(data) {
   const memDet = document.getElementById("mem-details");
   if (memDet) {
     memDet.innerHTML =
-      detailRow("Used / Total", fmtGB(mem.used_bytes) + " / " + fmtGB(mem.total_bytes)) +
-      detailRow("App", fmtGB(mem.app_bytes)) +
-      detailRow("Wired", fmtGB(mem.wired_bytes)) +
-      detailRow("Compressed", fmtGB(mem.compressed_bytes));
+      detailRow("已用 / 總計", fmtGBVal(mem.used_gb) + " / " + fmtGBVal(mem.total_gb)) +
+      detailRow("應用", fmtGBVal(mem.app_gb)) +
+      detailRow("固定", fmtGBVal(mem.wired_gb)) +
+      detailRow("壓縮", fmtGBVal(mem.compressed_gb));
   }
   const memBadge = document.getElementById("mem-pressure-badge");
-  if (memBadge) memBadge.innerHTML = makeBadge(mem.pressure_level);
+  if (memBadge) memBadge.innerHTML = makeBadge(mem.pressure);
 
   // Disk
   const disk = data.disk || {};
@@ -160,9 +164,9 @@ function renderStatus(data) {
   const diskDet = document.getElementById("disk-details");
   if (diskDet) {
     diskDet.innerHTML =
-      detailRow("Used", fmtGB(disk.used_bytes)) +
-      detailRow("Free", fmtGB(disk.free_bytes)) +
-      detailRow("Total", fmtGB(disk.total_bytes));
+      detailRow("已用", fmtGB(disk.used_bytes)) +
+      detailRow("可用", fmtGB(disk.free_bytes)) +
+      detailRow("總計", fmtGB(disk.total_bytes));
   }
   const diskBadge = document.getElementById("disk-pressure-badge");
   if (diskBadge) diskBadge.innerHTML = makeBadge(disk.pressure_level);
@@ -176,11 +180,11 @@ function renderStatus(data) {
   if (battPctEl) battPctEl.textContent = batt.percent != null ? fmtPct(battPct) : "N/A";
   const battDet = document.getElementById("batt-details");
   if (battDet) {
-    const charging = batt.charging ? "⚡ Charging" : "🔋 Battery";
+    const charging = batt.charging ? "⚡ 充電中" : "🔋 電池";
     battDet.innerHTML =
-      detailRow("Status", charging) +
-      detailRow("CPU Temp", temp.cpu_temp != null ? temp.cpu_temp + "°C" : "—") +
-      detailRow("GPU Temp", temp.gpu_temp != null ? temp.gpu_temp + "°C" : "—");
+      detailRow("狀態", charging) +
+      detailRow("CPU 溫度", temp.cpu_temp_c != null ? temp.cpu_temp_c + "°C" : "—") +
+      detailRow("GPU 溫度", temp.gpu_temp_c != null ? temp.gpu_temp_c + "°C" : "—");
   }
 }
 
@@ -209,7 +213,7 @@ function renderHistory(data) {
       labels,
       datasets: [
         {
-          label: "CPU %",
+          label: "CPU",
           data: cpuData,
           borderColor: COLORS.blue,
           backgroundColor: COLORS.blue + "22",
@@ -219,7 +223,7 @@ function renderHistory(data) {
           borderWidth: 2,
         },
         {
-          label: "Memory %",
+          label: "記憶體",
           data: memData,
           borderColor: COLORS.mauve,
           backgroundColor: COLORS.mauve + "22",
@@ -229,7 +233,7 @@ function renderHistory(data) {
           borderWidth: 2,
         },
         {
-          label: "Disk %",
+          label: "磁碟",
           data: diskData,
           borderColor: COLORS.teal,
           backgroundColor: COLORS.teal + "22",
@@ -278,7 +282,7 @@ function renderAlerts(data) {
   if (!list) return;
   const rawAlerts = data.alerts || [];
   if (rawAlerts.length === 0) {
-    list.innerHTML = '<div class="empty">No alerts</div>';
+    list.innerHTML = '<div class="empty">無警報</div>';
     return;
   }
 
@@ -326,7 +330,7 @@ function renderReports(data) {
   if (!list) return;
   const reports = data.reports || [];
   if (reports.length === 0) {
-    list.innerHTML = '<div class="empty">No reports</div>';
+    list.innerHTML = '<div class="empty">無報告</div>';
     return;
   }
   list.innerHTML = reports
@@ -361,10 +365,10 @@ async function toggleReport(headerEl) {
       if (res.ok) {
         contentEl.textContent = await res.text();
       } else {
-        contentEl.textContent = "Failed to load report.";
+        contentEl.textContent = "無法載入報告。";
       }
     } catch {
-      contentEl.textContent = "Network error.";
+      contentEl.textContent = "網路錯誤。";
     }
     contentEl.dataset.loaded = "1";
   }

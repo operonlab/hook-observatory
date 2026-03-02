@@ -102,6 +102,47 @@ def classify_pressure(
 # ---------------------------------------------------------------------------
 
 
+def collect_disk_fast(config: dict) -> dict:
+    """Fast disk metrics — APFS container level only (no file scanning)."""
+    thresholds = config.get("thresholds", {}).get(
+        "disk_usage_pct", {"warning": 75, "critical": 85, "danger": 95}
+    )
+
+    container_raw = run("diskutil apfs list 2>/dev/null", timeout=10)
+    total_bytes = 0
+    free_bytes = 0
+
+    for line in container_raw.splitlines():
+        if "Size (Capacity Ceiling)" in line:
+            m = re.search(r"(\d+)\s*B\b", line)
+            if m:
+                total_bytes = int(m.group(1))
+        elif "Capacity Not Allocated" in line:
+            m = re.search(r"(\d+)\s*B\b", line)
+            if m:
+                free_bytes = int(m.group(1))
+
+    # Fallback to df
+    if total_bytes == 0:
+        df_out = run("df -k / | tail -1")
+        parts = df_out.split()
+        if len(parts) >= 4:
+            total_bytes = int(parts[1]) * 1024
+            free_bytes = int(parts[3]) * 1024
+
+    used_bytes = total_bytes - free_bytes
+    usage_pct = round(used_bytes * 100 / total_bytes, 1) if total_bytes else 0
+    pressure = classify_pressure(usage_pct, thresholds)
+
+    return {
+        "usage_pct": usage_pct,
+        "used_bytes": used_bytes,
+        "free_bytes": free_bytes,
+        "total_bytes": total_bytes,
+        "pressure_level": pressure,
+    }
+
+
 def collect_disk(config: dict) -> dict:
     thresholds = config.get("thresholds", {}).get(
         "disk_usage_pct", {"warning": 75, "critical": 85, "danger": 95}
