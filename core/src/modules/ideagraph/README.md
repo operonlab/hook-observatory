@@ -10,7 +10,7 @@
 | **依賴** | auth |
 | **被依賴於** | intelflow（情報→靈感轉入） |
 | **MCP** | `workshop-ideagraph`（CRUD ~8 tools）+ `workshop-ideagraph-ai`（AI 輔助 ~5 tools） |
-| **V1 參考** | `pulso-muse` MCP（8 tools） |
+| **V1 參考** | `workshop-muse` MCP（8 tools） |
 
 ## 核心工作流：Capture → Refine → Connect → Verify
 

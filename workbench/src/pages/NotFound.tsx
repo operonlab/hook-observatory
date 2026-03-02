@@ -20,7 +20,7 @@ export default function NotFound() {
         to="/"
         className="mt-6 rounded-lg px-5 py-2.5 text-sm font-medium"
         style={{
-          backgroundColor: "var(--blue)",
+          backgroundColor: "var(--accent)",
           color: "var(--crust)",
           minHeight: 44,
           display: "inline-flex",

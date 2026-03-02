@@ -6,7 +6,9 @@ import { useLayoutEditor } from '../hooks/useLayoutEditor';
 import BubbleOverlay from './BubbleOverlay';
 import Minimap from './Minimap';
 import TimelineBar from './TimelineBar';
+import GestureTutorial from './GestureTutorial';
 import { useUIStore } from '../stores/uiStore';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 export default function PixelOffice() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -14,6 +16,7 @@ export default function PixelOffice() {
   useLayoutEditor(canvasRef, cameraRef);
 
   const minimapVisible = useUIStore(s => s.minimapVisible);
+  const bp = useBreakpoint();
 
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
@@ -49,10 +52,11 @@ export default function PixelOffice() {
         }}
       />
       <BubbleOverlay canvasRef={canvasRef} cameraRef={cameraRef} />
-      {minimapVisible && (
+      {minimapVisible && bp !== 'mobile' && (
         <Minimap cameraRef={cameraRef} canvasWidth={size.w} canvasHeight={size.h} />
       )}
       <TimelineBar />
+      <GestureTutorial />
     </>
   );
 }

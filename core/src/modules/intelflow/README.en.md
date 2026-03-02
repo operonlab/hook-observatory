@@ -337,7 +337,7 @@ On first launch, the 6 topics from V1 will be automatically created as defaults:
 
 ## Migration Plan
 
-1.  Create schema + models → Import existing `pulso_research` DB data
+1.  Create schema + models → Import existing `workshop_research` DB data
 2.  Backfill 52 `.md` fallback files into the DB
 3.  Implement Core API (replicating research_report endpoints)
 4.  Switch smart-search Skill endpoint from `localhost:8830` → Core API

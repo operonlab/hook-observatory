@@ -14,7 +14,7 @@ target_lang: zh-TW
 
 | 順位 | 模組 | 目標 | 為什麼優先 | 詳細文件 |
 |------|------|------|-----------|---------|
-| **P1** | memvault (KAS Memory V2) | Claude Code 持久化記憶 | 每天都在用，改善記憶品質 = 改善所有工作品質 | [p1-memvault.md](./p1-memvault.md) |
+| **P1** | memvault | Claude Code 持久化記憶 + Knowledge Graph | 每天都在用，改善記憶品質 = 改善所有工作品質 | [p1-memvault.md](./p1-memvault.md) |
 | **P2** | intelflow (Smart Search V2) | 搜尋報告結構化儲存 + UI | 搜尋是高頻操作，散落 .md 檔已造成痛點 | [p2-intelflow.md](./p2-intelflow.md) |
 | **P3** | stations 整合 | 系統工具現代化 | 散落 V1 工具需統一管理 + tmux-webui 手機體驗 | [p3-stations.md](./p3-stations.md) |
 | **P4** | auth + admin | Google/GitHub OAuth + 管理系統 | 所有模組的前提基礎，V1 缺口多 | [p4-auth.md](./p4-auth.md) |
@@ -61,27 +61,27 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **kas-memory** (MCP) | 結構化記憶區塊 | 主力。遷移到 `memvault.blocks` + pgvector |
+| **memvault** (MCP) | 結構化記憶區塊 | 已遷移到 `memvault.blocks` + pgvector |
 | **meeting-insights** | 溝通模式分析 | 分析結果作為 memvault block 寫入，追蹤溝通風格演變 |
 
 ### finance — 會計與財務（P5）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **pulso-finance** (MCP) | 交易 CRUD + 訂閱 + 洞察 | V1 10 tools → V2 拆 2 MCP（CRUD + Analytics） |
+| **workshop-finance** (MCP) | 交易 CRUD + 訂閱 + 洞察 | V1 10 tools → V2 拆 2 MCP（CRUD + Analytics） |
 
 ### taskflow — 任務與排程（P6）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **pulso-quest** (MCP) | 任務 CRUD + 技能樹 | V1 10 tools → V2 拆 2 MCP（CRUD + Reports） |
+| **workshop-quest** (MCP) | 任務 CRUD + 技能樹 | V1 10 tools → V2 拆 2 MCP（CRUD + Reports） |
 | **scheduler** | cron 排程 | 週期性任務整合到 taskflow.tasks.recurrence |
 
 ### ideagraph — 靈感孵化與知識圖譜（P7）
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **pulso-muse** (MCP) | Spark CRUD + 連結 + 語意搜尋 | V1 8 tools → V2 拆 2 MCP（CRUD + AI 輔助） |
+| **workshop-muse** (MCP) | Spark CRUD + 連結 + 語意搜尋 | V1 8 tools → V2 拆 2 MCP（CRUD + AI 輔助） |
 
 **合併效益**：從純 CRUD 升級為 Capture→Refine→Connect→Verify 管線，AI 自動精煉想法 + 推演連結，人類驗證後固化為知識圖譜。
 
@@ -139,7 +139,7 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 
 | MCP Server | 模組 | Tools 數 | 狀態 |
 |------------|------|---------|------|
-| `kas-memory` | memvault | 9 | V1 運作中 → V2 改為 Core API adapter |
+| `memvault` | memvault | 16 | V2 Core API adapter（含 KG 9 tools） |
 | `workshop-intelflow` | intelflow | 待定 | V2 新建 |
 | `workshop-auth` | auth | 待定 | V2 新建 |
 | `workshop-finance` | finance | ~10 | V1 運作中 → V2 拆分 |
@@ -147,7 +147,7 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 | `workshop-taskflow` | taskflow | ~10 | V1 運作中 → V2 拆分 |
 | `workshop-taskflow-reports` | taskflow | ~5 | V2 新建（報告 + 分析） |
 | `workshop-admin` | admin | 待定 | V2 新建 |
-| `workshop-ideagraph` | ideagraph | ~8 | V1 pulso-muse → V2 重構（CRUD） |
+| `workshop-ideagraph` | ideagraph | ~8 | V1 workshop-muse → V2 重構（CRUD） |
 | `workshop-ideagraph-ai` | ideagraph | ~5 | V2 新建（AI 輔助：精煉 + 推演 + 驗證） |
 
 ---

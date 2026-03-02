@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useTimelineStore } from '../stores/timelineStore';
 import { timelineRecorder } from '../engine/TimelineRecorder';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 export default function TimelineBar() {
   const replaying = useTimelineStore(s => s.replaying);
@@ -17,6 +18,8 @@ export default function TimelineBar() {
   const seekTo = useTimelineStore(s => s.seekTo);
   const tick = useTimelineStore(s => s.tick);
   const updateFrameCount = useTimelineStore(s => s.updateFrameCount);
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
 
   // Update frame count periodically (when not replaying)
   useEffect(() => {
@@ -56,7 +59,7 @@ export default function TimelineBar() {
     return (
       <button
         onClick={startReplay}
-        style={startBtnStyle}
+        style={{ ...startBtnStyle, ...(isMobile ? { bottom: 52 } : {}) }}
         title={`${totalFrames} 幀，約 ${durationMin} 分鐘`}
       >
         {'▶ 回放'} ({durationMin}m)
@@ -66,7 +69,7 @@ export default function TimelineBar() {
 
   // Full timeline bar when replaying
   return (
-    <div style={barStyle}>
+    <div style={{ ...barStyle, ...(isMobile ? { bottom: 40 } : {}) }}>
       <button onClick={stopReplay} style={controlBtn} title="停止回放">
         {'■'}
       </button>

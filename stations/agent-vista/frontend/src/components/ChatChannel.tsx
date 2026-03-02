@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useChatStore } from '../stores/chatStore';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const CLI_COLORS: Record<string, string> = {
   claude: '#4A90D9',
@@ -35,6 +36,8 @@ export default function ChatChannel() {
   const isOpen = useChatStore(s => s.isOpen);
   const toggle = useChatStore(s => s.toggle);
   const clear = useChatStore(s => s.clear);
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +51,7 @@ export default function ChatChannel() {
   const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
 
   return (
-    <div style={containerStyle(isOpen)}>
+    <div style={containerStyle(isOpen, isMobile)}>
       {/* Header bar — always visible */}
       <div style={headerStyle} onClick={toggle}>
         <span style={{ color: '#FFC832', fontSize: 11 }}>
@@ -89,12 +92,12 @@ export default function ChatChannel() {
       {isOpen && (
         <div ref={listRef} style={messageListStyle}>
           {messages.length === 0 ? (
-            <div style={{ color: '#555', fontSize: 11, textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ color: '#555', fontSize: isMobile ? 10 : 11, textAlign: 'center', padding: '16px 0' }}>
               尚無活動紀錄
             </div>
           ) : (
             messages.map((msg) => (
-              <div key={msg.id} style={messageRowStyle}>
+              <div key={msg.id} style={isMobile ? mobileMessageRowStyle : messageRowStyle}>
                 <span style={{ color: '#555', minWidth: 64 }}>
                   {formatTime(msg.timestamp)}
                 </span>
@@ -117,13 +120,13 @@ export default function ChatChannel() {
   );
 }
 
-function containerStyle(isOpen: boolean): React.CSSProperties {
+function containerStyle(isOpen: boolean, isMobile = false): React.CSSProperties {
   return {
     position: 'fixed',
-    bottom: 0,
+    bottom: isMobile ? 40 : 0,
     left: '50%',
     transform: 'translateX(-50%)',
-    width: 'min(900px, 100vw)',
+    width: isMobile ? '100vw' : 'min(900px, 100vw)',
     background: 'rgba(14, 14, 24, 0.93)',
     border: '1px solid #2a2a40',
     borderBottom: 'none',
@@ -174,6 +177,14 @@ const messageRowStyle: React.CSSProperties = {
   lineHeight: '18px',
   borderBottom: '1px solid rgba(255,255,255,0.03)',
   flexWrap: 'wrap',
+};
+
+const mobileMessageRowStyle: React.CSSProperties = {
+  ...messageRowStyle,
+  gap: 4,
+  padding: '2px 8px',
+  fontSize: 10,
+  lineHeight: '16px',
 };
 
 const clearBtnStyle: React.CSSProperties = {

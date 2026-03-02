@@ -31,14 +31,15 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
     return (
       <div
         onClick={onClick}
-        className="flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer transition-colors"
+        className="flex items-start sm:items-center gap-2 sm:gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors"
         style={{
           backgroundColor: "var(--mantle)",
           borderColor: "var(--surface0)",
+          minHeight: 44,
         }}
       >
         <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+          className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium mt-0.5 sm:mt-0"
           style={{
             backgroundColor: badgeBg,
             color: config.color,
@@ -49,14 +50,15 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
         </span>
 
         <span
-          className="flex-1 truncate text-sm"
+          className="flex-1 text-sm line-clamp-2 sm:truncate sm:line-clamp-none"
           style={{ color: "var(--text)" }}
         >
           {block.content}
         </span>
 
-        <div className="flex shrink-0 items-center gap-1.5">
-          {block.tags.slice(0, 3).map((tag) => (
+        {/* Tags: hidden on very small screens to prevent overflow */}
+        <div className="hidden sm:flex shrink-0 items-center gap-1.5">
+          {block.tags.slice(0, 2).map((tag) => (
             <span
               key={tag}
               className="rounded px-1.5 py-0.5 text-xs"
@@ -67,13 +69,14 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
           ))}
         </div>
 
-        <span className="shrink-0 text-xs font-medium" style={{ color: config.color }}>
-          {confidencePct}
-        </span>
-
-        <span className="shrink-0 text-xs" style={{ color: "var(--subtext1)" }}>
-          {relativeTime(block.updated_at)}
-        </span>
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-1.5 shrink-0">
+          <span className="shrink-0 text-xs font-medium" style={{ color: config.color }}>
+            {confidencePct}
+          </span>
+          <span className="shrink-0 text-xs" style={{ color: "var(--subtext1)" }}>
+            {relativeTime(block.updated_at)}
+          </span>
+        </div>
       </div>
     );
   }
@@ -81,7 +84,7 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
   return (
     <div
       onClick={onClick}
-      className="rounded-xl border p-4 cursor-pointer transition-all duration-200"
+      className="rounded-xl border p-4 cursor-pointer transition-all duration-200 active:scale-[0.98]"
       style={{
         backgroundColor: "var(--mantle)",
         borderColor: "var(--surface0)",

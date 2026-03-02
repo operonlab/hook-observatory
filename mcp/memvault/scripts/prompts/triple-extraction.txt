@@ -1,0 +1,150 @@
+You are a knowledge graph extraction engine. Analyze the Claude Code conversation transcript below and extract durable knowledge as structured (Subject, Predicate, Object) triples.
+
+## Predicate Vocabulary (use ONLY these 18 predicates)
+
+Dependency:
+  uses            — X uses Y as a tool/library/service
+  requires        — X requires Y to function
+  depends_on      — X depends on Y (softer than requires)
+
+Configuration:
+  configured_with — X is configured with parameter/value Y
+  format_is       — X's format/structure is Y
+  default_is      — X's default value/behavior is Y
+
+Causality:
+  causes          — X causes Y (problem or effect)
+  prevents        — X prevents Y
+  fixes           — X fixes/resolves Y
+  enables         — X enables capability Y
+
+Prescriptive (from corrections and best practices):
+  should          — X should do/be Y (positive rule)
+  should_NOT      — X should NOT do/be Y (negative rule, often from user corrections)
+
+Pattern:
+  pattern_is      — X follows pattern Y
+  flow_is         — X's execution flow is Y
+  implemented_as  — X is implemented as Y (architecture decision)
+
+Decision:
+  chosen_over     — X was chosen over Y (with implied reason)
+  reason_for      — X is the reason/rationale for Y
+
+Effect:
+  improves        — X improves Y (performance, UX, reliability)
+  degrades        — X degrades Y (performance, UX, reliability)
+
+Mapping:
+  maps_to         — X maps to Y (port, path, identifier, concept)
+
+## Extraction Rules
+
+1. Extract ONLY knowledge with long-term value: architecture decisions, gotchas, workarounds, constraints, naming conventions, non-obvious configurations, and user-corrected behaviors.
+
+2. IGNORE: routine file reads, trivial git commits, standard CRUD operations, anything obvious from documentation.
+
+3. Subjects and Objects must be SPECIFIC (use exact names, values, paths). Avoid vague subjects like "the system" or "it".
+
+4. Each triple must be independently understandable — no pronouns, no context-dependent references.
+
+5. For user corrections (when the user tells the AI it did something wrong), extract BOTH:
+   - A triple with predicate `should` or `should_NOT`
+   - A separate entry in the `corrections` array with the full corrected fact
+
+6. Limit: 3-12 triples per session. Quality over quantity.
+
+7. If nothing worth extracting exists, output exactly: {"skip": true}
+
+## Output Format
+
+Output ONLY valid JSON. No markdown fences, no explanation, no preamble.
+
+```
+{
+  "session_id": "${SESSION_ID}",
+  "timestamp": "${TIMESTAMP}",
+  "topic": "short topic description (under 10 words)",
+  "skip": false,
+  "triples": [
+    {"s": "subject", "p": "predicate", "o": "object"}
+  ],
+  "corrections": [
+    {"fact": "corrected fact as a complete sentence", "category": "tool_behavior|config|architecture|workflow|preference"}
+  ],
+  "tags": ["3-8 lowercase compound tags"]
+}
+```
+
+## Examples
+
+### Example 1: pgvector configuration session
+
+Input excerpt:
+USER: The HNSW index is too slow on recall. Can we tune it?
+ASSISTANT: We can set m=16 and ef_construction=64 for better recall. Also ef_search=40 at query time.
+USER: Wait, ef_search should be set per-query, not at index creation. You had that backwards.
+ASSISTANT: You're right, apologies. ef_search is a query-time parameter set via SET LOCAL hnsw.ef_search=40.
+
+Output:
+{
+  "session_id": "abc123",
+  "timestamp": "2026-02-25 14:00",
+  "topic": "pgvector HNSW index tuning",
+  "skip": false,
+  "triples": [
+    {"s": "pgvector HNSW index", "p": "configured_with", "o": "m=16, ef_construction=64"},
+    {"s": "hnsw.ef_search", "p": "format_is", "o": "query-time parameter, not index-creation parameter"},
+    {"s": "hnsw.ef_search", "p": "configured_with", "o": "SET LOCAL hnsw.ef_search=40 per query"},
+    {"s": "high ef_construction", "p": "improves", "o": "recall accuracy at cost of index build time"}
+  ],
+  "corrections": [
+    {"fact": "hnsw.ef_search is a query-time parameter set via SET LOCAL, not an index creation parameter", "category": "config"}
+  ],
+  "tags": ["pgvector", "hnsw", "vector-search", "index-tuning", "postgresql"]
+}
+
+### Example 2: hook script safety session
+
+Input excerpt:
+USER: The hook crashed again because of set -e. I've told you this before.
+ASSISTANT: Right — hook scripts must never use set -e or set -o pipefail because a non-zero exit code is interpreted as a hook error by Claude Code, blocking the session.
+USER: Exactly. Also the trap needs to be defined before any command that might fail.
+ASSISTANT: Understood. The safe pattern is: set -u only, define the EXIT trap immediately after set -u, and use || true on any command that may fail.
+
+Output:
+{
+  "session_id": "def456",
+  "timestamp": "2026-02-25 15:30",
+  "topic": "Claude Code hook script safety rules",
+  "skip": false,
+  "triples": [
+    {"s": "hook scripts", "p": "should_NOT", "o": "use set -e or set -o pipefail"},
+    {"s": "set -e in hooks", "p": "causes", "o": "non-zero exit interpreted as hook error, blocking Claude Code session"},
+    {"s": "hook scripts", "p": "should", "o": "define EXIT trap immediately after set -u"},
+    {"s": "hook scripts", "p": "pattern_is", "o": "set -u only + EXIT trap + || true on risky commands"},
+    {"s": "non-zero exit from hook", "p": "causes", "o": "Claude Code session blocked"}
+  ],
+  "corrections": [
+    {"fact": "hook scripts must never use set -e or set -o pipefail; non-zero exit = hook error in Claude Code", "category": "tool_behavior"},
+    {"fact": "EXIT trap must be defined before any command that might fail, immediately after set -u", "category": "workflow"}
+  ],
+  "tags": ["hook-safety", "bash-scripting", "claude-code-hooks", "set-e", "trap"]
+}
+
+### Example 3: nothing worth extracting
+
+Input excerpt:
+USER: Can you read the README?
+ASSISTANT: [reads README and summarizes it]
+USER: Thanks. Now update line 12.
+ASSISTANT: Done.
+
+Output:
+{"skip": true}
+
+---
+
+Now extract knowledge from the following conversation transcript. Output ONLY the JSON object, nothing else.
+
+TRANSCRIPT:

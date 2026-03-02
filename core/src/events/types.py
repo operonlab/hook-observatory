@@ -13,18 +13,28 @@ class AuthEvents:
 
 
 class FinanceEvents:
+    # 交易
     TRANSACTION_CREATED = "finance.transaction.created"
     TRANSACTION_UPDATED = "finance.transaction.updated"
     TRANSACTION_DELETED = "finance.transaction.deleted"
+
+    # 預算
     BUDGET_EXCEEDED = "finance.budget.exceeded"
+
+    # 錢包
     WALLET_SYNCED = "finance.wallet.synced"
     WALLET_RECONCILED = "finance.wallet.reconciled"
+
+    # 分期
     INSTALLMENT_CREATED = "finance.installment.created"
     INSTALLMENT_COMPLETED = "finance.installment.completed"
     INSTALLMENT_DUE = "finance.installment.due"
     INSTALLMENT_CANCELLED = "finance.installment.cancelled"
+
+    # 轉帳
     TRANSFER_COMPLETED = "finance.transfer.completed"
-    SUBSCRIPTION_RENEWED = "finance.subscription.renewed"
+
+    # 隱密
     PRIVACY_TOGGLED = "finance.privacy.toggled"
 
 
@@ -51,6 +61,10 @@ class AdminEvents:
 
 
 class IntelflowEvents:
+    REPORT_CREATED = "intelflow.report.created"
+    REPORT_UPDATED = "intelflow.report.updated"
+    REPORT_DELETED = "intelflow.report.deleted"
+    TOPIC_CREATED = "intelflow.topic.created"
     FEED_ADDED = "intelflow.feed.added"
     FEED_FETCHED = "intelflow.feed.fetched"
     BRIEFING_GENERATED = "intelflow.briefing.generated"
@@ -64,6 +78,13 @@ class MemvaultEvents:
     MEMORY_PRUNED = "memvault.memory.pruned"
     EMBEDDING_COMPUTED = "memvault.embedding.computed"
     PROFILE_UPDATED = "memvault.profile.updated"
+    # KG events
+    TRIPLE_INGESTED = "memvault.triple.ingested"
+    TRIPLE_BATCH_INGESTED = "memvault.triple.batch_ingested"
+    CLUSTER_REGENERATED = "memvault.cluster.regenerated"
+    WISDOM_REGENERATED = "memvault.wisdom.regenerated"
+    ATTITUDE_EVOLVED = "memvault.attitude.evolved"
+    SKILL_INVOKED = "memvault.skill.invoked"
 
 
 class SkillpathEvents:

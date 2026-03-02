@@ -136,7 +136,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **依賴項目** | auth |
 | **被依賴於** | intelflow（情報→靈感轉入） |
 | **MCP 伺服器** | `workshop-ideagraph` + `workshop-ideagraph-ai` |
-| **整合 Skills** | pulso-muse (V1 MCP) |
+| **整合 Skills** | workshop-muse (V1 MCP) |
 | **V1 狀態** | MCP 伺服器運作中 (8 個工具，僅 CRUD) |
 
 **功能能力**:
@@ -186,8 +186,8 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 |----------|-------|
 | **依賴項目** | auth |
 | **被依賴於** | skillpath, intelflow |
-| **MCP 伺服器** | `kas-memory` (現有，8 個工具) |
-| **整合 Skills** | kas-memory (MCP), meeting-insights |
+| **MCP 伺服器** | `memvault` (16 個工具) |
+| **整合 Skills** | memvault (MCP), meeting-insights |
 | **V1 狀態** | MCP 伺服器 v0.2.0 (語義搜索 + 個人檔案) |
 
 **功能能力**:
@@ -195,7 +195,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 - 使用者提交提示 → 自動召回相關記憶
 - 語義搜索 (OpenAI embedding，可切換至 Ollama)
 - 記憶晉升 / 編輯 / 標籤
-- KAS 個人檔案 (使用者特徵摘要)
+- Profile Score (K/A/S 三維量化)
 - **V2 方向**: 更好的遺忘機制、跨空間隔離、多代理支持
 
 ---
@@ -532,7 +532,7 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | taskflow | 領域服務 | MCP 運作中 | `workshop-taskflow` + `workshop-taskflow-reports` | ~15 |
 | ideagraph | 領域服務 | MCP 運作中 | `workshop-ideagraph` + `workshop-ideagraph-ai` | ~13 |
 | intelflow | 領域服務 | 未開始 | `workshop-intelflow` | 待定 |
-| memvault | 領域服務 | MCP v0.2.0 | `kas-memory` | 8 |
+| memvault | 領域服務 | Core + MCP | `memvault` | 16 |
 | skillpath | 領域服務 | 未開始 | `workshop-skillpath` | 待定 |
 | workpool | 領域服務 | 未開始 | `workshop-workpool` | 待定 |
 | matchcore | 領域服務 | 未開始 | `workshop-matchcore` | 待定 |

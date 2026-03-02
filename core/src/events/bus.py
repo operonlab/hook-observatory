@@ -1,8 +1,9 @@
 """In-process async event bus. Swappable to Redis Streams."""
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -10,7 +11,7 @@ Handler = Callable[["Event"], Coroutine[Any, Any, None]]
 
 
 class Event:
-    __slots__ = ("type", "data", "id", "timestamp", "source", "user_id", "trace_id")
+    __slots__ = ("data", "id", "source", "timestamp", "trace_id", "type", "user_id")
 
     def __init__(
         self,
@@ -23,7 +24,7 @@ class Event:
         self.type = type
         self.data = data
         self.id = uuid.uuid4().hex
-        self.timestamp = datetime.now(timezone.utc)
+        self.timestamp = datetime.now(UTC)
         self.source = source
         self.user_id = user_id
         self.trace_id = trace_id or uuid.uuid4().hex

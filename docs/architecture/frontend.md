@@ -87,16 +87,35 @@ src/modules/<domain>/
 
 ## 應用程式外殼 (`src/shell/`)
 
-外殼（Shell）提供應用程式框架：
+外殼（Shell）提供輕量級應用程式框架，讓各模組以全螢幕模式運行：
 
 ```
 src/shell/
-├── App.tsx                  根組件
-├── Layout.tsx               頁首、側邊欄、內容區域
-├── Router.tsx               具延遲載入的最上層路由
+├── App.tsx                  根組件、路由定義
+├── AppShell.tsx             極簡包裝（Glass Header + full-screen content）
+├── AppHeader.tsx            Glass morphism 薄型 header（48px）
+├── AppLauncher.tsx          九宮格 App Switcher dropdown
 ├── AuthProvider.tsx         認證上下文、會話管理
 └── ThemeProvider.tsx         深色/淺色模式、CSS 變數
 ```
+
+**架構特色**：
+- 無全域 Sidebar —— 模組間透過 App Switcher（九宮格 dropdown）切換
+- 無 "Workshop" NavBar —— 僅保留 Glass Header（Home icon、App Switcher、User avatar、Logout）
+- `/apps` 作為入口頁（App Launcher grid）
+- 各模組全螢幕、可擁有自己的主題 CSS scope
+
+詳見 [UX Shell Redesign](./ux-shell-redesign.md)。
+
+### 模組主題隔離
+
+各模組可在 `styles/<module>.css` 中定義 CSS scope，覆蓋全域變數：
+
+| 模組 | CSS Class | 檔案 | 主題 |
+|------|-----------|------|------|
+| Intelflow | `.intelflow` | `intelflow/styles/intelflow.css` | Dark Luxury (#0A0A0A) |
+| Memvault | `.memvault` | `memvault/styles/memvault.css` | Midnight Neural (#0B0D1A) |
+| 其他 | 無 | — | 全域 Catppuccin Mocha |
 
 ### 具程式碼分割的路由
 
@@ -150,7 +169,8 @@ export function Router() {
 
 | 路徑模式 | 負責者 | 階段 |
 |---------|-------|-------|
-| `/` | 外殼 (儀表板) | 1 |
+| `/` | Redirect → `/apps` | — |
+| `/apps` | App Launcher（模組入口頁） | 1 |
 | `/finance/*` | Finance 模組 | 1 |
 | `/taskflow/*` | Quest 模組 | 1 |
 | `/ideagraph/*` | Muse 模組 | 1 |

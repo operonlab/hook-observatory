@@ -1,6 +1,6 @@
 // 儀表板側欄 — 工作階段列表、Token 統計、編輯切換
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useAgentStore } from '../stores/agentStore';
 import { useWSStore } from '../stores/wsStore';
 import { useOfficeStore } from '../stores/officeStore';
@@ -10,6 +10,18 @@ import type { AlertLevel } from '../stores/watchdogStore';
 import { useUIStore } from '../stores/uiStore';
 import { getDayNightState, phaseLabel } from '../engine/DayNight';
 import { getWeatherState, WEATHER_ICONS } from '../engine/Weather';
+import { useBreakpoint, type Breakpoint } from '../hooks/useBreakpoint';
+
+function subscribeOnline(cb: () => void) {
+  window.addEventListener('online', cb);
+  window.addEventListener('offline', cb);
+  return () => {
+    window.removeEventListener('online', cb);
+    window.removeEventListener('offline', cb);
+  };
+}
+function getOnline() { return navigator.onLine; }
+function useOnlineStatus() { return useSyncExternalStore(subscribeOnline, getOnline, () => true); }
 
 const CLI_COLORS: Record<string, string> = {
   claude: '#4A90D9',
@@ -57,6 +69,9 @@ export default function Dashboard() {
   const layoutSaving = useOfficeStore(s => s.layoutSaving);
   const soundMuted = useUIStore(s => s.soundMuted);
   const toggleSound = useUIStore(s => s.toggleSound);
+  const isOnline = useOnlineStatus();
+  const bp = useBreakpoint();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const toggleExpand = (id: string) => {
@@ -72,8 +87,46 @@ export default function Dashboard() {
   const activeAgents = allAgents.filter(e => e.agent.status !== 'resting' && e.agent.status !== 'offline');
   const restingAgents = allAgents.filter(e => e.agent.status === 'resting');
 
+  const totalTokens = allAgents.reduce((sum, e) => sum + e.agent.tokens_total, 0);
+
+  // Mobile: bottom drawer
+  if (bp === 'mobile') {
+    return (
+      <div style={mobileDrawerStyle(drawerOpen)}>
+        <div
+          style={mobileDrawerHandleStyle}
+          onClick={() => setDrawerOpen(o => !o)}
+        >
+          <span style={{ color: '#E0E0E0', fontSize: 12 }}>
+            {activeAgents.length} 活躍 | {totalTokens > 0 ? formatTokens(totalTokens) : '0'} tokens
+          </span>
+          <span style={{
+            fontSize: 10,
+            color: wsStatus === 'connected' ? '#4CAF50' : '#F44336',
+            marginLeft: 'auto',
+          }}>
+            {!isOnline && <span style={{ color: '#F9A825', marginRight: 4 }}>OFFLINE</span>}
+            {WS_LABELS[wsStatus] ?? wsStatus}
+          </span>
+          <span style={{ color: '#888', fontSize: 11, marginLeft: 8 }}>
+            {drawerOpen ? '▼' : '▲'}
+          </span>
+        </div>
+        {drawerOpen && (
+          <div style={{ padding: '0 12px 12px', maxHeight: 'calc(60vh - 40px)', overflowY: 'auto' }}>
+            <DayNightIndicator />
+            <AgentList agents={activeAgents} expandedIds={expandedIds} toggleExpand={toggleExpand} />
+            <TokenSection allAgents={allAgents} />
+            <WatchdogSection />
+            <ResourceSection />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div style={panelStyle}>
+    <div style={responsivePanelStyle(bp)}>
       <h2 style={{ fontSize: 14, margin: '0 0 8px', color: '#E0E0E0' }}>
         Agent Vista
         <button
@@ -96,6 +149,7 @@ export default function Dashboard() {
           float: 'right', fontSize: 10,
           color: wsStatus === 'connected' ? '#4CAF50' : '#F44336',
         }}>
+          {!isOnline && <span style={{ color: '#F9A825', marginRight: 4 }}>OFFLINE</span>}
           {WS_LABELS[wsStatus] ?? wsStatus}
         </span>
       </h2>
@@ -135,26 +189,30 @@ export default function Dashboard() {
       <WatchdogSection />
       <ResourceSection />
 
-      <button onClick={toggleEdit} style={btnStyle(editMode)}>
-        {editMode ? '退出編輯' : '編輯佈局'}
-      </button>
-
-      {editMode && (
+      {bp === 'desktop' && (
         <>
-          <button
-            onClick={() => saveLayout()}
-            disabled={layoutSaving}
-            style={saveBtnStyle(layoutSaving)}
-          >
-            {layoutSaving ? '儲存中...' : '儲存佈局'}
+          <button onClick={toggleEdit} style={btnStyle(editMode)}>
+            {editMode ? '退出編輯' : '編輯佈局'}
           </button>
-          <div style={{ fontSize: 9, color: '#666', marginTop: 4, lineHeight: 1.4 }}>
-            右鍵拖曳：移動 | 左鍵：選取
-            <br />R：旋轉 | [ ]：寬度 | {'{ }'}：高度
-            {layoutVersion > 0 && (
-              <span style={{ float: 'right', color: '#555' }}>v{layoutVersion}</span>
-            )}
-          </div>
+
+          {editMode && (
+            <>
+              <button
+                onClick={() => saveLayout()}
+                disabled={layoutSaving}
+                style={saveBtnStyle(layoutSaving)}
+              >
+                {layoutSaving ? '儲存中...' : '儲存佈局'}
+              </button>
+              <div style={{ fontSize: 9, color: '#666', marginTop: 4, lineHeight: 1.4 }}>
+                右鍵拖曳：移動 | 左鍵：選取
+                <br />R：旋轉 | [ ]：寬度 | {'{ }'}：高度
+                {layoutVersion > 0 && (
+                  <span style={{ float: 'right', color: '#555' }}>v{layoutVersion}</span>
+                )}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -517,14 +575,20 @@ function DayNightIndicator() {
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+  const hasTemp = weather.temperature != null;
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      fontSize: 10, color: '#888', marginBottom: 6, padding: '2px 0',
-    }}>
-      <span>{PHASE_ICONS[dn.phase] ?? ''} {phaseLabel(dn.phase)}</span>
-      <span style={{ color: '#666' }}>{timeStr}</span>
-      <span>{WEATHER_ICONS[weather.type]} {weather.label}</span>
+    <div style={{ fontSize: 10, color: '#888', marginBottom: 6, padding: '2px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>{PHASE_ICONS[dn.phase] ?? ''} {phaseLabel(dn.phase)}</span>
+        <span style={{ color: '#666' }}>{timeStr}</span>
+        <span>{WEATHER_ICONS[weather.type]} {weather.label}{hasTemp ? ` ${weather.temperature}°` : ''}</span>
+      </div>
+      {weather.city && (
+        <div style={{ textAlign: 'right', color: '#555', fontSize: 9, marginTop: 1 }}>
+          📍 {weather.city}
+        </div>
+      )}
     </div>
   );
 }
@@ -544,22 +608,56 @@ function badgeStyle(cliType: string): React.CSSProperties {
   };
 }
 
-const panelStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 12,
-  right: 12,
-  width: 220,
-  padding: 12,
-  background: 'rgba(20, 20, 35, 0.92)',
-  border: '1px solid #333',
-  borderRadius: 8,
-  fontFamily: 'monospace',
-  zIndex: 10,
-  backdropFilter: 'blur(4px)',
-  maxHeight: 'calc(100vh - 24px)',
-  overflowY: 'auto',
-  scrollbarWidth: 'thin',
-  scrollbarColor: '#2a2a40 transparent',
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function responsivePanelStyle(bp: Breakpoint): React.CSSProperties {
+  return {
+    position: 'fixed',
+    top: 12,
+    right: 12,
+    width: bp === 'tablet' ? 180 : 220,
+    padding: 12,
+    background: 'rgba(20, 20, 35, 0.92)',
+    border: '1px solid #333',
+    borderRadius: 8,
+    fontFamily: 'monospace',
+    zIndex: 10,
+    backdropFilter: 'blur(4px)',
+    maxHeight: 'calc(100vh - 24px)',
+    overflowY: 'auto',
+    scrollbarWidth: 'thin',
+    scrollbarColor: '#2a2a40 transparent',
+  };
+}
+
+function mobileDrawerStyle(open: boolean): React.CSSProperties {
+  return {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    background: 'rgba(20, 20, 35, 0.95)',
+    borderTop: '1px solid #333',
+    borderRadius: '12px 12px 0 0',
+    fontFamily: 'monospace',
+    zIndex: 10,
+    backdropFilter: 'blur(6px)',
+    maxHeight: open ? '60vh' : 40,
+    transition: 'max-height 0.25s ease',
+    overflow: 'hidden',
+  };
+}
+
+const mobileDrawerHandleStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  padding: '10px 16px',
+  cursor: 'pointer',
+  userSelect: 'none',
 };
 
 const agentRowStyle: React.CSSProperties = {

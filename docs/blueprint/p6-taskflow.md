@@ -10,7 +10,7 @@ target_lang: zh-TW
 
 ### 現況分析
 
-V1 Quest MCP Server（`pulso-quest`）已有 10 個 tools：
+V1 Quest MCP Server（`workshop-quest`）已有 10 個 tools：
 
 | Tool | 功能 |
 |------|------|

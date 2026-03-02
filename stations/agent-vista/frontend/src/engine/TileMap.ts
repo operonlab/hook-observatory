@@ -201,13 +201,13 @@ export function createDefaultOffice(): {
     // Furniture
     { type: 'clock',     tileX: 5,  tileY: 0,  w: 1, h: 1 },
     { type: 'whiteboard', tileX: 14, tileY: 0,  w: 2, h: 1 },
-    { type: 'bookshelf', tileX: 1,  tileY: 3,  w: 1, h: 1 },
-    { type: 'bookshelf', tileX: 1,  tileY: 7,  w: 1, h: 1 },
+    { type: 'bookshelf', tileX: 1,  tileY: 3,  w: 1, h: 2 },
+    { type: 'bookshelf', tileX: 1,  tileY: 7,  w: 1, h: 2 },
     { type: 'plant',     tileX: 1,  tileY: 1,  w: 1, h: 1 },
     { type: 'plant',     tileX: 21, tileY: 1,  w: 1, h: 1 },
     { type: 'plant',     tileX: 1,  tileY: 13, w: 1, h: 1 },
-    { type: 'printer',   tileX: 20, tileY: 5,  w: 1, h: 1 },
-    { type: 'cabinet',   tileX: 20, tileY: 9,  w: 1, h: 1 },
+    { type: 'printer',   tileX: 20, tileY: 5,  w: 1, h: 2 },
+    { type: 'cabinet',   tileX: 20, tileY: 9,  w: 1, h: 2 },
 
     // ══════════════════════════════════════════════════════════
     // Gemini Research Lab (top-right: x=28..48, y=1..13)
@@ -225,13 +225,13 @@ export function createDefaultOffice(): {
     // Furniture
     { type: 'whiteboard', tileX: 34, tileY: 0,  w: 2, h: 1 },
     { type: 'whiteboard', tileX: 42, tileY: 0,  w: 2, h: 1 },
-    { type: 'bookshelf', tileX: 28, tileY: 3,  w: 1, h: 1 },
-    { type: 'bookshelf', tileX: 28, tileY: 7,  w: 1, h: 1 },
-    { type: 'bookshelf', tileX: 28, tileY: 11, w: 1, h: 1 },
+    { type: 'bookshelf', tileX: 28, tileY: 3,  w: 1, h: 2 },
+    { type: 'bookshelf', tileX: 28, tileY: 7,  w: 1, h: 2 },
+    { type: 'bookshelf', tileX: 28, tileY: 11, w: 1, h: 2 },
     { type: 'plant',     tileX: 28, tileY: 1,  w: 1, h: 1 },
     { type: 'plant',     tileX: 48, tileY: 1,  w: 1, h: 1 },
     { type: 'plant',     tileX: 48, tileY: 13, w: 1, h: 1 },
-    { type: 'cabinet',   tileX: 47, tileY: 5,  w: 1, h: 1 },
+    { type: 'cabinet',   tileX: 47, tileY: 5,  w: 1, h: 2 },
 
     // ══════════════════════════════════════════════════════════
     // Codex Build Lab (bottom-left: x=1..21, y=20..32)
@@ -248,20 +248,20 @@ export function createDefaultOffice(): {
     { type: 'desk',  tileX: 16, tileY: 30, w: 2, h: 1 },
     // Furniture
     { type: 'whiteboard', tileX: 8,  tileY: 19, w: 2, h: 1 },
-    { type: 'printer',    tileX: 20, tileY: 22, w: 1, h: 1 },
-    { type: 'printer',    tileX: 20, tileY: 28, w: 1, h: 1 },
-    { type: 'bookshelf',  tileX: 1,  tileY: 22, w: 1, h: 1 },
-    { type: 'bookshelf',  tileX: 1,  tileY: 26, w: 1, h: 1 },
+    { type: 'printer',    tileX: 20, tileY: 22, w: 1, h: 2 },
+    { type: 'printer',    tileX: 20, tileY: 28, w: 1, h: 2 },
+    { type: 'bookshelf',  tileX: 1,  tileY: 22, w: 1, h: 2 },
+    { type: 'bookshelf',  tileX: 1,  tileY: 26, w: 1, h: 2 },
     { type: 'plant',      tileX: 1,  tileY: 20, w: 1, h: 1 },
     { type: 'plant',      tileX: 21, tileY: 20, w: 1, h: 1 },
     { type: 'plant',      tileX: 1,  tileY: 32, w: 1, h: 1 },
-    { type: 'cabinet',    tileX: 20, tileY: 25, w: 1, h: 1 },
+    { type: 'cabinet',    tileX: 20, tileY: 25, w: 1, h: 2 },
 
     // ══════════════════════════════════════════════════════════
     // Rest / Break Room (bottom-right: x=28..48, y=20..32)
     // ══════════════════════════════════════════════════════════
     { type: 'coffee_machine',  tileX: 28, tileY: 20, w: 1, h: 1 },
-    { type: 'water_dispenser', tileX: 30, tileY: 20, w: 1, h: 1 },
+    { type: 'water_dispenser', tileX: 30, tileY: 20, w: 1, h: 2 },
     { type: 'bed',             tileX: 42, tileY: 21, w: 2, h: 1 },
     { type: 'bed',             tileX: 42, tileY: 24, w: 2, h: 1 },
     { type: 'bed',             tileX: 42, tileY: 27, w: 2, h: 1 },
@@ -271,7 +271,7 @@ export function createDefaultOffice(): {
     { type: 'plant',           tileX: 48, tileY: 20, w: 1, h: 1 },
     { type: 'plant',           tileX: 28, tileY: 32, w: 1, h: 1 },
     { type: 'plant',           tileX: 48, tileY: 32, w: 1, h: 1 },
-    { type: 'bookshelf',       tileX: 46, tileY: 20, w: 1, h: 1 },
+    { type: 'bookshelf',       tileX: 46, tileY: 20, w: 1, h: 2 },
 
     // ══════════════════════════════════════════════════════════
     // Corridor decoration
@@ -304,6 +304,12 @@ export function createDefaultOffice(): {
     ...partitionWallH(19, 1, 21, [11]),
     // Rest room (gap at x=38)
     ...partitionWallH(19, 28, 48, [38]),
+
+    // Corner wall blocks where vertical and horizontal partitions meet
+    { type: 'wall', tileX: 22, tileY: 14, w: 1, h: 1, rotation: 90 },
+    { type: 'wall', tileX: 22, tileY: 19, w: 1, h: 1, rotation: 90 },
+    { type: 'wall', tileX: 27, tileY: 14, w: 1, h: 1, rotation: 270 },
+    { type: 'wall', tileX: 27, tileY: 19, w: 1, h: 1, rotation: 270 },
   ];
 
   // Mark furniture tiles as non-walkable

@@ -79,7 +79,7 @@ social hooks v1                                                full platform
 
 | 模組 | 目標 | 完成標準 |
 |--------|--------|-------------------|
-| **memvault** | KAS Memory v2 | 自動提取、語義搜尋、跨階段召回 |
+| **memvault** | 記憶持久化 + KG | 自動提取、語義搜尋、跨階段召回 |
 | **skillpath** | 技能樹 v1 | 技能定義、等級、學習路徑 |
 | **intelflow** | 每日情報 v1 | RSS 訂閱、自動摘要、簡報 |
 | **matchcore v1** | 基礎媒合 | 技能 × 學習資源推薦 |

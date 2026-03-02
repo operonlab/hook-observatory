@@ -57,7 +57,7 @@ Claude Code ──► MCP Server ──► FastAPI Core ──► Database
 | `workshop-finance` | 9 |
 | `workshop-taskflow` | 10 |
 | `workshop-ideagraph` | 8 |
-| `kas-memory` | 8 |
+| `memvault` | 16 |
 
 ---
 
@@ -292,3 +292,38 @@ Python 負責：                      Rust 負責：
 - ❌ 全 Rust 重寫 → 開發速度降 3-5x，AI 生態系支援差，收益有限（I/O-bound 場景差異小）
 - ❌ Go → 開發速度中等，但 AI/ML 生態系遠不及 Python
 - ✅ **Python-First + Selective Rust** → 開發速度最大化，在真正需要效能的地方用 Rust
+
+---
+
+## AD-10: 事件韌性模式 (Event Resilience Patterns)
+
+**決策**：所有需要零遺失保證的事件管線，必須實作 [event-resilience-patterns.md](./event-resilience-patterns.md) 中定義的 6 個韌性模式。
+
+**決策理由**：
+- AD-6 定義了事件的格式與傳遞規則，但未涵蓋崩潰恢復、事件時效、冪等處理等「非理想路徑」行為
+- Hook Observatory 實戰驗證了 spool-based WAL + checkpoint recovery 的可行性與必要性
+- Workshop 各模組對事件遺失的容忍度不同，需要分類策略
+
+**6 個模式**：
+1. **P1 事件時效分類** — ephemeral / durable / idempotent，TTL 決定恢復行為
+2. **P2 冪等投影** — dedup_hash + ON CONFLICT DO NOTHING，確保 at-least-once = exactly-once
+3. **P3 WAL-Projection 分離** — 先寫日誌（source of truth），再投影到 DB（可重建）
+4. **P4 Checkpoint Recovery** — cursor + 檔案狀態機，崩潰後從正確位置繼續
+5. **P5 非阻塞隔離** — 三層隔離（fire-and-forget → background drain → consumers）
+6. **P6 層級式過載保護** — 每層獨立流量控制，入口層永不阻塞
+
+**簡化經驗（2026-02-28 三方辯論結論）**：
+Hook Observatory 的實作驗證了一個重要洞察：**當 P2（冪等投影）完整實作時，P4（Checkpoint Recovery）的狀態機是冗餘的**。
+dedup_hash + ON CONFLICT DO NOTHING 已提供 crash safety——重播不會產生重複。`.processing → .done` 狀態機和 P2 解決的是同一個問題。
+同理，P1（TTL 分類）在低吞吐量個人工作站上是過度設計——定期 SQL DELETE 更簡單有效。
+
+**實際採用**：Hook Observatory 簡化為 4 部件（spool JSONL + drain loop + dedup INSERT + batch size），從 7 部件減少 43%。
+6 個模式作為**參考架構**保留，但各場景應依實際需求裁剪，而非全部實作。
+
+**適用範圍**：
+- ✅ 所有需要零遺失的場景（hook-observatory、intelflow pipeline、audit log）
+- ⚠️ EventBus Phase 2+ (Redis Streams) 後，**標準事件** 的 P3/P4 可免（Redis 持久化足夠，丟 1s 可接受）
+- ✅ **關鍵事件**（finance、audit）即使有 Redis 仍需保留 local spool——Redis 本身也會 crash
+- ✅ P1、P2、P5、P6 在所有 Phase、所有場景都需要，永不退役
+
+**參考實作**：`stations/hook-observatory/spool.py`

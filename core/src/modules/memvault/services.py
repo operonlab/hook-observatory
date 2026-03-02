@@ -15,21 +15,29 @@ from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
-from .models import EMBEDDING_DIM, KASProfile, KnowledgeDomain, MemoryBlock, Tag
+from .models import (
+    EMBEDDING_DIM,
+    BlockArchive,
+    BlockEmbedding,
+    KnowledgeDomain,
+    MemoryBlock,
+    ProfileScore,
+    Tag,
+)
 from .schemas import (
+    BLOCK_TYPE_ALIASES,
     BLOCK_TYPES,
-    KASProfileResponse,
-    KASProfileUpdate,
     KnowledgeDomainCreate,
     KnowledgeDomainResponse,
     KnowledgeDomainUpdate,
     MemoryBlockCreate,
     MemoryBlockResponse,
     MemoryBlockUpdate,
+    ProfileScoreResponse,
+    ProfileScoreUpdate,
     SemanticSearchResult,
     TagResponse,
 )
-
 
 # ======================== MemoryBlock Service ========================
 
@@ -41,6 +49,8 @@ class MemoryBlockService(
 
     def before_create(self, data: MemoryBlockCreate, **kwargs: Any) -> dict:
         d = data.model_dump()
+        # Normalize pipeline aliases (insight→knowledge, etc.) to canonical KAS types
+        d["block_type"] = BLOCK_TYPE_ALIASES.get(d["block_type"], d["block_type"])
         if d["block_type"] not in BLOCK_TYPES:
             raise BadRequestError(
                 f"Invalid block_type: {d['block_type']}",
@@ -130,14 +140,78 @@ class MemoryBlockService(
         tags: list[str] | None = None,
         block_type: str | None = None,
     ) -> list[SemanticSearchResult]:
-        """Vector similarity search using pgvector cosine distance."""
+        """Vector similarity search using pgvector cosine distance.
+
+        Tries block_embeddings sub-table first (Phase 2 path);
+        falls back to inline blocks.embedding for backward compatibility.
+        """
         if len(query_embedding) != EMBEDDING_DIM:
             raise BadRequestError(
                 f"Embedding must be {EMBEDDING_DIM}d, got {len(query_embedding)}d",
                 code="memvault.invalid_embedding_dim",
             )
 
-        # Cosine distance: 1 - similarity. Lower = more similar.
+        # Phase 2 path: search via embedding sub-table
+        results = await self._search_via_subtable(
+            db, space_id, query_embedding, top_k, threshold, tags, block_type
+        )
+        if results:
+            return results
+
+        # Fallback: inline embedding column (pre-Phase 2 or partial migration)
+        return await self._search_via_inline(
+            db, space_id, query_embedding, top_k, threshold, tags, block_type
+        )
+
+    async def _search_via_subtable(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query_embedding: list[float],
+        top_k: int,
+        threshold: float,
+        tags: list[str] | None,
+        block_type: str | None,
+    ) -> list[SemanticSearchResult]:
+        """Search using the block_embeddings sub-table (Phase 2)."""
+        distance = BlockEmbedding.embedding.cosine_distance(query_embedding)
+        similarity = (1 - distance).label("similarity")
+
+        q = (
+            select(MemoryBlock, similarity)
+            .join(BlockEmbedding, BlockEmbedding.block_id == MemoryBlock.id)
+            .where(
+                MemoryBlock.space_id == space_id,
+                distance < (1 - threshold),
+            )
+            .order_by(distance)
+            .limit(top_k)
+        )
+        if tags:
+            q = q.where(MemoryBlock.tags.contains(tags))
+        if block_type:
+            q = q.where(MemoryBlock.block_type == block_type)
+
+        rows = (await db.execute(q)).all()
+        return [
+            SemanticSearchResult(
+                block=self.to_response(row.MemoryBlock),
+                score=round(float(row.similarity), 4),
+            )
+            for row in rows
+        ]
+
+    async def _search_via_inline(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query_embedding: list[float],
+        top_k: int,
+        threshold: float,
+        tags: list[str] | None,
+        block_type: str | None,
+    ) -> list[SemanticSearchResult]:
+        """Search using the inline embedding column (pre-Phase 2 fallback)."""
         distance = MemoryBlock.embedding.cosine_distance(query_embedding)
         similarity = (1 - distance).label("similarity")
 
@@ -146,12 +220,11 @@ class MemoryBlockService(
             .where(
                 MemoryBlock.space_id == space_id,
                 MemoryBlock.embedding.isnot(None),
-                distance < (1 - threshold),  # filter by threshold
+                distance < (1 - threshold),
             )
             .order_by(distance)
             .limit(top_k)
         )
-
         if tags:
             q = q.where(MemoryBlock.tags.contains(tags))
         if block_type:
@@ -172,8 +245,12 @@ class MemoryBlockService(
         space_id: str,
         query: str,
         top_k: int = 10,
+        include_archived: bool = False,
     ) -> list[SemanticSearchResult]:
-        """Fallback text search using ILIKE when embeddings are unavailable."""
+        """Fallback text search using ILIKE when embeddings are unavailable.
+
+        When include_archived=True, also searches blocks_archive table.
+        """
         pattern = f"%{query}%"
         q = (
             select(MemoryBlock)
@@ -185,15 +262,52 @@ class MemoryBlockService(
             .limit(top_k)
         )
         rows = (await db.execute(q)).scalars().all()
-        return [
+        results = [
             SemanticSearchResult(block=self.to_response(r), score=0.5)
             for r in rows
         ]
 
+        # Phase 3: search archived blocks if requested and under limit
+        if include_archived and len(results) < top_k:
+            remaining = top_k - len(results)
+            archive_q = (
+                select(BlockArchive)
+                .where(
+                    BlockArchive.space_id == space_id,
+                    BlockArchive.content.ilike(pattern),
+                )
+                .order_by(BlockArchive.created_at.desc())
+                .limit(remaining)
+            )
+            archive_rows = (await db.execute(archive_q)).scalars().all()
+            results.extend([
+                SemanticSearchResult(
+                    block=MemoryBlockResponse(
+                        id=r.id,
+                        space_id=r.space_id,
+                        created_by=r.created_by,
+                        created_at=r.created_at,
+                        updated_at=r.updated_at,
+                        content=r.content,
+                        block_type=r.block_type,
+                        tags=r.tags or [],
+                        source_session=r.source_session,
+                        confidence=r.confidence or 0.0,
+                    ),
+                    score=0.3,  # lower score to indicate archived result
+                )
+                for r in archive_rows
+            ])
+
+        return results
+
     async def update_embedding(
         self, db: AsyncSession, block_id: str, embedding: list[float]
     ) -> None:
-        """Set or update the embedding vector for a block."""
+        """Set or update the embedding vector for a block.
+
+        Writes to both inline column (backward compat) and sub-table (Phase 2).
+        """
         if len(embedding) != EMBEDDING_DIM:
             raise BadRequestError(
                 f"Embedding must be {EMBEDDING_DIM}d",
@@ -206,6 +320,13 @@ class MemoryBlockService(
         )
         if result.rowcount == 0:
             raise NotFoundError("Block not found", code="memvault.block_not_found")
+
+        # Upsert into sub-table
+        existing = await db.get(BlockEmbedding, block_id)
+        if existing:
+            existing.embedding = embedding
+        else:
+            db.add(BlockEmbedding(block_id=block_id, embedding=embedding))
 
 
 # ======================== Tag Service ========================
@@ -277,20 +398,20 @@ class KnowledgeDomainService(
         )
 
 
-# ======================== KASProfile Service ========================
+# ======================== ProfileScore Service ========================
 
 
-class KASProfileService:
-    """Single KAS profile per space — flat scores."""
+class ProfileScoreService:
+    """Single profile score per space — K/A/S aggregate scores."""
 
     async def get_by_space(
         self, db: AsyncSession, space_id: str
-    ) -> KASProfileResponse | None:
-        q = select(KASProfile).where(KASProfile.space_id == space_id)
+    ) -> ProfileScoreResponse | None:
+        q = select(ProfileScore).where(ProfileScore.space_id == space_id)
         instance = (await db.execute(q)).scalar_one_or_none()
         if not instance:
             return None
-        return KASProfileResponse(
+        return ProfileScoreResponse(
             id=instance.id,
             space_id=instance.space_id,
             created_by=instance.created_by,
@@ -305,10 +426,10 @@ class KASProfileService:
         self,
         db: AsyncSession,
         space_id: str,
-        data: KASProfileUpdate,
+        data: ProfileScoreUpdate,
         user_id: str | None = None,
-    ) -> KASProfileResponse:
-        q = select(KASProfile).where(KASProfile.space_id == space_id)
+    ) -> ProfileScoreResponse:
+        q = select(ProfileScore).where(ProfileScore.space_id == space_id)
         existing = (await db.execute(q)).scalar_one_or_none()
         if existing:
             updates = data.model_dump(exclude_unset=True)
@@ -318,7 +439,7 @@ class KASProfileService:
             await db.refresh(existing)  # reload server-side onupdate fields
             return self.to_response(existing)
         # Create new
-        profile = KASProfile(
+        profile = ProfileScore(
             space_id=space_id,
             created_by=user_id,
             knowledge_score=data.knowledge_score or 0.0,
@@ -330,8 +451,8 @@ class KASProfileService:
         await db.refresh(profile)  # reload server-side defaults
         return self.to_response(profile)
 
-    def to_response(self, instance: KASProfile) -> KASProfileResponse:
-        return KASProfileResponse(
+    def to_response(self, instance: ProfileScore) -> ProfileScoreResponse:
+        return ProfileScoreResponse(
             id=instance.id,
             space_id=instance.space_id,
             created_by=instance.created_by,
@@ -348,4 +469,4 @@ class KASProfileService:
 memory_block_service = MemoryBlockService()
 tag_service = TagService()
 knowledge_domain_service = KnowledgeDomainService()
-kas_profile_service = KASProfileService()
+profile_score_service = ProfileScoreService()

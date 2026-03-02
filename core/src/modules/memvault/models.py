@@ -1,14 +1,14 @@
-"""Memvault ORM models — memory blocks, tags, knowledge domains, KAS profiles.
+"""Memvault ORM models — memory blocks, tags, knowledge domains, profile scores.
 
 All tables live in the `memvault` PostgreSQL schema.
 """
 
-from sqlalchemy import Float, Index, Integer, String, Text, text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
-from pgvector.sqlalchemy import Vector
 
-from src.shared.models import SpaceScopedModel
+from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "memvault"
 EMBEDDING_DIM = 768  # Ollama nomic-embed-text
@@ -29,6 +29,14 @@ class MemoryBlock(SpaceScopedModel):
             postgresql_with={"m": 16, "ef_construction": 64},
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+        Index(
+            "idx_blocks_embedding_recent",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_where=text("created_at > now() - interval '90 days'"),
+        ),
         {"schema": SCHEMA},
     )
 
@@ -44,6 +52,63 @@ class MemoryBlock(SpaceScopedModel):
         Vector(EMBEDDING_DIM), nullable=True
     )
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class BlockEmbedding(Base):
+    """Separated embedding vector for MemoryBlock — allows independent lifecycle management."""
+
+    __tablename__ = "block_embeddings"
+    __table_args__ = (
+        Index(
+            "idx_block_emb_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        {"schema": SCHEMA},
+    )
+
+    block_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey(f"{SCHEMA}.blocks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+
+
+class BlockArchive(Base):
+    """Archived memory block — cold data with metadata preserved, vector removed.
+
+    Same schema as blocks minus HNSW indexes. Content may be an S3 reference
+    for COLD-BLOB entries (content > 10KB).
+    """
+
+    __tablename__ = "blocks_archive"
+    __table_args__ = (
+        Index("idx_ba_tags", "tags", postgresql_using="gin"),
+        Index("idx_ba_type", "block_type"),
+        Index("idx_ba_created", "created_at"),
+        Index("idx_ba_archived", "archived_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    space_id: Mapped[str] = mapped_column(String(32))
+    created_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[str] = mapped_column(Text)
+    source_session: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    content: Mapped[str] = mapped_column(Text)  # may be S3 ref for COLD-BLOB
+    block_type: Mapped[str] = mapped_column(String(50))
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]")
+    )
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    archived_at: Mapped[str] = mapped_column(Text)
+    archive_type: Mapped[str] = mapped_column(
+        String(20), server_default=text("'cold-archive'")
+    )  # cold-archive | cold-blob
 
 
 class Tag(SpaceScopedModel):
@@ -74,12 +139,12 @@ class KnowledgeDomain(SpaceScopedModel):
     block_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
 
-class KASProfile(SpaceScopedModel):
-    """KAS profile — knowledge, attitude, skill scores."""
+class ProfileScore(SpaceScopedModel):
+    """Profile score — knowledge, attitude, skill aggregate scores."""
 
-    __tablename__ = "kas_profiles"
+    __tablename__ = "profile_scores"
     __table_args__ = (
-        Index("idx_kas_space", "space_id", unique=True),
+        Index("idx_profile_scores_space", "space_id", unique=True),
         {"schema": SCHEMA},
     )
 

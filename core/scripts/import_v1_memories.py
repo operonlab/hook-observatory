@@ -547,7 +547,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--db-url",
-        default="postgresql://pulso:pulso_dev@localhost/workshop",
+        default="postgresql://joneshong:dev_12345@localhost/workshop",
         help="PostgreSQL connection URL",
     )
     parser.add_argument(

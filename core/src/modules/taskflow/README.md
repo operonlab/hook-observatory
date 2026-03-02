@@ -10,7 +10,7 @@
 | **依賴** | auth, skillpath（量化模式） |
 | **雙向連接** | finance（任務 ↔ 訂單） |
 | **MCP** | `workshop-taskflow`（CRUD ~10 tools）+ `workshop-taskflow-reports`（報告 ~5 tools） |
-| **V1 參考** | `pulso-quest` MCP（10 tools） |
+| **V1 參考** | `workshop-quest` MCP（10 tools） |
 
 ## 核心功能
 

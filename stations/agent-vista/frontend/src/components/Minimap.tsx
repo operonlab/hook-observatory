@@ -7,8 +7,10 @@ import { useAgentStore } from '../stores/agentStore';
 import { useOfficeStore } from '../stores/officeStore';
 import { TILE } from '../engine/TileMap';
 import type { Camera } from '../engine/Camera';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
-const MINIMAP_SCALE = 4; // each tile = 4px on minimap
+const MINIMAP_SCALE_DESKTOP = 4;
+const MINIMAP_SCALE_TABLET = 3;
 
 const CLI_COLORS: Record<string, string> = {
   claude: '#4A90D9',
@@ -24,11 +26,12 @@ interface Props {
 
 export default function Minimap({ cameraRef, canvasWidth, canvasHeight }: Props) {
   const mmRef = useRef<HTMLCanvasElement>(null);
-  // Subscribe to agent changes so draw() re-runs when agent positions update
   useAgentStore(s => s.agents);
   const map = useOfficeStore(s => s.map);
   const furniture = useOfficeStore(s => s.furniture);
   const rafRef = useRef(0);
+  const bp = useBreakpoint();
+  const MINIMAP_SCALE = bp === 'tablet' ? MINIMAP_SCALE_TABLET : MINIMAP_SCALE_DESKTOP;
 
   const draw = useCallback(() => {
     const canvas = mmRef.current;
@@ -41,13 +44,27 @@ export default function Minimap({ cameraRef, canvasWidth, canvasHeight }: Props)
     const W = map.width;
     const H = map.height;
     const S = MINIMAP_SCALE;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+
+    // DPR-aware canvas sizing
+    const logW = W * S;
+    const logH = H * S;
+    const bufW = Math.round(logW * dpr);
+    const bufH = Math.round(logH * dpr);
+    if (canvas.width !== bufW || canvas.height !== bufH) {
+      canvas.width = bufW;
+      canvas.height = bufH;
+      canvas.style.width = logW + 'px';
+      canvas.style.height = logH + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
 
     // Clear
-    ctx.clearRect(0, 0, W * S, H * S);
+    ctx.clearRect(0, 0, logW, logH);
 
     // Background
     ctx.fillStyle = 'rgba(20, 20, 35, 0.85)';
-    ctx.fillRect(0, 0, W * S, H * S);
+    ctx.fillRect(0, 0, logW, logH);
 
     // Draw floor tiles (walkable = lighter)
     for (let y = 0; y < H; y++) {
@@ -96,10 +113,10 @@ export default function Minimap({ cameraRef, canvasWidth, canvasHeight }: Props)
     // Border
     ctx.strokeStyle = 'rgba(100, 100, 120, 0.5)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, W * S, H * S);
+    ctx.strokeRect(0, 0, logW, logH);
 
     rafRef.current = requestAnimationFrame(draw);
-  }, [cameraRef, map, furniture, canvasWidth, canvasHeight]);
+  }, [cameraRef, map, furniture, canvasWidth, canvasHeight, MINIMAP_SCALE]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(draw);
@@ -119,14 +136,9 @@ export default function Minimap({ cameraRef, canvasWidth, canvasHeight }: Props)
     camera.centerOn(wx, wy, canvasWidth, canvasHeight);
   }, [cameraRef, canvasWidth, canvasHeight]);
 
-  const W = map.width;
-  const H = map.height;
-
   return (
     <canvas
       ref={mmRef}
-      width={W * MINIMAP_SCALE}
-      height={H * MINIMAP_SCALE}
       onClick={handleClick}
       style={{
         position: 'fixed',

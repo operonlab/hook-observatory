@@ -44,20 +44,77 @@ export default function ChatPanel() {
 
   return (
     <>
-      {/* Overlay for mobile */}
+      {/* ── Floating Chat Toggle ── */}
+
+      {/* Desktop: right-edge vertical tab, vertically centered */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="fixed right-0 top-1/2 -translate-y-1/2 z-40 hidden md:flex items-center justify-center"
+        style={{
+          width: '36px',
+          height: '44px',
+          backgroundColor: 'rgba(15, 15, 22, 0.9)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderRadius: '8px 0 0 8px',
+          borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRight: 'none',
+          color: 'rgba(180, 190, 254, 0.7)',
+          boxShadow: '-2px 0 12px rgba(0, 0, 0, 0.3)',
+          transition: 'opacity 0.25s, transform 0.3s',
+          opacity: open ? 0 : 1,
+          pointerEvents: open ? 'none' : 'auto',
+          transform: open ? 'translateY(-50%) translateX(100%)' : 'translateY(-50%)',
+        }}
+        aria-label="開啟 Chat"
+      >
+        <MessageCircle size={16} />
+      </button>
+
+      {/* Mobile: bottom-right FAB, above potential tab bars */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="fixed z-40 flex md:hidden items-center justify-center"
+        style={{
+          right: '16px',
+          bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+          width: '48px',
+          height: '48px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(180, 190, 254, 0.15)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid rgba(180, 190, 254, 0.12)',
+          color: 'var(--accent)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+          transition: 'opacity 0.25s, transform 0.3s',
+          opacity: open ? 0 : 1,
+          pointerEvents: open ? 'none' : 'auto',
+          transform: open ? 'scale(0.8)' : 'scale(1)',
+        }}
+        aria-label="開啟 Chat"
+      >
+        <MessageCircle size={20} />
+      </button>
+
+      {/* ── Mobile overlay ── */}
       {open && (
         <button
           type="button"
-          className="fixed inset-0 z-40 md:hidden border-none cursor-default"
+          className="fixed inset-0 z-[35] md:hidden border-none cursor-default"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
           onClick={() => setOpen(false)}
           aria-label="關閉 Chat"
         />
       )}
 
-      {/* Panel */}
+      {/* ── Chat Panel ── */}
       <div
-        className="fixed top-0 right-0 z-50 flex h-full flex-col"
+        className="fixed top-12 bottom-0 right-0 z-40 flex flex-col"
         style={{
           width: 'min(360px, 100vw)',
           backgroundColor: 'rgba(15, 15, 22, 0.98)',

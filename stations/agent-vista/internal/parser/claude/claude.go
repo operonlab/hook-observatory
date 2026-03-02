@@ -17,7 +17,13 @@ type Parser struct {
 	meta        protocol.SessionMeta
 	lineBuf     []byte // buffered incomplete line from previous read
 	initialized bool
-	lastUsage   *apiUsage // latest message.usage from assistant records (flushed at turn_duration)
+
+	// Token accumulation: a single turn may span multiple API calls (tool loop).
+	// Each API call produces multiple assistant records (streaming chunks) that
+	// share the same usage object. We deduplicate by tracking the previous usage
+	// and only accumulate when usage values actually change.
+	turnUsage *apiUsage // accumulated usage across all API calls in the current turn
+	prevUsage *apiUsage // last seen usage — used to detect new API call vs duplicate chunk
 }
 
 // New creates a new Claude JSONL parser.
@@ -80,6 +86,8 @@ func (p *Parser) Reset() {
 	p.meta = protocol.SessionMeta{}
 	p.lineBuf = nil
 	p.initialized = false
+	p.turnUsage = nil
+	p.prevUsage = nil
 }
 
 // --- Internal JSONL record types ---
@@ -199,10 +207,10 @@ func (p *Parser) parseLine(line []byte) ([]protocol.AgentEvent, error) {
 func (p *Parser) parseSystem(rec record, ts time.Time, sid string) ([]protocol.AgentEvent, error) {
 	switch rec.Subtype {
 	case "turn_duration":
-		// Flush accumulated tokens from preceding assistant records.
+		// Flush accumulated tokens from all API calls in this turn.
 		// Token data lives in assistant message.usage, NOT in turn_duration fields.
-		if p.lastUsage != nil {
-			u := p.lastUsage
+		if p.turnUsage != nil {
+			u := p.turnUsage
 			totalInput := u.InputTokens + u.CacheRead + u.CacheCreate
 			tokens := &protocol.TokenUsage{
 				Input:  totalInput,
@@ -210,7 +218,8 @@ func (p *Parser) parseSystem(rec record, ts time.Time, sid string) ([]protocol.A
 				Cached: u.CacheRead,
 				Total:  totalInput + u.OutputTokens,
 			}
-			p.lastUsage = nil
+			p.turnUsage = nil
+			p.prevUsage = nil
 			return []protocol.AgentEvent{{
 				CLIType:   protocol.CLIClaude,
 				SessionID: sid,
@@ -236,11 +245,23 @@ func (p *Parser) parseAssistant(rec record, ts time.Time, sid string) ([]protoco
 		p.meta.Model = rec.Message.Model
 	}
 
-	// Track latest usage — multiple assistant records per turn have
-	// increasing output_tokens; the last one contains the turn total.
-	// Flushed to a token event at the next turn_duration record.
+	// Accumulate token usage across all API calls within a turn.
+	// A turn may have multiple API calls (tool loop), each producing
+	// multiple assistant records (streaming chunks) with identical usage.
+	// We deduplicate: only accumulate when usage values differ from previous.
 	if rec.Message.Usage != nil {
-		p.lastUsage = rec.Message.Usage
+		u := rec.Message.Usage
+		if p.prevUsage == nil || !sameUsage(p.prevUsage, u) {
+			// New API call — accumulate its usage into the turn total
+			if p.turnUsage == nil {
+				p.turnUsage = &apiUsage{}
+			}
+			p.turnUsage.InputTokens += u.InputTokens
+			p.turnUsage.OutputTokens += u.OutputTokens
+			p.turnUsage.CacheRead += u.CacheRead
+			p.turnUsage.CacheCreate += u.CacheCreate
+		}
+		p.prevUsage = u
 	}
 
 	var events []protocol.AgentEvent
@@ -356,6 +377,15 @@ func (p *Parser) parseProgress(rec record, ts time.Time, sid string) ([]protocol
 }
 
 // --- Helpers ---
+
+// sameUsage returns true if two usage objects have identical token counts.
+// Used to deduplicate streaming chunks within the same API call.
+func sameUsage(a, b *apiUsage) bool {
+	return a.InputTokens == b.InputTokens &&
+		a.OutputTokens == b.OutputTokens &&
+		a.CacheRead == b.CacheRead &&
+		a.CacheCreate == b.CacheCreate
+}
 
 func agentID(sessionID string) string {
 	return "claude-" + sessionID

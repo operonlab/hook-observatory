@@ -67,9 +67,13 @@ const realApi = {
 
   syncStats: (): Promise<SyncStats> =>
     request<SyncStats>("/memvault/sync/stats"),
+
+  recalculateProfile: (): Promise<KASProfile> =>
+    request<KASProfile>("/memvault/profile/recalculate", { method: "POST" }),
 };
 
 import { mockMemvaultApi } from "./mock";
 
 const api = USE_MOCK ? mockMemvaultApi : realApi;
 export { api as memvaultApi };
+export { kgApi } from "./kg";

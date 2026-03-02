@@ -30,16 +30,32 @@ function tryLoad(name: string): HTMLImageElement | null {
   if (loading.has(name)) return null;
 
   loading.add(name);
-  const img = new Image();
-  img.src = `/sprites/${name}.png`;
-  img.onload = () => {
-    loaded.set(name, img);
-    loading.delete(name);
-  };
-  img.onerror = () => {
-    loaded.set(name, null); // mark as unavailable
-    loading.delete(name);
-  };
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+  // Use fetch instead of Image.src to avoid browser console 404 errors
+  fetch(`${base}/sprites/${name}.png`)
+    .then(res => {
+      if (!res.ok) throw new Error('not found');
+      return res.blob();
+    })
+    .then(blob => {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        loaded.set(name, img);
+        loading.delete(name);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        loaded.set(name, null);
+        loading.delete(name);
+      };
+      img.src = url;
+    })
+    .catch(() => {
+      loaded.set(name, null); // mark as unavailable
+      loading.delete(name);
+    });
 
   return null;
 }

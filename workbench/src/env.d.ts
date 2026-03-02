@@ -1,3 +1,5 @@
+declare const __BASE_PATH__: string;
+
 declare module "*.css" {
   const content: Record<string, string>;
   export default content;

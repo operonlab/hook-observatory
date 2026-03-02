@@ -33,6 +33,8 @@ select = [
     "RUF",   # ruff-specific
 ]
 ignore = [
+    "B008",  # function-call-in-default-argument (FastAPI Depends/Query pattern)
+    "RUF012",# mutable-class-default (SQLAlchemy relationship/column defaults)
     "S101",  # assert usage (OK in tests)
     "S104",  # bind to 0.0.0.0 (handled by Nginx)
 ]
@@ -40,6 +42,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "core/migrations/**" = ["E501"]  # alembic auto-generated
 "mcp/**/server.py" = ["RUF001", "E501"]  # Chinese descriptions + long inputSchema lines
+"core/src/config.py" = ["S105"]  # pydantic-settings defaults, not real secrets
+"core/src/modules/auth/oauth.py" = ["S106"]  # OAuth URL param named access_token_url
+"core/src/modules/memvault/kg_services.py" = ["E402"]  # conditional import after type definitions
+"core/src/shared/services.py" = ["UP046"]  # Generic[] syntax for BaseCRUDService readability
 
 [tool.ruff.format]
 quote-style = "double"
