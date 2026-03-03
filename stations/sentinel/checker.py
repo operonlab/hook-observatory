@@ -49,7 +49,7 @@ LIGHT_CHECKS: list[LightCheck] = [
     LightCheck(
         name="nginx",
         group="system",
-        url="http://127.0.0.1:8080/",
+        url="http://127.0.0.1:8080/v2/health",
     ),
     LightCheck(
         name="orbstack",
