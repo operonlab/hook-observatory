@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable icon：安全區域內繪製（中央 80% = 410x410 區域） -->
+  <!-- 滿版背景 -->
+  <rect width="512" height="512" fill="#1e1e2e"/>
+
+  <!-- 外環：CPU 儀表盤 -->
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#313244" stroke-width="22"/>
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#cba6f7" stroke-width="22"
+    stroke-dasharray="613 817" stroke-linecap="round"
+    transform="rotate(-90 256 256)"/>
+
+  <!-- 內環：記憶體 -->
+  <circle cx="256" cy="256" r="94" fill="none" stroke="#313244" stroke-width="16"/>
+  <circle cx="256" cy="256" r="94" fill="none" stroke="#89b4fa" stroke-width="16"
+    stroke-dasharray="413 591" stroke-linecap="round"
+    transform="rotate(-90 256 256)"/>
+
+  <!-- 中心脈搏點 -->
+  <circle cx="256" cy="256" r="28" fill="#a6e3a1" opacity="0.9"/>
+  <circle cx="256" cy="256" r="14" fill="#1e1e2e"/>
+</svg>
