@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       icon: data.icon || 'icons/icon-192.svg',
       tag: data.tag,
-      data: { url: data.url || '/v2/apps/sysmon/' },
+      data: { url: data.url || '/apps/sysmon/' },
       vibrate: data.severity === 'critical' ? [200, 100, 200, 100, 200] : [100, 50, 100],
       requireInteraction: data.severity !== 'info',
     })
@@ -21,7 +21,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || '/v2/apps/sysmon/';
+  const url = event.notification.data?.url || '/apps/sysmon/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wc) => {
       for (const c of wc) {
@@ -98,7 +98,7 @@ self.addEventListener('fetch', (event) => {
 
 function isApiRequest(url) {
   const path = url.pathname;
-  // FastAPI 端的 API 路徑（經 Nginx 代理後在 /v2/apps/sysmon/ 下）
+  // FastAPI 端的 API 路徑（經 Nginx 代理後在 /apps/sysmon/ 下）
   return path.includes('/status') ||
          path.includes('/services') ||
          path.includes('/health') ||

@@ -22,7 +22,7 @@ class PushSubscription(GlobalModel):
     p256dh: Mapped[str] = mapped_column(Text, nullable=False)
     auth: Mapped[str] = mapped_column(Text, nullable=False)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
-    app_scope: Mapped[str] = mapped_column(String(100), server_default="'/v2/'")
+    app_scope: Mapped[str] = mapped_column(String(100), server_default="'/'")
     active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     preferences: Mapped[dict] = mapped_column(
         JSONB,

@@ -4,9 +4,9 @@
  */
 
 // Detect base path from current URL at load time.
-// Under Nginx proxy (/v2/apps/hook/) → BASE = "/v2/apps/hook"
+// Under Nginx proxy (/apps/hook/) → BASE = "/apps/hook"
 // Local dev (localhost:4101) → BASE = ""
-const BASE = window.location.pathname.match(/^(\/v2\/apps\/hook)\/?/)?.[1] ?? "";
+const BASE = window.location.pathname.match(/^(\/apps\/hook)\/?/)?.[1] ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
