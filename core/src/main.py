@@ -22,10 +22,22 @@ async def lifespan(app: FastAPI):
     if not settings.debug:
         settings.validate_secret_key()
 
-    # Startup: init event bus, load plugins
+    # Import event subscribers so @event_bus.on decorators register handlers
+    import src.modules.finance.events  # noqa: F401
+    import src.modules.invest.events  # noqa: F401
+    import src.modules.nodeflow.events  # noqa: F401
+
+    # Startup: init event bus, load plugins, register nodeflow
     event_bus.use(logging_middleware)
     await event_bus.start()
     await hook_bus.load_plugins(settings.plugin_dir)
+
+    # Register nodeflow action registry + wildcard event subscriber
+    from src.modules.nodeflow.registry import register_module_actions
+    from src.modules.nodeflow.services import on_any_event
+
+    register_module_actions()
+    event_bus.subscribe("*", on_any_event)
     yield
     # Shutdown
     await event_bus.stop()
@@ -80,13 +92,17 @@ app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(health_router, tags=["health"])
 
 from src.modules.intelflow.routes import router as intelflow_router  # noqa: E402
+from src.modules.invest.routes import router as invest_router  # noqa: E402
 from src.modules.matchcore.routes import router as matchcore_router  # noqa: E402
 from src.modules.memvault.routes import router as memvault_router  # noqa: E402
+from src.modules.nodeflow.routes import router as nodeflow_router  # noqa: E402
 from src.modules.skillpath.routes import router as skillpath_router  # noqa: E402
 from src.modules.workpool.routes import router as workpool_router  # noqa: E402
 
 app.include_router(intelflow_router, prefix="/api/intelflow", tags=["intelflow"])
+app.include_router(invest_router, prefix="/api/invest", tags=["invest"])
 app.include_router(memvault_router, prefix="/api/memvault", tags=["memvault"])
 app.include_router(skillpath_router, prefix="/api/skillpath", tags=["skillpath"])
 app.include_router(workpool_router, prefix="/api/workpool", tags=["workpool"])
 app.include_router(matchcore_router, prefix="/api/matchcore", tags=["matchcore"])
+app.include_router(nodeflow_router, prefix="/api/nodeflow", tags=["nodeflow"])
