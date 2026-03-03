@@ -3,6 +3,35 @@
 
 const CACHE_NAME = "hook-observatory-v1";
 
+// ── Web Push ──
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  const data = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Hook Observatory", {
+      body: data.body || "",
+      icon: data.icon || "/v2/apps/hook/icon-192.svg",
+      tag: data.tag,
+      data: { url: data.url || "/v2/apps/hook/" },
+      vibrate: data.severity === "critical" ? [200, 100, 200, 100, 200] : [100, 50, 100],
+      requireInteraction: data.severity !== "info",
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/v2/apps/hook/";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((wc) => {
+      for (const c of wc) {
+        if ("focus" in c) { c.navigate(url); return c.focus(); }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
+
 // 需預快取的靜態資源（build 時帶 hash，內容不變）
 const PRECACHE_URLS = [
   "./",
