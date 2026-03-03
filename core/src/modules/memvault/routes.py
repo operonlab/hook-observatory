@@ -130,6 +130,10 @@ async def search(
     space_id: str = Query("default"),
     include_metadata: bool = Query(False, description="Include scoring metadata"),
     skip_adaptive: bool = Query(False, description="Force search even if adaptive says skip"),
+    scope: str | None = Query(
+        None,
+        description="Scope filter: global, session:{id}, user:{id}, type:{type}. Comma-separated.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     # Phase B2: Adaptive Retrieval
@@ -143,6 +147,7 @@ async def search(
                 scoring_applied=False,
                 input_count=0,
                 output_count=0,
+                scope=scope,
             )
             return EnhancedSearchResult(
                 results=[],
@@ -152,13 +157,16 @@ async def search(
     query_embedding = await get_embedding(q, task_type="search_query")
     if query_embedding is None:
         # Fallback: ILIKE text search when Ollama is unavailable
-        results = await memory_block_service.text_search(db, space_id, q, top_k)
+        results = await memory_block_service.text_search(
+            db, space_id, q, top_k, scope=scope,
+        )
         meta = SearchMetadata(
             vector_used=False,
             keyword_used=True,
             scoring_applied=False,
             input_count=len(results),
             output_count=len(results),
+            scope=scope,
         )
         return EnhancedSearchResult(
             results=results,
@@ -166,7 +174,7 @@ async def search(
         )
 
     results, meta = await memory_block_service.semantic_search(
-        db, space_id, query_embedding, top_k=top_k, query=q,
+        db, space_id, query_embedding, top_k=top_k, query=q, scope=scope,
     )
     return EnhancedSearchResult(
         results=results,

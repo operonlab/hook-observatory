@@ -45,6 +45,7 @@ from .schemas import (
     SemanticSearchResult,
     TagResponse,
 )
+from .scopes import parse_scopes, scopes_to_filters
 from .scoring_pipeline import ScoringConfig, ScoringPipeline
 
 # --- CJK detection helper ---
@@ -210,6 +211,7 @@ class MemoryBlockService(
         include_warm: bool = True,
         query: str | None = None,
         scoring_config: ScoringConfig | None = None,
+        scope: str | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
         """Vector similarity search with RRF hybrid retrieval + scoring pipeline.
 
@@ -228,16 +230,21 @@ class MemoryBlockService(
                 code="memvault.invalid_embedding_dim",
             )
 
-        meta = SearchMetadata(vector_used=True)
+        meta = SearchMetadata(vector_used=True, scope=scope)
+
+        # Defense ⑦: Parse scope and build extra filters
+        extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
 
         # Phase B1: Run vector search + keyword search in parallel
         vector_coro = self._vector_search_combined(
-            db, space_id, query_embedding, top_k, threshold, tags, block_type
+            db, space_id, query_embedding, top_k, threshold, tags, block_type,
+            extra_filters=extra_filters,
         )
 
         if query:
             keyword_coro = self._keyword_search(
-                db, space_id, query, top_k, tags, block_type
+                db, space_id, query, top_k, tags, block_type,
+                extra_filters=extra_filters,
             )
             vector_results, keyword_results = await asyncio.gather(
                 vector_coro, keyword_coro
@@ -252,6 +259,7 @@ class MemoryBlockService(
         if include_warm and len(results) < top_k:
             warm_results = await self._warm_tier_search(
                 db, space_id, top_k - len(results), tags, block_type,
+                extra_filters=extra_filters,
             )
             results.extend(warm_results)
 
@@ -308,14 +316,17 @@ class MemoryBlockService(
         threshold: float,
         tags: list[str] | None,
         block_type: str | None,
+        extra_filters: list | None = None,
     ) -> list[SemanticSearchResult]:
         """Run vector search: subtable first, fallback to inline."""
         results = await self._search_via_subtable(
             db, space_id, query_embedding, top_k, threshold, tags, block_type,
+            extra_filters=extra_filters,
         )
         if not results:
             results = await self._search_via_inline(
                 db, space_id, query_embedding, top_k, threshold, tags, block_type,
+                extra_filters=extra_filters,
             )
         return results
 
@@ -327,6 +338,7 @@ class MemoryBlockService(
         top_k: int,
         tags: list[str] | None = None,
         block_type: str | None = None,
+        extra_filters: list | None = None,
     ) -> list[SemanticSearchResult]:
         """PostgreSQL keyword search.
 
@@ -365,6 +377,8 @@ class MemoryBlockService(
             q = q.where(MemoryBlock.tags.contains(tags))
         if block_type:
             q = q.where(MemoryBlock.block_type == block_type)
+        for f in extra_filters or []:
+            q = q.where(f)
 
         rows = (await db.execute(q)).all()
 
@@ -432,6 +446,7 @@ class MemoryBlockService(
         threshold: float,
         tags: list[str] | None,
         block_type: str | None,
+        extra_filters: list | None = None,
     ) -> list[SemanticSearchResult]:
         """Search using the block_embeddings sub-table (Phase 2)."""
         distance = BlockEmbedding.embedding.cosine_distance(query_embedding)
@@ -452,6 +467,8 @@ class MemoryBlockService(
             q = q.where(MemoryBlock.tags.contains(tags))
         if block_type:
             q = q.where(MemoryBlock.block_type == block_type)
+        for f in extra_filters or []:
+            q = q.where(f)
 
         rows = (await db.execute(q)).all()
         return [
@@ -471,6 +488,7 @@ class MemoryBlockService(
         threshold: float,
         tags: list[str] | None,
         block_type: str | None,
+        extra_filters: list | None = None,
     ) -> list[SemanticSearchResult]:
         """Search using the inline embedding column (pre-Phase 2 fallback)."""
         distance = MemoryBlock.embedding.cosine_distance(query_embedding)
@@ -490,6 +508,8 @@ class MemoryBlockService(
             q = q.where(MemoryBlock.tags.contains(tags))
         if block_type:
             q = q.where(MemoryBlock.block_type == block_type)
+        for f in extra_filters or []:
+            q = q.where(f)
 
         rows = (await db.execute(q)).all()
         return [
@@ -507,6 +527,7 @@ class MemoryBlockService(
         remaining: int,
         tags: list[str] | None,
         block_type: str | None,
+        extra_filters: list | None = None,
     ) -> list[SemanticSearchResult]:
         """Search warm-tier blocks (no HNSW, still in main table).
 
@@ -533,6 +554,8 @@ class MemoryBlockService(
             q = q.where(MemoryBlock.tags.contains(tags))
         if block_type:
             q = q.where(MemoryBlock.block_type == block_type)
+        for f in extra_filters or []:
+            q = q.where(f)
 
         rows = (await db.execute(q)).scalars().all()
         return [
@@ -551,6 +574,7 @@ class MemoryBlockService(
         top_k: int = 10,
         include_archived: bool = False,
         include_warm: bool = True,
+        scope: str | None = None,
     ) -> list[SemanticSearchResult]:
         """Fallback text search using ILIKE.
 
@@ -565,6 +589,9 @@ class MemoryBlockService(
         hot_cutoff = now - timedelta(days=tier.hot_days)
         warm_cutoff = now - timedelta(days=tier.warm_days)
 
+        # Defense ⑦: Parse scope filters
+        extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
+
         # --- Hot tier: recent blocks (full index coverage) ---
         hot_q = (
             select(MemoryBlock)
@@ -576,6 +603,8 @@ class MemoryBlockService(
             .order_by(MemoryBlock.updated_at.desc())
             .limit(top_k)
         )
+        for f in extra_filters:
+            hot_q = hot_q.where(f)
         hot_rows = (await db.execute(hot_q)).scalars().all()
         results: list[SemanticSearchResult] = [
             SemanticSearchResult(
@@ -599,6 +628,8 @@ class MemoryBlockService(
                 .order_by(MemoryBlock.updated_at.desc())
                 .limit(remaining)
             )
+            for f in extra_filters:
+                warm_q = warm_q.where(f)
             warm_rows = (await db.execute(warm_q)).scalars().all()
             results.extend(
                 [

@@ -24,6 +24,7 @@ from src.modules.memvault.schemas import (
     SearchMetadata,
     SemanticSearchResult,
 )
+from src.modules.memvault.scopes import Scope, parse_scopes, scopes_to_filters
 from src.modules.memvault.scoring_pipeline import (
     ScoringConfig,
     ScoringPipeline,
@@ -810,3 +811,107 @@ class TestReranker:
         ):
             _reranked, applied = await rerank_results("test", results)
         assert applied is False
+
+
+# ======================== Defense ⑦: Multi-Scope Isolation Tests ========================
+
+
+class TestMultiScope:
+    """Tests for Defense ⑦: Multi-Scope Isolation."""
+
+    def test_parse_global_scope(self):
+        scopes = parse_scopes("global")
+        assert len(scopes) == 1
+        assert scopes[0].kind == "global"
+        assert scopes[0].value is None
+
+    def test_parse_session_scope(self):
+        scopes = parse_scopes("session:abc123")
+        assert len(scopes) == 1
+        assert scopes[0].kind == "session"
+        assert scopes[0].value == "abc123"
+
+    def test_parse_user_scope(self):
+        scopes = parse_scopes("user:user42")
+        assert len(scopes) == 1
+        assert scopes[0].kind == "user"
+        assert scopes[0].value == "user42"
+
+    def test_parse_type_scope(self):
+        scopes = parse_scopes("type:knowledge")
+        assert len(scopes) == 1
+        assert scopes[0].kind == "type"
+        assert scopes[0].value == "knowledge"
+
+    def test_parse_multiple_scopes(self):
+        scopes = parse_scopes("session:abc,type:knowledge")
+        assert len(scopes) == 2
+        assert scopes[0].kind == "session"
+        assert scopes[0].value == "abc"
+        assert scopes[1].kind == "type"
+        assert scopes[1].value == "knowledge"
+
+    def test_parse_invalid_scope_raises(self):
+        with pytest.raises(ValueError, match="Invalid scope format"):
+            parse_scopes("badformat")
+
+    def test_parse_unknown_kind_raises(self):
+        with pytest.raises(ValueError, match="Unknown scope kind"):
+            parse_scopes("unknown:value")
+
+    def test_scope_to_filter_global_returns_none(self):
+        scope = Scope(kind="global")
+        assert scope.to_filter() is None
+
+    def test_scope_to_filter_session(self):
+        scope = Scope(kind="session", value="sess123")
+        f = scope.to_filter()
+        assert f is not None
+
+    def test_scope_to_filter_user(self):
+        scope = Scope(kind="user", value="user1")
+        f = scope.to_filter()
+        assert f is not None
+
+    def test_scope_to_filter_type(self):
+        scope = Scope(kind="type", value="knowledge")
+        f = scope.to_filter()
+        assert f is not None
+
+    def test_scope_default_is_global(self):
+        # scope=None behaves same as scope="global"
+        scopes_none = parse_scopes(None)
+        scopes_global = parse_scopes("global")
+        assert scopes_none[0].kind == scopes_global[0].kind == "global"
+        assert scopes_to_filters(scopes_none) == []
+        assert scopes_to_filters(scopes_global) == []
+
+    def test_scopes_to_filters_mixed(self):
+        scopes = parse_scopes("session:s1,type:skill")
+        filters = scopes_to_filters(scopes)
+        assert len(filters) == 2
+
+    def test_scope_str_representation(self):
+        assert str(Scope(kind="global")) == "global"
+        assert str(Scope(kind="session", value="abc")) == "session:abc"
+        assert str(Scope(kind="user", value="u1")) == "user:u1"
+        assert str(Scope(kind="type", value="knowledge")) == "type:knowledge"
+
+    def test_parse_empty_string_is_global(self):
+        scopes = parse_scopes("")
+        assert len(scopes) == 1
+        assert scopes[0].kind == "global"
+
+    def test_parse_whitespace_handling(self):
+        scopes = parse_scopes(" session:abc , type:knowledge ")
+        assert len(scopes) == 2
+        assert scopes[0].kind == "session"
+        assert scopes[1].kind == "type"
+
+    def test_scope_in_search_metadata(self):
+        meta = SearchMetadata(scope="session:abc123")
+        assert meta.scope == "session:abc123"
+
+    def test_scope_none_in_search_metadata(self):
+        meta = SearchMetadata()
+        assert meta.scope is None
