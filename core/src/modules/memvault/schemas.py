@@ -112,3 +112,23 @@ class SemanticSearchParams(BaseModel):
 class SemanticSearchResult(BaseModel):
     block: MemoryBlockResponse
     score: float
+
+
+class SearchMetadata(BaseModel):
+    """Metadata about the search pipeline execution."""
+
+    vector_used: bool = True
+    keyword_used: bool = False
+    scoring_applied: bool = True
+    stages_applied: list[str] = []
+    stages_skipped: list[str] = []
+    adaptive_skipped: bool = False
+    adaptive_reason: str | None = None
+    noise_filtered: int = 0
+    input_count: int = 0
+    output_count: int = 0
+
+
+class EnhancedSearchResult(BaseModel):
+    results: list[SemanticSearchResult]
+    metadata: SearchMetadata | None = None
