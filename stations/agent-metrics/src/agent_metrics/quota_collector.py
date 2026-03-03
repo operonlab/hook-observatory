@@ -39,12 +39,15 @@ _GM_PROJECT_TTL = 3600.0
 # Claude Code — Anthropic OAuth usage API
 # ---------------------------------------------------------------------------
 
+
 async def fetch_cc_quota(client: httpx.AsyncClient) -> dict:
     """Fetch Claude Code quota from Anthropic OAuth API via macOS Keychain."""
     try:
         raw = subprocess.run(
             ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         ).stdout.strip()
         if not raw:
             return {}
@@ -72,6 +75,7 @@ async def fetch_cc_quota(client: httpx.AsyncClient) -> dict:
 # ---------------------------------------------------------------------------
 # Codex / ChatGPT — wham/usage API
 # ---------------------------------------------------------------------------
+
 
 async def fetch_cx_quota(client: httpx.AsyncClient) -> dict:
     """Fetch Codex/ChatGPT quota from backend API."""
@@ -106,6 +110,7 @@ async def fetch_cx_quota(client: httpx.AsyncClient) -> dict:
 # Gemini — CodeAssist retrieveUserQuota API
 # ---------------------------------------------------------------------------
 
+
 def _ensure_gemini_token() -> str | None:
     """Ensure Gemini OAuth token is fresh, refresh if needed. Synchronous."""
     oauth_path = Path(settings.GM_OAUTH_PATH).expanduser()
@@ -128,12 +133,14 @@ def _ensure_gemini_token() -> str | None:
         import urllib.parse
         import urllib.request
 
-        body = urllib.parse.urlencode({
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "client_id": settings.GM_CLIENT_ID,
-            "client_secret": settings.GM_CLIENT_SECRET,
-        }).encode()
+        body = urllib.parse.urlencode(
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": settings.GM_CLIENT_ID,
+                "client_secret": settings.GM_CLIENT_SECRET,
+            }
+        ).encode()
         req = urllib.request.Request(
             "https://oauth2.googleapis.com/token",
             data=body,
@@ -262,19 +269,20 @@ def get_raw_cache() -> dict:
 # Format quota for tmux / API
 # ---------------------------------------------------------------------------
 
+
 def _parse_cc(data: dict) -> dict:
     """Parse Claude Code API response."""
     result: dict = {}
     if "five_hour" in data:
-        result["5h"] = f"{round(data['five_hour'].get('utilization', 0))}%"
+        result["5h"] = f"{round(data['five_hour'].get('utilization') or 0)}%"
     if "seven_day" in data:
-        result["7d"] = f"{round(data['seven_day'].get('utilization', 0))}%"
+        result["7d"] = f"{round(data['seven_day'].get('utilization') or 0)}%"
     if "extra_usage" in data:
         ex = data["extra_usage"]
         if ex.get("is_enabled"):
-            used = ex.get("used_credits", 0) / 100
-            limit = ex.get("monthly_limit", 0) / 100
-            pct = round(ex.get("utilization", 0))
+            used = (ex.get("used_credits") or 0) / 100
+            limit = (ex.get("monthly_limit") or 0) / 100
+            pct = round(ex.get("utilization") or 0)
             result["ex"] = f"${used:.2f}/${limit:.0f} {pct}%"
         else:
             result["ex"] = "off"
