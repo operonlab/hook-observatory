@@ -121,7 +121,7 @@ class NotificationService:
             "title": payload.title,
             "body": payload.body,
             "url": payload.url,
-            "icon": payload.icon or "/v2/icons/icon-192.png",
+            "icon": payload.icon or "/icons/icon-192.png",
             "tag": payload.tag,
             "severity": payload.severity,
         }

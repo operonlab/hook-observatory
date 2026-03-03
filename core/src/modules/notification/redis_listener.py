@@ -24,7 +24,7 @@ async def redis_push_listener() -> None:
         "category": "sentinel",
         "title": "Service Down",
         "body": "nginx is unreachable",
-        "url": "/v2/apps/sentinel/",
+        "url": "/apps/sentinel/",
         "tag": "sentinel-nginx",
         "severity": "critical",
         "user_id": null  // null = broadcast

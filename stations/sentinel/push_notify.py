@@ -30,7 +30,7 @@ async def publish_push(
     category: str = "sentinel",
     severity: str = "warning",
     tag: str | None = None,
-    url: str = "/v2/apps/sentinel/",
+    url: str = "/apps/sentinel/",
     user_id: str | None = None,
 ) -> None:
     """Publish a push notification payload to Redis workshop:push channel."""

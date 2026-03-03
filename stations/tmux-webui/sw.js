@@ -9,7 +9,7 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       icon: data.icon || './icon-192.svg',
       tag: data.tag,
-      data: { url: data.url || '/v2/apps/tmux/' },
+      data: { url: data.url || '/apps/tmux/' },
       vibrate: data.severity === 'critical' ? [200, 100, 200, 100, 200] : [100, 50, 100],
       requireInteraction: data.severity !== 'info',
     })
@@ -18,7 +18,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || '/v2/apps/tmux/';
+  const url = event.notification.data?.url || '/apps/tmux/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wc) => {
       for (const c of wc) {

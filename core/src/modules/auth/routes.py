@@ -145,7 +145,7 @@ async def session_info(
 async def oauth_google(request: Request):
     """Initiate Google OAuth flow."""
     redirect_uri = f"{settings.oauth_redirect_base}/auth/oauth/google/callback"
-    request.session["oauth_redirect"] = request.query_params.get("redirect", "/v2/")
+    request.session["oauth_redirect"] = request.query_params.get("redirect", "/")
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
@@ -183,7 +183,7 @@ async def oauth_google_callback(
         user_id=user.id,
     ))
 
-    redirect = request.session.pop("oauth_redirect", "/v2/")
+    redirect = request.session.pop("oauth_redirect", "/")
     return RedirectResponse(url=redirect)
 
 
@@ -191,7 +191,7 @@ async def oauth_google_callback(
 async def oauth_github(request: Request):
     """Initiate GitHub OAuth flow."""
     redirect_uri = f"{settings.oauth_redirect_base}/auth/oauth/github/callback"
-    request.session["oauth_redirect"] = request.query_params.get("redirect", "/v2/")
+    request.session["oauth_redirect"] = request.query_params.get("redirect", "/")
     return await oauth.github.authorize_redirect(request, redirect_uri)
 
 
@@ -235,5 +235,5 @@ async def oauth_github_callback(
         user_id=user.id,
     ))
 
-    redirect = request.session.pop("oauth_redirect", "/v2/")
+    redirect = request.session.pop("oauth_redirect", "/")
     return RedirectResponse(url=redirect)

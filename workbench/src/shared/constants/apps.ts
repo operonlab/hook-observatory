@@ -108,7 +108,7 @@ export const APP_LIST: AppInfo[] = [
     path: '/filebrowser',
     color: '#f5c2e7',
     status: 'external',
-    externalUrl: '/v2/apps/files/',
+    externalUrl: '/apps/files/',
   },
   {
     id: 'hook-observatory',
@@ -118,7 +118,7 @@ export const APP_LIST: AppInfo[] = [
     path: '/hook-observatory',
     color: '#89b4fa',
     status: 'external',
-    externalUrl: '/v2/apps/hook/',
+    externalUrl: '/apps/hook/',
   },
   {
     id: 'tmux-webui',
@@ -128,7 +128,7 @@ export const APP_LIST: AppInfo[] = [
     path: '/tmux-webui',
     color: '#cba6f7',
     status: 'external',
-    externalUrl: '/v2/apps/tmux/',
+    externalUrl: '/apps/tmux/',
   },
   {
     id: 'system-monitor',
@@ -138,7 +138,7 @@ export const APP_LIST: AppInfo[] = [
     path: '/system-monitor',
     color: '#a6e3a1',
     status: 'external',
-    externalUrl: '/v2/apps/sysmon/',
+    externalUrl: '/apps/sysmon/',
   },
   {
     id: 'sentinel',
@@ -148,6 +148,6 @@ export const APP_LIST: AppInfo[] = [
     path: '/sentinel',
     color: '#74c7ec',
     status: 'external',
-    externalUrl: '/v2/apps/sentinel/',
+    externalUrl: '/apps/sentinel/',
   },
 ]

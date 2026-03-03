@@ -17,21 +17,21 @@ EVENT_PUSH_MAP: dict[str, dict] = {
         "title": "預算超支警告",
         "severity": "warning",
         "tag": "finance-budget",
-        "url": "/v2/finance",
+        "url": "/finance",
     },
     "taskflow.task.completed": {
         "category": "taskflow",
         "title": "任務完成",
         "severity": "info",
         "tag": "taskflow-completed",
-        "url": "/v2/taskflow",
+        "url": "/taskflow",
     },
     "intelflow.briefing.generated": {
         "category": "intelflow",
         "title": "每日簡報已生成",
         "severity": "info",
         "tag": "intelflow-briefing",
-        "url": "/v2/intelflow",
+        "url": "/intelflow",
     },
 }
 
@@ -50,7 +50,7 @@ async def on_mapped_event(event: Event) -> None:
         category=mapping["category"],
         title=mapping["title"],
         body=body,
-        url=mapping.get("url", "/v2/"),
+        url=mapping.get("url", "/"),
         tag=mapping.get("tag"),
         severity=mapping.get("severity", "info"),
         user_id=event.user_id,

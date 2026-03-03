@@ -9,20 +9,20 @@ interface ModulePWA {
 
 const MODULE_PWA: Record<string, ModulePWA> = {
   memvault: {
-    manifest: '/v2/manifest-memvault.json',
-    icon: '/v2/icons/icon-memvault-192.png',
+    manifest: '/manifest-memvault.json',
+    icon: '/icons/icon-memvault-192.png',
     themeColor: '#bdd4fa',
   },
   intelflow: {
-    manifest: '/v2/manifest-intelflow.json',
-    icon: '/v2/icons/icon-intelflow-192.png',
+    manifest: '/manifest-intelflow.json',
+    icon: '/icons/icon-intelflow-192.png',
     themeColor: '#94e2d5',
   },
 }
 
 const DEFAULT_PWA: ModulePWA = {
-  manifest: '/v2/manifest.json',
-  icon: '/v2/icons/icon-192.png',
+  manifest: '/manifest.json',
+  icon: '/icons/icon-192.png',
   themeColor: '#1e1e2e',
 }
 
