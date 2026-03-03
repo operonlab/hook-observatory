@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "aiofiles>=24.1.0",
     "itsdangerous>=2.2.0",
+    "redis>=5.0",
 ]
 
 [project.scripts]

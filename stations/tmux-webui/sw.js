@@ -1,4 +1,34 @@
 const CACHE_NAME = 'tmux-webui-__GIT_HASH__';
+
+// ── Web Push ──
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  const data = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Workshop', {
+      body: data.body || '',
+      icon: data.icon || './icon-192.svg',
+      tag: data.tag,
+      data: { url: data.url || '/v2/apps/tmux/' },
+      vibrate: data.severity === 'critical' ? [200, 100, 200, 100, 200] : [100, 50, 100],
+      requireInteraction: data.severity !== 'info',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/v2/apps/tmux/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wc) => {
+      for (const c of wc) {
+        if ('focus' in c) { c.navigate(url); return c.focus(); }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
+
 const PRECACHE_URLS = [
   './',
   './static/css/main.css',

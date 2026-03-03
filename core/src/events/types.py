@@ -133,6 +133,13 @@ class NodeflowEvents:
     NODE_FAILED = "nodeflow.node.failed"
 
 
+class NotificationEvents:
+    PUSH_DELIVERED = "notification.push.delivered"
+    PUSH_FAILED = "notification.push.failed"
+    SUBSCRIPTION_CREATED = "notification.subscription.created"
+    SUBSCRIPTION_REMOVED = "notification.subscription.removed"
+
+
 class PluginEvents:
     INSTALLED = "plugin.installed"
     ENABLED = "plugin.enabled"

@@ -1,0 +1,64 @@
+"""Notification event subscribers — map EventBus events to push notifications."""
+
+import structlog
+
+from src.events.bus import Event, event_bus
+from src.shared.database import async_session_factory
+
+from .schemas import PushPayload
+from .services import notification_service
+
+logger = structlog.get_logger()
+
+# EventBus event → push notification mapping
+EVENT_PUSH_MAP: dict[str, dict] = {
+    "finance.budget.exceeded": {
+        "category": "finance",
+        "title": "預算超支警告",
+        "severity": "warning",
+        "tag": "finance-budget",
+        "url": "/v2/finance",
+    },
+    "taskflow.task.completed": {
+        "category": "taskflow",
+        "title": "任務完成",
+        "severity": "info",
+        "tag": "taskflow-completed",
+        "url": "/v2/taskflow",
+    },
+    "intelflow.briefing.generated": {
+        "category": "intelflow",
+        "title": "每日簡報已生成",
+        "severity": "info",
+        "tag": "intelflow-briefing",
+        "url": "/v2/intelflow",
+    },
+}
+
+
+@event_bus.on("finance.budget.exceeded")
+@event_bus.on("taskflow.task.completed")
+@event_bus.on("intelflow.briefing.generated")
+async def on_mapped_event(event: Event) -> None:
+    """Push notification for mapped EventBus events."""
+    mapping = EVENT_PUSH_MAP.get(event.type)
+    if not mapping:
+        return
+
+    body = event.data.get("message", event.data.get("detail", ""))
+    payload = PushPayload(
+        category=mapping["category"],
+        title=mapping["title"],
+        body=body,
+        url=mapping.get("url", "/v2/"),
+        tag=mapping.get("tag"),
+        severity=mapping.get("severity", "info"),
+        user_id=event.user_id,
+    )
+
+    try:
+        async with async_session_factory() as db:
+            await notification_service.send_notification(db, payload)
+            await db.commit()
+    except Exception as e:
+        logger.error("event_push_failed", event_type=event.type, error=str(e))
