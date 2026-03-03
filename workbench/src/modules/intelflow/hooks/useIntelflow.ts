@@ -1,26 +1,26 @@
-import { useEffect } from "react";
-import { useIntelflowStore } from "../stores";
+import { useEffect } from 'react'
+import { useIntelflowStore } from '../stores'
 
-const STALE_MS = 5 * 60 * 1000;
+const STALE_MS = 5 * 60 * 1000
 
 export function useDashboard() {
-  const { dashboard, dashboardLoading, dashboardFetchedAt, fetchDashboard } = useIntelflowStore();
+  const { dashboard, dashboardLoading, dashboardFetchedAt, fetchDashboard } = useIntelflowStore()
 
   useEffect(() => {
-    if (!dashboard || Date.now() - dashboardFetchedAt > STALE_MS) fetchDashboard();
-  }, [dashboard, dashboardFetchedAt, fetchDashboard]);
+    if (!dashboard || Date.now() - dashboardFetchedAt > STALE_MS) fetchDashboard()
+  }, [dashboard, dashboardFetchedAt, fetchDashboard])
 
-  return { dashboard, loading: dashboardLoading && !dashboard };
+  return { dashboard, loading: dashboardLoading && !dashboard }
 }
 
 export function useTimeline(days = 30) {
-  const { timeline, timelineLoading, timelineFetchedAt, fetchTimeline } = useIntelflowStore();
+  const { timeline, timelineLoading, timelineFetchedAt, fetchTimeline } = useIntelflowStore()
 
   useEffect(() => {
-    if (timeline.length === 0 || Date.now() - timelineFetchedAt > STALE_MS) fetchTimeline(days);
-  }, [timeline.length, timelineFetchedAt, fetchTimeline, days]);
+    if (timeline.length === 0 || Date.now() - timelineFetchedAt > STALE_MS) fetchTimeline(days)
+  }, [timeline.length, timelineFetchedAt, fetchTimeline, days])
 
-  return { timeline, loading: timelineLoading && timeline.length === 0 };
+  return { timeline, loading: timelineLoading && timeline.length === 0 }
 }
 
 export function useReports() {
@@ -34,11 +34,11 @@ export function useReports() {
     allTags,
     fetchReports,
     setActiveTag,
-  } = useIntelflowStore();
+  } = useIntelflowStore()
 
   useEffect(() => {
-    fetchReports();
-  }, [fetchReports]);
+    fetchReports()
+  }, [fetchReports])
 
   return {
     reports,
@@ -50,28 +50,35 @@ export function useReports() {
     allTags,
     fetchReports,
     setActiveTag,
-  };
+  }
 }
 
 export function useReportDetail(id: string | undefined) {
   const { selectedReport, reportDetailLoading, fetchReportById, clearSelectedReport } =
-    useIntelflowStore();
+    useIntelflowStore()
 
   useEffect(() => {
-    if (id) fetchReportById(id);
-    return () => clearSelectedReport();
-  }, [id, fetchReportById, clearSelectedReport]);
+    if (id) fetchReportById(id)
+    return () => clearSelectedReport()
+  }, [id, fetchReportById, clearSelectedReport])
 
-  return { report: selectedReport, loading: reportDetailLoading };
+  return { report: selectedReport, loading: reportDetailLoading }
 }
 
 export function useTopics() {
-  const { topics, topicsTotal, topicsLoading, topicsFetchedAt, activeTopic, fetchTopics, setActiveTopic } =
-    useIntelflowStore();
+  const {
+    topics,
+    topicsTotal,
+    topicsLoading,
+    topicsFetchedAt,
+    activeTopic,
+    fetchTopics,
+    setActiveTopic,
+  } = useIntelflowStore()
 
   useEffect(() => {
-    if (topics.length === 0 || Date.now() - topicsFetchedAt > STALE_MS) fetchTopics();
-  }, [topics.length, topicsFetchedAt, fetchTopics]);
+    if (topics.length === 0 || Date.now() - topicsFetchedAt > STALE_MS) fetchTopics()
+  }, [topics.length, topicsFetchedAt, fetchTopics])
 
   return {
     topics,
@@ -79,12 +86,12 @@ export function useTopics() {
     loading: topicsLoading && topics.length === 0,
     activeTopic,
     setActiveTopic,
-  };
+  }
 }
 
 export function useSearch() {
   const { searchQuery, searchResults, searchLoading, setSearchQuery, searchReports, clearSearch } =
-    useIntelflowStore();
+    useIntelflowStore()
 
   return {
     query: searchQuery,
@@ -93,5 +100,5 @@ export function useSearch() {
     setQuery: setSearchQuery,
     search: searchReports,
     clear: clearSearch,
-  };
+  }
 }

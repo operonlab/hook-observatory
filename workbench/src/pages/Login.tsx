@@ -67,7 +67,6 @@ export default function Login() {
               }}
               placeholder="name@example.com"
               autoComplete="email"
-              autoFocus
             />
           </div>
 

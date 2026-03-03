@@ -20,8 +20,8 @@ Revises: h9a0b1c2d3e4
 Create Date: 2026-03-02
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "i0a1b2c3d4e5"
 down_revision = "h9a0b1c2d3e4"

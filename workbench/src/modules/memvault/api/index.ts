@@ -1,34 +1,33 @@
-import { createCrudApi, request } from "@/api/client";
+import { createCrudApi, request } from '@/api/client'
 import type {
+  KASProfile,
   MemoryBlock,
   MemoryBlockCreate,
   MemoryBlockUpdate,
-  KASProfile,
-  SemanticSearchResult,
   PaginatedResponse,
-} from "@/types";
+  SemanticSearchResult,
+} from '@/types'
 
 export interface SyncScanResult {
-  total: number;
-  synced: number;
-  failed: number;
-  skipped: number;
-  already: number;
-  log: string;
+  total: number
+  synced: number
+  failed: number
+  skipped: number
+  already: number
+  log: string
 }
 
 export interface SyncStats {
-  total: number;
-  synced: number;
-  failed: number;
-  skipped: number;
+  total: number
+  synced: number
+  failed: number
+  skipped: number
 }
 
-const USE_MOCK = (import.meta as unknown as { env: Record<string, string> }).env.VITE_USE_MOCK === "true";
+const USE_MOCK =
+  (import.meta as unknown as { env: Record<string, string> }).env.VITE_USE_MOCK === 'true'
 
-const crudApi = createCrudApi<MemoryBlock, MemoryBlockCreate, MemoryBlockUpdate>(
-  "/memvault/blocks",
-);
+const crudApi = createCrudApi<MemoryBlock, MemoryBlockCreate, MemoryBlockUpdate>('/memvault/blocks')
 
 const realApi = {
   ...crudApi,
@@ -38,14 +37,9 @@ const realApi = {
       `/memvault/search?q=${encodeURIComponent(query)}&top_k=${topK}`,
     ),
 
-  getProfile: (): Promise<KASProfile> =>
-    request<KASProfile>("/memvault/profile"),
+  getProfile: (): Promise<KASProfile> => request<KASProfile>('/memvault/profile'),
 
-  listByTag: (
-    tag: string,
-    page = 1,
-    pageSize = 20,
-  ): Promise<PaginatedResponse<MemoryBlock>> =>
+  listByTag: (tag: string, page = 1, pageSize = 20): Promise<PaginatedResponse<MemoryBlock>> =>
     request<PaginatedResponse<MemoryBlock>>(
       `/memvault/blocks?tag=${encodeURIComponent(tag)}&page=${page}&page_size=${pageSize}`,
     ),
@@ -60,20 +54,18 @@ const realApi = {
     ),
 
   syncScan: (recent?: number): Promise<SyncScanResult> =>
-    request<SyncScanResult>(
-      `/memvault/sync/scan${recent ? `?recent=${recent}` : ""}`,
-      { method: "POST" },
-    ),
+    request<SyncScanResult>(`/memvault/sync/scan${recent ? `?recent=${recent}` : ''}`, {
+      method: 'POST',
+    }),
 
-  syncStats: (): Promise<SyncStats> =>
-    request<SyncStats>("/memvault/sync/stats"),
+  syncStats: (): Promise<SyncStats> => request<SyncStats>('/memvault/sync/stats'),
 
   recalculateProfile: (): Promise<KASProfile> =>
-    request<KASProfile>("/memvault/profile/recalculate", { method: "POST" }),
-};
+    request<KASProfile>('/memvault/profile/recalculate', { method: 'POST' }),
+}
 
-import { mockMemvaultApi } from "./mock";
+import { mockMemvaultApi } from './mock'
 
-const api = USE_MOCK ? mockMemvaultApi : realApi;
-export { api as memvaultApi };
-export { kgApi } from "./kg";
+const api = USE_MOCK ? mockMemvaultApi : realApi
+export { api as memvaultApi }
+export { kgApi } from './kg'

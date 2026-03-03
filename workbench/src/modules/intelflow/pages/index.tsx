@@ -1,13 +1,13 @@
-import { Routes, Route } from "react-router-dom";
-import IntelflowLayout from "../components/IntelflowLayout";
-import Dashboard from "./Dashboard";
-import ReportList from "./ReportList";
-import ReportDetail from "./ReportDetail";
-import SemanticSearch from "./SemanticSearch";
-import SmartQA from "./SmartQA";
-import TopicsOverview from "./TopicsOverview";
-import TopicDetail from "./TopicDetail";
-import BriefingSettings from "./BriefingSettings";
+import { Route, Routes } from 'react-router-dom'
+import IntelflowLayout from '../components/IntelflowLayout'
+import BriefingSettings from './BriefingSettings'
+import Dashboard from './Dashboard'
+import ReportDetail from './ReportDetail'
+import ReportList from './ReportList'
+import SemanticSearch from './SemanticSearch'
+import SmartQA from './SmartQA'
+import TopicDetail from './TopicDetail'
+import TopicsOverview from './TopicsOverview'
 
 export default function IntelflowPages() {
   return (
@@ -23,5 +23,5 @@ export default function IntelflowPages() {
         <Route path="briefings/settings" element={<BriefingSettings />} />
       </Route>
     </Routes>
-  );
+  )
 }

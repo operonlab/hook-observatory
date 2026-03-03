@@ -14,8 +14,8 @@ Revises: g8b9c0d1e2f3
 Create Date: 2026-02-28
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 revision = "h9a0b1c2d3e4"

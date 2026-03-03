@@ -1,17 +1,16 @@
-import { useState, useCallback } from "react";
-import { useMemvaultStore } from "../stores";
-import type { CascadeRecallResult } from "../types";
+import { useCallback, useState } from 'react'
+import { useMemvaultStore } from '../stores'
 
 function hexToRgba(cssVar: string, alpha: number): string {
-  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`;
+  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
 }
 
 const LAYER_CONFIG: Record<string, { label: string; color: string }> = {
-  wisdom: { label: "智慧 (L2)", color: "var(--peach)" },
-  clusters: { label: "群集 (L1)", color: "var(--blue)" },
-  triples: { label: "三元組 (L0)", color: "var(--teal)" },
-  blocks: { label: "記憶區塊", color: "var(--text)" },
-};
+  wisdom: { label: '智慧 (L2)', color: 'var(--peach)' },
+  clusters: { label: '群集 (L1)', color: 'var(--blue)' },
+  triples: { label: '三元組 (L0)', color: 'var(--teal)' },
+  blocks: { label: '記憶區塊', color: 'var(--text)' },
+}
 
 function LayerSection({
   layerKey,
@@ -19,16 +18,16 @@ function LayerSection({
   expanded,
   onToggle,
 }: {
-  layerKey: string;
-  items: any[];
-  expanded: boolean;
-  onToggle: () => void;
+  layerKey: string
+  items: any[]
+  expanded: boolean
+  onToggle: () => void
 }) {
-  const config = LAYER_CONFIG[layerKey] ?? { label: layerKey, color: "var(--text)" };
-  if (items.length === 0) return null;
+  const config = LAYER_CONFIG[layerKey] ?? { label: layerKey, color: 'var(--text)' }
+  if (items.length === 0) return null
 
   return (
-    <div className="border-t pt-2" style={{ borderColor: "var(--surface0)" }}>
+    <div className="border-t pt-2" style={{ borderColor: 'var(--surface0)' }}>
       <button
         onClick={onToggle}
         className="flex items-center gap-2 w-full text-left py-2"
@@ -38,7 +37,7 @@ function LayerSection({
           className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
           style={{ backgroundColor: config.color }}
         />
-        <span className="text-sm font-medium flex-1" style={{ color: "var(--text)" }}>
+        <span className="text-sm font-medium flex-1" style={{ color: 'var(--text)' }}>
           {config.label}
         </span>
         <span
@@ -50,8 +49,8 @@ function LayerSection({
         >
           {items.length}
         </span>
-        <span className="text-xs" style={{ color: "var(--subtext0)" }}>
-          {expanded ? "收合" : "展開"}
+        <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
+          {expanded ? '收合' : '展開'}
         </span>
       </button>
 
@@ -62,30 +61,30 @@ function LayerSection({
               key={item.id ?? i}
               className="rounded-lg border px-3 py-2.5 text-sm"
               style={{
-                backgroundColor: "var(--mantle)",
-                borderColor: "var(--surface0)",
-                color: "var(--text)",
+                backgroundColor: 'var(--mantle)',
+                borderColor: 'var(--surface0)',
+                color: 'var(--text)',
               }}
             >
-              {layerKey === "wisdom" && item.wisdom}
-              {layerKey === "clusters" && (
+              {layerKey === 'wisdom' && item.wisdom}
+              {layerKey === 'clusters' && (
                 <span>
                   <span className="font-medium">{item.name}</span>
-                  <span className="ml-2 text-xs" style={{ color: "var(--subtext0)" }}>
+                  <span className="ml-2 text-xs" style={{ color: 'var(--subtext0)' }}>
                     ({item.size} 成員)
                   </span>
                 </span>
               )}
-              {layerKey === "triples" && (
+              {layerKey === 'triples' && (
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
-                  <span style={{ color: "var(--teal)" }}>{item.subject}</span>
-                  <span style={{ color: "var(--subtext0)" }}>&rarr;</span>
-                  <span style={{ color: "var(--subtext1)" }}>{item.predicate}</span>
-                  <span style={{ color: "var(--subtext0)" }}>&rarr;</span>
+                  <span style={{ color: 'var(--teal)' }}>{item.subject}</span>
+                  <span style={{ color: 'var(--subtext0)' }}>&rarr;</span>
+                  <span style={{ color: 'var(--subtext1)' }}>{item.predicate}</span>
+                  <span style={{ color: 'var(--subtext0)' }}>&rarr;</span>
                   <span className="break-all">{item.object}</span>
                 </div>
               )}
-              {layerKey === "blocks" && (
+              {layerKey === 'blocks' && (
                 <span className="text-sm line-clamp-2">{item.content?.slice(0, 80)}</span>
               )}
             </div>
@@ -93,36 +92,34 @@ function LayerSection({
         </div>
       )}
     </div>
-  );
+  )
 }
 
 export default function CascadeSearchBar() {
-  const [query, setQuery] = useState("");
-  const { kg_cascadeResult, kg_loading, cascadeRecall, clearCascadeResult } =
-    useMemvaultStore();
+  const [query, setQuery] = useState('')
+  const { kg_cascadeResult, kg_loading, cascadeRecall, clearCascadeResult } = useMemvaultStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     wisdom: true,
     clusters: true,
     triples: false,
     blocks: false,
-  });
+  })
 
   const handleSearch = useCallback(() => {
-    if (query.trim()) cascadeRecall(query.trim());
-  }, [query, cascadeRecall]);
+    if (query.trim()) cascadeRecall(query.trim())
+  }, [query, cascadeRecall])
 
   const handleClear = useCallback(() => {
-    setQuery("");
-    clearCascadeResult();
-  }, [clearCascadeResult]);
+    setQuery('')
+    clearCascadeResult()
+  }, [clearCascadeResult])
 
-  const toggleLayer = (key: string) =>
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleLayer = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  const result = kg_cascadeResult;
+  const result = kg_cascadeResult
   const totalHits = result
     ? result.wisdom.length + result.clusters.length + result.triples.length + result.blocks.length
-    : 0;
+    : 0
 
   return (
     <div>
@@ -132,20 +129,20 @@ export default function CascadeSearchBar() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           placeholder="跨層搜尋記憶..."
           className="flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
           style={{
-            backgroundColor: "var(--base)",
-            borderColor: "var(--surface0)",
-            color: "var(--text)",
+            backgroundColor: 'var(--base)',
+            borderColor: 'var(--surface0)',
+            color: 'var(--text)',
             minHeight: 44,
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = "var(--peach)";
+            e.currentTarget.style.borderColor = 'var(--peach)'
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = "var(--surface0)";
+            e.currentTarget.style.borderColor = 'var(--surface0)'
           }}
         />
         <button
@@ -153,14 +150,14 @@ export default function CascadeSearchBar() {
           disabled={kg_loading || !query.trim()}
           className="rounded-lg px-3 sm:px-4 py-2 text-sm font-medium transition-colors shrink-0"
           style={{
-            backgroundColor: kg_loading ? "var(--surface0)" : "var(--peach)",
-            color: kg_loading ? "var(--subtext0)" : "var(--base)",
-            cursor: kg_loading ? "wait" : "pointer",
+            backgroundColor: kg_loading ? 'var(--surface0)' : 'var(--peach)',
+            color: kg_loading ? 'var(--subtext0)' : 'var(--base)',
+            cursor: kg_loading ? 'wait' : 'pointer',
             opacity: !query.trim() ? 0.5 : 1,
             minHeight: 44,
           }}
         >
-          {kg_loading ? "搜尋中..." : "跨層搜尋"}
+          {kg_loading ? '搜尋中...' : '跨層搜尋'}
         </button>
       </div>
 
@@ -168,20 +165,20 @@ export default function CascadeSearchBar() {
       {result && (
         <div className="mt-3">
           <div className="flex items-center justify-between mb-2 gap-2">
-            <span className="text-xs" style={{ color: "var(--subtext0)" }}>
+            <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
               找到 {totalHits} 筆結果（跨 {result.layers_searched.length} 層）
             </span>
             <button
               onClick={handleClear}
               className="text-xs py-1 px-2"
-              style={{ color: "var(--subtext0)", minHeight: 36 }}
+              style={{ color: 'var(--subtext0)', minHeight: 36 }}
             >
               清除
             </button>
           </div>
 
           <div className="space-y-1">
-            {(["wisdom", "clusters", "triples", "blocks"] as const).map((layer) => (
+            {(['wisdom', 'clusters', 'triples', 'blocks'] as const).map((layer) => (
               <LayerSection
                 key={layer}
                 layerKey={layer}
@@ -194,5 +191,5 @@ export default function CascadeSearchBar() {
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -5,10 +5,9 @@ Revises: 2bb21e53cb53
 Create Date: 2026-02-25
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from pgvector.sqlalchemy import Vector
-
 
 revision = "c4d5e6f7a8b9"
 down_revision = "a1b2c3d4e5f6"

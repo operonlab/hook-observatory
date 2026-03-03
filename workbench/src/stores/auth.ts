@@ -1,15 +1,15 @@
-import { create } from "zustand";
-import type { User } from "@/types";
-import * as gateway from "@/api/gateway";
+import { create } from 'zustand'
+import * as gateway from '@/api/gateway'
+import type { User } from '@/types'
 
 interface AuthState {
-  user: User | null;
-  loading: boolean;
-  initialized: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
-  logout: () => Promise<void>;
-  checkSession: () => Promise<void>;
+  user: User | null
+  loading: boolean
+  initialized: boolean
+  login: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string, name: string) => Promise<void>
+  logout: () => Promise<void>
+  checkSession: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -18,44 +18,44 @@ export const useAuthStore = create<AuthState>((set) => ({
   initialized: false,
 
   login: async (email, password) => {
-    set({ loading: true });
+    set({ loading: true })
     try {
-      const data = await gateway.login(email, password);
-      set({ user: data.user, loading: false });
+      const data = await gateway.login(email, password)
+      set({ user: data.user, loading: false })
     } catch (err) {
-      set({ loading: false });
-      throw err;
+      set({ loading: false })
+      throw err
     }
   },
 
   register: async (email, password, name) => {
-    set({ loading: true });
+    set({ loading: true })
     try {
-      const data = await gateway.register(email, password, name);
-      set({ user: data.user, loading: false });
+      const data = await gateway.register(email, password, name)
+      set({ user: data.user, loading: false })
     } catch (err) {
-      set({ loading: false });
-      throw err;
+      set({ loading: false })
+      throw err
     }
   },
 
   logout: async () => {
-    set({ loading: true });
+    set({ loading: true })
     try {
-      await gateway.logout();
-      set({ user: null, loading: false });
+      await gateway.logout()
+      set({ user: null, loading: false })
     } catch {
-      set({ loading: false });
+      set({ loading: false })
     }
   },
 
   checkSession: async () => {
-    set({ loading: true });
+    set({ loading: true })
     try {
-      const data = await gateway.getSession();
-      set({ user: data.user, loading: false, initialized: true });
+      const data = await gateway.getSession()
+      set({ user: data.user, loading: false, initialized: true })
     } catch {
-      set({ user: null, loading: false, initialized: true });
+      set({ user: null, loading: false, initialized: true })
     }
   },
-}));
+}))

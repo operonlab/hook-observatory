@@ -1,19 +1,19 @@
-import type { User } from "@/types";
+import type { User } from '@/types'
 
-const BASE = __BASE_PATH__;
+const BASE = __BASE_PATH__
 
 interface AuthResponse {
-  user: User;
+  user: User
 }
 
 interface RawUser {
-  id: string;
-  email: string;
-  display_name: string;
-  avatar_url: string | null;
-  role: string;
-  status: string;
-  created_at: string;
+  id: string
+  email: string
+  display_name: string
+  avatar_url: string | null
+  role: string
+  status: string
+  created_at: string
 }
 
 function mapUser(raw: RawUser): User {
@@ -25,31 +25,28 @@ function mapUser(raw: RawUser): User {
     role: raw.role,
     status: raw.status,
     created_at: raw.created_at,
-  };
+  }
 }
 
-async function request<T>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    credentials: "include",
+    credentials: 'include',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     ...options,
-  });
+  })
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = await res.json().catch(() => ({}))
     throw new Error(
       (body as Record<string, string>).detail ||
         (body as Record<string, string>).message ||
         `Request failed: ${res.status}`,
-    );
+    )
   }
 
-  return res.json();
+  return res.json()
 }
 
 export async function register(
@@ -57,40 +54,37 @@ export async function register(
   password: string,
   name: string,
 ): Promise<AuthResponse> {
-  const r = await request<{ user: RawUser }>("/auth/register", {
-    method: "POST",
+  const r = await request<{ user: RawUser }>('/auth/register', {
+    method: 'POST',
     body: JSON.stringify({ email, password, name }),
-  });
-  return { user: mapUser(r.user) };
+  })
+  return { user: mapUser(r.user) }
 }
 
-export async function login(
-  email: string,
-  password: string,
-): Promise<AuthResponse> {
-  const r = await request<{ user: RawUser }>("/auth/login", {
-    method: "POST",
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const r = await request<{ user: RawUser }>('/auth/login', {
+    method: 'POST',
     body: JSON.stringify({ email, password }),
-  });
-  return { user: mapUser(r.user) };
+  })
+  return { user: mapUser(r.user) }
 }
 
 export async function logout(): Promise<void> {
   const res = await fetch(`${BASE}/auth/logout`, {
-    method: "POST",
-    credentials: "include",
+    method: 'POST',
+    credentials: 'include',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
-  });
+  })
   if (!res.ok) {
-    throw new Error(`Logout failed: ${res.status}`);
+    throw new Error(`Logout failed: ${res.status}`)
   }
 }
 
 export async function getSession(): Promise<AuthResponse> {
-  const r = await request<{ user: RawUser }>("/auth/session", {
-    method: "GET",
-  });
-  return { user: mapUser(r.user) };
+  const r = await request<{ user: RawUser }>('/auth/session', {
+    method: 'GET',
+  })
+  return { user: mapUser(r.user) }
 }
