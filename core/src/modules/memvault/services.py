@@ -29,6 +29,7 @@ from .models import (
     Tag,
 )
 from .noise_filter import QUARANTINE_TAG, check_noise, filter_results
+from .reranker import rerank_results
 from .schemas import (
     BLOCK_TYPE_ALIASES,
     BLOCK_TYPES,
@@ -272,6 +273,12 @@ class MemoryBlockService(
         ]
 
         scored_dicts, scoring_meta = pipeline.apply(scored_dicts, query_embedding)
+
+        # Phase C2: Optional cross-encoder reranking
+        if query:
+            scored_dicts, reranked = await rerank_results(query, scored_dicts)
+            if reranked:
+                meta.reranker_used = True
 
         # Update metadata
         meta.scoring_applied = True
