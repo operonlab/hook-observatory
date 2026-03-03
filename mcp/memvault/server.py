@@ -21,7 +21,7 @@ from typing import Any
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-from workshop.clients._base import APIError, ConnectionError as APIConnectionError
+from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.memvault import MemvaultClient
 
 server = Server("memvault")
