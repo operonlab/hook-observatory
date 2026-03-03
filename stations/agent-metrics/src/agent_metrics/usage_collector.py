@@ -43,19 +43,16 @@ def _parse_pct(val: str | int | float) -> int | None:
     return None
 
 
-def _fetch_sysmon_usage(url: str) -> tuple[int | None, int | None]:
-    """Fetch CC usage from sysmon API."""
-    if not url:
-        return None, None
+def _fetch_sysmon_usage() -> tuple[int | None, int | None]:
+    """Fetch CC usage from in-process quota collector cache."""
     try:
-        import urllib.request
+        from agent_metrics.quota_collector import get_quota_sync
 
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-
-        cc_5h = _parse_pct(data.get("llm_cc_5h", "?"))
-        cc_7d = _parse_pct(data.get("llm_cc_7d", "?"))
+        quota = get_quota_sync()
+        if not quota:
+            return None, None
+        cc_5h = _parse_pct(quota.get("llm_cc_5h", "?"))
+        cc_7d = _parse_pct(quota.get("llm_cc_7d", "?"))
         return cc_5h, cc_7d
     except Exception:
         return None, None
@@ -96,7 +93,7 @@ def _collect_claude_code() -> dict:
         "collected_at": datetime.now(UTC).isoformat(),
     }
 
-    cc_5h, cc_7d = _fetch_sysmon_usage(settings.SYSMON_URL)
+    cc_5h, cc_7d = _fetch_sysmon_usage()
     if cc_5h is not None:
         result["quota_5h_pct"] = cc_5h
         result["quota_7d_pct"] = cc_7d

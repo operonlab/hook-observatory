@@ -2,7 +2,7 @@
 
 Runs as an asyncio task, calling collect_all() via run_in_executor every N seconds.
 Writes JSON to /tmp for tmux status line consumption and maintains an in-memory
-ring buffer for the /sysmon/history API.
+ring buffer for the /sysmon/history API. Integrates quota data on each tick.
 """
 
 from __future__ import annotations
@@ -25,6 +25,9 @@ _latest_snapshot: dict = {}
 
 # Ring buffer for history (default 720 = 1h @ 5s interval)
 _history_buffer: deque[dict] = deque(maxlen=settings.SYSMON_HISTORY_SIZE)
+
+# Tick counter for periodic operations
+_tick_count: int = 0
 
 
 def get_latest() -> dict:
@@ -54,17 +57,33 @@ def _atomic_write(path: str, data: str) -> None:
 
 async def sysmon_loop() -> None:
     """Background loop: collect system metrics every SYSMON_COLLECT_INTERVAL seconds."""
-    global _latest_snapshot
+    global _latest_snapshot, _tick_count
 
     log.info("sysmon_loop_started", interval=settings.SYSMON_COLLECT_INTERVAL)
 
     loop = asyncio.get_running_loop()
+
+    # Import here to avoid circular imports
+    from agent_metrics.quota_collector import get_quota, get_raw_cache
 
     try:
         while True:
             try:
                 snapshot: SysmonSnapshot = await loop.run_in_executor(None, collect_all)
                 snap_dict = snapshot.to_dict()
+
+                # Merge quota data (60s TTL controlled internally)
+                try:
+                    quota = await get_quota()
+                    for key in (
+                        "llm_cc_5h", "llm_cc_7d", "llm_cc_ex",
+                        "llm_cx_5h", "llm_cx_7d",
+                        "llm_gm_pro", "llm_gm_flash", "llm_display",
+                    ):
+                        if key in quota:
+                            snap_dict[key] = quota[key]
+                except Exception:
+                    log.debug("quota_merge_failed", exc_info=True)
 
                 # Update in-memory state
                 _latest_snapshot = snap_dict
@@ -77,6 +96,39 @@ async def sysmon_loop() -> None:
                 # Backward-compatible write (Pulso sysmon path)
                 if settings.SYSMON_COMPAT_PATH:
                     _atomic_write(settings.SYSMON_COMPAT_PATH, json_str)
+
+                # Write quota compat file (raw API responses for quota-all.sh)
+                if settings.QUOTA_COMPAT_PATH:
+                    try:
+                        raw = get_raw_cache()
+                        if raw:
+                            _atomic_write(settings.QUOTA_COMPAT_PATH, json.dumps(raw))
+                    except Exception:
+                        pass
+
+                # Guardian + Sweep (Phase 3)
+                try:
+                    from agent_metrics.guardian import maybe_run_guardian
+
+                    await loop.run_in_executor(
+                        None, maybe_run_guardian, snap_dict.get("mem_pressure", 99)
+                    )
+                except ImportError:
+                    pass
+                except Exception:
+                    log.debug("guardian_tick_error", exc_info=True)
+
+                _tick_count += 1
+                sweep_ticks = settings.SWEEP_INTERVAL // settings.SYSMON_COLLECT_INTERVAL
+                if sweep_ticks > 0 and _tick_count % sweep_ticks == 0:
+                    try:
+                        from agent_metrics.sweep import maybe_run_sweep
+
+                        await loop.run_in_executor(None, maybe_run_sweep)
+                    except ImportError:
+                        pass
+                    except Exception:
+                        log.debug("sweep_tick_error", exc_info=True)
 
             except Exception:
                 log.exception("sysmon_collect_error")
