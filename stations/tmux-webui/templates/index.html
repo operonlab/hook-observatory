@@ -108,6 +108,32 @@
 <script src="static/js/keys.js?v=2"></script>
 <script src="static/js/autocomplete.js?v=2"></script>
 <script src="static/js/gestures.js?v=2"></script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js')}</script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    if (Notification.permission === 'granted') {
+      (async () => {
+        try {
+          const existing = await reg.pushManager.getSubscription();
+          if (existing) return;
+          const res = await fetch('/v2/api/notification/vapid-key');
+          if (!res.ok) return;
+          const { public_key } = await res.json();
+          const padding = '='.repeat((4 - public_key.length % 4) % 4);
+          const raw = atob((public_key + padding).replace(/-/g, '+').replace(/_/g, '/'));
+          const key = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+          const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+          const j = sub.toJSON();
+          await fetch('/v2/api/notification/subscriptions', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, app_scope: '/v2/apps/tmux/' }),
+          });
+        } catch(e) { console.warn('[Push]', e); }
+      })();
+    }
+  });
+}
+</script>
 </body>
 </html>

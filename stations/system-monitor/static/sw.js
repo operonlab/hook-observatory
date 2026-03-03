@@ -3,6 +3,35 @@
 
 const CACHE_NAME = 'sysmon-v1';
 
+// ── Web Push ──
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  const data = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'System Monitor', {
+      body: data.body || '',
+      icon: data.icon || 'icons/icon-192.svg',
+      tag: data.tag,
+      data: { url: data.url || '/v2/apps/sysmon/' },
+      vibrate: data.severity === 'critical' ? [200, 100, 200, 100, 200] : [100, 50, 100],
+      requireInteraction: data.severity !== 'info',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/v2/apps/sysmon/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wc) => {
+      for (const c of wc) {
+        if ('focus' in c) { c.navigate(url); return c.focus(); }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
+
 // 預快取的核心靜態資源（相對於 SW 所在位置 /static/）
 const PRECACHE_ASSETS = [
   '../',                       // 首頁 HTML

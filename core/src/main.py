@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
     import src.modules.finance.events  # noqa: F401
     import src.modules.invest.events  # noqa: F401
     import src.modules.nodeflow.events  # noqa: F401
+    import src.modules.notification.events  # noqa: F401
 
     # Startup: init event bus, load plugins, register nodeflow
     event_bus.use(logging_middleware)
@@ -38,8 +39,22 @@ async def lifespan(app: FastAPI):
 
     register_module_actions()
     event_bus.subscribe("*", on_any_event)
+
+    # Start Redis push listener for station-originated notifications
+    import asyncio
+
+    from src.modules.notification.redis_listener import redis_push_listener
+
+    push_task = asyncio.create_task(redis_push_listener())
+
     yield
+
     # Shutdown
+    push_task.cancel()
+    try:
+        await push_task
+    except asyncio.CancelledError:
+        pass
     await event_bus.stop()
 
 
@@ -96,9 +111,11 @@ from src.modules.invest.routes import router as invest_router  # noqa: E402
 from src.modules.matchcore.routes import router as matchcore_router  # noqa: E402
 from src.modules.memvault.routes import router as memvault_router  # noqa: E402
 from src.modules.nodeflow.routes import router as nodeflow_router  # noqa: E402
+from src.modules.notification.routes import router as notification_router  # noqa: E402
 from src.modules.skillpath.routes import router as skillpath_router  # noqa: E402
 from src.modules.workpool.routes import router as workpool_router  # noqa: E402
 
+app.include_router(notification_router, prefix="/api/notification", tags=["notification"])
 app.include_router(intelflow_router, prefix="/api/intelflow", tags=["intelflow"])
 app.include_router(invest_router, prefix="/api/invest", tags=["invest"])
 app.include_router(memvault_router, prefix="/api/memvault", tags=["memvault"])

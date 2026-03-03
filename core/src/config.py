@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     s3_secret_key: str = "rustfsadmin"
     s3_archive_bucket: str = "workshop-archive"
 
+    # Web Push (VAPID)
+    vapid_private_key: str = ""  # path to PEM file or inline PEM
+    vapid_public_key: str = ""  # base64url-encoded applicationServerKey
+    vapid_contact: str = "mailto:admin@joneshong.com"
+
     # Plugins
     plugin_dir: str = "plugins"
 

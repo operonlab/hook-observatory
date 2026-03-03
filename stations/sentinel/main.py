@@ -23,8 +23,9 @@ from remediation import Remediator
 from sqlalchemy import text
 from state import InterventionEngine, State
 
-from config import config
-from routes import router, set_engine
+from config import config  # isort: skip
+from push_notify import publish_push  # isort: skip
+from routes import router, set_engine  # isort: skip
 
 logging.basicConfig(
     level=logging.INFO,
@@ -143,6 +144,22 @@ async def _repair_monitor_loop() -> None:
                             except Exception:
                                 pass
 
+                        # Push notification for repair result
+                        if success:
+                            await publish_push(
+                                title=f"{service} 已修復",
+                                body="自動修復成功完成",
+                                severity="info",
+                                tag=f"sentinel-{service}",
+                            )
+                        else:
+                            await publish_push(
+                                title=f"{service} 修復失敗 — 需人工介入",
+                                body="自動修復未能解決問題",
+                                severity="critical",
+                                tag=f"sentinel-{service}",
+                            )
+
                 # Dispatch repair if needed
                 elif tracker.state == State.INTERVENING:
                     detail = f"light={tracker.light_status}, deep={tracker.deep_status}"
@@ -165,6 +182,15 @@ async def _repair_monitor_loop() -> None:
                         },
                     )
                     tracker.incident_id = inc_id
+
+                    # Push notification: incident detected
+                    sev = "major" if tracker.light_status in ("unhealthy", "timeout") else "minor"
+                    await publish_push(
+                        title=f"{service} 服務異常",
+                        body=detail,
+                        severity="critical" if sev == "major" else "warning",
+                        tag=f"sentinel-{service}",
+                    )
 
                     # Dispatch repair
                     pane = await remediator.dispatch(service, detail)

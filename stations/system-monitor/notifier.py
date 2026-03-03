@@ -1,16 +1,21 @@
 """
-System Monitor V2 Notifier — pressure alerts via file + macOS notifications.
+System Monitor V2 Notifier — pressure alerts via file + macOS + Web Push notifications.
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import os
 import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+import redis
+
 SCRIPT_DIR = Path(__file__).parent
+logger = logging.getLogger("sysmon.notifier")
 
 # Pressure levels ranked by severity
 PRESSURE_RANK = {"normal": 0, "unknown": 0, "warning": 1, "critical": 2, "danger": 3}
@@ -29,6 +34,8 @@ class PressureNotifier:
             config.get("output_dir", "~/.claude/data/system-monitor")
         ).expanduser() / "alerts"
         self.alert_dir.mkdir(parents=True, exist_ok=True)
+        self._last_pressure = "normal"  # Track pressure level to only push on escalation
+        self._redis_url = os.environ.get("SYSMON_REDIS_URL", "redis://localhost:6379/0")
 
     def check_and_alert(self, data: dict) -> list[dict]:
         """Check pressure levels and send alerts if >= warning.
@@ -82,6 +89,13 @@ class PressureNotifier:
             self._alert_file(alerts, timestamp, overall)
         if "macos" in self.methods:
             self._alert_macos(alerts, overall)
+
+        # Web Push: only on pressure ESCALATION (normal→warning, warning→critical, etc.)
+        prev_rank = PRESSURE_RANK.get(self._last_pressure, 0)
+        curr_rank = PRESSURE_RANK.get(overall, 0)
+        if curr_rank > prev_rank:
+            self._alert_push(alerts, overall)
+        self._last_pressure = overall
 
         return alerts
 
@@ -142,3 +156,22 @@ class PressureNotifier:
             )
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+
+    def _alert_push(self, alerts: list[dict], overall: str) -> None:
+        """Publish Web Push notification via Redis Pub/Sub."""
+        summary = ", ".join(a["detail"] for a in alerts[:3])
+        severity_map = {"warning": "warning", "critical": "critical", "danger": "critical"}
+        payload = {
+            "category": "system",
+            "title": f"系統壓力: {overall.upper()}",
+            "body": summary,
+            "url": "/v2/apps/sysmon/",
+            "tag": "system-pressure",
+            "severity": severity_map.get(overall, "warning"),
+        }
+        try:
+            r = redis.Redis.from_url(self._redis_url, decode_responses=True)
+            r.publish("workshop:push", json.dumps(payload, ensure_ascii=False))
+            r.close()
+        except Exception as e:
+            logger.warning("Failed to publish push notification: %s", e)

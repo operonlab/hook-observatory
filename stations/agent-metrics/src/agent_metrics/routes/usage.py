@@ -7,6 +7,8 @@ in run_in_executor to keep the event loop non-blocking.
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 
 from fastapi import APIRouter, Query
 
@@ -16,6 +18,11 @@ from agent_metrics.usage_collector import (
     collect_subscriptions,
     get_month_to_date,
 )
+
+logger = logging.getLogger("agent-metrics.usage")
+
+# Track whether we've already pushed a budget warning this month
+_budget_warning_pushed = False
 
 router = APIRouter()
 
@@ -47,11 +54,18 @@ async def usage_by_model(days: int = Query(default=30, ge=1, le=365)) -> dict:
 @router.get("/budget")
 async def usage_budget() -> dict:
     """Monthly budget status (API spend vs budget)."""
+    global _budget_warning_pushed
     mtd = await _run_sync(get_month_to_date)
     budget = settings.API_MONTHLY_BUDGET_USD
     used = mtd.get("total_cost_usd", 0)
     used_pct = round(used / budget * 100, 1) if budget > 0 else 0
     warning = used_pct >= settings.BUDGET_WARNING_PCT
+
+    # Push notification once per month when budget warning threshold is hit
+    if warning and not _budget_warning_pushed:
+        _budget_warning_pushed = True
+        await _push_budget_warning(used_pct, used, budget)
+
     return {
         "budget_usd": budget,
         "used_usd": used,
@@ -61,6 +75,26 @@ async def usage_budget() -> dict:
         "warning_threshold_pct": settings.BUDGET_WARNING_PCT,
         "days_elapsed": mtd.get("days", 0),
     }
+
+
+async def _push_budget_warning(used_pct: float, used: float, budget: float) -> None:
+    """Publish budget warning to Redis workshop:push channel."""
+    import redis.asyncio as aioredis
+
+    payload = {
+        "category": "agent",
+        "title": f"LLM 用量警告: {used_pct}%",
+        "body": f"本月已使用 ${used:.2f} / ${budget:.2f}",
+        "url": "/v2/apps/agent-metrics/",
+        "tag": "agent-budget-monthly",
+        "severity": "warning",
+    }
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        await r.publish("workshop:push", json.dumps(payload, ensure_ascii=False))
+        await r.aclose()
+    except Exception as e:
+        logger.warning("Failed to publish budget warning: %s", e)
 
 
 @router.get("/cache")
