@@ -8,10 +8,10 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 
-from agentops.config import settings
-from agentops.db import get_pool
-from agentops.engines import maestro as me
-from agentops.models import DispatchRequest, PlanRequest
+from agent_metrics.config import settings
+from agent_metrics.db import get_pool
+from agent_metrics.engines import maestro as me
+from agent_metrics.models import DispatchRequest, PlanRequest
 
 router = APIRouter()
 
@@ -110,7 +110,7 @@ async def run_dispatch(body: DispatchRequest) -> dict:
     # Fire-and-forget hook notification
     asyncio.create_task(
         me.notify_hook(
-            "agentops.dispatch.completed",
+            "agent-metrics.dispatch.completed",
             {"name": run.name, "pattern": run.pattern, "duration_s": run.duration_s},
         )
     )

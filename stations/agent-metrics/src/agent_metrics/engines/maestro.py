@@ -22,7 +22,7 @@ import asyncpg
 import structlog
 import yaml
 
-from agentops.config import settings
+from agent_metrics.config import settings
 
 log = structlog.get_logger()
 
