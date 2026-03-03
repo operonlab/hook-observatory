@@ -122,6 +122,7 @@ class SearchMetadata(BaseModel):
     scoring_applied: bool = True
     stages_applied: list[str] = []
     stages_skipped: list[str] = []
+    reranker_used: bool = False
     adaptive_skipped: bool = False
     adaptive_reason: str | None = None
     noise_filtered: int = 0
