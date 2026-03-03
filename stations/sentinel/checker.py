@@ -90,6 +90,10 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:9526/",
     ),
     LightCheck(
+        name="agentops",
+        url="http://127.0.0.1:8795/health",
+    ),
+    LightCheck(
         name="tmux-webui",
         url="http://127.0.0.1:9527/",
     ),
