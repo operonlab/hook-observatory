@@ -140,11 +140,6 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:8795/health",
     ),
     LightCheck(
-        name="llm-usage",
-        group="external",
-        url="http://127.0.0.1:9525/",
-    ),
-    LightCheck(
         name="sentinel",
         group="external",
         url="http://127.0.0.1:4101/health",
@@ -214,12 +209,6 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="agent-metrics-render",
         group="external",
         url="http://127.0.0.1:8080/v2/apps/agentops/",
-        playwright_code=_PW_BODY_CHECK,
-    ),
-    DeepCheck(
-        name="llm-usage-render",
-        group="external",
-        url="http://127.0.0.1:8080/v2/apps/llm/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
@@ -354,7 +343,6 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "system-monitor-render": "sysm",
         "tmux-webui-render": "tmux",
         "agent-metrics-render": "am",
-        "llm-usage-render": "llm",
         "sentinel-render": "sntl",
         "file-manager-render": "files",
     }

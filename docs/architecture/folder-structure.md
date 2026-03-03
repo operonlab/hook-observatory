@@ -68,7 +68,6 @@ Workshop 將所有功能組織成三個層級：
 ├── mcp/                         # MCP 適配層 (對核心 API 的薄封裝)
 ├── stations/                    # 獨立本地工具
 │   ├── system-monitor/          # 磁碟分析 + 硬體資源監控
-│   ├── llm-usage/               # LLM Token/Cost 統一追蹤
 │   ├── envkit/                  # 環境快照 + 一鍵移植
 │   ├── tmux-webui/              # tmux 瀏覽器控制介面
 │   ├── session-redactor/        # 轉錄檔敏感資料清理
@@ -219,7 +218,6 @@ stations/<name>/
 | Station | 語言 | 使用 SDK | 定位 |
 |---------|------|:--------:|------|
 | system-monitor | Python/Shell | ✅ | 磁碟 + 硬體監控，週報制 |
-| llm-usage | Python | ✅ | LLM Token/Cost 統一追蹤 |
 | envkit | Python/Shell | ❌ | 環境快照 + 一鍵移植 CLI |
 | tmux-webui | Python | ❌ | tmux 瀏覽器控制 + 系統指標 |
 | session-redactor | Python | ❌ | SessionEnd hook 敏感資料清理 |
