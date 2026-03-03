@@ -158,16 +158,17 @@ class InterventionEngine:
 
     def get_all_statuses(self) -> dict[str, dict]:
         """Get all service statuses for API response."""
+        from checker import GROUP_MAP, merge_status
+
         result = {}
         for name, t in self.trackers.items():
-            from checker import merge_status
-
             overall = merge_status(t.light_status, t.deep_status)
             if t.state == State.MAINTENANCE:
                 overall = "maintenance"
             result[name] = {
                 "service": name,
                 "status": overall,
+                "group": GROUP_MAP.get(name),
                 "state": t.state.value,
                 "light_status": t.light_status,
                 "deep_status": t.deep_status,

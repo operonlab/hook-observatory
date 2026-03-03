@@ -34,18 +34,51 @@ const STATUS_LABELS_SHORT = {
     unknown:         '未知',
 };
 
+// ── Service groups (4 categories) ──
+
+const SERVICE_GROUPS = {
+    system:   { label: '系統',     order: 0 },
+    infra:    { label: '基礎設施', order: 1 },
+    internal: { label: '內部服務', order: 2 },
+    external: { label: '外部工具', order: 3 },
+};
+
 const SERVICE_DISPLAY = {
-    core:                      'Core API',
-    frontend:                  '前端 (Nginx)',
-    'frontend-memvault':       '前端 — 記憶金庫',
-    'frontend-render':         '前端渲染 (Deep)',
+    // system
+    nginx:                      'Nginx',
+    orbstack:                   'OrbStack',
+    // infra
+    postgres:                   'PostgreSQL',
+    redis:                      'Redis',
+    rustfs:                     'RustFS (S3)',
+    lgtm:                       'LGTM Stack',
+    'lgtm-render':              'LGTM 渲染 (Deep)',
+    litellm:                    'LiteLLM Proxy',
+    ollama:                     'Ollama',
+    // internal
+    core:                       'Core API',
+    gateway:                    'Gateway',
+    frontend:                   'Workbench',
+    'frontend-memvault':        '記憶金庫',
+    'frontend-render':          'Workbench 渲染 (Deep)',
     'frontend-memvault-render': '記憶金庫渲染 (Deep)',
-    'hook-observatory':        'Hook 監控台',
-    'agent-vista':             'Agent Vista',
-    litellm:                   'LiteLLM Proxy',
-    postgres:                  'PostgreSQL',
-    redis:                     'Redis',
-    rustfs:                    'RustFS (S3)',
+    // external
+    'hook-observatory':         'Hook 監控台',
+    'hook-observatory-render':  'Hook 監控台渲染 (Deep)',
+    'agent-vista':              'Agent Vista',
+    'agent-vista-render':       'Agent Vista 渲染 (Deep)',
+    'system-monitor':           '系統監控',
+    'system-monitor-render':    '系統監控渲染 (Deep)',
+    'tmux-webui':               'tmux WebUI',
+    'tmux-webui-render':        'tmux WebUI 渲染 (Deep)',
+    'agent-metrics':            'Agent Metrics',
+    'agent-metrics-render':     'Agent Metrics 渲染 (Deep)',
+    'llm-usage':                'LLM 用量',
+    'llm-usage-render':         'LLM 用量渲染 (Deep)',
+    sentinel:                   '服務哨兵',
+    'sentinel-render':          '服務哨兵渲染 (Deep)',
+    'file-manager':             '檔案管理',
+    'file-manager-render':      '檔案管理渲染 (Deep)',
 };
 
 const INCIDENT_LABELS = {
@@ -123,7 +156,7 @@ function renderBanner(data) {
     el.querySelector('.banner__text').textContent = STATUS_LABELS[status] || status;
 }
 
-// ── Render: Service List ──
+// ── Render: Service List (grouped) ──
 
 function renderServices(data) {
     const container = document.getElementById('services-container');
@@ -136,30 +169,68 @@ function renderServices(data) {
     }
 
     const ORDER = { major_outage: 0, partial_outage: 1, degraded: 2, maintenance: 3, operational: 4, unknown: 5 };
-    const sorted = [...data.services].sort((a, b) =>
-        (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9)
+
+    // Group services
+    const groups = {};
+    for (const s of data.services) {
+        const g = s.group || 'external';
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(s);
+    }
+
+    // Sort groups by defined order, sort services within each group by severity
+    const sortedGroupKeys = Object.keys(groups).sort(
+        (a, b) => (SERVICE_GROUPS[a]?.order ?? 9) - (SERVICE_GROUPS[b]?.order ?? 9)
     );
 
-    const healthy = sorted.filter(s => s.status === 'operational').length;
-    countEl.textContent = `${healthy} / ${sorted.length} 正常`;
+    const allServices = data.services;
+    const healthy = allServices.filter(s => s.status === 'operational').length;
+    countEl.textContent = `${healthy} / ${allServices.length} 正常`;
 
-    container.innerHTML = sorted.map((s, i) => {
-        const name        = SERVICE_DISPLAY[s.service] || s.service;
-        const latency     = s.response_ms ? `${Math.round(s.response_ms)}ms` : '—';
-        const statusLabel = STATUS_LABELS_SHORT[s.status] || s.status;
-        return `
-            <div class="svc svc--${s.status} anim-item" style="--i:${i + 2}">
-                <div class="svc__left">
-                    <span class="svc__dot dot--${s.status}" aria-hidden="true"></span>
-                    <span class="svc__name">${escHtml(name)}</span>
+    let animIdx = 2;
+    let html = '';
+
+    for (const gKey of sortedGroupKeys) {
+        const gInfo    = SERVICE_GROUPS[gKey] || { label: gKey };
+        const gServices = groups[gKey].sort((a, b) =>
+            (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9)
+        );
+        const gHealthy = gServices.filter(s => s.status === 'operational').length;
+
+        html += `
+            <div class="group anim-item" style="--i:${animIdx++}">
+                <div class="group__header">
+                    <span class="group__title">${escHtml(gInfo.label)}</span>
+                    <span class="group__count">${gHealthy} / ${gServices.length}</span>
                 </div>
-                <div class="svc__right">
-                    <span class="svc__latency mono">${latency}</span>
-                    <span class="svc__badge badge--${s.status}">${statusLabel}</span>
+                <div class="group__services">
+        `;
+
+        for (const s of gServices) {
+            const name        = SERVICE_DISPLAY[s.service] || s.service;
+            const latency     = s.response_ms ? `${Math.round(s.response_ms)}ms` : '—';
+            const statusLabel = STATUS_LABELS_SHORT[s.status] || s.status;
+            html += `
+                <div class="svc svc--${s.status} anim-item" style="--i:${animIdx++}">
+                    <div class="svc__left">
+                        <span class="svc__dot dot--${s.status}" aria-hidden="true"></span>
+                        <span class="svc__name">${escHtml(name)}</span>
+                    </div>
+                    <div class="svc__right">
+                        <span class="svc__latency mono">${latency}</span>
+                        <span class="svc__badge badge--${s.status}">${statusLabel}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `
                 </div>
             </div>
         `;
-    }).join('');
+    }
+
+    container.innerHTML = html;
 }
 
 // ── Render: 90-Day Timeline ──
