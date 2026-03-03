@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     COLLECTION_LATEST_FILE: str = "~/.claude/data/llm-usage/latest.json"
     COLLECTION_RETENTION_DAYS: int = 90
 
+    # Redis (for push notifications)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     model_config = {"env_prefix": "AGENT_METRICS_", "env_file": ".env", "extra": "ignore"}
 
 

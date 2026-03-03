@@ -12,6 +12,7 @@ dependencies = [
     "pyyaml>=6.0",
     "httpx>=0.28",
     "structlog>=24.4",
+    "redis>=5.0",
 ]
 
 [project.scripts]

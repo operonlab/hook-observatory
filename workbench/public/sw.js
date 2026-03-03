@@ -1,6 +1,35 @@
 const CACHE_NAME = "workshop-__CACHE_VERSION__";
 const APP_SHELL = ["/v2/manifest.json", "/v2/icons/icon-192.svg"];
 
+// ── Web Push ──
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  const data = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Workshop", {
+      body: data.body || "",
+      icon: data.icon || "/v2/icons/icon-192.svg",
+      tag: data.tag,
+      data: { url: data.url || "/v2/" },
+      vibrate: data.severity === "critical" ? [200, 100, 200, 100, 200] : [100, 50, 100],
+      requireInteraction: data.severity !== "info",
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/v2/";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((wc) => {
+      for (const c of wc) {
+        if ("focus" in c) { c.navigate(url); return c.focus(); }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
+
 // Install: cache app shell (excluding index.html to ensure fresh loads)
 self.addEventListener("install", (event) => {
   event.waitUntil(

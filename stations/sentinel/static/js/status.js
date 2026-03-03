@@ -406,7 +406,31 @@ async function refresh() {
 
 if ('serviceWorker' in navigator) {
     const swPath = `${window.location.pathname.replace(/\/$/, '')}/static/sw.js`;
-    navigator.serviceWorker.register(swPath).catch(() => {});
+    navigator.serviceWorker.register(swPath).then((reg) => {
+        if (Notification.permission === 'granted') {
+            workshopPushSubscribe(reg, '/v2/apps/sentinel/');
+        }
+    }).catch(() => {});
+}
+
+async function workshopPushSubscribe(reg, appScope) {
+    try {
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) return;
+        const res = await fetch('/v2/api/notification/vapid-key');
+        if (!res.ok) return;
+        const { public_key } = await res.json();
+        const padding = '='.repeat((4 - public_key.length % 4) % 4);
+        const raw = atob((public_key + padding).replace(/-/g, '+').replace(/_/g, '/'));
+        const key = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        const j = sub.toJSON();
+        await fetch('/v2/api/notification/subscriptions', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, app_scope: appScope }),
+        });
+    } catch (e) { console.warn('[Push] subscribe failed:', e); }
 }
 
 // ── Init ──
