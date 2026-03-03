@@ -5,7 +5,7 @@ Modes:
   dag     – Dependency graph, parallel dispatch when deps resolve.
   debate  – N agents examine same question, cross-review, synthesize.
 
-Storage: asyncpg → agentops.projects (JSONB state column).
+Storage: asyncpg → agent_metrics.projects (JSONB state column).
 """
 
 from __future__ import annotations
