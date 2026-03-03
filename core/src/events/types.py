@@ -112,6 +112,27 @@ class MatchcoreEvents:
     SCORE_CALCULATED = "matchcore.score.calculated"
 
 
+class InvestEvents:
+    TRADE_EXECUTED = "invest.trade.executed"
+    DIVIDEND_RECEIVED = "invest.dividend.received"
+    VALUATION_UPDATED = "invest.valuation.updated"
+    POSITION_OPENED = "invest.position.opened"
+    POSITION_CLOSED = "invest.position.closed"
+
+
+class NodeflowEvents:
+    FLOW_CREATED = "nodeflow.flow.created"
+    FLOW_UPDATED = "nodeflow.flow.updated"
+    FLOW_ACTIVATED = "nodeflow.flow.activated"
+    FLOW_PAUSED = "nodeflow.flow.paused"
+    FLOW_ARCHIVED = "nodeflow.flow.archived"
+    FLOW_RUN_STARTED = "nodeflow.flow_run.started"
+    FLOW_RUN_COMPLETED = "nodeflow.flow_run.completed"
+    FLOW_RUN_FAILED = "nodeflow.flow_run.failed"
+    NODE_EXECUTED = "nodeflow.node.executed"
+    NODE_FAILED = "nodeflow.node.failed"
+
+
 class PluginEvents:
     INSTALLED = "plugin.installed"
     ENABLED = "plugin.enabled"
