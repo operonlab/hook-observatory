@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>系統監控</title>
+  <meta name="theme-color" content="#1e1e2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SysMon">
+  <link rel="manifest" href="static/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="static/icons/icon-192.svg">
+  <link rel="apple-touch-icon" href="static/icons/icon-192.svg">
   <link rel="stylesheet" href="static/css/dashboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -349,5 +356,26 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
   <script src="static/js/dashboard.js"></script>
+  <script>
+    // Service Worker 註冊
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('static/sw.js', { scope: './' })
+          .then((reg) => {
+            console.log('[SW] 註冊成功, scope:', reg.scope);
+            // 偵測更新
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'activated') {
+                  console.log('[SW] 新版本已啟用');
+                }
+              });
+            });
+          })
+          .catch((err) => console.warn('[SW] 註冊失敗:', err));
+      });
+    }
+  </script>
 </body>
 </html>

@@ -31,12 +31,8 @@ def _load_config() -> dict:
 
 CONFIG = _load_config()
 
-ALERTS_DIR = Path(
-    CONFIG.get("output_dir", "~/.claude/data/system-monitor")
-).expanduser() / "alerts"
-DATA_DIR = Path(
-    CONFIG.get("output_dir", "~/.claude/data/system-monitor")
-).expanduser()
+ALERTS_DIR = Path(CONFIG.get("output_dir", "~/.claude/data/system-monitor")).expanduser() / "alerts"
+DATA_DIR = Path(CONFIG.get("output_dir", "~/.claude/data/system-monitor")).expanduser()
 REPORTS_DIR = Path(
     CONFIG.get("reports", {}).get("output_dir", "~/.claude/data/system-monitor/reports")
 ).expanduser()
@@ -72,6 +68,7 @@ class CleanCacheRequest(BaseModel):
 def _get_latest_data() -> dict:
     """Run collector and cache result."""
     import time
+
     global _cache, _cache_time
 
     now = time.time()
@@ -80,6 +77,7 @@ def _get_latest_data() -> dict:
 
     try:
         from collector import collect_all, collect_disk_fast, load_config
+
         config = load_config()
         # Hardware + fast APFS-level disk (skip slow file scanning)
         data = collect_all(config, disk=False, hardware=True)
@@ -95,6 +93,17 @@ def _get_latest_data() -> dict:
 async def dashboard(request: Request):
     """Serve the dashboard UI."""
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/sw.js")
+async def service_worker():
+    """Serve SW from root path to maximize scope coverage."""
+    sw_path = SCRIPT_DIR / "static" / "sw.js"
+    return FileResponse(
+        sw_path,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
 
 
 @app.get("/health")
@@ -137,6 +146,7 @@ async def list_services():
     import asyncio
 
     from collector import collect_services
+
     services = await asyncio.get_event_loop().run_in_executor(None, collect_services)
     return {"services": services, "total": len(services)}
 
@@ -156,6 +166,7 @@ async def enable_service(label: str):
             continue
         try:
             import plistlib
+
             with open(p, "rb") as f:
                 plist = plistlib.load(f)
             if plist.get("Label") == label:
@@ -178,7 +189,9 @@ async def enable_service(label: str):
 
     result = subprocess.run(
         ["launchctl", "load", str(enabled_path)],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode != 0:
         return {"status": "error", "label": label, "detail": result.stderr.strip()}
@@ -196,6 +209,7 @@ async def disable_service(label: str):
     for p in agents_dir.glob("*.plist"):
         try:
             import plistlib
+
             with open(p, "rb") as f:
                 plist = plistlib.load(f)
             if plist.get("Label") == label:
@@ -209,7 +223,9 @@ async def disable_service(label: str):
 
     result = subprocess.run(
         ["launchctl", "unload", str(plist_path)],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode != 0:
         return {"status": "error", "label": label, "detail": result.stderr.strip()}
@@ -231,6 +247,7 @@ async def restart_service(label: str):
     for p in agents_dir.glob("*.plist"):
         try:
             import plistlib
+
             with open(p, "rb") as f:
                 plist = plistlib.load(f)
             if plist.get("Label") == label:
@@ -245,12 +262,16 @@ async def restart_service(label: str):
     # Unload
     subprocess.run(
         ["launchctl", "unload", str(plist_path)],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     # Load
     result = subprocess.run(
         ["launchctl", "load", str(plist_path)],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode != 0:
         return {"status": "error", "label": label, "detail": result.stderr.strip()}
@@ -263,6 +284,7 @@ async def service_logs(label: str, lines: int = 50):
     import asyncio
 
     from collector import get_service_logs
+
     data = await asyncio.get_event_loop().run_in_executor(
         None, lambda: get_service_logs(label, lines)
     )
@@ -273,6 +295,7 @@ async def service_logs(label: str, lines: int = 50):
 async def guardian_log():
     """Get memory guardian action log."""
     from collector import collect_guardian_log
+
     entries = collect_guardian_log()
     return {"entries": entries, "total": len(entries)}
 
@@ -285,14 +308,16 @@ async def history():
     for f in sorted(DATA_DIR.glob("snapshot-*.json"), reverse=True)[:30]:
         try:
             data = json.loads(f.read_text())
-            snapshots.append({
-                "filename": f.name,
-                "timestamp": data.get("timestamp"),
-                "pressure_level": data.get("pressure_level"),
-                "disk_usage_pct": data.get("disk", {}).get("usage_pct"),
-                "cpu_usage_pct": data.get("hardware", {}).get("cpu", {}).get("usage_pct"),
-                "memory_usage_pct": data.get("hardware", {}).get("memory", {}).get("usage_pct"),
-            })
+            snapshots.append(
+                {
+                    "filename": f.name,
+                    "timestamp": data.get("timestamp"),
+                    "pressure_level": data.get("pressure_level"),
+                    "disk_usage_pct": data.get("disk", {}).get("usage_pct"),
+                    "cpu_usage_pct": data.get("hardware", {}).get("cpu", {}).get("usage_pct"),
+                    "memory_usage_pct": data.get("hardware", {}).get("memory", {}).get("usage_pct"),
+                }
+            )
         except (json.JSONDecodeError, OSError):
             continue
     return {"snapshots": snapshots, "total": len(snapshots)}
@@ -323,10 +348,9 @@ async def disk_summary():
     import asyncio
 
     from collector import collect_disk_fast, load_config
+
     config = load_config()
-    data = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: collect_disk_fast(config)
-    )
+    data = await asyncio.get_event_loop().run_in_executor(None, lambda: collect_disk_fast(config))
     return data
 
 
@@ -343,10 +367,9 @@ async def disk_scan():
         return _disk_scan_cache
 
     from collector import collect_disk, load_config
+
     config = load_config()
-    data = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: collect_disk(config)
-    )
+    data = await asyncio.get_event_loop().run_in_executor(None, lambda: collect_disk(config))
     _disk_scan_cache = data
     _disk_scan_time = time.time()
     return data
@@ -411,21 +434,25 @@ async def list_reports(
         all_files = [f for f in all_files if report_type in f.stem]
 
     total = len(all_files)
-    page = all_files[offset:offset + limit]
+    page = all_files[offset : offset + limit]
 
     reports = []
     for f in page:
         stat = f.stat()
-        reports.append({
-            "filename": f.name,
-            "size_bytes": stat.st_size,
-            "created": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-            "type": (
-                "monthly" if "monthly" in f.stem
-                else "weekly" if "weekly" in f.stem
-                else "daily"
-            ),
-        })
+        reports.append(
+            {
+                "filename": f.name,
+                "size_bytes": stat.st_size,
+                "created": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+                "type": (
+                    "monthly"
+                    if "monthly" in f.stem
+                    else "weekly"
+                    if "weekly" in f.stem
+                    else "daily"
+                ),
+            }
+        )
     return {"reports": reports, "total": total}
 
 
