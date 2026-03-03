@@ -48,6 +48,8 @@ class MemoryBlockService(
     BaseCRUDService[MemoryBlock, MemoryBlockCreate, MemoryBlockUpdate, MemoryBlockResponse]
 ):
     model = MemoryBlock
+    audit_module = "memvault"
+    audit_entity_type = "blocks"
 
     def before_create(self, data: MemoryBlockCreate, **kwargs: Any) -> dict:
         d = data.model_dump()
@@ -96,6 +98,7 @@ class MemoryBlockService(
         base = select(MemoryBlock).where(
             MemoryBlock.space_id == space_id,
             MemoryBlock.tags.contains(tags),
+            MemoryBlock.deleted_at == None,  # noqa: E711
         )
         count_q = select(func.count()).select_from(base.subquery())
         total = (await db.execute(count_q)).scalar_one()
@@ -120,6 +123,7 @@ class MemoryBlockService(
         base = select(MemoryBlock).where(
             MemoryBlock.space_id == space_id,
             MemoryBlock.block_type == block_type,
+            MemoryBlock.deleted_at == None,  # noqa: E711
         )
         count_q = select(func.count()).select_from(base.subquery())
         total = (await db.execute(count_q)).scalar_one()
@@ -491,6 +495,8 @@ class KnowledgeDomainService(
     ]
 ):
     model = KnowledgeDomain
+    audit_module = "memvault"
+    audit_entity_type = "knowledge_domains"
 
     def to_response(self, instance: KnowledgeDomain) -> KnowledgeDomainResponse:
         return KnowledgeDomainResponse(

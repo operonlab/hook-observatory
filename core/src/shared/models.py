@@ -1,4 +1,4 @@
-"""Base ORM models — TimestampMixin, SpaceScopedModel, GlobalModel."""
+"""Base ORM models — TimestampMixin, SoftDeleteMixin, SpaceScopedModel, GlobalModel."""
 
 from datetime import datetime
 
@@ -27,7 +27,15 @@ class TimestampMixin:
     )
 
 
-class SpaceScopedModel(TimestampMixin, Base):
+class SoftDeleteMixin:
+    """Soft delete support — set deleted_at instead of hard deleting."""
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None, index=True
+    )
+
+
+class SpaceScopedModel(TimestampMixin, SoftDeleteMixin, Base):
     """Base for entities scoped to a space (8/10 modules)."""
 
     __abstract__ = True

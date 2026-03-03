@@ -69,7 +69,7 @@ class Wallet(SpaceScopedModel):
     is_private: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     sync_provider: Mapped[str] = mapped_column(Text, server_default=text("'manual'"))
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # deleted_at inherited from SoftDeleteMixin via SpaceScopedModel
 
 
 # ======================== Categories ========================
