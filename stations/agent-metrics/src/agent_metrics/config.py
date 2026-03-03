@@ -72,7 +72,65 @@ class Settings(BaseSettings):
     # Redis (for push notifications)
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # --- Sysmon Collector ---
+    SYSMON_COLLECT_INTERVAL: int = 5
+    SYSMON_DISK_CACHE_TTL: int = 60
+    SYSMON_OUTPUT_PATH: str = "/tmp/agent-metrics-sysmon.json"
+    SYSMON_COMPAT_PATH: str = "/tmp/pulso-sysmon-latest.json"
+    SYSMON_HISTORY_SIZE: int = 720  # 1h @ 5s
+
+    # --- LLM Quota Collector ---
+    QUOTA_CACHE_TTL: int = 60
+    QUOTA_COMPAT_PATH: str = "/tmp/pulso-quota-all.json"
+    CODEX_AUTH_PATH: str = "~/.codex/auth.json"
+    GM_OAUTH_PATH: str = "~/.gemini/oauth_creds.json"
+    GM_CLIENT_ID: str = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
+    GM_CLIENT_SECRET: str = "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"
+
+    # --- Guardian ---
+    GUARDIAN_WARN_THRESHOLD: int = 40
+    GUARDIAN_CRIT_THRESHOLD: int = 8
+    GUARDIAN_IDLE_CPU: float = 1.0
+    GUARDIAN_MIN_AGE: int = 600
+    GUARDIAN_GRACE_SECONDS: int = 60
+    GUARDIAN_COOLDOWN: int = 120
+    GUARDIAN_SUSTAINED_CHECKS: int = 3
+    EXPENDABLE_APPS: list[str] = [
+        "Google Chrome Helper (Renderer)|Chrome Tabs",
+        "LINE|LINE",
+        "LineCall|LINE Call",
+        "openclaw-gateway|OpenClaw",
+        "AltServer|AltServer",
+    ]
+
+    # --- Process Sweep ---
+    SWEEP_INTERVAL: int = 1800  # 30 minutes
+    MCP_CONFIG_PATHS: list[str] = [
+        "~/.mcp.json",
+        "~/workshop/.mcp.json",
+    ]
+    MCP_EXTRA_PATTERNS: list[str] = []
+    SWEEP_CPU_THRESHOLD: float = 80.0
+    SWEEP_CPU_MIN_AGE: int = 600
+    SWEEP_CPU_WHITELIST: list[str] = ["claude", "ollama"]
+    SWEEP_STALE_WARN_HOURS: int = 24
+    SWEEP_STALE_KILL_HOURS: int = 48
+    SWEEP_STALE_WHITELIST: list[str] = ["claude", "cost-server", "browser-tools-server"]
+
     model_config = {"env_prefix": "AGENT_METRICS_", "env_file": ".env", "extra": "ignore"}
+
+    @property
+    def expendable_list(self) -> list[tuple[str, str]]:
+        result = []
+        for entry in self.EXPENDABLE_APPS:
+            if "|" in entry:
+                pattern, name = entry.split("|", 1)
+                result.append((pattern, name))
+        return result
+
+    @property
+    def mcp_pattern_list(self) -> list[str]:
+        return self.MCP_EXTRA_PATTERNS
 
 
 settings = Settings()

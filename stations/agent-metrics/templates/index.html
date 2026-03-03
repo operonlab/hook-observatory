@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Metrics</title>
+  <meta name="theme-color" content="#1e1e2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgentMetrics">
+  <link rel="stylesheet" href="static/css/dashboard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <h1>Agent Metrics</h1>
+      <span class="header-info" id="sys-info">v{{ version }}</span>
+    </div>
+    <div class="header-right">
+      <span id="last-updated">—</span>
+      <div class="toggle-wrap" id="auto-refresh-toggle" title="Auto refresh">
+        <div class="toggle-track active" id="toggle-track">
+          <div class="toggle-thumb"></div>
+        </div>
+        <span>Auto</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tab Bar -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="quotas">Quotas</button>
+    <button class="tab-btn" data-tab="sessions">Sessions</button>
+    <button class="tab-btn" data-tab="system">System</button>
+    <button class="tab-btn" data-tab="usage">Usage</button>
+    <button class="tab-btn" data-tab="ops">Operations</button>
+  </nav>
+
+  <!-- ═══ Tab: Quotas ═══ -->
+  <div class="tab-panel active" id="panel-quotas">
+    <div class="container">
+      <div class="card">
+        <div class="card-title">LLM Quota Usage</div>
+        <div class="quota-grid" id="quota-grid">
+          <div class="empty">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Tab: Sessions ═══ -->
+  <div class="tab-panel" id="panel-sessions">
+    <div class="container">
+      <!-- Stat cards -->
+      <div class="stat-grid" id="session-stats">
+        <div class="stat-card"><div class="stat-label">Today Cost</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">Active</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">Sessions</div><div class="stat-value">—</div></div>
+        <div class="stat-card"><div class="stat-label">7d Summaries</div><div class="stat-value">—</div></div>
+      </div>
+
+      <!-- Sessions table -->
+      <div class="card">
+        <div class="card-title">Active Sessions</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>CLI</th>
+                <th>Model</th>
+                <th>CWD</th>
+                <th>Cost</th>
+                <th>Last Seen</th>
+              </tr>
+            </thead>
+            <tbody id="sessions-tbody">
+              <tr><td colspan="5" class="empty">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Tab: System ═══ -->
+  <div class="tab-panel" id="panel-system">
+    <div class="container">
+      <!-- Gauges -->
+      <div class="gauge-grid">
+        <!-- CPU -->
+        <div class="card">
+          <div class="card-title">CPU</div>
+          <div class="gauge-container">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="track" cx="18" cy="18" r="15.9"/>
+                <circle class="fill" id="cpu-gauge" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+              </svg>
+              <div class="gauge-value" id="cpu-pct">—</div>
+            </div>
+            <div class="gauge-details" id="cpu-details"></div>
+          </div>
+        </div>
+
+        <!-- Memory -->
+        <div class="card">
+          <div class="card-title">Memory</div>
+          <div class="gauge-container">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="track" cx="18" cy="18" r="15.9"/>
+                <circle class="fill" id="mem-gauge" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+              </svg>
+              <div class="gauge-value" id="mem-pct">—</div>
+            </div>
+            <div class="gauge-details" id="mem-details"></div>
+          </div>
+        </div>
+
+        <!-- Disk -->
+        <div class="card">
+          <div class="card-title">Disk</div>
+          <div class="gauge-container">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 36 36">
+                <circle class="track" cx="18" cy="18" r="15.9"/>
+                <circle class="fill" id="disk-gauge" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
+              </svg>
+              <div class="gauge-value" id="disk-pct">—</div>
+            </div>
+            <div class="gauge-details" id="disk-details"></div>
+          </div>
+        </div>
+
+        <!-- Network -->
+        <div class="card">
+          <div class="card-title">Network</div>
+          <div id="net-info" style="padding:0.5rem 0">
+            <div class="empty">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Claude Processes -->
+      <div class="card">
+        <div class="card-title">Claude Processes</div>
+        <div id="claude-procs">
+          <div class="empty">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Tab: Usage ═══ -->
+  <div class="tab-panel" id="panel-usage">
+    <div class="container">
+      <div class="two-col">
+        <!-- Budget -->
+        <div class="card">
+          <div class="card-title">Monthly Budget</div>
+          <div id="budget-info">
+            <div class="empty">Loading...</div>
+          </div>
+        </div>
+
+        <!-- Trends -->
+        <div class="card">
+          <div class="card-title">
+            <span>30-Day Trends</span>
+            <span id="trends-projection" style="font-size:0.65rem;color:var(--subtext0);margin-left:auto"></span>
+          </div>
+          <div class="sparkline-container" id="trends-chart"></div>
+        </div>
+      </div>
+
+      <!-- By Model -->
+      <div class="card">
+        <div class="card-title">Cost by Model (30d)</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th style="text-align:right">Tokens</th>
+                <th style="text-align:right">Cost</th>
+                <th style="text-align:right">%</th>
+              </tr>
+            </thead>
+            <tbody id="model-tbody">
+              <tr><td colspan="4" class="empty">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Tab: Operations ═══ -->
+  <div class="tab-panel" id="panel-ops">
+    <div class="container">
+      <div class="two-col">
+        <!-- Guardian -->
+        <div class="card">
+          <div class="card-title">Guardian Log (48h)</div>
+          <div class="log-list" id="guardian-list">
+            <div class="empty">Loading...</div>
+          </div>
+        </div>
+
+        <!-- Sweep -->
+        <div class="card">
+          <div class="card-title">Sweep Log (48h)</div>
+          <div class="log-list" id="sweep-list">
+            <div class="empty">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Maestro -->
+      <div class="card">
+        <div class="card-title">Maestro Dispatch History</div>
+        <div class="log-list" id="maestro-list">
+          <div class="empty">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="static/js/charts.js"></script>
+  <script src="static/js/app.js"></script>
+</body>
+</html>
