@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Memvault CLI - Command-line interface for the Memvault memory system."""
+"""Memvault CLI - Command-line interface for the Memvault memory system.
+
+Uses the shared workshop SDK client instead of raw HTTP calls.
+"""
 
 import argparse
 import json
@@ -7,39 +10,8 @@ import os
 import sys
 from datetime import datetime
 
-import httpx
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-BASE_URL: str = os.environ.get("MEMVAULT_API_URL", "http://localhost:8801")
-SPACE_ID: str = os.environ.get("MEMVAULT_SPACE_ID", "default")
-API_PREFIX: str = "/api/memvault"
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-
-def api_get(path: str, params: dict | None = None) -> dict:
-    """Issue a GET request against the Memvault Core API."""
-    url = f"{BASE_URL}{API_PREFIX}{path}"
-    p: dict = {"space_id": SPACE_ID}
-    if params:
-        p.update(params)
-    resp = httpx.get(url, params=p, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def api_post(path: str, body: dict | None = None) -> dict:
-    """Issue a POST request against the Memvault Core API."""
-    url = f"{BASE_URL}{API_PREFIX}{path}"
-    resp = httpx.post(url, json=body or {}, params={"space_id": SPACE_ID}, timeout=60)
-    resp.raise_for_status()
-    return resp.json()
-
+from workshop.clients._base import APIError, ConnectionError as APIConnectionError
+from workshop.clients.memvault import MemvaultClient
 
 # ---------------------------------------------------------------------------
 # Formatting helpers
@@ -82,10 +54,9 @@ def fmt_dt(iso: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def cmd_recall(args: argparse.Namespace) -> None:
+def cmd_recall(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Semantic search over memory blocks."""
-    params = {"q": args.query, "top_k": args.top_k, "min_score": args.min_score}
-    data = api_get("/search", params)
+    data = client.recall(args.query, top_k=args.top_k, min_score=args.min_score)
 
     if args.json_output:
         print(json.dumps(data, indent=2, ensure_ascii=False))
@@ -98,7 +69,6 @@ def cmd_recall(args: argparse.Namespace) -> None:
         return
 
     for i, item in enumerate(results, 1):
-        # Handle both flat ({score, content, ...}) and nested ({score, block: {content, ...}}) formats
         block = item.get("block", item)
         score = item.get("score", block.get("score", 0))
         btype = block.get("block_type", block.get("type", "?"))
@@ -112,18 +82,15 @@ def cmd_recall(args: argparse.Namespace) -> None:
             print()
 
 
-def cmd_extract(args: argparse.Namespace) -> None:
+def cmd_extract(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Create a new memory block."""
-    body: dict = {
-        "content": args.text,
-        "block_type": args.type,
-    }
-    if args.tags:
-        body["tags"] = [t.strip() for t in args.tags.split(",") if t.strip()]
-    if args.session:
-        body["source_session"] = args.session
-
-    data = api_post("/blocks", body)
+    tags = [t.strip() for t in args.tags.split(",") if t.strip()] if args.tags else None
+    data = client.extract(
+        args.text,
+        block_type=args.type,
+        tags=tags,
+        source_session=args.session,
+    )
 
     if args.json_output:
         print(json.dumps(data, indent=2, ensure_ascii=False))
@@ -139,30 +106,22 @@ def cmd_extract(args: argparse.Namespace) -> None:
             print(f"  Tags: {args.tags}")
 
 
-def cmd_stats(args: argparse.Namespace) -> None:
+def cmd_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Display aggregate memory statistics."""
-    blocks_data = api_get("/blocks", {"page_size": 1})
-    tags_data = api_get("/tags")
-    profile_data = api_get("/profile")
+    data = client.stats()
 
     if args.json_output:
-        combined = {
-            "blocks": blocks_data,
-            "tags": tags_data,
-            "profile": profile_data,
-        }
-        print(json.dumps(combined, indent=2, ensure_ascii=False))
+        print(json.dumps(data, indent=2, ensure_ascii=False))
         return
 
-    # Total blocks
-    total = blocks_data.get("total", blocks_data.get("count", "?"))
+    blocks_data = data["blocks"]
+    tags_data = data["tags"]
+    profile_data = data["profile"]
 
-    # Tags
+    total = blocks_data.get("total", blocks_data.get("count", "?"))
     tag_list = tags_data if isinstance(tags_data, list) else tags_data.get("tags", [])
     unique_tags = len(tag_list)
     top_tags = tag_list[:20]
-
-    # KAS scores
     kas = profile_data.get("kas", profile_data.get("scores", {}))
 
     if args.quiet:
@@ -193,13 +152,9 @@ def cmd_stats(args: argparse.Namespace) -> None:
                 print(f"    - {t}")
 
 
-def cmd_profile(args: argparse.Namespace) -> None:
+def cmd_profile(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Display the KAS profile."""
-    params: dict = {}
-    if args.rebuild:
-        params["rebuild"] = "true"
-
-    data = api_get("/profile", params)
+    data = client.profile(rebuild=args.rebuild)
 
     if args.json_output:
         print(json.dumps(data, indent=2, ensure_ascii=False))
@@ -227,16 +182,14 @@ def cmd_profile(args: argparse.Namespace) -> None:
         print("  (rebuilt)")
 
 
-def cmd_cascade(args: argparse.Namespace) -> None:
+def cmd_cascade(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Knowledge-graph cascade recall."""
-    params = {"q": args.query, "top_k": args.top_k}
-    data = api_get("/kg/recall", params)
+    data = client.cascade(args.query, top_k=args.top_k)
 
     if args.json_output:
         print(json.dumps(data, indent=2, ensure_ascii=False))
         return
 
-    # Layered display: L2 Wisdom -> L1 Clusters -> L0 Triples -> Blocks
     wisdom = data.get("wisdom", [])
     clusters = data.get("clusters", [])
     triples = data.get("triples", [])
@@ -290,21 +243,15 @@ def cmd_cascade(args: argparse.Namespace) -> None:
         print("  No cascade results found.")
 
 
-def cmd_wisdom(args: argparse.Namespace) -> None:
+def cmd_wisdom(client: MemvaultClient, args: argparse.Namespace) -> None:
     """List wisdom nodes from the knowledge graph."""
-    data = api_get("/kg/wisdom")
+    data = client.wisdom(confidence=args.confidence, tag=args.tag)
 
     if args.json_output:
         print(json.dumps(data, indent=2, ensure_ascii=False))
         return
 
     nodes = data if isinstance(data, list) else data.get("wisdom", data.get("nodes", []))
-
-    # Apply filters
-    if args.confidence:
-        nodes = [n for n in nodes if n.get("confidence", "").upper() == args.confidence.upper()]
-    if args.tag:
-        nodes = [n for n in nodes if args.tag in n.get("tags", [])]
 
     if not nodes:
         if not args.quiet:
@@ -330,19 +277,15 @@ def cmd_wisdom(args: argparse.Namespace) -> None:
         print()
 
 
-def cmd_attitude(args: argparse.Namespace) -> None:
+def cmd_attitude(client: MemvaultClient, args: argparse.Namespace) -> None:
     """List active attitude facts."""
-    data = api_get("/kg/attitudes")
+    data = client.attitudes(category=args.category)
 
     if args.json_output:
         print(json.dumps(data, indent=2, ensure_ascii=False))
         return
 
     attitudes = data if isinstance(data, list) else data.get("attitudes", data.get("facts", []))
-
-    # Apply filter
-    if args.category:
-        attitudes = [a for a in attitudes if a.get("category", "").lower() == args.category.lower()]
 
     if not attitudes:
         if not args.quiet:
@@ -366,19 +309,22 @@ def cmd_attitude(args: argparse.Namespace) -> None:
         print()
 
 
-def cmd_health(args: argparse.Namespace) -> None:
+def cmd_health(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Check API connectivity."""
-    url = args.api_url or BASE_URL
-    data = api_get("/profile")
+    healthy = client.health()
 
     if args.json_output:
-        print(json.dumps({"status": "healthy", "url": url, "profile": data}, indent=2, ensure_ascii=False))
+        print(json.dumps({"status": "healthy" if healthy else "unhealthy", "url": client.base_url}, indent=2, ensure_ascii=False))
         return
+
+    if not healthy:
+        print(f"  Memvault API unreachable ({client.base_url})", file=sys.stderr)
+        sys.exit(1)
 
     if args.quiet:
         print("ok")
     else:
-        print(f"  Memvault API healthy ({url})")
+        print(f"  Memvault API healthy ({client.base_url})")
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +333,6 @@ def cmd_health(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # Shared flags inherited by every subcommand
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--json", dest="json_output", action="store_true", help="Output raw JSON")
     common.add_argument("--quiet", action="store_true", help="Minimal output")
@@ -456,18 +401,12 @@ COMMAND_MAP = {
 
 
 def main() -> None:
-    global BASE_URL, SPACE_ID
-
     parser = build_parser()
     args = parser.parse_args()
 
-    # Apply overrides
-    if args.api_url:
-        BASE_URL = args.api_url
-    if os.environ.get("MEMVAULT_API_URL"):
-        BASE_URL = os.environ["MEMVAULT_API_URL"]
-    if args.api_url:  # CLI flag takes highest priority
-        BASE_URL = args.api_url
+    # Build client with overrides (--api-url flag > MEMVAULT_API_URL env > SDK default)
+    api_url = args.api_url or os.environ.get("MEMVAULT_API_URL") or None
+    client = MemvaultClient(base_url=api_url)
 
     handler = COMMAND_MAP.get(args.command)
     if not handler:
@@ -475,20 +414,12 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        handler(args)
-    except httpx.ConnectError:
-        url = args.api_url or BASE_URL
-        print(
-            f"  Cannot connect to Memvault API at {url}\n"
-            f"  Start server: cd core && uvicorn src.main:app --port 8801",
-            file=sys.stderr,
-        )
+        handler(client, args)
+    except APIConnectionError as e:
+        print(f"  {e}", file=sys.stderr)
         sys.exit(1)
-    except httpx.HTTPStatusError as exc:
-        print(
-            f"  API error {exc.response.status_code}: {exc.response.text[:500]}",
-            file=sys.stderr,
-        )
+    except APIError as e:
+        print(f"  {e}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(130)
