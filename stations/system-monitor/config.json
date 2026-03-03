@@ -38,5 +38,10 @@
   "notification": {
     "enabled": true,
     "methods": ["file", "macos"]
+  },
+  "disk_management": {
+    "scan_cache_ttl": 300,
+    "protected_prefixes": ["/System", "/Library", "/usr", "/bin", "/sbin", "/var", "/private", "/etc", "/tmp"],
+    "protected_home_dirs": [".claude", ".ssh", ".gnupg", "Library/Application Support"]
   }
 }

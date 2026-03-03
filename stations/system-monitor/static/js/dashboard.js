@@ -122,6 +122,8 @@ function setupTabs() {
       // Lazy-load tab data
       if (tab === "services") fetchServices();
       if (tab === "guardian") fetchGuardian();
+      if (tab === "disk") fetchDiskSummary();
+      if (tab === "reports") fetchReports();
     });
   });
 }
@@ -629,6 +631,264 @@ async function fetchGuardian() {
   }
 }
 
+// ─── Disk Tab ───
+
+let diskScanData = null;
+
+function fmtSize(bytes) {
+  if (bytes == null || bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + " " + units[i];
+}
+
+function renderDiskSummary(data) {
+  const pct = data.usage_pct ?? 0;
+  setGauge("disk-detail-gauge", pct);
+  const pctEl = document.getElementById("disk-detail-pct");
+  if (pctEl) pctEl.textContent = fmtPct(pct);
+  const infoEl = document.getElementById("disk-detail-info");
+  if (infoEl) {
+    infoEl.innerHTML =
+      detailRow("已用", fmtGB(data.used_bytes)) +
+      detailRow("可用", fmtGB(data.free_bytes)) +
+      detailRow("總計", fmtGB(data.total_bytes)) +
+      detailRow("壓力", makeBadge(data.pressure_level));
+  }
+}
+
+function renderDiskScan(data) {
+  diskScanData = data;
+
+  // Top directories
+  const topDirs = document.getElementById("top-dirs-list");
+  if (topDirs) {
+    const dirs = data.top_dirs || [];
+    if (dirs.length === 0) {
+      topDirs.innerHTML = '<div class="empty">無資料</div>';
+    } else {
+      topDirs.innerHTML = dirs.slice(0, 10).map((d) => {
+        const pct = data.total_bytes ? ((d.size_bytes || 0) / data.total_bytes * 100).toFixed(1) : 0;
+        return `<div class="disk-bar-item">
+          <div class="disk-bar-label">${esc(d.path || d.name)}</div>
+          <div class="disk-bar-track"><div class="disk-bar-fill" style="width:${Math.min(pct, 100)}%"></div></div>
+          <div class="disk-bar-value">${fmtSize(d.size_bytes)} (${pct}%)</div>
+        </div>`;
+      }).join("");
+    }
+  }
+
+  // Large files
+  const lfTbody = document.getElementById("large-files-tbody");
+  if (lfTbody) {
+    const files = data.large_files || [];
+    if (files.length === 0) {
+      lfTbody.innerHTML = '<tr><td colspan="4" class="empty">無大檔案</td></tr>';
+    } else {
+      lfTbody.innerHTML = files.slice(0, 30).map((f) =>
+        `<tr>
+          <td title="${esc(f.path)}">${esc(f.path.split("/").pop())}</td>
+          <td>${f.size_human || fmtSize(f.size_bytes)}</td>
+          <td>${esc(f.modified || "—")}</td>
+          <td><button class="action-btn action-disable" onclick="deletePath('${esc(f.path)}','file')">刪除</button></td>
+        </tr>`
+      ).join("");
+    }
+  }
+
+  // Stale files
+  const sfTbody = document.getElementById("stale-files-tbody");
+  if (sfTbody) {
+    const files = data.old_files || [];
+    if (files.length === 0) {
+      sfTbody.innerHTML = '<tr><td colspan="4" class="empty">無過期檔案</td></tr>';
+    } else {
+      sfTbody.innerHTML = files.slice(0, 30).map((f) =>
+        `<tr>
+          <td title="${esc(f.path)}">${esc(f.path.split("/").pop())}</td>
+          <td>${f.size_human || fmtSize(f.size_bytes)}</td>
+          <td>${esc(f.last_access || "—")}</td>
+          <td><button class="action-btn action-disable" onclick="deletePath('${esc(f.path)}','file')">刪除</button></td>
+        </tr>`
+      ).join("");
+    }
+  }
+
+  // Caches
+  const cTbody = document.getElementById("caches-tbody");
+  if (cTbody) {
+    const caches = data.caches || [];
+    if (caches.length === 0) {
+      cTbody.innerHTML = '<tr><td colspan="4" class="empty">無快取</td></tr>';
+    } else {
+      cTbody.innerHTML = caches.map((c) =>
+        `<tr>
+          <td>${esc(c.name)}</td>
+          <td class="mono" style="font-size:0.7rem" title="${esc(c.path)}">${esc(c.path)}</td>
+          <td>${c.size || fmtSize(c.size_bytes)}</td>
+          <td><button class="action-btn action-restart" onclick="cleanCache('${esc(c.path)}')">清理</button></td>
+        </tr>`
+      ).join("");
+    }
+  }
+}
+
+async function fetchDiskSummary() {
+  try {
+    const data = await fetch("disk/summary").then((r) => r.json());
+    renderDiskSummary(data);
+  } catch (err) {
+    console.error("Disk summary error:", err);
+  }
+}
+
+async function triggerFullScan() {
+  const spinner = document.getElementById("disk-scan-spinner");
+  if (spinner) spinner.style.display = "";
+  try {
+    const data = await fetch("disk/scan").then((r) => r.json());
+    renderDiskSummary(data);
+    renderDiskScan(data);
+  } catch (err) {
+    console.error("Disk scan error:", err);
+  } finally {
+    if (spinner) spinner.style.display = "none";
+  }
+}
+
+async function deletePath(path, type) {
+  if (!confirm(`確定刪除？\n${path}`)) return;
+  try {
+    const res = await fetch("disk/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, type }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(`已刪除，釋放 ${fmtSize(data.freed_bytes)}`);
+      triggerFullScan();
+    } else {
+      alert(`刪除失敗: ${data.detail}`);
+    }
+  } catch (err) {
+    alert(`刪除失敗: ${err.message}`);
+  }
+}
+
+async function cleanCache(path) {
+  if (!confirm(`確定清理快取？\n${path}`)) return;
+  try {
+    const res = await fetch("disk/clean-cache", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(`已清理，釋放 ${fmtSize(data.freed_bytes)}`);
+      triggerFullScan();
+    } else {
+      alert(`清理失敗: ${data.detail}`);
+    }
+  } catch (err) {
+    alert(`清理失敗: ${err.message}`);
+  }
+}
+
+async function emptyTrash() {
+  if (!confirm("確定清空垃圾桶？")) return;
+  try {
+    const res = await fetch("disk/empty-trash", { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      alert(`已清空垃圾桶，釋放 ${fmtSize(data.freed_bytes)}`);
+      triggerFullScan();
+    } else {
+      alert(`清空失敗: ${data.detail || "未知錯誤"}`);
+    }
+  } catch (err) {
+    alert(`清空失敗: ${err.message}`);
+  }
+}
+
+// ─── Reports Tab ───
+
+let reportsData = [];
+let currentReportTypeFilter = "all";
+
+function renderReportList(data) {
+  reportsData = data.reports || [];
+  const list = document.getElementById("report-list");
+  if (!list) return;
+
+  const filtered = currentReportTypeFilter === "all"
+    ? reportsData
+    : reportsData.filter((r) => r.type === currentReportTypeFilter);
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty">無報告</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map((r) => {
+    const typeLabels = { weekly: "週報", monthly: "月報", daily: "日報" };
+    const typeCls = r.type === "monthly" ? "type-periodic" : r.type === "weekly" ? "type-service" : "type-oneshot";
+    return `<div class="report-item" onclick="loadReport('${esc(r.filename)}')">
+      <span class="type-badge ${typeCls}">${typeLabels[r.type] || r.type}</span>
+      <span class="report-name">${esc(r.filename)}</span>
+      <span class="report-date">${fmtDate(r.created)}</span>
+    </div>`;
+  }).join("");
+}
+
+async function fetchReports() {
+  const spinner = document.getElementById("reports-spinner");
+  if (spinner) spinner.style.display = "";
+  try {
+    const data = await fetch("reports").then((r) => r.json());
+    renderReportList(data);
+  } catch (err) {
+    console.error("Reports fetch error:", err);
+  } finally {
+    if (spinner) spinner.style.display = "none";
+  }
+}
+
+async function loadReport(filename) {
+  const preview = document.getElementById("report-preview");
+  const nameEl = document.getElementById("report-preview-name");
+  if (nameEl) nameEl.textContent = filename;
+  if (preview) preview.innerHTML = '<div class="empty">載入中…</div>';
+  try {
+    const data = await fetch(`reports/${encodeURIComponent(filename)}`).then((r) => r.json());
+    if (preview && data.content) {
+      // Use marked.js if available, otherwise raw
+      if (typeof marked !== "undefined") {
+        preview.innerHTML = marked.parse(data.content);
+      } else {
+        preview.innerHTML = `<pre style="white-space:pre-wrap">${esc(data.content)}</pre>`;
+      }
+    }
+  } catch (err) {
+    if (preview) preview.innerHTML = `<div class="empty">載入失敗: ${esc(err.message)}</div>`;
+  }
+}
+
+function setupReportFilter() {
+  const filter = document.getElementById("report-type-filter");
+  if (filter) {
+    filter.addEventListener("click", (e) => {
+      const btn = e.target.closest(".filter-btn");
+      if (!btn) return;
+      filter.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentReportTypeFilter = btn.dataset.rtype;
+      renderReportList({ reports: reportsData });
+    });
+  }
+}
+
 // ─── Auto-Refresh Toggle ───
 
 function setupToggle() {
@@ -670,6 +930,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   setupToggle();
   setupServiceFilter();
+  setupReportFilter();
   fetchAll();
   startTimer();
 });
