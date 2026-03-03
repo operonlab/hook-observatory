@@ -1,7 +1,7 @@
 [project]
-name = "agentops"
-version = "0.1.0"
-description = "AgentOps — Multi-CLI orchestration & team-task management station"
+name = "agent-metrics"
+version = "0.2.0"
+description = "Agent Metrics — session tracking, multi-CLI dispatch & team-task management"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -15,14 +15,14 @@ dependencies = [
 ]
 
 [project.scripts]
-agentops = "agentops.cli:main"
+agent-metrics = "agent_metrics.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentops"]
+packages = ["src/agent_metrics"]
 
 [tool.ruff]
 target-version = "py312"

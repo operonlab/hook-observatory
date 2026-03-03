@@ -1,10 +1,10 @@
-"""AgentOps CLI entry point.
+"""Agent Metrics CLI entry point.
 
 Usage:
-    python -m agentops serve                             # Start API server
-    python -m agentops maestro plan "Build auth module"  # Plan a dispatch
-    python -m agentops maestro run "Fix login bug"       # Run a dispatch
-    python -m agentops maestro runs                      # List dispatch history
+    python -m agent_metrics serve                             # Start API server
+    python -m agent_metrics maestro plan "Build auth module"  # Plan a dispatch
+    python -m agent_metrics maestro run "Fix login bug"       # Run a dispatch
+    python -m agent_metrics maestro runs                      # List dispatch history
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import json
 import sys
 from dataclasses import asdict
 
-from agentops.engines import maestro as me
+from agent_metrics.engines import maestro as me
 
 
 def _json_out(data: dict | list) -> None:
@@ -32,8 +32,8 @@ async def _cmd_plan(args: argparse.Namespace) -> None:
 
 
 async def _cmd_run(args: argparse.Namespace) -> None:
-    from agentops.config import settings
-    from agentops.db import close_pool, get_pool
+    from agent_metrics.config import settings
+    from agent_metrics.db import close_pool, get_pool
     from datetime import UTC, datetime
 
     pool = await get_pool()
@@ -77,7 +77,7 @@ async def _cmd_run(args: argparse.Namespace) -> None:
 
 
 async def _cmd_runs(args: argparse.Namespace) -> None:
-    from agentops.db import close_pool, get_pool
+    from agent_metrics.db import close_pool, get_pool
 
     pool = await get_pool()
     try:
@@ -97,15 +97,15 @@ async def _cmd_routing(_args: argparse.Namespace) -> None:
 def _cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
-    from agentops.config import settings
+    from agent_metrics.config import settings
 
     host = args.host or settings.HOST
     port = args.port or settings.PORT
-    uvicorn.run("agentops.main:app", host=host, port=port, reload=args.reload)
+    uvicorn.run("agent_metrics.main:app", host=host, port=port, reload=args.reload)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="agentops", description="AgentOps CLI")
+    parser = argparse.ArgumentParser(prog="agent-metrics", description="Agent Metrics CLI")
     sub = parser.add_subparsers(dest="command")
 
     # serve

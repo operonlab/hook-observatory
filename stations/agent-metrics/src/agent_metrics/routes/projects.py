@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from agentops.db import get_pool
-from agentops.engines import task_manager as tm
-from agentops.models import (
+from agent_metrics.db import get_pool
+from agent_metrics.engines import task_manager as tm
+from agent_metrics.models import (
     DebaterAdd,
     ProjectCreate,
     RoundAction,
