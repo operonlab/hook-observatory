@@ -65,6 +65,13 @@ def apply_privacy_filter(query, model, user_id: str | None):
     return query.where(model.is_private == False)  # noqa: E712
 
 
+def _soft_delete_filter(query, model):
+    """Exclude soft-deleted records."""
+    if hasattr(model, "deleted_at"):
+        return query.where(model.deleted_at == None)  # noqa: E711
+    return query
+
+
 # ======================== Balance Helpers ========================
 
 
@@ -94,6 +101,8 @@ async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decima
 
 class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletResponse]):
     model = Wallet
+    audit_module = "finance"
+    audit_entity_type = "wallets"
 
     def before_create(self, data: WalletCreate, **kwargs: Any) -> dict:
         d = data.model_dump()
@@ -133,6 +142,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
     ) -> PaginatedResponse[WalletResponse]:
         p = pagination or PaginationParams()
         base = select(Wallet).where(Wallet.space_id == space_id)
+        base = _soft_delete_filter(base, Wallet)
         base = apply_privacy_filter(base, Wallet, user_id)
         if not include_inactive:
             base = base.where(Wallet.is_active == True)  # noqa: E712
@@ -221,12 +231,18 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
 
         # Calculate balance from initial + sum of all completed transactions
+        # Only count non-deleted transactions
+        txn_filter = [
+            Transaction.wallet_id == wallet_id,
+            Transaction.status == "completed",
+        ]
+        txn_filter.append(Transaction.deleted_at == None)  # noqa: E711
+
         income_sum = (
             await db.execute(
                 select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                    Transaction.wallet_id == wallet_id,
+                    *txn_filter,
                     Transaction.type == "income",
-                    Transaction.status == "completed",
                 )
             )
         ).scalar_one()
@@ -234,9 +250,8 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         expense_sum = (
             await db.execute(
                 select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                    Transaction.wallet_id == wallet_id,
+                    *txn_filter,
                     Transaction.type.in_(["expense", "transfer"]),
-                    Transaction.status == "completed",
                 )
             )
         ).scalar_one()
@@ -248,6 +263,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
                     Transaction.transfer_to_wallet_id == wallet_id,
                     Transaction.type == "transfer",
                     Transaction.status == "completed",
+                    Transaction.deleted_at == None,  # noqa: E711
                 )
             )
         ).scalar_one()
@@ -255,8 +271,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         fee_sum = (
             await db.execute(
                 select(func.coalesce(func.sum(Transaction.fee), 0)).where(
-                    Transaction.wallet_id == wallet_id,
-                    Transaction.status == "completed",
+                    *txn_filter,
                 )
             )
         ).scalar_one()
@@ -265,10 +280,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
 
         txn_count = (
             await db.execute(
-                select(func.count()).where(
-                    Transaction.wallet_id == wallet_id,
-                    Transaction.status == "completed",
-                )
+                select(func.count()).where(*txn_filter)
             )
         ).scalar_one()
 
@@ -301,6 +313,8 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
 
 class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, CategoryResponse]):
     model = Category
+    audit_module = "finance"
+    audit_entity_type = "categories"
 
     def to_response(self, instance: Category) -> CategoryResponse:
         children = []
@@ -334,6 +348,7 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
             Category.space_id == space_id,
             Category.parent_id == None,  # noqa: E711
             Category.is_active == True,  # noqa: E712
+            Category.deleted_at == None,  # noqa: E711
         )
         q = apply_privacy_filter(q, Category, user_id)
         q = q.order_by(Category.sort_order, Category.name)
@@ -348,7 +363,11 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
         user_id: str | None = None,
     ) -> PaginatedResponse[CategoryResponse]:
         p = pagination or PaginationParams()
-        base = select(Category).where(Category.space_id == space_id, Category.is_active == True)  # noqa: E712
+        base = select(Category).where(
+            Category.space_id == space_id,
+            Category.is_active == True,  # noqa: E712
+            Category.deleted_at == None,  # noqa: E711
+        )
         base = apply_privacy_filter(base, Category, user_id)
         count_q = select(func.count()).select_from(base.subquery())
         total = (await db.execute(count_q)).scalar_one()
@@ -374,6 +393,8 @@ class TransactionService(
     BaseCRUDService[Transaction, TransactionCreate, TransactionUpdate, TransactionResponse]
 ):
     model = Transaction
+    audit_module = "finance"
+    audit_entity_type = "transactions"
 
     def before_create(self, data: TransactionCreate, **kwargs: Any) -> dict:
         d = data.model_dump(exclude={"tags"})
@@ -447,12 +468,13 @@ class TransactionService(
         return instance
 
     async def update(
-        self, db: AsyncSession, entity_id: str, data: TransactionUpdate
+        self, db: AsyncSession, entity_id: str, data: TransactionUpdate, user_id: str | None = None
     ) -> Transaction | None:
-        instance = await db.get(Transaction, entity_id)
+        instance = await self.get(db, entity_id)
         if not instance:
             return None
 
+        old_snapshot = self._snapshot(instance)
         old_amount = instance.amount
         old_type = instance.type
         old_wallet_id = instance.wallet_id
@@ -489,6 +511,19 @@ class TransactionService(
         await db.flush()
         await db.refresh(instance)
 
+        # Audit diff
+        new_snapshot = self._snapshot(instance)
+        changes = self._compute_diff(old_snapshot, new_snapshot)
+        if changes:
+            await self._record_audit(
+                db,
+                action="updated",
+                entity_id=entity_id,
+                user_id=user_id or instance.created_by,
+                space_id=instance.space_id,
+                changes=changes,
+            )
+
         await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_UPDATED,
@@ -498,37 +533,82 @@ class TransactionService(
                     "amount": str(instance.amount),
                 },
                 source="finance",
-                user_id=instance.created_by,
+                user_id=user_id or instance.created_by,
             )
         )
         return instance
 
-    async def delete(self, db: AsyncSession, entity_id: str) -> bool:
-        instance = await db.get(Transaction, entity_id)
+    async def delete(
+        self, db: AsyncSession, entity_id: str, user_id: str | None = None
+    ) -> bool:
+        instance = await self.get(db, entity_id)
         if not instance:
             return False
 
-        # Reverse balance delta
+        # Reverse balance delta before soft delete
         if instance.status == "completed":
             delta = _balance_delta(instance.type, instance.amount)
             await _adjust_wallet_balance(db, instance.wallet_id, -delta)
             if instance.fee:
                 await _adjust_wallet_balance(db, instance.wallet_id, instance.fee)
 
+        snapshot = self._snapshot(instance)
         txn_id = instance.id
-        user_id = instance.created_by
-        await db.delete(instance)
+        txn_user_id = user_id or instance.created_by
+
+        # Soft delete
+        instance.deleted_at = datetime.now(UTC)
         await db.flush()
+
+        await self._record_audit(
+            db,
+            action="deleted",
+            entity_id=txn_id,
+            user_id=txn_user_id,
+            space_id=instance.space_id,
+            snapshot=snapshot,
+        )
 
         await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_DELETED,
                 data={"transaction_id": txn_id},
                 source="finance",
-                user_id=user_id,
+                user_id=txn_user_id,
             )
         )
         return True
+
+    async def restore(
+        self, db: AsyncSession, entity_id: str, user_id: str | None = None
+    ) -> Transaction | None:
+        """Restore a soft-deleted transaction and re-apply balance delta."""
+        instance = await db.get(Transaction, entity_id)
+        if not instance or instance.deleted_at is None:
+            return None
+
+        instance.deleted_at = None
+        await db.flush()
+
+        # Re-apply balance delta
+        if instance.status == "completed":
+            delta = _balance_delta(instance.type, instance.amount)
+            await _adjust_wallet_balance(db, instance.wallet_id, delta)
+            if instance.fee:
+                await _adjust_wallet_balance(db, instance.wallet_id, -instance.fee)
+
+        await db.flush()
+        await db.refresh(instance)
+
+        await self._record_audit(
+            db,
+            action="restored",
+            entity_id=entity_id,
+            user_id=user_id or instance.created_by,
+            space_id=instance.space_id,
+            snapshot=self._snapshot(instance),
+        )
+        return instance
 
     async def list(
         self,
@@ -544,7 +624,10 @@ class TransactionService(
         search: str | None = None,
     ) -> PaginatedResponse[TransactionResponse]:
         p = pagination or PaginationParams()
-        base = select(Transaction).where(Transaction.space_id == space_id)
+        base = select(Transaction).where(
+            Transaction.space_id == space_id,
+            Transaction.deleted_at == None,  # noqa: E711
+        )
         base = apply_privacy_filter(base, Transaction, user_id)
 
         if year_month:
@@ -594,6 +677,8 @@ class SubscriptionService(
     BaseCRUDService[Subscription, SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse]
 ):
     model = Subscription
+    audit_module = "finance"
+    audit_entity_type = "subscriptions"
 
     def to_response(self, instance: Subscription) -> SubscriptionResponse:
         return SubscriptionResponse(
@@ -628,7 +713,10 @@ class SubscriptionService(
         status: str | None = None,
     ) -> PaginatedResponse[SubscriptionResponse]:
         p = pagination or PaginationParams()
-        base = select(Subscription).where(Subscription.space_id == space_id)
+        base = select(Subscription).where(
+            Subscription.space_id == space_id,
+            Subscription.deleted_at == None,  # noqa: E711
+        )
         base = apply_privacy_filter(base, Subscription, user_id)
         if status:
             base = base.where(Subscription.status == status)
@@ -655,6 +743,8 @@ class InstallmentPlanService(
     ]
 ):
     model = InstallmentPlan
+    audit_module = "finance"
+    audit_entity_type = "installment_plans"
 
     def to_response(self, instance: InstallmentPlan) -> InstallmentPlanResponse:
         return InstallmentPlanResponse(
@@ -707,7 +797,10 @@ class InstallmentPlanService(
         status: str | None = None,
     ) -> PaginatedResponse[InstallmentPlanResponse]:
         p = pagination or PaginationParams()
-        base = select(InstallmentPlan).where(InstallmentPlan.space_id == space_id)
+        base = select(InstallmentPlan).where(
+            InstallmentPlan.space_id == space_id,
+            InstallmentPlan.deleted_at == None,  # noqa: E711
+        )
         base = apply_privacy_filter(base, InstallmentPlan, user_id)
         if status:
             base = base.where(InstallmentPlan.status == status)
@@ -734,6 +827,8 @@ class InstallmentPlanService(
 
 class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetResponse]):
     model = Budget
+    audit_module = "finance"
+    audit_entity_type = "budgets"
 
     def to_response(self, instance: Budget) -> BudgetResponse:
         return BudgetResponse(
@@ -760,6 +855,7 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
         q = select(Budget).where(
             Budget.space_id == space_id,
             Budget.year_month == data.year_month,
+            Budget.deleted_at == None,  # noqa: E711
         )
         if data.category_id:
             q = q.where(Budget.category_id == data.category_id)
@@ -786,7 +882,10 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
         year_month: str | None = None,
     ) -> PaginatedResponse[BudgetResponse]:
         p = pagination or PaginationParams()
-        base = select(Budget).where(Budget.space_id == space_id)
+        base = select(Budget).where(
+            Budget.space_id == space_id,
+            Budget.deleted_at == None,  # noqa: E711
+        )
         base = apply_privacy_filter(base, Budget, user_id)
         if year_month:
             base = base.where(Budget.year_month == year_month)
@@ -816,12 +915,14 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
     ) -> dict:
         """Return budget vs actual spending for a given month."""
         budgets_q = select(Budget).where(
-            Budget.space_id == space_id, Budget.year_month == year_month
+            Budget.space_id == space_id,
+            Budget.year_month == year_month,
+            Budget.deleted_at == None,  # noqa: E711
         )
         budgets_q = apply_privacy_filter(budgets_q, Budget, user_id)
         budgets = (await db.execute(budgets_q)).scalars().all()
 
-        # Actual spending by category for the month
+        # Actual spending by category for the month (exclude deleted transactions)
         spending_q = (
             select(
                 Transaction.category_id,
@@ -831,6 +932,7 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
                 Transaction.space_id == space_id,
                 Transaction.type == "expense",
                 Transaction.status == "completed",
+                Transaction.deleted_at == None,  # noqa: E711
                 func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
             )
             .group_by(Transaction.category_id)
@@ -996,6 +1098,7 @@ class SummaryService:
         base = select(Transaction).where(
             Transaction.space_id == space_id,
             Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
             func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
         )
         base = apply_privacy_filter(base, Transaction, user_id)
@@ -1010,6 +1113,7 @@ class SummaryService:
             .where(
                 Transaction.space_id == space_id,
                 Transaction.status == "completed",
+                Transaction.deleted_at == None,  # noqa: E711
                 func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
             )
             .group_by(Transaction.type)
@@ -1040,6 +1144,7 @@ class SummaryService:
                 Transaction.space_id == space_id,
                 Transaction.type == "expense",
                 Transaction.status == "completed",
+                Transaction.deleted_at == None,  # noqa: E711
                 func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
             )
             .group_by(Transaction.category_id, Category.name)

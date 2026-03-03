@@ -61,6 +61,10 @@ class AdminEvents:
     USER_MANAGED = "admin.user.managed"
     MODULE_TOGGLED = "admin.module.toggled"
     CONFIG_UPDATED = "admin.config.updated"
+    # Audit trail
+    ENTITY_SOFT_DELETED = "admin.entity.soft_deleted"
+    ENTITY_RESTORED = "admin.entity.restored"
+    ENTITY_PURGED = "admin.entity.purged"
 
 
 class IntelflowEvents:

@@ -57,6 +57,8 @@ from .schemas import (
 
 class ReportService(BaseCRUDService[Report, ReportCreate, ReportUpdate, ReportResponse]):
     model = Report
+    audit_module = "intelflow"
+    audit_entity_type = "reports"
 
     def before_create(self, data: ReportCreate, **kwargs: Any) -> dict:
         return data.model_dump(exclude={"created_at"})
@@ -133,6 +135,7 @@ class ReportService(BaseCRUDService[Report, ReportCreate, ReportUpdate, ReportRe
         base = select(Report).where(
             Report.space_id == space_id,
             Report.tags.contains(tags),
+            Report.deleted_at == None,  # noqa: E711
         )
         count_q = select(func.count()).select_from(base.subquery())
         total = (await db.execute(count_q)).scalar_one()
@@ -160,7 +163,11 @@ class ReportService(BaseCRUDService[Report, ReportCreate, ReportUpdate, ReportRe
         base = (
             select(Report)
             .join(ReportTopic, Report.id == ReportTopic.report_id)
-            .where(Report.space_id == space_id, ReportTopic.topic_id == topic_id)
+            .where(
+                Report.space_id == space_id,
+                ReportTopic.topic_id == topic_id,
+                Report.deleted_at == None,  # noqa: E711
+            )
         )
         count_q = select(func.count()).select_from(base.subquery())
         total = (await db.execute(count_q)).scalar_one()
@@ -387,6 +394,8 @@ class BriefingTopicService(
     BaseCRUDService[BriefingTopic, BriefingTopicCreate, BriefingTopicUpdate, BriefingTopicResponse]
 ):
     model = BriefingTopic
+    audit_module = "intelflow"
+    audit_entity_type = "briefing_topics"
 
     def to_response(self, instance: BriefingTopic) -> BriefingTopicResponse:
         subtopics = []
