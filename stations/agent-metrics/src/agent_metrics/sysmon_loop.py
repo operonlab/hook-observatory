@@ -64,7 +64,7 @@ async def sysmon_loop() -> None:
     loop = asyncio.get_running_loop()
 
     # Import here to avoid circular imports
-    from agent_metrics.quota_collector import get_quota, get_raw_cache
+    from agent_metrics.quota_collector import get_quota
 
     try:
         while True:
@@ -76,9 +76,14 @@ async def sysmon_loop() -> None:
                 try:
                     quota = await get_quota()
                     for key in (
-                        "llm_cc_5h", "llm_cc_7d", "llm_cc_ex",
-                        "llm_cx_5h", "llm_cx_7d",
-                        "llm_gm_pro", "llm_gm_flash", "llm_display",
+                        "llm_cc_5h",
+                        "llm_cc_7d",
+                        "llm_cc_ex",
+                        "llm_cx_5h",
+                        "llm_cx_7d",
+                        "llm_gm_pro",
+                        "llm_gm_flash",
+                        "llm_display",
                     ):
                         if key in quota:
                             snap_dict[key] = quota[key]
@@ -92,19 +97,6 @@ async def sysmon_loop() -> None:
                 # Write to primary output path
                 json_str = json.dumps(snap_dict)
                 _atomic_write(settings.SYSMON_OUTPUT_PATH, json_str)
-
-                # Backward-compatible write (Pulso sysmon path)
-                if settings.SYSMON_COMPAT_PATH:
-                    _atomic_write(settings.SYSMON_COMPAT_PATH, json_str)
-
-                # Write quota compat file (raw API responses for quota-all.sh)
-                if settings.QUOTA_COMPAT_PATH:
-                    try:
-                        raw = get_raw_cache()
-                        if raw:
-                            _atomic_write(settings.QUOTA_COMPAT_PATH, json.dumps(raw))
-                    except Exception:
-                        pass
 
                 # Guardian + Sweep (Phase 3)
                 try:
