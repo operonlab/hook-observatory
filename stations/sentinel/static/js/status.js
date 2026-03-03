@@ -73,8 +73,6 @@ const SERVICE_DISPLAY = {
     'tmux-webui-render':        'tmux WebUI 渲染 (Deep)',
     'agent-metrics':            'Agent Metrics',
     'agent-metrics-render':     'Agent Metrics 渲染 (Deep)',
-    'llm-usage':                'LLM 用量',
-    'llm-usage-render':         'LLM 用量渲染 (Deep)',
     sentinel:                   '服務哨兵',
     'sentinel-render':          '服務哨兵渲染 (Deep)',
     'file-manager':             '檔案管理',
