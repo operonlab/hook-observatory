@@ -26,6 +26,7 @@ window.tmuxState = {
   currentTool: null,
   currentSession: '',
   activeWindowIdx: null,
+  autoRelay: false,
 };
 
 // ========================================================================
@@ -37,6 +38,7 @@ const statusEl      = document.getElementById('status');
 const inputEl       = document.getElementById('input');
 const sendBtn       = document.getElementById('send-btn');
 const uploadBtn     = document.getElementById('upload-btn');
+const relayToggle   = document.getElementById('relay-toggle');
 const fileInput     = document.getElementById('file-input');
 const focusLabel    = document.getElementById('focused-label');
 const layoutSelect  = document.getElementById('layout-select');
@@ -151,7 +153,7 @@ window.sendInput = function() {
 
   // Auto-relay: dispatch via server-side /api/relay (zero-blocking async)
   const basePath = location.pathname.replace(/\/+$/, '') || '';
-  if (S.currentTool === 'claude' && !text.startsWith('/')) {
+  if (S.autoRelay && S.currentTool === 'claude' && !text.startsWith('/')) {
     fetch(basePath + '/api/relay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -177,6 +179,13 @@ window.sendInput = function() {
 };
 
 sendBtn.addEventListener('click', () => { window.acClose?.(); window.sendInput(); });
+
+// ── Auto-Relay Toggle ──
+relayToggle.addEventListener('click', () => {
+  S.autoRelay = !S.autoRelay;
+  relayToggle.classList.toggle('active', S.autoRelay);
+  relayToggle.title = S.autoRelay ? 'Auto-Relay: ON' : 'Auto-Relay: OFF';
+});
 
 // ── File Upload ──
 
