@@ -60,7 +60,6 @@ class Settings(BaseSettings):
     }
     API_MONTHLY_BUDGET_USD: float = 50.0
     BUDGET_WARNING_PCT: float = 80.0
-    SYSMON_URL: str = "http://localhost:8800/api/sysmon/current"
     MODEL_POLICY_STATE_PATH: str = "~/.claude/data/model-policy/state.json"
     MODEL_POLICY_CONFIG_PATH: str = "~/.claude/data/model-policy/config.json"
     CCUSAGE_BIN: str = "/opt/homebrew/bin/ccusage"
@@ -76,12 +75,10 @@ class Settings(BaseSettings):
     SYSMON_COLLECT_INTERVAL: int = 5
     SYSMON_DISK_CACHE_TTL: int = 60
     SYSMON_OUTPUT_PATH: str = "/tmp/agent-metrics-sysmon.json"
-    SYSMON_COMPAT_PATH: str = "/tmp/pulso-sysmon-latest.json"
     SYSMON_HISTORY_SIZE: int = 720  # 1h @ 5s
 
     # --- LLM Quota Collector ---
     QUOTA_CACHE_TTL: int = 60
-    QUOTA_COMPAT_PATH: str = "/tmp/pulso-quota-all.json"
     CODEX_AUTH_PATH: str = "~/.codex/auth.json"
     GM_OAUTH_PATH: str = "~/.gemini/oauth_creds.json"
     GM_CLIENT_ID: str = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
