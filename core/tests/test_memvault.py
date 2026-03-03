@@ -5,6 +5,7 @@ Tests cover:
 - Phase A2: Scoring Pipeline (7 stages, metadata tracking)
 - Phase B1: RRF Hybrid Retrieval (fusion, CJK detection)
 - Phase B2: Adaptive Retrieval (should_search, skip_adaptive)
+- Phase C2: Cross-Encoder Reranking (Defense ⑥)
 - Integration: Full pipeline flow
 """
 
@@ -503,3 +504,186 @@ class TestIntegration:
 
         assert _cosine_similarity([], []) == 0.0
         assert _cosine_similarity([0, 0, 0], [1, 1, 1]) == 0.0
+
+
+# ======================== Phase C2: Reranker Tests ========================
+
+
+class TestReranker:
+    """Tests for Defense ⑥: Cross-Encoder Reranking."""
+
+    def test_circuit_breaker_opens_after_threshold(self):
+        from src.modules.memvault.reranker import CircuitBreaker
+
+        cb = CircuitBreaker(threshold=3, recovery=600)
+        assert cb.is_available() is True
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.is_available() is True  # 2 < 3
+        cb.record_failure()
+        assert cb.is_available() is False  # 3 >= 3, open
+
+    def test_circuit_breaker_recovers(self):
+        from src.modules.memvault.reranker import CircuitBreaker
+
+        cb = CircuitBreaker(threshold=2, recovery=0.01)  # 10ms recovery
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.is_available() is False
+        # Wait for recovery
+        import time
+
+        time.sleep(0.02)
+        assert cb.is_available() is True
+        assert cb.failures == 0
+        assert cb.open is False
+
+    def test_circuit_breaker_success_resets(self):
+        from src.modules.memvault.reranker import CircuitBreaker
+
+        cb = CircuitBreaker(threshold=3, recovery=600)
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.failures == 2
+        cb.record_success()
+        assert cb.failures == 0
+        assert cb.open is False
+
+    @pytest.mark.asyncio
+    async def test_rerank_blends_scores(self):
+        from unittest.mock import AsyncMock, patch
+
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(weight_original=0.4, weight_rerank=0.6)
+        reranker = LocalReranker(config)
+
+        results = [
+            {"content": "Python is great", "score": 0.8},
+            {"content": "Java is okay", "score": 0.7},
+        ]
+
+        # Mock embeddings: query close to first doc, far from second
+        query_emb = [1.0, 0.0, 0.0]
+        doc_emb_1 = [0.9, 0.1, 0.0]  # close to query
+        doc_emb_2 = [0.0, 0.0, 1.0]  # far from query
+
+        with (
+            patch(
+                "src.shared.embedding.get_embedding",
+                new_callable=AsyncMock,
+                return_value=query_emb,
+            ),
+            patch(
+                "src.shared.embedding.get_embeddings_batch",
+                new_callable=AsyncMock,
+                return_value=[doc_emb_1, doc_emb_2],
+            ),
+        ):
+            reranked, applied = await reranker.rerank("python", results)
+
+        assert applied is True
+        # First result should have higher blended score
+        assert reranked[0]["score"] > reranked[1]["score"]
+        # Scores should be blended (not original)
+        assert reranked[0]["score"] != 0.8
+        assert reranked[1]["score"] != 0.7
+
+    @pytest.mark.asyncio
+    async def test_rerank_skips_when_disabled(self):
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(enabled=False)
+        reranker = LocalReranker(config)
+        results = [
+            {"content": "A", "score": 0.8},
+            {"content": "B", "score": 0.7},
+        ]
+        reranked, applied = await reranker.rerank("test", results)
+        assert applied is False
+        assert reranked[0]["score"] == 0.8  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_rerank_skips_single_result(self):
+        from src.modules.memvault.reranker import LocalReranker
+
+        reranker = LocalReranker()
+        results = [{"content": "Only one", "score": 0.9}]
+        reranked, applied = await reranker.rerank("test", results)
+        assert applied is False
+        assert len(reranked) == 1
+
+    @pytest.mark.asyncio
+    async def test_rerank_graceful_degradation(self):
+        """Mock embedding failure → returns original results."""
+        from unittest.mock import AsyncMock, patch
+
+        from src.modules.memvault.reranker import LocalReranker
+
+        reranker = LocalReranker()
+        results = [
+            {"content": "A content", "score": 0.8},
+            {"content": "B content", "score": 0.7},
+        ]
+
+        with patch(
+            "src.shared.embedding.get_embedding",
+            new_callable=AsyncMock,
+            return_value=None,  # Ollama unavailable
+        ):
+            reranked, applied = await reranker.rerank("test query", results)
+
+        assert applied is False
+        assert reranked[0]["score"] == 0.8  # unchanged
+        assert reranker._breaker.failures == 1
+
+    @pytest.mark.asyncio
+    async def test_rerank_circuit_breaker_skips_after_failures(self):
+        """After threshold failures, reranker is skipped."""
+        from unittest.mock import AsyncMock, patch
+
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(failure_threshold=2, recovery_seconds=600)
+        reranker = LocalReranker(config)
+
+        results = [
+            {"content": "A content", "score": 0.8},
+            {"content": "B content", "score": 0.7},
+        ]
+
+        # Simulate 2 embedding failures to open circuit breaker
+        with patch(
+            "src.shared.embedding.get_embedding",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            await reranker.rerank("q1", results)
+            await reranker.rerank("q2", results)
+
+        assert reranker._breaker.open is True
+
+        # Now reranker should be skipped without even calling embedding
+        _reranked, applied = await reranker.rerank("q3", results)
+        assert applied is False
+
+    @pytest.mark.asyncio
+    async def test_rerank_convenience_function(self):
+        """Test the module-level rerank_results function."""
+        from unittest.mock import AsyncMock, patch
+
+        from src.modules.memvault.reranker import rerank_results
+
+        results = [
+            {"content": "A", "score": 0.8},
+            {"content": "B", "score": 0.7},
+        ]
+
+        # With embedding failure, should return originals
+        with patch(
+            "src.shared.embedding.get_embedding",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            _reranked, applied = await rerank_results("test", results)
+        assert applied is False
