@@ -1,10 +1,13 @@
 """
-Sentinel auto-notify — fire-and-forget POST to /api/sentinel/notify.
+Sentinel auto-notify/resolve — paired lifecycle for service maintenance state.
 
-Detects service-modifying Bash commands and notifies sentinel
-so it knows an agent is working and should suppress auto-intervention.
+PreToolUse:  detect service-modifying Bash commands → POST /notify
+PostToolUse: same detection → POST /resolve (command completed)
 
-Latency: <5ms (non-blocking, 2s timeout).
+This ensures MAINTENANCE state is always bounded by the actual command
+execution window, preventing stale maintenance from accumulating.
+
+Latency: <5ms per call (non-blocking, 2s timeout).
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import urllib.request
 
 from .base import ALLOW, HookResult
 
-SENTINEL_URL = "http://127.0.0.1:4101/api/sentinel/notify"
+_SENTINEL_BASE = "http://127.0.0.1:4101/api/sentinel"
 
 # Patterns: (regex, service_hint)
 PATTERNS: list[tuple[re.Pattern, str]] = [
@@ -40,20 +43,13 @@ def _detect_service(command: str) -> str | None:
     return None
 
 
-def _fire_notify(service: str, action: str, agent_id: str) -> None:
+def _fire(endpoint: str, payload: dict) -> None:
     """Fire-and-forget POST to sentinel. Never blocks, never throws."""
     try:
-        payload = json.dumps(
-            {
-                "service": service,
-                "action": action,
-                "agent_id": agent_id,
-                "estimated_duration": 300,
-            }
-        ).encode()
+        data = json.dumps(payload).encode()
         req = urllib.request.Request(
-            SENTINEL_URL,
-            data=payload,
+            f"{_SENTINEL_BASE}/{endpoint}",
+            data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
@@ -63,7 +59,7 @@ def _fire_notify(service: str, action: str, agent_id: str) -> None:
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
-    """PreToolUse/Bash: detect service-modifying commands → auto POST /notify."""
+    """PreToolUse → notify, PostToolUse → resolve. Both for Bash only."""
     if tool_name != "Bash":
         return ALLOW
 
@@ -75,8 +71,26 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     if not service:
         return ALLOW
 
-    # Agent ID from env or session
     agent_id = os.environ.get("CLAUDE_SESSION_ID", "unknown-agent")
-    _fire_notify(service, command[:100], agent_id)
+
+    if event_type == "PreToolUse":
+        _fire(
+            "notify",
+            {
+                "service": service,
+                "action": command[:100],
+                "agent_id": agent_id,
+                "estimated_duration": 300,
+            },
+        )
+    elif event_type == "PostToolUse":
+        _fire(
+            "resolve",
+            {
+                "service": service,
+                "agent_id": agent_id,
+                "result": "completed",
+            },
+        )
 
     return ALLOW
