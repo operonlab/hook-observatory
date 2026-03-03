@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
+from pydantic import ValidationError
 
 # --- Cron ---
 from src.modules.finance.cron import (
@@ -139,6 +140,7 @@ def sample_transaction():
     t.invoice_number = None
     t.is_private = False
     t.transacted_at = datetime.now(UTC)
+    t.deleted_at = None
     t.tags = []
     t.attachments = []
     return t
@@ -177,7 +179,7 @@ class TestSchemaValidation:
         assert dump == {"name": "Updated"}
 
     def test_transaction_create_required_fields(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             TransactionCreate()
 
     def test_transaction_create_with_tags(self):
@@ -261,8 +263,8 @@ class TestSchemaValidation:
     def test_category_breakdown_defaults(self):
         cb = CategoryBreakdown()
         assert cb.category_name == "未分類"
-        assert cb.total == Decimal("0")
-        assert cb.percentage == 0.0
+        assert cb.amount == Decimal("0")
+        assert cb.pct == 0.0
 
     def test_reconcile_response(self):
         r = ReconcileResponse(
@@ -731,7 +733,7 @@ class TestBudgetService:
             savings_target=Decimal("15000"),
         )
 
-        result = await budget_service.upsert(mock_db, "space", data)
+        await budget_service.upsert(mock_db, "space", data)
         assert existing.budget_amount == Decimal("60000")
         assert existing.savings_target == Decimal("15000")
 
@@ -805,13 +807,17 @@ class TestSummaryService:
         cat_row = MagicMock(
             category_id="cat1",
             category_name="Food",
+            category_icon=None,
             total=Decimal("30000"),
             cnt=10,
         )
         cat_result = MagicMock()
         cat_result.all.return_value = [cat_row]
 
-        mock_db.execute = AsyncMock(side_effect=[totals_result, cat_result])
+        wallet_result = MagicMock()
+        wallet_result.scalars.return_value.all.return_value = []
+
+        mock_db.execute = AsyncMock(side_effect=[totals_result, cat_result, wallet_result])
 
         result = await summary_service.monthly_summary(mock_db, "space", "2026-03")
         assert result.total_income == Decimal("100000")
@@ -819,7 +825,7 @@ class TestSummaryService:
         assert result.net == Decimal("40000")
         assert result.transaction_count == 20
         assert len(result.category_breakdown) == 1
-        assert result.category_breakdown[0].percentage == 50.0
+        assert result.category_breakdown[0].pct == 50.0
 
     @pytest.mark.asyncio
     async def test_monthly_summary_empty(self, mock_db):
@@ -827,7 +833,9 @@ class TestSummaryService:
         totals_result.all.return_value = []
         cat_result = MagicMock()
         cat_result.all.return_value = []
-        mock_db.execute = AsyncMock(side_effect=[totals_result, cat_result])
+        wallet_result = MagicMock()
+        wallet_result.scalars.return_value.all.return_value = []
+        mock_db.execute = AsyncMock(side_effect=[totals_result, cat_result, wallet_result])
 
         result = await summary_service.monthly_summary(mock_db, "space", "2026-03")
         assert result.total_income == Decimal("0")
