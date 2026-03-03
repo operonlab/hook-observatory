@@ -23,7 +23,7 @@ content_hash: aff21e36
   - `core/services/media/` — STT/TTS/影像處理
 - `workbench/` — 單一 React 應用
 - `mcp/` — MCP 適配層（Core API 的薄封裝）
-- `stations/` — 獨立本地工具（system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor）
+- `stations/` — 獨立本地工具（system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor）
 - `vendor/` — 第三方社群工具（可觀測性）
 - `bridges/` — 外部平台連接器（LINE, Telegram, Discord）
 - `plugins/` — 插件套件
@@ -41,7 +41,7 @@ content_hash: aff21e36
 - **業務域服務**（有 DB）: finance, quest, muse, scout, lore, dojo, roster, nexus
 - **橋接層**: 外部連接器（social-hooks, notification）
 - **熱路徑服務**: media（STT/TTS/影像）、realtime（LiveKit）
-- **工作站**: 獨立本地工具（system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor）
+- **工作站**: 獨立本地工具（system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor）
 - **第三方**: 社群工具（可觀測性）
 - **組合應用**: 特定場景的服務組裝（法律顧問、教會音樂、虛擬客服、ERP/POS）
 

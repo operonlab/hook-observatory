@@ -370,24 +370,6 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 
 ---
 
-#### llm-usage — LLM 使用量追蹤
-
-| 屬性 | 數值 |
-|----------|-------|
-| **分類** | 工作站 (Station) |
-| **V1 狀態** | model-policy（boost/normal 切換）+ LiteLLM Proxy |
-| **V2 變更** | 統一 token/cost 追蹤，整合所有 Provider |
-
-**功能能力**：
-- 跨 Provider 統一追蹤（Anthropic + OpenAI + Google + Ollama）
-- 跨 CLI 統一追蹤（Claude Code + Codex + Gemini + LiteLLM）
-- 多維度成本分析（按 Provider、Model、Caller、時間、用途）
-- Cache 效率統計
-- 月度預算追蹤與警報
-- Workbench Widget（成本儀表板）
-
----
-
 #### envkit — 環境工具組
 
 | 屬性 | 數值 |
@@ -540,7 +522,6 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | notification | 橋接層 | 未開始 | — | — |
 | media | 熱路徑 | 位於 core/services/ | — | — |
 | system-monitor | 工作站 | V1 運作中 | — | — |
-| llm-usage | 工作站 | 部分 V1 | — | — |
 | envkit | 工作站 | 重新設計 | — | — |
 | tmux-webui | 工作站 | V1 運作中 | — | — |
 | session-redactor | 工作站 | V1 運作中 | — | — |
@@ -557,6 +538,6 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | **領域服務 (Domain Service)** | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore | PostgreSQL (每個模組一個 schema) |
 | **橋接層 (Bridge)** | social-hooks, notification | 外部 + 事件總線 (Event Bus) |
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
-| **工作站 (Station)** | system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 PostgreSQL |
+| **工作站 (Station)** | system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 PostgreSQL |
 | **第三方 (Vendor)** | observability (@disler) | 獨立運行 |
 | **組合 (Composition)** | 法律顧問, 教會音樂, 虛擬客服, ERP/POS | 上述服務的組合 |
