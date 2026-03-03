@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class ServiceStatus(BaseModel):
     service: str
     status: str  # operational / degraded / partial_outage / major_outage / maintenance
+    group: str | None = None
     light_status: str | None = None
     deep_status: str | None = None
     last_check: str | None = None

@@ -384,6 +384,43 @@ body {
     gap: 14px;
 }
 
+/* ══ Service Groups ══ */
+
+.group {
+    margin-bottom: 6px;
+}
+
+.group:last-child {
+    margin-bottom: 0;
+}
+
+.group__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px 4px;
+}
+
+.group__title {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+}
+
+.group__count {
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+}
+
+.group__services {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
 /* ══ Service List ══ */
 
 .services {
