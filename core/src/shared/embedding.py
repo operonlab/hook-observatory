@@ -24,15 +24,22 @@ def _get_client() -> httpx.AsyncClient:
     return _client
 
 
-async def get_embedding(text: str) -> list[float] | None:
+async def get_embedding(text: str, task_type: str | None = None) -> list[float] | None:
     """Generate embedding vector for text via Ollama.
+
+    Args:
+        text: The text to embed.
+        task_type: Optional prefix for task-aware models.
+                   Supported: "search_query", "search_document", "clustering", "classification"
+                   When set, prepends "{task_type}: " to the text.
 
     Returns None if Ollama is unavailable (graceful degradation).
     """
+    prefixed = f"{task_type}: {text}" if task_type else text
     try:
         resp = await _get_client().post(
             f"{OLLAMA_URL}/api/embed",
-            json={"model": MODEL, "input": text},
+            json={"model": MODEL, "input": prefixed},
         )
         resp.raise_for_status()
         data = resp.json()
@@ -46,12 +53,21 @@ async def get_embedding(text: str) -> list[float] | None:
         return None
 
 
-async def get_embeddings_batch(texts: list[str]) -> list[list[float] | None]:
-    """Generate embeddings for multiple texts in a single call."""
+async def get_embeddings_batch(
+    texts: list[str], task_type: str | None = None,
+) -> list[list[float] | None]:
+    """Generate embeddings for multiple texts in a single call.
+
+    Args:
+        texts: The texts to embed.
+        task_type: Optional prefix for task-aware models.
+                   When set, prepends "{task_type}: " to each text.
+    """
+    prefixed = [f"{task_type}: {t}" if task_type else t for t in texts]
     try:
         resp = await _get_client().post(
             f"{OLLAMA_URL}/api/embed",
-            json={"model": MODEL, "input": texts},
+            json={"model": MODEL, "input": prefixed},
         )
         resp.raise_for_status()
         data = resp.json()
