@@ -39,6 +39,36 @@ class Settings(BaseSettings):
     RETENTION_DAILY_DAYS: int = 365
     FALLBACK_PATH: str = "/tmp/agent-metrics-latest.json"
 
+    # --- LLM Usage (merged from llm-usage station) ---
+
+    SUBSCRIPTIONS: dict = {
+        "claude-code": {
+            "provider": "anthropic",
+            "plan": "max_5",
+            "monthly_cost_usd": 100.00,
+        },
+        "codex-cli": {
+            "provider": "openai",
+            "plan": "pro",
+            "monthly_cost_usd": 200.00,
+        },
+        "gemini-cli": {
+            "provider": "google",
+            "plan": "advanced",
+            "monthly_cost_usd": 0,
+        },
+    }
+    API_MONTHLY_BUDGET_USD: float = 50.0
+    BUDGET_WARNING_PCT: float = 80.0
+    SYSMON_URL: str = "http://localhost:8800/api/sysmon/current"
+    MODEL_POLICY_STATE_PATH: str = "~/.claude/data/model-policy/state.json"
+    MODEL_POLICY_CONFIG_PATH: str = "~/.claude/data/model-policy/config.json"
+    CCUSAGE_BIN: str = "/opt/homebrew/bin/ccusage"
+    COLLECTION_INTERVAL_SECONDS: int = 1800
+    COLLECTION_SNAPSHOT_DIR: str = "~/.claude/data/llm-usage/snapshots"
+    COLLECTION_LATEST_FILE: str = "~/.claude/data/llm-usage/latest.json"
+    COLLECTION_RETENTION_DAYS: int = 90
+
     model_config = {"env_prefix": "AGENT_METRICS_", "env_file": ".env", "extra": "ignore"}
 
 
