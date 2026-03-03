@@ -19,6 +19,7 @@ from . import (
     bash_safety,
     cleanup_versions,
     external,
+    issue_sync,
     observability,
     relay_signal,
     sentinel_notify,
@@ -50,6 +51,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "PostToolUse": [
         ("Edit|Write", auto_format.handle),
         ("Bash", sentinel_notify.handle),
+        ("Bash", issue_sync.handle),
         ("Skill", external.skill_tracker),
         (None, observability.handle),
     ],
