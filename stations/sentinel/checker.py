@@ -27,6 +27,7 @@ class CheckResult:
 @dataclass
 class LightCheck:
     name: str
+    group: str = ""
     url: str | None = None
     command: str | None = None  # shell command alternative
     expect_json: dict | None = None  # key-value pairs to verify in JSON
@@ -37,89 +38,211 @@ class LightCheck:
 @dataclass
 class DeepCheck:
     name: str
-    url: str
-    playwright_code: str  # JS code for run-code
+    group: str = ""
+    url: str = ""
+    playwright_code: str = ""  # JS code for run-code
     timeout: float = 30.0
 
 
 LIGHT_CHECKS: list[LightCheck] = [
+    # ── system ──
     LightCheck(
-        name="core",
-        url="http://127.0.0.1:8801/health",
-        expect_json={"status": "healthy"},
+        name="nginx",
+        group="system",
+        url="http://127.0.0.1:8080/",
     ),
     LightCheck(
-        name="frontend",
-        url="http://127.0.0.1:8080/v2/",
-        expect_contains='<div id="root">',
+        name="orbstack",
+        group="system",
+        command="pgrep -q OrbStack",
     ),
-    LightCheck(
-        name="frontend-memvault",
-        url="http://127.0.0.1:8080/v2/memvault/",
-        expect_contains='<div id="root">',
-    ),
-    LightCheck(
-        name="hook-observatory",
-        url="http://127.0.0.1:4100/",
-    ),
-    LightCheck(
-        name="agent-vista",
-        url="http://127.0.0.1:8840/",
-    ),
-    LightCheck(
-        name="litellm",
-        url="http://127.0.0.1:4000/health",
-    ),
+    # ── infra ──
     LightCheck(
         name="postgres",
+        group="infra",
         command="docker exec ws-infra-postgres-1 pg_isready -q",
     ),
     LightCheck(
         name="redis",
+        group="infra",
         command="docker exec ws-infra-redis-1 redis-cli ping",
         expect_contains="PONG",
     ),
     LightCheck(
         name="rustfs",
+        group="infra",
         url="http://127.0.0.1:9000/",
         timeout=5.0,
     ),
-    # ── App Services (stations) ──
+    LightCheck(
+        name="lgtm",
+        group="infra",
+        url="http://127.0.0.1:3100/",
+    ),
+    LightCheck(
+        name="litellm",
+        group="infra",
+        url="http://127.0.0.1:4000/health",
+    ),
+    LightCheck(
+        name="ollama",
+        group="infra",
+        url="http://127.0.0.1:11434/",
+    ),
+    # ── internal ──
+    LightCheck(
+        name="core",
+        group="internal",
+        url="http://127.0.0.1:8801/health",
+        expect_json={"status": "healthy"},
+    ),
+    LightCheck(
+        name="gateway",
+        group="internal",
+        url="http://127.0.0.1:8800/",
+    ),
+    LightCheck(
+        name="frontend",
+        group="internal",
+        url="http://127.0.0.1:8080/v2/",
+        expect_contains='<div id="root">',
+    ),
+    LightCheck(
+        name="frontend-memvault",
+        group="internal",
+        url="http://127.0.0.1:8080/v2/memvault/",
+        expect_contains='<div id="root">',
+    ),
+    # ── external (stations) ──
+    LightCheck(
+        name="hook-observatory",
+        group="external",
+        url="http://127.0.0.1:4100/",
+    ),
+    LightCheck(
+        name="agent-vista",
+        group="external",
+        url="http://127.0.0.1:8840/",
+    ),
     LightCheck(
         name="system-monitor",
+        group="external",
         url="http://127.0.0.1:9526/",
     ),
     LightCheck(
-        name="agent-metrics",
-        url="http://127.0.0.1:8795/health",
-    ),
-    LightCheck(
         name="tmux-webui",
+        group="external",
         url="http://127.0.0.1:9527/",
     ),
     LightCheck(
+        name="agent-metrics",
+        group="external",
+        url="http://127.0.0.1:8795/health",
+    ),
+    LightCheck(
         name="llm-usage",
+        group="external",
         url="http://127.0.0.1:9525/",
+    ),
+    LightCheck(
+        name="sentinel",
+        group="external",
+        url="http://127.0.0.1:4101/health",
+    ),
+    LightCheck(
+        name="file-manager",
+        group="external",
+        url="http://127.0.0.1:8850/",
     ),
 ]
 
 
 _PW_ROOT_CHECK = (
-    "async (page) => { await page.waitForSelector(\"#root > *\", {timeout:10000}); return 'ok'; }"
+    'async (page) => { await page.waitForSelector("#root > *", {timeout:10000}); return "ok"; }'
+)
+_PW_BODY_CHECK = (
+    'async (page) => { await page.waitForSelector("body > *", {timeout:10000}); return "ok"; }'
 )
 
 DEEP_CHECKS: list[DeepCheck] = [
+    # ── internal (React #root) ──
     DeepCheck(
         name="frontend-render",
+        group="internal",
         url="http://127.0.0.1:8080/v2/",
         playwright_code=_PW_ROOT_CHECK,
     ),
     DeepCheck(
         name="frontend-memvault-render",
+        group="internal",
         url="http://127.0.0.1:8080/v2/memvault/",
         playwright_code=_PW_ROOT_CHECK,
     ),
+    # ── infra ──
+    DeepCheck(
+        name="lgtm-render",
+        group="infra",
+        url="http://127.0.0.1:3100/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    # ── external (station HTML — body > *) ──
+    DeepCheck(
+        name="hook-observatory-render",
+        group="external",
+        url="http://127.0.0.1:8080/v2/apps/hook/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="agent-vista-render",
+        group="external",
+        url="http://127.0.0.1:8080/apps/vista/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="system-monitor-render",
+        group="external",
+        url="http://127.0.0.1:8080/v2/apps/sysmon/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="tmux-webui-render",
+        group="external",
+        url="http://127.0.0.1:8080/v2/apps/tmux/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="agent-metrics-render",
+        group="external",
+        url="http://127.0.0.1:8080/v2/apps/agentops/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="llm-usage-render",
+        group="external",
+        url="http://127.0.0.1:8080/v2/apps/llm/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="sentinel-render",
+        group="external",
+        url="http://127.0.0.1:8080/v2/apps/sentinel/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="file-manager-render",
+        group="external",
+        url="http://127.0.0.1:8080/v2/apps/files/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
 ]
+
+# ── Group lookup for state.py ──
+
+GROUP_MAP: dict[str, str] = {}
+for _c in LIGHT_CHECKS:
+    GROUP_MAP[_c.name] = _c.group
+for _c in DEEP_CHECKS:
+    GROUP_MAP[_c.name] = _c.group
 
 
 # ── Check Execution ──────────────────────────────────────────
@@ -222,8 +345,20 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
     # Keep session ID short — macOS Unix socket path limit is 104 chars.
     # Playwright stores sockets in /var/folders/…/playwright-cli/<hash>/<session>.sock
     # which is ~85 chars base, so session ID must be ≤18 chars.
-    _SHORT_NAMES = {"frontend-render": "fe", "frontend-memvault-render": "mv"}
-    session_id = f"sn-{_SHORT_NAMES.get(check.name, check.name[:8])}"
+    _short_names = {
+        "frontend-render": "fe",
+        "frontend-memvault-render": "mv",
+        "lgtm-render": "lgtm",
+        "hook-observatory-render": "hook",
+        "agent-vista-render": "vista",
+        "system-monitor-render": "sysm",
+        "tmux-webui-render": "tmux",
+        "agent-metrics-render": "am",
+        "llm-usage-render": "llm",
+        "sentinel-render": "sntl",
+        "file-manager-render": "files",
+    }
+    session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
     start = time.monotonic()
     try:
         # Open browser session with target URL (headless by default)

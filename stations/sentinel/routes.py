@@ -62,6 +62,7 @@ async def overall_status(_user: dict = Depends(require_auth)):
             ServiceStatus(
                 service=s["service"],
                 status=s["status"],
+                group=s.get("group"),
                 light_status=s.get("light_status"),
                 deep_status=s.get("deep_status"),
                 last_check=s.get("last_check"),
@@ -107,6 +108,7 @@ async def service_status(service: str, _user: dict = Depends(require_auth)):
     return ServiceStatus(
         service=s["service"],
         status=s["status"],
+        group=s.get("group"),
         light_status=s.get("light_status"),
         deep_status=s.get("deep_status"),
         last_check=s.get("last_check"),
