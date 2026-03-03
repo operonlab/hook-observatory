@@ -97,7 +97,9 @@ if _templates_dir.exists():
 
     @app.get("/", response_class=HTMLResponse)
     async def dashboard(request: Request):
-        return _templates.TemplateResponse("index.html", {"request": request})
+        return _templates.TemplateResponse(
+            "index.html", {"request": request, "version": __version__}
+        )
 
 
 @app.get("/health")
