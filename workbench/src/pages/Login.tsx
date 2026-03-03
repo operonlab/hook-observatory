@@ -168,7 +168,7 @@ export default function Login() {
         {/* OAuth buttons */}
         <div className="space-y-3">
           <a
-            href={`${oauthBase}/auth/oauth/google?redirect=/v2/`}
+            href={`${oauthBase}/auth/oauth/google?redirect=/`}
             className="flex w-full items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
             style={{
               borderColor: 'var(--surface0)',
@@ -199,7 +199,7 @@ export default function Login() {
           </a>
 
           <a
-            href={`${oauthBase}/auth/oauth/github?redirect=/v2/`}
+            href={`${oauthBase}/auth/oauth/github?redirect=/`}
             className="flex w-full items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
             style={{
               borderColor: 'var(--surface0)',

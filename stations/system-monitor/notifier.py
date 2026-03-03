@@ -165,7 +165,7 @@ class PressureNotifier:
             "category": "system",
             "title": f"系統壓力: {overall.upper()}",
             "body": summary,
-            "url": "/v2/apps/sysmon/",
+            "url": "/apps/sysmon/",
             "tag": "system-pressure",
             "severity": severity_map.get(overall, "warning"),
         }

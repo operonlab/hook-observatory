@@ -37,7 +37,7 @@ export default function AuthGuard({ children }: Props) {
         <span className="text-4xl">🔒</span>
         <p className="text-sm text-white/50">請先登入 Workshop</p>
         <a
-          href="http://localhost:8800/v2/login"
+          href="/login"
           className="rounded px-4 py-2 text-sm transition-colors"
           style={{
             backgroundColor: "#89b4fa20",

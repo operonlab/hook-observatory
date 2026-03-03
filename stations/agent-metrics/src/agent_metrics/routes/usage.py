@@ -85,7 +85,7 @@ async def _push_budget_warning(used_pct: float, used: float, budget: float) -> N
         "category": "agent",
         "title": f"LLM 用量警告: {used_pct}%",
         "body": f"本月已使用 ${used:.2f} / ${budget:.2f}",
-        "url": "/v2/apps/agent-metrics/",
+        "url": "/apps/agent-metrics/",
         "tag": "agent-budget-monthly",
         "severity": "warning",
     }

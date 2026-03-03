@@ -49,7 +49,7 @@ LIGHT_CHECKS: list[LightCheck] = [
     LightCheck(
         name="nginx",
         group="system",
-        url="http://127.0.0.1:8080/v2/health",
+        url="http://127.0.0.1:8080/health",
     ),
     LightCheck(
         name="orbstack",
@@ -104,13 +104,13 @@ LIGHT_CHECKS: list[LightCheck] = [
     LightCheck(
         name="frontend",
         group="internal",
-        url="http://127.0.0.1:8080/v2/",
+        url="http://127.0.0.1:8080/",
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-memvault",
         group="internal",
-        url="http://127.0.0.1:8080/v2/memvault/",
+        url="http://127.0.0.1:8080/memvault/",
         expect_contains='<div id="root">',
     ),
     # ── external (stations) ──
@@ -164,13 +164,13 @@ DEEP_CHECKS: list[DeepCheck] = [
     DeepCheck(
         name="frontend-render",
         group="internal",
-        url="http://127.0.0.1:8080/v2/",
+        url="http://127.0.0.1:8080/",
         playwright_code=_PW_ROOT_CHECK,
     ),
     DeepCheck(
         name="frontend-memvault-render",
         group="internal",
-        url="http://127.0.0.1:8080/v2/memvault/",
+        url="http://127.0.0.1:8080/memvault/",
         playwright_code=_PW_ROOT_CHECK,
     ),
     # ── infra ──
@@ -184,7 +184,7 @@ DEEP_CHECKS: list[DeepCheck] = [
     DeepCheck(
         name="hook-observatory-render",
         group="external",
-        url="http://127.0.0.1:8080/v2/apps/hook/",
+        url="http://127.0.0.1:8080/apps/hook/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
@@ -196,31 +196,31 @@ DEEP_CHECKS: list[DeepCheck] = [
     DeepCheck(
         name="system-monitor-render",
         group="external",
-        url="http://127.0.0.1:8080/v2/apps/sysmon/",
+        url="http://127.0.0.1:8080/apps/sysmon/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="tmux-webui-render",
         group="external",
-        url="http://127.0.0.1:8080/v2/apps/tmux/",
+        url="http://127.0.0.1:8080/apps/tmux/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="agent-metrics-render",
         group="external",
-        url="http://127.0.0.1:8080/v2/apps/agentops/",
+        url="http://127.0.0.1:8080/apps/agentops/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="sentinel-render",
         group="external",
-        url="http://127.0.0.1:8080/v2/apps/sentinel/",
+        url="http://127.0.0.1:8080/apps/sentinel/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="file-manager-render",
         group="external",
-        url="http://127.0.0.1:8080/v2/apps/files/",
+        url="http://127.0.0.1:8080/apps/files/",
         playwright_code=_PW_BODY_CHECK,
     ),
 ]

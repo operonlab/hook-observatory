@@ -42,7 +42,7 @@ class Config:
     secret_key: str = "change-me-in-production"
     session_cookie_name: str = "workshop_session"
     session_max_age: int = 604800  # 7 days
-    login_url: str = "/v2/login"
+    login_url: str = "/login"
     spool: SpoolConfig = field(default_factory=SpoolConfig)
     check: CheckConfig = field(default_factory=CheckConfig)
     lock_dir: Path = field(default_factory=lambda: LOCK_DIR)

@@ -4,9 +4,9 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App.tsx";
 import "./index.css";
 
-// Detect basename from current path: if served under /v2/apps/hook/, use that.
+// Detect basename from current path: if served under /apps/hook/, use that.
 // Falls back to "/" for local dev (localhost:4101).
-const BASE_PATH = window.location.pathname.match(/^(\/v2\/apps\/hook)\/?/)?.[1] ?? "";
+const BASE_PATH = window.location.pathname.match(/^(\/apps\/hook)\/?/)?.[1] ?? "";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

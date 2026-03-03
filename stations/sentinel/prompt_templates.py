@@ -20,22 +20,22 @@ Steps:
 3. Try restart: /Users/joneshong/workshop/scripts/workshop-services.sh restart core
 4. Verify: curl -s http://127.0.0.1:8801/health
 """,
-    "frontend": """Frontend (Nginx serving /v2/) is unhealthy.
+    "frontend": """Frontend (Nginx serving /) is unhealthy.
 Failure: {detail}
 
 Steps:
 1. Check nginx: nginx -t
 2. Check if dist exists: ls -la /Users/joneshong/workshop/workbench/dist/index.html
 3. If dist missing or broken, rebuild:
-   cd /Users/joneshong/workshop/workbench && BASE_PATH=/v2 pnpm run build
+   cd /Users/joneshong/workshop/workbench && pnpm run build
 4. Reload nginx: nginx -s reload
-5. Verify: curl -s http://127.0.0.1/v2/ | head -5
+5. Verify: curl -s http://127.0.0.1/ | head -5
 """,
-    "frontend-memvault": """Frontend route /v2/memvault/ is unhealthy.
+    "frontend-memvault": """Frontend route /memvault/ is unhealthy.
 Failure: {detail}
 
 This is likely the same issue as the main frontend. Check:
-1. curl -s http://127.0.0.1/v2/ (main page)
+1. curl -s http://127.0.0.1/ (main page)
 2. If main page also fails → rebuild frontend
 3. If main page works but memvault fails → check React router config
 """,
