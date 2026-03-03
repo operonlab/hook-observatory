@@ -140,10 +140,18 @@ class InterventionEngine:
         Called from the main loop alongside light checks to ensure virtual
         services (workshop-services, frontend-build, etc.) transition back
         from MAINTENANCE once their lock expires.
+
+        Also clears stale agent_id when lock has expired and agent PID
+        is no longer alive (or was never set — e.g. hook-originated notify).
         """
         for t in list(self.trackers.values()):
             if t.state == State.MAINTENANCE:
-                if not self._has_active_lock(t.service) and not t.agent_id:
+                if not self._has_active_lock(t.service):
+                    # Lock expired — check if agent is still alive
+                    if t.agent_pid and _pid_alive(t.agent_pid):
+                        continue  # Agent still running, don't clear
+                    t.agent_id = None
+                    t.agent_pid = None
                     t.state = State.HEALTHY
                     t.first_failure_at = 0.0
                     logger.info("Service %s → HEALTHY (lock expired, sweep)", t.service)
