@@ -363,7 +363,6 @@
         navigator.serviceWorker.register('static/sw.js', { scope: './' })
           .then((reg) => {
             console.log('[SW] 註冊成功, scope:', reg.scope);
-            // 偵測更新
             reg.addEventListener('updatefound', () => {
               const newWorker = reg.installing;
               newWorker.addEventListener('statechange', () => {
@@ -372,9 +371,32 @@
                 }
               });
             });
+            // Auto-subscribe to push if permission already granted
+            if (Notification.permission === 'granted') {
+              workshopPushSubscribe(reg, '/v2/apps/sysmon/');
+            }
           })
           .catch((err) => console.warn('[SW] 註冊失敗:', err));
       });
+    }
+    async function workshopPushSubscribe(reg, appScope) {
+      try {
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) return;
+        const res = await fetch('/v2/api/notification/vapid-key');
+        if (!res.ok) return;
+        const { public_key } = await res.json();
+        const padding = '='.repeat((4 - public_key.length % 4) % 4);
+        const raw = atob((public_key + padding).replace(/-/g, '+').replace(/_/g, '/'));
+        const key = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        const j = sub.toJSON();
+        await fetch('/v2/api/notification/subscriptions', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, app_scope: appScope }),
+        });
+      } catch (e) { console.warn('[Push] subscribe failed:', e); }
     }
   </script>
 </body>
