@@ -49,6 +49,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "PostToolUse": [
         ("Edit|Write", auto_format.handle),
+        ("Bash", sentinel_notify.handle),
         ("Skill", external.skill_tracker),
         (None, observability.handle),
     ],
