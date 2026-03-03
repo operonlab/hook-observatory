@@ -11,8 +11,7 @@ import os
 import sys
 from datetime import datetime
 
-from workshop.clients._base import APIError
-from workshop.clients._base import ConnectionError as APIConnectionError
+from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.memvault import MemvaultClient
 
 # ---------------------------------------------------------------------------
@@ -418,6 +417,8 @@ def cmd_block_update(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_block_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Delete a memory block."""
     client.delete_block(args.block_id)
+    if _json_out({"deleted": args.block_id}, args):
+        return
     if not args.quiet:
         print(f"  Block deleted: {args.block_id}")
 
@@ -865,6 +866,144 @@ def cmd_sync_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
         print(f"  Skipped        : {data.get('skipped', '?')}")
 
 
+def cmd_sync_scan(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Trigger a sync scan for new memories."""
+    data = client.sync_scan()
+    if _json_out(data, args):
+        return
+
+    if args.quiet:
+        print(data.get("status", "ok"))
+    else:
+        print(f"  Sync scan: {data.get('status', 'ok')}")
+
+
+# ---------------------------------------------------------------------------
+# Command handlers — NEW: Missing commands from review
+# ---------------------------------------------------------------------------
+
+
+def cmd_skill_proficiency(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Show skill proficiency ranking."""
+    data = client.skill_proficiency()
+    if _json_out(data, args):
+        return
+
+    skills = data if isinstance(data, list) else data.get("skills", [])
+    if not skills:
+        if not args.quiet:
+            print("  No skill proficiency data.")
+        return
+
+    if not args.quiet:
+        print("  Skill Proficiency Ranking")
+        print("  " + "-" * 50)
+
+    for i, s in enumerate(skills, 1):
+        name = s.get("skill_name", s.get("name", "?"))
+        count = s.get("invocation_count", s.get("count", 0))
+        success = s.get("success_rate", s.get("rate", 0))
+        if args.quiet:
+            print(f"{name} count={count} success={success:.0%}")
+        else:
+            print(f"  {i}. {name:30s} invocations={count}  success={success:.0%}")
+
+
+def cmd_triple_create(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Create a KG triple."""
+    data = client.create_triple(
+        args.subject,
+        args.predicate,
+        args.object,
+        confidence=args.confidence,
+        source_session=args.session,
+    )
+    if _json_out(data, args):
+        return
+
+    if args.quiet:
+        print(data.get("id", "?"))
+    else:
+        print(f"  Triple created: {data.get('id', '?')}")
+        print(f"  {args.subject} --[{args.predicate}]--> {args.object}")
+
+
+def cmd_triple_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Delete a KG triple."""
+    client.delete_triple(args.triple_id)
+    if _json_out({"deleted": args.triple_id}, args):
+        return
+    if not args.quiet:
+        print(f"  Triple deleted: {args.triple_id}")
+
+
+def cmd_attitude_create(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Create an attitude fact."""
+    data = client.create_attitude(
+        args.fact,
+        args.category,
+        confidence=args.confidence,
+    )
+    if _json_out(data, args):
+        return
+
+    if args.quiet:
+        print(data.get("id", "?"))
+    else:
+        print(f"  Attitude created: {data.get('id', '?')}")
+        print(f"  [{args.category}] {args.fact}")
+
+
+def cmd_attitude_evolve(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Evolve an attitude fact (ADD/UPDATE/NOOP)."""
+    data = client.attitude_evolve(
+        args.fact,
+        args.category,
+        source_session=args.session,
+    )
+    if _json_out(data, args):
+        return
+
+    op = data.get("operation", "?")
+    fid = data.get("id", data.get("fact_id", "?"))
+    if args.quiet:
+        print(f"{op} {fid}")
+    else:
+        print(f"  Attitude evolved: {op}")
+        print(f"  Fact ID: {fid}")
+
+
+def cmd_attitude_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Delete an attitude fact."""
+    client.delete_attitude(args.fact_id)
+    if _json_out({"deleted": args.fact_id}, args):
+        return
+    if not args.quiet:
+        print(f"  Attitude deleted: {args.fact_id}")
+
+
+def cmd_profile_upsert(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Upsert KAS profile scores."""
+    data = client.upsert_profile(
+        knowledge_score=args.knowledge,
+        attitude_score=args.attitude,
+        skill_score=args.skill,
+    )
+    if _json_out(data, args):
+        return
+
+    if args.quiet:
+        k = data.get("knowledge_score", 0)
+        a = data.get("attitude_score", 0)
+        s = data.get("skill_score", 0)
+        print(f"K={k} A={a} S={s}")
+    else:
+        print("  Profile updated:")
+        print(f"  Knowledge : {data.get('knowledge_score', 0)}")
+        print(f"  Attitude  : {data.get('attitude_score', 0)}")
+        print(f"  Skill     : {data.get('skill_score', 0)}")
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -1022,6 +1161,49 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("backfill", parents=[common], help="Backfill missing embeddings")
     p.add_argument("--batch-size", type=int, default=50, help="Batch size (default: 50)")
 
+    sub.add_parser("sync-scan", parents=[common], help="Trigger sync scan for new memories")
+
+    # ---- NEW: Missing commands from review ----
+
+    # skill-proficiency
+    sub.add_parser("skill-proficiency", parents=[common], help="Skill proficiency ranking")
+
+    # triple-create
+    p = sub.add_parser("triple-create", parents=[common], help="Create a KG triple")
+    p.add_argument("subject", help="Subject entity")
+    p.add_argument("predicate", help="Predicate/relation")
+    p.add_argument("object", help="Object entity")
+    p.add_argument("--confidence", type=float, default=None, help="Confidence (0.0-1.0)")
+    p.add_argument("--session", default=None, help="Source session ID")
+
+    # triple-delete
+    p = sub.add_parser("triple-delete", parents=[common], help="Delete a KG triple")
+    p.add_argument("triple_id", help="Triple ID")
+
+    # attitude-create
+    p = sub.add_parser("attitude-create", parents=[common], help="Create an attitude fact")
+    p.add_argument("fact", help="Attitude fact text")
+    p.add_argument("category", help="Category (e.g. preference, belief, value)")
+    p.add_argument("--confidence", type=float, default=None, help="Confidence (0.0-1.0)")
+
+    # attitude-evolve
+    p = sub.add_parser(
+        "attitude-evolve", parents=[common], help="Evolve an attitude (ADD/UPDATE/NOOP)",
+    )
+    p.add_argument("fact", help="Attitude fact text")
+    p.add_argument("category", help="Category")
+    p.add_argument("--session", default=None, help="Source session ID")
+
+    # attitude-delete
+    p = sub.add_parser("attitude-delete", parents=[common], help="Delete an attitude fact")
+    p.add_argument("fact_id", help="Attitude fact ID")
+
+    # profile-upsert
+    p = sub.add_parser("profile-upsert", parents=[common], help="Upsert KAS profile scores")
+    p.add_argument("--knowledge", type=float, default=None, help="Knowledge score")
+    p.add_argument("--attitude", type=float, default=None, help="Attitude score")
+    p.add_argument("--skill", type=float, default=None, help="Skill score")
+
     return parser
 
 
@@ -1070,6 +1252,15 @@ COMMAND_MAP = {
     "decay": cmd_decay,
     "backfill": cmd_backfill,
     "sync-stats": cmd_sync_stats,
+    "sync-scan": cmd_sync_scan,
+    # Review round — missing commands
+    "skill-proficiency": cmd_skill_proficiency,
+    "triple-create": cmd_triple_create,
+    "triple-delete": cmd_triple_delete,
+    "attitude-create": cmd_attitude_create,
+    "attitude-evolve": cmd_attitude_evolve,
+    "attitude-delete": cmd_attitude_delete,
+    "profile-upsert": cmd_profile_upsert,
 }
 
 

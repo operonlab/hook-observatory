@@ -146,6 +146,12 @@ class MemvaultClient(BaseClient):
         """Get sync/extraction statistics. GET /sync/stats"""
         return self._get("/sync/stats")
 
+    # ======================== Sync — Scan ========================
+
+    def sync_scan(self) -> dict:
+        """Trigger a sync scan for new memories. POST /sync/scan"""
+        return self._post("/sync/scan")
+
     # ======================== Status ========================
 
     def status(self) -> dict:
@@ -339,7 +345,7 @@ class MemvaultClient(BaseClient):
 
     def backfill_embeddings(self, batch_size: int = 50) -> dict:
         """Backfill missing embeddings for triples and attitudes. POST /kg/embeddings/backfill"""
-        return self._post("/kg/embeddings/backfill", timeout=120)
+        return self._post("/kg/embeddings/backfill", params={"batch_size": batch_size}, timeout=120)
 
     # ======================== Convenience ========================
 
