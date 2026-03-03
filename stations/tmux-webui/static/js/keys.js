@@ -93,16 +93,38 @@
   function initArrowPad(pad) {
     if (!pad) return;
     const THRESHOLD = 18;
-    let tracking = false, lastX = 0, lastY = 0, dirClass = '';
+    const COOLDOWN = 150;
+    const REPEAT_DELAY = 400; // ms before repeat starts
+    const REPEAT_RATE = 120;  // ms between repeats
+    let tracking = false, lastX = 0, lastY = 0, dirClass = '', lastSendTime = 0;
+    let currentKey = null, repeatTimer = null;
 
     function clearDir() {
       if (dirClass) { pad.classList.remove(dirClass); dirClass = ''; }
+    }
+
+    function stopRepeat() {
+      clearInterval(repeatTimer);
+      repeatTimer = null;
+      currentKey = null;
+    }
+
+    function startRepeat(key) {
+      stopRepeat();
+      currentKey = key;
+      repeatTimer = setTimeout(() => {
+        repeatTimer = setInterval(() => {
+          if (currentKey) sendEk(currentKey);
+        }, REPEAT_RATE);
+      }, REPEAT_DELAY);
     }
 
     function handleMove(cx, cy) {
       const dx = cx - lastX, dy = cy - lastY;
       const ax = Math.abs(dx), ay = Math.abs(dy);
       if (ax < THRESHOLD && ay < THRESHOLD) return;
+      const now = Date.now();
+      if (now - lastSendTime < COOLDOWN) return;
       let key, cls;
       if (ax > ay) {
         key = dx > 0 ? 'Right' : 'Left';
@@ -112,11 +134,15 @@
         cls = dy > 0 ? 'dir-down' : 'dir-up';
       }
       lastX = cx; lastY = cy;
+      lastSendTime = now;
       clearDir();
       dirClass = cls;
       pad.classList.add(cls);
       sendEk(key);
+      startRepeat(key);
     }
+
+    function stop() { tracking = false; clearDir(); stopRepeat(); }
 
     pad.addEventListener('touchstart', (e) => {
       e.preventDefault();
@@ -130,7 +156,8 @@
       handleMove(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: false });
 
-    pad.addEventListener('touchend', () => { tracking = false; clearDir(); });
+    pad.addEventListener('touchend', stop);
+    pad.addEventListener('touchcancel', stop);
 
     // Mouse fallback
     pad.addEventListener('mousedown', (e) => {
@@ -138,7 +165,7 @@
       tracking = true; lastX = e.clientX; lastY = e.clientY;
       const onMove = (ev) => handleMove(ev.clientX, ev.clientY);
       const onUp = () => {
-        tracking = false; clearDir();
+        stop();
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
       };

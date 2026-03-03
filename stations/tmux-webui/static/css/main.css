@@ -186,10 +186,12 @@ footer{
 footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible}
 .focused-label{font-size:11px;color:var(--accent-h);margin-left:auto;white-space:nowrap}
 .qbtn{
-  padding:4px 10px;border:1px solid var(--border);border-radius:6px;
-  background:var(--surface2);color:var(--dim);font-size:11px;font-family:inherit;
+  padding:4px 8px 3px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surface2);color:var(--dim);font-size:10px;font-family:inherit;
   cursor:pointer;transition:all .15s;
+  display:inline-flex;flex-direction:column;align-items:center;gap:1px;line-height:1;
 }
+.qico{font-size:15px;opacity:.6}
 .qbtn:hover{color:var(--text);border-color:var(--accent)}
 /* Functional button colors */
 .qbtn[data-key="Escape"]{color:var(--yellow);border-color:rgba(251,191,36,.3)}
@@ -276,10 +278,12 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
 #send-btn{
   padding:8px 18px;background:var(--accent);color:#fff;border:none;
   border-radius:var(--radius);font-size:13px;font-family:inherit;cursor:pointer;
-  transition:background .15s;
+  transition:background .15s;user-select:none;-webkit-user-select:none;touch-action:manipulation;
 }
 #send-btn:hover{background:var(--accent-h)}
 #send-btn:disabled{opacity:.4;cursor:default}
+#send-btn.clear-transition{background:var(--red);transition:background 1s ease}
+#send-btn.clear-ready{background:var(--red);box-shadow:0 0 8px var(--red)}
 
 /* ── Extra Keys (Blink-style) ── */
 .extra-keys{
