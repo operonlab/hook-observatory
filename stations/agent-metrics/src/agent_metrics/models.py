@@ -158,3 +158,67 @@ class DailySummaryResponse(BaseModel):
     total_output_tokens: int
     avg_context_pct: float
     max_context_pct: float
+
+
+# ── LLM Usage (merged from llm-usage station) ────────────────────
+
+
+class SubscriptionInfo(BaseModel):
+    cli: str
+    provider: str
+    plan: str
+    monthly_cost_usd: float = 0.0
+    quota_5h_pct: int | None = None
+    quota_7d_pct: int | None = None
+    current_mode: str | None = None
+    source: str = "unknown"
+
+
+class BudgetInfo(BaseModel):
+    budget_usd: float
+    used_usd: float
+    used_pct: float
+    remaining_usd: float
+    warning: bool = False
+    warning_threshold_pct: float = 80.0
+    days_elapsed: int = 0
+
+
+class CacheStats(BaseModel):
+    cache_hit_rate: float = 0.0
+    total_cache_read: int = 0
+    total_cache_creation: int = 0
+    estimated_savings_usd: float = 0.0
+    total_tokens_in: int = 0
+    total_tokens_out: int = 0
+
+
+class TrendEntry(BaseModel):
+    date: str
+    cost_usd: float
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cumulative_cost_usd: float = 0.0
+    cost_7d_avg_usd: float | None = None
+
+
+class ModelBreakdown(BaseModel):
+    model: str
+    provider: str = "anthropic"
+    requests: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cache_creation: int = 0
+    cache_read: int = 0
+    cost_usd: float = 0.0
+    cache_hit_rate: float = 0.0
+    pct_of_total: float = 0.0
+
+
+class UsageSummary(BaseModel):
+    type: str = "summary"
+    timestamp: str
+    period: str
+    subscription: dict
+    api: dict
+    combined: dict
