@@ -12,10 +12,11 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from starlette.requests import Request
 
 SCRIPT_DIR = Path(__file__).parent
@@ -36,6 +37,9 @@ ALERTS_DIR = Path(
 DATA_DIR = Path(
     CONFIG.get("output_dir", "~/.claude/data/system-monitor")
 ).expanduser()
+REPORTS_DIR = Path(
+    CONFIG.get("reports", {}).get("output_dir", "~/.claude/data/system-monitor/reports")
+).expanduser()
 
 app = FastAPI(title="System Monitor API", version="2.0.0")
 app.mount("/static", StaticFiles(directory=SCRIPT_DIR / "static"), name="static")
@@ -49,6 +53,20 @@ CACHE_TTL = 30  # seconds
 # Snapshot auto-save rate limiting
 _last_snapshot_time: float = 0
 SNAPSHOT_INTERVAL = 300  # 5 minutes
+
+# Full disk scan cache (separate from status cache — much slower)
+_disk_scan_cache: dict = {}
+_disk_scan_time: float = 0
+DISK_SCAN_CACHE_TTL = 300  # 5 minutes
+
+
+class DeleteRequest(BaseModel):
+    path: str
+    type: str = "file"  # "file" or "directory"
+
+
+class CleanCacheRequest(BaseModel):
+    path: str
 
 
 def _get_latest_data() -> dict:
@@ -292,6 +310,138 @@ async def list_alerts():
         except (json.JSONDecodeError, OSError):
             continue
     return {"alerts": alerts, "total": len(alerts)}
+
+
+# ---------------------------------------------------------------------------
+# Disk Management Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/disk/summary")
+async def disk_summary():
+    """Lightweight disk summary via APFS-level query (~1s)."""
+    import asyncio
+
+    from collector import collect_disk_fast, load_config
+    config = load_config()
+    data = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: collect_disk_fast(config)
+    )
+    return data
+
+
+@app.get("/disk/scan")
+async def disk_scan():
+    """Full disk scan including large files, stale files, caches (~30s, cached 5min)."""
+    import asyncio
+    import time
+
+    global _disk_scan_cache, _disk_scan_time
+
+    now = time.time()
+    if _disk_scan_cache and (now - _disk_scan_time) < DISK_SCAN_CACHE_TTL:
+        return _disk_scan_cache
+
+    from collector import collect_disk, load_config
+    config = load_config()
+    data = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: collect_disk(config)
+    )
+    _disk_scan_cache = data
+    _disk_scan_time = time.time()
+    return data
+
+
+@app.post("/disk/delete")
+async def disk_delete(req: DeleteRequest):
+    """Delete a file or directory with safety validation."""
+    from disk_manager import DiskManager
+
+    mgr = DiskManager()
+    try:
+        result = mgr.delete_file(req.path, req.type)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from None
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None
+
+
+@app.post("/disk/clean-cache")
+async def disk_clean_cache(req: CleanCacheRequest):
+    """Clean all contents of a cache directory."""
+    from disk_manager import DiskManager
+
+    mgr = DiskManager()
+    try:
+        result = mgr.clean_cache_dir(req.path)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from None
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from None
+
+
+@app.post("/disk/empty-trash")
+async def disk_empty_trash():
+    """Empty the user's Trash directory."""
+    from disk_manager import DiskManager
+
+    mgr = DiskManager()
+    result = mgr.empty_trash()
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Reports Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/reports")
+async def list_reports(
+    report_type: str | None = Query(None, alias="type"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List generated reports (Markdown files), with optional type filter and pagination."""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    all_files = sorted(REPORTS_DIR.glob("*.md"), reverse=True)
+
+    if report_type:
+        all_files = [f for f in all_files if report_type in f.stem]
+
+    total = len(all_files)
+    page = all_files[offset:offset + limit]
+
+    reports = []
+    for f in page:
+        stat = f.stat()
+        reports.append({
+            "filename": f.name,
+            "size_bytes": stat.st_size,
+            "created": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+            "type": (
+                "monthly" if "monthly" in f.stem
+                else "weekly" if "weekly" in f.stem
+                else "daily"
+            ),
+        })
+    return {"reports": reports, "total": total}
+
+
+@app.get("/reports/{filename}")
+async def get_report(filename: str):
+    """Read a specific report file (Markdown)."""
+    # Sanitize filename to prevent path traversal
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    report_path = REPORTS_DIR / filename
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail=f"Report not found: {filename}")
+
+    content = report_path.read_text(encoding="utf-8")
+    return {"filename": filename, "content": content}
 
 
 if __name__ == "__main__":
