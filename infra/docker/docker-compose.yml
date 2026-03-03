@@ -79,7 +79,7 @@ services:
       - filebrowser-data:/srv
       - filebrowser-db:/database
     environment:
-      FB_BASEURL: /v2/apps/files
+      FB_BASEURL: /apps/files
       FB_DATABASE: /database/filebrowser.db
       FB_ROOT: /srv
       FB_NOAUTH: "false"
