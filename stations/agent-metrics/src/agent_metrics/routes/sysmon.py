@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from agent_metrics.db import get_pool
 from agent_metrics.quota_collector import get_quota, get_raw_cache
 from agent_metrics.sysmon_loop import get_history, get_latest
 
@@ -71,3 +72,51 @@ async def quota_formatted():
         "gm-flash": quota.get("llm_gm_flash", "?"),
         "display": quota.get("llm_display", "?"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Guardian / Sweep Logs
+# ---------------------------------------------------------------------------
+
+@router.get("/guardian/log")
+async def guardian_log(
+    hours: int = Query(default=24, ge=1, le=168),
+    level: str | None = Query(default=None),
+):
+    """Return guardian action log."""
+    pool = await get_pool()
+    query = (
+        "SELECT id, ts, level, priority, pid, process_name, mem_mb, cpu_pct, "
+        "action, result, detail FROM guardian_actions "
+        "WHERE ts > now() - make_interval(hours => $1) AND level != 'SWEEP'"
+    )
+    params: list = [hours]
+    if level:
+        query += " AND level = $2"
+        params.append(level)
+    query += " ORDER BY ts DESC LIMIT 200"
+
+    rows = await pool.fetch(query, *params)
+    actions = [dict(r) for r in rows]
+    for a in actions:
+        if a.get("ts"):
+            a["ts"] = a["ts"].isoformat()
+    return {"actions": actions, "total": len(actions)}
+
+
+@router.get("/sweep/log")
+async def sweep_log(hours: int = Query(default=24, ge=1, le=168)):
+    """Return sweep action log."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "SELECT id, ts, level, priority, pid, process_name, mem_mb, cpu_pct, "
+        "action, result, detail FROM guardian_actions "
+        "WHERE ts > now() - make_interval(hours => $1) AND level = 'SWEEP' "
+        "ORDER BY ts DESC LIMIT 200",
+        hours,
+    )
+    actions = [dict(r) for r in rows]
+    for a in actions:
+        if a.get("ts"):
+            a["ts"] = a["ts"].isoformat()
+    return {"actions": actions, "total": len(actions)}
