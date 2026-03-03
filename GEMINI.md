@@ -30,7 +30,7 @@ Modular Monolith + Event-Driven workspace.
   - `core/services/media/` — STT/TTS/image processing
 - `workbench/` — Single React application
 - `mcp/` — MCP adapter layer (thin wrappers over Core API)
-- `stations/` — Standalone local tools (system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor, agent-vista)
+- `stations/` — Standalone local tools (system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor, agent-vista)
 - `vendor/` — Third-party community tools (observability)
 - `bridges/` — External platform connectors (LINE, Telegram, Discord)
 - `plugins/` — Plugin packages
@@ -48,7 +48,7 @@ Modular Monolith + Event-Driven workspace.
 - **Domain Services** (DB-backed): finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore
 - **Bridges**: External connectors (social-hooks, notification)
 - **Hot-path Services**: media (STT/TTS/image), realtime (LiveKit)
-- **Stations**: Standalone local tools (system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor, agent-vista)
+- **Stations**: Standalone local tools (system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor, agent-vista)
 - **Vendor**: Third-party community tools (observability)
 - **Compositions**: Service assemblies for specific use cases (Legal Advisor, Church Music, Virtual CS, ERP/POS)
 

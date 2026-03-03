@@ -472,7 +472,7 @@ Sub-agents        → 縮小版（50%）跟隨在主 agent 旁邊
 | **Avatar Console Usage Watchdog** | 整合為 Token/Cost Dashboard，provider 額度監控 + 自動切換 |
 | **Hooks Observability Bridge** | Agent Vista 可作為 bridge 的消費者，接收 hook 事件做即時視覺化 |
 | **stations/system-monitor** | 共用 process monitoring 邏輯，或合併 |
-| **stations/llm-usage** | token/cost 統計可整合到 Agent Vista dashboard |
+| **stations/agent-metrics** | token/cost 統計可整合到 Agent Vista dashboard |
 | **Claude Squad (`cs`)** | 互補 — cs 管理 sessions，Agent Vista 視覺化狀態 |
 | **ccusage** | 歷史用量分析，Agent Vista 即時用量 |
 

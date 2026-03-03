@@ -162,7 +162,7 @@ Agent SDK / 自建服務 → LiteLLM Proxy → api_collector.py → DB
 
 ```
 P3-A (system-monitor): 複製 V1 腳本 → 改頻率 → 加硬體監控 → API + Widget
-P3-B (llm-usage):      整理會員方案 + 解析 LiteLLM DB → 雙軌收集 → API + Widget
+P3-B (agent-metrics):  整理會員方案 + 解析 LiteLLM DB → 雙軌收集 → API + Widget（已整合 llm-usage）
 P3-C (envkit):         掃描 Mac Mini → inventory.yaml + config 備份 → bootstrap pipeline → 歸檔 ~/dotfiles/
 P3-D (briefing 管理):  建立 DB 表 → 遷移寫死主題 → CRUD API → 管理 UI
 P3-E (tmux-webui):     V1 為基底 → 虛擬按鍵列 → Autocomplete → 觸控手勢 → 響應式

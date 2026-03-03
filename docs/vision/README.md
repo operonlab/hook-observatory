@@ -43,7 +43,7 @@ Meeting:   Compose services into solutions (Legal Advisor, ERP, ...)
 | **基礎 (Foundation)** | auth, admin | PostgreSQL |
 | **領域 (Domain)** | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore | PostgreSQL (schema-per-module) |
 | **橋接 (Bridge)** | social-hooks, notification | 外部 + Event Bus |
-| **工作站 (Station)** | system-monitor, llm-usage, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 DB |
+| **工作站 (Station)** | system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 DB |
 | **第三方 (Vendor)** | observability (@disler) | 獨立運行 |
 | **組合 (Composition)** | Legal Advisor、Church Music、Virtual CS、ERP/POS | 上述服務的組裝 |
 
