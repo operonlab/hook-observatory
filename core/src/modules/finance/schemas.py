@@ -290,8 +290,12 @@ class BudgetUpdate(BaseModel):
 class BudgetResponse(SpaceScopedResponse):
     year_month: str
     category_id: str | None = None
+    category_name: str | None = None
     budget_amount: Decimal
     savings_target: Decimal | None = None
+    spent_amount: Decimal = Decimal("0")
+    remaining_amount: Decimal = Decimal("0")
+    used_pct: float = 0.0
     is_private: bool = False
 
 
@@ -347,9 +351,18 @@ class ReconcileResponse(BaseModel):
 class CategoryBreakdown(BaseModel):
     category_id: str | None = None
     category_name: str = "未分類"
-    total: Decimal = Decimal("0")
+    category_icon: str | None = None
+    amount: Decimal = Decimal("0")
+    pct: float = 0.0
     count: int = 0
-    percentage: float = 0.0
+
+
+class WalletOverviewItem(BaseModel):
+    wallet_id: str
+    wallet_name: str
+    wallet_type: str
+    current_balance: Decimal
+    change: Decimal = Decimal("0")
 
 
 class MonthlySummaryResponse(BaseModel):
@@ -359,3 +372,21 @@ class MonthlySummaryResponse(BaseModel):
     net: Decimal = Decimal("0")
     transaction_count: int = 0
     category_breakdown: list[CategoryBreakdown] = []
+    wallet_overview: list[WalletOverviewItem] = []
+
+
+class MonthlyTrendResponse(BaseModel):
+    year_month: str
+    income: Decimal = Decimal("0")
+    expense: Decimal = Decimal("0")
+    net: Decimal = Decimal("0")
+
+
+class NetWorthPointResponse(BaseModel):
+    date: str
+    total: Decimal = Decimal("0")
+    bank: Decimal = Decimal("0")
+    cash: Decimal = Decimal("0")
+    e_wallet: Decimal = Decimal("0")
+    investment: Decimal = Decimal("0")
+    credit_card: Decimal = Decimal("0")

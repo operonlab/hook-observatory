@@ -123,7 +123,7 @@ export const analyticsApi = {
   insights: (months = 6) => request<MonthlyTrend[]>(`/finance/insights?months=${months}`),
 
   categoryBreakdown: (yearMonth: string) =>
-    request<MonthlySummary>(`/finance/summary/${yearMonth}`).then((s) => s.by_category),
+    request<MonthlySummary>(`/finance/summary/${yearMonth}`).then((s) => s.category_breakdown),
 
   netWorth: () => request<NetWorthPoint[]>('/finance/wallets/net-worth'),
 }
