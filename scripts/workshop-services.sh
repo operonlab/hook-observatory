@@ -21,7 +21,7 @@ SERVICES=(
   "agent-vista|binary|/Users/joneshong/workshop/stations/agent-vista/bin/agent-vista --no-browser --port 8840|8840|http://127.0.0.1:8840|/Users/joneshong/workshop/stations/agent-vista"
   "hook-observatory|uvicorn|/Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py|4100|http://127.0.0.1:4100|/Users/joneshong/workshop/stations/hook-observatory"
   "system-monitor|uvicorn|/Users/joneshong/workshop/stations/system-monitor/.venv/bin/python3 api.py --port 9526|9526|http://127.0.0.1:9526|/Users/joneshong/workshop/stations/system-monitor"
-  "agentops|uvicorn|/Users/joneshong/workshop/stations/agentops/.venv/bin/python3 -m agentops serve|8795|http://127.0.0.1:8795/health|/Users/joneshong/workshop/stations/agentops"
+  "agent-metrics|uvicorn|/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3 -m agent_metrics serve|8795|http://127.0.0.1:8795/health|/Users/joneshong/workshop/stations/agent-metrics"
   # sentinel 獨立於 workshop-services.sh — 由 launchd plist 管理（看門人不能被自己看守的人管）
   # ── Infrastructure Tools ──
   "litellm|binary|/Users/joneshong/.local/bin/litellm --config /Users/joneshong/.config/litellm/config.yaml --port 4000 --host 127.0.0.1|4000|http://127.0.0.1:4000|/Users/joneshong"

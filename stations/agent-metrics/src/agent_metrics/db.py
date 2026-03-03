@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncpg
 import structlog
 
-from agentops.config import settings
+from agent_metrics.config import settings
 
 log = structlog.get_logger()
 
@@ -20,7 +20,7 @@ async def get_pool() -> asyncpg.Pool:
             settings.DATABASE_URL,
             min_size=2,
             max_size=10,
-            server_settings={"search_path": "agentops,public"},
+            server_settings={"search_path": "agent_metrics,public"},
         )
         log.info("db_pool_created", dsn=settings.DATABASE_URL.split("@")[-1])
     return _pool
