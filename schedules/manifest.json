@@ -107,10 +107,10 @@
       "label": "com.joneshong.orchestrator",
       "command": "~/Claude/services/orchestrator/scripts/run.sh",
       "schedule": { "run_at_load": true },
-      "description": "服務 Orchestrator（KeepAlive daemon）",
+      "description": "[已停用] V1 Orchestrator — 已遷移至 stations/agentops（由 workshop-services.sh 管理）",
       "category": "jonathan",
       "type": "daemon",
-      "enabled": true
+      "enabled": false
     },
     {
       "name": "tmux-webui",
