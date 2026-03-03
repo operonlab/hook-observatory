@@ -15,7 +15,9 @@ const IntelflowPage = React.lazy(() => import('./modules/intelflow/pages'))
 const MemvaultPage = React.lazy(() => import('./modules/memvault/pages'))
 const SkillpathPage = React.lazy(() => import('./modules/skillpath/pages'))
 const WorkpoolPage = React.lazy(() => import('./modules/workpool/pages'))
+const InvestPage = React.lazy(() => import('./modules/invest/pages'))
 const MatchcorePage = React.lazy(() => import('./modules/matchcore/pages'))
+const NodeflowPage = React.lazy(() => import('./modules/nodeflow/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
@@ -182,6 +184,30 @@ function AppRoutes() {
             <AppShell>
               <ModuleSuspense>
                 <WorkpoolPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/invest/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <InvestPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/nodeflow/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <NodeflowPage />
               </ModuleSuspense>
             </AppShell>
           </AuthGuard>
