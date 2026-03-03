@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Memvault MCP Server — Slim adapter — 8 tools + 2 resources.
-
-Each tool = one HTTP call to Core API (localhost:8801).
+"""Memvault MCP Server — Slim adapter — 8 tools + 2 resources. Uses workshop.clients.memvault SDK.
 
 Usage:
     python3 mcp/memvault/server.py
@@ -17,44 +15,20 @@ Configure in ~/.claude.json:
     }
 """
 
-import os
+from asyncio import to_thread
 from typing import Any
 
-import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
-SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
-BASE = f"{CORE_API}/api/memvault"
+from workshop.clients._base import APIError, ConnectionError as APIConnectionError
+from workshop.clients.memvault import MemvaultClient
 
 server = Server("memvault")
+client = MemvaultClient()
 
 
 # ======================== Helpers ========================
-
-
-async def api_get(path: str, params: dict | None = None) -> dict:
-    """GET request to Core API."""
-    p = {"space_id": SPACE_ID}
-    if params:
-        p.update(params)
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{BASE}{path}", params=p)
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def api_post(path: str, body: dict | None = None, params: dict | None = None) -> dict:
-    """POST request to Core API."""
-    p = {"space_id": SPACE_ID}
-    if params:
-        p.update(params)
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(f"{BASE}{path}", json=body or {}, params=p)
-        resp.raise_for_status()
-        return resp.json()
 
 
 def text_result(text: str) -> list[TextContent]:
@@ -200,13 +174,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return await handle_skill_proficiency(arguments)
             case _:
                 return text_result(f"Unknown tool: {name}")
-    except httpx.HTTPStatusError as e:
-        return text_result(f"API error {e.response.status_code}: {e.response.text}")
-    except httpx.ConnectError:
-        return text_result(
-            f"Cannot connect to Core API at {CORE_API}. "
-            "Start the server: cd core && uvicorn src.main:app --port 8801"
-        )
+    except APIError as e:
+        return text_result(str(e))
+    except APIConnectionError as e:
+        return text_result(str(e))
 
 
 # ======================== Tool Implementations ========================
@@ -218,13 +189,14 @@ async def handle_recall(args: dict) -> list[TextContent]:
     max_results = args.get("max_results", 5)
     mode = args.get("mode", "default")
 
-    # Redirect to KG Cascade Recall when mode=cascade
     if mode == "cascade":
         return await handle_kg_cascade_recall({"query": query, "top_k": max_results})
 
-    # Try semantic search (now GET)
-    result = await api_get("/search", {"q": query, "top_k": str(max_results)})
-    if result:  # result is now list[SemanticSearchResult]
+    result = await to_thread(
+        client.recall, query, top_k=max_results, min_score=args.get("min_score", 0.3)
+    )
+
+    if result:
         blocks_text = "\n\n---\n\n".join(
             f"**[Score {r['score']}]** ({r['block']['block_type']})\n"
             f"Tags: {', '.join(r['block'].get('tags', []))}\n"
@@ -233,26 +205,18 @@ async def handle_recall(args: dict) -> list[TextContent]:
         )
         return text_result(f"Found {len(result)} memories (semantic search)\n\n{blocks_text}")
 
-    # Fallback
-    blocks = await api_get("/blocks", {"page_size": str(max_results)})
-    if not blocks.get("items"):
-        return text_result(f"No matching memories found for: {query}")
-    blocks_text = "\n\n---\n\n".join(
-        f"**{b['block_type']}**\nTags: {', '.join(b.get('tags', []))}\n{b['content'][:300]}..."
-        for b in blocks["items"]
-    )
-    return text_result(f"Found {blocks['total']} memories (listing)\n\n{blocks_text}")
+    return text_result(f"No matching memories found for: {query}")
 
 
 async def handle_extract(args: dict) -> list[TextContent]:
-    """memvault_extract -- POST /blocks (create a new memory block)."""
-    body = {
-        "content": args["content"],
-        "block_type": args.get("block_type", "general"),
-        "source_session": args.get("source_session"),
-        "tags": args.get("tags", []),
-    }
-    result = await api_post("/blocks", body)
+    """memvault_extract -- create a new memory block."""
+    result = await to_thread(
+        client.extract,
+        content=args["content"],
+        block_type=args.get("block_type", "general"),
+        tags=args.get("tags", []),
+        source_session=args.get("source_session"),
+    )
     return text_result(
         f"Memory extracted and stored.\n"
         f"Block ID: {result['id']}\n"
@@ -262,9 +226,8 @@ async def handle_extract(args: dict) -> list[TextContent]:
 
 
 async def handle_profile(args: dict) -> list[TextContent]:
-    """memvault_profile -- GET /profile (single flat profile)."""
-    profile = await api_get("/profile", params={"rebuild": args.get("rebuild", False)})
-
+    """memvault_profile -- KAS profile scores."""
+    profile = await to_thread(client.profile, rebuild=args.get("rebuild", False))
     return text_result(
         f"# KAS Profile\n\n"
         f"- Knowledge: {profile.get('knowledge_score', 0)}\n"
@@ -275,14 +238,10 @@ async def handle_profile(args: dict) -> list[TextContent]:
 
 
 async def handle_kg_wisdom(args: dict) -> list[TextContent]:
-    """memvault_kg_wisdom -- GET /kg/wisdom."""
-    params: dict = {}
-    if args.get("confidence"):
-        params["confidence"] = args["confidence"]
-    if args.get("tag"):
-        params["tag"] = args["tag"]
-
-    result = await api_get("/kg/wisdom", params if params else None)
+    """memvault_kg_wisdom -- list wisdom nodes."""
+    result = await to_thread(
+        client.wisdom, confidence=args.get("confidence"), tag=args.get("tag")
+    )
     if not result:
         return text_result("No wisdom nodes found.")
 
@@ -296,11 +255,11 @@ async def handle_kg_wisdom(args: dict) -> list[TextContent]:
 
 
 async def handle_kg_cascade_recall(args: dict) -> list[TextContent]:
-    """memvault_kg_cascade_recall -- GET /kg/recall."""
+    """memvault_kg_cascade_recall -- four-layer cascade recall."""
     query = args["query"]
     top_k = args.get("top_k", 5)
 
-    result = await api_get("/kg/recall", {"q": query, "top_k": str(top_k)})
+    result = await to_thread(client.cascade, query, top_k=top_k)
     layers = result.get("layers_searched", [])
 
     parts: list[str] = [
@@ -345,12 +304,8 @@ async def handle_kg_cascade_recall(args: dict) -> list[TextContent]:
 
 
 async def handle_attitude_current(args: dict) -> list[TextContent]:
-    """memvault_attitude_current -- GET /kg/attitudes."""
-    params: dict = {}
-    if args.get("category"):
-        params["category"] = args["category"]
-
-    result = await api_get("/kg/attitudes", params if params else None)
+    """memvault_attitude_current -- list active attitude facts."""
+    result = await to_thread(client.attitudes, category=args.get("category"))
     if not result:
         return text_result("No active attitude facts found.")
 
@@ -363,15 +318,13 @@ async def handle_attitude_current(args: dict) -> list[TextContent]:
 
 
 async def handle_attitude_evolve(args: dict) -> list[TextContent]:
-    """memvault_attitude_evolve -- POST /kg/attitudes/evolve."""
-    body: dict = {
-        "fact": args["fact"],
-        "category": args["category"],
-    }
-    if args.get("source_session"):
-        body["source_session"] = args["source_session"]
-
-    result = await api_post("/kg/attitudes/evolve", body)
+    """memvault_attitude_evolve -- evolve an attitude fact."""
+    result = await to_thread(
+        client.attitude_evolve,
+        fact=args["fact"],
+        category=args["category"],
+        source_session=args.get("source_session"),
+    )
     operation = result.get("operation", "?")
     fact_id = result.get("fact_id", "?")
     message = result.get("message", "")
@@ -389,8 +342,8 @@ async def handle_attitude_evolve(args: dict) -> list[TextContent]:
 
 
 async def handle_skill_proficiency(args: dict) -> list[TextContent]:
-    """memvault_skill_proficiency -- GET /kg/skills/proficiency."""
-    result = await api_get("/kg/skills/proficiency")
+    """memvault_skill_proficiency -- skill proficiency ranking."""
+    result = await to_thread(client.skill_proficiency)
     if not result:
         return text_result("No skill proficiency data found.")
 
@@ -430,7 +383,7 @@ async def list_resources():
 @server.read_resource()
 async def read_resource(uri: str) -> str:
     if "attitudes/current" in str(uri):
-        result = await api_get("/kg/attitudes")
+        result = await to_thread(client.attitudes)
         if not result:
             return "No active attitude facts."
         return "\n\n---\n\n".join(
@@ -439,7 +392,7 @@ async def read_resource(uri: str) -> str:
             for a in result
         )
     if "profile/kas" in str(uri):
-        profile = await api_get("/profile")
+        profile = await to_thread(client.profile)
         return (
             f"# KAS Profile\n\n"
             f"- Knowledge: {profile.get('knowledge_score', 0)}\n"
@@ -454,7 +407,6 @@ async def read_resource(uri: str) -> str:
 
 
 async def main():
-
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
