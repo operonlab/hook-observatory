@@ -37,8 +37,18 @@
       "label": "com.joneshong.scheduler.dotfiles-sync",
       "command": "~/dotfiles/scripts/sync-detect.sh",
       "schedule": { "interval": 259200 },
-      "description": "每 3 天自動偵測系統設定變更，同步到 GitHub dotfiles repo",
+      "description": "[已停用] 舊版 dotfiles 同步 — 已被 ws-envkit-snapshot 取代",
       "category": "jonathan",
+      "type": "periodic",
+      "enabled": false
+    },
+    {
+      "name": "ws-envkit-snapshot",
+      "label": "com.joneshong.scheduler.ws-envkit-snapshot",
+      "command": "~/workshop/schedules/runners/ws-envkit-snapshot.sh",
+      "schedule": { "calendar": { "Weekday": 1, "Hour": 5, "Minute": 30 } },
+      "description": "每週一 5:30AM: 環境快照 + config 備份 + drift 偵測",
+      "category": "workshop",
       "type": "periodic",
       "enabled": true
     },

@@ -76,7 +76,12 @@ def _yaml_scalar(value) -> str:
         return str(value)
     s = str(value)
     # Quote strings that could be misinterpreted
-    if s in ("true", "false", "null", "yes", "no", "") or ":" in s or "#" in s or s.startswith(("'", '"', "[", "{")):
+    if (
+        s in ("true", "false", "null", "yes", "no", "")
+        or ":" in s
+        or "#" in s
+        or s.startswith(("'", '"', "[", "{"))
+    ):
         return f'"{s}"'
     # Quote strings that look numeric to prevent float precision loss on round-trip
     if s:
@@ -357,8 +362,12 @@ def _compare_snapshots(a: dict, b: dict) -> list[dict]:
         a_data = a.get(cat, {})
         b_data = b.get(cat, {})
 
-        a_pkgs = {p["name"]: p.get("version", "") for p in a_data.get(list_key, []) if isinstance(p, dict)}
-        b_pkgs = {p["name"]: p.get("version", "") for p in b_data.get(list_key, []) if isinstance(p, dict)}
+        a_pkgs = {
+            p["name"]: p.get("version", "") for p in a_data.get(list_key, []) if isinstance(p, dict)
+        }
+        b_pkgs = {
+            p["name"]: p.get("version", "") for p in b_data.get(list_key, []) if isinstance(p, dict)
+        }
 
         for name in sorted(set(a_pkgs) - set(b_pkgs)):
             diffs.append({"category": cat, "type": "removed", "detail": f"{name} ({a_pkgs[name]})"})
@@ -366,10 +375,13 @@ def _compare_snapshots(a: dict, b: dict) -> list[dict]:
             diffs.append({"category": cat, "type": "added", "detail": f"{name} ({b_pkgs[name]})"})
         for name in sorted(set(a_pkgs) & set(b_pkgs)):
             if a_pkgs[name] != b_pkgs[name]:
-                diffs.append({
-                    "category": cat, "type": "version_changed",
-                    "detail": f"{name}: {a_pkgs[name]} -> {b_pkgs[name]}",
-                })
+                diffs.append(
+                    {
+                        "category": cat,
+                        "type": "version_changed",
+                        "detail": f"{name}: {a_pkgs[name]} -> {b_pkgs[name]}",
+                    }
+                )
 
     # Compare app lists
     for cat, list_key in [("apps", "applications"), ("node", "npm_global")]:
@@ -396,6 +408,21 @@ def _compare_snapshots(a: dict, b: dict) -> list[dict]:
             diffs.append({"category": f"cli_tools/{group}", "type": "added", "detail": name})
 
     return diffs
+
+
+def cmd_bootstrap(args) -> None:
+    """Delegate to bootstrap/bootstrap.py."""
+    import subprocess as sp
+
+    bootstrap_script = SCRIPT_DIR / "bootstrap" / "bootstrap.py"
+    cmd = [sys.executable, str(bootstrap_script), args.snapshot]
+    if args.from_phase != 2:
+        cmd.extend(["--from", str(args.from_phase)])
+    if args.to_phase != 9:
+        cmd.extend(["--to", str(args.to_phase)])
+    if args.dry_run:
+        cmd.append("--dry-run")
+    sp.run(cmd)
 
 
 # ---------------------------------------------------------------------------
@@ -429,8 +456,19 @@ def main() -> None:
 
     # list
     p_list = sub.add_parser("list", help="List installed items by category")
-    p_list.add_argument("category", nargs="?", default="all",
-                        help="Category: all, brew, cask, python, node, shell, docker, apps, cli")
+    p_list.add_argument(
+        "category",
+        nargs="?",
+        default="all",
+        help="Category: all, brew, cask, python, node, shell, docker, apps, cli",
+    )
+
+    # bootstrap
+    p_boot = sub.add_parser("bootstrap", help="Restore environment from snapshot")
+    p_boot.add_argument("snapshot", help="Path to snapshot YAML file")
+    p_boot.add_argument("--from", dest="from_phase", type=int, default=2, help="Start from phase N")
+    p_boot.add_argument("--to", dest="to_phase", type=int, default=9, help="Stop at phase N")
+    p_boot.add_argument("--dry-run", action="store_true", help="Preview without changes")
 
     args = parser.parse_args()
     commands = {
@@ -439,6 +477,7 @@ def main() -> None:
         "verify": cmd_verify,
         "diff": cmd_diff,
         "list": cmd_list,
+        "bootstrap": cmd_bootstrap,
     }
     commands[args.command](args)
 

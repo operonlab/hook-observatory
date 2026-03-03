@@ -1,0 +1,3 @@
+# Snapshot + config backups contain embedded git repos and sensitive data
+configs/
+snapshots/
