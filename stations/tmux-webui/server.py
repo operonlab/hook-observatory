@@ -54,6 +54,33 @@ BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = Path.home() / "workshop" / "outputs" / "tmux-webui-uploads"
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
 
+# ── 啟動時讀取 git hash，注入 sw.js CACHE_NAME ──
+
+
+def _get_git_hash() -> str:
+    """取得 workshop repo 的 git short hash，失敗時 fallback 為 'dev'。"""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(Path.home() / "workshop"), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "dev"
+
+
+GIT_HASH = _get_git_hash()
+
+# 讀取 sw.js 模板並替換 placeholder
+_SW_JS_TEMPLATE = (BASE_DIR / "sw.js").read_text()
+_SW_JS_CONTENT = _SW_JS_TEMPLATE.replace("__GIT_HASH__", GIT_HASH)
+
 # ── Relay scripts (shared with MCP server) ──
 
 RELAY_SCRIPTS_DIR = Path.home() / ".claude/skills/tmux-relay/scripts"
@@ -100,9 +127,7 @@ def _on_ws_disconnect(session: str):
     count = _active_connections.get(session, 1) - 1
     _active_connections[session] = max(0, count)
     if count <= 0 and session not in _disconnect_timers:
-        _disconnect_timers[session] = asyncio.create_task(
-            _reset_layout_delayed(session)
-        )
+        _disconnect_timers[session] = asyncio.create_task(_reset_layout_delayed(session))
 
 
 @asynccontextmanager
@@ -122,10 +147,13 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     cfg = get_config()
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "config": cfg,
-    })
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "config": cfg,
+        },
+    )
 
 
 @app.get("/api/sessions")
@@ -166,7 +194,7 @@ async def api_upload(file: UploadFile):
 
     # Sanitize filename: keep only safe characters
     name = Path(file.filename).name  # strip directory components
-    name = re.sub(r'[^\w\-.]', '_', name)  # replace unsafe chars
+    name = re.sub(r"[^\w\-.]", "_", name)  # replace unsafe chars
     safe_name = f"{int(time.time())}_{name}"
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -183,13 +211,15 @@ async def api_upload(file: UploadFile):
 async def _run_relay_script(script: Path, *args: str, timeout: float = 30) -> str:
     """Run a relay shell script and return stdout."""
     proc = await asyncio.create_subprocess_exec(
-        "bash", str(script), *args,
+        "bash",
+        str(script),
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.communicate()
         raise HTTPException(status_code=504, detail=f"Script timed out: {script.name}")
@@ -228,7 +258,10 @@ async def api_relay(request: Request):
                 await asyncio.sleep(1.5)
                 try:
                     status = await _run_relay_script(
-                        RELAY_PANE_POOL, "status", pane, timeout=10,
+                        RELAY_PANE_POOL,
+                        "status",
+                        pane,
+                        timeout=10,
                     )
                 except HTTPException:
                     status = "unknown"
@@ -240,11 +273,16 @@ async def api_relay(request: Request):
     # 3. Dispatch (background)
     signal_file = f"/tmp/relay-webui-{int(time.time() * 1000)}-{os.getpid()}.done"
     await asyncio.create_subprocess_exec(
-        "bash", str(RELAY_SH),
-        pane, "", command,
+        "bash",
+        str(RELAY_SH),
+        pane,
+        "",
+        command,
         "--no-forward",
-        "--signal", signal_file,
-        "--timeout", str(timeout_val),
+        "--signal",
+        signal_file,
+        "--timeout",
+        str(timeout_val),
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )
@@ -264,21 +302,35 @@ async def api_relay_check(signal_file: str):
 # ── PWA assets ──
 
 
+@app.get("/sw.js")
+async def pwa_sw():
+    from fastapi.responses import Response
+
+    return Response(
+        content=_SW_JS_CONTENT,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @app.get("/manifest.json")
 async def pwa_manifest():
     from fastapi.responses import FileResponse
+
     return FileResponse(BASE_DIR / "manifest.json", media_type="application/manifest+json")
 
 
 @app.get("/icon-192.svg")
 async def pwa_icon_192():
     from fastapi.responses import FileResponse
+
     return FileResponse(BASE_DIR / "icon-192.svg", media_type="image/svg+xml")
 
 
 @app.get("/icon-512.svg")
 async def pwa_icon_512():
     from fastapi.responses import FileResponse
+
     return FileResponse(BASE_DIR / "icon-512.svg", media_type="image/svg+xml")
 
 
@@ -305,10 +357,12 @@ async def ws_handler(websocket: WebSocket):
     all_panes = await list_panes(session)
     windows = await list_windows(session)
     if not all_panes:
-        await websocket.send_json({
-            "type": "error",
-            "message": f"No panes found in '{session}'",
-        })
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": f"No panes found in '{session}'",
+            }
+        )
         await websocket.close()
         return
 
@@ -349,9 +403,13 @@ async def ws_handler(websocket: WebSocket):
                 old_ids = set(last_contents.keys())
                 if vis_ids != old_ids:
                     cur_windows = await list_windows(session)
-                    await websocket.send_json({
-                        "type": "windows", "windows": cur_windows, "active": active_window,
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "windows",
+                            "windows": cur_windows,
+                            "active": active_window,
+                        }
+                    )
                     await websocket.send_json({"type": "panes", "panes": vis})
                     for gone in old_ids - vis_ids:
                         last_contents.pop(gone, None)
@@ -403,10 +461,12 @@ async def ws_handler(websocket: WebSocket):
                     if ok:
                         await send_keys(target, "Enter", literal=False)
                     else:
-                        await websocket.send_json({
-                            "type": "input_error",
-                            "message": f"Failed to send to {pane_id}",
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "input_error",
+                                "message": f"Failed to send to {pane_id}",
+                            }
+                        )
 
             elif action == "key":
                 key = data.get("key", "")
@@ -425,10 +485,12 @@ async def ws_handler(websocket: WebSocket):
                     else:
                         ok = await send_keys(target, key, literal=False)
                     if not ok:
-                        await websocket.send_json({
-                            "type": "input_error",
-                            "message": f"Failed to send key to {pane_id}",
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "input_error",
+                                "message": f"Failed to send key to {pane_id}",
+                            }
+                        )
 
             elif action == "switch_window":
                 win = data.get("window")
@@ -436,9 +498,13 @@ async def ws_handler(websocket: WebSocket):
                 last_contents.clear()
                 cur_panes = await list_panes(session)
                 cur_windows = await list_windows(session)
-                await websocket.send_json({
-                    "type": "windows", "windows": cur_windows, "active": active_window,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "windows",
+                        "windows": cur_windows,
+                        "active": active_window,
+                    }
+                )
                 await websocket.send_json({"type": "panes", "panes": visible_panes(cur_panes)})
 
             elif action == "new_window":
@@ -448,9 +514,13 @@ async def ws_handler(websocket: WebSocket):
                     active_window = max(w["index"] for w in cur_windows)
                 last_contents.clear()
                 cur_panes = await list_panes(session)
-                await websocket.send_json({
-                    "type": "windows", "windows": cur_windows, "active": active_window,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "windows",
+                        "windows": cur_windows,
+                        "active": active_window,
+                    }
+                )
                 await websocket.send_json({"type": "panes", "panes": visible_panes(cur_panes)})
 
             elif action == "close_window":
@@ -459,20 +529,30 @@ async def ws_handler(websocket: WebSocket):
                     await kill_window(session, win)
                     cur_windows = await list_windows(session)
                     if not cur_windows:
-                        await websocket.send_json({
-                            "type": "error", "message": "All windows closed",
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": "All windows closed",
+                            }
+                        )
                         break
                     if active_window == win:
                         active_window = cur_windows[0]["index"]
                     last_contents.clear()
                     cur_panes = await list_panes(session)
-                    await websocket.send_json({
-                        "type": "windows", "windows": cur_windows, "active": active_window,
-                    })
-                    await websocket.send_json({
-                        "type": "panes", "panes": visible_panes(cur_panes),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "windows",
+                            "windows": cur_windows,
+                            "active": active_window,
+                        }
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": "panes",
+                            "panes": visible_panes(cur_panes),
+                        }
+                    )
 
             elif action == "fit":
                 cols = data.get("cols")
@@ -488,10 +568,12 @@ async def ws_handler(websocket: WebSocket):
             elif action == "autocomplete":
                 query = data.get("query", "")
                 results = complete(query)
-                await websocket.send_json({
-                    "type": "autocomplete",
-                    "results": results,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "autocomplete",
+                        "results": results,
+                    }
+                )
 
             elif action == "refresh_panes":
                 panes = await list_panes(session)
@@ -519,10 +601,11 @@ def main():
     host = args.host or cfg["host"]
     port = args.port or cfg["port"]
 
-    logger.info("tmux Web Controller V2")
+    logger.info("tmux Web Controller V2 (sw.js cache: tmux-webui-%s)", GIT_HASH)
     logger.info("  http://%s:%d", host, port)
 
     import uvicorn
+
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

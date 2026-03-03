@@ -48,11 +48,8 @@
     touchStartY = e.touches[0].clientY;
     touchStartTime = Date.now();
 
-    // Long press detection
+    // Long press: show hint (let browser handle native selection)
     longPressTimer = setTimeout(() => {
-      // Trigger native text selection
-      const sel = window.getSelection();
-      if (sel) sel.removeAllRanges();
       showIndicator('Select');
     }, LONG_PRESS_MS);
   }, { passive: true });

@@ -151,25 +151,9 @@ window.sendInput = function() {
   if (!window.tmuxWs || !window.tmuxWs.isConnected()) { window.flashInputError('Not connected'); return; }
   if (!S.focusedPane) { window.flashInputError('No pane selected'); return; }
 
-  // Auto-relay: dispatch via server-side /api/relay (zero-blocking async)
-  const basePath = location.pathname.replace(/\/+$/, '') || '';
-  if (S.autoRelay && S.currentTool === 'claude' && !text.startsWith('/')) {
-    fetch(basePath + '/api/relay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: text }),
-    })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then(data => {
-        inputEl.placeholder = `✓ Dispatched → ${data.pane}`;
-        setTimeout(() => { inputEl.placeholder = 'Type a message...'; }, 3000);
-      })
-      .catch(err => {
-        window.flashInputError('Relay: ' + err.message);
-      });
-    inputEl.value = '';
-    inputEl.style.height = 'auto';
-    return;
+  // Auto-relay prefix: prepend /tmux-relay for Claude Code panes (toggle-controlled)
+  if (S.autoRelay && S.currentTool === 'claude' && !text.startsWith('/tmux-relay')) {
+    text = '/tmux-relay async dispatch to a free pane: ' + text;
   }
 
   window.tmuxWs.send({ type:'input', pane:S.focusedPane, text });
@@ -178,7 +162,43 @@ window.sendInput = function() {
   if (S.paneEls[S.focusedPane]) S.paneEls[S.focusedPane].resetScroll();
 };
 
-sendBtn.addEventListener('click', () => { window.acClose?.(); window.sendInput(); });
+// ── Send / Long-Press Clear ──
+(function() {
+  let mode = 'send', transTimer = null, clearTimer = null;
+  function reset() {
+    clearTimeout(transTimer); clearTimeout(clearTimer);
+    mode = 'send';
+    sendBtn.textContent = 'Send';
+    sendBtn.classList.remove('clear-transition', 'clear-ready');
+  }
+  function doClear() {
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    reset();
+  }
+  sendBtn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    reset();
+    // At 1s: start color transition + text change
+    transTimer = setTimeout(() => {
+      mode = 'clear';
+      sendBtn.textContent = 'Clear';
+      sendBtn.classList.add('clear-transition');
+      // At 2s: fully ready
+      setTimeout(() => sendBtn.classList.add('clear-ready'), 1000);
+    }, 1000);
+    // At 3s: auto-clear
+    clearTimer = setTimeout(doClear, 3000);
+  });
+  sendBtn.addEventListener('pointerup', () => {
+    if (mode === 'clear') { doClear(); return; }
+    reset();
+    window.acClose?.();
+    window.sendInput();
+  });
+  sendBtn.addEventListener('pointerleave', reset);
+  sendBtn.addEventListener('pointercancel', reset);
+})();
 
 // ── Auto-Relay Toggle ──
 relayToggle.addEventListener('click', () => {
@@ -703,6 +723,9 @@ window.tmuxWs = (function() {
         for (const [paneId, content] of Object.entries(data.panes)) {
           const pe = S.paneEls[paneId];
           if (!pe) continue;
+          // Skip update if user is selecting text in this terminal
+          const sel = window.getSelection();
+          if (sel && sel.toString() && pe.terminal.contains(sel.anchorNode)) continue;
           pe.terminal.innerHTML = ansiToHtml(content);
           if (!pe.scrolledByUser()) {
             const t = pe.terminal;
@@ -817,7 +840,14 @@ document.querySelectorAll('.qbtn').forEach(btn => {
 // ========================================================================
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && S.maximizedPane && document.activeElement !== inputEl) toggleMaximize(S.maximizedPane);
+  if (e.key === 'Escape') {
+    if (document.activeElement === inputEl && inputEl.value) {
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      return;
+    }
+    if (S.maximizedPane) toggleMaximize(S.maximizedPane);
+  }
 });
 
 // Exit fullscreen button
