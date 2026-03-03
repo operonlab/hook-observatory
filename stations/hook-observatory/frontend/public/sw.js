@@ -1,7 +1,7 @@
 // Hook Observatory Service Worker
 // 快取策略：靜態資源 cache-first，HTML network-first，API 不快取
 
-const CACHE_NAME = "hook-observatory-v1";
+const CACHE_NAME = "hook-observatory-v2";
 
 // ── Web Push ──
 self.addEventListener("push", (event) => {
@@ -10,7 +10,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Hook Observatory", {
       body: data.body || "",
-      icon: data.icon || "/apps/hook/icon-192.svg",
+      icon: data.icon || "/apps/hook/icon-192.png",
       tag: data.tag,
       data: { url: data.url || "/apps/hook/" },
       vibrate: data.severity === "critical" ? [200, 100, 200, 100, 200] : [100, 50, 100],
@@ -90,7 +90,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // SVG 圖示等靜態資源 — cache-first
+  // 圖示等靜態資源 — cache-first
   if (url.pathname.match(/\.(svg|png|ico|woff2?)$/)) {
     event.respondWith(
       caches.match(request).then((cached) => {
