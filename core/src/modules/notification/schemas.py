@@ -14,7 +14,7 @@ class SubscriptionCreate(BaseModel):
     endpoint: str
     keys: SubscriptionKeys
     user_agent: str | None = None
-    app_scope: str = "/v2/"
+    app_scope: str = "/"
 
 
 class SubscriptionResponse(BaseModel):
@@ -43,7 +43,7 @@ class PushPayload(BaseModel):
     category: str  # sentinel, system, finance, taskflow, intelflow, agent
     title: str
     body: str = ""
-    url: str = "/v2/"
+    url: str = "/"
     icon: str | None = None
     tag: str | None = None  # same tag → replace previous notification
     severity: str = "info"  # info, warning, critical

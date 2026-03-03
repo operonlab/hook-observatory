@@ -1,5 +1,5 @@
 const CACHE_NAME = "workshop-__CACHE_VERSION__";
-const APP_SHELL = ["/v2/manifest.json", "/v2/icons/icon-192.svg"];
+const APP_SHELL = ["/manifest.json", "/icons/icon-192.svg"];
 
 // ── Web Push ──
 self.addEventListener("push", (event) => {
@@ -8,9 +8,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Workshop", {
       body: data.body || "",
-      icon: data.icon || "/v2/icons/icon-192.svg",
+      icon: data.icon || "/icons/icon-192.svg",
       tag: data.tag,
-      data: { url: data.url || "/v2/" },
+      data: { url: data.url || "/" },
       vibrate: data.severity === "critical" ? [200, 100, 200, 100, 200] : [100, 50, 100],
       requireInteraction: data.severity !== "info",
     })
@@ -19,7 +19,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/v2/";
+  const url = event.notification.data?.url || "/";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((wc) => {
       for (const c of wc) {
@@ -62,7 +62,7 @@ self.addEventListener("fetch", (event) => {
 
   // Pass-through for proxied station apps (hook-observatory, etc.)
   // These are separate apps with their own frontend; SW should not interfere.
-  if (url.pathname.startsWith("/v2/apps/")) return;
+  if (url.pathname.startsWith("/apps/")) return;
 
   // Cache-first for Google Fonts (immutable once loaded)
   if (
@@ -85,8 +85,8 @@ self.addEventListener("fetch", (event) => {
 
   // Network-only for auth, health, and mutation requests
   if (
-    url.pathname.startsWith("/v2/auth") ||
-    url.pathname.startsWith("/v2/health")
+    url.pathname.startsWith("/auth") ||
+    url.pathname.startsWith("/health")
   ) {
     event.respondWith(
       fetch(event.request).catch(
@@ -101,18 +101,18 @@ self.addEventListener("fetch", (event) => {
 
   // Stale-while-revalidate for cacheable API GET requests
   const CACHEABLE_API_PREFIXES = [
-    "/v2/api/memvault/blocks",
-    "/v2/api/memvault/profile",
-    "/v2/api/memvault/kg/",
-    "/v2/api/memvault/skills",
-    "/v2/api/memvault/attitudes",
-    "/v2/api/intelflow/dashboard",
-    "/v2/api/intelflow/reports",
-    "/v2/api/intelflow/topics",
-    "/v2/api/intelflow/timeline",
+    "/api/memvault/blocks",
+    "/api/memvault/profile",
+    "/api/memvault/kg/",
+    "/api/memvault/skills",
+    "/api/memvault/attitudes",
+    "/api/intelflow/dashboard",
+    "/api/intelflow/reports",
+    "/api/intelflow/topics",
+    "/api/intelflow/timeline",
   ];
   if (
-    url.pathname.startsWith("/v2/api") &&
+    url.pathname.startsWith("/api") &&
     event.request.method === "GET" &&
     CACHEABLE_API_PREFIXES.some((p) => url.pathname.startsWith(p))
   ) {
@@ -140,7 +140,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Network-only for other API requests (POST/PATCH/DELETE, uncached endpoints)
-  if (url.pathname.startsWith("/v2/api")) {
+  if (url.pathname.startsWith("/api")) {
     event.respondWith(
       fetch(event.request).catch(
         () => new Response(JSON.stringify({ error: "offline" }), {

@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="/v2/apps/tmux/manifest.json">
-<link rel="apple-touch-icon" href="/v2/apps/tmux/icon-192.svg">
+<link rel="manifest" href="/apps/tmux/manifest.json">
+<link rel="apple-touch-icon" href="/apps/tmux/icon-192.svg">
 <link rel="stylesheet" href="static/css/main.css?v=2">
 <title>tmux Web Controller</title>
 </head>
@@ -116,7 +116,7 @@ if('serviceWorker' in navigator){
         try {
           const existing = await reg.pushManager.getSubscription();
           if (existing) return;
-          const res = await fetch('/v2/api/notification/vapid-key');
+          const res = await fetch('/api/notification/vapid-key');
           if (!res.ok) return;
           const { public_key } = await res.json();
           const padding = '='.repeat((4 - public_key.length % 4) % 4);
@@ -124,10 +124,10 @@ if('serviceWorker' in navigator){
           const key = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
           const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
           const j = sub.toJSON();
-          await fetch('/v2/api/notification/subscriptions', {
+          await fetch('/api/notification/subscriptions', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ endpoint: sub.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, app_scope: '/v2/apps/tmux/' }),
+            body: JSON.stringify({ endpoint: sub.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, app_scope: '/apps/tmux/' }),
           });
         } catch(e) { console.warn('[Push]', e); }
       })();

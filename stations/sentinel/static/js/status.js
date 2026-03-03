@@ -3,16 +3,16 @@
  * 每 30 秒輪詢 /api/sentinel/status, /uptime, /incidents
  */
 
-// ── API Base detection (supports /v2/apps/sentinel/ via Nginx) ──
+// ── API Base detection (supports /apps/sentinel/ via Nginx) ──
 
 const API_BASE = (() => {
     const p = window.location.pathname;
-    if (p.includes('/v2/apps/sentinel')) return '/v2/apps/sentinel';
+    if (p.includes('/apps/sentinel')) return '/apps/sentinel';
     return '';
 })();
 
 const POLL_INTERVAL = 30_000;
-const LOGIN_URL = '/v2/login';
+const LOGIN_URL = '/login';
 const MAX_INCIDENTS = 5;
 
 // ── Label maps ──
@@ -408,7 +408,7 @@ if ('serviceWorker' in navigator) {
     const swPath = `${window.location.pathname.replace(/\/$/, '')}/static/sw.js`;
     navigator.serviceWorker.register(swPath).then((reg) => {
         if (Notification.permission === 'granted') {
-            workshopPushSubscribe(reg, '/v2/apps/sentinel/');
+            workshopPushSubscribe(reg, '/apps/sentinel/');
         }
     }).catch(() => {});
 }
@@ -417,7 +417,7 @@ async function workshopPushSubscribe(reg, appScope) {
     try {
         const existing = await reg.pushManager.getSubscription();
         if (existing) return;
-        const res = await fetch('/v2/api/notification/vapid-key');
+        const res = await fetch('/api/notification/vapid-key');
         if (!res.ok) return;
         const { public_key } = await res.json();
         const padding = '='.repeat((4 - public_key.length % 4) % 4);
@@ -425,7 +425,7 @@ async function workshopPushSubscribe(reg, appScope) {
         const key = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
         const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
         const j = sub.toJSON();
-        await fetch('/v2/api/notification/subscriptions', {
+        await fetch('/api/notification/subscriptions', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ endpoint: sub.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth }, app_scope: appScope }),
