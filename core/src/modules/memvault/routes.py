@@ -16,6 +16,7 @@ from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .embedding import get_embedding
 from .schemas import (
+    EnhancedSearchResult,
     KnowledgeDomainCreate,
     KnowledgeDomainResponse,
     KnowledgeDomainUpdate,
@@ -24,14 +25,15 @@ from .schemas import (
     MemoryBlockUpdate,
     ProfileScoreResponse,
     ProfileScoreUpdate,
+    SearchMetadata,
     SemanticSearchParams,  # noqa: F401 — available for future use
-    SemanticSearchResult,
     TagResponse,
 )
 from .services import (
     knowledge_domain_service,
     memory_block_service,
     profile_score_service,
+    should_search,
     tag_service,
 )
 
@@ -121,18 +123,55 @@ async def delete_block(
 # ======================== Semantic Search ========================
 
 
-@router.get("/search", response_model=list[SemanticSearchResult])
-async def semantic_search(
+@router.get("/search", response_model=EnhancedSearchResult)
+async def search(
     q: str = Query(..., min_length=1, max_length=2000),
     top_k: int = Query(10, ge=1, le=100),
     space_id: str = Query("default"),
+    include_metadata: bool = Query(False, description="Include scoring metadata"),
+    skip_adaptive: bool = Query(False, description="Force search even if adaptive says skip"),
     db: AsyncSession = Depends(get_db),
 ):
+    # Phase B2: Adaptive Retrieval
+    if not skip_adaptive:
+        do_search, reason = should_search(q)
+        if not do_search:
+            meta = SearchMetadata(
+                adaptive_skipped=True,
+                adaptive_reason=reason,
+                vector_used=False,
+                scoring_applied=False,
+                input_count=0,
+                output_count=0,
+            )
+            return EnhancedSearchResult(
+                results=[],
+                metadata=meta if include_metadata else None,
+            )
+
     query_embedding = await get_embedding(q)
     if query_embedding is None:
         # Fallback: ILIKE text search when Ollama is unavailable
-        return await memory_block_service.text_search(db, space_id, q, top_k)
-    return await memory_block_service.semantic_search(db, space_id, query_embedding, top_k=top_k)
+        results = await memory_block_service.text_search(db, space_id, q, top_k)
+        meta = SearchMetadata(
+            vector_used=False,
+            keyword_used=True,
+            scoring_applied=False,
+            input_count=len(results),
+            output_count=len(results),
+        )
+        return EnhancedSearchResult(
+            results=results,
+            metadata=meta if include_metadata else None,
+        )
+
+    results, meta = await memory_block_service.semantic_search(
+        db, space_id, query_embedding, top_k=top_k, query=q,
+    )
+    return EnhancedSearchResult(
+        results=results,
+        metadata=meta if include_metadata else None,
+    )
 
 
 # ======================== Tags ========================
