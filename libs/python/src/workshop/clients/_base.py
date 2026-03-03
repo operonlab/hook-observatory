@@ -85,9 +85,9 @@ class BaseClient:
             resp.raise_for_status()
             return resp.json()
         except httpx.ConnectError:
-            raise ConnectionError(self.base_url)
+            raise ConnectionError(self.base_url) from None
         except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500])
+            raise APIError(e.response.status_code, e.response.text[:500]) from e
 
     def _post(self, path: str, body: dict | None = None, timeout: float | None = None) -> Any:
         try:
@@ -100,9 +100,49 @@ class BaseClient:
             resp.raise_for_status()
             return resp.json()
         except httpx.ConnectError:
-            raise ConnectionError(self.base_url)
+            raise ConnectionError(self.base_url) from None
         except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500])
+            raise APIError(e.response.status_code, e.response.text[:500]) from e
+
+    def _patch(self, path: str, body: dict | None = None) -> Any:
+        try:
+            resp = self.client.patch(
+                f"{self.prefix}{path}",
+                json=body or {},
+                params=self._params(),
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.ConnectError:
+            raise ConnectionError(self.base_url) from None
+        except httpx.HTTPStatusError as e:
+            raise APIError(e.response.status_code, e.response.text[:500]) from e
+
+    def _put(self, path: str, body: dict | None = None) -> Any:
+        try:
+            resp = self.client.put(
+                f"{self.prefix}{path}",
+                json=body or {},
+                params=self._params(),
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.ConnectError:
+            raise ConnectionError(self.base_url) from None
+        except httpx.HTTPStatusError as e:
+            raise APIError(e.response.status_code, e.response.text[:500]) from e
+
+    def _delete(self, path: str) -> None:
+        try:
+            resp = self.client.delete(
+                f"{self.prefix}{path}",
+                params=self._params(),
+            )
+            resp.raise_for_status()
+        except httpx.ConnectError:
+            raise ConnectionError(self.base_url) from None
+        except httpx.HTTPStatusError as e:
+            raise APIError(e.response.status_code, e.response.text[:500]) from e
 
     def __enter__(self):
         return self
