@@ -47,8 +47,28 @@
       "label": "com.joneshong.disk-report",
       "command": "~/.claude/data/disk-report/scripts/generate-report.sh",
       "schedule": { "calendar": { "Hour": 5, "Minute": 0 } },
-      "description": "每日 5AM 磁碟空間報告",
+      "description": "[已停用] 舊版每日磁碟報告 — 已合併至 system-monitor",
       "category": "jonathan",
+      "type": "periodic",
+      "enabled": false
+    },
+    {
+      "name": "ws-sysmon-weekly",
+      "label": "com.joneshong.scheduler.ws-sysmon-weekly",
+      "command": "~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=weekly",
+      "schedule": { "calendar": { "Weekday": 1, "Hour": 5, "Minute": 0 } },
+      "description": "每週一 5AM: 系統監控週報（磁碟+硬體+AI 建議）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-sysmon-monthly",
+      "label": "com.joneshong.scheduler.ws-sysmon-monthly",
+      "command": "~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=monthly",
+      "schedule": { "calendar": { "Day": 1, "Hour": 5, "Minute": 0 } },
+      "description": "每月 1 日 5AM: 系統監控月報（深度分析+容量規劃）",
+      "category": "workshop",
       "type": "periodic",
       "enabled": true
     },
