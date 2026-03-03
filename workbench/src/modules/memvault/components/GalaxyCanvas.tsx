@@ -1,64 +1,74 @@
-import { useRef, useEffect } from "react";
-import ForceGraph3D from "3d-force-graph";
-import * as THREE from "three";
-import type { GalaxyNode, GalaxyLink, GalaxyLayer, BlockType } from "../types";
+import ForceGraph3D from '3d-force-graph'
+import { useEffect, useRef } from 'react'
+import * as THREE from 'three'
+import type { BlockType, GalaxyLayer, GalaxyLink, GalaxyNode } from '../types'
 
 interface GalaxyCanvasProps {
-  nodes: GalaxyNode[];
-  links: GalaxyLink[];
-  onNodeClick?: (node: GalaxyNode) => void;
-  onEmptyClick?: () => void;
-  selectedNodeId?: string | null;
+  nodes: GalaxyNode[]
+  links: GalaxyLink[]
+  onNodeClick?: (node: GalaxyNode) => void
+  onEmptyClick?: () => void
+  selectedNodeId?: string | null
 }
 
 const CSS_VAR_MAP: Record<BlockType, string> = {
-  knowledge: "--blue",
-  skill: "--green",
-  attitude: "--mauve",
-  general: "--text",
-};
+  knowledge: '--blue',
+  skill: '--green',
+  attitude: '--mauve',
+  general: '--text',
+}
 
 function resolveColors() {
-  const s = getComputedStyle(document.documentElement);
-  const g = (v: string) => s.getPropertyValue(v).trim();
-  const types = {} as Record<BlockType, string>;
+  const s = getComputedStyle(document.documentElement)
+  const g = (v: string) => s.getPropertyValue(v).trim()
+  const types = {} as Record<BlockType, string>
   for (const [bt, v] of Object.entries(CSS_VAR_MAP)) {
-    types[bt as BlockType] = g(v);
+    types[bt as BlockType] = g(v)
   }
   return {
     types,
-    selected: g("--peach"),
-    teal: g("--teal"),
-    blue: g("--blue"),
-    peach: g("--peach"),
-  };
+    selected: g('--peach'),
+    teal: g('--teal'),
+    blue: g('--blue'),
+    peach: g('--peach'),
+  }
 }
 
 function nodeSize(n: any): number {
-  const layer = n.layer as GalaxyLayer;
+  const layer = n.layer as GalaxyLayer
   switch (layer) {
-    case "wisdom": return 4 + (n.confidence || 0.5) * 6;
-    case "clusters": return 3;
-    case "triples": return 1 + (n.confidence || 0.5) * 0.5;
-    default: return 2 + (n.confidence || 0.5) * 12;
+    case 'wisdom':
+      return 4 + (n.confidence || 0.5) * 6
+    case 'clusters':
+      return 3
+    case 'triples':
+      return 1 + (n.confidence || 0.5) * 0.5
+    default:
+      return 2 + (n.confidence || 0.5) * 12
   }
 }
 
 function nodeColor(n: any, colors: ReturnType<typeof resolveColors>): string {
-  const layer = n.layer as GalaxyLayer;
+  const layer = n.layer as GalaxyLayer
   switch (layer) {
-    case "wisdom": return colors.peach;
-    case "clusters": return colors.blue;
-    case "triples": return colors.teal;
-    default: return colors.types[n.type as BlockType] || colors.types.general;
+    case 'wisdom':
+      return colors.peach
+    case 'clusters':
+      return colors.blue
+    case 'triples':
+      return colors.teal
+    default:
+      return colors.types[n.type as BlockType] || colors.types.general
   }
 }
 
-function nodeOpacity(n: any): number {
-  const layer = n.layer as GalaxyLayer;
+function _nodeOpacity(n: any): number {
+  const layer = n.layer as GalaxyLayer
   switch (layer) {
-    case "clusters": return 0.35;
-    default: return 0.9;
+    case 'clusters':
+      return 0.35
+    default:
+      return 0.9
   }
 }
 
@@ -69,25 +79,31 @@ export default function GalaxyCanvas({
   onEmptyClick,
   selectedNodeId,
 }: GalaxyCanvasProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const graphRef = useRef<any>(null);
-  const colorsRef = useRef(resolveColors());
-  const selectedIdRef = useRef(selectedNodeId);
-  const onNodeClickRef = useRef(onNodeClick);
-  const onEmptyClickRef = useRef(onEmptyClick);
+  const containerRef = useRef<HTMLDivElement>(null)
+  const graphRef = useRef<any>(null)
+  const colorsRef = useRef(resolveColors())
+  const selectedIdRef = useRef(selectedNodeId)
+  const onNodeClickRef = useRef(onNodeClick)
+  const onEmptyClickRef = useRef(onEmptyClick)
 
   // Keep refs in sync
-  useEffect(() => { selectedIdRef.current = selectedNodeId; }, [selectedNodeId]);
-  useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
-  useEffect(() => { onEmptyClickRef.current = onEmptyClick; }, [onEmptyClick]);
+  useEffect(() => {
+    selectedIdRef.current = selectedNodeId
+  }, [selectedNodeId])
+  useEffect(() => {
+    onNodeClickRef.current = onNodeClick
+  }, [onNodeClick])
+  useEffect(() => {
+    onEmptyClickRef.current = onEmptyClick
+  }, [onEmptyClick])
 
   // Initialize graph (once)
   useEffect(() => {
-    if (!containerRef.current) return;
-    const colors = colorsRef.current;
+    if (!containerRef.current) return
+    const colors = colorsRef.current
 
     const graph = ForceGraph3D()(containerRef.current)
-      .backgroundColor("#0F111E")
+      .backgroundColor('#0F111E')
       // ── Nodes ──
       .nodeVal((n: any) => nodeSize(n))
       .nodeColor((n: any) => nodeColor(n, colors))
@@ -95,9 +111,9 @@ export default function GalaxyCanvas({
       .nodeResolution(16)
       .nodeThreeObjectExtend(true)
       .nodeThreeObject((n: any) => {
-        if (n.id !== selectedIdRef.current) return undefined as any;
-        const nVal = nodeSize(n);
-        const r = Math.cbrt(nVal) * graph.nodeRelSize();
+        if (n.id !== selectedIdRef.current) return undefined as any
+        const nVal = nodeSize(n)
+        const r = Math.cbrt(nVal) * graph.nodeRelSize()
         const torus = new THREE.Mesh(
           new THREE.TorusGeometry(r * 1.6, r * 0.1, 12, 48),
           new THREE.MeshBasicMaterial({
@@ -105,80 +121,80 @@ export default function GalaxyCanvas({
             transparent: true,
             opacity: 0.65,
           }),
-        );
-        torus.rotation.x = Math.PI * 0.42; // Saturn-like tilt
-        return torus;
+        )
+        torus.rotation.x = Math.PI * 0.42 // Saturn-like tilt
+        return torus
       })
       .nodeLabel((n: any) => {
-        const conf = Math.round((n.confidence || 0) * 100);
-        const layerLabel = n.layer || "block";
+        const conf = Math.round((n.confidence || 0) * 100)
+        const layerLabel = n.layer || 'block'
         return `<div style="text-align:center;font-family:system-ui;padding:4px 8px">
-          <div style="font-size:13px;font-weight:600">${n.label || ""}</div>
+          <div style="font-size:13px;font-weight:600">${n.label || ''}</div>
           <div style="font-size:11px;opacity:0.7;margin-top:2px">${layerLabel} · ${conf}%</div>
-        </div>`;
+        </div>`
       })
       // ── Links + particles ──
       .linkDirectionalParticles(2)
       .linkDirectionalParticleWidth(1.5)
       .linkDirectionalParticleSpeed(0.005)
-      .linkDirectionalParticleColor(() => "rgba(180, 190, 254, 0.7)")
-      .linkColor(() => "rgba(180, 190, 254, 0.25)")
+      .linkDirectionalParticleColor(() => 'rgba(180, 190, 254, 0.7)')
+      .linkColor(() => 'rgba(180, 190, 254, 0.25)')
       .linkWidth((l: any) => 0.5 + (l.strength || 0.5) * 1.5)
       .linkOpacity(0.6)
       // ── Physics ──
       .d3AlphaDecay(0.02)
-      .d3VelocityDecay(0.3);
+      .d3VelocityDecay(0.3)
 
     // Tighten the cluster: weaker repulsion + shorter link distance
-    graph.d3Force("charge")?.strength(-30).distanceMax(80);
-    graph.d3Force("link")?.distance(20).strength(0.8);
+    graph.d3Force('charge')?.strength(-30).distanceMax(80)
+    graph.d3Force('link')?.distance(20).strength(0.8)
 
     graph
       // ── Interaction ──
       .onNodeClick((node: any) => {
-        onNodeClickRef.current?.(node as GalaxyNode);
+        onNodeClickRef.current?.(node as GalaxyNode)
       })
       .onNodeDragEnd((node: any) => {
         // Pin node at drop position
-        node.fx = node.x;
-        node.fy = node.y;
-        node.fz = node.z;
+        node.fx = node.x
+        node.fy = node.y
+        node.fz = node.z
       })
       .onNodeRightClick((node: any) => {
         // Unpin node
-        node.fx = undefined;
-        node.fy = undefined;
-        node.fz = undefined;
+        node.fx = undefined
+        node.fy = undefined
+        node.fz = undefined
       })
       .onBackgroundClick(() => {
-        onEmptyClickRef.current?.();
+        onEmptyClickRef.current?.()
       })
       .warmupTicks(80)
-      .cooldownTicks(200);
+      .cooldownTicks(200)
 
-    graphRef.current = graph;
+    graphRef.current = graph
 
     // Auto-fit camera after simulation settles
     setTimeout(() => {
-      graph.zoomToFit(600, 50);
-    }, 1000);
+      graph.zoomToFit(600, 50)
+    }, 1000)
 
     // Resize observer
     const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) graph.width(width).height(height);
-    });
-    ro.observe(containerRef.current);
+      const { width, height } = entries[0].contentRect
+      if (width > 0 && height > 0) graph.width(width).height(height)
+    })
+    ro.observe(containerRef.current)
 
     return () => {
-      ro.disconnect();
-      if (containerRef.current) containerRef.current.innerHTML = "";
-    };
-  }, []);
+      ro.disconnect()
+      if (containerRef.current) containerRef.current.innerHTML = ''
+    }
+  }, [])
 
   // Update graph data when nodes/links change
   useEffect(() => {
-    if (!graphRef.current) return;
+    if (!graphRef.current) return
     graphRef.current.graphData({
       nodes: nodes.map((n) => ({
         id: n.id,
@@ -192,22 +208,17 @@ export default function GalaxyCanvas({
         target: l.target,
         strength: l.strength,
       })),
-    });
+    })
     setTimeout(() => {
-      graphRef.current?.zoomToFit(400, 50);
-    }, 1200);
-  }, [nodes, links]);
+      graphRef.current?.zoomToFit(400, 50)
+    }, 1200)
+  }, [nodes, links])
 
   // Update Saturn ring on selection change
   useEffect(() => {
-    if (!graphRef.current) return;
-    graphRef.current.nodeThreeObject(graphRef.current.nodeThreeObject());
-  }, [selectedNodeId]);
+    if (!graphRef.current) return
+    graphRef.current.nodeThreeObject(graphRef.current.nodeThreeObject())
+  }, [selectedNodeId])
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ width: "100%", height: "100%", position: "relative" }}
-    />
-  );
+  return <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }} />
 }

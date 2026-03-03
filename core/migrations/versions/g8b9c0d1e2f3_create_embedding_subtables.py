@@ -19,8 +19,8 @@ Revises: f7a8b9c0d1e2
 Create Date: 2026-02-28
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from pgvector.sqlalchemy import Vector
 
 revision = "g8b9c0d1e2f3"

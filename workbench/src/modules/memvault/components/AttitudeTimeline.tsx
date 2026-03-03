@@ -1,41 +1,41 @@
-import { useEffect, useState, useMemo } from "react";
-import { useMemvaultStore } from "../stores";
-import type { AttitudeFact } from "../types";
-import InfoTip from "./InfoTip";
+import { useEffect, useMemo, useState } from 'react'
+import { useMemvaultStore } from '../stores'
+import type { AttitudeFact } from '../types'
+import InfoTip from './InfoTip'
 
 function hexToRgba(cssVar: string, alpha: number): string {
-  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`;
+  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
 }
 
 function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins} 分鐘前`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} 小時前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
-  return `${Math.floor(days / 30)} 個月前`;
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins} 分鐘前`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} 小時前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} 天前`
+  return `${Math.floor(days / 30)} 個月前`
 }
 
 function HistoryChain({ history }: { history: AttitudeFact[] }) {
-  if (history.length === 0) return null;
+  if (history.length === 0) return null
 
   return (
-    <div className="mt-2 pl-3 border-l-2 space-y-2" style={{ borderColor: "var(--mauve)" }}>
+    <div className="mt-2 pl-3 border-l-2 space-y-2" style={{ borderColor: 'var(--mauve)' }}>
       {history.map((h) => (
         <div key={h.id} className="relative">
           <div
             className="absolute -left-[calc(0.75rem+1px)] top-1.5 h-2 w-2 rounded-full"
             style={{
-              backgroundColor: h.operation === "ADD" ? "var(--green)" : "var(--yellow)",
+              backgroundColor: h.operation === 'ADD' ? 'var(--green)' : 'var(--yellow)',
             }}
           />
           <div
             className="rounded-lg border px-3 py-2 text-xs"
             style={{
-              backgroundColor: "var(--base)",
-              borderColor: "var(--surface0)",
+              backgroundColor: 'var(--base)',
+              borderColor: 'var(--surface0)',
               opacity: 0.5 + h.confidence * 0.5,
             }}
           >
@@ -44,41 +44,39 @@ function HistoryChain({ history }: { history: AttitudeFact[] }) {
                 className="rounded px-1.5 py-0.5 font-medium shrink-0"
                 style={{
                   backgroundColor:
-                    h.operation === "ADD"
-                      ? hexToRgba("var(--green)", 0.15)
-                      : hexToRgba("var(--yellow)", 0.15),
-                  color: h.operation === "ADD" ? "var(--green)" : "var(--yellow)",
+                    h.operation === 'ADD'
+                      ? hexToRgba('var(--green)', 0.15)
+                      : hexToRgba('var(--yellow)', 0.15),
+                  color: h.operation === 'ADD' ? 'var(--green)' : 'var(--yellow)',
                 }}
               >
                 {h.operation}
               </span>
-              <span className="shrink-0" style={{ color: "var(--subtext0)" }}>
+              <span className="shrink-0" style={{ color: 'var(--subtext0)' }}>
                 {relativeTime(h.created_at)}
               </span>
             </div>
-            <p style={{ color: "var(--text)" }}>{h.fact}</p>
+            <p style={{ color: 'var(--text)' }}>{h.fact}</p>
             <div className="mt-1.5 flex items-center gap-2">
               <div
                 className="h-1 flex-1 rounded-full overflow-hidden"
-                style={{ backgroundColor: "var(--surface0)" }}
+                style={{ backgroundColor: 'var(--surface0)' }}
               >
                 <div
                   className="h-full rounded-full"
                   style={{
                     width: `${Math.round(h.confidence * 100)}%`,
-                    backgroundColor: "var(--mauve)",
+                    backgroundColor: 'var(--mauve)',
                   }}
                 />
               </div>
-              <span style={{ color: "var(--subtext0)" }}>
-                {Math.round(h.confidence * 100)}%
-              </span>
+              <span style={{ color: 'var(--subtext0)' }}>{Math.round(h.confidence * 100)}%</span>
             </div>
           </div>
         </div>
       ))}
     </div>
-  );
+  )
 }
 
 function AttitudeCard({
@@ -89,22 +87,22 @@ function AttitudeCard({
   onDelete,
   onUpdate,
 }: {
-  attitude: AttitudeFact;
-  onShowHistory: () => void;
-  historyData: AttitudeFact[];
-  showHistory: boolean;
-  onDelete: (id: string) => void;
-  onUpdate: (id: string, fact: string, category: string) => void;
+  attitude: AttitudeFact
+  onShowHistory: () => void
+  historyData: AttitudeFact[]
+  showHistory: boolean
+  onDelete: (id: string) => void
+  onUpdate: (id: string, fact: string, category: string) => void
 }) {
-  const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState(attitude.fact);
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState(attitude.fact)
 
   return (
     <div
       className="rounded-xl border p-3 transition-all duration-200"
       style={{
-        backgroundColor: "var(--mantle)",
-        borderColor: showHistory ? "var(--mauve)" : "var(--surface0)",
+        backgroundColor: 'var(--mantle)',
+        borderColor: showHistory ? 'var(--mauve)' : 'var(--surface0)',
       }}
     >
       {/* Content row */}
@@ -117,47 +115,50 @@ function AttitudeCard({
               onChange={(e) => setEditText(e.target.value)}
               className="flex-1 rounded border px-2 py-1.5 text-sm outline-none"
               style={{
-                backgroundColor: "var(--base)",
-                borderColor: "var(--mauve)",
-                color: "var(--text)",
+                backgroundColor: 'var(--base)',
+                borderColor: 'var(--mauve)',
+                color: 'var(--text)',
                 minHeight: 44,
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  onUpdate(attitude.id, editText, attitude.category);
-                  setEditing(false);
-                } else if (e.key === "Escape") {
-                  setEditText(attitude.fact);
-                  setEditing(false);
+                if (e.key === 'Enter') {
+                  onUpdate(attitude.id, editText, attitude.category)
+                  setEditing(false)
+                } else if (e.key === 'Escape') {
+                  setEditText(attitude.fact)
+                  setEditing(false)
                 }
               }}
-              autoFocus
             />
             <div className="flex gap-1.5">
               <button
                 onClick={() => {
-                  onUpdate(attitude.id, editText, attitude.category);
-                  setEditing(false);
+                  onUpdate(attitude.id, editText, attitude.category)
+                  setEditing(false)
                 }}
                 className="flex-1 sm:flex-none rounded px-3 py-2 text-xs font-medium"
-                style={{ backgroundColor: "var(--green)", color: "var(--base)", minHeight: 44 }}
+                style={{ backgroundColor: 'var(--green)', color: 'var(--base)', minHeight: 44 }}
               >
                 儲存
               </button>
               <button
                 onClick={() => {
-                  setEditText(attitude.fact);
-                  setEditing(false);
+                  setEditText(attitude.fact)
+                  setEditing(false)
                 }}
                 className="flex-1 sm:flex-none rounded px-3 py-2 text-xs"
-                style={{ backgroundColor: "var(--surface0)", color: "var(--subtext0)", minHeight: 44 }}
+                style={{
+                  backgroundColor: 'var(--surface0)',
+                  color: 'var(--subtext0)',
+                  minHeight: 44,
+                }}
               >
                 取消
               </button>
             </div>
           </div>
         ) : (
-          <p className="text-sm flex-1" style={{ color: "var(--text)" }}>
+          <p className="text-sm flex-1" style={{ color: 'var(--text)' }}>
             {attitude.fact}
           </p>
         )}
@@ -166,10 +167,10 @@ function AttitudeCard({
             className="rounded px-1.5 py-0.5 text-xs shrink-0 mt-0.5"
             style={{
               backgroundColor:
-                attitude.operation === "ADD"
-                  ? hexToRgba("var(--green)", 0.15)
-                  : hexToRgba("var(--yellow)", 0.15),
-              color: attitude.operation === "ADD" ? "var(--green)" : "var(--yellow)",
+                attitude.operation === 'ADD'
+                  ? hexToRgba('var(--green)', 0.15)
+                  : hexToRgba('var(--yellow)', 0.15),
+              color: attitude.operation === 'ADD' ? 'var(--green)' : 'var(--yellow)',
             }}
           >
             {attitude.operation}
@@ -182,18 +183,18 @@ function AttitudeCard({
         <div className="flex items-center gap-2">
           <div
             className="h-1 w-16 rounded-full overflow-hidden"
-            style={{ backgroundColor: "var(--surface0)" }}
+            style={{ backgroundColor: 'var(--surface0)' }}
           >
             <div
               className="h-full rounded-full"
               style={{
                 width: `${Math.round(attitude.confidence * 100)}%`,
-                backgroundColor: "var(--mauve)",
+                backgroundColor: 'var(--mauve)',
                 opacity: attitude.confidence,
               }}
             />
           </div>
-          <span className="text-xs" style={{ color: "var(--subtext0)" }}>
+          <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
             {Math.round(attitude.confidence * 100)}%
           </span>
         </div>
@@ -202,7 +203,7 @@ function AttitudeCard({
             <button
               onClick={() => setEditing(true)}
               className="text-xs py-1 px-2 rounded transition-colors"
-              style={{ color: "var(--subtext0)", minHeight: 36 }}
+              style={{ color: 'var(--subtext0)', minHeight: 36 }}
               title="編輯"
             >
               編輯
@@ -210,10 +211,10 @@ function AttitudeCard({
           )}
           <button
             onClick={() => {
-              if (confirm("確定刪除此態度記錄？")) onDelete(attitude.id);
+              if (confirm('確定刪除此態度記錄？')) onDelete(attitude.id)
             }}
             className="text-xs py-1 px-2 rounded transition-colors"
-            style={{ color: "var(--red)", minHeight: 36 }}
+            style={{ color: 'var(--red)', minHeight: 36 }}
             title="刪除"
           >
             刪除
@@ -221,28 +222,28 @@ function AttitudeCard({
           <button
             onClick={onShowHistory}
             className="text-xs py-1 px-2 rounded transition-colors"
-            style={{ color: "var(--mauve)", minHeight: 36 }}
+            style={{ color: 'var(--mauve)', minHeight: 36 }}
           >
-            {showHistory ? "隱藏歷史" : "版本鏈"}
+            {showHistory ? '隱藏歷史' : '版本鏈'}
           </button>
         </div>
       </div>
 
       {showHistory && <HistoryChain history={historyData} />}
     </div>
-  );
+  )
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  workflow: "工作流程",
-  tool_behavior: "工具行為",
-  config: "設定",
-  architecture: "架構",
-  preference: "偏好",
-  naming: "命名",
-  technical: "技術",
-  principle: "原則",
-};
+  workflow: '工作流程',
+  tool_behavior: '工具行為',
+  config: '設定',
+  architecture: '架構',
+  preference: '偏好',
+  naming: '命名',
+  technical: '技術',
+  principle: '原則',
+}
 
 export default function AttitudeTimeline() {
   const {
@@ -253,59 +254,59 @@ export default function AttitudeTimeline() {
     fetchAttitudeHistory,
     deleteAttitude,
     updateAttitude,
-  } = useMemvaultStore();
+  } = useMemvaultStore()
 
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
 
-  const isStale = useMemvaultStore((s) => s.isStale);
+  const isStale = useMemvaultStore((s) => s.isStale)
 
   useEffect(() => {
-    if (isStale("kg_attitudes")) fetchAttitudes();
-  }, [fetchAttitudes, isStale]);
+    if (isStale('kg_attitudes')) fetchAttitudes()
+  }, [fetchAttitudes, isStale])
 
   const grouped = useMemo(() => {
-    const map: Record<string, AttitudeFact[]> = {};
+    const map: Record<string, AttitudeFact[]> = {}
     for (const a of kg_attitudes) {
-      if (!map[a.category]) map[a.category] = [];
-      map[a.category].push(a);
+      if (!map[a.category]) map[a.category] = []
+      map[a.category].push(a)
     }
-    return Object.entries(map).sort((a, b) => b[1].length - a[1].length);
-  }, [kg_attitudes]);
+    return Object.entries(map).sort((a, b) => b[1].length - a[1].length)
+  }, [kg_attitudes])
 
   const handleShowHistory = (id: string) => {
     if (expandedId === id) {
-      setExpandedId(null);
+      setExpandedId(null)
     } else {
-      setExpandedId(id);
-      fetchAttitudeHistory(id);
+      setExpandedId(id)
+      fetchAttitudeHistory(id)
     }
-  };
+  }
 
   const toggleCategory = (category: string) => {
     setCollapsedCategories((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev)
       if (next.has(category)) {
-        next.delete(category);
+        next.delete(category)
       } else {
-        next.add(category);
+        next.add(category)
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
         <span
           className="inline-block h-3 w-3 rounded-full"
-          style={{ backgroundColor: "var(--mauve)" }}
+          style={{ backgroundColor: 'var(--mauve)' }}
         />
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
           態度演進
         </h3>
         <InfoTip text="態度是從對話中自動提煉的偏好、習慣與工作原則。每條態度有信心度（隨時間衰減）和版本鏈（記錄 ADD/UPDATE 演進歷程）。按類別分組顯示：工作流程、工具行為、設定、架構等。" />
-        <span className="text-xs" style={{ color: "var(--subtext0)" }}>
+        <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
           {kg_attitudes.length} 條
         </span>
       </div>
@@ -314,30 +315,30 @@ export default function AttitudeTimeline() {
         <div className="flex justify-center py-8">
           <div
             className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
-            style={{ borderColor: "var(--mauve)", borderTopColor: "transparent" }}
+            style={{ borderColor: 'var(--mauve)', borderTopColor: 'transparent' }}
           />
         </div>
       ) : kg_attitudes.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-2">
-          <p className="text-sm" style={{ color: "var(--subtext0)" }}>
+          <p className="text-sm" style={{ color: 'var(--subtext0)' }}>
             尚無態度記錄
           </p>
-          <p className="text-xs" style={{ color: "var(--subtext1)" }}>
+          <p className="text-xs" style={{ color: 'var(--subtext1)' }}>
             態度將在對話中自動提煉
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           {grouped.map(([category, attitudes]) => {
-            const isCollapsed = collapsedCategories.has(category);
-            const label = CATEGORY_LABELS[category] ?? category;
+            const isCollapsed = collapsedCategories.has(category)
+            const label = CATEGORY_LABELS[category] ?? category
             return (
               <div
                 key={category}
                 className="rounded-xl border overflow-hidden"
                 style={{
-                  backgroundColor: "var(--mantle)",
-                  borderColor: isCollapsed ? "var(--surface0)" : "var(--mauve)",
+                  backgroundColor: 'var(--mantle)',
+                  borderColor: isCollapsed ? 'var(--surface0)' : 'var(--mauve)',
                 }}
               >
                 {/* Category header — clickable toggle */}
@@ -345,30 +346,35 @@ export default function AttitudeTimeline() {
                   onClick={() => toggleCategory(category)}
                   className="flex items-center gap-2 w-full px-4 text-left transition-colors"
                   style={{
-                    backgroundColor: isCollapsed ? "var(--mantle)" : hexToRgba("var(--mauve)", 0.06),
+                    backgroundColor: isCollapsed
+                      ? 'var(--mantle)'
+                      : hexToRgba('var(--mauve)', 0.06),
                     minHeight: 48,
-                    paddingTop: "0.625rem",
-                    paddingBottom: "0.625rem",
+                    paddingTop: '0.625rem',
+                    paddingBottom: '0.625rem',
                   }}
                 >
                   <span
                     className="text-xs transition-transform duration-200 shrink-0"
                     style={{
-                      color: "var(--mauve)",
-                      display: "inline-block",
-                      transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                      color: 'var(--mauve)',
+                      display: 'inline-block',
+                      transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
                     }}
                   >
                     ▼
                   </span>
-                  <span className="text-sm font-medium flex-1 text-left" style={{ color: "var(--text)" }}>
+                  <span
+                    className="text-sm font-medium flex-1 text-left"
+                    style={{ color: 'var(--text)' }}
+                  >
                     {label}
                   </span>
                   <span
                     className="rounded-full px-2 py-0.5 text-xs font-medium shrink-0"
                     style={{
-                      backgroundColor: hexToRgba("var(--mauve)", 0.15),
-                      color: "var(--mauve)",
+                      backgroundColor: hexToRgba('var(--mauve)', 0.15),
+                      color: 'var(--mauve)',
                     }}
                   >
                     {attitudes.length}
@@ -386,18 +392,16 @@ export default function AttitudeTimeline() {
                         historyData={expandedId === a.id ? kg_attitudeHistory : []}
                         showHistory={expandedId === a.id}
                         onDelete={deleteAttitude}
-                        onUpdate={(id, fact, category) =>
-                          updateAttitude(id, { fact, category })
-                        }
+                        onUpdate={(id, fact, category) => updateAttitude(id, { fact, category })}
                       />
                     ))}
                   </div>
                 )}
               </div>
-            );
+            )
           })}
         </div>
       )}
     </div>
-  );
+  )
 }

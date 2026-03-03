@@ -219,7 +219,8 @@ class FinanceAPITest:
                         "wallets",
                     ]:
                         cur.execute(
-                            f"DELETE FROM finance.{table} WHERE space_id = %s", ("default",)
+                            f"DELETE FROM finance.{table} WHERE space_id = %s",  # noqa: S608
+                            ("default",),
                         )
                 conn.commit()
             print("  Cleaned up test data")
@@ -377,10 +378,10 @@ class FinanceAPITest:
             )
             # Verify balance (Decimal may return "5000.0000")
             if isinstance(body, dict):
-                from decimal import Decimal as D
+                from decimal import Decimal
 
                 bal = body.get("current_balance")
-                if bal is not None and D(str(bal)) != D("5000"):
+                if bal is not None and Decimal(str(bal)) != Decimal("5000"):
                     self.report.bugs.append(
                         f"Wallet initial balance mismatch: expected 5000, got {bal}"
                     )
@@ -663,7 +664,8 @@ class FinanceAPITest:
             )
             if isinstance(body, list) and len(body) == 2:
                 print(
-                    f"    -> Transfer created 2 transactions: out={body[0].get('id', '?')}, in={body[1].get('id', '?')}"
+                    f"    -> Transfer created 2 transactions: "
+                    f"out={body[0].get('id', '?')}, in={body[1].get('id', '?')}"
                 )
             elif isinstance(body, list):
                 self.report.bugs.append(f"Transfer should return 2 transactions, got {len(body)}")

@@ -1,31 +1,31 @@
-import type { MemoryBlock } from "@/types";
-import { BLOCK_TYPE_CONFIG } from "../types";
+import type { MemoryBlock } from '@/types'
+import { BLOCK_TYPE_CONFIG } from '../types'
 
 interface MemoryCardProps {
-  block: MemoryBlock;
-  onClick?: () => void;
-  compact?: boolean;
+  block: MemoryBlock
+  onClick?: () => void
+  compact?: boolean
 }
 
 function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins} 分鐘前`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} 小時前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
-  return `${Math.floor(days / 30)} 個月前`;
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins} 分鐘前`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} 小時前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} 天前`
+  return `${Math.floor(days / 30)} 個月前`
 }
 
 function hexToRgba(cssVar: string, alpha: number): string {
-  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`;
+  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
 }
 
 export default function MemoryCard({ block, onClick, compact = false }: MemoryCardProps) {
-  const config = BLOCK_TYPE_CONFIG[block.block_type] ?? BLOCK_TYPE_CONFIG.general;
-  const confidencePct = `${Math.round(block.confidence * 100)}%`;
-  const badgeBg = hexToRgba(config.color, 0.18);
+  const config = BLOCK_TYPE_CONFIG[block.block_type] ?? BLOCK_TYPE_CONFIG.general
+  const confidencePct = `${Math.round(block.confidence * 100)}%`
+  const badgeBg = hexToRgba(config.color, 0.18)
 
   if (compact) {
     return (
@@ -33,8 +33,8 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
         onClick={onClick}
         className="flex items-start sm:items-center gap-2 sm:gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors"
         style={{
-          backgroundColor: "var(--mantle)",
-          borderColor: "var(--surface0)",
+          backgroundColor: 'var(--mantle)',
+          borderColor: 'var(--surface0)',
           minHeight: 44,
         }}
       >
@@ -51,7 +51,7 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
 
         <span
           className="flex-1 text-sm line-clamp-2 sm:truncate sm:line-clamp-none"
-          style={{ color: "var(--text)" }}
+          style={{ color: 'var(--text)' }}
         >
           {block.content}
         </span>
@@ -62,7 +62,7 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
             <span
               key={tag}
               className="rounded px-1.5 py-0.5 text-xs"
-              style={{ backgroundColor: "var(--surface0)", color: "var(--subtext0)" }}
+              style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
             >
               {tag}
             </span>
@@ -73,12 +73,12 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
           <span className="shrink-0 text-xs font-medium" style={{ color: config.color }}>
             {confidencePct}
           </span>
-          <span className="shrink-0 text-xs" style={{ color: "var(--subtext1)" }}>
+          <span className="shrink-0 text-xs" style={{ color: 'var(--subtext1)' }}>
             {relativeTime(block.updated_at)}
           </span>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -86,18 +86,18 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
       onClick={onClick}
       className="rounded-xl border p-4 cursor-pointer transition-all duration-200 active:scale-[0.98]"
       style={{
-        backgroundColor: "var(--mantle)",
-        borderColor: "var(--surface0)",
+        backgroundColor: 'var(--mantle)',
+        borderColor: 'var(--surface0)',
       }}
       onMouseEnter={(e) => {
-        const el = e.currentTarget;
-        el.style.transform = "scale(1.02)";
-        el.style.borderColor = config.color;
+        const el = e.currentTarget
+        el.style.transform = 'scale(1.02)'
+        el.style.borderColor = config.color
       }}
       onMouseLeave={(e) => {
-        const el = e.currentTarget;
-        el.style.transform = "scale(1)";
-        el.style.borderColor = "var(--surface0)";
+        const el = e.currentTarget
+        el.style.transform = 'scale(1)'
+        el.style.borderColor = 'var(--surface0)'
       }}
     >
       <div className="flex items-center justify-between mb-3">
@@ -116,10 +116,7 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
         </span>
       </div>
 
-      <p
-        className="text-sm leading-relaxed mb-3 line-clamp-3"
-        style={{ color: "var(--text)" }}
-      >
+      <p className="text-sm leading-relaxed mb-3 line-clamp-3" style={{ color: 'var(--text)' }}>
         {block.content}
       </p>
 
@@ -129,7 +126,7 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
             <span
               key={tag}
               className="rounded px-2 py-0.5 text-xs"
-              style={{ backgroundColor: "var(--surface0)", color: "var(--subtext0)" }}
+              style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
             >
               {tag}
             </span>
@@ -137,9 +134,9 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
         </div>
       )}
 
-      <p className="text-xs" style={{ color: "var(--subtext1)" }}>
+      <p className="text-xs" style={{ color: 'var(--subtext1)' }}>
         {relativeTime(block.updated_at)}
       </p>
     </div>
-  );
+  )
 }

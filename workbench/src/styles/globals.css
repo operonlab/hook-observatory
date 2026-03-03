@@ -28,8 +28,8 @@
   body {
     background-color: var(--base);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      "Helvetica Neue", Arial, sans-serif;
+    font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     min-height: 100vh;
     margin: 0;
     -webkit-font-smoothing: antialiased;
@@ -37,7 +37,9 @@
   }
 
   * {
-    transition: background-color 0.15s ease, border-color 0.15s ease,
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
       color 0.15s ease;
   }
 }

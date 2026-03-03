@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import { APP_LIST } from "@/shared/constants/apps";
-import type { AppInfo } from "@/types";
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/hooks/useAuth'
+import { APP_LIST } from '@/shared/constants/apps'
+import type { AppInfo } from '@/types'
 
 function AppCard({
   app,
@@ -10,10 +10,10 @@ function AppCard({
   onHover,
   onClick,
 }: {
-  app: AppInfo;
-  isHovered: boolean;
-  onHover: (id: string | null) => void;
-  onClick: () => void;
+  app: AppInfo
+  isHovered: boolean
+  onHover: (id: string | null) => void
+  onClick: () => void
 }) {
   return (
     <button
@@ -22,19 +22,19 @@ function AppCard({
       onMouseLeave={() => onHover(null)}
       className="group relative flex items-start gap-4 p-6 text-left transition-all"
       style={{
-        backgroundColor: isHovered ? app.color + "14" : "transparent",
-        cursor: "pointer",
-        border: "1px solid rgba(255, 255, 255, 0.04)",
-        borderLeft: `2px solid ${isHovered ? app.color : app.color + "40"}`,
+        backgroundColor: isHovered ? `${app.color}14` : 'transparent',
+        cursor: 'pointer',
+        border: '1px solid rgba(255, 255, 255, 0.04)',
+        borderLeft: `2px solid ${isHovered ? app.color : `${app.color}40`}`,
       }}
     >
       <span
         className="flex h-11 w-11 shrink-0 items-center justify-center text-xl"
         style={{
-          backgroundColor: isHovered ? app.color + "30" : app.color + "20",
-          border: `1px solid ${app.color}${isHovered ? "50" : "35"}`,
-          borderRadius: "8px",
-          transition: "all 0.2s ease",
+          backgroundColor: isHovered ? `${app.color}30` : `${app.color}20`,
+          border: `1px solid ${app.color}${isHovered ? '50' : '35'}`,
+          borderRadius: '8px',
+          transition: 'all 0.2s ease',
         }}
       >
         {app.icon}
@@ -43,7 +43,7 @@ function AppCard({
         <h3
           className="text-sm font-medium transition-colors"
           style={{
-            color: isHovered ? app.color : "rgba(255, 255, 255, 0.85)",
+            color: isHovered ? app.color : 'rgba(255, 255, 255, 0.85)',
           }}
         >
           {app.name}
@@ -51,9 +51,7 @@ function AppCard({
         <p
           className="mt-1 text-xs leading-relaxed"
           style={{
-            color: isHovered
-              ? "rgba(255, 255, 255, 0.45)"
-              : "rgba(255, 255, 255, 0.3)",
+            color: isHovered ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.3)',
           }}
         >
           {app.description}
@@ -63,49 +61,43 @@ function AppCard({
         className="mt-1 text-xs opacity-0 transition-opacity group-hover:opacity-100"
         style={{ color: app.color }}
       >
-        {app.externalUrl ? "↗" : "→"}
+        {app.externalUrl ? '↗' : '→'}
       </span>
     </button>
-  );
+  )
 }
 
 export default function Home() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
 
-  const internal = APP_LIST.filter((a) => a.status === "available");
-  const external = APP_LIST.filter((a) => a.status === "external");
-  const comingSoon = APP_LIST.filter((a) => a.status === "coming-soon");
+  const internal = APP_LIST.filter((a) => a.status === 'available')
+  const external = APP_LIST.filter((a) => a.status === 'external')
+  const comingSoon = APP_LIST.filter((a) => a.status === 'coming-soon')
 
   return (
-    <div
-      className="min-h-full flex flex-col"
-      style={{ backgroundColor: "#1a1b2e" }}
-    >
+    <div className="min-h-full flex flex-col" style={{ backgroundColor: '#1a1b2e' }}>
       {/* Hero section */}
       <div className="flex flex-col items-center pt-16 pb-12 px-6">
         <p
           className="text-sm tracking-widest uppercase mb-3"
-          style={{ color: "rgba(255, 255, 255, 0.25)", letterSpacing: "0.2em" }}
+          style={{ color: 'rgba(255, 255, 255, 0.25)', letterSpacing: '0.2em' }}
         >
           Workshop
         </p>
         <h1
           style={{
             fontFamily: "'Cormorant Garamond', Georgia, serif",
-            fontSize: "clamp(1.75rem, 4vw, 2.5rem)",
+            fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
             fontWeight: 400,
-            color: "rgba(255, 255, 255, 0.9)",
-            letterSpacing: "0.02em",
+            color: 'rgba(255, 255, 255, 0.9)',
+            letterSpacing: '0.02em',
           }}
         >
-          {user?.name ? `${user.name}` : "Welcome"}
+          {user?.name ? `${user.name}` : 'Welcome'}
         </h1>
-        <p
-          className="mt-2 text-sm"
-          style={{ color: "rgba(255, 255, 255, 0.3)" }}
-        >
+        <p className="mt-2 text-sm" style={{ color: 'rgba(255, 255, 255, 0.3)' }}>
           選擇一個應用開始
         </p>
       </div>
@@ -114,7 +106,7 @@ export default function Home() {
       <div className="mx-auto w-full max-w-4xl px-6 pb-8">
         <p
           className="mb-4 text-xs tracking-wider uppercase"
-          style={{ color: "rgba(255, 255, 255, 0.2)", letterSpacing: "0.15em" }}
+          style={{ color: 'rgba(255, 255, 255, 0.2)', letterSpacing: '0.15em' }}
         >
           內部系統
         </p>
@@ -136,7 +128,7 @@ export default function Home() {
         <div className="mx-auto w-full max-w-4xl px-6 pb-8">
           <p
             className="mb-4 text-xs tracking-wider uppercase"
-            style={{ color: "rgba(255, 255, 255, 0.2)", letterSpacing: "0.15em" }}
+            style={{ color: 'rgba(255, 255, 255, 0.2)', letterSpacing: '0.15em' }}
           >
             外部系統
           </p>
@@ -147,7 +139,9 @@ export default function Home() {
                 app={app}
                 isHovered={hoveredId === app.id}
                 onHover={setHoveredId}
-                onClick={() => { window.location.href = app.externalUrl!; }}
+                onClick={() => {
+                  window.location.href = app.externalUrl!
+                }}
               />
             ))}
           </div>
@@ -160,32 +154,25 @@ export default function Home() {
           <p
             className="mb-4 text-xs tracking-wider uppercase"
             style={{
-              color: "rgba(255, 255, 255, 0.15)",
-              letterSpacing: "0.15em",
+              color: 'rgba(255, 255, 255, 0.15)',
+              letterSpacing: '0.15em',
             }}
           >
             即將推出
           </p>
           <div className="flex flex-wrap gap-6">
             {comingSoon.map((app) => (
-              <div
-                key={app.id}
-                className="flex items-center gap-3"
-                style={{ opacity: 0.4 }}
-              >
+              <div key={app.id} className="flex items-center gap-3" style={{ opacity: 0.4 }}>
                 <span
                   className="flex h-6 w-6 items-center justify-center text-sm"
                   style={{
-                    backgroundColor: app.color + "18",
-                    borderRadius: "4px",
+                    backgroundColor: `${app.color}18`,
+                    borderRadius: '4px',
                   }}
                 >
                   {app.icon}
                 </span>
-                <span
-                  className="text-xs"
-                  style={{ color: "rgba(255, 255, 255, 0.5)" }}
-                >
+                <span className="text-xs" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
                   {app.name}
                 </span>
               </div>
@@ -194,5 +181,5 @@ export default function Home() {
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -37,7 +37,7 @@ class TestArchiveColdDataScript:
 
     def test_help_shows_expected_args(self):
         """Running --help succeeds and shows --execute, --phase, --module, --db-url."""
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             [PYTHON, str(self.SCRIPT_PATH), "--help"],
             capture_output=True,
             text=True,
@@ -54,7 +54,7 @@ class TestArchiveColdDataScript:
 
     def test_no_age_days_arg(self):
         """--age-days was removed (replaced by tier-config thresholds); must not appear."""
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             [PYTHON, str(self.SCRIPT_PATH), "--help"],
             capture_output=True,
             text=True,
@@ -67,7 +67,7 @@ class TestArchiveColdDataScript:
 
     def test_phase_choices_include_all(self):
         """--phase should accept '1', '2', '3', and 'all'."""
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             [PYTHON, str(self.SCRIPT_PATH), "--help"],
             capture_output=True,
             text=True,
@@ -149,7 +149,7 @@ class TestMigrationChain:
         assert fields["down_revision"] == "k2c3d4e5f6g7"
 
     def test_chain_integrity(self):
-        """The full chain j -> k -> l is connected: each down_revision matches the prior revision."""
+        """The full chain j->k->l is connected: down_revision matches prior."""
         fields_j = _extract_revision_fields(self.MIGRATION_J)
         fields_k = _extract_revision_fields(self.MIGRATION_K)
         fields_l = _extract_revision_fields(self.MIGRATION_L)

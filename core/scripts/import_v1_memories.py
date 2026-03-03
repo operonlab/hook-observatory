@@ -19,7 +19,6 @@ import asyncio
 import json
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
@@ -29,14 +28,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 # Add core/src to path so we can import models
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from shared.models import Base  # noqa: E402
-from modules.memvault.models import (  # noqa: E402
+from modules.memvault.embedding import get_embeddings_batch
+from modules.memvault.models import (
     KASProfile,
     KnowledgeDomain,
     MemoryBlock,
     Tag,
 )
-from modules.memvault.embedding import get_embeddings_batch  # noqa: E402
 
 logger = structlog.get_logger()
 
@@ -290,7 +288,7 @@ async def generate_embeddings(
         embeddings = await get_embeddings_batch(texts)
 
         async with session_factory() as db:
-            for row, embedding in zip(batch, embeddings):
+            for row, embedding in zip(batch, embeddings, strict=False):
                 if embedding is not None:
                     await db.execute(
                         update(MemoryBlock)
@@ -320,9 +318,7 @@ async def import_profile(
 
     async with session_factory() as db:
         existing_id = (
-            await db.execute(
-                select(KASProfile.id).where(KASProfile.space_id == space_id)
-            )
+            await db.execute(select(KASProfile.id).where(KASProfile.space_id == space_id))
         ).scalar_one_or_none()
 
         if existing_id:
@@ -441,7 +437,7 @@ async def main(
     db_url: str,
     skip_embeddings: bool,
 ) -> None:
-    kas_path = Path(kas_dir).expanduser()
+    kas_path = Path(kas_dir).expanduser()  # noqa: ASYNC240
     if not kas_path.exists():
         logger.error("KAS directory not found", path=str(kas_path))
         sys.exit(1)
@@ -469,12 +465,8 @@ async def main(
 
     logger.info("Total blocks parsed", count=len(all_blocks))
 
-    blocks_imported, blocks_skipped = await import_blocks(
-        session_factory, all_blocks, space_id
-    )
-    logger.info(
-        "Blocks imported", imported=blocks_imported, skipped=blocks_skipped
-    )
+    blocks_imported, blocks_skipped = await import_blocks(session_factory, all_blocks, space_id)
+    logger.info("Blocks imported", imported=blocks_imported, skipped=blocks_skipped)
 
     # ── 2. Generate embeddings ────────────────────────────────────────────────
     if skip_embeddings:
@@ -503,15 +495,9 @@ async def main(
     domains_dir = kas_path / "knowledge" / "domains"
     domains_imported = domains_skipped = 0
     if domains_dir.exists():
-        domains = [
-            parse_knowledge_domain(f) for f in sorted(domains_dir.glob("*.md"))
-        ]
-        domains_imported, domains_skipped = await import_domains(
-            session_factory, domains, space_id
-        )
-        logger.info(
-            "Domains imported", imported=domains_imported, skipped=domains_skipped
-        )
+        domains = [parse_knowledge_domain(f) for f in sorted(domains_dir.glob("*.md"))]
+        domains_imported, domains_skipped = await import_domains(session_factory, domains, space_id)
+        logger.info("Domains imported", imported=domains_imported, skipped=domains_skipped)
     else:
         logger.warning("knowledge/domains/ directory not found", path=str(domains_dir))
 
