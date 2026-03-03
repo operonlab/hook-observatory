@@ -232,7 +232,8 @@ export interface MonthlySummary {
   total_income: number
   total_expense: number
   net: number
-  by_category: CategoryBreakdown[]
+  transaction_count: number
+  category_breakdown: CategoryBreakdown[]
   wallet_overview: WalletOverview[]
 }
 

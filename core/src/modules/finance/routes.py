@@ -20,6 +20,8 @@ from .schemas import (
     InstallmentPlanResponse,
     InstallmentPlanUpdate,
     MonthlySummaryResponse,
+    MonthlyTrendResponse,
+    NetWorthPointResponse,
     ReconcileResponse,
     SubscriptionCreate,
     SubscriptionResponse,
@@ -67,6 +69,15 @@ async def list_wallets(
         user_id=user.get("id"),
         include_inactive=include_inactive,
     )
+
+
+@router.get("/wallets/net-worth", response_model=list[NetWorthPointResponse])
+async def get_net_worth(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    return await summary_service.net_worth(db, space_id, user_id=user.get("id"))
 
 
 @router.get("/wallets/{wallet_id}", response_model=WalletResponse)
@@ -550,3 +561,13 @@ async def get_monthly_summary(
     user: dict = require_permission("finance.read"),
 ):
     return await summary_service.monthly_summary(db, space_id, year_month, user_id=user.get("id"))
+
+
+@router.get("/insights", response_model=list[MonthlyTrendResponse])
+async def get_monthly_trends(
+    months: int = Query(6, ge=1, le=24),
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    return await summary_service.monthly_trends(db, space_id, months, user_id=user.get("id"))

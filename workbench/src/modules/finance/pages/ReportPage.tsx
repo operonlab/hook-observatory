@@ -176,7 +176,7 @@ export default function ReportPage() {
       )}
 
       {/* Wallet overview */}
-      {summary && summary.wallet_overview.length > 0 && (
+      {summary && summary.wallet_overview?.length > 0 && (
         <div
           className="rounded-lg border p-4"
           style={{
@@ -188,7 +188,7 @@ export default function ReportPage() {
             錢包異動
           </h3>
           <div className="space-y-2">
-            {summary.wallet_overview.map((w) => (
+            {summary.wallet_overview?.map((w) => (
               <div key={w.wallet_id} className="flex items-center justify-between py-1">
                 <span className="text-xs" style={{ color: 'var(--fn-text-secondary)' }}>
                   {w.wallet_name}

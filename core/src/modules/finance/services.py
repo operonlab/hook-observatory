@@ -41,6 +41,8 @@ from .schemas import (
     InstallmentPlanResponse,
     InstallmentPlanUpdate,
     MonthlySummaryResponse,
+    MonthlyTrendResponse,
+    NetWorthPointResponse,
     ReconcileResponse,
     SubscriptionCreate,
     SubscriptionResponse,
@@ -49,6 +51,7 @@ from .schemas import (
     TransactionResponse,
     TransactionUpdate,
     WalletCreate,
+    WalletOverviewItem,
     WalletResponse,
     WalletSnapshotResponse,
     WalletSyncRequest,
@@ -830,7 +833,16 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
     audit_module = "finance"
     audit_entity_type = "budgets"
 
-    def to_response(self, instance: Budget) -> BudgetResponse:
+    def to_response(
+        self,
+        instance: Budget,
+        spent: Decimal | None = None,
+        cat_name: str | None = None,
+    ) -> BudgetResponse:
+        spent_amount = spent or Decimal("0")
+        budget_amt = instance.budget_amount or Decimal("0")
+        remaining = budget_amt - spent_amount
+        used_pct = float(spent_amount / budget_amt * 100) if budget_amt else 0.0
         return BudgetResponse(
             id=instance.id,
             space_id=instance.space_id,
@@ -839,8 +851,12 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
             updated_at=instance.updated_at,
             year_month=instance.year_month,
             category_id=instance.category_id,
+            category_name=cat_name,
             budget_amount=instance.budget_amount,
             savings_target=instance.savings_target,
+            spent_amount=spent_amount,
+            remaining_amount=remaining,
+            used_pct=round(used_pct, 1),
             is_private=instance.is_private,
         )
 
@@ -899,8 +915,46 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
             .limit(p.page_size)
         )
         rows = (await db.execute(q)).scalars().all()
+
+        # Compute actual spending per category for the relevant months
+        ym_set = {r.year_month for r in rows}
+        spending_map: dict[tuple[str, str | None], Decimal] = {}
+        cat_name_map: dict[str, str] = {}
+        for ym in ym_set:
+            spending_q = (
+                select(
+                    Transaction.category_id,
+                    func.coalesce(Category.name, "未分類").label("cat_name"),
+                    func.sum(Transaction.amount).label("total"),
+                )
+                .outerjoin(Category, Transaction.category_id == Category.id)
+                .where(
+                    Transaction.space_id == space_id,
+                    Transaction.type == "expense",
+                    Transaction.status == "completed",
+                    func.to_char(Transaction.transacted_at, "YYYY-MM") == ym,
+                )
+                .group_by(Transaction.category_id, Category.name)
+            )
+            spending_q = apply_privacy_filter(spending_q, Transaction, user_id)
+            spending_rows = (await db.execute(spending_q)).all()
+            for sr in spending_rows:
+                spending_map[(ym, sr.category_id)] = sr.total or Decimal("0")
+                if sr.category_id:
+                    cat_name_map[sr.category_id] = sr.cat_name
+
+            # Total spending for budgets without category
+            total_spending = sum((sr.total or Decimal("0")) for sr in spending_rows)
+            spending_map[(ym, None)] = total_spending
+
+        items = []
+        for r in rows:
+            spent = spending_map.get((r.year_month, r.category_id), Decimal("0"))
+            cat_name = cat_name_map.get(r.category_id, None) if r.category_id else None
+            items.append(self.to_response(r, spent=spent, cat_name=cat_name))
+
         return PaginatedResponse[BudgetResponse](
-            items=[self.to_response(r) for r in rows],
+            items=items,
             total=total,
             page=p.page,
             page_size=p.page_size,
@@ -1136,6 +1190,7 @@ class SummaryService:
             select(
                 Transaction.category_id,
                 func.coalesce(Category.name, "未分類").label("category_name"),
+                Category.icon.label("category_icon"),
                 func.sum(Transaction.amount).label("total"),
                 func.count().label("cnt"),
             )
@@ -1147,7 +1202,7 @@ class SummaryService:
                 Transaction.deleted_at == None,  # noqa: E711
                 func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
             )
-            .group_by(Transaction.category_id, Category.name)
+            .group_by(Transaction.category_id, Category.name, Category.icon)
             .order_by(func.sum(Transaction.amount).desc())
         )
         cat_q = apply_privacy_filter(cat_q, Transaction, user_id)
@@ -1160,9 +1215,50 @@ class SummaryService:
                 CategoryBreakdown(
                     category_id=row.category_id,
                     category_name=row.category_name,
-                    total=row.total,
+                    category_icon=row.category_icon,
+                    amount=row.total,
                     count=row.cnt,
-                    percentage=round(pct, 1),
+                    pct=round(pct, 1),
+                )
+            )
+
+        # Wallet overview: balance + change for this month
+        wallet_q = select(Wallet).where(
+            Wallet.space_id == space_id,
+            Wallet.is_active == True,  # noqa: E712
+        )
+        wallet_q = apply_privacy_filter(wallet_q, Wallet, user_id)
+        wallets = (await db.execute(wallet_q)).scalars().all()
+
+        wallet_overview = []
+        for w in wallets:
+            # Change = income - expense for this wallet in this month
+            change_q = (
+                select(
+                    Transaction.type,
+                    func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("total"),
+                )
+                .where(
+                    Transaction.wallet_id == w.id,
+                    Transaction.status == "completed",
+                    func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
+                )
+                .group_by(Transaction.type)
+            )
+            change_rows = (await db.execute(change_q)).all()
+            change = Decimal("0")
+            for cr in change_rows:
+                if cr.type == "income":
+                    change += cr.total or Decimal("0")
+                elif cr.type in ("expense", "transfer"):
+                    change -= cr.total or Decimal("0")
+            wallet_overview.append(
+                WalletOverviewItem(
+                    wallet_id=w.id,
+                    wallet_name=w.name,
+                    wallet_type=w.type,
+                    current_balance=w.current_balance,
+                    change=change,
                 )
             )
 
@@ -1173,7 +1269,99 @@ class SummaryService:
             net=income - expense,
             transaction_count=count,
             category_breakdown=breakdown,
+            wallet_overview=wallet_overview,
         )
+
+    async def monthly_trends(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        months: int = 6,
+        user_id: str | None = None,
+    ) -> list[MonthlyTrendResponse]:
+        """Return income/expense/net for the last N months."""
+        from datetime import date as _date
+        from datetime import timedelta
+
+        today = _date.today()
+        results = []
+        for i in range(months - 1, -1, -1):
+            # Calculate year_month for i months ago
+            d = today.replace(day=1)
+            for _ in range(i):
+                d = (d - timedelta(days=1)).replace(day=1)
+            ym = d.strftime("%Y-%m")
+
+            totals_q = (
+                select(
+                    Transaction.type,
+                    func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("total"),
+                )
+                .where(
+                    Transaction.space_id == space_id,
+                    Transaction.status == "completed",
+                    func.to_char(Transaction.transacted_at, "YYYY-MM") == ym,
+                )
+                .group_by(Transaction.type)
+            )
+            totals_q = apply_privacy_filter(totals_q, Transaction, user_id)
+            rows = (await db.execute(totals_q)).all()
+
+            inc = Decimal("0")
+            exp = Decimal("0")
+            for row in rows:
+                if row.type == "income":
+                    inc = row.total or Decimal("0")
+                elif row.type == "expense":
+                    exp = row.total or Decimal("0")
+
+            results.append(
+                MonthlyTrendResponse(
+                    year_month=ym,
+                    income=inc,
+                    expense=exp,
+                    net=inc - exp,
+                )
+            )
+        return results
+
+    async def net_worth(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        user_id: str | None = None,
+    ) -> list[NetWorthPointResponse]:
+        """Return current net worth grouped by wallet type."""
+        from datetime import date as _date
+
+        q = select(
+            Wallet.type,
+            func.sum(Wallet.current_balance).label("total"),
+        ).where(
+            Wallet.space_id == space_id,
+            Wallet.is_active == True,  # noqa: E712
+        )
+        q = apply_privacy_filter(q, Wallet, user_id)
+        q = q.group_by(Wallet.type)
+        rows = (await db.execute(q)).all()
+
+        type_map: dict[str, Decimal] = {}
+        grand_total = Decimal("0")
+        for row in rows:
+            type_map[row.type] = row.total or Decimal("0")
+            grand_total += row.total or Decimal("0")
+
+        return [
+            NetWorthPointResponse(
+                date=_date.today().isoformat(),
+                total=grand_total,
+                bank=type_map.get("bank_account", Decimal("0")),
+                cash=type_map.get("cash", Decimal("0")),
+                e_wallet=type_map.get("e_wallet", Decimal("0")),
+                investment=type_map.get("investment", Decimal("0")),
+                credit_card=type_map.get("credit_card", Decimal("0")),
+            )
+        ]
 
 
 # ======================== Module-Level Singletons ========================
