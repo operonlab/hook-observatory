@@ -1,7 +1,7 @@
 """BaseCRUDService — generic CRUD with Template Method hooks, audit trail, and soft delete."""
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Generic, TypeVar
 
@@ -22,7 +22,7 @@ def _serialize_value(value: Any) -> Any:
         return None
     if isinstance(value, Decimal):
         return str(value)
-    if isinstance(value, datetime):
+    if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, (list, tuple)):
         return [_serialize_value(v) for v in value]
@@ -143,11 +143,7 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     ) -> PaginatedResponse[ResponseT]:
         p = pagination or PaginationParams()
         base_filter = self.model.space_id == space_id  # type: ignore[attr-defined]
-        count_q = (
-            select(func.count())
-            .select_from(self.model)
-            .where(base_filter)
-        )
+        count_q = select(func.count()).select_from(self.model).where(base_filter)
         if self._has_soft_delete():
             count_q = count_q.where(self.model.deleted_at == None)  # noqa: E711
         total = (await db.execute(count_q)).scalar_one()
@@ -237,9 +233,7 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
             )
         return instance
 
-    async def delete(
-        self, db: AsyncSession, entity_id: str, user_id: str | None = None
-    ) -> bool:
+    async def delete(self, db: AsyncSession, entity_id: str, user_id: str | None = None) -> bool:
         instance = await self.get(db, entity_id)
         if not instance:
             return False
@@ -328,9 +322,7 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
         )
         return instance
 
-    async def purge(
-        self, db: AsyncSession, entity_id: str, user_id: str | None = None
-    ) -> bool:
+    async def purge(self, db: AsyncSession, entity_id: str, user_id: str | None = None) -> bool:
         """Permanently delete (hard delete) an entity. Use for already-soft-deleted items."""
         instance = await db.get(self.model, entity_id)
         if not instance:
