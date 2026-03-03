@@ -220,7 +220,7 @@ resources:
 **決策**：Stations 之間的共通邏輯提取到 `libs/python/station-sdk/`，作為輕量 SDK（非框架）提供。
 
 **決策理由**：
-- system-monitor 與 llm-usage 有 4 項重疊邏輯：launchd 排程、Core API 推送、Widget 資料格式、通知整合
+- system-monitor 與 agent-metrics 有 4 項重疊邏輯：launchd 排程、Core API 推送、Widget 資料格式、通知整合
 - 若每個 station 各寫一套 HTTP client 和 JSON 格式，維護成本隨 station 數量線性增長
 - 但 stations 的核心價值是「可獨立運行」，不能強制依賴 SDK
 
@@ -247,7 +247,7 @@ libs/python/station-sdk/
 | Station | 使用 SDK | 說明 |
 |---------|:--------:|------|
 | system-monitor | ✅ | 排程 + API + Widget + 通知，全部用到 |
-| llm-usage | ✅ | API + Widget + 通知 |
+| agent-metrics | ✅ | API + Widget + 通知 |
 | envkit | ❌ | CLI 工具性質不同，無排程/Widget 需求 |
 | sandbox-executor | ❌ | Node.js MCP Server，語言不同 |
 

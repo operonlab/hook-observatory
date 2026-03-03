@@ -141,16 +141,6 @@ export const APP_LIST: AppInfo[] = [
     externalUrl: '/v2/apps/sysmon/',
   },
   {
-    id: 'llm-usage',
-    name: 'LLM 用量',
-    description: 'API 用量追蹤、預算監控、模型分析',
-    icon: '🤖',
-    path: '/llm-usage',
-    color: '#f9e2af',
-    status: 'external',
-    externalUrl: '/v2/apps/llm/',
-  },
-  {
     id: 'sentinel',
     name: '服務哨兵',
     description: '健康監測、自動修復、狀態總覽',

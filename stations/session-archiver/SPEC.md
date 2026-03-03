@@ -71,7 +71,7 @@ Session Archiver 採用相同理念，但資料型態不同（JSONL 檔案而非
 ~/workshop/stations/session-archiver/
 ├── SPEC.md                           # 本文件
 ├── pyproject.toml                    # uv project
-├── __main__.py                       # CLI 入口（COMMANDS dispatch，仿 llm-usage）
+├── __main__.py                       # CLI 入口（COMMANDS dispatch，仿 system-monitor）
 ├── src/session_archiver/
 │   ├── __init__.py
 │   ├── config.py                     # Settings — JSON config + env override（仿 system-monitor）
@@ -97,7 +97,7 @@ Session Archiver 採用相同理念，但資料型態不同（JSONL 檔案而非
 | **S3 Storage** | `core/src/shared/storage.py` | aiobotocore S3 client，`upload_blob()` / `resolve_content()` — 降級回 None |
 | **DB Pattern** | `core/src/shared/database.py` | SQLAlchemy async + psycopg3，`create_async_engine()` |
 | **Config Pattern** | `stations/system-monitor/config.json` | JSON config + env override，data dir `~/.claude/data/<name>/` |
-| **Scheduler** | `stations/llm-usage/scheduler.py` | launchd plist install/uninstall/status |
+| **Scheduler** | `schedules/sync.sh` | launchd plist install/uninstall/status |
 | **Shell Wrapper** | `stations/system-monitor/scripts/` | 雙層 fallback（API → offline CLI） |
 
 > **Note**: `corelib.db` 已完全棄用。所有 Workshop 服務已遷移至 SQLAlchemy async。
@@ -333,7 +333,7 @@ session-archiver thaw <session_id>
 ## CLI Commands
 
 ```bash
-# 仿 stations/llm-usage 的 COMMANDS dispatch 模式
+# 仿 stations/system-monitor 的 COMMANDS dispatch 模式
 # 入口：uv run python -m session_archiver <command>
 
 session-archiver scan              # 掃描所有 sessions，更新 DB index
@@ -418,7 +418,7 @@ fi
 
 ## Implementation Order
 
-1. **Project scaffold** — `pyproject.toml` + `__main__.py` + package structure（仿 llm-usage/system-monitor）
+1. **Project scaffold** — `pyproject.toml` + `__main__.py` + package structure（仿 system-monitor）
 2. **config.py** — JSON config loader + env override（`~/.claude/data/session-archiver/config.json`）
 3. **scanner.py** — JSONL metadata extraction（parse first/last lines + stat）
 4. **scorer.py** — 四維評分引擎

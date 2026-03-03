@@ -83,16 +83,6 @@
       "enabled": true
     },
     {
-      "name": "llm-usage",
-      "label": "com.joneshong.llm-usage",
-      "command": "/opt/homebrew/bin/node ~/.claude/data/llm-usage/server.js",
-      "schedule": { "run_at_load": true },
-      "description": "LLM 用量追蹤 server（KeepAlive daemon）",
-      "category": "jonathan",
-      "type": "daemon",
-      "enabled": true
-    },
-    {
       "name": "auth-service",
       "label": "com.joneshong.auth-service",
       "command": "~/.openclaw/workspace/openclaw_avator/backend/scripts/run-auth-service.sh",

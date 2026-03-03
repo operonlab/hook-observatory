@@ -58,7 +58,7 @@ stations/tmux-webui/
 
 1. Copy `server.py` to `stations/tmux-webui/`
 2. Update the launch command path
-3. (Optional) Integrate LLM usage data source with the llm-usage station
+3. (Optional) Integrate LLM usage data source with the agent-metrics station
 
 ## Dependencies
 
