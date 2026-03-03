@@ -4,6 +4,8 @@ This is the PUBLIC API of the memvault module.
 Other modules import from here, never from models.py.
 """
 
+import asyncio
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,6 +28,7 @@ from .models import (
     ProfileScore,
     Tag,
 )
+from .noise_filter import QUARANTINE_TAG, check_noise, filter_results
 from .schemas import (
     BLOCK_TYPE_ALIASES,
     BLOCK_TYPES,
@@ -37,9 +40,60 @@ from .schemas import (
     MemoryBlockUpdate,
     ProfileScoreResponse,
     ProfileScoreUpdate,
+    SearchMetadata,
     SemanticSearchResult,
     TagResponse,
 )
+from .scoring_pipeline import ScoringConfig, ScoringPipeline
+
+# --- CJK detection helper ---
+
+_CJK_RANGES = re.compile(
+    r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f"
+    r"\u30a0-\u30ff\uff00-\uffef\uac00-\ud7af]"
+)
+
+# --- Greeting patterns (shared with noise_filter for should_search) ---
+
+_GREETING_ONLY = re.compile(
+    r"^(hi|hello|hey|howdy|yo|sup|greetings|good\s*(morning|afternoon|evening|night)"
+    r"|你好|嗨|哈囉|早安|午安|晚安|哈嘍|嘿)[\s!.,、。\uff01]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_cjk_dominant(text: str) -> bool:
+    """Check if text is predominantly CJK characters."""
+    if not text:
+        return False
+    cjk_count = len(_CJK_RANGES.findall(text))
+    return cjk_count / len(text) > 0.3
+
+
+def _is_cjk(text: str) -> bool:
+    """Check if text contains any CJK characters."""
+    return bool(_CJK_RANGES.search(text))
+
+
+def should_search(query: str) -> tuple[bool, str]:
+    """Determine if a query warrants memory retrieval."""
+    stripped = query.strip()
+    # Too short
+    if _is_cjk_dominant(stripped) and len(stripped) < 3:
+        return False, "cjk_too_short"
+    if not _is_cjk_dominant(stripped) and len(stripped) < 10:
+        return False, "too_short"
+    # Pure greeting
+    if _GREETING_ONLY.match(stripped):
+        return False, "greeting"
+    # Memory keywords force search
+    memory_kw = [
+        "記得", "之前", "上次", "remember", "previously",
+        "earlier", "last time", "recall",
+    ]
+    if any(kw in stripped.lower() for kw in memory_kw):
+        return True, "memory_keyword"
+    return True, "default"
 
 # ======================== MemoryBlock Service ========================
 
@@ -60,6 +114,13 @@ class MemoryBlockService(
                 f"Invalid block_type: {d['block_type']}",
                 code="memvault.invalid_block_type",
             )
+        # Phase A1: Noise quarantine — tag noisy content instead of rejecting
+        verdict = check_noise(d.get("content", ""))
+        if verdict.is_noise:
+            tags = d.get("tags") or []
+            if QUARANTINE_TAG not in tags:
+                tags = [*tags, QUARANTINE_TAG]
+            d["tags"] = tags
         return d
 
     def after_create(self, instance: MemoryBlock) -> None:
@@ -146,8 +207,10 @@ class MemoryBlockService(
         tags: list[str] | None = None,
         block_type: str | None = None,
         include_warm: bool = True,
-    ) -> list[SemanticSearchResult]:
-        """Vector similarity search using pgvector cosine distance.
+        query: str | None = None,
+        scoring_config: ScoringConfig | None = None,
+    ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
+        """Vector similarity search with RRF hybrid retrieval + scoring pipeline.
 
         Tries block_embeddings sub-table first (Phase 2 path);
         falls back to inline blocks.embedding for backward compat.
@@ -155,6 +218,8 @@ class MemoryBlockService(
         When include_warm=True (default), augments results with
         warm-tier text search (score x 0.7) for blocks between
         hot_days and warm_days age that no longer have HNSW indexes.
+
+        Returns (results, metadata) tuple.
         """
         if len(query_embedding) != EMBEDDING_DIM:
             raise BadRequestError(
@@ -162,40 +227,194 @@ class MemoryBlockService(
                 code="memvault.invalid_embedding_dim",
             )
 
-        # Phase 2 path: search via embedding sub-table
-        results = await self._search_via_subtable(
-            db,
-            space_id,
-            query_embedding,
-            top_k,
-            threshold,
-            tags,
-            block_type,
+        meta = SearchMetadata(vector_used=True)
+
+        # Phase B1: Run vector search + keyword search in parallel
+        vector_coro = self._vector_search_combined(
+            db, space_id, query_embedding, top_k, threshold, tags, block_type
         )
-        if not results:
-            # Fallback: inline embedding column (pre-Phase 2)
-            results = await self._search_via_inline(
-                db,
-                space_id,
-                query_embedding,
-                top_k,
-                threshold,
-                tags,
-                block_type,
+
+        if query:
+            keyword_coro = self._keyword_search(
+                db, space_id, query, top_k, tags, block_type
             )
+            vector_results, keyword_results = await asyncio.gather(
+                vector_coro, keyword_coro
+            )
+            meta.keyword_used = True
+            # RRF Fusion
+            results = await self._rrf_fuse(vector_results, keyword_results)
+        else:
+            results = await vector_coro
 
         # Warm tier: text-based augmentation for older blocks
         if include_warm and len(results) < top_k:
             warm_results = await self._warm_tier_search(
-                db,
-                space_id,
-                top_k - len(results),
-                tags,
-                block_type,
+                db, space_id, top_k - len(results), tags, block_type,
             )
             results.extend(warm_results)
 
+        # Phase A1 + A2: Noise filter on results + Scoring Pipeline
+        results, _ = filter_results(results)
+
+        # Convert to scoring pipeline format
+        pipeline = ScoringPipeline(scoring_config)
+        scored_dicts = [
+            {
+                "block": r.block,
+                "score": r.score,
+                "content": r.block.content,
+                "created_at": r.block.created_at,
+                "confidence": r.block.confidence,
+                "embedding": None,
+            }
+            for r in results
+        ]
+
+        scored_dicts, scoring_meta = pipeline.apply(scored_dicts, query_embedding)
+
+        # Update metadata
+        meta.scoring_applied = True
+        meta.stages_applied = scoring_meta.stages_applied
+        meta.stages_skipped = scoring_meta.stages_skipped
+        meta.noise_filtered = scoring_meta.noise_filtered
+        meta.input_count = scoring_meta.input_count
+        meta.output_count = scoring_meta.output_count
+
+        # Convert back to SemanticSearchResult
+        final_results = [
+            SemanticSearchResult(
+                block=d["block"],
+                score=round(d["score"], 4),
+            )
+            for d in scored_dicts[:top_k]
+        ]
+
+        return final_results, meta
+
+    async def _vector_search_combined(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query_embedding: list[float],
+        top_k: int,
+        threshold: float,
+        tags: list[str] | None,
+        block_type: str | None,
+    ) -> list[SemanticSearchResult]:
+        """Run vector search: subtable first, fallback to inline."""
+        results = await self._search_via_subtable(
+            db, space_id, query_embedding, top_k, threshold, tags, block_type,
+        )
+        if not results:
+            results = await self._search_via_inline(
+                db, space_id, query_embedding, top_k, threshold, tags, block_type,
+            )
         return results
+
+    async def _keyword_search(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query: str,
+        top_k: int,
+        tags: list[str] | None = None,
+        block_type: str | None = None,
+    ) -> list[SemanticSearchResult]:
+        """PostgreSQL keyword search.
+
+        Uses tsvector for English text; falls back to ILIKE for CJK.
+        """
+        if _is_cjk(query):
+            # CJK: use ILIKE
+            pattern = f"%{query}%"
+            q = (
+                select(MemoryBlock)
+                .where(
+                    MemoryBlock.space_id == space_id,
+                    MemoryBlock.content.ilike(pattern),
+                    MemoryBlock.deleted_at == None,  # noqa: E711
+                )
+                .order_by(MemoryBlock.updated_at.desc())
+                .limit(top_k)
+            )
+        else:
+            # English: use tsvector + ts_rank_cd
+            ts_query = func.plainto_tsquery("english", query)
+            ts_vector = func.to_tsvector("english", MemoryBlock.content)
+            rank = func.ts_rank_cd(ts_vector, ts_query).label("rank")
+            q = (
+                select(MemoryBlock, rank)
+                .where(
+                    MemoryBlock.space_id == space_id,
+                    ts_vector.op("@@")(ts_query),
+                    MemoryBlock.deleted_at == None,  # noqa: E711
+                )
+                .order_by(rank.desc())
+                .limit(top_k)
+            )
+
+        if tags:
+            q = q.where(MemoryBlock.tags.contains(tags))
+        if block_type:
+            q = q.where(MemoryBlock.block_type == block_type)
+
+        rows = (await db.execute(q)).all()
+
+        results = []
+        for row in rows:
+            if _is_cjk(query):
+                block = row
+                score = 0.5
+            else:
+                block = row.MemoryBlock
+                score = float(row.rank) if row.rank else 0.3
+            results.append(
+                SemanticSearchResult(
+                    block=self.to_response(block),
+                    score=round(score, 4),
+                )
+            )
+        return results
+
+    async def _rrf_fuse(
+        self,
+        vector_results: list[SemanticSearchResult],
+        keyword_results: list[SemanticSearchResult],
+        k: int = 60,
+        keyword_boost: float = 0.15,
+    ) -> list[SemanticSearchResult]:
+        """Reciprocal Rank Fusion: combine vector and keyword results."""
+        scores: dict[str, float] = {}
+        best_result: dict[str, SemanticSearchResult] = {}
+
+        # Score from vector results
+        for rank, r in enumerate(vector_results):
+            block_id = r.block.id
+            scores[block_id] = scores.get(block_id, 0) + 1.0 / (k + rank)
+            if block_id not in best_result or r.score > best_result[block_id].score:
+                best_result[block_id] = r
+
+        # Score from keyword results with boost
+        keyword_ids = set()
+        for rank, r in enumerate(keyword_results):
+            block_id = r.block.id
+            keyword_ids.add(block_id)
+            scores[block_id] = scores.get(block_id, 0) + (
+                1.0 / (k + rank) * (1 + keyword_boost)
+            )
+            if block_id not in best_result or r.score > best_result[block_id].score:
+                best_result[block_id] = r
+
+        # Sort by fused score
+        sorted_ids = sorted(scores, key=lambda bid: scores[bid], reverse=True)
+        return [
+            SemanticSearchResult(
+                block=best_result[bid].block,
+                score=round(scores[bid], 4),
+            )
+            for bid in sorted_ids
+        ]
 
     async def _search_via_subtable(
         self,
