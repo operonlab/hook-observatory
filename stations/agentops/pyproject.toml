@@ -1,0 +1,29 @@
+[project]
+name = "agentops"
+version = "0.1.0"
+description = "AgentOps — Multi-CLI orchestration & team-task management station"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "asyncpg>=0.30",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "pyyaml>=6.0",
+    "httpx>=0.28",
+    "structlog>=24.4",
+]
+
+[project.scripts]
+agentops = "agentops.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentops"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
