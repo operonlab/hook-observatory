@@ -29,7 +29,7 @@ class APIError(Exception):
         super().__init__(f"API error {status_code}: {detail}")
 
 
-class ConnectionError(Exception):
+class APIConnectionError(Exception):
     """Raised when the Core API is unreachable."""
 
     def __init__(self, url: str):
@@ -38,6 +38,10 @@ class ConnectionError(Exception):
             f"Cannot connect to Core API at {url}. "
             "Start server: cd core && uvicorn src.main:app --port 8801"
         )
+
+
+# Backward-compat alias (shadows builtin intentionally for existing imports)
+ConnectionError = APIConnectionError
 
 
 class BaseClient:
@@ -79,70 +83,43 @@ class BaseClient:
             p.update({k: v for k, v in extra.items() if v is not None})
         return p
 
-    def _get(self, path: str, params: dict | None = None) -> Any:
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Send an HTTP request with standard error handling."""
         try:
-            resp = self.client.get(f"{self.prefix}{path}", params=self._params(params))
+            resp = self.client.request(method, f"{self.prefix}{path}", **kwargs)
             resp.raise_for_status()
-            return resp.json()
+            return resp
         except httpx.ConnectError:
-            raise ConnectionError(self.base_url) from None
+            raise APIConnectionError(self.base_url) from None
         except httpx.HTTPStatusError as e:
             raise APIError(e.response.status_code, e.response.text[:500]) from e
 
-    def _post(self, path: str, body: dict | None = None, timeout: float | None = None) -> Any:
-        try:
-            resp = self.client.post(
-                f"{self.prefix}{path}",
-                json=body or {},
-                params=self._params(),
-                timeout=timeout or 60,
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except httpx.ConnectError:
-            raise ConnectionError(self.base_url) from None
-        except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500]) from e
+    def _get(self, path: str, params: dict | None = None) -> Any:
+        return self._request("GET", path, params=self._params(params)).json()
+
+    def _post(
+        self,
+        path: str,
+        body: dict | None = None,
+        params: dict | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        return self._request(
+            "POST",
+            path,
+            json=body or {},
+            params=self._params(params),
+            timeout=timeout or 60,
+        ).json()
 
     def _patch(self, path: str, body: dict | None = None) -> Any:
-        try:
-            resp = self.client.patch(
-                f"{self.prefix}{path}",
-                json=body or {},
-                params=self._params(),
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except httpx.ConnectError:
-            raise ConnectionError(self.base_url) from None
-        except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500]) from e
+        return self._request("PATCH", path, json=body or {}, params=self._params()).json()
 
     def _put(self, path: str, body: dict | None = None) -> Any:
-        try:
-            resp = self.client.put(
-                f"{self.prefix}{path}",
-                json=body or {},
-                params=self._params(),
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except httpx.ConnectError:
-            raise ConnectionError(self.base_url) from None
-        except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500]) from e
+        return self._request("PUT", path, json=body or {}, params=self._params()).json()
 
     def _delete(self, path: str) -> None:
-        try:
-            resp = self.client.delete(
-                f"{self.prefix}{path}",
-                params=self._params(),
-            )
-            resp.raise_for_status()
-        except httpx.ConnectError:
-            raise ConnectionError(self.base_url) from None
-        except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500]) from e
+        self._request("DELETE", path, params=self._params())
 
     def __enter__(self):
         return self
