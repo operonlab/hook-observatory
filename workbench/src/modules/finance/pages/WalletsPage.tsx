@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import InstallmentTracker from '../components/InstallmentTracker'
 import SubscriptionList from '../components/SubscriptionList'
+import WalletForm from '../components/WalletForm'
 import WalletList from '../components/WalletList'
 import type { Wallet } from '../types'
 
@@ -14,7 +15,9 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function WalletsPage() {
   const [tab, setTab] = useState<Tab>('wallets')
-  const [_editWallet, setEditWallet] = useState<Wallet | null>(null)
+  const [editWallet, setEditWallet] = useState<Wallet | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
@@ -47,14 +50,28 @@ export default function WalletsPage() {
       {/* Tab content */}
       {tab === 'wallets' && (
         <WalletList
-          onEdit={(w) => setEditWallet(w)}
+          key={refreshKey}
+          onEdit={(w) => {
+            setEditWallet(w)
+            setShowForm(true)
+          }}
           onAdd={() => {
-            /* TODO: wallet form */
+            setEditWallet(null)
+            setShowForm(true)
           }}
         />
       )}
       {tab === 'installments' && <InstallmentTracker />}
       {tab === 'subscriptions' && <SubscriptionList />}
+
+      {/* Wallet form modal */}
+      {showForm && (
+        <WalletForm
+          wallet={editWallet}
+          onClose={() => setShowForm(false)}
+          onSaved={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
     </div>
   )
 }
