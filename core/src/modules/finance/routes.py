@@ -100,7 +100,7 @@ async def update_wallet(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await wallet_service.update(db, wallet_id, data)
+    instance = await wallet_service.update(db, wallet_id, data, user_id=user.get("id"))
     if not instance:
         raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
     await db.commit()
@@ -171,7 +171,7 @@ async def update_category(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await category_service.update(db, category_id, data)
+    instance = await category_service.update(db, category_id, data, user_id=user.get("id"))
     if not instance:
         raise NotFoundError("Category not found", code="finance.category_not_found")
     await db.commit()
@@ -184,7 +184,7 @@ async def delete_category(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    if not await category_service.delete(db, category_id):
+    if not await category_service.delete(db, category_id, user_id=user.get("id")):
         raise NotFoundError("Category not found", code="finance.category_not_found")
     await db.commit()
 
@@ -251,7 +251,9 @@ async def update_transaction(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await transaction_service.update(db, transaction_id, data)
+    instance = await transaction_service.update(
+        db, transaction_id, data, user_id=user.get("id")
+    )
     if not instance:
         raise NotFoundError("Transaction not found", code="finance.transaction_not_found")
     await db.commit()
@@ -264,8 +266,85 @@ async def delete_transaction(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    if not await transaction_service.delete(db, transaction_id):
+    if not await transaction_service.delete(db, transaction_id, user_id=user.get("id")):
         raise NotFoundError("Transaction not found", code="finance.transaction_not_found")
+    await db.commit()
+
+
+# ======================== Trash (Soft Delete) ========================
+
+
+@router.get("/trash/{entity_type}", response_model=PaginatedResponse)
+async def list_trash(
+    entity_type: str,
+    space_id: str = Query("default"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    """List soft-deleted items for an entity type."""
+    svc_map = {
+        "transactions": transaction_service,
+        "categories": category_service,
+        "wallets": wallet_service,
+        "subscriptions": subscription_service,
+        "installment-plans": installment_plan_service,
+        "budgets": budget_service,
+    }
+    svc = svc_map.get(entity_type)
+    if not svc:
+        raise NotFoundError(f"Unknown entity type: {entity_type}", code="finance.unknown_entity")
+    return await svc.list_deleted(db, space_id, PaginationParams(page=page, page_size=page_size))
+
+
+@router.post("/trash/{entity_type}/{entity_id}/restore", status_code=200)
+async def restore_from_trash(
+    entity_type: str,
+    entity_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.write"),
+):
+    """Restore a soft-deleted item."""
+    svc_map = {
+        "transactions": transaction_service,
+        "categories": category_service,
+        "wallets": wallet_service,
+        "subscriptions": subscription_service,
+        "installment-plans": installment_plan_service,
+        "budgets": budget_service,
+    }
+    svc = svc_map.get(entity_type)
+    if not svc:
+        raise NotFoundError(f"Unknown entity type: {entity_type}", code="finance.unknown_entity")
+    instance = await svc.restore(db, entity_id, user_id=user.get("id"))
+    if not instance:
+        raise NotFoundError("Item not found in trash", code="finance.not_in_trash")
+    await db.commit()
+    return svc.to_response(instance)
+
+
+@router.delete("/trash/{entity_type}/{entity_id}", status_code=204)
+async def purge_from_trash(
+    entity_type: str,
+    entity_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.write"),
+):
+    """Permanently delete a soft-deleted item."""
+    svc_map = {
+        "transactions": transaction_service,
+        "categories": category_service,
+        "wallets": wallet_service,
+        "subscriptions": subscription_service,
+        "installment-plans": installment_plan_service,
+        "budgets": budget_service,
+    }
+    svc = svc_map.get(entity_type)
+    if not svc:
+        raise NotFoundError(f"Unknown entity type: {entity_type}", code="finance.unknown_entity")
+    if not await svc.purge(db, entity_id, user_id=user.get("id")):
+        raise NotFoundError("Item not found", code="finance.not_found")
     await db.commit()
 
 
@@ -321,7 +400,9 @@ async def update_subscription(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await subscription_service.update(db, subscription_id, data)
+    instance = await subscription_service.update(
+        db, subscription_id, data, user_id=user.get("id")
+    )
     if not instance:
         raise NotFoundError("Subscription not found", code="finance.subscription_not_found")
     await db.commit()
@@ -380,7 +461,7 @@ async def update_installment_plan(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await installment_plan_service.update(db, plan_id, data)
+    instance = await installment_plan_service.update(db, plan_id, data, user_id=user.get("id"))
     if not instance:
         raise NotFoundError("Installment plan not found", code="finance.plan_not_found")
     await db.commit()
