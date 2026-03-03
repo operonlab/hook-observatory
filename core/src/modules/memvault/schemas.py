@@ -127,6 +127,7 @@ class SearchMetadata(BaseModel):
     noise_filtered: int = 0
     input_count: int = 0
     output_count: int = 0
+    scope: str | None = None
 
 
 class EnhancedSearchResult(BaseModel):
