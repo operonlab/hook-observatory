@@ -19,9 +19,7 @@ _serializer = URLSafeTimedSerializer(settings.secret_key)
 class SessionMiddleware(BaseHTTPMiddleware):
     """Read/write signed session cookie + Redis lookup on every request."""
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # --- Decode session token from cookie ---
         session_token: str | None = None
         cookie_value = request.cookies.get(settings.session_cookie_name)
@@ -39,6 +37,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
         user_data: dict | None = None
         if session_token:
             import hashlib
+            import logging
 
             token_hash = hashlib.sha256(session_token.encode()).hexdigest()
             redis = get_redis()
@@ -46,6 +45,9 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 raw = await redis.get(f"auth:session:{token_hash}")
                 if raw:
                     user_data = json.loads(raw)
+            except Exception as e:
+                logging.getLogger(__name__).warning("Redis session lookup failed: %s", e)
+                session_token = None  # treat as unauthenticated
             finally:
                 await redis.aclose()
 
