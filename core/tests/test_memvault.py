@@ -503,3 +503,91 @@ class TestIntegration:
 
         assert _cosine_similarity([], []) == 0.0
         assert _cosine_similarity([0, 0, 0], [1, 1, 1]) == 0.0
+
+
+# ======================== Defense ⑤: Task-Aware Embedding Tests ========================
+
+
+class TestTaskAwareEmbedding:
+    """Tests for Defense ⑤: Task-Aware Embedding."""
+
+    @pytest.mark.asyncio
+    async def test_search_query_prefix(self):
+        """Verify prefix is correctly prepended for search queries."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"embeddings": [[0.1] * 768]}
+
+        with patch("src.shared.embedding._get_client") as mock_client:
+            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+            from src.shared.embedding import get_embedding
+
+            result = await get_embedding("test query", task_type="search_query")
+            assert result is not None
+            assert len(result) == 768
+            call_args = mock_client.return_value.post.call_args
+            sent_input = call_args[1]["json"]["input"]
+            assert sent_input == "search_query: test query"
+
+    @pytest.mark.asyncio
+    async def test_search_document_prefix(self):
+        """Verify prefix is correctly prepended for document storage."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"embeddings": [[0.2] * 768]}
+
+        with patch("src.shared.embedding._get_client") as mock_client:
+            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+            from src.shared.embedding import get_embedding
+
+            result = await get_embedding("my document content", task_type="search_document")
+            assert result is not None
+            call_args = mock_client.return_value.post.call_args
+            sent_input = call_args[1]["json"]["input"]
+            assert sent_input == "search_document: my document content"
+
+    @pytest.mark.asyncio
+    async def test_no_prefix_backward_compat(self):
+        """Verify None task_type produces no prefix (backward compat)."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"embeddings": [[0.3] * 768]}
+
+        with patch("src.shared.embedding._get_client") as mock_client:
+            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+            from src.shared.embedding import get_embedding
+
+            result = await get_embedding("plain text")
+            assert result is not None
+            call_args = mock_client.return_value.post.call_args
+            sent_input = call_args[1]["json"]["input"]
+            assert sent_input == "plain text"
+
+    @pytest.mark.asyncio
+    async def test_batch_embedding_with_prefix(self):
+        """Verify batch embedding works with task_type."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "embeddings": [[0.1] * 768, [0.2] * 768],
+        }
+
+        with patch("src.shared.embedding._get_client") as mock_client:
+            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+            from src.shared.embedding import get_embeddings_batch
+
+            results = await get_embeddings_batch(
+                ["doc one", "doc two"], task_type="search_document",
+            )
+            assert len(results) == 2
+            assert all(r is not None and len(r) == 768 for r in results)
+            call_args = mock_client.return_value.post.call_args
+            sent_input = call_args[1]["json"]["input"]
+            assert sent_input == [
+                "search_document: doc one",
+                "search_document: doc two",
+            ]

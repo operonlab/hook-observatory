@@ -87,7 +87,7 @@ async def create_block(
 ):
     instance = await memory_block_service.create(db, space_id, body)
     # Generate embedding asynchronously (best-effort)
-    embedding = await get_embedding(instance.content)
+    embedding = await get_embedding(instance.content, task_type="search_document")
     if embedding:
         await memory_block_service.update_embedding(db, instance.id, embedding)
     await db.commit()
@@ -149,7 +149,7 @@ async def search(
                 metadata=meta if include_metadata else None,
             )
 
-    query_embedding = await get_embedding(q)
+    query_embedding = await get_embedding(q, task_type="search_query")
     if query_embedding is None:
         # Fallback: ILIKE text search when Ollama is unavailable
         results = await memory_block_service.text_search(db, space_id, q, top_k)
