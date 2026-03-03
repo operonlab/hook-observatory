@@ -11,10 +11,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from agent_metrics import __version__
 from agent_metrics.config import settings
@@ -24,11 +28,14 @@ from agent_metrics.routes import router
 log = structlog.get_logger()
 
 _aggregator_task: asyncio.Task | None = None
+_sysmon_task: asyncio.Task | None = None
+
+STATION_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    global _aggregator_task
+    global _aggregator_task, _sysmon_task
 
     pool = await get_pool()
 
@@ -36,6 +43,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from agent_metrics.aggregator import aggregator_loop
 
     _aggregator_task = asyncio.create_task(aggregator_loop())
+
+    # Start sysmon collector background task
+    from agent_metrics.sysmon_loop import sysmon_loop
+
+    _sysmon_task = asyncio.create_task(sysmon_loop())
 
     log.info(
         "starting",
@@ -46,13 +58,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-    # Shutdown aggregator
-    if _aggregator_task and not _aggregator_task.done():
-        _aggregator_task.cancel()
-        try:
-            await _aggregator_task
-        except asyncio.CancelledError:
-            pass
+    # Shutdown background tasks
+    for task in (_aggregator_task, _sysmon_task):
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     await close_pool()
     log.info("shutting_down", service=settings.SERVICE_NAME)
@@ -73,6 +86,18 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+# Static files and templates for dashboard
+_static_dir = STATION_DIR / "static"
+_templates_dir = STATION_DIR / "templates"
+if _static_dir.exists():
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+if _templates_dir.exists():
+    _templates = Jinja2Templates(directory=_templates_dir)
+
+    @app.get("/", response_class=HTMLResponse)
+    async def dashboard(request: Request):
+        return _templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/health")
