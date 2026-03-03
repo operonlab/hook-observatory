@@ -266,6 +266,13 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
 .upload-btn:disabled{opacity:.4;cursor:default}
 .upload-btn.uploading{opacity:.5;pointer-events:none;animation:upload-pulse 1s infinite}
 @keyframes upload-pulse{0%,100%{opacity:.5}50%{opacity:.2}}
+.relay-toggle{
+  padding:8px 10px;background:var(--surface2);color:var(--dim);border:1px solid var(--border);
+  border-radius:var(--radius);font-size:15px;font-family:inherit;cursor:pointer;
+  transition:all .15s;line-height:1;flex-shrink:0;
+}
+.relay-toggle:hover{color:var(--accent-h);border-color:var(--accent)}
+.relay-toggle.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 #send-btn{
   padding:8px 18px;background:var(--accent);color:#fff;border:none;
   border-radius:var(--radius);font-size:13px;font-family:inherit;cursor:pointer;
@@ -329,11 +336,11 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
 /* ── Touch / Responsive ── */
 @media(pointer:coarse){
   .qbtn,.ek,.win-tab{min-height:44px}
-  #send-btn,.upload-btn{min-height:44px}
+  #send-btn,.upload-btn,.relay-toggle{min-height:44px}
 }
 @media(pointer:coarse) and (max-width:600px){
   .qbtn,.win-tab{min-height:34px}
-  #send-btn,.upload-btn{min-height:36px}
+  #send-btn,.upload-btn,.relay-toggle{min-height:36px}
   .ek{min-height:36px}
 }
 
