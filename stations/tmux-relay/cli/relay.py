@@ -16,7 +16,7 @@ Usage:
     relay cleanup [--threshold N]
     relay cache show|refresh|clear|ping
 
-Symlink: ln -sf ~/workshop/stations/tmux-relay-cli/relay.py ~/.local/bin/relay
+Symlink: ln -sf ~/workshop/stations/tmux-relay/cli/relay.py ~/.local/bin/relay
 """
 
 import argparse

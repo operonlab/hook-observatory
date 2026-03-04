@@ -334,7 +334,7 @@ class TmuxRelayClient:
 
     def _ensure_hooks_registered(self, session: str) -> None:
         """Register tmux hooks for cache-updater on relay windows."""
-        updater = "/Users/joneshong/workshop/stations/tmux-relay-cli/cache-updater.py"
+        updater = "/Users/joneshong/workshop/stations/tmux-relay/cli/cache-updater.py"
         python = "/Users/joneshong/.local/bin/python3"
         for wname in self._list_relay_windows(session):
             target = f"{session}:{wname}"

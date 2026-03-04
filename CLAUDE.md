@@ -27,7 +27,9 @@ Modular Monolith + Event-Driven workspace.
   - `core/services/media/` — STT/TTS/image processing
 - `workbench/` — Single React application
 - `mcp/` — MCP server layer (16 servers: SDK-based protocol access to core services and stations)
-- `stations/` — Standalone local tools (agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-redactor, system-monitor, tmux-webui)
+- `stations/` — Standalone local tools (agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-intelligence, session-pipeline, session-redactor, system-monitor, tmux-relay, tmux-webui)
+  - Each station's CLI lives in `stations/{name}/cli/`
+- `core/cli/` — Core module CLI wrappers (finance, intelflow, auth, admin, notification, memvault, nodeflow)
 - `vendor/` — Third-party community tools (observability)
 - `bridges/` — External platform connectors (LINE, Telegram, Discord)
 - `plugins/` — Plugin packages
@@ -45,7 +47,7 @@ Modular Monolith + Event-Driven workspace.
 - **Domain Services** (DB-backed): finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest
 - **Bridges**: External connectors (social-hooks)
 - **Hot-path Services**: media (STT/TTS/image), realtime (LiveKit)
-- **Stations**: Standalone local tools (agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-redactor, system-monitor, tmux-webui)
+- **Stations**: Standalone local tools (agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-intelligence, session-pipeline, session-redactor, system-monitor, tmux-relay, tmux-webui)
 - **Vendor**: Third-party community tools (observability)
 - **Compositions**: Service assemblies for specific use cases (Legal Advisor, Church Music, Virtual CS, ERP/POS)
 - **SDK Clients**: `libs/python/src/workshop/clients/` — unified Python SDK layer for all services (20+ clients)

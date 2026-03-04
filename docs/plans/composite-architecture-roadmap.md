@@ -60,7 +60,8 @@ Workshop 已有 5 個服務完成四層複合架構（SDK → CLI → MCP → Sk
 
 ```
 libs/python/src/workshop/clients/{name}.py    ← SDK（繼承 BaseClient）
-stations/{name}-cli/{name}.py                  ← CLI（argparse, 匯入 SDK）
+stations/{name}/cli/{cmd}.py                   ← Station CLI（合併在 station 內）
+core/cli/{name}.py                             ← Core Module CLI（argparse, 匯入 SDK）
 mcp/{name}/server.py                           ← MCP（包裝 SDK, stdio 模式）
 ~/.claude/skills/{name}/SKILL.md               ← Skill（參照 CLI + MCP）
 ```
@@ -111,7 +112,7 @@ client = FinanceClient()
 | 分析 | monthly_summary, spending_by_category, wallet_trend |
 | 分期 | list_installments, create_installment |
 
-**CLI** — `stations/finance-cli/finance.py`
+**CLI** — `core/cli/finance.py`
 ```
 finance transactions list [--wallet W] [--category C] [--limit N]
 finance transactions create <wallet> <title> <amount> [--category C]
@@ -143,7 +144,7 @@ finance analytics spending [--from 日期] [--to 日期]
 | 派遣 | dispatch_task |
 | 獎勵 | claim_reward |
 
-**CLI** — `stations/taskflow-cli/taskflow.py`
+**CLI** — `core/cli/taskflow.py`
 ```
 taskflow quests list [--status S] [--priority P]
 taskflow quests create <title> [--priority P] [--due 日期]
@@ -167,7 +168,7 @@ taskflow dispatch <task_id> [--agent A]
 | 簡報 | list_briefings, get_briefing, generate_briefing |
 | 搜尋 | semantic_search |
 
-**CLI** — `stations/intelflow-cli/intelflow.py`
+**CLI** — `core/cli/intelflow.py`
 ```
 intelflow reports list [--topic T] [--limit N]
 intelflow reports search <查詢>
@@ -190,7 +191,7 @@ intelflow briefings list | generate [--topics T1,T2]
 | 修復 | list_remediations, get_remediation_history |
 | 總覽 | get_status_summary |
 
-**CLI** — `stations/sentinel-cli/sentinel.py`
+**CLI** — `stations/sentinel/cli/sentinel.py`
 ```
 sentinel status           # 總覽儀表板
 sentinel checks list      # 列出所有註冊的檢查
@@ -209,7 +210,7 @@ sentinel history [--limit N]
 ### 2.1 Ideagraph（SDK + CLI + MCP + Skill）
 
 **SDK 方法**: list_sparks, create_spark, refine_spark, list_links, suggest_links, create_link, search, get_graph
-**CLI**: `stations/ideagraph-cli/ideagraph.py`
+**CLI**: `core/cli/ideagraph.py`
 **MCP**: `mcp/ideagraph/server.py`（全新或完善現有）
 **Skill**: `~/.claude/skills/ideagraph/SKILL.md`
 **工作量**: SDK ~120 行, CLI ~200 行, MCP ~150 行, Skill ~100 行
@@ -217,7 +218,7 @@ sentinel history [--limit N]
 ### 2.2 Nodeflow（SDK + CLI + MCP + Skill）
 
 **SDK 方法**: list_flows, create_flow, get_flow, add_node, add_edge, run_flow, get_run, list_runs
-**CLI**: `stations/nodeflow-cli/nodeflow.py`
+**CLI**: `core/cli/nodeflow.py`
 **MCP**: `mcp/nodeflow/server.py`（全新）
 **Skill**: `~/.claude/skills/nodeflow/SKILL.md`
 **工作量**: SDK ~130 行, CLI ~250 行, MCP ~180 行, Skill ~120 行
@@ -283,11 +284,11 @@ Envkit 是 **CLI 優先**設計（無 HTTP 服務）。SDK 透過 subprocess 包
 
 1. **安全提交** — 受影響的 repo 先 `git commit`
 2. **建立 SDK** — `libs/python/src/workshop/clients/{name}.py`
-3. **建立 CLI** — `stations/{name}-cli/{name}.py`（argparse + 匯入 SDK + chmod +x）
+3. **建立 CLI** — `stations/{name}/cli/{name}.py`（Station）或 `core/cli/{name}.py`（Core Module）（argparse + 匯入 SDK + chmod +x）
 4. **建立/升級 MCP** — `mcp/{name}/server.py`（使用 SDK，不用原始 httpx）
 5. **建立 Skill** — `~/.claude/skills/{name}/SKILL.md`
 6. **測試** — 匯入驗證 + CLI `--help` + `py_compile`
-7. **建立符號連結** — `ln -sf ~/workshop/stations/{name}-cli/{name}.py ~/.local/bin/{name}`
+7. **建立符號連結** — `ln -sf ~/workshop/stations/{name}/cli/{name}.py ~/.local/bin/{name}`（Station）或 `ln -sf ~/workshop/core/cli/{name}.py ~/.local/bin/{name}`（Core Module）
 
 ---
 

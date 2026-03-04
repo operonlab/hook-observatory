@@ -16,7 +16,7 @@ Usage:
     nodeflow actions
     nodeflow status
 
-Symlink: ln -sf ~/workshop/stations/nodeflow-cli/nodeflow.py ~/.local/bin/nodeflow
+Symlink: ln -sf ~/workshop/core/cli/nodeflow.py ~/.local/bin/nodeflow
 """
 
 import argparse

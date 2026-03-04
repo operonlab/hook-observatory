@@ -10,7 +10,7 @@ Usage:
 Options:
     --json   Output as JSON
 
-Symlink: ln -sf ~/workshop/stations/session-pipeline-cli/pipeline.py ~/.local/bin/pipeline
+Symlink: ln -sf ~/workshop/stations/session-pipeline/cli/pipeline.py ~/.local/bin/pipeline
 """
 
 import argparse

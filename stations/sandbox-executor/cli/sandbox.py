@@ -9,7 +9,7 @@ Usage:
     sandbox info                                    # show Python SDK docs
     sandbox info -l javascript                      # show JS SDK docs
 
-Symlink: ln -sf ~/workshop/stations/sandbox-cli/sandbox.py ~/.local/bin/sandbox
+Symlink: ln -sf ~/workshop/stations/sandbox-executor/cli/sandbox.py ~/.local/bin/sandbox
 """
 
 import argparse

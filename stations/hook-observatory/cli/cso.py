@@ -10,7 +10,7 @@ Usage:
     cso timeline [--range 7d] [--granularity hour]
     cso ingest --type X [--data '{"key":"val"}']  # manual event push
 
-Symlink: ln -sf ~/workshop/stations/hook-observatory-cli/cso.py ~/.local/bin/cso
+Symlink: ln -sf ~/workshop/stations/hook-observatory/cli/cso.py ~/.local/bin/cso
 """
 
 import argparse
