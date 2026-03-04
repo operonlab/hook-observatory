@@ -2,6 +2,7 @@
 """Finance MCP Server — core CRUD thin adapter over Core API.
 
 10 tools: transactions CRUD, subscriptions CRUD, categories, suggest, privacy toggle.
+Uses workshop.clients.finance SDK instead of raw httpx calls.
 
 Usage:
     python3 mcp/finance/server.py
@@ -17,53 +18,21 @@ Configure in ~/.claude.json:
     }
 """
 
-import os
+import asyncio
+from asyncio import to_thread
 from typing import Any
 
-import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
-SPACE_ID = os.environ.get("FINANCE_SPACE_ID", "default")
-BASE = f"{CORE_API}/api/finance"
+from workshop.clients._base import APIConnectionError, APIError
+from workshop.clients.finance import FinanceClient
 
 server = Server("workshop-finance")
+client = FinanceClient()
 
 
 # ======================== Helpers ========================
-
-
-async def api_get(path: str, params: dict | None = None) -> dict:
-    p = {"space_id": SPACE_ID}
-    if params:
-        p.update(params)
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{BASE}{path}", params=p)
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def api_post(path: str, body: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        payload = {"space_id": SPACE_ID, **(body or {})}
-        resp = await client.post(f"{BASE}{path}", json=payload)
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def api_put(path: str, body: dict) -> dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.put(f"{BASE}{path}", json=body)
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def api_delete(path: str) -> bool:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.delete(f"{BASE}{path}")
-        return resp.status_code in (200, 204)
 
 
 def text_result(text: str) -> list[TextContent]:
@@ -103,8 +72,15 @@ async def list_tools() -> list[Tool]:
                     "category_id": {"type": "string", "description": "分類 ID"},
                     "wallet_id": {"type": "string", "description": "錢包 ID（必填）"},
                     "transfer_to_wallet_id": {"type": "string", "description": "轉帳目標錢包 ID"},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "自訂標籤"},
-                    "transacted_at": {"type": "string", "description": "交易時間（ISO 8601），預設為現在"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "自訂標籤",
+                    },
+                    "transacted_at": {
+                        "type": "string",
+                        "description": "交易時間（ISO 8601），預設為現在",
+                    },
                     "is_private": {"type": "boolean", "default": False},
                     "invoice_number": {"type": "string", "description": "發票號碼"},
                     "fee": {"type": "number", "description": "手續費", "default": 0},
@@ -159,7 +135,10 @@ async def list_tools() -> list[Tool]:
                     "tag": {"type": "string", "description": "標籤過濾"},
                     "search": {"type": "string", "description": "全文搜尋（商家/描述）"},
                     "installment_plan_id": {"type": "string", "description": "分期計畫 ID"},
-                    "status": {"type": "string", "enum": ["completed", "scheduled", "cancelled", "pending"]},
+                    "status": {
+                        "type": "string",
+                        "enum": ["completed", "scheduled", "cancelled", "pending"],
+                    },
                     "page": {"type": "integer", "default": 1},
                     "page_size": {"type": "integer", "default": 20},
                 },
@@ -276,7 +255,14 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "entity_type": {
                         "type": "string",
-                        "enum": ["transaction", "subscription", "category", "wallet", "installment_plan", "budget"],
+                        "enum": [
+                            "transaction",
+                            "subscription",
+                            "category",
+                            "wallet",
+                            "installment_plan",
+                            "budget",
+                        ],
                         "description": "實體類型",
                     },
                     "entity_id": {"type": "string", "description": "實體 ID"},
@@ -317,33 +303,38 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return await handle_toggle_privacy(arguments)
             case _:
                 return text_result(f"Unknown tool: {name}")
-    except httpx.HTTPStatusError as e:
-        return text_result(f"API error {e.response.status_code}: {e.response.text}")
-    except httpx.ConnectError:
-        return text_result(
-            f"Cannot connect to Core API at {CORE_API}. "
-            "Start the server: cd core && uvicorn src.main:app --port 8801"
-        )
+    except APIError as e:
+        return text_result(f"API error {e.status_code}: {e.detail}")
+    except APIConnectionError as e:
+        return text_result(str(e))
 
 
 # ======================== Tool Implementations ========================
 
 
 async def handle_add_transaction(args: dict) -> list[TextContent]:
-    body = {
+    body: dict[str, Any] = {
         "type": args["type"],
         "amount": args["amount"],
         "wallet_id": args["wallet_id"],
     }
     for field in (
-        "description", "merchant", "payment_method", "payment_detail",
-        "category_id", "transfer_to_wallet_id", "tags", "transacted_at",
-        "is_private", "invoice_number", "fee",
+        "description",
+        "merchant",
+        "payment_method",
+        "payment_detail",
+        "category_id",
+        "transfer_to_wallet_id",
+        "tags",
+        "transacted_at",
+        "is_private",
+        "invoice_number",
+        "fee",
     ):
         if field in args:
             body[field] = args[field]
 
-    result = await api_post("/transactions", body)
+    result = await to_thread(client.create_transaction, body)
     return text_result(
         f"Transaction created.\n"
         f"ID: {result['id']}\n"
@@ -354,7 +345,7 @@ async def handle_add_transaction(args: dict) -> list[TextContent]:
 
 async def handle_update_transaction(args: dict) -> list[TextContent]:
     txn_id = args.pop("id")
-    result = await api_put(f"/transactions/{txn_id}", args)
+    result = await to_thread(client.update_transaction, txn_id, args)
     return text_result(
         f"Transaction {txn_id} updated.\n"
         f"Amount: {fmt_amount(result['amount'])} | Type: {result['type']}"
@@ -363,24 +354,22 @@ async def handle_update_transaction(args: dict) -> list[TextContent]:
 
 async def handle_delete_transaction(args: dict) -> list[TextContent]:
     txn_id = args["id"]
-    ok = await api_delete(f"/transactions/{txn_id}")
-    if ok:
-        return text_result(f"Transaction {txn_id} deleted.")
-    return text_result(f"Failed to delete transaction {txn_id}.")
+    await to_thread(client.delete_transaction, txn_id)
+    return text_result(f"Transaction {txn_id} deleted.")
 
 
 async def handle_list_transactions(args: dict) -> list[TextContent]:
-    params: dict[str, str] = {}
-    for key in (
-        "month", "type", "category_id", "wallet_id", "payment_method",
-        "tag", "search", "installment_plan_id", "status",
-    ):
-        if key in args:
-            params[key] = str(args[key])
-    params["page"] = str(args.get("page", 1))
-    params["page_size"] = str(args.get("page_size", 20))
-
-    result = await api_get("/transactions", params)
+    result = await to_thread(
+        client.list_transactions,
+        year_month=args.get("month"),
+        type=args.get("type"),
+        category_id=args.get("category_id"),
+        wallet_id=args.get("wallet_id"),
+        tag=args.get("tag"),
+        search=args.get("search"),
+        page=args.get("page", 1),
+        page_size=args.get("page_size", 20),
+    )
     items = result.get("items", [])
     total = result.get("total", 0)
 
@@ -389,7 +378,7 @@ async def handle_list_transactions(args: dict) -> list[TextContent]:
 
     lines = [f"# Transactions ({total} total)\n"]
     for t in items:
-        icon = {"income": "+", "expense": "-", "transfer": "↔"}
+        icon = {"income": "+", "expense": "-", "transfer": "~"}
         prefix = icon.get(t["type"], "?")
         desc = t.get("description") or t.get("merchant") or "-"
         date = t.get("transacted_at", "")[:10]
@@ -402,20 +391,26 @@ async def handle_list_transactions(args: dict) -> list[TextContent]:
 
 
 async def handle_add_subscription(args: dict) -> list[TextContent]:
-    body = {
+    body: dict[str, Any] = {
         "name": args["name"],
         "amount": args["amount"],
         "billing_cycle": args["billing_cycle"],
         "start_date": args["start_date"],
     }
     for field in (
-        "billing_day", "category_id", "wallet_id", "payment_method",
-        "payment_detail", "end_date", "notes", "is_private",
+        "billing_day",
+        "category_id",
+        "wallet_id",
+        "payment_method",
+        "payment_detail",
+        "end_date",
+        "notes",
+        "is_private",
     ):
         if field in args:
             body[field] = args[field]
 
-    result = await api_post("/subscriptions", body)
+    result = await to_thread(client.create_subscription, body)
     return text_result(
         f"Subscription created.\n"
         f"ID: {result['id']}\n"
@@ -426,7 +421,7 @@ async def handle_add_subscription(args: dict) -> list[TextContent]:
 
 async def handle_update_subscription(args: dict) -> list[TextContent]:
     sub_id = args.pop("id")
-    result = await api_put(f"/subscriptions/{sub_id}", args)
+    result = await to_thread(client.update_subscription, sub_id, args)
     return text_result(
         f"Subscription {sub_id} updated.\n"
         f"Name: {result['name']} | Status: {result.get('status', '-')}"
@@ -434,13 +429,12 @@ async def handle_update_subscription(args: dict) -> list[TextContent]:
 
 
 async def handle_list_subscriptions(args: dict) -> list[TextContent]:
-    params: dict[str, str] = {}
-    if "status" in args:
-        params["status"] = args["status"]
-    params["page"] = str(args.get("page", 1))
-    params["page_size"] = str(args.get("page_size", 20))
-
-    result = await api_get("/subscriptions", params)
+    result = await to_thread(
+        client.list_subscriptions,
+        status=args.get("status"),
+        page=args.get("page", 1),
+        page_size=args.get("page_size", 20),
+    )
     items = result.get("items", [])
     total = result.get("total", 0)
 
@@ -449,7 +443,9 @@ async def handle_list_subscriptions(args: dict) -> list[TextContent]:
 
     lines = [f"# Subscriptions ({total} total)\n"]
     for s in items:
-        status_icon = {"active": "●", "paused": "⏸", "cancelled": "✕"}.get(s.get("status", ""), "?")
+        status_icon = {"active": "*", "paused": "||", "cancelled": "x"}.get(
+            s.get("status", ""), "?"
+        )
         lines.append(
             f"  {status_icon} {s['name']}  {fmt_amount(s['amount'])} / {s['billing_cycle']}  "
             f"next: {s.get('next_billing', '-')}  id={s['id'][:8]}"
@@ -462,7 +458,7 @@ async def handle_manage_categories(args: dict) -> list[TextContent]:
     action = args["action"]
 
     if action == "list":
-        result = await api_get("/categories")
+        result = await to_thread(client.list_categories)
         items = result if isinstance(result, list) else result.get("items", [])
         if not items:
             return text_result("No categories found.")
@@ -470,7 +466,7 @@ async def handle_manage_categories(args: dict) -> list[TextContent]:
         for c in items:
             indent = "  " if c.get("parent_id") else ""
             icon = c.get("icon", "")
-            private = " 🔒" if c.get("is_private") else ""
+            private = " [private]" if c.get("is_private") else ""
             lines.append(f"{indent}{icon} {c['name']}{private}  id={c['id'][:8]}")
         return text_result("\n".join(lines))
 
@@ -479,8 +475,10 @@ async def handle_manage_categories(args: dict) -> list[TextContent]:
         for field in ("parent_id", "icon", "color", "sort_order", "is_private"):
             if field in args:
                 body[field] = args[field]
-        result = await api_post("/categories", body)
-        return text_result(f"Category created: {result.get('icon', '')} {result['name']} (id={result['id'][:8]})")
+        result = await to_thread(client.create_category, body)
+        return text_result(
+            f"Category created: {result.get('icon', '')} {result['name']} (id={result['id'][:8]})"
+        )
 
     if action == "update":
         cat_id = args["id"]
@@ -488,31 +486,30 @@ async def handle_manage_categories(args: dict) -> list[TextContent]:
         for field in ("name", "parent_id", "icon", "color", "sort_order", "is_private"):
             if field in args:
                 body[field] = args[field]
-        result = await api_put(f"/categories/{cat_id}", body)
+        result = await to_thread(client.update_category, cat_id, body)
         return text_result(f"Category {cat_id[:8]} updated: {result['name']}")
 
     if action == "deactivate":
         cat_id = args["id"]
-        result = await api_put(f"/categories/{cat_id}", {"is_active": False})
+        result = await to_thread(client.update_category, cat_id, {"is_active": False})
         return text_result(f"Category {cat_id[:8]} deactivated.")
 
     return text_result(f"Unknown action: {action}")
 
 
 async def handle_suggest(args: dict) -> list[TextContent]:
-    params: dict[str, str] = {"field": args["field"]}
+    # suggest endpoint not in SDK (not a standard CRUD route), use _get directly
+    params = {"field": args["field"]}
     if "prefix" in args:
         params["prefix"] = args["prefix"]
-
-    result = await api_get("/suggest", params)
+    result = await to_thread(client._get, "/suggest", params)
     suggestions = result if isinstance(result, list) else result.get("items", [])
 
     if not suggestions:
         return text_result(f"No suggestions for {args['field']}.")
 
     return text_result(
-        f"Suggestions for {args['field']}:\n"
-        + "\n".join(f"  - {s}" for s in suggestions)
+        f"Suggestions for {args['field']}:\n" + "\n".join(f"  - {s}" for s in suggestions)
     )
 
 
@@ -521,21 +518,21 @@ async def handle_toggle_privacy(args: dict) -> list[TextContent]:
     entity_id = args["entity_id"]
     is_private = args["is_private"]
 
-    # Map entity type to API path
-    path_map = {
-        "transaction": f"/transactions/{entity_id}",
-        "subscription": f"/subscriptions/{entity_id}",
-        "category": f"/categories/{entity_id}",
-        "wallet": f"/wallets/{entity_id}",
-        "installment_plan": f"/installments/{entity_id}",
-        "budget": f"/budgets/{entity_id}",
+    update_map = {
+        "transaction": lambda: client.update_transaction(entity_id, {"is_private": is_private}),
+        "subscription": lambda: client.update_subscription(entity_id, {"is_private": is_private}),
+        "category": lambda: client.update_category(entity_id, {"is_private": is_private}),
+        "wallet": lambda: client.update_wallet(entity_id, {"is_private": is_private}),
+        "installment_plan": lambda: client.update_installment(
+            entity_id, {"is_private": is_private}
+        ),
     }
-    path = path_map.get(entity_type)
-    if not path:
+    fn = update_map.get(entity_type)
+    if not fn:
         return text_result(f"Unknown entity type: {entity_type}")
 
-    await api_put(path, {"is_private": is_private})
-    state = "private 🔒" if is_private else "public"
+    await to_thread(fn)
+    state = "private" if is_private else "public"
     return text_result(f"{entity_type} {entity_id[:8]} set to {state}.")
 
 
@@ -548,6 +545,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())

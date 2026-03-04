@@ -10,48 +10,26 @@ Configure in ~/.claude.json:
     "workshop-finance-analytics": {
         "command": "python3",
         "args": ["/path/to/workshop/mcp/finance-analytics/server.py"],
-        "env": {
-            "CORE_API_URL": "http://localhost:8801",
-            "FINANCE_SPACE_ID": "default"
-        }
+        "env": {}
     }
 """
 
+import asyncio
 import json
-import os
+from asyncio import to_thread
 from typing import Any
 
-import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
-SPACE_ID = os.environ.get("FINANCE_SPACE_ID", "default")
-BASE = f"{CORE_API}/api/finance"
+from workshop.clients._base import APIConnectionError, APIError
+from workshop.clients.finance import FinanceClient
 
 server = Server("workshop-finance-analytics")
+client = FinanceClient()
 
 
 # ======================== Helpers ========================
-
-
-async def api_get(path: str, params: dict | None = None) -> dict:
-    p = {"space_id": SPACE_ID}
-    if params:
-        p.update(params)
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{BASE}{path}", params=p)
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def api_post(path: str, body: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=30) as client:
-        payload = {"space_id": SPACE_ID, **(body or {})}
-        resp = await client.post(f"{BASE}{path}", json=payload)
-        resp.raise_for_status()
-        return resp.json()
 
 
 def text_result(text: str) -> list[TextContent]:
@@ -204,7 +182,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "data_type": {
                         "type": "string",
-                        "enum": ["transactions", "subscriptions", "budgets", "wallets", "installments"],
+                        "enum": [
+                            "transactions",
+                            "subscriptions",
+                            "budgets",
+                            "wallets",
+                            "installments",
+                        ],
                         "description": "匯出資料類型",
                     },
                     "month": {"type": "string", "description": "月份過濾 (YYYY-MM)"},
@@ -249,45 +233,37 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return await handle_export(arguments)
             case _:
                 return text_result(f"Unknown tool: {name}")
-    except httpx.HTTPStatusError as e:
-        return text_result(f"API error {e.response.status_code}: {e.response.text}")
-    except httpx.ConnectError:
-        return text_result(
-            f"Cannot connect to Core API at {CORE_API}. "
-            "Start the server: cd core && uvicorn src.main:app --port 8801"
-        )
+    except (APIError, APIConnectionError) as e:
+        return text_result(f"Finance error: {e}")
+    except Exception as e:
+        return text_result(f"Error: {type(e).__name__}: {e}")
 
 
 # ======================== Tool Implementations ========================
 
 
 async def handle_summary(args: dict) -> list[TextContent]:
-    params: dict[str, str] = {}
-    if "month" in args:
-        params["month"] = args["month"]
+    month = args.get("month")
+    result = await to_thread(client.get_summary, month=month)
 
-    result = await api_get("/summary", params)
-
-    month = result.get("month", args.get("month", "current"))
+    display_month = result.get("month", month or "current")
     income = float(result.get("total_income", 0))
     expense = float(result.get("total_expense", 0))
     net = income - expense
 
     lines = [
-        f"# Finance Summary — {month}\n",
-        f"💰 Income:  {fmt_amount(income)}",
-        f"💸 Expense: {fmt_amount(expense)}",
-        f"📊 Net:     {fmt_amount(net)}",
+        f"# Finance Summary — {display_month}\n",
+        f"Income:  {fmt_amount(income)}",
+        f"Expense: {fmt_amount(expense)}",
+        f"Net:     {fmt_amount(net)}",
     ]
 
-    # Category breakdown
     categories = result.get("categories", [])
     if categories:
         lines.append("\n## By Category")
         for c in categories:
             lines.append(f"  {c.get('icon', '')} {c['name']}: {fmt_amount(c['amount'])}")
 
-    # Wallet overview
     wallets = result.get("wallets", [])
     if wallets:
         lines.append("\n## Wallet Balances")
@@ -301,9 +277,9 @@ async def handle_summary(args: dict) -> list[TextContent]:
 
 async def handle_insights(args: dict) -> list[TextContent]:
     months = args.get("months", 6)
-    result = await api_get("/insights", {"months": str(months)})
+    result = await to_thread(client.monthly_trends, months=months)
 
-    trends = result.get("trends", [])
+    trends = result.get("trends", []) if isinstance(result, dict) else result
     if not trends:
         return text_result("No trend data available.")
 
@@ -318,15 +294,13 @@ async def handle_insights(args: dict) -> list[TextContent]:
             f"expense: {fmt_amount(t.get('expense', 0)):>12s}  {bar}"
         )
 
-    # Anomalies
-    anomalies = result.get("anomalies", [])
+    anomalies = result.get("anomalies", []) if isinstance(result, dict) else []
     if anomalies:
         lines.append("\n## Anomalies")
         for a in anomalies:
             lines.append(f"  ⚠️ {a.get('description', a)}")
 
-    # Category trends
-    cat_trends = result.get("category_trends", [])
+    cat_trends = result.get("category_trends", []) if isinstance(result, dict) else []
     if cat_trends:
         lines.append("\n## Category Trends")
         for c in cat_trends:
@@ -346,7 +320,7 @@ async def handle_budget_set(args: dict) -> list[TextContent]:
     if "category_budgets" in args:
         body["category_budgets"] = args["category_budgets"]
 
-    await api_post("/budgets", body)
+    await to_thread(client.upsert_budget, body)
 
     lines = [
         f"Budget set for {args['year_month']}.\n",
@@ -365,13 +339,10 @@ async def handle_budget_set(args: dict) -> list[TextContent]:
 
 
 async def handle_budget_status(args: dict) -> list[TextContent]:
-    params: dict[str, str] = {}
-    if "year_month" in args:
-        params["year_month"] = args["year_month"]
+    year_month = args.get("year_month")
+    result = await to_thread(client.list_budgets, year_month=year_month)
 
-    result = await api_get("/budgets", params)
-
-    month = result.get("year_month", args.get("year_month", "current"))
+    month = result.get("year_month", year_month or "current")
     budget = float(result.get("budget_amount", 0))
     spent = float(result.get("total_spent", 0))
     committed = float(result.get("committed_expense", 0))
@@ -397,7 +368,6 @@ async def handle_budget_status(args: dict) -> list[TextContent]:
         lines.append(f"\nSavings target: {fmt_amount(float(savings))}")
         lines.append(f"Actual savings: {fmt_amount(actual_savings)}")
 
-    # Category breakdown
     categories = result.get("categories", [])
     if categories:
         lines.append("\n## Category Budgets")
@@ -418,35 +388,30 @@ async def handle_monthly_report(args: dict) -> list[TextContent]:
     regenerate = args.get("regenerate", False)
 
     if regenerate:
-        result = await api_post(f"/reports/{year_month}", {"regenerate": True})
+        result = await to_thread(client.generate_monthly_report, year_month, regenerate=True)
     else:
-        result = await api_get(f"/reports/{year_month}")
+        result = await to_thread(client.get_monthly_report, year_month)
 
     report = result.get("report") or result.get("content", "")
     if not report:
         return text_result(
-            f"No report available for {year_month}. "
-            f"Use regenerate=true to generate one."
+            f"No report available for {year_month}. Use regenerate=true to generate one."
         )
 
     return text_result(f"# Monthly Report — {year_month}\n\n{report}")
 
 
 async def handle_category_breakdown(args: dict) -> list[TextContent]:
-    params: dict[str, str] = {}
-    if "month" in args:
-        params["month"] = args["month"]
-    if "category_id" in args:
-        params["category_id"] = args["category_id"]
-
-    result = await api_get("/summary/categories", params)
+    month = args.get("month")
+    category_id = args.get("category_id")
+    result = await to_thread(client.get_category_breakdown, month=month, category_id=category_id)
     items = result if isinstance(result, list) else result.get("items", [])
 
     if not items:
         return text_result("No category data found.")
 
     total = sum(float(c.get("amount", 0)) for c in items)
-    lines = [f"# Category Breakdown — {args.get('month', 'current')}\n"]
+    lines = [f"# Category Breakdown — {month or 'current'}\n"]
 
     for c in items:
         amount = float(c.get("amount", 0))
@@ -454,7 +419,6 @@ async def handle_category_breakdown(args: dict) -> list[TextContent]:
         icon = c.get("icon", "")
         lines.append(f"  {icon} {c['name']}: {fmt_amount(amount)} ({ratio})")
 
-        # Sub-categories
         children = c.get("children", [])
         for child in children:
             child_amount = float(child.get("amount", 0))
@@ -466,7 +430,7 @@ async def handle_category_breakdown(args: dict) -> list[TextContent]:
 
 async def handle_subscription_forecast(args: dict) -> list[TextContent]:
     months = args.get("months", 3)
-    result = await api_get("/subscriptions/forecast", {"months": str(months)})
+    result = await to_thread(client.subscription_forecast, months=months)
     items = result if isinstance(result, list) else result.get("months", [])
 
     if not items:
@@ -487,7 +451,7 @@ async def handle_subscription_forecast(args: dict) -> list[TextContent]:
 
 async def handle_installment_forecast(args: dict) -> list[TextContent]:
     months = args.get("months", 6)
-    result = await api_get("/installments/forecast", {"months": str(months)})
+    result = await to_thread(client.installment_forecast, months=months)
     items = result if isinstance(result, list) else result.get("months", [])
 
     if not items:
@@ -502,10 +466,7 @@ async def handle_installment_forecast(args: dict) -> list[TextContent]:
         for p in m.get("installments", []):
             n = p.get("installment_number", "?")
             total_n = p.get("num_installments", "?")
-            lines.append(
-                f"  - {p['description']}: {fmt_amount(p['amount'])} "
-                f"(#{n}/{total_n})"
-            )
+            lines.append(f"  - {p['description']}: {fmt_amount(p['amount'])} (#{n}/{total_n})")
 
     lines.append(f"\nTotal forecast: {fmt_amount(grand_total)}")
     return text_result("\n".join(lines))
@@ -515,27 +476,25 @@ async def handle_export(args: dict) -> list[TextContent]:
     export_format = args.get("format", "csv")
     data_type = args["data_type"]
 
-    params: dict[str, str] = {"format": export_format}
-    for key in ("month", "start_date", "end_date"):
-        if key in args:
-            params[key] = args[key]
-    if args.get("include_archived"):
-        params["include_archived"] = "true"
-
-    # Export endpoint returns file content or download path
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.get(
-            f"{BASE}/export/{data_type}",
-            params={"space_id": SPACE_ID, **params},
-        )
-        resp.raise_for_status()
+    resp = await to_thread(
+        client.export_data,
+        data_type=data_type,
+        format=export_format,
+        month=args.get("month"),
+        start_date=args.get("start_date"),
+        end_date=args.get("end_date"),
+        include_archived=args.get("include_archived", False),
+    )
 
     content_type = resp.headers.get("content-type", "")
     if "json" in content_type:
         data = resp.json()
         if isinstance(data, dict) and "download_url" in data:
             return text_result(f"Export ready.\nDownload: {data['download_url']}")
-        return text_result(f"Export ({data_type}, {export_format}):\n\n{json.dumps(data, indent=2, ensure_ascii=False)}")
+        return text_result(
+            f"Export ({data_type}, {export_format}):\n\n"
+            f"{json.dumps(data, indent=2, ensure_ascii=False)}"
+        )
 
     # CSV / plain text
     text = resp.text
@@ -558,6 +517,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())
