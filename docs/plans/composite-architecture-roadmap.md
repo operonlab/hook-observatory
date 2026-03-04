@@ -1,4 +1,7 @@
-# Workshop 複合架構進化計劃書
+# Workshop 複合架構推進路線圖
+
+> 四層複合架構的定義請見 [composite-architecture.md](../architecture/composite-architecture.md)。
+> 本文件聚焦於**實作推進計劃**：哪些服務在何時完成四層升級。
 
 ## 背景與目標
 

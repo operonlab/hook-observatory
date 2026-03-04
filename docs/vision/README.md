@@ -1,7 +1,7 @@
 ---
-doc_version: 4
-content_hash: 1dafee87
-source_version: 4
+doc_version: 5
+content_hash: pending
+source_version: 5
 target_lang: zh-TW
 translated_at: 2026-02-23
 ---
@@ -16,9 +16,19 @@ translated_at: 2026-02-23
 |------|----------|
 | [workshop-manifesto.md](./workshop-manifesto.md) | Workshop 是什麼、LEGO 組合哲學、服務分類、設計原則 |
 | [domain-catalog.md](./domain-catalog.md) | 統一服務目錄 + 組合配方 + 依賴關係圖 |
-| [architecture-decisions.md](../architecture/architecture-decisions.md) | 7 項 ADR：Monolith、MCP Adapter、Space Model、Widget、Resource、Event、Progressive |
+| [architecture-decisions.md](../architecture/architecture-decisions.md) | 11 項 ADR：Monolith、SDK Adapter、Space Model、Widget、Resource、Event、Progressive、Plugin、Python-First、Event Resilience、FSM |
 | [composition-model.md](./composition-model.md) | 樂高組合模型：雙線夾擊、組合配方、決策流程 |
 | [roadmap.md](./roadmap.md) | 四階段路線圖：個人 → 知識 → 團隊 → 商業 |
+
+## 相關架構文件
+
+| 檔案 | 內容 |
+|------|----------|
+| [composite-architecture.md](../architecture/composite-architecture.md) | SDK→CLI→MCP→Skill 四層複合架構 |
+| [event-resilience-patterns.md](../architecture/event-resilience-patterns.md) | 6 個事件韌性模式（P1-P6） |
+| [ux-shell-redesign.md](../architecture/ux-shell-redesign.md) | App Launcher + Full-Screen Module 架構 |
+| [widget-manifest-spec.md](../architecture/widget-manifest-spec.md) | Dashboard Widget 系統規格 |
+| [scheduling.md](../architecture/scheduling.md) | 系統排程管理策略 |
 
 ## 翻譯
 
