@@ -1,6 +1,8 @@
 import { createCrudApi, request } from '@/api/client'
 import type { PaginatedResponse } from '@/types'
 import type {
+  Briefing,
+  BriefingEntry,
   BriefingSubtopic,
   BriefingSubtopicCreate,
   BriefingSubtopicUpdate,
@@ -99,4 +101,15 @@ export const intelflowApi = {
     request<void>(`/intelflow/briefings/topics/${topicId}/subtopics/${subtopicId}`, {
       method: 'DELETE',
     }),
+
+  // Briefings (daily briefing reports)
+  listBriefings: (page = 1, pageSize = 20) =>
+    request<PaginatedResponse<Briefing>>(`/intelflow/briefings?page=${page}&page_size=${pageSize}`),
+
+  getBriefingsByDate: (date: string) => request<Briefing[]>(`/intelflow/briefings/${date}`),
+
+  getBriefingEntries: (briefingId: string, phase?: string) => {
+    const params = phase ? `?phase=${phase}` : ''
+    return request<BriefingEntry[]>(`/intelflow/briefings/${briefingId}/entries${params}`)
+  },
 }

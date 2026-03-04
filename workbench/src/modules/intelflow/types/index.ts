@@ -149,3 +149,28 @@ export interface BriefingSubtopicUpdate {
   parameters?: Record<string, unknown>
   enabled?: boolean
 }
+
+// Briefing Entry (normalized per-entry storage)
+export interface BriefingEntry {
+  id: string
+  space_id: string
+  briefing_id: string
+  phase: 'raw' | 'analysis' | 'debate'
+  key: string
+  content: string
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+// Briefing (daily briefing report)
+export interface Briefing extends BaseEntity {
+  date: string
+  topic_id: string | null
+  domain: string
+  status: string
+  raw_data: Record<string, string> | null
+  analyses: Record<string, string> | null
+  debate: string | null
+  entries: BriefingEntry[]
+}

@@ -223,6 +223,11 @@ class BriefingSubtopic(SpaceScopedModel):
 
 # ======================== Briefings ========================
 
+# Pipeline status: searching → analyzing → debating → completed | failed
+BRIEFING_STATUSES = ("searching", "analyzing", "debating", "completed", "failed")
+# Entry phases: raw (search results), analysis (independent), debate (cross-review)
+ENTRY_PHASES = ("raw", "analysis", "debate")
+
 
 class Briefing(SpaceScopedModel):
     """A daily intelligence briefing — one per date per topic."""
@@ -242,6 +247,8 @@ class Briefing(SpaceScopedModel):
         nullable=True,
     )
     domain: Mapped[str] = mapped_column(Text)  # backward compat = briefing_topics.name
+    status: Mapped[str] = mapped_column(String(20), server_default=text("'searching'"))
+    # Legacy JSONB fields — kept nullable for migration, new data uses entries
     raw_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     analyses: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     debate: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -249,6 +256,47 @@ class Briefing(SpaceScopedModel):
 
     # Relationships
     topic: Mapped["BriefingTopic | None"] = relationship(lazy="selectin")
+    entries: Mapped[list["BriefingEntry"]] = relationship(
+        back_populates="briefing",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class BriefingEntry(SpaceScopedModel):
+    """A single entry in a briefing — one per phase per key.
+
+    phase: raw | analysis | debate
+    key: topic slug (e.g. "finance", "weather") or analyst name (e.g. "claude", "gemini")
+    """
+
+    __tablename__ = "briefing_entries"
+    __table_args__ = (
+        Index("idx_be_briefing", "briefing_id"),
+        Index("idx_be_phase", "phase"),
+        UniqueConstraint("briefing_id", "phase", "key", name="uq_be_briefing_phase_key"),
+        Index(
+            "idx_be_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        {"schema": SCHEMA},
+    )
+
+    briefing_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey(f"{SCHEMA}.briefings.id", ondelete="CASCADE"),
+    )
+    phase: Mapped[str] = mapped_column(String(20))  # raw | analysis | debate
+    key: Mapped[str] = mapped_column(Text)  # e.g. "finance", "claude"
+    content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    meta: Mapped[dict | None] = mapped_column("metadata", JSONB, server_default=text("'{}'::jsonb"))
+
+    # Relationships
+    briefing: Mapped["Briefing"] = relationship(back_populates="entries")
 
 
 # ======================== Archive Tables ========================

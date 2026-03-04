@@ -153,6 +153,6 @@ stations/system-monitor/
 -   V1 Disk Analysis: `~/.claude/data/disk-report/`
 -   V1 Schedule: `~/Library/LaunchAgents/com.joneshong.disk-report.plist`
 -   V1 Web UI: port 9527
--   Report Output: `~/Claude/disk-report/`
+-   Report Output: `~/workshop/outputs/disk-report/`
 Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2703ms
 Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 2748ms

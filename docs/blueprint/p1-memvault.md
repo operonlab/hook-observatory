@@ -10,7 +10,7 @@ target_lang: zh-TW
 
 ### 現況分析
 
-KAS Memory 目前是獨立專案（`~/Claude/projects/kas-memory/`），採用檔案系統架構：
+KAS Memory 原為獨立專案（V1: `~/Claude/projects/kas-memory/`，已遷移至 `core/src/modules/memvault/`），V1 採用檔案系統架構：
 
 | 層級 | 儲存 | 問題 |
 |------|------|------|

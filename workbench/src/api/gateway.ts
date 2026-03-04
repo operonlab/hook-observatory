@@ -1,6 +1,7 @@
 import type { User } from '@/types'
 
-const BASE = __BASE_PATH__
+// Auth endpoints are always at root — never prefixed by BASE_PATH
+const AUTH_BASE = ''
 
 interface AuthResponse {
   user: User
@@ -29,7 +30,7 @@ function mapUser(raw: RawUser): User {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${AUTH_BASE}${path}`, {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
@@ -70,7 +71,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
 }
 
 export async function logout(): Promise<void> {
-  const res = await fetch(`${BASE}/auth/logout`, {
+  const res = await fetch(`${AUTH_BASE}/auth/logout`, {
     method: 'POST',
     credentials: 'include',
     headers: {

@@ -9,7 +9,7 @@ gen() {
   local module="$1" title="$2" color="$3"
   sed \
     -e "s|/manifest.json|/manifest-${module}.json|" \
-    -e "s|/icons/icon-192.svg|/icons/icon-${module}-192.svg|" \
+    -e "s|/icons/icon-192.png|/icons/icon-${module}-192.png|" \
     -e "s|content=\"#1e1e2e\"|content=\"${color}\"|" \
     -e "s|<title>Workshop</title>|<title>${title}</title>|" \
     "$DIST/index.html" > "$DIST/${module}.html"

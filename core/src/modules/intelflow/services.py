@@ -19,6 +19,7 @@ from src.shared.services import BaseCRUDService
 
 from .models import (
     Briefing,
+    BriefingEntry,
     BriefingSubtopic,
     BriefingTopic,
     Report,
@@ -30,6 +31,8 @@ from .models import (
 )
 from .schemas import (
     BriefingCreate,
+    BriefingEntryCreate,
+    BriefingEntryResponse,
     BriefingResponse,
     BriefingSubtopicCreate,
     BriefingSubtopicResponse,
@@ -37,6 +40,7 @@ from .schemas import (
     BriefingTopicCreate,
     BriefingTopicResponse,
     BriefingTopicUpdate,
+    BriefingUpdate,
     DashboardResponse,
     ReportBrief,
     ReportCreate,
@@ -684,11 +688,12 @@ class BriefingService:
             date=data.date,
             topic_id=data.topic_id,
             domain=data.domain,
+            status=data.status,
             raw_data=data.raw_data,
             analyses=data.analyses,
             debate=data.debate,
         )
-        # Generate embedding for debate content
+        # Generate embedding for debate content (legacy path)
         if data.debate:
             embedding = await get_embedding(data.debate)
             if embedding:
@@ -705,7 +710,60 @@ class BriefingService:
         )
         return self._to_response(briefing)
 
+    async def update_status(
+        self, db: AsyncSession, briefing_id: str, data: BriefingUpdate
+    ) -> BriefingResponse:
+        q = select(Briefing).where(Briefing.id == briefing_id)
+        instance = (await db.execute(q)).scalar_one_or_none()
+        if not instance:
+            raise NotFoundError("Briefing not found", code="intelflow.briefing_not_found")
+        if data.status:
+            instance.status = data.status
+        await db.flush()
+        return self._to_response(instance)
+
+    async def add_entry(
+        self,
+        db: AsyncSession,
+        briefing_id: str,
+        space_id: str,
+        data: BriefingEntryCreate,
+        user_id: str | None = None,
+    ) -> BriefingEntryResponse:
+        entry = BriefingEntry(
+            briefing_id=briefing_id,
+            space_id=space_id,
+            created_by=user_id,
+            phase=data.phase,
+            key=data.key,
+            content=data.content,
+            meta=data.metadata,
+        )
+        # Generate per-entry embedding
+        embedding = await get_embedding(data.content)
+        if embedding:
+            entry.embedding = embedding
+        db.add(entry)
+        await db.flush()
+        return self._entry_to_response(entry)
+
+    async def get_entries(
+        self,
+        db: AsyncSession,
+        briefing_id: str,
+        phase: str | None = None,
+    ) -> list[BriefingEntryResponse]:
+        q = select(BriefingEntry).where(BriefingEntry.briefing_id == briefing_id)
+        if phase:
+            q = q.where(BriefingEntry.phase == phase)
+        q = q.order_by(BriefingEntry.phase, BriefingEntry.key)
+        rows = (await db.execute(q)).scalars().all()
+        return [self._entry_to_response(e) for e in rows]
+
     def _to_response(self, instance: Briefing) -> BriefingResponse:
+        entries = []
+        if instance.entries:
+            entries = [self._entry_to_response(e) for e in instance.entries]
         return BriefingResponse(
             id=instance.id,
             space_id=instance.space_id,
@@ -715,9 +773,25 @@ class BriefingService:
             date=instance.date,
             topic_id=instance.topic_id,
             domain=instance.domain,
+            status=instance.status,
             raw_data=instance.raw_data,
             analyses=instance.analyses,
             debate=instance.debate,
+            entries=entries,
+        )
+
+    def _entry_to_response(self, entry: BriefingEntry) -> BriefingEntryResponse:
+        return BriefingEntryResponse(
+            id=entry.id,
+            space_id=entry.space_id,
+            created_by=entry.created_by,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+            briefing_id=entry.briefing_id,
+            phase=entry.phase,
+            key=entry.key,
+            content=entry.content,
+            metadata=entry.meta or {},
         )
 
 

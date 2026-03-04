@@ -12,7 +12,7 @@ translated_at: 2026-02-24
 ## Positioning
 
 The `intelflow` module of Workshop Core integrates three existing systems:
-1.  **research_report service** (`~/Claude/services/research_report/`) — Report CRUD + pgvector
+1.  **research_report service** (V1: `~/Claude/services/research_report/`, migrated) — Report CRUD + pgvector
 2.  **smart-search skill** (`~/.claude/skills/smart-search/`) — Multi-source search engine
 3.  **daily-briefing skill** (`~/.claude/skills/daily-briefing/`) — Three-AI-analyst debate
 
@@ -342,7 +342,7 @@ On first launch, the 6 topics from V1 will be automatically created as defaults:
 3.  Implement Core API (replicating research_report endpoints)
 4.  Switch smart-search Skill endpoint from `localhost:8830` → Core API
 5.  Integrate daily-briefing three-analyst pipeline
-6.  Decommission `~/Claude/services/research_report/`
+6.  Decommission V1 `~/Claude/services/research_report/`
 
 ## Dependent Modules
 
@@ -364,7 +364,7 @@ Once all research outputs are unified in the database, they can be semantically 
 
 ## References
 
--   Existing research_report: `~/Claude/services/research_report/`
+-   V1 research_report (migrated): `~/Claude/services/research_report/`
 -   Existing smart-search skill: `~/.claude/skills/smart-search/SKILL.md`
 -   Existing daily-briefing skill: `~/.claude/skills/daily-briefing/`
 -   Existing company-intel skill: `~/.claude/skills/company-intel/SKILL.md`

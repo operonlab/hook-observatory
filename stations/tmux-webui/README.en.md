@@ -17,7 +17,7 @@ An independent workstation under Workshop `stations/`. Provides a web interface 
 
 | Component | Location | Description |
 |------|------|------|
-| `server.py` | `~/Claude/projects/tmux-webui/` | Single-file Python, aiohttp, 75KB |
+| `server.py` | V1: `~/Claude/projects/tmux-webui/` | Single-file Python, aiohttp, 75KB |
 | tmux status scripts | `~/.tmux/scripts/` | net-speed, cpu-status, mem-status, disk-status |
 | sysmon data | `/tmp/workshop-sysmon-latest.json` | LLM usage fallback |
 
@@ -34,8 +34,8 @@ An independent workstation under Workshop `stations/`. Provides a web interface 
 ## Launch
 
 ```bash
-uv run ~/Claude/projects/tmux-webui/server.py              # port 8765
-uv run ~/Claude/projects/tmux-webui/server.py --port 3000   # custom port
+uv run ~/workshop/stations/tmux-webui/server.py              # port 8765
+uv run ~/workshop/stations/tmux-webui/server.py --port 3000   # custom port
 ```
 
 ## Technology
@@ -68,5 +68,5 @@ stations/tmux-webui/
 
 ## References
 
-- V1 Location: `~/Claude/projects/tmux-webui/`
+- V1 Location (migrated): `~/Claude/projects/tmux-webui/`
 Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3618ms

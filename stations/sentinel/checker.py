@@ -113,6 +113,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:8080/memvault/",
         expect_contains='<div id="root">',
     ),
+    LightCheck(
+        name="frontend-intelflow",
+        group="internal",
+        url="http://127.0.0.1:8080/intelflow/",
+        expect_contains='<div id="root">',
+    ),
     # ── external (stations) ──
     LightCheck(
         name="hook-observatory",
@@ -173,12 +179,11 @@ DEEP_CHECKS: list[DeepCheck] = [
         url="http://127.0.0.1:8080/memvault/",
         playwright_code=_PW_ROOT_CHECK,
     ),
-    # ── infra ──
     DeepCheck(
-        name="lgtm-render",
-        group="infra",
-        url="http://127.0.0.1:3100/",
-        playwright_code=_PW_BODY_CHECK,
+        name="frontend-intelflow-render",
+        group="internal",
+        url="http://127.0.0.1:8080/intelflow/",
+        playwright_code=_PW_ROOT_CHECK,
     ),
     # ── external (station HTML — body > *) ──
     DeepCheck(
@@ -202,25 +207,19 @@ DEEP_CHECKS: list[DeepCheck] = [
     DeepCheck(
         name="tmux-webui-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/tmux/",
+        url="http://127.0.0.1:8080/apps/tmux/?readonly=1",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="agent-metrics-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/agentops/",
+        url="http://127.0.0.1:8080/apps/agent-metrics/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="sentinel-render",
         group="external",
         url="http://127.0.0.1:8080/apps/sentinel/",
-        playwright_code=_PW_BODY_CHECK,
-    ),
-    DeepCheck(
-        name="file-manager-render",
-        group="external",
-        url="http://127.0.0.1:8080/apps/files/",
         playwright_code=_PW_BODY_CHECK,
     ),
 ]
@@ -337,14 +336,13 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
     _short_names = {
         "frontend-render": "fe",
         "frontend-memvault-render": "mv",
-        "lgtm-render": "lgtm",
+        "frontend-intelflow-render": "if",
         "hook-observatory-render": "hook",
         "agent-vista-render": "vista",
         "system-monitor-render": "sysm",
         "tmux-webui-render": "tmux",
         "agent-metrics-render": "am",
         "sentinel-render": "sntl",
-        "file-manager-render": "files",
     }
     session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
     start = time.monotonic()

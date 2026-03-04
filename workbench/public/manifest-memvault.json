@@ -1,8 +1,9 @@
 {
+  "id": "/memvault",
   "name": "記憶金庫",
   "short_name": "MemVault",
-  "start_url": "/memvault",
-  "scope": "/",
+  "start_url": "/memvault/",
+  "scope": "/memvault/",
   "display": "standalone",
   "background_color": "#1e1e2e",
   "theme_color": "#bdd4fa",

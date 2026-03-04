@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>系統監控</title>
   <meta name="theme-color" content="#1e1e2e">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SysMon">
-  <link rel="manifest" href="static/manifest.json">
+  <link rel="manifest" href="static/manifest.json" crossorigin="use-credentials">
   <link rel="icon" type="image/svg+xml" href="static/icons/icon-192.svg">
-  <link rel="apple-touch-icon" href="static/icons/icon-192.svg">
+  <link rel="apple-touch-icon" href="static/icons/icon-192.png">
   <link rel="stylesheet" href="static/css/dashboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -360,7 +360,7 @@
     // Service Worker 註冊
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('static/sw.js', { scope: './' })
+        navigator.serviceWorker.register('sw.js', { scope: './' })
           .then((reg) => {
             console.log('[SW] 註冊成功, scope:', reg.scope);
             reg.addEventListener('updatefound', () => {
@@ -373,7 +373,9 @@
             });
             // Auto-subscribe to push if permission already granted
             if (Notification.permission === 'granted') {
-              workshopPushSubscribe(reg, '/apps/sysmon/');
+              navigator.serviceWorker.ready.then((activeReg) => {
+                workshopPushSubscribe(activeReg, '/apps/sysmon/');
+              });
             }
           })
           .catch((err) => console.warn('[SW] 註冊失敗:', err));

@@ -12,7 +12,7 @@ translated_at: 2026-02-24
 **Inspiration Sources**:
 - [pablodelucca/pixel-agents](https://github.com/pablodelucca/pixel-agents) — Pixel-style LLM agent visualization (VS Code Extension)
 - [inventra/lazyoffice-opneclaw](https://github.com/inventra/lazyoffice-opneclaw) — Pixel-style virtual office AI Agent Dashboard
-- [Avatar Console](~/Claude/apps/avatar-console) — Master's early multi-agent command console (V1 Prototype)
+- [Avatar Console](~/Claude/apps/avatar-console) — Master's early multi-agent command console (V1 Prototype, migrated)
 
 ---
 
@@ -31,7 +31,7 @@ as a pixel-style virtual office, providing an at-a-glance view of each agent's a
 
 ### Project Overview
 
-**Avatar Console** is Master's early multi-agent command console, located at `~/Claude/apps/avatar-console/`
+**Avatar Console** is Master's early multi-agent command console, V1 located at `~/Claude/apps/avatar-console/`
 (actual source code at `~/.openclaw/workspace/openclaw_avator/`).
 It uses "paper-doll actors" as the core UI metaphor to manage multiple AI agents on a visual stage.
 

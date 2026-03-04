@@ -23,8 +23,8 @@ async def lifespan(app: FastAPI):
         settings.validate_secret_key()
 
     # Import event subscribers so @event_bus.on decorators register handlers
-    import src.modules.finance.events  # noqa: F401
-    import src.modules.invest.events  # noqa: F401
+    import src.modules.finance.events
+    import src.modules.invest.events
     import src.modules.nodeflow.events  # noqa: F401
     import src.modules.notification.events  # noqa: F401
 
@@ -99,7 +99,7 @@ from src.modules.ideagraph.routes import router as ideagraph_router  # noqa: E40
 from src.modules.taskflow.routes import router as taskflow_router  # noqa: E402
 from src.routes.health import router as health_router  # noqa: E402
 
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(finance_router, prefix="/api/finance", tags=["finance"])
 app.include_router(taskflow_router, prefix="/api/taskflow", tags=["taskflow"])
 app.include_router(ideagraph_router, prefix="/api/ideagraph", tags=["ideagraph"])

@@ -101,6 +101,16 @@ export const APP_LIST: AppInfo[] = [
     status: 'coming-soon',
   },
   {
+    id: 'agent-vista',
+    name: 'Agent Vista',
+    description: '像素風虛擬辦公室 — CLI Agent 即時視覺化',
+    icon: '🎮',
+    path: '/agent-vista',
+    color: '#b4befe',
+    status: 'external',
+    externalUrl: '/apps/vista/',
+  },
+  {
     id: 'filebrowser',
     name: '檔案管理',
     description: '遠端檔案瀏覽、上傳下載、線上編輯',

@@ -127,5 +127,5 @@ core/src/modules/memvault/
 
 - V1 (已遷移)：`~/Claude/projects/kas-memory/`
 - MCP Server：`~/workshop/mcp/memvault/`
-- Galaxy 視覺化：`~/Claude/memvault/galaxy-explorer.html`
+- Galaxy 視覺化（V1，已遷移）：`~/Claude/memvault/galaxy-explorer.html`
 - 現有 meeting-insights skill：`~/.claude/skills/meeting-insights/SKILL.md`

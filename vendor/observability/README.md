@@ -9,7 +9,7 @@
 | **作者** | [@disler](https://github.com/disler) |
 | **Repo** | [claude-code-hooks-multi-agent-observability](https://github.com/disler/claude-code-hooks-multi-agent-observability) |
 | **授權** | 開源（GitHub） |
-| **本地位置** | `~/Claude/projects/claude-code-hooks-multi-agent-observability/` |
+| **本地位置** | `~/workshop/vendor/observability/` |
 
 ## 為什麼放在 vendor/
 
@@ -43,7 +43,7 @@ Hook script（`observability-bridge.sh`）將事件 POST 到 Bun server。
 ## 本地操作
 
 ```bash
-cd ~/Claude/projects/claude-code-hooks-multi-agent-observability
+cd ~/workshop/vendor/observability
 just server    # 啟動 Bun server
 just client    # 啟動 Vue client
 just dev       # 同時啟動 server + client

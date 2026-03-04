@@ -1,5 +1,5 @@
 // Workshop Sentinel Service Worker — runtime cache only
-const CACHE_NAME = 'sentinel-v2';
+const CACHE_NAME = 'sentinel-v3';
 
 // ── Web Push ──
 self.addEventListener('push', (event) => {
@@ -8,7 +8,7 @@ self.addEventListener('push', (event) => {
     event.waitUntil(
         self.registration.showNotification(data.title || 'Sentinel', {
             body: data.body || '',
-            icon: data.icon || 'icons/icon-192.svg',
+            icon: data.icon || 'icons/icon-192.png',
             tag: data.tag,
             data: { url: data.url || '/apps/sentinel/' },
             vibrate: data.severity === 'critical' ? [200, 100, 200, 100, 200] : [100, 50, 100],

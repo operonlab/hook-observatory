@@ -5,7 +5,7 @@
 **靈感來源**:
 - [pablodelucca/pixel-agents](https://github.com/pablodelucca/pixel-agents) — 像素風 LLM agent 視覺化（VS Code Extension）
 - [inventra/lazyoffice-opneclaw](https://github.com/inventra/lazyoffice-opneclaw) — 像素風虛擬辦公室 AI Agent Dashboard
-- [Avatar Console](~/Claude/apps/avatar-console) — 少爺早期的多代理人命令控制台（V1 原型）
+- [Avatar Console](~/Claude/apps/avatar-console) — 少爺早期的多代理人命令控制台（V1 原型，已遷移）
 
 ---
 
@@ -24,7 +24,7 @@
 
 ### 專案概述
 
-**Avatar Console** 是少爺早期開發的多代理人命令控制台，位於 `~/Claude/apps/avatar-console/`
+**Avatar Console** 是少爺早期開發的多代理人命令控制台，V1 位於 `~/Claude/apps/avatar-console/`
 （實際原始碼在 `~/.openclaw/workspace/openclaw_avator/`）。
 以「紙娃娃演員」(paper-doll actors) 為核心 UI 隱喻，在一個視覺化舞台上管理多個 AI agent。
 

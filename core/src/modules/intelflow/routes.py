@@ -22,6 +22,8 @@ from src.shared.storage import (
 from . import search as search_engine
 from .schemas import (
     BriefingCreate,
+    BriefingEntryCreate,
+    BriefingEntryResponse,
     BriefingResponse,
     BriefingSubtopicCreate,
     BriefingSubtopicResponse,
@@ -29,6 +31,7 @@ from .schemas import (
     BriefingTopicCreate,
     BriefingTopicResponse,
     BriefingTopicUpdate,
+    BriefingUpdate,
     DashboardResponse,
     ReportCreate,
     ReportResponse,
@@ -411,6 +414,48 @@ async def create_briefing(
     db: AsyncSession = Depends(get_db),
 ):
     result = await briefing_service.create_briefing(db, space_id, body)
+    await db.commit()
+    return result
+
+
+@router.patch("/briefings/{briefing_id}", response_model=BriefingResponse)
+async def update_briefing_status(
+    briefing_id: str,
+    body: BriefingUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await briefing_service.update_status(db, briefing_id, body)
+    await db.commit()
+    return result
+
+
+# ======================== Briefing Entries ========================
+
+
+@router.get(
+    "/briefings/{briefing_id}/entries",
+    response_model=list[BriefingEntryResponse],
+)
+async def list_briefing_entries(
+    briefing_id: str,
+    phase: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await briefing_service.get_entries(db, briefing_id, phase)
+
+
+@router.post(
+    "/briefings/{briefing_id}/entries",
+    response_model=BriefingEntryResponse,
+    status_code=201,
+)
+async def add_briefing_entry(
+    briefing_id: str,
+    body: BriefingEntryCreate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await briefing_service.add_entry(db, briefing_id, space_id, body)
     await db.commit()
     return result
 

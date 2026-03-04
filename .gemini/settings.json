@@ -22,42 +22,19 @@
       ]
     },
     "workshop-finance": {
-      "command": "/Users/joneshong/Claude/shared/.venv/bin/python",
+      "command": "/Users/joneshong/workshop/.venv/bin/python3",
       "args": [
-        "-m",
-        "finance.mcp"
+        "/Users/joneshong/workshop/mcp/finance/server.py"
       ],
       "env": {
-        "FINANCE_API_URL": "http://localhost:8793",
-        "PYTHONPATH": "/Users/joneshong/Claude/services/finance/src:/Users/joneshong/Claude/shared/src"
-      }
-    },
-    "workshop-muse": {
-      "command": "/Users/joneshong/Claude/shared/.venv/bin/python",
-      "args": [
-        "-m",
-        "muse.mcp"
-      ],
-      "env": {
-        "MUSE_API_URL": "http://localhost:8794",
-        "PYTHONPATH": "/Users/joneshong/Claude/services/muse/src:/Users/joneshong/Claude/shared/src"
-      }
-    },
-    "workshop-quest": {
-      "command": "/Users/joneshong/Claude/shared/.venv/bin/python",
-      "args": [
-        "-m",
-        "quest.mcp"
-      ],
-      "env": {
-        "QUEST_API_URL": "http://localhost:8797",
-        "PYTHONPATH": "/Users/joneshong/Claude/services/quest/src:/Users/joneshong/Claude/shared/src"
+        "CORE_API_URL": "http://localhost:8801",
+        "FINANCE_SPACE_ID": "default"
       }
     },
     "sandbox-executor": {
       "command": "node",
       "args": [
-        "/Users/joneshong/Claude/projects/sandbox-executor/dist/index.js"
+        "/Users/joneshong/workshop/stations/sandbox-executor/dist/index.js"
       ],
       "env": {
         "PYTHON_PATH": "/Users/joneshong/.local/bin/python3"

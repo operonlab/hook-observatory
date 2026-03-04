@@ -30,7 +30,7 @@ SessionEnd Hook 觸發
 
 | 元件 | 位置 | 說明 |
 |------|------|------|
-| `redact-session.sh` | `~/Claude/projects/session-redactor/scripts/` | SessionEnd hook 入口（非阻塞） |
+| `redact-session.sh` | V1: `~/Claude/projects/session-redactor/scripts/` | SessionEnd hook 入口（非阻塞） |
 | `redactor.py` | `src/session_redactor/` | 核心清理邏輯（JSON parse + regex + atomic write） |
 | `patterns.py` | `src/session_redactor/` | 16 種敏感模式定義 |
 | `scanner.py` | `src/session_redactor/` | 每日 4 AM 完整掃描 |
@@ -91,7 +91,7 @@ stations/session-redactor/
 
 ## 遷移計劃
 
-1. 複製 `~/Claude/projects/session-redactor/` 到 `stations/session-redactor/`
+1. 複製 V1 `~/Claude/projects/session-redactor/` 到 `stations/session-redactor/`
 2. 更新 `~/.claude/settings.json` hook 路徑指向新位置
 3. 確認 SessionEnd pipeline 順序：redactor → lore extract → observability
 4. （可選）遷移 SQLite → PostgreSQL，與 Core API 整合清理統計
@@ -104,6 +104,6 @@ stations/session-redactor/
 
 ## 參考
 
-- V1 位置：`~/Claude/projects/session-redactor/`
+- V1 位置（已遷移）：`~/Claude/projects/session-redactor/`
 - Hook 設定：`~/.claude/settings.json`（SessionEnd entries）
 - SQLite DB：`~/.local/share/workshop/session_redactor.sqlite`

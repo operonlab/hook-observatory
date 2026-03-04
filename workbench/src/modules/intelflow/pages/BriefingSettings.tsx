@@ -268,44 +268,184 @@ function TopicFormModal({
   )
 }
 
+// ─── Tag Input ───
+
+function TagInput({
+  tags,
+  onChange,
+  placeholder,
+}: {
+  tags: string[]
+  onChange: (tags: string[]) => void
+  placeholder?: string
+}) {
+  const [input, setInput] = useState('')
+
+  const addTag = () => {
+    const val = input.trim()
+    if (val && !tags.includes(val)) {
+      onChange([...tags, val])
+    }
+    setInput('')
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs"
+            style={{
+              backgroundColor: 'var(--if-bg)',
+              color: 'var(--if-text-secondary)',
+              border: '1px solid var(--if-border)',
+            }}
+          >
+            {tag}
+            <button
+              type="button"
+              onClick={() => onChange(tags.filter((t) => t !== tag))}
+              className="ml-0.5"
+              style={{ color: 'var(--if-text-muted)' }}
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-1.5">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              addTag()
+            }
+          }}
+          placeholder={placeholder}
+          className="flex-1 border px-3 py-2 text-sm outline-none"
+          style={inputStyle}
+        />
+        <button
+          type="button"
+          onClick={addTag}
+          className="px-3 py-2 text-xs border transition-colors shrink-0"
+          style={{ borderColor: 'var(--if-border)', color: 'var(--if-accent)' }}
+        >
+          <Plus size={12} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Subtopic Type Detection ───
+
+type SubtopicType = 'news' | 'weather' | 'custom'
+
+function detectSubtopicType(topicName: string): SubtopicType {
+  if (/weather|天氣|氣象/i.test(topicName)) return 'weather'
+  if (/finance|ai|tech|geopolit|新聞|金融|科技|國際|市場/i.test(topicName)) return 'news'
+  return 'news' // default to news
+}
+
+const REGIONS = [
+  { value: 'tw', label: '台灣' },
+  { value: 'us', label: '美國' },
+  { value: 'jp', label: '日本' },
+  { value: 'cn', label: '中國' },
+  { value: 'global', label: '全球' },
+]
+
 // ─── Subtopic Form Modal ───
 
 function SubtopicFormModal({
   open,
   onClose,
   subtopic,
+  topicName,
   onSave,
 }: {
   open: boolean
   onClose: () => void
   subtopic: BriefingSubtopic | null
+  topicName: string
   onSave: (data: BriefingSubtopicCreate | BriefingSubtopicUpdate) => void
 }) {
   const [name, setName] = useState('')
+  const [advancedMode, setAdvancedMode] = useState(false)
   const [paramsText, setParamsText] = useState('{}')
   const [parseError, setParseError] = useState('')
+
+  // Structured fields — news
+  const [keywords, setKeywords] = useState<string[]>([])
+  const [region, setRegion] = useState('tw')
+  const [language, setLanguage] = useState('zh-TW')
+
+  // Structured fields — weather
+  const [location, setLocation] = useState('')
+  const [units, setUnits] = useState('metric')
+
+  const subtopicType = detectSubtopicType(topicName)
 
   useEffect(() => {
     if (subtopic) {
       setName(subtopic.name)
       setParamsText(JSON.stringify(subtopic.parameters, null, 2))
+      const p = subtopic.parameters
+      // Populate structured fields from existing params
+      setKeywords(Array.isArray(p.keywords) ? (p.keywords as string[]) : [])
+      setRegion((p.region as string) || 'tw')
+      setLanguage((p.language as string) || 'zh-TW')
+      setLocation((p.location as string) || '')
+      setUnits((p.units as string) || 'metric')
     } else {
       setName('')
       setParamsText('{}')
+      setKeywords([])
+      setRegion('tw')
+      setLanguage('zh-TW')
+      setLocation('')
+      setUnits('metric')
     }
     setParseError('')
+    setAdvancedMode(false)
   }, [subtopic, open])
+
+  const buildParameters = (): Record<string, unknown> | null => {
+    if (advancedMode) {
+      try {
+        const parsed = JSON.parse(paramsText)
+        setParseError('')
+        return parsed
+      } catch {
+        setParseError('JSON 格式錯誤')
+        return null
+      }
+    }
+    if (subtopicType === 'weather') {
+      return { location, units }
+    }
+    // news / default
+    const params: Record<string, unknown> = { region, language }
+    if (keywords.length > 0) params.keywords = keywords
+    return params
+  }
+
+  // Sync structured → JSON when switching to advanced
+  const switchToAdvanced = () => {
+    const params = buildParameters()
+    if (params) setParamsText(JSON.stringify(params, null, 2))
+    setAdvancedMode(true)
+  }
 
   const handleSubmit = () => {
     if (!name.trim()) return
-    let parameters: Record<string, unknown>
-    try {
-      parameters = JSON.parse(paramsText)
-      setParseError('')
-    } catch {
-      setParseError('JSON 格式錯誤')
-      return
-    }
+    const parameters = buildParameters()
+    if (!parameters) return
     onSave({ name, parameters })
   }
 
@@ -316,28 +456,103 @@ function SubtopicFormModal({
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. 台北"
+          placeholder={subtopicType === 'weather' ? 'e.g. 台北' : 'e.g. 加密貨幣'}
           className="w-full border px-3 py-2 text-sm outline-none"
           style={inputStyle}
         />
       </FormField>
-      <FormField label="參數 (JSON)">
-        <textarea
-          value={paramsText}
-          onChange={(e) => {
-            setParamsText(e.target.value)
-            setParseError('')
-          }}
-          rows={4}
-          className="w-full border px-3 py-2 text-sm outline-none resize-y font-mono"
-          style={inputStyle}
-        />
-        {parseError && (
-          <p className="text-xs mt-1" style={{ color: '#E06C75' }}>
-            {parseError}
-          </p>
-        )}
-      </FormField>
+
+      {/* Mode toggle */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs uppercase tracking-wider" style={{ color: 'var(--if-text-dim)' }}>
+          {advancedMode ? '進階 JSON' : subtopicType === 'weather' ? '天氣設定' : '新聞設定'}
+        </span>
+        <button
+          type="button"
+          onClick={() => (advancedMode ? setAdvancedMode(false) : switchToAdvanced())}
+          className="text-[10px] px-2 py-0.5 border transition-colors"
+          style={{ borderColor: 'var(--if-border)', color: 'var(--if-accent)' }}
+        >
+          {advancedMode ? '結構化' : '進階 JSON'}
+        </button>
+      </div>
+
+      {advancedMode ? (
+        <FormField label="參數 (JSON)">
+          <textarea
+            value={paramsText}
+            onChange={(e) => {
+              setParamsText(e.target.value)
+              setParseError('')
+            }}
+            rows={6}
+            className="w-full border px-3 py-2 text-sm outline-none resize-y font-mono"
+            style={inputStyle}
+          />
+          {parseError && (
+            <p className="text-xs mt-1" style={{ color: '#E06C75' }}>
+              {parseError}
+            </p>
+          )}
+        </FormField>
+      ) : subtopicType === 'weather' ? (
+        <>
+          <FormField label="地點">
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="e.g. 台北, Tokyo, New York"
+              className="w-full border px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="單位">
+            <select
+              value={units}
+              onChange={(e) => setUnits(e.target.value)}
+              className="w-full border px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            >
+              <option value="metric">公制 (°C)</option>
+              <option value="imperial">英制 (°F)</option>
+            </select>
+          </FormField>
+        </>
+      ) : (
+        <>
+          <FormField label="關鍵字">
+            <TagInput tags={keywords} onChange={setKeywords} placeholder="輸入關鍵字後按 Enter" />
+          </FormField>
+          <FormField label="地區">
+            <select
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              className="w-full border px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            >
+              {REGIONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="語言">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full border px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            >
+              <option value="zh-TW">繁體中文</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+            </select>
+          </FormField>
+        </>
+      )}
+
       <div className="flex justify-end gap-2 mt-4">
         <button
           onClick={onClose}
@@ -582,8 +797,9 @@ export default function BriefingSettings() {
   const [subtopicModalOpen, setSubtopicModalOpen] = useState(false)
   const [subtopicContext, setSubtopicContext] = useState<{
     topicId: string
+    topicName: string
     subtopic: BriefingSubtopic | null
-  }>({ topicId: '', subtopic: null })
+  }>({ topicId: '', topicName: '', subtopic: null })
 
   const fetchTopics = useCallback(async () => {
     try {
@@ -761,12 +977,14 @@ export default function BriefingSettings() {
               onDelete={handleDeleteTopic}
               onToggleSubtopic={handleToggleSubtopic}
               onEditSubtopic={(topicId, sub) => {
-                setSubtopicContext({ topicId, subtopic: sub })
+                const t = topics.find((tp) => tp.id === topicId)
+                setSubtopicContext({ topicId, topicName: t?.name || '', subtopic: sub })
                 setSubtopicModalOpen(true)
               }}
               onDeleteSubtopic={handleDeleteSubtopic}
               onAddSubtopic={(topicId) => {
-                setSubtopicContext({ topicId, subtopic: null })
+                const t = topics.find((tp) => tp.id === topicId)
+                setSubtopicContext({ topicId, topicName: t?.name || '', subtopic: null })
                 setSubtopicModalOpen(true)
               }}
             />
@@ -803,6 +1021,7 @@ export default function BriefingSettings() {
         open={subtopicModalOpen}
         onClose={() => setSubtopicModalOpen(false)}
         subtopic={subtopicContext.subtopic}
+        topicName={subtopicContext.topicName}
         onSave={handleSaveSubtopic}
       />
     </div>

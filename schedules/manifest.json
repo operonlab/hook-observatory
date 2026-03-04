@@ -105,9 +105,9 @@
     {
       "name": "orchestrator",
       "label": "com.joneshong.orchestrator",
-      "command": "~/Claude/services/orchestrator/scripts/run.sh",
+      "command": "~/workshop/scripts/workshop-services.sh start agent-metrics",
       "schedule": { "run_at_load": true },
-      "description": "[已停用] V1 Orchestrator — 已遷移至 stations/agent-metrics（由 workshop-services.sh 管理）",
+      "description": "[已停用] 已遷移至 stations/agent-metrics（由 workshop-services.sh 管理）",
       "category": "jonathan",
       "type": "daemon",
       "enabled": false
@@ -115,7 +115,7 @@
     {
       "name": "tmux-webui",
       "label": "com.joneshong.tmux-webui",
-      "command": "/opt/homebrew/bin/uv run ~/Claude/projects/tmux-webui/server.py --host 127.0.0.1 --port 8765",
+      "command": "/opt/homebrew/bin/uv run ~/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",
       "schedule": { "run_at_load": true },
       "description": "tmux Web UI — WebSocket bridge（KeepAlive daemon, port 8765）",
       "category": "jonathan",

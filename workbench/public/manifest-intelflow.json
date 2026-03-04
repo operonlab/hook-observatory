@@ -1,8 +1,9 @@
 {
+  "id": "/intelflow",
   "name": "情報研究",
   "short_name": "IntelFlow",
-  "start_url": "/intelflow",
-  "scope": "/",
+  "start_url": "/intelflow/",
+  "scope": "/intelflow/",
   "display": "standalone",
   "background_color": "#1e1e2e",
   "theme_color": "#94e2d5",

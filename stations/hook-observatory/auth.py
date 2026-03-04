@@ -11,10 +11,15 @@ _serializer = URLSafeTimedSerializer(config.secret_key)
 
 
 async def require_auth(request: Request) -> dict:
-    """FastAPI dependency — validate workshop_session cookie.
+    """FastAPI dependency — validate workshop_session cookie or X-Local-Key header.
 
     Returns the user dict from the session payload.
     """
+    # Local key auth (CLI/SDK)
+    local_key = request.headers.get("x-local-key")
+    if local_key and local_key == config.secret_key:
+        return {"status": "active", "source": "local-key"}
+
     cookie = request.cookies.get(config.session_cookie_name)
     if not cookie:
         raise HTTPException(status_code=401, detail="Not authenticated")

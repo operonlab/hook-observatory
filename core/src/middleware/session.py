@@ -26,10 +26,13 @@ class SessionMiddleware(BaseHTTPMiddleware):
 
         if cookie_value:
             try:
-                session_token = _serializer.loads(
+                payload = _serializer.loads(
                     cookie_value,
                     max_age=settings.session_max_age,
                 )
+                # New format: token is a plain str.
+                # Old format: cookie stored the full session dict — discard it.
+                session_token = payload if isinstance(payload, str) else None
             except (BadSignature, SignatureExpired):
                 session_token = None
 

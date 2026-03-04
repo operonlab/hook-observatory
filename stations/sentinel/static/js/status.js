@@ -52,7 +52,6 @@ const SERVICE_DISPLAY = {
     redis:                      'Redis',
     rustfs:                     'RustFS (S3)',
     lgtm:                       'LGTM Stack',
-    'lgtm-render':              'LGTM 渲染 (Deep)',
     litellm:                    'LiteLLM Proxy',
     ollama:                     'Ollama',
     // internal
@@ -60,8 +59,10 @@ const SERVICE_DISPLAY = {
     gateway:                    'Gateway',
     frontend:                   'Workbench',
     'frontend-memvault':        '記憶金庫',
+    'frontend-intelflow':       '情報研究',
     'frontend-render':          'Workbench 渲染 (Deep)',
     'frontend-memvault-render': '記憶金庫渲染 (Deep)',
+    'frontend-intelflow-render':'情報研究渲染 (Deep)',
     // external
     'hook-observatory':         'Hook 監控台',
     'hook-observatory-render':  'Hook 監控台渲染 (Deep)',
@@ -76,7 +77,6 @@ const SERVICE_DISPLAY = {
     sentinel:                   '服務哨兵',
     'sentinel-render':          '服務哨兵渲染 (Deep)',
     'file-manager':             '檔案管理',
-    'file-manager-render':      '檔案管理渲染 (Deep)',
 };
 
 const INCIDENT_LABELS = {
