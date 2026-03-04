@@ -67,4 +67,4 @@ mcp/memvault/
 
 - **工具已重命名**：所有工具從 `kas_*` 重命名為 `memvault_*`，Claude Code 的 settings/hooks 需同步更新
 - **漸進切換**：先在 Core 建立 API → MCP Server 切換端點 → 驗證 → 退役舊 MCP Server
-- **Hook 相容**：SessionEnd hook（`extract-async.sh`）最終改為 `curl POST /api/memvault/extract`
+- **Hook 相容**：SessionEnd hook（`extract_v2_async.py`）最終改為 `curl POST /api/memvault/extract`
