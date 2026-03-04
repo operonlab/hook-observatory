@@ -145,6 +145,24 @@ class BriefingSubtopicUpdate(BaseModel):
     enabled: bool | None = None
 
 
+# ======================== Briefing Entry ========================
+
+
+class BriefingEntryCreate(BaseModel):
+    phase: str  # raw | analysis | debate
+    key: str  # e.g. "finance", "claude"
+    content: str
+    metadata: dict = Field(default_factory=dict)
+
+
+class BriefingEntryResponse(SpaceScopedResponse):
+    briefing_id: str
+    phase: str
+    key: str
+    content: str
+    metadata: dict = {}
+
+
 # ======================== Briefing ========================
 
 
@@ -152,18 +170,26 @@ class BriefingCreate(BaseModel):
     date: date
     topic_id: str | None = None
     domain: str
+    status: str = "searching"
+    # Legacy fields — for backward compatibility with V1 data
     raw_data: dict | None = None
     analyses: dict | None = None
     debate: str | None = None
+
+
+class BriefingUpdate(BaseModel):
+    status: str | None = None
 
 
 class BriefingResponse(SpaceScopedResponse):
     date: date
     topic_id: str | None = None
     domain: str
+    status: str = "searching"
     raw_data: dict | None = None
     analyses: dict | None = None
     debate: str | None = None
+    entries: list[BriefingEntryResponse] = []
 
 
 # ======================== Search ========================

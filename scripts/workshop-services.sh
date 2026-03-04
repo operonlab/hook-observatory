@@ -15,8 +15,8 @@ LOG_MAX_SIZE=$((10 * 1024 * 1024))  # 10MB
 SERVICES=(
   # ── V2 Core ──
   "core|uvicorn|/Users/joneshong/workshop/.venv/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8801 --env-file .env|8801|http://127.0.0.1:8801/docs|/Users/joneshong/workshop/core"
-  # ── V1 Gateway (proxies V1 micro-services, will be removed after V2 migration) ──
-  "gateway|uvicorn|/Users/joneshong/Claude/shared/.venv/bin/uvicorn gateway.main:app --host 127.0.0.1 --port 8800 --app-dir /Users/joneshong/Claude/services/gateway/src|8800|http://127.0.0.1:8800|/Users/joneshong/Claude/services/gateway"
+  # ── V1 Gateway (DEPRECATED: proxied V1 micro-services, now replaced by V2 Core on :8801) ──
+  # "gateway|uvicorn|/Users/joneshong/Claude/shared/.venv/bin/uvicorn gateway.main:app --host 127.0.0.1 --port 8800 --app-dir /Users/joneshong/Claude/services/gateway/src|8800|http://127.0.0.1:8800|/Users/joneshong/Claude/services/gateway"
   # ── Stations ──
   "agent-vista|binary|/Users/joneshong/workshop/stations/agent-vista/bin/agent-vista --no-browser --port 8840|8840|http://127.0.0.1:8840|/Users/joneshong/workshop/stations/agent-vista"
   "hook-observatory|uvicorn|/Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py|4100|http://127.0.0.1:4100|/Users/joneshong/workshop/stations/hook-observatory"

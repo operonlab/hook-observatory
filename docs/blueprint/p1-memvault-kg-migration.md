@@ -12,7 +12,7 @@ status: ready-to-execute
 
 ## 0. 背景
 
-V1 KAS Memory 已在 `~/Claude/projects/kas-memory/` 完成三層 Knowledge Graph 原型：
+V1 KAS Memory 已完成三層 Knowledge Graph 原型（V1 位於 `~/Claude/projects/kas-memory/`，已遷移至 `core/src/modules/memvault/`）：
 
 | 層級 | V1 現況 | 數據量 |
 |------|---------|--------|

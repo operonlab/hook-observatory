@@ -29,7 +29,7 @@ export default function Login() {
     }
   }
 
-  const oauthBase = __BASE_PATH__
+  const oauthBase = '' // auth endpoints are always at root
 
   return (
     <div

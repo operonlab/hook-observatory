@@ -1,54 +1,30 @@
 #!/usr/bin/env python3
-"""tmux-relay MCP Server — event-driven async dispatch.
+"""tmux-relay MCP Server — Thin wrapper over TmuxRelayClient SDK.
 
-Primary tool: relay_run — synchronous-blocking relay that awaits completion
-via relay.sh's tmux wait-for mechanism (zero-CPU, event-driven).
-Designed to be called from Claude Code's background agents for true async.
+5 tools: relay_run, relay_dispatch, relay_list, relay_check, relay_result.
+All logic lives in workshop.clients.tmux_relay (SDK layer).
 
-Low-level tools (relay_dispatch/check/result) retained for manual control.
+Usage:
+    python3 mcp/tmux-relay/server.py
 
-Usage (via .mcp.json):
-    uv run --no-project --with 'mcp>=1.0' python3 mcp/tmux-relay/server.py
+Configure in ~/.claude.json:
+    "tmux-relay": {
+        "command": "/Users/joneshong/.local/bin/python3",
+        "args": ["/Users/joneshong/workshop/mcp/tmux-relay/server.py"],
+        "env": {}
+    }
 """
 
 import asyncio
-import os
-import time
-from pathlib import Path
+from asyncio import to_thread
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-
-SCRIPTS_DIR = Path.home() / ".claude/skills/tmux-relay/scripts"
-PANE_POOL = SCRIPTS_DIR / "pane_pool.sh"
-RELAY_SH = SCRIPTS_DIR / "relay.sh"
+from workshop.clients.tmux_relay import TmuxRelayClient, TmuxRelayError
 
 server = Server("tmux-relay")
-
-
-# ======================== Helpers ========================
-
-
-async def run_script(script: Path, *args: str, timeout: float = 30) -> str:
-    """Run a shell script and return stdout."""
-    proc = await asyncio.create_subprocess_exec(
-        "bash",
-        str(script),
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except TimeoutError:
-        proc.kill()
-        await proc.communicate()
-        raise RuntimeError(f"Script timed out after {timeout}s: {script.name} {' '.join(args)}")
-    if proc.returncode != 0:
-        err = stderr.decode().strip()
-        raise RuntimeError(f"{script.name} failed (rc={proc.returncode}): {err}")
-    return stdout.decode().strip()
+client = TmuxRelayClient()
 
 
 def text_result(text: str) -> list[TextContent]:
@@ -118,7 +94,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="relay_list",
-            description="List all relay panes with their idle/busy status.",
+            description="List all relay panes with their idle/busy status (cache-backed, ~0.5ms).",
             inputSchema={
                 "type": "object",
                 "properties": {},
@@ -126,7 +102,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="relay_check",
-            description="Low-level: check if a dispatched command has completed (poll signal file).",
+            description="Low-level: check if a dispatched command has completed (cache-backed, ~0.1ms).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -160,219 +136,89 @@ async def list_tools() -> list[Tool]:
     ]
 
 
-# ======================== Tool Handlers ========================
+# ======================== Result Formatting ========================
+
+
+def _format_relay_result(result) -> str:
+    parts = [f"**Pane**: {result.pane}"]
+    if result.status:
+        parts.append(f"**Status**: {result.status}")
+    if result.elapsed:
+        parts.append(f"**Elapsed**: {result.elapsed}")
+    if result.result_file:
+        parts.append(f"**Result file**: {result.result_file}")
+    if result.output:
+        total_lines = result.output.count("\n") + 1
+        parts.append(f"\n## Output ({total_lines} lines)\n\n{result.output}")
+    return "\n".join(parts)
+
+
+def _format_dispatch(dispatched: list[dict]) -> str:
+    parts = [f"**Dispatched {len(dispatched)} task(s)**\n"]
+    for d in dispatched:
+        parts.append(f"- Pane: {d['pane']}, Signal: {d['signal_file']}, PID: {d['pid']}")
+    return "\n".join(parts)
+
+
+def _format_panes(panes) -> str:
+    if not panes:
+        return "No relay panes found."
+    parts = ["### Relay Panes\n"]
+    for p in panes:
+        indicator = "🟢" if p.status == "idle" else "🔴"
+        parts.append(f"- {indicator} **{p.pane_ref}** — {p.status} ({p.pane_id})")
+    return "\n".join(parts)
+
+
+# ======================== Tool Handler ========================
 
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
-        match name:
-            case "relay_run":
-                return await handle_run(arguments)
-            case "relay_dispatch":
-                return await handle_dispatch(arguments)
-            case "relay_list":
-                return await handle_list(arguments)
-            case "relay_check":
-                return await handle_check(arguments)
-            case "relay_result":
-                return await handle_result(arguments)
-            case _:
-                return text_result(f"Unknown tool: {name}")
-    except RuntimeError as e:
-        return text_result(f"Error: {e}")
-    except Exception as e:
-        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
+        if name == "relay_run":
+            result = await to_thread(
+                client.run,
+                command=arguments["command"],
+                timeout=arguments.get("timeout", 600),
+                max_lines=arguments.get("lines", 200),
+            )
+            return text_result(_format_relay_result(result))
 
+        elif name == "relay_dispatch":
+            dispatched = await to_thread(
+                client.dispatch,
+                command=arguments["command"],
+                timeout=arguments.get("timeout", 600),
+                count=arguments.get("count", 1),
+            )
+            return text_result(_format_dispatch(dispatched))
 
-# ======================== Tool Implementations ========================
+        elif name == "relay_list":
+            panes = await to_thread(client.list_panes)
+            return text_result(_format_panes(panes))
 
+        elif name == "relay_check":
+            result = await to_thread(
+                client.check,
+                signal_file=arguments["signal_file"],
+            )
+            status = result["status"].upper()
+            meta = result.get("meta", "")
+            return text_result(f"**Status**: {status}\nSignal: {result['signal_file']}\n{meta}")
 
-async def handle_run(args: dict) -> list[TextContent]:
-    """Blocking relay: acquire → recycle if busy → dispatch → AWAIT completion → return result."""
-    command = args["command"]
-    timeout = args.get("timeout", 600)
-    max_lines = args.get("lines", 200)
+        elif name == "relay_result":
+            result = await to_thread(
+                client.result,
+                signal_file=arguments["signal_file"],
+                max_lines=arguments.get("lines", 200),
+            )
+            return text_result(_format_relay_result(result))
 
-    # 1. Acquire a single pane
-    raw = await run_script(PANE_POOL, "acquire", "1", timeout=30)
-    pane = raw.strip().splitlines()[0].strip() if raw.strip() else ""
-    if not pane:
-        return text_result("Failed to acquire relay pane. Is tmux running?")
+        return text_result(f"Unknown tool: {name}")
 
-    # 2. Recycle if busy
-    try:
-        status = await run_script(PANE_POOL, "status", pane, timeout=10)
-    except RuntimeError:
-        status = "unknown"
-
-    if status.startswith("busy"):
-        try:
-            await run_script(PANE_POOL, "recycle", pane, timeout=30)
-            for _ in range(10):
-                await asyncio.sleep(1.5)
-                try:
-                    status = await run_script(PANE_POOL, "status", pane, timeout=10)
-                except RuntimeError:
-                    status = "unknown"
-                if status == "idle":
-                    break
-        except RuntimeError as e:
-            return text_result(f"Pane {pane}: recycle failed — {e}")
-
-    # 3. Run relay.sh and AWAIT it (blocks until tmux wait-for signals)
-    signal_file = f"/tmp/relay-mcp-{int(time.time() * 1000)}-{os.getpid()}.done"
-    try:
-        await run_script(
-            RELAY_SH,
-            pane,  # source pane
-            "",  # target pane (empty = no forward)
-            command,  # the command to send
-            "--no-forward",
-            "--signal",
-            signal_file,
-            "--timeout",
-            str(timeout),
-            timeout=timeout + 10,  # script timeout slightly longer than relay timeout
-        )
-    except RuntimeError as e:
-        return text_result(f"Relay failed on {pane}: {e}")
-
-    # 4. Read signal file metadata
-    meta = ""
-    if os.path.exists(signal_file):
-        try:
-            meta = Path(signal_file).read_text().strip()
-        except OSError:
-            meta = "(signal unreadable)"
-
-    # 5. Read result file
-    result_file = signal_file.replace(".done", ".txt")
-    if not os.path.exists(result_file):
-        return text_result(f"Relay completed but no result file.\nPane: {pane}\n{meta}")
-
-    try:
-        lines = Path(result_file).read_text().splitlines()
-        total = len(lines)
-        truncated = lines[:max_lines]
-        output = "\n".join(truncated)
-        if total > max_lines:
-            output += f"\n\n... ({total - max_lines} more lines truncated)"
-        return text_result(
-            f"# Relay Result\n\nPane: {pane}\n{meta}\n\n## Output ({total} lines)\n\n{output}"
-        )
-    except OSError as e:
-        return text_result(f"Error reading result: {e}")
-
-
-async def handle_dispatch(args: dict) -> list[TextContent]:
-    """Acquire pane(s) → recycle if busy → dispatch command (background)."""
-    command = args["command"]
-    timeout = args.get("timeout", 600)
-    count = args.get("count", 1)
-
-    # 1. Acquire panes
-    raw = await run_script(PANE_POOL, "acquire", str(count), timeout=30)
-    panes = [p.strip() for p in raw.splitlines() if p.strip()]
-    if not panes:
-        return text_result("Failed to acquire relay panes. Is tmux running?")
-
-    results = []
-    for pane in panes:
-        # 2. Check status → recycle if busy
-        try:
-            status = await run_script(PANE_POOL, "status", pane, timeout=10)
-        except RuntimeError:
-            status = "unknown"
-
-        if status.startswith("busy"):
-            try:
-                await run_script(PANE_POOL, "recycle", pane, timeout=30)
-                # Wait for recycle to complete
-                for _ in range(10):
-                    await asyncio.sleep(1.5)
-                    try:
-                        status = await run_script(PANE_POOL, "status", pane, timeout=10)
-                    except RuntimeError:
-                        status = "unknown"
-                    if status == "idle":
-                        break
-            except RuntimeError as e:
-                results.append(f"Pane {pane}: recycle failed — {e}")
-                continue
-
-        # 3. Dispatch (background — relay.sh runs async)
-        signal_file = f"/tmp/relay-mcp-{int(time.time() * 1000)}-{os.getpid()}.done"
-        proc = await asyncio.create_subprocess_exec(
-            "bash",
-            str(RELAY_SH),
-            pane,  # source pane
-            "",  # target pane (empty = no forward)
-            command,  # the command to send
-            "--no-forward",
-            "--signal",
-            signal_file,
-            "--timeout",
-            str(timeout),
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        # Detach — don't await. The process runs in background.
-        results.append(f"Pane: {pane}\nSignal: {signal_file}\nPID: {proc.pid}")
-
-    header = f"Dispatched {len(results)} task(s)\n\n"
-    return text_result(header + "\n---\n".join(results))
-
-
-async def handle_list(args: dict) -> list[TextContent]:
-    """List relay panes with status."""
-    raw = await run_script(PANE_POOL, "list", timeout=10)
-    if not raw:
-        return text_result("No relay panes found.")
-    return text_result(f"# Relay Panes\n\n{raw}")
-
-
-async def handle_check(args: dict) -> list[TextContent]:
-    """Check if a signal file exists (command completed)."""
-    signal_file = args["signal_file"]
-    if os.path.exists(signal_file):
-        # Read signal file content for status
-        try:
-            content = Path(signal_file).read_text().strip()
-        except OSError:
-            content = "(unreadable)"
-        return text_result(f"Status: COMPLETED\nSignal: {signal_file}\n{content}")
-    else:
-        return text_result(f"Status: RUNNING\nSignal: {signal_file}")
-
-
-async def handle_result(args: dict) -> list[TextContent]:
-    """Read the result file (.txt) associated with a signal file."""
-    signal_file = args["signal_file"]
-    max_lines = args.get("lines", 200)
-
-    # Result file is signal_file with .done → .txt
-    result_file = signal_file.replace(".done", ".txt")
-
-    if not os.path.exists(signal_file):
-        return text_result(f"Task not yet completed.\nSignal: {signal_file}")
-
-    if not os.path.exists(result_file):
-        return text_result(
-            f"Task completed but no result file found.\n"
-            f"Signal: {signal_file}\nExpected: {result_file}"
-        )
-
-    try:
-        lines = Path(result_file).read_text().splitlines()
-        total = len(lines)
-        truncated = lines[:max_lines]
-        output = "\n".join(truncated)
-        if total > max_lines:
-            output += f"\n\n... ({total - max_lines} more lines truncated)"
-        return text_result(f"# Result ({total} lines)\n\n{output}")
-    except OSError as e:
-        return text_result(f"Error reading result: {e}")
+    except TmuxRelayError as e:
+        return text_result(f"tmux-relay error: {e}")
 
 
 # ======================== Main ========================

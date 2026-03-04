@@ -169,7 +169,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **依賴項目** | auth, memvault (用於個人化) |
 | **MCP 伺服器** | `workshop-intelflow` (待建置) |
 | **整合 Skills** | smart-search, daily-briefing, company-intel, competitive-intel, content-writer |
-| **V1 狀態** | research_report service (port 8830) + smart-search skill v0.3.3 |
+| **V1 狀態** | research_report service (已遷移至 `core/src/modules/intelflow/`) + smart-search skill v0.3.3 |
 
 **功能能力**:
 - RSS / 社群媒體來源管理
@@ -392,7 +392,7 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | 屬性 | 數值 |
 |----------|-------|
 | **分類** | 工作站 (Station) |
-| **V1 狀態** | 運作中（`~/Claude/projects/tmux-webui/`，port 8765） |
+| **V1 狀態** | 運作中（`~/workshop/stations/tmux-webui/`，port 8765） |
 
 **功能能力**：
 - 瀏覽器管理 tmux sessions / windows / panes

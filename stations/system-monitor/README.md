@@ -146,4 +146,4 @@ stations/system-monitor/
 - V1 磁碟分析：`~/.claude/data/disk-report/`
 - V1 排程：`~/Library/LaunchAgents/com.joneshong.disk-report.plist`
 - V1 Web UI：port 9527
-- 報告輸出：`~/Claude/disk-report/`
+- 報告輸出：`~/workshop/outputs/disk-report/`

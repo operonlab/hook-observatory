@@ -37,7 +37,7 @@ SessionEnd Hook Triggered
 
 | Component | Location | Description |
 |------|------|------|
-| `redact-session.sh` | `~/Claude/projects/session-redactor/scripts/` | SessionEnd hook entry point (non-blocking) |
+| `redact-session.sh` | V1: `~/Claude/projects/session-redactor/scripts/` | SessionEnd hook entry point (non-blocking) |
 | `redactor.py` | `src/session_redactor/` | Core redaction logic (JSON parse + regex + atomic write) |
 | `patterns.py` | `src/session_redactor/` | Definitions for 16 types of sensitive patterns |
 | `scanner.py` | `src/session_redactor/` | Daily full scan at 4 AM |
@@ -98,7 +98,7 @@ stations/session-redactor/
 
 ## Migration Plan
 
-1. Copy `~/Claude/projects/session-redactor/` to `stations/session-redactor/`
+1. Copy V1 `~/Claude/projects/session-redactor/` to `stations/session-redactor/`
 2. Update the hook path in `~/.claude/settings.json` to point to the new location
 3. Confirm the SessionEnd pipeline order: redactor → lore extract → observability
 4. (Optional) Migrate SQLite → PostgreSQL and integrate redaction statistics with the Core API
@@ -111,7 +111,7 @@ stations/session-redactor/
 
 ## References
 
-- V1 Location: `~/Claude/projects/session-redactor/`
+- V1 Location (migrated): `~/Claude/projects/session-redactor/`
 - Hook Configuration: `~/.claude/settings.json` (SessionEnd entries)
 - SQLite DB: `~/.local/share/workshop/session_redactor.sqlite`
 Hook execution for SessionEnd: 2 hooks executed successfully, total duration: 3252ms

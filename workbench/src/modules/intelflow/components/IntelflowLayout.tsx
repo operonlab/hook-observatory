@@ -2,6 +2,7 @@ import {
   FileText,
   LayoutDashboard,
   MessageCircleQuestion,
+  Newspaper,
   Search,
   Settings,
   Tags,
@@ -12,6 +13,7 @@ import '../styles/intelflow.css'
 const NAV_ITEMS = [
   { id: 'dashboard', label: '儀表板', icon: LayoutDashboard, path: '/intelflow' },
   { id: 'reports', label: '報告', icon: FileText, path: '/intelflow/reports' },
+  { id: 'briefings', label: '簡報', icon: Newspaper, path: '/intelflow/briefings' },
   { id: 'search', label: '搜尋', icon: Search, path: '/intelflow/search' },
   { id: 'qa', label: '問答', icon: MessageCircleQuestion, path: '/intelflow/qa' },
   { id: 'topics', label: '主題', icon: Tags, path: '/intelflow/topics' },
@@ -23,6 +25,12 @@ export default function IntelflowLayout() {
 
   const isActive = (item: (typeof NAV_ITEMS)[number]) => {
     if (item.id === 'dashboard') return location.pathname === '/intelflow'
+    if (item.id === 'settings') return location.pathname.startsWith(item.path)
+    if (item.id === 'briefings')
+      return (
+        location.pathname.startsWith(item.path) &&
+        !location.pathname.startsWith('/intelflow/briefings/settings')
+      )
     return location.pathname.startsWith(item.path)
   }
 

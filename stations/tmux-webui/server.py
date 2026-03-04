@@ -334,6 +334,20 @@ async def pwa_icon_512():
     return FileResponse(BASE_DIR / "icon-512.svg", media_type="image/svg+xml")
 
 
+@app.get("/icon-192.png")
+async def pwa_icon_192_png():
+    from fastapi.responses import FileResponse
+
+    return FileResponse(BASE_DIR / "icon-192.png", media_type="image/png")
+
+
+@app.get("/icon-512.png")
+async def pwa_icon_512_png():
+    from fastapi.responses import FileResponse
+
+    return FileResponse(BASE_DIR / "icon-512.png", media_type="image/png")
+
+
 # ── WebSocket handler ──
 
 

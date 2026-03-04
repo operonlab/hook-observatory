@@ -89,6 +89,41 @@ export function useTopics() {
   }
 }
 
+export function useBriefings() {
+  const {
+    briefings,
+    briefingsTotal,
+    briefingsPage,
+    briefingsLoading,
+    briefingsFetchedAt,
+    fetchBriefings,
+  } = useIntelflowStore()
+
+  useEffect(() => {
+    if (briefings.length === 0 || Date.now() - briefingsFetchedAt > STALE_MS) fetchBriefings()
+  }, [briefings.length, briefingsFetchedAt, fetchBriefings])
+
+  return {
+    briefings,
+    total: briefingsTotal,
+    page: briefingsPage,
+    loading: briefingsLoading && briefings.length === 0,
+    fetchBriefings,
+  }
+}
+
+export function useBriefingDetail(date: string | undefined) {
+  const { selectedBriefings, briefingDetailLoading, fetchBriefingsByDate, clearSelectedBriefings } =
+    useIntelflowStore()
+
+  useEffect(() => {
+    if (date) fetchBriefingsByDate(date)
+    return () => clearSelectedBriefings()
+  }, [date, fetchBriefingsByDate, clearSelectedBriefings])
+
+  return { briefings: selectedBriefings, loading: briefingDetailLoading }
+}
+
 export function useSearch() {
   const { searchQuery, searchResults, searchLoading, setSearchQuery, searchReports, clearSearch } =
     useIntelflowStore()

@@ -8,6 +8,13 @@ translated_at: 2026-02-23
 
 # V1 功能清單
 
+> **注意**：本文件為 V1 歷史紀錄。文中所有 `~/Claude/` 路徑為 V1 時期的原始位置，已遷移至 V2 `~/workshop/` 對應目錄：
+> - `~/Claude/projects/avatar-console/` → `~/workshop/core/src/modules/auth/`
+> - `~/Claude/projects/tmux-webui/` → `~/workshop/stations/tmux-webui/`
+> - `~/Claude/projects/kas-memory/` → `~/workshop/core/src/modules/memvault/` + `~/workshop/mcp/memvault/`
+> - `~/Claude/projects/session-redactor/` → `~/workshop/stations/session-redactor/`
+> - `~/Claude/projects/claude-code-hooks-multi-agent-observability/` → `~/workshop/vendor/observability/`
+
 所有 V1 系統的完整文件，供 V2 重構參考。
 
 ## 1. 身份驗證服務 (avatar-console)

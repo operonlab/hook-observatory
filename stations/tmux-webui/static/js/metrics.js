@@ -1,9 +1,20 @@
 /**
  * metrics.js — System metrics + LLM usage rendering
+ *
+ * LLM groups are rendered dynamically from backend `llm` dict.
+ * Provider/metric labels have known mappings with uppercase fallback,
+ * so new providers or metrics from agent-metrics appear automatically.
  */
 
 (function() {
   const tmuxStatusEl = document.getElementById('tmux-status');
+
+  // Display labels — unknown keys fall back to UPPERCASED key
+  const PROVIDER_LABELS = { cc: 'CLAUDE', cx: 'CODEX', gm: 'GEMINI' };
+  const METRIC_LABELS = { '5h': '5H', '7d': '7D', 'ex': 'EX', 'pro': 'Pro', 'flash': 'Flash' };
+  // Render order: providers first, then metrics within each provider; unknowns appended
+  const PROVIDER_ORDER = ['cc', 'cx', 'gm'];
+  const METRIC_ORDER = ['flash', '5h', '7d', 'ex', 'pro'];
 
   function renderMetrics(m) {
     if (!m) { tmuxStatusEl.style.display = 'none'; return; }
@@ -17,34 +28,39 @@
     if (m.mem) parts.push(`<span class="ms-mem"><span class="ms-label">MEM</span><span class="ms-val">${escHtml(m.mem)}</span></span>`);
     if (m.disk) parts.push(`<span class="ms-disk"><span class="ms-label">DISK</span><span class="ms-val">${escHtml(m.disk)}</span></span>`);
 
-    // Claude Usage
-    const hasClaude = m.claude_5h || m.claude_7d || m.claude_ex;
-    if (hasClaude) {
-      let cg = '<span class="usage-group"><span class="usage-group-label">CLAUDE</span>';
-      if (m.claude_5h) cg += `<span class="ms-c5h"><span class="ms-label">5H</span><span class="ms-val">${escHtml(m.claude_5h)}</span></span>`;
-      if (m.claude_7d) cg += `<span class="ms-c7d"><span class="ms-label">7D</span><span class="ms-val">${escHtml(m.claude_7d)}</span></span>`;
-      if (m.claude_ex) cg += `<span class="ms-cex"><span class="ms-label">EX</span><span class="ms-val">${escHtml(m.claude_ex)}</span></span>`;
-      cg += '</span>';
-      parts.push(cg);
-    }
+    // LLM Usage — dynamic rendering
+    if (m.llm && typeof m.llm === 'object') {
+      const providers = Object.keys(m.llm);
+      providers.sort((a, b) => {
+        const ia = PROVIDER_ORDER.indexOf(a), ib = PROVIDER_ORDER.indexOf(b);
+        if (ia >= 0 && ib >= 0) return ia - ib;
+        if (ia >= 0) return -1;
+        if (ib >= 0) return 1;
+        return a.localeCompare(b);
+      });
 
-    // Codex Usage
-    const hasCodex = (m.codex_5h && m.codex_5h !== '?') || (m.codex_7d && m.codex_7d !== '?');
-    if (hasCodex) {
-      let xg = '<span class="usage-group"><span class="usage-group-label">CODEX</span>';
-      if (m.codex_5h && m.codex_5h !== '?') xg += `<span class="ms-x5h"><span class="ms-label">5H</span><span class="ms-val">${escHtml(m.codex_5h)}</span></span>`;
-      if (m.codex_7d && m.codex_7d !== '?') xg += `<span class="ms-x7d"><span class="ms-label">7D</span><span class="ms-val">${escHtml(m.codex_7d)}</span></span>`;
-      xg += '</span>';
-      parts.push(xg);
-    }
+      for (const provider of providers) {
+        const metrics = m.llm[provider];
+        if (!metrics || typeof metrics !== 'object') continue;
+        const entries = Object.entries(metrics).filter(([, v]) => v && v !== '?');
+        if (!entries.length) continue;
+        entries.sort((a, b) => {
+          const ia = METRIC_ORDER.indexOf(a[0]), ib = METRIC_ORDER.indexOf(b[0]);
+          if (ia >= 0 && ib >= 0) return ia - ib;
+          if (ia >= 0) return -1;
+          if (ib >= 0) return 1;
+          return a[0].localeCompare(b[0]);
+        });
 
-    // Gemini Usage
-    const hasGemini = m.gemini_pro && m.gemini_pro !== '?';
-    if (hasGemini) {
-      let gg = '<span class="usage-group"><span class="usage-group-label">GEMINI</span>';
-      gg += `<span class="ms-gp"><span class="ms-label">Pro</span><span class="ms-val">${escHtml(m.gemini_pro)}</span></span>`;
-      gg += '</span>';
-      parts.push(gg);
+        const label = PROVIDER_LABELS[provider] || provider.toUpperCase();
+        let g = `<span class="usage-group" data-provider="${escHtml(provider)}"><span class="usage-group-label">${escHtml(label)}</span>`;
+        for (const [metric, value] of entries) {
+          const mLabel = METRIC_LABELS[metric] || metric.toUpperCase();
+          g += `<span class="ms-llm ms-${escHtml(provider)}-${escHtml(metric)}"><span class="ms-label">${escHtml(mLabel)}</span><span class="ms-val">${escHtml(value)}</span></span>`;
+        }
+        g += '</span>';
+        parts.push(g);
+      }
     }
 
     tmuxStatusEl.innerHTML = parts.join(sep);

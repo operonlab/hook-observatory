@@ -12,8 +12,9 @@
   --kb-height:0px;
   --font-size:12px;
 }
-html,body{height:100%;height:100dvh;background:var(--bg);color:var(--text);font-family:var(--font-mono);overflow:hidden;overscroll-behavior:none}
-#app{display:flex;flex-direction:column;height:100%}
+html{height:100%;overflow:hidden}
+body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-mono);overscroll-behavior:none;-webkit-text-size-adjust:none}
+#app{position:fixed;top:0;left:0;right:0;bottom:var(--kb-height,0px);display:flex;flex-direction:column;overflow:hidden}
 
 /* ── Header ── */
 header{
@@ -153,7 +154,7 @@ select:focus{outline:none;border-color:var(--accent)}
   display:flex;gap:8px;padding:2px 12px;background:var(--surface);
   border-top:1px solid var(--border);font-size:10px;color:var(--dim);
   flex-shrink:0;align-items:center;flex-wrap:nowrap;
-  overflow-x:auto;white-space:nowrap;
+  overflow-x:auto;white-space:nowrap;min-width:0;width:100%;
   scrollbar-width:none;-ms-overflow-style:none;
 }
 .tmux-status::-webkit-scrollbar{display:none}
@@ -164,15 +165,19 @@ select:focus{outline:none;border-color:var(--accent)}
 .ms-mem .ms-label{background:#ca8a04;color:#fff}
 .ms-disk .ms-label{background:#ea580c;color:#fff}
 .tmux-status .ms-val{color:var(--text);margin-left:3px}
+.tmux-status > span{flex-shrink:0}
 .ms-sep{color:var(--border);margin:0 1px}
-/* LLM Usage badges */
-.ms-c5h .ms-label{background:#89dceb;color:#11111b}
-.ms-c7d .ms-label{background:#89b4fa;color:#11111b}
-.ms-cex .ms-label{background:#f2cdcd;color:#11111b}
-.ms-x5h .ms-label{background:#f5c2e7;color:#11111b}
-.ms-x7d .ms-label{background:#eba0ac;color:#11111b}
-.ms-gp .ms-label{background:#b4befe;color:#11111b}
-.usage-group{display:flex;align-items:center;gap:4px}
+/* LLM Usage badges — ms-{provider}-{metric} */
+.ms-llm .ms-label{background:#585b70;color:#cdd6f4} /* generic fallback */
+.ms-cc-5h .ms-label{background:#89dceb;color:#11111b}
+.ms-cc-7d .ms-label{background:#89b4fa;color:#11111b}
+.ms-cc-ex .ms-label{background:#f2cdcd;color:#11111b}
+.ms-cx-5h .ms-label{background:#f5c2e7;color:#11111b}
+.ms-cx-7d .ms-label{background:#eba0ac;color:#11111b}
+.ms-gm-pro .ms-label{background:#7287fd;color:#11111b}
+.ms-gm-flash .ms-label{background:#b4befe;color:#11111b}
+.usage-group{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.ms-llm{flex-shrink:0}
 .usage-group-label{font-weight:700;font-size:9px;letter-spacing:.3px;color:var(--dim)}
 
 /* ── Footer ── */

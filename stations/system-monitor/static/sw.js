@@ -1,7 +1,7 @@
 // System Monitor Service Worker
 // 策略：HTML = network-first, 靜態資源 = stale-while-revalidate, API = 不快取
 
-const CACHE_NAME = 'sysmon-v1';
+const CACHE_NAME = 'sysmon-v2';
 
 // ── Web Push ──
 self.addEventListener('push', (event) => {
@@ -10,7 +10,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'System Monitor', {
       body: data.body || '',
-      icon: data.icon || 'icons/icon-192.svg',
+      icon: data.icon || 'icons/icon-192.png',
       tag: data.tag,
       data: { url: data.url || '/apps/sysmon/' },
       vibrate: data.severity === 'critical' ? [200, 100, 200, 100, 200] : [100, 50, 100],
@@ -32,14 +32,14 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// 預快取的核心靜態資源（相對於 SW 所在位置 /static/）
+// 預快取的核心靜態資源（相對於 SW 所在位置 /sw.js → 根路徑）
 const PRECACHE_ASSETS = [
-  '../',                       // 首頁 HTML
-  'css/dashboard.css',
-  'js/dashboard.js',
-  'manifest.json',
-  'icons/icon-192.svg',
-  'icons/icon-512.svg',
+  './',                              // 首頁 HTML
+  'static/css/dashboard.css',
+  'static/js/dashboard.js',
+  'static/manifest.json',
+  'static/icons/icon-192.png',
+  'static/icons/icon-512.png',
 ];
 
 // 第三方 CDN 資源（stale-while-revalidate）

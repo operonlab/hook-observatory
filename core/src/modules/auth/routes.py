@@ -27,7 +27,9 @@ async def _create_session(request: Request, db: AsyncSession, user: User) -> Non
     redis = get_redis()
     try:
         token = await user_service.create_session(
-            db, redis, user,
+            db,
+            redis,
+            user,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
@@ -59,12 +61,14 @@ async def register(
 
     await _create_session(request, db, user)
 
-    await event_bus.publish(Event(
-        type=AuthEvents.USER_REGISTERED,
-        data={"email": body.email, "name": body.name},
-        source="auth",
-        user_id=user.id,
-    ))
+    await event_bus.publish(
+        Event(
+            type=AuthEvents.USER_REGISTERED,
+            data={"email": body.email, "name": body.name},
+            source="auth",
+            user_id=user.id,
+        )
+    )
 
     return {"user": user_service.to_response(user)}
 
@@ -77,18 +81,19 @@ async def login(
 ):
     user = await user_service.authenticate(db, body.email, body.password)
     if not user:
-        raise BadRequestError(
-            "Invalid credentials", code="auth.invalid_credentials"
-        )
+        raise BadRequestError("Invalid credentials", code="auth.invalid_credentials")
 
+    await db.commit()
     await _create_session(request, db, user)
 
-    await event_bus.publish(Event(
-        type=AuthEvents.USER_LOGGED_IN,
-        data={"email": body.email},
-        source="auth",
-        user_id=user.id,
-    ))
+    await event_bus.publish(
+        Event(
+            type=AuthEvents.USER_LOGGED_IN,
+            data={"email": body.email},
+            source="auth",
+            user_id=user.id,
+        )
+    )
 
     return {"user": user_service.to_response(user)}
 
@@ -112,12 +117,14 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     request.state.user = None
     request.state._session_cleared = True
 
-    await event_bus.publish(Event(
-        type=AuthEvents.USER_LOGGED_OUT,
-        data={},
-        source="auth",
-        user_id=user_id,
-    ))
+    await event_bus.publish(
+        Event(
+            type=AuthEvents.USER_LOGGED_OUT,
+            data={},
+            source="auth",
+            user_id=user_id,
+        )
+    )
 
 
 @router.get("/session", response_model=SessionResponse)
@@ -158,9 +165,7 @@ async def oauth_google_callback(
     token = await oauth.google.authorize_access_token(request)
     userinfo = token.get("userinfo")
     if not userinfo:
-        raise BadRequestError(
-            "Failed to get user info from Google", code="auth.oauth_failed"
-        )
+        raise BadRequestError("Failed to get user info from Google", code="auth.oauth_failed")
 
     user, is_new = await user_service.get_or_create_oauth_user(
         db,
@@ -176,12 +181,14 @@ async def oauth_google_callback(
     await _create_session(request, db, user)
 
     event_type = AuthEvents.USER_REGISTERED if is_new else AuthEvents.USER_LOGGED_IN
-    await event_bus.publish(Event(
-        type=event_type,
-        data={"email": user.email, "provider": "google"},
-        source="auth",
-        user_id=user.id,
-    ))
+    await event_bus.publish(
+        Event(
+            type=event_type,
+            data={"email": user.email, "provider": "google"},
+            source="auth",
+            user_id=user.id,
+        )
+    )
 
     redirect = request.session.pop("oauth_redirect", "/")
     return RedirectResponse(url=redirect)
@@ -228,12 +235,14 @@ async def oauth_github_callback(
     await _create_session(request, db, user)
 
     event_type = AuthEvents.USER_REGISTERED if is_new else AuthEvents.USER_LOGGED_IN
-    await event_bus.publish(Event(
-        type=event_type,
-        data={"email": user.email, "provider": "github"},
-        source="auth",
-        user_id=user.id,
-    ))
+    await event_bus.publish(
+        Event(
+            type=event_type,
+            data={"email": user.email, "provider": "github"},
+            source="auth",
+            user_id=user.id,
+        )
+    )
 
     redirect = request.session.pop("oauth_redirect", "/")
     return RedirectResponse(url=redirect)

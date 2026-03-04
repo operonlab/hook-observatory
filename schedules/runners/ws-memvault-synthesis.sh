@@ -9,16 +9,16 @@
 #   5. Tag sync + domain auto-promotion (threshold >= 10)
 #   6. Reset triple counter (for threshold-based triggering)
 #
-# Logs: ~/Claude/memvault/logs/synthesis.log
+# Logs: ~/workshop/outputs/memvault/logs/synthesis.log
 
 set -u
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 PIPELINES_DIR="$HOME/workshop/mcp/memvault/pipelines"
 PYTHON="$HOME/.local/bin/python3"
-LOG_DIR="$HOME/Claude/memvault/logs"
+LOG_DIR="$HOME/workshop/outputs/memvault/logs"
 LOG_FILE="$LOG_DIR/synthesis.log"
-CORRECTIONS_DIR="$HOME/Claude/memvault/corrections"
+CORRECTIONS_DIR="$HOME/workshop/outputs/memvault/corrections"
 COUNTER_FILE="$HOME/.memvault-triple-counter"
 CORE_API="http://localhost:8801/api/memvault"
 DOMAIN_THRESHOLD=10

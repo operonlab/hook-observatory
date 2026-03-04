@@ -916,4 +916,5 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
 // ========================================================================
 
 loadLayoutPref();
-loadSessions(true); // auto-connect to "default" or first session
+const _readOnly = new URLSearchParams(location.search).has('readonly');
+loadSessions(!_readOnly); // skip auto-connect in readonly mode (e.g. sentinel health check)

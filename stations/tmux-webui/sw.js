@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tmux-webui-__GIT_HASH__';
+const CACHE_NAME = 'tmux-webui-v2-__GIT_HASH__';
 
 // ── Web Push ──
 self.addEventListener('push', (event) => {
@@ -7,7 +7,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Workshop', {
       body: data.body || '',
-      icon: data.icon || './icon-192.svg',
+      icon: data.icon || './icon-192.png',
       tag: data.tag,
       data: { url: data.url || '/apps/tmux/' },
       vibrate: data.severity === 'critical' ? [200, 100, 200, 100, 200] : [100, 50, 100],
@@ -38,8 +38,8 @@ const PRECACHE_URLS = [
   './static/js/keys.js',
   './static/js/autocomplete.js',
   './static/js/gestures.js',
-  './icon-192.svg',
-  './icon-512.svg',
+  './icon-192.png',
+  './icon-512.png',
 ];
 
 self.addEventListener('install', (e) => {

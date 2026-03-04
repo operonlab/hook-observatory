@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { PaginatedResponse } from '@/types'
 import { intelflowApi } from '../api/client'
-import type { DashboardData, Report, SearchResult, TimelineEntry, Topic } from '../types'
+import type { Briefing, DashboardData, Report, SearchResult, TimelineEntry, Topic } from '../types'
 
 type NavPage = 'dashboard' | 'reports' | 'qa' | 'topics'
 
@@ -39,6 +39,15 @@ interface IntelflowState {
   topicsFetchedAt: number
   activeTopic: string | null
 
+  // Briefings
+  briefings: Briefing[]
+  briefingsTotal: number
+  briefingsPage: number
+  briefingsLoading: boolean
+  briefingsFetchedAt: number
+  selectedBriefings: Briefing[]
+  briefingDetailLoading: boolean
+
   // Search / QA
   searchQuery: string
   searchResults: SearchResult[]
@@ -65,6 +74,11 @@ interface IntelflowState {
   // Actions — Topics
   fetchTopics: () => Promise<void>
   setActiveTopic: (topic: string | null) => void
+
+  // Actions — Briefings
+  fetchBriefings: (page?: number) => Promise<void>
+  fetchBriefingsByDate: (date: string) => Promise<void>
+  clearSelectedBriefings: () => void
 
   // Actions — Search / QA
   setSearchQuery: (query: string) => void
@@ -106,6 +120,15 @@ export const useIntelflowStore = create<IntelflowState>()(
       topicsLoading: false,
       topicsFetchedAt: 0,
       activeTopic: null,
+
+      // Briefings
+      briefings: [],
+      briefingsTotal: 0,
+      briefingsPage: 1,
+      briefingsLoading: false,
+      briefingsFetchedAt: 0,
+      selectedBriefings: [],
+      briefingDetailLoading: false,
 
       // Search / QA
       searchQuery: '',
@@ -211,6 +234,35 @@ export const useIntelflowStore = create<IntelflowState>()(
 
       setActiveTopic: (topic) => set({ activeTopic: topic }),
 
+      // ── Briefings ──
+
+      fetchBriefings: async (page?: number) => {
+        const p = page ?? get().briefingsPage
+        set({ briefingsLoading: true, error: null, briefingsPage: p })
+        try {
+          const res = await intelflowApi.listBriefings(p, 20)
+          set({ briefings: res.items, briefingsTotal: res.total, briefingsFetchedAt: Date.now() })
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : 'Failed to fetch briefings' })
+        } finally {
+          set({ briefingsLoading: false })
+        }
+      },
+
+      fetchBriefingsByDate: async (date: string) => {
+        set({ briefingDetailLoading: true, error: null })
+        try {
+          const result = await intelflowApi.getBriefingsByDate(date)
+          set({ selectedBriefings: result })
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : 'Failed to fetch briefing' })
+        } finally {
+          set({ briefingDetailLoading: false })
+        }
+      },
+
+      clearSelectedBriefings: () => set({ selectedBriefings: [] }),
+
       // ── Search / QA ──
 
       setSearchQuery: (query) => set({ searchQuery: query }),
@@ -244,6 +296,9 @@ export const useIntelflowStore = create<IntelflowState>()(
         topicsTotal: state.topicsTotal,
         topicsFetchedAt: state.topicsFetchedAt,
         allTags: state.allTags,
+        briefings: state.briefings,
+        briefingsTotal: state.briefingsTotal,
+        briefingsFetchedAt: state.briefingsFetchedAt,
       }),
     },
   ),

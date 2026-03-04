@@ -15,7 +15,7 @@ Smart Search 已有兩個元件：
 | 元件 | 位置 | 狀態 |
 |------|------|------|
 | `smart-search` Skill | `~/.claude/skills/smart-search/` | 運作中，v0.3.3 |
-| `research_report` Service | `~/Claude/services/research_report/` | 運作中，port 8830 |
+| `research_report` Service | `~/workshop/core/src/modules/intelflow/`（V1: `~/Claude/services/research_report/`） | 已遷移至 Core Module |
 
 **已有的好東西**：
 - PostgreSQL + pgvector（schema `workshop_research`，768d Ollama embedding）
@@ -36,10 +36,10 @@ Smart Search 已有兩個元件：
 #### 1. 資料層整合：獨立 Service → Core Module
 
 ```
-現況：
-  ~/Claude/services/research_report/  (獨立 FastAPI, port 8830)
-  ~/Claude/skills/smart-search/*.md   (52 個 fallback 檔案)
-  ~/Claude/skills/daily-briefing/     (靜態 HTML)
+V1（已遷移）：
+  ~/Claude/services/research_report/  (獨立 FastAPI, port 8830) → 已遷移至 Core Module
+  ~/.claude/skills/smart-search/*.md  (52 個 fallback 檔案)
+  ~/.claude/skills/daily-briefing/    (靜態 HTML)
   ↓
 目標：
   core/src/modules/intelflow/             (Core Module)
