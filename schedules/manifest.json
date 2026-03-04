@@ -17,7 +17,7 @@
       "label": "com.joneshong.scheduler.ws-session-archive",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_session_archive.py",
       "schedule": { "calendar": { "Hour": 5, "Minute": 15 } },
-      "description": "每日 5:15AM: scan sessions + archive cold candidates with summaries + embeddings",
+      "description": "每日 5:15AM: session lifecycle pipeline — redact sweep → scan → archive (hook 失效備援)",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
