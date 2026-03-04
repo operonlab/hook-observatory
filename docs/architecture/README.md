@@ -37,11 +37,12 @@ target_lang: zh-TW
 | [modular-monolith.md](./modular-monolith.md) | 模組化單體架構、模組邊界規則、13 模組權限歸屬 |
 | [event-driven.md](./event-driven.md) | 事件結構、命名規範、EventBus API、事件流範例 |
 | [event-resilience-patterns.md](./event-resilience-patterns.md) | 6 個事件韌性模式（P1-P6）— 時效分類、冪等投影、WAL 分離等 |
-| [shared-layer-patterns.md](./shared-layer-patterns.md) | OOP 模式：BaseCRUDService、SpaceScopedModel、PaginatedResponse |
+| [shared-layer-patterns.md](./shared-layer-patterns.md) | OOP 模式：BaseCRUDService、SpaceScopedModel、SoftDeleteMixin、PaginatedResponse |
 | [auth.md](./auth.md) | 認證（signed cookies）+ 授權（RBAC + ABAC）+ 使用者生命週期 |
 | [notification.md](./notification.md) | 通知路由、多通道推播、雙向平台橋接 |
 | [communication.md](./communication.md) | 通訊模式：HTTP REST / SSE / WebRTC / Event Bus |
 | [composite-architecture.md](./composite-architecture.md) | SDK → CLI → MCP → Skill 四層複合架構 |
+| [four-tier-data-lifecycle.md](./four-tier-data-lifecycle.md) | 熱暖冷冰四層資料生命週期策略 |
 | [scheduling.md](./scheduling.md) | 系統排程管理：開機自起、離線自救、定時任務 |
 
 ## 前端架構

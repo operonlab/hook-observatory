@@ -34,7 +34,8 @@ docs/
 │   ├── plugin-system.md             # Hook/插件系統
 │   ├── observability.md             # 可觀測性策略
 │   ├── scheduling.md                # 系統排程管理
-│   ├── shared-layer-patterns.md     # 共享層模式
+│   ├── four-tier-data-lifecycle.md  # 熱暖冷冰資料策略
+│   ├── shared-layer-patterns.md     # 共享層模式（含軟刪除）
 │   ├── folder-structure.md          # 佈局與命名規則
 │   ├── tech-stack.md                # 技術選擇
 │   ├── rwd-pwa.md                   # RWD + PWA 標準
@@ -51,7 +52,6 @@ docs/
 │   └── p1~p10-*.md                  # 各模組藍圖
 ├── plans/                           # 戰略計劃（跨模組演進）
 │   ├── composite-architecture-roadmap.md  # 四層架構推進計劃
-│   ├── four-tier-data-lifecycle.md        # 熱暖冷冰資料策略
 │   └── skill-ecosystem-hardening.md       # Skill 生態加固
 ├── reference/                       # 參考資料
 │   ├── sandbox-executor.md          # Sandbox 執行器規格

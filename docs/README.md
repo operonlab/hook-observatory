@@ -44,7 +44,7 @@ target_lang: zh-TW
 
 ### 我想了解跨模組的演進策略
 → [plans/composite-architecture-roadmap.md](./plans/composite-architecture-roadmap.md)（四層架構推進）
-→ [plans/four-tier-data-lifecycle.md](./plans/four-tier-data-lifecycle.md)（熱暖冷冰資料策略）
+→ [architecture/four-tier-data-lifecycle.md](./architecture/four-tier-data-lifecycle.md)（熱暖冷冰資料策略）
 → [plans/skill-ecosystem-hardening.md](./plans/skill-ecosystem-hardening.md)（Skill 生態加固）
 
 ---

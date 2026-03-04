@@ -1,7 +1,7 @@
 ---
-doc_version: 5
-content_hash: 2989924d
-source_version: 5
+doc_version: 6
+content_hash: pending
+source_version: 6
 target_lang: zh-TW
 translated_at: 2026-02-23
 ---
@@ -34,19 +34,21 @@ translated_at: 2026-02-23
 ### 1.1 SQLAlchemy 模型繼承鏈
 
 ```
-                        TimestampMixin
-                     ┌───── id (UUID v7)
-                     │ created_at (server_default)
-                     │ updated_at (server_default + onupdate)
-                     │
-           ┌─────────┴─────────┐
-     SpaceScopedModel       GlobalModel
-   ┌── space_id (FK)      (no extra fields)
-   │── created_by (FK)          │
-   │                            │
-   ▼                            ▼
-Transaction              AuditLog
-Budget                   SystemSetting
+    TimestampMixin              SoftDeleteMixin
+ ┌── id (UUID v7)             ┌── deleted_at (nullable, indexed)
+ │── created_at                │
+ │── updated_at                │
+ │                             │
+ └──────────┬──────────────────┘
+            │ (both mixins)
+  ┌─────────┴──────────┐
+SpaceScopedModel    GlobalModel
+ ┌── space_id       (TimestampMixin only,
+ │── created_by      無 soft delete)
+ │                        │
+ ▼                        ▼
+Transaction          AuditLog
+Budget               SystemSetting
 Quest, Task
 Spark, Link
 Source, Memory
@@ -56,13 +58,82 @@ Skill, Resource
 
 **誰繼承了 SpaceScopedModel (8 個模組, ~35 個實體)**：
 finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore
+→ **全部具備軟刪除能力**（透過 `SoftDeleteMixin`）
 
 **誰繼承了 GlobalModel (2 個模組, ~4 個實體)**：
 admin (audit_log, setting), auth (user, api_key)
+→ **無軟刪除**（僅有 `TimestampMixin`）
 
 **auth 是特殊的**：space/space_member 是元實體 (meta-entities) — 它們不繼承任何基底並定義自己的 schema。
 
-### 1.2 Pydantic Schema 繼承鏈
+### 1.2 軟刪除模式 (Soft Delete Pattern)
+
+> `SoftDeleteMixin` + `BaseCRUDService` 的協作，實現「刪除不消失」的資料保護。
+
+**設計理由**：個人工作站中，誤刪資料的代價很高。軟刪除讓所有 `SpaceScopedModel` 實體（8 模組, ~35 實體）自動獲得「回收桶 + 恢復」能力。
+
+#### Mixin 定義
+
+```python
+# core/src/shared/models.py
+class SoftDeleteMixin:
+    """Soft delete support — set deleted_at instead of hard deleting."""
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None, index=True
+    )
+```
+
+- `deleted_at = None` → 正常存在
+- `deleted_at = timestamp` → 已軟刪除（進入回收桶）
+- 有 `index=True` → 查詢效能保證
+
+#### BaseCRUDService 的自動行為
+
+`BaseCRUDService` 會自動偵測 model 是否含有 `deleted_at` 欄位（`_has_soft_delete()`），並據此調整所有操作：
+
+| 方法 | 行為（有 SoftDeleteMixin） | 行為（無 SoftDeleteMixin） |
+|------|--------------------------|--------------------------|
+| `list()` | 自動過濾 `deleted_at == None` | 回傳全部 |
+| `get()` | 已刪除的回傳 `None` | 正常取得 |
+| `get_including_deleted()` | 忽略軟刪除狀態，強制取得 | 同 `get()` |
+| `delete()` | **設定 `deleted_at = now()`**（軟刪除） | **真正刪除**（hard delete） |
+| `list_deleted()` | 回收桶：列出所有已軟刪除的項目 | 不適用 |
+| `restore()` | 還原：`deleted_at = None` | 不適用 |
+| `purge()` | 永久刪除（hard delete，不可逆） | 不適用 |
+
+#### 完整生命週期
+
+```
+建立 → 正常存在 (deleted_at = NULL)
+  │
+  ├── list() / get() → ✅ 可見
+  │
+  ▼ delete()
+軟刪除 (deleted_at = timestamp)
+  │
+  ├── list() / get() → ❌ 不可見（被自動過濾）
+  ├── list_deleted() → ✅ 出現在回收桶
+  │
+  ├── restore() → 回到「正常存在」
+  │
+  └── purge() → 永久消失（不可逆）
+```
+
+#### 稽核追蹤
+
+所有軟刪除操作都透過 `_record_audit()` 記錄：
+- `delete` → action: `"delete"`, 記錄刪除者 (user_id) 與時間
+- `restore` → action: `"restore"`
+- `purge` → action: `"purge"`
+
+#### 適用範圍
+
+| 類別 | 模組 | 軟刪除 |
+|------|------|--------|
+| SpaceScopedModel | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore | ✅ |
+| GlobalModel | auth, admin | ❌ |
+
+### 1.3 Pydantic Schema 繼承鏈
 
 ```
          TimestampMixin
@@ -85,7 +156,7 @@ admin (audit_log, setting), auth (user, api_key)
            └── module
 ```
 
-### 1.3 異常繼承鏈
+### 1.4 異常繼承鏈
 
 ```
   WorkshopError (base)
@@ -102,7 +173,7 @@ admin (audit_log, setting), auth (user, api_key)
 
 異常處理程序註冊在 `main.py` 中，自動將 `WorkshopError` 轉換為 HTTP 回應。
 
-### 1.4 前端 TypeScript 繼承
+### 1.5 前端 TypeScript 繼承
 
 ```typescript
 // BaseEntity — 對應 SpaceScopedResponse
@@ -439,8 +510,8 @@ CREATE INDEX idx_{table}_tags ON {schema}.{table} USING GIN(tags);
 |------|----------|-----------|
 | `types.py` | UserId, SpaceId, EntityId, TypeVars | 型別別名 |
 | `schemas.py` | TimestampMixin, SpaceScopedResponse, PaginationParams, PaginatedResponse\<T\>, ErrorResponse | 繼承 + 泛型 |
-| `models.py` | Base, TimestampMixin, SpaceScopedModel, GlobalModel | Mixin |
-| `service.py` | BaseCRUDService\<M,C,U,R\> + 輔助函式 | 泛型 + 範本方法 + 組合 |
+| `models.py` | Base, TimestampMixin, SoftDeleteMixin, SpaceScopedModel, GlobalModel | Mixin |
+| `service.py` | BaseCRUDService\<M,C,U,R\> + 軟刪除生命週期 + 輔助函式 | 泛型 + 範本方法 + 組合 |
 | `deps.py` | get_db, get_current_user, get_space_id, require_permission, get_pagination | 封裝 (DI) |
 | `exceptions.py` | WorkshopError 層級 + ERROR_REGISTRY | 繼承 + 註冊表 |
 | `events.py` | event_type(), publish_crud_event() | 封裝 (函式) |
@@ -693,6 +764,7 @@ export const financeWidgets: DashboardWidget[] = [
 | 數量 | 描述 |
 |--------|-------------|
 | **39** | 標準 CRUD 實體 → 由 BaseCRUDService 涵蓋 |
+| **~35** | 具備軟刪除的實體（SpaceScopedModel, 8 模組） |
 | **~28** | 特殊方法 → 獨立小幫手 + 自定義服務 |
 | **8/10** | 核心模組使用 SpaceScopedModel |
 | **~60** | 遵循 `module.entity.action` 格式的事件型別 |
