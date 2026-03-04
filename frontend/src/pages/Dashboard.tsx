@@ -6,7 +6,7 @@ import TimelineChart from "../components/TimelineChart.tsx";
 import ToolUsageChart from "../components/ToolUsageChart.tsx";
 import SessionList from "../components/SessionList.tsx";
 
-const REFRESH = 10_000;
+const REFRESH = 30_000;
 
 export default function Dashboard() {
   const { data: summary, error: e1, refresh: r1 } = useSWR("summary", api.summary, { refreshInterval: REFRESH });
