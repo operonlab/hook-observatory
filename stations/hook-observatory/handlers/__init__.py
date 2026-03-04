@@ -23,6 +23,7 @@ from . import (
     observability,
     relay_signal,
     sentinel_notify,
+    session_pipeline,
     skill_security,
     verify_commit,
     voice_notify,
@@ -61,8 +62,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "SessionEnd": [
-        (None, external.redact_session),
-        (None, external.extract),
+        (None, session_pipeline.handle),
         (None, observability.handle),
     ],
     "UserPromptSubmit": [
