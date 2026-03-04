@@ -10,7 +10,7 @@ Usage:
     sentinel uptime [--days N]   # per-service uptime
     sentinel health              # raw health check
 
-Symlink: ln -sf ~/workshop/stations/sentinel-cli/sentinel.py ~/.local/bin/sentinel
+Symlink: ln -sf ~/workshop/stations/sentinel/cli/sentinel.py ~/.local/bin/sentinel
 """
 
 import argparse

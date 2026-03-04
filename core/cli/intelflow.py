@@ -12,7 +12,7 @@ Usage:
     intelflow dashboard
     intelflow status
 
-Symlink: ln -sf ~/workshop/stations/intelflow-cli/intelflow.py ~/.local/bin/intelflow
+Symlink: ln -sf ~/workshop/core/cli/intelflow.py ~/.local/bin/intelflow
 """
 
 import argparse

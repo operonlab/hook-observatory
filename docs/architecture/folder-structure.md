@@ -23,6 +23,14 @@ Workshop 將所有功能組織成三個層級：
 ```
 ~/workshop/
 ├── core/                        # 模塊化單體 (Python/FastAPI)
+│   ├── cli/                     # Core Module CLI 包裝器
+│   │   ├── finance.py           # 會計與財務 CLI
+│   │   ├── intelflow.py         # 每日情報 CLI
+│   │   ├── auth.py              # 認證與授權 CLI
+│   │   ├── admin.py             # 平台管理 CLI
+│   │   ├── notification.py      # 多通道通知 CLI
+│   │   ├── memvault.py          # LLM 記憶持久化 CLI
+│   │   └── nodeflow.py          # 工作流編排 CLI
 │   ├── src/
 │   │   ├── events/              # 事件匯流排引擎
 │   │   ├── hooks/               # 鉤子/插件引擎
@@ -72,16 +80,22 @@ Workshop 將所有功能組織成三個層級：
 │   ├── rsbuild.config.ts
 │   └── package.json
 ├── mcp/                         # MCP 適配層 (SDK-based protocol access, 16 servers)
-├── stations/                    # 獨立本地工具 (10 個工作站)
+├── stations/                    # 獨立本地工具 (10+ 個工作站)
 │   ├── agent-metrics/           # 多 Agent 任務管理與追蹤
+│   │   └── cli/                 # Station CLI（合併在 station 內）
 │   ├── agent-vista/             # Agent 虛擬辦公室視覺化
 │   ├── envkit/                  # 環境快照 + 一鍵移植
+│   │   └── cli/
 │   ├── hook-observatory/        # Hook 事件可觀測性
+│   │   └── cli/
 │   ├── sandbox-executor/        # 沙盒代碼執行 MCP 伺服器
+│   │   └── cli/
 │   ├── sentinel/                # 服務健康檢查與自動修復
+│   │   └── cli/
 │   ├── session-archiver/        # Session 歸檔與壓縮
 │   ├── session-redactor/        # 轉錄檔敏感資料清理
 │   ├── system-monitor/          # 磁碟分析 + 硬體資源監控
+│   │   └── cli/
 │   └── tmux-webui/              # tmux 瀏覽器控制介面
 ├── vendor/                      # 第三方社群工具（不改造）
 │   └── observability/           # Multi-Agent Observability (@disler)
@@ -220,8 +234,12 @@ mcp/<server-name>/
 
 可獨立運行的本地工具。需要推送資料到 Core API 或提供 Workbench Widget 的 station，可選擇引用 `libs/python/station-sdk/`（參見 [AD-8](./architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
 
+Station CLI 合併在各 station 目錄下的 `cli/` 子目錄（不再使用獨立的 `*-cli/` 目錄）。Core Module CLI 則集中在 `core/cli/`。
+
 ```
 stations/<name>/
+├── cli/                 # Station CLI（argparse + 匯入 SDK）
+│   └── <cmd>.py
 ├── src/                 # 源碼
 ├── README.md
 └── package.json / pyproject.toml

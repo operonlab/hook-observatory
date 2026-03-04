@@ -6,7 +6,7 @@ Usage:
     admin audit list [--module M] [--entity-type T] [--user-id U] [--action A] [--limit N]
     admin audit history <module> <entity_type> <entity_id>
 
-Symlink: ln -sf ~/workshop/stations/admin-cli/admin_cli.py ~/.local/bin/admin
+Symlink: ln -sf ~/workshop/core/cli/admin.py ~/.local/bin/admin
 """
 
 import argparse

@@ -38,9 +38,10 @@ Python Script ──► SDK ──► Service API
 
 ```
 libs/python/src/workshop/clients/{name}.py    ← SDK（繼承 BaseClient 或獨立）
-stations/{name}-cli/{name}.py                  ← CLI（argparse + 匯入 SDK）
-mcp/{name}/server.py                           ← MCP（包裝 SDK, stdio 模式）
-~/.claude/skills/{name}/SKILL.md               ← Skill（參照 CLI + MCP）
+stations/{name}/cli/{cmd}.py                   ← Station CLI（合併在 station 內）
+core/cli/{name}.py                             ← Core Module CLI
+mcp/{name}/server.py                           ← MCP（不變）
+~/.claude/skills/{name}/SKILL.md               ← Skill（不變）
 ```
 
 ### SDK 四種變體

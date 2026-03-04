@@ -17,7 +17,7 @@ Usage:
     finance categories list | create
     finance transfer <from> <to> <amount>
 
-Symlink: ln -sf ~/workshop/stations/finance-cli/finance.py ~/.local/bin/finance
+Symlink: ln -sf ~/workshop/core/cli/finance.py ~/.local/bin/finance
 """
 
 import argparse

@@ -8,7 +8,7 @@ Usage:
     auth session
     auth status  # alias for session
 
-Symlink: ln -sf ~/workshop/stations/auth-cli/auth_cli.py ~/.local/bin/auth
+Symlink: ln -sf ~/workshop/core/cli/auth.py ~/.local/bin/auth
 """
 
 import argparse

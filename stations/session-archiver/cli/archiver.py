@@ -9,7 +9,7 @@ Usage:
     archiver status                              # archive statistics
     archiver search <query> [--limit N]          # semantic search
 
-Symlink: ln -sf ~/workshop/stations/session-archiver-cli/archiver.py ~/.local/bin/archiver
+Symlink: ln -sf ~/workshop/stations/session-archiver/cli/archiver.py ~/.local/bin/archiver
 """
 
 import argparse

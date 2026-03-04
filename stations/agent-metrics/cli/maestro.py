@@ -19,7 +19,7 @@ Usage:
     maestro project round <name> <action> [--debater D] [--text T]
     maestro project reset <name>
 
-Symlink: ln -sf ~/workshop/stations/agent-metrics-cli/maestro.py ~/.local/bin/maestro
+Symlink: ln -sf ~/workshop/stations/agent-metrics/cli/maestro.py ~/.local/bin/maestro
 """
 
 import argparse

@@ -8,7 +8,7 @@ Usage:
     notification subscriptions delete <endpoint>
     notification subscriptions preferences <sub_id> [--key value ...]
 
-Symlink: ln -sf ~/workshop/stations/notification-cli/notification_cli.py ~/.local/bin/notification
+Symlink: ln -sf ~/workshop/core/cli/notification.py ~/.local/bin/notification
 """
 
 import argparse

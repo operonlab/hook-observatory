@@ -15,7 +15,7 @@ Usage:
     sysmon reports get <filename>
     sysmon health                          # health check
 
-Symlink: ln -sf ~/workshop/stations/system-monitor-cli/sysmon.py ~/.local/bin/sysmon
+Symlink: ln -sf ~/workshop/stations/system-monitor/cli/sysmon.py ~/.local/bin/sysmon
 """
 
 import argparse
