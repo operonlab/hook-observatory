@@ -1,9 +1,9 @@
 ---
-doc_version: 4
-content_hash: adfe14e5
-source_version: 4
+doc_version: 5
+content_hash: pending
+source_version: 5
 target_lang: zh-TW
-translated_at: 2026-02-23
+translated_at: 2026-03-04
 ---
 
 # 目錄結構與命名規範
@@ -14,7 +14,7 @@ Workshop 將所有功能組織成三個層級：
 
 | 層級 | 描述 | 位置 |
 |------|-------------|----------|
-| **核心模組 (Core Modules)** | 由資料庫支援的業務領域（10 個模組） | `core/src/modules/` |
+| **核心模組 (Core Modules)** | 由資料庫支援的業務領域（13 個模組） | `core/src/modules/` |
 | **工作站 (Stations)** | 獨立的本地工具（不依賴核心資料庫） | `stations/` |
 | **橋接器 (Bridges)** | 外部平台連接器 | `bridges/` |
 
@@ -26,7 +26,7 @@ Workshop 將所有功能組織成三個層級：
 │   ├── src/
 │   │   ├── events/              # 事件匯流排引擎
 │   │   ├── hooks/               # 鉤子/插件引擎
-│   │   ├── modules/             # 核心模組 (10 個領域)
+│   │   ├── modules/             # 核心模組 (13 個領域)
 │   │   │   ├── auth/            # 認證與授權
 │   │   │   ├── finance/         # 會計與財務
 │   │   │   ├── taskflow/           # 任務與調度
@@ -36,7 +36,10 @@ Workshop 將所有功能組織成三個層級：
 │   │   │   ├── skillpath/            # 技能樹與學習路徑
 │   │   │   ├── workpool/          # 資源管理
 │   │   │   ├── matchcore/           # 匹配引擎
-│   │   │   └── admin/           # 平台管理
+│   │   │   ├── admin/           # 平台管理
+│   │   │   ├── nodeflow/        # 工作流編排
+│   │   │   ├── notification/    # 多通道通知
+│   │   │   └── invest/          # 投資追蹤
 │   │   ├── middleware/          # Auth, CORS, OTel 中間件
 │   │   ├── shared/              # 共享類型、工具
 │   │   └── routes/              # 路由聚合
@@ -59,19 +62,27 @@ Workshop 將所有功能組織成三個層級：
 │   │   │   ├── skillpath/
 │   │   │   ├── workpool/
 │   │   │   ├── matchcore/
-│   │   │   └── admin/
+│   │   │   ├── admin/
+│   │   │   ├── nodeflow/
+│   │   │   ├── notification/
+│   │   │   └── invest/
 │   │   ├── plugins/             # 插件 UI 運行時 + 插槽
 │   │   └── shared/              # 共享組件、鉤子、工具
 │   ├── public/
 │   ├── rsbuild.config.ts
 │   └── package.json
-├── mcp/                         # MCP 適配層 (對核心 API 的薄封裝)
-├── stations/                    # 獨立本地工具
-│   ├── system-monitor/          # 磁碟分析 + 硬體資源監控
+├── mcp/                         # MCP 適配層 (SDK-based protocol access, 16 servers)
+├── stations/                    # 獨立本地工具 (10 個工作站)
+│   ├── agent-metrics/           # 多 Agent 任務管理與追蹤
+│   ├── agent-vista/             # Agent 虛擬辦公室視覺化
 │   ├── envkit/                  # 環境快照 + 一鍵移植
-│   ├── tmux-webui/              # tmux 瀏覽器控制介面
+│   ├── hook-observatory/        # Hook 事件可觀測性
+│   ├── sandbox-executor/        # 沙盒代碼執行 MCP 伺服器
+│   ├── sentinel/                # 服務健康檢查與自動修復
+│   ├── session-archiver/        # Session 歸檔與壓縮
 │   ├── session-redactor/        # 轉錄檔敏感資料清理
-│   └── sandbox-executor/        # 沙盒代碼執行 MCP 伺服器
+│   ├── system-monitor/          # 磁碟分析 + 硬體資源監控
+│   └── tmux-webui/              # tmux 瀏覽器控制介面
 ├── vendor/                      # 第三方社群工具（不改造）
 │   └── observability/           # Multi-Agent Observability (@disler)
 ├── bridges/                     # 外部平台連接器
@@ -121,7 +132,7 @@ core/src/modules/<name>/
 └── deps.py              # FastAPI 依賴項
 ```
 
-### 10 個核心模組
+### 13 個核心模組
 
 | 模組 | 領域 | 階段 | 資料庫 Schema |
 |--------|--------|-------|-----------|
@@ -132,6 +143,9 @@ core/src/modules/<name>/
 | `intelflow` | 每日情報 | 2 | `intelflow` |
 | `memvault` | LLM 記憶持久化 | 2 | `memvault` |
 | `skillpath` | 技能樹與學習路徑 | 2 | `skillpath` |
+| `nodeflow` | 工作流編排、DAG 執行 | 2 | `nodeflow` |
+| `notification` | 多通道通知 | 2 | `notification` |
+| `invest` | 投資追蹤、組合分析 | 2 | `invest` |
 | `workpool` | 資源管理 | 3 | `workpool` |
 | `matchcore` | 匹配引擎 | 3 | `matchcore` |
 | `admin` | 平台管理 | 1 | `admin` |
@@ -193,7 +207,7 @@ bridges/<platform>/
 
 ### MCP 適配器 (`mcp/`)
 
-薄封裝層，將核心 API 端點公開為 MCP 工具。MCP 伺服器永遠不會直接接觸資料庫。
+SDK-based protocol 適配層，透過 SDK 客戶端將核心服務與工作站公開為 MCP 工具。MCP 伺服器永遠不會直接接觸資料庫。
 
 ```
 mcp/<server-name>/
@@ -215,13 +229,18 @@ stations/<name>/
 
 **Station 分類**：
 
-| Station | 語言 | 使用 SDK | 定位 |
+| Station | 語言 | 四層架構 | 定位 |
 |---------|------|:--------:|------|
-| system-monitor | Python/Shell | ✅ | 磁碟 + 硬體監控，週報制 |
-| envkit | Python/Shell | ❌ | 環境快照 + 一鍵移植 CLI |
-| tmux-webui | Python | ❌ | tmux 瀏覽器控制 + 系統指標 |
-| session-redactor | Python | ❌ | SessionEnd hook 敏感資料清理 |
-| sandbox-executor | Node.js | ❌ | 批次執行 MCP Server |
+| agent-metrics | Python | SDK+CLI+MCP+Skill | 多 Agent 任務管理 |
+| agent-vista | Go | — | Agent 虛擬辦公室（獨立生態） |
+| envkit | Python | SDK+CLI+MCP+Skill | 環境快照 + 一鍵移植 |
+| hook-observatory | Python | SDK+CLI+MCP | Hook 事件可觀測性 |
+| sandbox-executor | Python | SDK+CLI+MCP+Skill | 沙盒代碼執行 |
+| sentinel | Python | SDK+CLI+MCP+Skill | 服務健康檢查 |
+| session-archiver | Python | SDK+CLI | Session 歸檔壓縮 |
+| session-redactor | Python | SDK+CLI+MCP | 轉錄檔敏感資料清理 |
+| system-monitor | Python | SDK+CLI+MCP+Skill | 磁碟 + 硬體監控 |
+| tmux-webui | Python | SDK+MCP+Skill | tmux 瀏覽器控制 |
 
 ### 第三方工具 (`vendor/`)
 
@@ -297,7 +316,7 @@ docs/
 ├── reference/               # 參考資料
 ├── vision/                  # 平台願景文檔
 │   ├── workshop-manifesto.md    # 何謂 Workshop
-│   ├── domain-catalog.md        # 10 個核心模組 + 5 個專案構想
+│   ├── domain-catalog.md        # 13 個核心模組 + 10 個工作站 + 組合模式
 │   ├── composition-model.md     # 樂高組合模型
 │   └── roadmap.md               # 四階段路線圖
 └── guides/                  # 開發者指南 (文件管理、功能生命週期)

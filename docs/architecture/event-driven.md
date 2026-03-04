@@ -1,9 +1,9 @@
 ---
-doc_version: 1
-content_hash: 3ff968ae
-source_version: 1
+doc_version: 2
+content_hash: pending
+source_version: 2
 target_lang: zh-TW
-translated_at: 2026-02-23
+translated_at: 2026-03-04
 ---
 
 # 事件驅動架構 (Event-Driven Architecture)
@@ -78,6 +78,14 @@ class Event:
 | finance | `finance.transaction.created`, `finance.transaction.updated`, `finance.budget.exceeded`, `finance.subscription.renewed` |
 | taskflow | `taskflow.task.created`, `taskflow.task.completed`, `taskflow.skill.leveled_up`, `taskflow.reward.claimed` |
 | ideagraph | `ideagraph.spark.created`, `ideagraph.spark.linked`, `ideagraph.graph.updated` |
+| intelflow | `intelflow.report.created`, `intelflow.briefing.generated`, `intelflow.topic.updated` |
+| memvault | `memvault.memory.extracted`, `memvault.memory.recalled`, `memvault.profile.updated` |
+| skillpath | `skillpath.skill.leveled_up`, `skillpath.path.completed`, `skillpath.assessment.scored` |
+| nodeflow | `nodeflow.workflow.triggered`, `nodeflow.workflow.completed`, `nodeflow.node.executed` |
+| notification | `notification.sent`, `notification.failed`, `notification.preference.updated` |
+| invest | `invest.portfolio.created`, `invest.transaction.recorded`, `invest.snapshot.taken` |
+| workpool | `workpool.resource.allocated`, `workpool.resource.released`, `workpool.schedule.updated` |
+| matchcore | `matchcore.match.created`, `matchcore.match.scored`, `matchcore.recommendation.generated` |
 | admin | `admin.setting.changed`, `admin.plugin.installed`, `admin.plugin.removed` |
 
 ### 系統事件
