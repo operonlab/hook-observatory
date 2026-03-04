@@ -1,7 +1,7 @@
 # Architecture Constraints
 
 ## Modular Monolith
-- Single deployable unit: all 10 domain modules in one FastAPI process (port 8800)
+- Single deployable unit: all 13 domain modules in one FastAPI process (port 8800)
 - Two hot-path services run separately: realtime/LiveKit (8830), media/STT-TTS (8831)
 - Frontend: single React app (workbench/, port 3000) — NO micro-frontend, NO Module Federation
 
@@ -12,7 +12,7 @@
 - Cross-module writes → publish events via EventBus, never direct DB writes
 - Each module owns one PostgreSQL schema: module name = schema name
 
-## 10 Core Modules
+## 13 Core Modules
 
 | Module | Domain | Phase |
 |--------|--------|-------|
@@ -24,6 +24,9 @@
 | intelflow | RSS feeds, daily briefings | 2 |
 | memvault | LLM memories, semantic search | 2 |
 | skillpath | Skill trees, learning paths | 2 |
+| nodeflow | Workflow orchestration, DAG execution | 2 |
+| notification | Multi-channel notifications | 2 |
+| invest | Investment tracking, portfolio analysis | 2 |
 | workpool | Resources, scheduling, capacity | 3 |
 | matchcore | Talent-job matching, scoring | 3 |
 
@@ -35,10 +38,10 @@
 - Keep payloads lean: IDs + essential data only; fetch full records via service imports
 
 ## Service Taxonomy
-- **Core Modules** (DB-backed): auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin
+- **Core Modules** (DB-backed): auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin, nodeflow, notification, invest
 - **Stations** (`stations/`): standalone local tools, no Core DB dependency
 - **Bridges** (`bridges/`): external platform connectors (LINE, Telegram, Discord)
-- **MCP adapters** (`mcp/`): thin wrappers over Core API — NEVER touch DB directly
+- **MCP servers** (`mcp/`): SDK-based protocol access to core services and stations (16 servers)
 - **Vendor** (`vendor/`): third-party tools, used as-is, no modification
 
 ## Key Design Principles

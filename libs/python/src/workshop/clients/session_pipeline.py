@@ -204,11 +204,13 @@ class SessionPipelineClient:
             )
 
             client = SessionRedactorClient()
-            # Pass transcript path if available; the client resolves by session_id otherwise
-            kwargs: dict = {"session_id": session_id}
             if transcript_path:
-                kwargs["transcript_path"] = transcript_path
-            outcome = client.redact(**kwargs)
+                # Targeted: redact the specific transcript file
+                result = client.redact_file(transcript_path, trigger="hook", session_id=session_id)
+                outcome = result.to_dict()
+            else:
+                # No transcript path — nothing to redact for this session
+                outcome = {"skipped": True, "reason": "no transcript_path provided"}
             stage.details = outcome if isinstance(outcome, dict) else {"result": str(outcome)}
         except ImportError:
             # session_redactor SDK not available — fall back to legacy shell script

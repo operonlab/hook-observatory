@@ -21,4 +21,9 @@ Stations (standalone):
 CLI wrappers (subprocess):
     from workshop.clients.envkit import EnvkitClient
     from workshop.clients.session_archiver import SessionArchiverClient
+
+Direct impl (no HTTP server):
+    from workshop.clients.session_redactor import SessionRedactorClient
+    from workshop.clients.session_pipeline import SessionPipelineClient
+    from workshop.clients.session_intelligence import SessionIntelligenceClient
 """

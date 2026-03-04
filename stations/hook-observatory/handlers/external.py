@@ -42,17 +42,6 @@ def skill_tracker(event_type: str, tool_name: str, tool_input: dict, raw_input: 
     )
 
 
-def redact_session(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
-    """SessionEnd: redact sensitive data from transcript."""
-    return call_external_script(
-        os.path.join(
-            HOME, "Claude", "projects", "session-redactor", "scripts", "redact-session.sh"
-        ),
-        input_data=raw_input,
-        timeout=10,
-    )
-
-
 def sync_login(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """SessionStart: sync Playwright profile from master."""
     return call_external_script(
