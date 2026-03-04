@@ -1,7 +1,7 @@
 ---
-doc_version: 3
-content_hash: 5cdc4d23
-source_version: 3
+doc_version: 4
+content_hash: pending
+source_version: 4
 target_lang: zh-TW
 translated_at: 2026-02-23
 ---
@@ -16,34 +16,54 @@ translated_at: 2026-02-23
 
 ```
 docs/
-├── architecture/        # 系統設計決策
-│   ├── architecture-decisions.md  # 7 項 ADR
-│   ├── modular-monolith.md        # 後端架構指南
-│   ├── frontend.md                # 前端架構指南
-│   ├── event-driven.md            # 事件驅動架構
-│   ├── plugin-system.md           # Hook/插件系統
-│   ├── observability.md           # 可觀測性策略
-│   ├── auth.md                    # 認證與權限
-│   ├── communication.md           # 通訊模式
-│   ├── folder-structure.md        # 佈局與命名規則
-│   ├── tech-stack.md              # 技術選擇
-│   ├── rwd-pwa.md                 # RWD + PWA 標準
-│   ├── principles.md              # 設計原則
-│   └── shared-layer-patterns.md   # 共享層模式
-├── vision/              # 平台願景
-│   ├── workshop-manifesto.md      # Workshop 宣言
-│   ├── domain-catalog.md          # 服務目錄 + 組合配方
-│   ├── composition-model.md       # 樂高組合模型
-│   └── roadmap.md                 # 四階段路線圖
-├── blueprint/           # 建設藍圖
-│   ├── v1-feature-inventory.md    # V1 功能盤點
-│   ├── v2-blueprint.md            # V2 藍圖
-│   └── v2-worktree-todos.md       # V2 待辦清單
-├── reference/           # 參考資料
-│   └── sandbox-executor.md        # Sandbox 執行器
-└── guides/              # 開發者指南
-    ├── docs-management.md         # 此文件
-    └── feature-lifecycle.md       # POC → 生產工作流
+├── README.md                        # 頂層入口索引
+├── architecture/                    # 系統架構（ADR、設計模式、技術規格）
+│   ├── README.md                    # 架構文件索引
+│   ├── architecture-decisions.md    # 11 項 ADR
+│   ├── modular-monolith.md          # 後端架構指南
+│   ├── composite-architecture.md    # SDK→CLI→MCP→Skill 四層架構
+│   ├── event-driven.md              # 事件驅動架構
+│   ├── event-resilience-patterns.md # 6 個事件韌性模式
+│   ├── frontend.md                  # 前端架構指南
+│   ├── frontend-design-system.md    # 色彩系統 + 模組主題
+│   ├── ux-shell-redesign.md         # App Launcher 架構
+│   ├── widget-manifest-spec.md      # Widget 系統規格
+│   ├── auth.md                      # 認證與權限
+│   ├── notification.md              # 通知與橋接
+│   ├── communication.md             # 通訊模式
+│   ├── plugin-system.md             # Hook/插件系統
+│   ├── observability.md             # 可觀測性策略
+│   ├── scheduling.md                # 系統排程管理
+│   ├── shared-layer-patterns.md     # 共享層模式
+│   ├── folder-structure.md          # 佈局與命名規則
+│   ├── tech-stack.md                # 技術選擇
+│   ├── rwd-pwa.md                   # RWD + PWA 標準
+│   └── principles.md                # 設計原則
+├── vision/                          # 平台願景
+│   ├── README.md                    # 願景文件索引
+│   ├── workshop-manifesto.md        # Workshop 宣言
+│   ├── domain-catalog.md            # 服務目錄 + 組合配方
+│   ├── composition-model.md         # 樂高組合模型
+│   └── roadmap.md                   # 四階段路線圖
+├── blueprint/                       # 建設藍圖（各模組實作規格）
+│   ├── v1-feature-inventory.md      # V1 功能盤點
+│   ├── v2-priorities.md             # V2 優先級矩陣
+│   └── p1~p10-*.md                  # 各模組藍圖
+├── plans/                           # 戰略計劃（跨模組演進）
+│   ├── composite-architecture-roadmap.md  # 四層架構推進計劃
+│   ├── four-tier-data-lifecycle.md        # 熱暖冷冰資料策略
+│   └── skill-ecosystem-hardening.md       # Skill 生態加固
+├── reference/                       # 參考資料
+│   ├── sandbox-executor.md          # Sandbox 執行器規格
+│   ├── memvault-kg-research.md      # Memvault KG 研究
+│   └── memvault-growth-loops.md     # Memvault 成長飛輪
+├── guides/                          # 開發者指南
+│   ├── docs-management.md           # 此文件
+│   └── feature-lifecycle.md         # POC → 生產工作流
+└── lessons/                         # 實戰教訓
+    ├── README.md                    # 教訓索引
+    ├── frontend-color-system-fix.md # 前端色彩系統修復
+    └── hook-observatory-resilience.md  # Hook 韌性模式
 ```
 
 ### 分散式 (按領域)
@@ -61,33 +81,33 @@ workbench/README.md                      ← 前端開發指南
 
 | 內容 | 位置 | 範例 |
 |---------|----------|---------|
-| 架構決策 | `docs/architecture/` | 「為什麼選擇 Modular Monolith 而非微服務」 |
-| 平台願景 | `docs/vision/` | 「Workshop 宣言、服務目錄、路線圖」 |
-| 建設藍圖 | `docs/blueprint/` | 「V2 藍圖、待辦清單」 |
-| 開發者指南 | `docs/guides/` | 「文件管理、功能生命週期」 |
-| 參考資料 | `docs/reference/` | 「Sandbox 執行器規格」 |
-| 模組專屬設置 | `core/README.md` | 「核心需要 CORE_DB_URL 環境變數」 |
-| 共享函式庫用法 | `libs/<lang>/README.md` | 「匯入 corelib.db 進行連線」 |
+| 架構決策與設計模式 | `docs/architecture/` | ADR、事件韌性、複合架構、排程管理 |
+| 平台願景 | `docs/vision/` | Workshop 宣言、服務目錄、路線圖 |
+| 建設藍圖（各模組實作規格） | `docs/blueprint/` | P1-P10 各模組藍圖、V2 優先級矩陣 |
+| 戰略計劃（跨模組演進） | `docs/plans/` | 四層架構推進、熱暖冷冰資料策略 |
+| 開發者指南 | `docs/guides/` | 文件管理、功能生命週期 |
+| 參考資料（研究與規格） | `docs/reference/` | Sandbox 規格、Memvault KG 研究 |
+| 實戰教訓 | `docs/lessons/` | 前端色彩修復、Hook 韌性模式 |
+| 模組專屬設置 | `core/README.md` | 核心需要 CORE_DB_URL 環境變數 |
+| 共享函式庫用法 | `libs/<lang>/README.md` | 匯入 corelib.db 進行連線 |
 
 ## ADR (架構決策紀錄)
 
-對於重大的技術決策，請在 `docs/architecture/adr/` 建立 ADR：
+對於重大的技術決策，在 `docs/architecture/architecture-decisions.md` 中添加新 ADR：
 
 ```markdown
-# ADR-NNN: <標題>
+## AD-N: <標題>
 
-## 狀態
-已接受 | 提議中 | 已棄用
+**決策**：我們決定了什麼？
 
-## 上下文
-是什麼情況促成了這個決策？
+**決策理由**：
+- 為什麼？有哪些考量？
 
-## 決策
-我們決定了什麼？
-
-## 後果
-有哪些權衡？
+**限制條件**：
+- 有哪些約束或權衡？
 ```
+
+如果決策內容較長（>50 行），另建獨立檔案放在 `docs/architecture/` 中，並從 ADR 中交叉引用。
 
 ## 翻譯工作流 (zh-TW)
 
