@@ -1,9 +1,9 @@
 ---
-doc_version: 3
-content_hash: 2ec4dc04
-source_version: 3
+doc_version: 4
+content_hash: pending
+source_version: 4
 target_lang: zh-TW
-translated_at: 2026-02-23
+translated_at: 2026-03-04
 ---
 
 # 服務目錄 (Service Catalog)
@@ -49,7 +49,8 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth |
-| **MCP 伺服器** | `workshop-admin` (待建置) |
+| **MCP 伺服器** | — (安全邊界，不暴露給 LLM) |
+| **四層架構** | SDK ✅ CLI ✅ |
 | **V1 狀態** | V1 擁有 sysmon + agent-metrics (已併入 gateway) |
 
 **功能能力**:
@@ -167,7 +168,8 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | 屬性 | 數值 |
 |----------|-------|
 | **依賴項目** | auth, memvault (用於個人化) |
-| **MCP 伺服器** | `workshop-intelflow` (待建置) |
+| **MCP 伺服器** | `workshop-intelflow` |
+| **四層架構** | SDK ✅ CLI ✅ MCP ✅ Skill ✅ |
 | **整合 Skills** | smart-search, daily-briefing, company-intel, competitive-intel, content-writer |
 | **V1 狀態** | research_report service (已遷移至 `core/src/modules/intelflow/`) + smart-search skill v0.3.3 |
 
@@ -270,7 +272,55 @@ resources:
 
 ---
 
-### 整合服務 (橋接層 Bridges)
+#### nodeflow — 工作流程編排
+
+| 屬性 | 數值 |
+|----------|-------|
+| **依賴項目** | auth |
+| **MCP 伺服器** | `workshop-nodeflow` |
+| **四層架構** | SDK ✅ CLI ✅ MCP ✅ Skill ✅ |
+| **V1 狀態** | 核心模組已建置 |
+
+**功能能力**:
+- DAG 工作流程定義與執行
+- 節點與邊管理
+- 流程執行追蹤與歷史
+- 自動化觸發
+
+---
+
+#### notification — 通知路由服務
+
+| 屬性 | 數值 |
+|----------|-------|
+| **依賴項目** | auth |
+| **四層架構** | SDK ✅ CLI ✅ |
+| **V1 狀態** | 核心模組已建置 |
+
+**功能能力**:
+- 事件→通知路由（EventBus 事件 → 過濾 → 格式化 → 派送）
+- Channel Adapter 介面（統一 ABC，每個推播通道獨立實作）
+- 使用者偏好（按模組、按事件類型、按 channel 三維開關）
+- 聚合防轟炸（同 group_key 短時間內合併）
+- 多通道派送（PWA Push → ntfy → Email → Bridge）
+
+---
+
+#### invest — 投資追蹤
+
+| 屬性 | 數值 |
+|----------|-------|
+| **依賴項目** | auth, finance |
+| **V1 狀態** | 核心模組已建置（骨架階段） |
+
+**功能能力**:
+- 投資組合管理
+- 資產追蹤與估值
+- 績效分析
+
+---
+
+### 橋接層 (Bridges)
 
 #### social-hooks — 社群平台連接器（Bridges）
 
@@ -303,37 +353,6 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 階段 2: + Telegram Bridge
 階段 3: + Discord Bridge
 ```
-
----
-
-#### notification — 通知路由服務
-
-| 屬性 | 數值 |
-|----------|-------|
-| **分類** | Hot-path 服務，位於 `core/services/notification/` |
-| **前提條件** | PWA (sw.js + manifest.json) |
-| **技術** | Web Push API + VAPID (主要), ntfy (後備), Firebase (未來) |
-| **偏好儲存** | `auth.notification_preferences`（JSONB） |
-
-**功能能力**:
-- **事件→通知路由**：EventBus 事件 → 過濾 → 格式化 → 派送
-- **Channel Adapter 介面**：統一的 `ChannelAdapter` ABC，每個推播通道獨立實作
-- **使用者偏好**：按模組、按事件類型、按 channel 的三維開關
-- **聚合防轟炸**：同 group_key 短時間內合併（防 10 筆交易 = 10 條通知）
-- **勿擾時段**：quiet_hours 設定
-- **通知歷史**：完整派送日誌 + 已讀追蹤 + Badge 未讀數
-- **多通道派送**：PWA Push → ntfy → Email → Bridge（fallback chain）
-
-**增長路徑**:
-```
-階段 1: PWA Push (VAPID) + 偏好管理 + 通知歷史
-階段 2: + ntfy 備用 + 聚合 + 勿擾
-階段 3: + Email (SMTP/Resend)
-階段 4: + Firebase (行動端)
-階段 5: + AI 路由（自動選最佳 channel）
-```
-
-詳見 [通知與橋接架構](../architecture/notification.md)
 
 ---
 
@@ -423,12 +442,94 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | 屬性 | 數值 |
 |----------|-------|
 | **分類** | 工作站 (Station) |
-| **V1 狀態** | 運作中（MCP Server，2 個工具） |
+| **四層架構** | SDK ✅ CLI ✅ MCP ✅ Skill ✅ |
 
 **功能能力**：
 - Python/JS 沙盒執行
 - SDK Helpers 自動注入（http_get/post, read_file/write_file, output）
 - 批次操作（取代多次個別 tool call）
+
+---
+
+#### agent-metrics — 多代理指標與編排
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **四層架構** | SDK ✅ CLI (`maestro`) ✅ MCP (10 tools) ✅ Skill ✅ |
+
+**功能能力**：
+- Maestro 任務分派與執行追蹤
+- Project 管理（多任務編排）
+- 代理效能指標收集
+
+---
+
+#### hook-observatory — Hook 事件觀測
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **四層架構** | SDK ✅ CLI (`hook-obs`) ✅ MCP (4 tools) ✅ |
+
+**功能能力**：
+- Hook 事件即時監控與統計
+- 事件歷史查詢與過濾
+- 效能分析（延遲、錯誤率）
+
+---
+
+#### sentinel — 服務健康監控
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **四層架構** | SDK ✅ CLI ✅ MCP (5 tools) ✅ Skill ✅ |
+
+**功能能力**：
+- 服務健康檢查（HTTP + process + port）
+- 自動修復建議
+- 檢查歷史追蹤
+
+---
+
+#### session-archiver — Session 歸檔
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **四層架構** | SDK ✅ CLI ✅ |
+
+**功能能力**：
+- Claude Code session 轉錄檔歸檔
+- 批次掃描與壓縮
+
+---
+
+#### agent-vista — 虛擬辦公室視覺化
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **技術** | Go backend + React frontend |
+
+**功能能力**：
+- 三 CLI（Claude Code + Codex + Gemini）像素風虛擬辦公室
+- 即時代理狀態視覺化
+
+---
+
+#### tmux-relay — tmux 跨 Pane 通訊
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station)（無獨立 HTTP server） |
+| **四層架構** | SDK ✅ CLI (`relay`) ✅ MCP (5 tools) ✅ Skill ✅ |
+
+**功能能力**：
+- 跨 tmux pane 指令傳遞
+- 結果捕獲與回傳
+- Pane pool 管理
 
 ---
 
@@ -506,26 +607,38 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 
 ## 服務索引 (Service Index)
 
-| 服務 | 類型 | 狀態 | MCP 伺服器 | 工具數 |
-|---------|------|--------|------------|-------|
-| auth | 基礎層 | V1 已存在 | `workshop-auth` | 待定 |
-| admin | 基礎層 | 部分 V1 | `workshop-admin` | 待定 |
-| finance | 領域服務 | MCP 運作中 | `workshop-finance` + `workshop-finance-analytics` | ~18 |
+> 四層架構 = SDK → CLI → MCP → Skill（詳見 `composite-architecture.md`）
+
+| 服務 | 類型 | 四層狀態 | MCP 伺服器 | 工具數 |
+|---------|------|----------|------------|-------|
+| auth | 基礎層 | SDK+CLI | — | — |
+| admin | 基礎層 | SDK+CLI | — | — |
+| finance | 領域服務 | SDK+CLI+MCP+Skill | `finance` + `finance-wallet` + `finance-analytics` | ~27 |
 | taskflow | 領域服務 | MCP 運作中 | `workshop-taskflow` + `workshop-taskflow-reports` | ~15 |
 | ideagraph | 領域服務 | MCP 運作中 | `workshop-ideagraph` + `workshop-ideagraph-ai` | ~13 |
-| intelflow | 領域服務 | 未開始 | `workshop-intelflow` | 待定 |
-| memvault | 領域服務 | Core + MCP | `memvault` | 16 |
-| skillpath | 領域服務 | 未開始 | `workshop-skillpath` | 待定 |
-| workpool | 領域服務 | 未開始 | `workshop-workpool` | 待定 |
-| matchcore | 領域服務 | 未開始 | `workshop-matchcore` | 待定 |
+| intelflow | 領域服務 | SDK+CLI+MCP+Skill | `intelflow` | ~2 |
+| memvault | 領域服務 | SDK+CLI+MCP+Skill | `memvault` | 8 |
+| skillpath | 領域服務 | 未開始 | — | — |
+| workpool | 領域服務 | 未開始 | — | — |
+| matchcore | 領域服務 | 未開始 | — | — |
+| nodeflow | 領域服務 | SDK+CLI+MCP+Skill | `nodeflow` | 6 |
+| notification | 領域服務 | SDK+CLI | — | — |
+| invest | 領域服務 | 骨架 | — | — |
 | social-hooks | 橋接層 | 未開始 | — | — |
-| notification | 橋接層 | 未開始 | — | — |
-| media | 熱路徑 | 位於 core/services/ | — | — |
-| system-monitor | 工作站 | V1 運作中 | — | — |
-| envkit | 工作站 | 重新設計 | — | — |
-| tmux-webui | 工作站 | V1 運作中 | — | — |
-| session-redactor | 工作站 | V1 運作中 | — | — |
-| sandbox-executor | 工作站 | V1 運作中 | MCP (2 工具) | 2 |
+| media | 熱路徑 | core/services/ | — | — |
+| agent-metrics | 工作站 | SDK+CLI+MCP+Skill | `agent-metrics` | 10 |
+| hook-observatory | 工作站 | SDK+CLI+MCP | `hook-observatory` | 4 |
+| sandbox-executor | 工作站 | SDK+CLI+MCP+Skill | `sandbox` | 2 |
+| sentinel | 工作站 | SDK+CLI+MCP+Skill | `sentinel` | 5 |
+| system-monitor | 工作站 | SDK+CLI+MCP+Skill | `system-monitor` | 4 |
+| tmux-relay | 工作站 | SDK+CLI+MCP+Skill | `tmux-relay` | 5 |
+| tmux-webui | 工作站 | SDK+MCP | `tmux-webui` | 3 |
+| envkit | 工作站 | SDK+MCP+Skill | `envkit` | 4 |
+| session-redactor | 工作站 | SDK+CLI+MCP+Skill | `session-redactor` | 5 |
+| session-archiver | 工作站 | SDK+CLI | — | — |
+| session-pipeline | 工作站 | SDK+CLI+Hook | — | — |
+| session-intelligence | 工作站 | SDK+CLI+MCP+Skill | `session-intelligence` | 6 |
+| agent-vista | 工作站 | Go 獨立生態 | — | — |
 | observability | 第三方 | 運作中 | — | — |
 
 ---
@@ -535,9 +648,31 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | 類型 | 項目 | 資料存放地 |
 |------|-------|---------------|
 | **基礎層 (Foundation)** | auth, admin | PostgreSQL |
-| **領域服務 (Domain Service)** | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore | PostgreSQL (每個模組一個 schema) |
-| **橋接層 (Bridge)** | social-hooks, notification | 外部 + 事件總線 (Event Bus) |
+| **領域服務 (Domain Service)** | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest | PostgreSQL (每個模組一個 schema) |
+| **橋接層 (Bridge)** | social-hooks | 外部 + 事件總線 (Event Bus) |
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
-| **工作站 (Station)** | system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor | 本地 / 可選 PostgreSQL |
+| **工作站 (Station)** | agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-redactor, system-monitor, tmux-relay, tmux-webui + session-pipeline, session-intelligence (CLI-only) | 本地 SQLite / 無狀態 |
 | **第三方 (Vendor)** | observability (@disler) | 獨立運行 |
 | **組合 (Composition)** | 法律顧問, 教會音樂, 虛擬客服, ERP/POS | 上述服務的組合 |
+
+## 四層複合架構 (Composite Architecture)
+
+> 2026-03-04 大規模升級完成。詳見 `memory/composite-architecture.md`
+
+```
+SDK  — 基底層：純 Python client，CLI 和 MCP 都基於此
+CLI  — 通用存取：人 + 腳本 + headless agent + sub-agents
+MCP  — 結構化合約：Claude Code main agent（typed schema）
+Skill — 意圖路由：何時用、怎麼選。只呼叫 CLI + MCP，不 import SDK
+```
+
+**SDK 四種模式**：
+
+| 模式 | 適用情境 | 範例 |
+|------|----------|------|
+| BaseClient HTTP | DB-backed 核心模組 (port 8801) | finance, memvault, intelflow |
+| Standalone HTTP | 有獨立 HTTP server 的工作站 | sentinel, system-monitor |
+| Direct impl | 無 HTTP server 的本地工具 | session-redactor, session-pipeline |
+| Subprocess | CLI-first 工具 | envkit, session-archiver |
+
+**已完成 19 個服務**（僅跳過 taskflow、ideagraph — 延後）。

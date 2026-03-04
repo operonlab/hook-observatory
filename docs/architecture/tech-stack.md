@@ -1,9 +1,9 @@
 ---
-doc_version: 3
-content_hash: 95d02640
-source_version: 3
+doc_version: 4
+content_hash: pending
+source_version: 4
 target_lang: zh-TW
-translated_at: 2026-02-23
+translated_at: 2026-03-04
 ---
 
 # 技術棧規範 (Technology Stack Specification)
@@ -55,7 +55,10 @@ PostgreSQL Instance
 ├── schema: skillpath         (skill trees, learning paths, assessments) — 第二階段 (Phase 2)
 ├── schema: workpool       (resources, schedules, capacity)           — 第三階段 (Phase 3)
 ├── schema: matchcore        (match rules, scores, recommendations)     — 第三階段 (Phase 3)
-└── schema: admin        (audit_logs, settings, system health)      — 第一階段 (Phase 1)
+├── schema: admin        (audit_logs, settings, system health)      — 第一階段 (Phase 1)
+├── schema: nodeflow       (workflows, DAG nodes, execution runs)     — 第二階段 (Phase 2)
+├── schema: notification   (preferences, log, channels, rules)        — 第二階段 (Phase 2)
+└── schema: invest         (portfolios, transactions, analysis)       — 第二階段 (Phase 2)
 ```
 
 **規則**:

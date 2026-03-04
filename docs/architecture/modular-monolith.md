@@ -1,9 +1,9 @@
 ---
-doc_version: 3
-content_hash: 87cf60a6
-source_version: 3
+doc_version: 4
+content_hash: pending
+source_version: 4
 target_lang: zh-TW
-translated_at: 2026-02-23
+translated_at: 2026-03-04
 ---
 
 # 模組化單體架構指南 (Modular Monolith Architecture Guide)
@@ -26,6 +26,9 @@ translated_at: 2026-02-23
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐ ┌────────┐ ┌────────┐  │
                     │  │  skillpath  │ │ workpool │ │ matchcore  │  │
+                    │  └────────┘ └────────┘ └────────┘  │
+                    │  ┌────────┐ ┌────────┐ ┌────────┐  │
+                    │  │nodeflow│ │notific.│ │ invest │  │
                     │  └────────┘ └────────┘ └────────┘  │
                     │  ┌────────┐                        │
                     │  │ admin  │                        │
@@ -63,6 +66,9 @@ translated_at: 2026-02-23
 | `intelflow` | RSS feeds, daily briefings, topic tracking | `intelflow` | 2 |
 | `memvault` | LLM memories, semantic search, profiles | `memvault` | 2 |
 | `skillpath` | Skill trees, learning paths, assessments | `skillpath` | 2 |
+| `nodeflow` | Workflows, DAG execution, triggers | `nodeflow` | 2 |
+| `notification` | Multi-channel notifications, preferences | `notification` | 2 |
+| `invest` | Investment tracking, portfolio analysis | `invest` | 2 |
 | `workpool` | Resources (human/machine/agent), scheduling | `workpool` | 3 |
 | `matchcore` | Talent-job matching, task pairing | `matchcore` | 3 |
 | `admin` | Platform management, audit logs, system health | `admin` | 1 |
@@ -101,6 +107,9 @@ CREATE SCHEMA skillpath;       -- 由 skillpath 模組擁有 (Phase 2)
 CREATE SCHEMA workpool;     -- 由 workpool 模組擁有 (Phase 3)
 CREATE SCHEMA matchcore;      -- 由 matchcore 模組擁有 (Phase 3)
 CREATE SCHEMA admin;      -- 由 admin 模組擁有 (Phase 1)
+CREATE SCHEMA nodeflow;     -- 由 nodeflow 模組擁有 (Phase 2)
+CREATE SCHEMA notification; -- 由 notification 模組擁有 (Phase 2)
+CREATE SCHEMA invest;       -- 由 invest 模組擁有 (Phase 2)
 ```
 
 跨 schema 查詢在技術上是可行的，但在**架構上是被禁止的**。如果模組 A 需要來自模組 B 的資料，它必須調用 B 的 service 層。
@@ -193,7 +202,10 @@ class CoreSettings(BaseSettings):
     "skillpath": "healthy",
     "workpool": "healthy",
     "matchcore": "healthy",
-    "admin": "healthy"
+    "admin": "healthy",
+    "nodeflow": "healthy",
+    "notification": "healthy",
+    "invest": "healthy"
   }
 }
 ```
@@ -204,7 +216,7 @@ class CoreSettings(BaseSettings):
 
 ```python
 # core/src/app.py
-from src.modules import auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin
+from src.modules import auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin, nodeflow, notification, invest
 
 def create_app() -> FastAPI:
     app = FastAPI()
@@ -220,6 +232,9 @@ def create_app() -> FastAPI:
     app.include_router(intelflow.router, prefix="/api/intelflow", tags=["intelflow"])
     app.include_router(memvault.router, prefix="/api/memvault", tags=["memvault"])
     app.include_router(skillpath.router, prefix="/api/skillpath", tags=["skillpath"])
+    app.include_router(nodeflow.router, prefix="/api/nodeflow", tags=["nodeflow"])
+    app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
+    app.include_router(invest.router, prefix="/api/invest", tags=["invest"])
 
     # 註冊模組路由 (Phase 3)
     app.include_router(workpool.router, prefix="/api/workpool", tags=["workpool"])

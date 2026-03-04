@@ -1,7 +1,8 @@
 ---
-doc_version: 1
+doc_version: 2
 content_hash: pending
 target_lang: zh-TW
+translated_at: 2026-03-04
 ---
 
 # 通知與橋接架構
@@ -24,7 +25,7 @@ target_lang: zh-TW
                        │
                        ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  Notification Router（core/services/notification/）           │
+│  Notification Router（core/src/modules/notification/）         │
 │                                                              │
 │  1. 事件過濾：哪些事件需要通知？（notification_rules 表）       │
 │  2. 使用者偏好：這個使用者要收這類通知嗎？（preferences 表）    │
@@ -48,15 +49,17 @@ target_lang: zh-TW
 
 ## 核心設計：兩層分離
 
-### 第一層：Notification Service（單向推播）
+### 第一層：Notification Module（單向推播）
 
 | 屬性 | 值 |
 |------|-----|
-| **位置** | `core/services/notification/` |
-| **性質** | Hot-path service（無獨立 DB schema，共用 auth schema 的 user preferences） |
+| **位置** | `core/src/modules/notification/` |
+| **性質** | Core Module（DB-backed，擁有 `notification` schema） |
 | **職責** | 事件→通知路由、格式化、派送、聚合、偏好管理 |
 
 **只負責「發出去」**——不接收使用者回覆。
+
+> **注意**：notification 是核心模組，非 hot-path service。它在 Core Monolith 內運行，擁有獨立的 DB schema。
 
 ### 第二層：Bridges（雙向通訊）
 
