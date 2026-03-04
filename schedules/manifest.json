@@ -5,7 +5,7 @@
     {
       "name": "ws-memvault-synthesis",
       "label": "com.joneshong.scheduler.ws-memvault-synthesis",
-      "command": "~/workshop/schedules/runners/ws-memvault-synthesis.sh",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_synthesis.py",
       "schedule": { "calendar": { "Hour": 4, "Minute": 0 } },
       "description": "每日 4AM: cluster → wisdom → decay → attitude pipeline",
       "category": "workshop",
@@ -15,7 +15,7 @@
     {
       "name": "ws-session-archive",
       "label": "com.joneshong.scheduler.ws-session-archive",
-      "command": "~/workshop/schedules/runners/ws-session-archive.sh",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_session_archive.py",
       "schedule": { "calendar": { "Hour": 5, "Minute": 15 } },
       "description": "每日 5:15AM: scan sessions + archive cold candidates with summaries + embeddings",
       "category": "workshop",
@@ -25,7 +25,7 @@
     {
       "name": "daily-briefing",
       "label": "com.joneshong.scheduler.daily-briefing",
-      "command": "~/.claude/scripts/daily-briefing/run.sh",
+      "command": "~/.local/bin/python3 ~/.claude/scripts/daily-briefing/run.py",
       "schedule": { "calendar": { "Hour": 7, "Minute": 0 } },
       "description": "每日情報簡報：金融、AI、科技、地緣政治（7:00 AM）",
       "category": "jonathan",
@@ -45,7 +45,7 @@
     {
       "name": "ws-envkit-snapshot",
       "label": "com.joneshong.scheduler.ws-envkit-snapshot",
-      "command": "~/workshop/schedules/runners/ws-envkit-snapshot.sh",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_envkit_snapshot.py",
       "schedule": { "calendar": { "Weekday": 1, "Hour": 5, "Minute": 30 } },
       "description": "每週一 5:30AM: 環境快照 + config 備份 + drift 偵測",
       "category": "workshop",
@@ -105,7 +105,7 @@
     {
       "name": "orchestrator",
       "label": "com.joneshong.orchestrator",
-      "command": "~/workshop/scripts/workshop-services.sh start agent-metrics",
+      "command": "~/.local/bin/python3 ~/workshop/scripts/workshop_services.py start agent-metrics",
       "schedule": { "run_at_load": true },
       "description": "[已停用] 已遷移至 stations/agent-metrics（由 workshop-services.sh 管理）",
       "category": "jonathan",
@@ -125,7 +125,7 @@
     {
       "name": "workshop-launcher",
       "label": "com.workshop.launcher",
-      "command": "/bin/bash ~/workshop/scripts/workshop-services.sh daemon",
+      "command": "~/.local/bin/python3 ~/workshop/scripts/workshop_services.py daemon",
       "schedule": { "run_at_load": true },
       "description": "Workshop 服務啟動器（KeepAlive daemon, Core API + Redis）",
       "category": "workshop",
@@ -135,7 +135,7 @@
     {
       "name": "ws-drift-check",
       "label": "com.joneshong.scheduler.ws-drift-check",
-      "command": "/bin/bash ~/.claude/skills/system-map/scripts/check-drift.sh",
+      "command": "~/.local/bin/python3 ~/.claude/skills/system-map/scripts/check_drift.py",
       "schedule": { "calendar": { "Weekday": 1, "Hour": 6, "Minute": 0 } },
       "description": "每週一 6AM: 系統狀態漂移偵測（baseline diff → stdout log）",
       "category": "workshop",

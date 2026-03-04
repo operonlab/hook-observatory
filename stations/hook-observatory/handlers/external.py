@@ -18,7 +18,7 @@ MEMVAULT_SCRIPTS = os.path.join(HOME, "workshop", "mcp", "memvault", "scripts")
 def recall(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """UserPromptSubmit: memvault recall — returns markdown context."""
     return call_external_script(
-        os.path.join(MEMVAULT_SCRIPTS, "recall-v2.sh"),
+        os.path.join(MEMVAULT_SCRIPTS, "recall_v2.py"),
         input_data=raw_input,
         timeout=15,
     )
@@ -27,7 +27,7 @@ def recall(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 def extract(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """SessionEnd: async memory extraction pipeline."""
     return call_external_script(
-        os.path.join(MEMVAULT_SCRIPTS, "extract-v2-async.sh"),
+        os.path.join(MEMVAULT_SCRIPTS, "extract_v2_async.py"),
         input_data=raw_input,
         timeout=5,
     )
@@ -36,7 +36,7 @@ def extract(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -
 def skill_tracker(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """PostToolUse/Skill: track skill usage to Core API."""
     return call_external_script(
-        os.path.join(MEMVAULT_SCRIPTS, "skill-tracker-v2.sh"),
+        os.path.join(MEMVAULT_SCRIPTS, "skill_tracker_v2.py"),
         input_data=raw_input,
         timeout=5,
     )
@@ -45,7 +45,9 @@ def skill_tracker(event_type: str, tool_name: str, tool_input: dict, raw_input: 
 def redact_session(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """SessionEnd: redact sensitive data from transcript."""
     return call_external_script(
-        os.path.join(HOME, "Claude", "projects", "session-redactor", "scripts", "redact-session.sh"),
+        os.path.join(
+            HOME, "Claude", "projects", "session-redactor", "scripts", "redact-session.sh"
+        ),
         input_data=raw_input,
         timeout=10,
     )
