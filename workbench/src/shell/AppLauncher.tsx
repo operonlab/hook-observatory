@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { APP_LIST } from '@/shared/constants/apps'
+import { useAppOrder } from '@/hooks/useAppOrder'
 
 interface AppLauncherProps {
   onClose: () => void
@@ -21,9 +21,7 @@ export default function AppLauncher({ onClose }: AppLauncherProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [onClose])
 
-  const availableApps = APP_LIST.filter(
-    (app) => app.status === 'available' || app.status === 'external',
-  )
+  const { allOrdered } = useAppOrder()
 
   return (
     <div
@@ -53,7 +51,7 @@ export default function AppLauncher({ onClose }: AppLauncherProps) {
 
       {/* App list */}
       <div className="py-1">
-        {availableApps.map((app) => {
+        {allOrdered.map((app) => {
           const isActive = location.pathname.startsWith(app.path)
           return (
             <button
