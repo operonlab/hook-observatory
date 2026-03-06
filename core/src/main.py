@@ -25,8 +25,8 @@ async def lifespan(app: FastAPI):
     # Import event subscribers so @event_bus.on decorators register handlers
     import src.modules.finance.events
     import src.modules.invest.events
-    import src.modules.nodeflow.events  # noqa: F401
-    import src.modules.notification.events  # noqa: F401
+    import src.modules.nodeflow.events  # registers @event_bus.on handlers
+    import src.modules.notification.events  # noqa: F401 — registers @event_bus.on handlers
 
     # Startup: init event bus, load plugins, register nodeflow
     event_bus.use(logging_middleware)
@@ -106,6 +106,7 @@ app.include_router(ideagraph_router, prefix="/api/ideagraph", tags=["ideagraph"]
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(health_router, tags=["health"])
 
+from src.modules.briefing.routes import router as briefing_router  # noqa: E402
 from src.modules.intelflow.routes import router as intelflow_router  # noqa: E402
 from src.modules.invest.routes import router as invest_router  # noqa: E402
 from src.modules.matchcore.routes import router as matchcore_router  # noqa: E402
@@ -116,6 +117,7 @@ from src.modules.skillpath.routes import router as skillpath_router  # noqa: E40
 from src.modules.workpool.routes import router as workpool_router  # noqa: E402
 
 app.include_router(notification_router, prefix="/api/notification", tags=["notification"])
+app.include_router(briefing_router, prefix="/api/briefing", tags=["briefing"])
 app.include_router(intelflow_router, prefix="/api/intelflow", tags=["intelflow"])
 app.include_router(invest_router, prefix="/api/invest", tags=["invest"])
 app.include_router(memvault_router, prefix="/api/memvault", tags=["memvault"])

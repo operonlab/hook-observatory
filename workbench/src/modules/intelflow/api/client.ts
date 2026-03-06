@@ -1,14 +1,6 @@
 import { createCrudApi, request } from '@/api/client'
 import type { PaginatedResponse } from '@/types'
 import type {
-  Briefing,
-  BriefingEntry,
-  BriefingSubtopic,
-  BriefingSubtopicCreate,
-  BriefingSubtopicUpdate,
-  BriefingTopic,
-  BriefingTopicCreate,
-  BriefingTopicUpdate,
   DashboardData,
   Report,
   ReportCreate,
@@ -56,60 +48,4 @@ export const intelflowApi = {
     request<PaginatedResponse<Topic>>(`/intelflow/topics?page=${page}&page_size=${pageSize}`),
 
   getTopicGraph: () => request<TopicGraph>('/intelflow/topics/graph'),
-
-  // Briefing Topics
-  listBriefingTopics: (page = 1, pageSize = 50) =>
-    request<PaginatedResponse<BriefingTopic>>(
-      `/intelflow/briefings/topics?page=${page}&page_size=${pageSize}`,
-    ),
-
-  createBriefingTopic: (data: BriefingTopicCreate) =>
-    request<BriefingTopic>('/intelflow/briefings/topics', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  updateBriefingTopic: (id: string, data: BriefingTopicUpdate) =>
-    request<BriefingTopic>(`/intelflow/briefings/topics/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
-  deleteBriefingTopic: (id: string) =>
-    request<void>(`/intelflow/briefings/topics/${id}`, {
-      method: 'DELETE',
-    }),
-
-  toggleBriefingTopic: (id: string) =>
-    request<BriefingTopic>(`/intelflow/briefings/topics/${id}/toggle`, {
-      method: 'PATCH',
-    }),
-
-  addBriefingSubtopic: (topicId: string, data: BriefingSubtopicCreate) =>
-    request<BriefingSubtopic>(`/intelflow/briefings/topics/${topicId}/subtopics`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  updateBriefingSubtopic: (topicId: string, subtopicId: string, data: BriefingSubtopicUpdate) =>
-    request<BriefingSubtopic>(`/intelflow/briefings/topics/${topicId}/subtopics/${subtopicId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
-  deleteBriefingSubtopic: (topicId: string, subtopicId: string) =>
-    request<void>(`/intelflow/briefings/topics/${topicId}/subtopics/${subtopicId}`, {
-      method: 'DELETE',
-    }),
-
-  // Briefings (daily briefing reports)
-  listBriefings: (page = 1, pageSize = 20) =>
-    request<PaginatedResponse<Briefing>>(`/intelflow/briefings?page=${page}&page_size=${pageSize}`),
-
-  getBriefingsByDate: (date: string) => request<Briefing[]>(`/intelflow/briefings/${date}`),
-
-  getBriefingEntries: (briefingId: string, phase?: string) => {
-    const params = phase ? `?phase=${phase}` : ''
-    return request<BriefingEntry[]>(`/intelflow/briefings/${briefingId}/entries${params}`)
-  },
 }
