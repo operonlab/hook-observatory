@@ -4,15 +4,15 @@ Verify-completion gate — SubagentStop handler.
 Inspired by Trellis Ralph Loop: blocks sub-agent completion until
 programmatic verification commands pass (lint, typecheck, test).
 
-Config: `.verify.json` in project root (opt-in).
+Resolution order:
+  1. `.verify.json` in project root (explicit override)
+  2. Auto-detect from pyproject.toml / package.json (zero-config)
 
-```json
-{
-  "commands": ["ruff check .", "pnpm run lint"],
-  "max_iterations": 5,
-  "timeout_minutes": 30
-}
-```
+Auto-detect rules (fast, read-only commands only):
+  - pyproject.toml with [tool.ruff]  → ruff check .
+  - package.json with scripts.lint   → {pm} run lint
+  - package.json with scripts.typecheck → {pm} run typecheck
+  (test is excluded — too slow / side-effectful for a gate)
 
 Only triggers for code-modifying agent types.
 Tracks state in /tmp to prevent infinite loops.
@@ -83,29 +83,77 @@ def _save_state(path: str, state: dict) -> None:
         pass
 
 
-def _find_verify_config(cwd: str) -> dict | None:
-    """Find .verify.json in cwd or git root."""
-    # Check cwd first
-    candidate = os.path.join(cwd, ".verify.json")
-    if os.path.isfile(candidate):
-        try:
-            with open(candidate) as f:
-                return json.load(f)
-        except (OSError, json.JSONDecodeError):
-            return None
-
-    # Check git root if different from cwd
+def _find_project_root(cwd: str) -> str:
+    """Find git root or return cwd."""
     result = run_cmd(["git", "rev-parse", "--show-toplevel"], cwd=cwd, timeout=5)
     if result and result.returncode == 0:
-        git_root = result.stdout.strip()
-        if git_root != cwd:
-            candidate = os.path.join(git_root, ".verify.json")
-            if os.path.isfile(candidate):
-                try:
-                    with open(candidate) as f:
-                        return json.load(f)
-                except (OSError, json.JSONDecodeError):
-                    return None
+        return result.stdout.strip()
+    return cwd
+
+
+def _load_json_file(path: str) -> dict | None:
+    """Load a JSON file, return None on any error."""
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _detect_package_manager(root: str) -> str:
+    """Detect pnpm/yarn/npm from lock files."""
+    if os.path.isfile(os.path.join(root, "pnpm-lock.yaml")):
+        return "pnpm"
+    if os.path.isfile(os.path.join(root, "yarn.lock")):
+        return "yarn"
+    return "npm"
+
+
+def _auto_detect_commands(root: str) -> list[str]:
+    """Auto-detect verify commands from project files. Fast + read-only only."""
+    commands = []
+
+    # Python: pyproject.toml with ruff
+    pyproject = os.path.join(root, "pyproject.toml")
+    if os.path.isfile(pyproject):
+        try:
+            with open(pyproject) as f:
+                content = f.read()
+            if "[tool.ruff]" in content or "ruff" in content:
+                commands.append("ruff check . --quiet")
+        except OSError:
+            pass
+
+    # Node: package.json with lint/typecheck scripts
+    pkg_json = os.path.join(root, "package.json")
+    if os.path.isfile(pkg_json):
+        pkg = _load_json_file(pkg_json)
+        if pkg:
+            scripts = pkg.get("scripts", {})
+            pm = _detect_package_manager(root)
+            if "lint" in scripts:
+                commands.append(f"{pm} run lint")
+            if "typecheck" in scripts:
+                commands.append(f"{pm} run typecheck")
+
+    return commands
+
+
+def _find_verify_config(cwd: str) -> dict | None:
+    """Find .verify.json or auto-detect from project files."""
+    root = _find_project_root(cwd)
+
+    # Priority 1: explicit .verify.json (cwd first, then root)
+    for search_dir in [cwd, root] if cwd != root else [root]:
+        candidate = os.path.join(search_dir, ".verify.json")
+        config = _load_json_file(candidate)
+        if config and config.get("commands"):
+            return config
+
+    # Priority 2: auto-detect from project files
+    commands = _auto_detect_commands(root)
+    if commands:
+        return {"commands": commands, "_auto_detected": True}
 
     return None
 

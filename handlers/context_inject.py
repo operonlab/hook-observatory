@@ -2,8 +2,16 @@
 Context injection — SubagentStart handler.
 
 Phase-specific context injection inspired by Trellis JSONL manifests.
-Reads `.context/{agent_type}.jsonl` from project root and injects
-file contents into the sub-agent's additional context.
+
+Resolution order:
+  1. `.context/{agent_type}.jsonl` (agent-specific override)
+  2. `.context/default.jsonl` (project-wide override)
+  3. Auto-detect from project structure (zero-config)
+
+Auto-detect scans for:
+  - CLAUDE.md (project instructions — only if not at ~/.claude/)
+  - spec/ or docs/ directories (.md files)
+  - .claude/rules/ (.md files)
 
 JSONL format (one entry per line):
   {"file": "spec/api-design.md", "reason": "API contract"}
@@ -115,6 +123,45 @@ def _build_context(entries: list[dict], base_dir: str) -> str:
     return "\n\n".join(sections)
 
 
+def _find_project_root(cwd: str) -> str:
+    """Find git root or return cwd."""
+    result = run_cmd(["git", "rev-parse", "--show-toplevel"], cwd=cwd, timeout=5)
+    if result and result.returncode == 0:
+        return result.stdout.strip()
+    return cwd
+
+
+def _auto_detect_entries(root: str) -> list[dict]:
+    """Auto-detect context entries from project structure."""
+    entries = []
+
+    # Project-level CLAUDE.md (skip ~/.claude/CLAUDE.md — that's global)
+    claude_md = os.path.join(root, "CLAUDE.md")
+    home_claude = os.path.join(os.path.expanduser("~"), ".claude", "CLAUDE.md")
+    if os.path.isfile(claude_md) and os.path.realpath(claude_md) != os.path.realpath(home_claude):
+        entries.append({"file": "CLAUDE.md", "reason": "Project instructions"})
+
+    # spec/ or docs/ directories
+    for dirname, reason in [("spec", "Specifications"), ("docs", "Documentation")]:
+        dirpath = os.path.join(root, dirname)
+        if os.path.isdir(dirpath):
+            # Only include if it has .md files
+            has_md = any(f.endswith(".md") for f in os.listdir(dirpath))
+            if has_md:
+                entries.append({"file": dirname, "reason": reason, "type": "directory"})
+
+    # .claude/rules/ (project-specific rules, not global ~/.claude/rules/)
+    rules_dir = os.path.join(root, ".claude", "rules")
+    if os.path.isdir(rules_dir):
+        has_md = any(f.endswith(".md") for f in os.listdir(rules_dir))
+        if has_md:
+            entries.append(
+                {"file": ".claude/rules", "reason": "Project rules", "type": "directory"}
+            )
+
+    return entries
+
+
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     if event_type != "SubagentStart":
         return ALLOW
@@ -131,34 +178,37 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     if not agent_type:
         return ALLOW
 
-    # Find .context/ directory
+    root = _find_project_root(cwd)
+
+    # Priority 1: explicit .context/ JSONL files
     context_dir = _find_context_dir(cwd)
-    if not context_dir:
-        return ALLOW
-
-    # Determine base_dir (git root or cwd) for resolving relative paths
-    result = run_cmd(["git", "rev-parse", "--show-toplevel"], cwd=cwd, timeout=5)
-    base_dir = result.stdout.strip() if result and result.returncode == 0 else cwd
-
-    # Look for agent-specific JSONL, then fallback to default.jsonl
-    candidates = [
-        os.path.join(context_dir, f"{agent_type}.jsonl"),
-        os.path.join(context_dir, "default.jsonl"),
-    ]
-
     entries = []
-    for candidate in candidates:
-        entries = _read_jsonl(candidate)
+    source = ""
+
+    if context_dir:
+        candidates = [
+            os.path.join(context_dir, f"{agent_type}.jsonl"),
+            os.path.join(context_dir, "default.jsonl"),
+        ]
+        for candidate in candidates:
+            entries = _read_jsonl(candidate)
+            if entries:
+                source = ".context/"
+                break
+
+    # Priority 2: auto-detect from project structure
+    if not entries:
+        entries = _auto_detect_entries(root)
         if entries:
-            break
+            source = "auto-detect"
 
     if not entries:
         return ALLOW
 
     # Build context
-    context_text = _build_context(entries, base_dir)
+    context_text = _build_context(entries, root)
     if not context_text:
         return ALLOW
 
-    header = f"[context-inject] Loaded from .context/ for {agent_type}:"
+    header = f"[context-inject] Loaded from {source} for {agent_type}:"
     return HookResult(message=f"{header}\n\n{context_text}")
