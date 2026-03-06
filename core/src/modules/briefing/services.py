@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.shared.embedding import get_embedding
 from src.shared.errors import NotFoundError
-from src.shared.fsm import validate_transition
+from src.shared.fsm import emit_state_changed, validate_transition
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
@@ -506,6 +506,7 @@ class BriefingService:
         instance = (await db.execute(q)).scalar_one_or_none()
         if not instance:
             raise NotFoundError("Briefing not found", code="briefing.not_found")
+        old_status = instance.status
         if data.status:
             validate_transition(
                 BriefingLifecycle, instance.status, data.status, entity_type="briefing"
@@ -513,6 +514,10 @@ class BriefingService:
             instance.status = data.status
         await db.flush()
         await db.refresh(instance)
+
+        if data.status and old_status != data.status:
+            await emit_state_changed("briefing", "briefing", instance.id, old_status, data.status)
+
         return self._to_response(instance)
 
     # Phase ordering for determining the latest phase in a briefing's entries

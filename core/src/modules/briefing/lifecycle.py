@@ -8,6 +8,8 @@ EntryPhase: raw -> analysis -> debate -> conclusion (linear pipeline)
 
 from statemachine import State, StateMachine
 
+from src.shared.fsm import register_fsm
+
 
 class BriefingLifecycle(StateMachine):
     """Main briefing report lifecycle."""
@@ -42,3 +44,7 @@ class EntryPhase(StateMachine):
     analyze = raw.to(analysis)
     start_debate = analysis.to(debate)
     conclude = debate.to(conclusion)
+
+
+register_fsm("briefing.briefing", BriefingLifecycle)
+register_fsm("briefing.entry", EntryPhase)

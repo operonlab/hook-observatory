@@ -97,3 +97,44 @@ async def emit_state_changed(
             user_id=user_id,
         )
     )
+
+
+# FSM registry — all Workshop lifecycles
+_FSM_REGISTRY: dict[str, type[StateMachine]] = {}
+
+
+def register_fsm(key: str, machine_cls: type[StateMachine]) -> None:
+    """Register a lifecycle FSM for API introspection."""
+    _FSM_REGISTRY[key] = machine_cls
+
+
+def get_allowed_transitions(key: str, current_state: str) -> list[str]:
+    """Return list of valid target states from current_state."""
+    machine_cls = _FSM_REGISTRY.get(key)
+    if not machine_cls:
+        return []
+    table = get_valid_transitions(machine_cls)
+    return table.get(current_state, [])
+
+
+def get_fsm_registry_info() -> list[dict]:
+    """Return metadata for all registered FSMs."""
+    result = []
+    for key, cls in _FSM_REGISTRY.items():
+        table = get_valid_transitions(cls)
+        states = list(table.keys())
+        initial = [s.id for s in cls.states if s.initial]
+        final = [s.id for s in cls.states if s.final]
+        transition_count = sum(len(v) for v in table.values())
+        result.append(
+            {
+                "key": key,
+                "name": cls.__name__,
+                "states": states,
+                "initial": initial,
+                "final": final,
+                "transitions": table,
+                "transition_count": transition_count,
+            }
+        )
+    return result
