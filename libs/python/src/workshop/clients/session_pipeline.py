@@ -258,7 +258,12 @@ class SessionPipelineClient:
         session_id: str,
         transcript_path: str | None,
     ) -> StageResult:
-        """Stage 2: Extract knowledge via memvault (background process)."""
+        """Stage 2: Extract knowledge via memvault (background process).
+
+        Spawns extract_v2_async.py as a detached subprocess. The script
+        uses LLM internally for semantic extraction — this SDK method is
+        purely a launcher and does not perform any LLM reasoning itself.
+        """
         t0 = time.monotonic()
         stage = StageResult(name="extract")
         try:
@@ -268,17 +273,22 @@ class SessionPipelineClient:
                 stage.error = f"extract script not found: {script}"
             else:
                 payload = json.dumps({"session_id": session_id, "transcript_path": transcript_path})
-                # Async / background — mirrors existing external.extract handler
+                # Async / background — mirrors existing external.extract handler.
+                # stderr goes to log file for debuggability (not DEVNULL).
+                log_path = Path(HOME) / ".claude" / "data" / "session-pipeline" / "extract.log"
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                stderr_fh = open(log_path, "a")
                 proc = subprocess.Popen(
                     [sys.executable, str(script)],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stderr=stderr_fh,
                     start_new_session=True,
                 )
                 proc.stdin.write(payload.encode())
                 proc.stdin.close()
-                stage.details = {"pid": proc.pid, "mode": "background"}
+                stderr_fh.close()
+                stage.details = {"pid": proc.pid, "mode": "background", "log": str(log_path)}
         except Exception as exc:
             stage.success = False
             stage.error = str(exc)

@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from agent_metrics.db import get_pool
-from agent_metrics.quota_collector import get_quota, get_raw_cache
+from agent_metrics.quota_collector import (
+    get_quota,
+    get_quota_health,
+    get_raw_cache,
+    reset_cc_backoff,
+)
 from agent_metrics.sysmon_loop import get_history, get_latest
 
 router = APIRouter()
@@ -14,6 +19,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # System Metrics
 # ---------------------------------------------------------------------------
+
 
 @router.get("/sysmon/current")
 async def sysmon_current():
@@ -34,13 +40,16 @@ async def sysmon_history(minutes: int = Query(default=60, ge=1, le=720)):
 # LLM Quota
 # ---------------------------------------------------------------------------
 
+
 @router.get("/quota/current")
 async def quota_current():
     """Return raw + parsed quota data for all LLM providers."""
     quota = await get_quota()
     raw = get_raw_cache()
+    health = get_quota_health()
     return {
         "raw": raw,
+        "health": health,
         "parsed": {
             "cc": quota.get("cc_parsed", {}),
             "cx": quota.get("cx_parsed", {}),
@@ -74,9 +83,24 @@ async def quota_formatted():
     }
 
 
+@router.post("/quota/reset-cc-backoff")
+async def quota_reset_cc_backoff():
+    """Reset CC backoff and force a fresh fetch on next tick."""
+    reset_cc_backoff()
+    quota = await get_quota(force=True)
+    health = get_quota_health()
+    return {
+        "action": "backoff_reset",
+        "health": health.get("cc", {}),
+        "cc_5h": quota.get("llm_cc_5h", "?"),
+        "cc_7d": quota.get("llm_cc_7d", "?"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Guardian / Sweep Logs
 # ---------------------------------------------------------------------------
+
 
 @router.get("/guardian/log")
 async def guardian_log(
