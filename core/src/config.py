@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     bark_server_url: str = ""  # e.g. http://localhost:8090
     bark_device_key: str = ""  # device key from Bark iOS app
 
+    # ntfy (self-hosted push notification)
+    ntfy_server_url: str = ""  # e.g. http://localhost:9080
+    ntfy_topic: str = ""  # e.g. workshop
+
     # Plugins
     plugin_dir: str = "plugins"
 
