@@ -7,7 +7,7 @@ PostToolUse: same detection → POST /resolve (command completed)
 This ensures MAINTENANCE state is always bounded by the actual command
 execution window, preventing stale maintenance from accumulating.
 
-Latency: <5ms per call (non-blocking, 2s timeout).
+Latency: <1ms (fire-and-forget background curl).
 """
 
 from __future__ import annotations
@@ -15,10 +15,8 @@ from __future__ import annotations
 import json
 import os
 import re
-import urllib.error
-import urllib.request
 
-from .base import ALLOW, HookResult
+from .base import ALLOW, HookResult, run_background
 
 _SENTINEL_BASE = "http://127.0.0.1:4101/api/sentinel"
 
@@ -44,18 +42,24 @@ def _detect_service(command: str) -> str | None:
 
 
 def _fire(endpoint: str, payload: dict) -> None:
-    """Fire-and-forget POST to sentinel. Never blocks, never throws."""
-    try:
-        data = json.dumps(payload).encode()
-        req = urllib.request.Request(
+    """Fire-and-forget POST to sentinel via background curl. Never blocks."""
+    run_background(
+        [
+            "curl",
+            "-s",
+            "-X",
+            "POST",
             f"{_SENTINEL_BASE}/{endpoint}",
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=2)
-    except (urllib.error.URLError, OSError, Exception):
-        pass  # Sentinel down or unreachable — never block agent
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            json.dumps(payload, ensure_ascii=False),
+            "--connect-timeout",
+            "2",
+            "--max-time",
+            "5",
+        ],
+    )
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:

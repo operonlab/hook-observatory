@@ -4,7 +4,7 @@ Voice notification handler with async TTS queue.
 Events:
   PreToolUse/AskUserQuestion → random "請示" phrase
   Notification → random "確認" phrase
-  Stop → "{label}任務完成了"
+  Stop → task summary from state file, or "視窗X面板Y任務完成了"
 
 Queue guarantees:
   - Non-blocking enqueue (hook returns immediately)
@@ -21,6 +21,7 @@ import fcntl
 import json
 import os
 import random
+import re
 import subprocess
 
 from .base import ALLOW, HOME, HookResult
@@ -29,7 +30,7 @@ from .base import ALLOW, HOME, HookResult
 TTS_URL = os.environ.get("CLAUDE_TTS_URL", "http://localhost:8841/api/tts/speak")
 VOICE = os.environ.get("CLAUDE_VOICE_ID", "zh-CN-YunjianNeural")
 RATE = os.environ.get("CLAUDE_VOICE_RATE", "+20%")
-PLAYBACK_VOL = os.environ.get("CLAUDE_VOICE_VOLUME", "0.3")
+PLAYBACK_VOL = os.environ.get("CLAUDE_VOICE_VOLUME", "0.4")
 PYTHON_BIN = os.path.join(HOME, ".local", "bin", "python3")
 
 QUEUE_FILE = "/tmp/claude-tts-queue.jsonl"
@@ -74,23 +75,52 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 def _handle_notification(raw_input: str) -> None:
     """Notification: TTS for permission prompts."""
     try:
-        data = json.loads(raw_input) if raw_input.strip() else {}
+        json.loads(raw_input) if raw_input.strip() else {}
     except (json.JSONDecodeError, AttributeError):
-        data = {}
-
-    message = data.get("message", "")
-    # User is already at the screen for these — skip
-    if "waiting for your input" in message.lower():
-        return
+        pass
 
     _enqueue_tts(random.choice(_NOTIFY_PHRASES))
 
 
 def _handle_stop() -> None:
-    """Stop: announce task completion with session label."""
+    """Stop: announce task summary, or fall back to tmux position."""
+    summary = _get_task_summary()
+    if summary:
+        _enqueue_tts(f"少爺，{summary}的任務完成了")
+        return
+
+    # Fallback: tmux position (視窗X面板Y) or generic
     label = _get_label()
     msg = f"少爺，{label}任務完成了" if label else "少爺，任務完成了"
     _enqueue_tts(msg)
+
+
+# ---------------------------------------------------------------------------
+# Task summary from state file (written by Claude via rules/voice-state.md)
+# ---------------------------------------------------------------------------
+
+TASK_STATE_PREFIX = "/tmp/claude-task-"
+
+
+def _get_task_summary() -> str:
+    """Read task summary from state file. Claude maintains this file via CLAUDE.md instruction."""
+    pane_id = os.environ.get("TMUX_PANE", "")
+    if not pane_id:
+        return ""
+
+    pane_safe = pane_id.replace("%", "")
+    state_file = f"{TASK_STATE_PREFIX}{pane_safe}.txt"
+
+    if not os.path.isfile(state_file):
+        return ""
+
+    try:
+        with open(state_file) as f:
+            summary = f.read().strip()
+        os.remove(state_file)  # one-shot: clean up after reading
+        return summary[:50] if summary else ""
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +143,6 @@ def _get_label() -> str:
 
 
 def _tmux_label(pane_id: str) -> str:
-    import re
 
     def _q(fmt: str) -> str:
         try:
