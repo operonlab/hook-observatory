@@ -78,7 +78,12 @@ class Settings(BaseSettings):
     SYSMON_HISTORY_SIZE: int = 720  # 1h @ 5s
 
     # --- LLM Quota Collector ---
-    QUOTA_CACHE_TTL: int = 60
+    QUOTA_CACHE_TTL: int = 120
+    CC_QUOTA_FETCH_INTERVAL: int = 900  # 15 min — CC fetched less often than CX/GM
+    CC_QUOTA_BACKOFF_SECONDS: int = 600
+    CC_QUOTA_STALE_MAX_SECONDS: int = 86400
+    PW_SESSION_SCRIPT: str = str(Path.home() / ".claude" / "scripts" / "pw_session.py")
+    PW_SCRAPE_TIMEOUT: int = 60
     CODEX_AUTH_PATH: str = "~/.codex/auth.json"
     GM_OAUTH_PATH: str = "~/.gemini/oauth_creds.json"
     GM_CLIENT_ID: str = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"

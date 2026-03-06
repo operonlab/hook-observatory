@@ -26,8 +26,8 @@ Modular Monolith + Event-Driven workspace.
   - `core/services/realtime/` — LiveKit WebRTC gateway
   - `core/services/media/` — STT/TTS/image processing
 - `workbench/` — Single React application
-- `mcp/` — MCP server layer (16 servers: SDK-based protocol access to core services and stations)
-- `stations/` — Standalone local tools (agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-intelligence, session-pipeline, session-redactor, system-monitor, tmux-relay, tmux-webui)
+- `mcp/` — MCP server layer (17 servers: SDK-based protocol access to core services and stations)
+- `stations/` — Standalone local tools (agent-metrics, agent-vista, anvil, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-intelligence, session-pipeline, session-redactor, system-monitor, tmux-relay, tmux-webui)
   - Each station's CLI lives in `stations/{name}/cli/`
 - `core/cli/` — Core module CLI wrappers (finance, intelflow, auth, admin, notification, memvault, nodeflow)
 - `vendor/` — Third-party community tools (observability)

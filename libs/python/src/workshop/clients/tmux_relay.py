@@ -99,7 +99,9 @@ class TmuxRelayClient:
     INIT_TIMEOUT = 30
     INIT_POLL_INTERVAL = 2
 
-    # Detection patterns
+    # Detection patterns — heuristic text matching on terminal output.
+    # These are fragile UX hints, not semantic analysis. May need updating
+    # if Claude Code changes its spinner/status text in future versions.
     PROCESSING_INDICATORS = re.compile(r"⏺|✢|✻|Thinking|Processing|Osmosing|Crunching|Deciphering")
     CLAUDE_INDICATORS = re.compile(r"❯|⏺|✢|✻|╭─|💰")
     PROMPT_PATTERN = re.compile(r"❯")

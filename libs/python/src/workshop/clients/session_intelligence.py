@@ -246,7 +246,11 @@ class SessionIntelligenceClient:
     # ======================== Weekly Digest ========================
 
     def weekly_digest(self, week_offset: int = 0) -> dict:
-        """Generate a weekly digest of session activity.
+        """Aggregate raw weekly statistics from session data.
+
+        Returns structured numeric data (counts, percentages, rankings),
+        NOT a natural-language summary. Use Skill/MCP layer to interpret
+        these numbers into human-readable insights.
 
         Args:
             week_offset: 0 = current week, 1 = last week, etc.

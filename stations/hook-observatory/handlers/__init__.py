@@ -15,6 +15,7 @@ from collections.abc import Callable
 
 # Import all handler modules
 from . import (
+    anvil_telemetry,
     auto_format,
     bash_safety,
     cleanup_versions,
@@ -53,6 +54,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ("Edit|Write", auto_format.handle),
         ("Bash", sentinel_notify.handle),
         ("Bash", issue_sync.handle),
+        ("Skill", anvil_telemetry.handle),
         ("Skill", external.skill_tracker),
         (None, observability.handle),
     ],
