@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.events.types import FinanceEvents
+from src.modules.finance.lifecycle import TransactionLifecycle
 from src.shared.errors import BadRequestError, NotFoundError
+from src.shared.fsm import validate_transition
 from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -281,11 +283,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
 
         calculated = wallet.initial_balance + income_sum - expense_sum + transfer_in - fee_sum
 
-        txn_count = (
-            await db.execute(
-                select(func.count()).where(*txn_filter)
-            )
-        ).scalar_one()
+        txn_count = (await db.execute(select(func.count()).where(*txn_filter))).scalar_one()
 
         await event_bus.publish(
             Event(
@@ -486,6 +484,13 @@ class TransactionService(
 
         # Update scalar fields
         update_data = data.model_dump(exclude_unset=True, exclude={"tags"})
+
+        # FSM guard: validate status transition before applying
+        if "status" in update_data:
+            validate_transition(
+                TransactionLifecycle, old_status, update_data["status"], "transaction"
+            )
+
         for key, value in update_data.items():
             setattr(instance, key, value)
 
@@ -541,9 +546,7 @@ class TransactionService(
         )
         return instance
 
-    async def delete(
-        self, db: AsyncSession, entity_id: str, user_id: str | None = None
-    ) -> bool:
+    async def delete(self, db: AsyncSession, entity_id: str, user_id: str | None = None) -> bool:
         instance = await self.get(db, entity_id)
         if not instance:
             return False

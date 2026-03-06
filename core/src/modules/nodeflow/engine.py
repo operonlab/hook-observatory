@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.events.types import NodeflowEvents
+from src.shared.fsm import validate_transition
 from src.shared.models import _uuid7_hex
 
 from .executors import EXECUTOR_MAP
 from .executors.base import ExecutionContext, ExecutionResult
+from .lifecycle import FlowRunLifecycle, NodeRunLifecycle
 from .models import Edge, Flow, FlowRun, Node, NodeRunLog
 
 logger = structlog.get_logger()
@@ -44,12 +46,14 @@ async def execute_flow(
     db.add(flow_run)
     await db.flush()
 
-    await event_bus.publish(Event(
-        type=NodeflowEvents.FLOW_RUN_STARTED,
-        data={"flow_id": flow.id, "flow_run_id": flow_run.id, "flow_name": flow.name},
-        source="nodeflow",
-        user_id=user_id,
-    ))
+    await event_bus.publish(
+        Event(
+            type=NodeflowEvents.FLOW_RUN_STARTED,
+            data={"flow_id": flow.id, "flow_run_id": flow_run.id, "flow_name": flow.name},
+            source="nodeflow",
+            user_id=user_id,
+        )
+    )
 
     try:
         # Build adjacency from edges
@@ -95,11 +99,13 @@ async def execute_flow(
                 result = await executor_cls().execute(node.config or {}, ctx)
                 node_outputs[node.id] = result
 
+                validate_transition(NodeRunLifecycle, node_log.status, "completed", "NodeRun")
                 node_log.status = "completed"
                 node_log.output_data = result.data
                 node_log.finished_at = datetime.now(UTC)
 
             except Exception as exc:
+                validate_transition(NodeRunLifecycle, node_log.status, "failed", "NodeRun")
                 node_log.status = "failed"
                 node_log.error = str(exc)
                 node_log.finished_at = datetime.now(UTC)
@@ -114,31 +120,35 @@ async def execute_flow(
             await db.flush()
 
         # Mark skipped nodes (downstream of false condition branches)
-        _mark_skipped_nodes(
-            nodes_by_id, edges, node_outputs, flow_run, flow.space_id, user_id, db
-        )
+        _mark_skipped_nodes(nodes_by_id, edges, node_outputs, flow_run, flow.space_id, user_id, db)
 
+        validate_transition(FlowRunLifecycle, flow_run.status, "completed", "FlowRun")
         flow_run.status = "completed"
         flow_run.finished_at = datetime.now(UTC)
 
-        await event_bus.publish(Event(
-            type=NodeflowEvents.FLOW_RUN_COMPLETED,
-            data={"flow_id": flow.id, "flow_run_id": flow_run.id},
-            source="nodeflow",
-            user_id=user_id,
-        ))
+        await event_bus.publish(
+            Event(
+                type=NodeflowEvents.FLOW_RUN_COMPLETED,
+                data={"flow_id": flow.id, "flow_run_id": flow_run.id},
+                source="nodeflow",
+                user_id=user_id,
+            )
+        )
 
     except Exception as exc:
+        validate_transition(FlowRunLifecycle, flow_run.status, "failed", "FlowRun")
         flow_run.status = "failed"
         flow_run.error = str(exc)
         flow_run.finished_at = datetime.now(UTC)
 
-        await event_bus.publish(Event(
-            type=NodeflowEvents.FLOW_RUN_FAILED,
-            data={"flow_id": flow.id, "flow_run_id": flow_run.id, "error": str(exc)},
-            source="nodeflow",
-            user_id=user_id,
-        ))
+        await event_bus.publish(
+            Event(
+                type=NodeflowEvents.FLOW_RUN_FAILED,
+                data={"flow_id": flow.id, "flow_run_id": flow_run.id, "error": str(exc)},
+                source="nodeflow",
+                user_id=user_id,
+            )
+        )
 
     await db.flush()
     return flow_run
