@@ -21,8 +21,8 @@ from . import (
     cleanup_versions,
     context_inject,
     external,
-    issue_sync,
     observability,
+    pm_autopilot,
     relay_signal,
     sentinel_notify,
     session_pipeline,
@@ -55,13 +55,14 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "PostToolUse": [
         ("Edit|Write", auto_format.handle),
         ("Bash", sentinel_notify.handle),
-        ("Bash", issue_sync.handle),
+        ("Bash", pm_autopilot.handle),
         ("Skill", anvil_telemetry.handle),
         ("Skill", external.skill_tracker),
         (None, observability.handle),
     ],
     "Stop": [
         (None, relay_signal.handle),
+        (None, pm_autopilot.handle),
         (None, voice_notify.handle),
         (None, observability.handle),
     ],
@@ -80,6 +81,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "SessionStart": [
         (None, external.sync_login),
         (None, cleanup_versions.handle),
+        (None, pm_autopilot.handle),
         (None, observability.handle),
     ],
     "SubagentStart": [
