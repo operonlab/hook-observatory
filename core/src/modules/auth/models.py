@@ -26,6 +26,7 @@ class User(GlobalModel):
     avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[str] = mapped_column(String(50), server_default="user")
     status: Mapped[str] = mapped_column(String(50), server_default="pending")
+    preferences: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
 
 
 class OAuthAccount(GlobalModel):

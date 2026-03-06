@@ -1,4 +1,5 @@
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { getPreferences, updatePreferences } from '@/api/gateway'
 import { APP_LIST } from '@/shared/constants/apps'
 import type { AppInfo } from '@/types'
 
@@ -6,7 +7,9 @@ const STORAGE_KEY = 'workshop-app-order'
 
 type SavedOrder = { internal: string[]; external: string[] }
 
-function getSnapshot(): SavedOrder | null {
+// --- Local cache (localStorage as offline fallback + instant UI) ---
+
+function readCache(): SavedOrder | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     return raw ? JSON.parse(raw) : null
@@ -15,9 +18,13 @@ function getSnapshot(): SavedOrder | null {
   }
 }
 
+function writeCache(order: SavedOrder) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(order))
+}
+
 // Simple pub-sub so useSyncExternalStore re-renders on writes
 let listeners: (() => void)[] = []
-let cachedSnapshot = getSnapshot()
+let cachedSnapshot = readCache()
 
 function subscribe(cb: () => void) {
   listeners = [...listeners, cb]
@@ -27,13 +34,42 @@ function subscribe(cb: () => void) {
 }
 
 function emitChange() {
-  cachedSnapshot = getSnapshot()
+  cachedSnapshot = readCache()
   for (const l of listeners) l()
 }
 
 function getSnapshotCached() {
   return cachedSnapshot
 }
+
+// --- Backend sync ---
+
+let synced = false
+
+async function syncFromBackend() {
+  if (synced) return
+  try {
+    const prefs = await getPreferences()
+    const remote = prefs.app_order as SavedOrder | undefined
+    if (remote) {
+      writeCache(remote)
+      emitChange()
+    }
+    synced = true
+  } catch {
+    // Offline or not authenticated — use local cache
+  }
+}
+
+async function persistToBackend(order: SavedOrder) {
+  try {
+    await updatePreferences({ app_order: order })
+  } catch {
+    // Offline — local cache is already written, will sync next time
+  }
+}
+
+// --- Sorting ---
 
 function sortApps(apps: AppInfo[], savedIds: string[] | undefined): AppInfo[] {
   if (!savedIds?.length) return apps
@@ -45,8 +81,14 @@ function sortApps(apps: AppInfo[], savedIds: string[] | undefined): AppInfo[] {
   })
 }
 
+// --- Hook ---
+
 export function useAppOrder() {
   const saved = useSyncExternalStore(subscribe, getSnapshotCached, () => null)
+
+  useEffect(() => {
+    syncFromBackend()
+  }, [])
 
   const internal = APP_LIST.filter((a) => a.status === 'available')
   const external = APP_LIST.filter((a) => a.status === 'external')
@@ -65,18 +107,19 @@ export function useAppOrder() {
       const [moved] = list.splice(fromIdx, 1)
       list.splice(toIdx, 0, moved)
 
-      const prev = getSnapshot()
+      const prev = readCache()
       const next: SavedOrder = {
         internal: section === 'internal' ? list.map((a) => a.id) : (prev?.internal ?? []),
         external: section === 'external' ? list.map((a) => a.id) : (prev?.external ?? []),
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      // Optimistic: write local immediately, persist async
+      writeCache(next)
       emitChange()
+      persistToBackend(next)
     },
     [sortedInternal, sortedExternal],
   )
 
-  // All available apps in user's order (for AppLauncher)
   const allOrdered = [...sortedInternal, ...sortedExternal]
 
   return { sortedInternal, sortedExternal, comingSoon, allOrdered, reorder }
