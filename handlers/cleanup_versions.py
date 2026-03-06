@@ -42,7 +42,8 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
             continue
 
     if removed > 0:
-        return message(f"cleaned {removed} old Claude Code versions (freed {' '.join(freed_parts)})")
+        freed = " ".join(freed_parts)
+        return message(f"cleaned {removed} old versions (freed {freed})")
     return message("no old versions to clean")
 
 
