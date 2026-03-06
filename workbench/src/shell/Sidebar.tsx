@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { APP_LIST } from '@/shared/constants/apps'
+import { useAppOrder } from '@/hooks/useAppOrder'
 
 interface SidebarProps {
   isOpen: boolean
@@ -11,6 +11,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, collapsed, onClose, onToggleCollapse }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { allOrdered, comingSoon } = useAppOrder()
 
   const sidebarWidth = collapsed ? 'w-16' : 'w-60'
 
@@ -51,7 +52,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onToggleCollapse }
 
         {/* Nav items */}
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {APP_LIST.map((app) => {
+          {[...allOrdered, ...comingSoon].map((app) => {
             const isActive = location.pathname.startsWith(app.path)
             const isDisabled = app.status === 'coming-soon'
 
