@@ -62,6 +62,9 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "Stop": [
         (None, relay_signal.handle),
+        (None, observability.handle),
+    ],
+    "Notification": [
         (None, voice_notify.handle),
         (None, observability.handle),
     ],
