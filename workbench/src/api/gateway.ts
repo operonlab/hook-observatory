@@ -89,3 +89,18 @@ export async function getSession(): Promise<AuthResponse> {
   })
   return { user: mapUser(r.user) }
 }
+
+// --- Preferences ---
+
+export async function getPreferences(): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/auth/me/preferences')
+}
+
+export async function updatePreferences(
+  patch: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/auth/me/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}

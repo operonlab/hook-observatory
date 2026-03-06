@@ -16,7 +16,7 @@ from src.shared.redis import get_redis
 from .deps import get_current_user
 from .models import User
 from .oauth import oauth
-from .schemas import SessionResponse, UserCreate, UserLogin
+from .schemas import PreferencesUpdate, SessionResponse, UserCreate, UserLogin
 from .services import user_service
 
 router = APIRouter(tags=["auth"])
@@ -143,6 +143,31 @@ async def session_info(
         user=user_service.to_response(user),
         expires_at=expires_at,
     )
+
+
+# --- Preferences ---
+
+
+@router.get("/me/preferences")
+async def get_preferences(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    user = get_current_user(request)
+    return await user_service.get_preferences(db, user["id"])
+
+
+@router.patch("/me/preferences")
+async def update_preferences(
+    body: PreferencesUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    user = get_current_user(request)
+    patch = body.model_dump(exclude_none=True)
+    result = await user_service.update_preferences(db, user["id"], patch)
+    await db.commit()
+    return result
 
 
 # --- OAuth routes ---
