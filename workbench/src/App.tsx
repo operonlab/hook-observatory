@@ -17,6 +17,7 @@ const SkillpathPage = React.lazy(() => import('./modules/skillpath/pages'))
 const WorkpoolPage = React.lazy(() => import('./modules/workpool/pages'))
 const InvestPage = React.lazy(() => import('./modules/invest/pages'))
 const MatchcorePage = React.lazy(() => import('./modules/matchcore/pages'))
+const BriefingPage = React.lazy(() => import('./modules/briefing/pages'))
 const NodeflowPage = React.lazy(() => import('./modules/nodeflow/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
@@ -136,6 +137,18 @@ function AppRoutes() {
             <AppShell>
               <ModuleSuspense>
                 <AdminPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/briefing/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <BriefingPage />
               </ModuleSuspense>
             </AppShell>
           </AuthGuard>

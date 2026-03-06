@@ -206,7 +206,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <StatCard icon={FileText} label="研究報告" value={dashboard?.total_reports ?? 0} accent />
         <StatCard icon={Tags} label="研究主題" value={dashboard?.total_topics ?? 0} />
-        <StatCard icon={Search} label="搜尋次數" value={dashboard?.total_briefings ?? 0} />
+        <StatCard icon={Search} label="搜尋次數" value={0} />
         <StatCard icon={TrendingUp} label="本月新增" value={thisMonthCount} />
       </div>
 
