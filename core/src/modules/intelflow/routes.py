@@ -4,7 +4,6 @@ Prefix: /api/intelflow (mounted in main.py)
 """
 
 import json
-from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -21,17 +20,6 @@ from src.shared.storage import (
 
 from . import search as search_engine
 from .schemas import (
-    BriefingCreate,
-    BriefingEntryCreate,
-    BriefingEntryResponse,
-    BriefingResponse,
-    BriefingSubtopicCreate,
-    BriefingSubtopicResponse,
-    BriefingSubtopicUpdate,
-    BriefingTopicCreate,
-    BriefingTopicResponse,
-    BriefingTopicUpdate,
-    BriefingUpdate,
     DashboardResponse,
     ReportCreate,
     ReportResponse,
@@ -46,8 +34,6 @@ from .schemas import (
     TopicResponse,
 )
 from .services import (
-    briefing_service,
-    briefing_topic_service,
     dashboard_service,
     report_service,
     search_session_service,
@@ -262,202 +248,6 @@ async def get_topic_graph(
     db: AsyncSession = Depends(get_db),
 ):
     return await topic_service.get_graph(db, space_id)
-
-
-# ======================== Briefing Topics (Management) ========================
-
-
-@router.get("/briefings/topics", response_model=PaginatedResponse[BriefingTopicResponse])
-async def list_briefing_topics(
-    space_id: str = Query("default"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-):
-    pagination = PaginationParams(page=page, page_size=page_size)
-    return await briefing_topic_service.list(db, space_id, pagination)
-
-
-@router.post("/briefings/topics", response_model=BriefingTopicResponse, status_code=201)
-async def create_briefing_topic(
-    body: BriefingTopicCreate,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    instance = await briefing_topic_service.create(db, space_id, body)
-    await db.commit()
-    return briefing_topic_service.to_response(instance)
-
-
-@router.put("/briefings/topics/{topic_id}", response_model=BriefingTopicResponse)
-async def update_briefing_topic(
-    topic_id: str,
-    body: BriefingTopicUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    instance = await briefing_topic_service.update(db, topic_id, body)
-    if not instance:
-        raise NotFoundError("Briefing topic not found", code="intelflow.briefing_topic_not_found")
-    await db.commit()
-    return briefing_topic_service.to_response(instance)
-
-
-@router.delete("/briefings/topics/{topic_id}", status_code=204)
-async def delete_briefing_topic(
-    topic_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    deleted = await briefing_topic_service.delete(db, topic_id)
-    if not deleted:
-        raise NotFoundError("Briefing topic not found", code="intelflow.briefing_topic_not_found")
-    await db.commit()
-
-
-@router.patch("/briefings/topics/{topic_id}/toggle", response_model=BriefingTopicResponse)
-async def toggle_briefing_topic(
-    topic_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await briefing_topic_service.toggle(db, topic_id)
-    await db.commit()
-    return result
-
-
-@router.post(
-    "/briefings/topics/{topic_id}/subtopics",
-    response_model=BriefingSubtopicResponse,
-    status_code=201,
-)
-async def add_subtopic(
-    topic_id: str,
-    body: BriefingSubtopicCreate,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await briefing_topic_service.add_subtopic(db, topic_id, space_id, body)
-    await db.commit()
-    return result
-
-
-@router.put(
-    "/briefings/topics/{topic_id}/subtopics/{subtopic_id}",
-    response_model=BriefingSubtopicResponse,
-)
-async def update_subtopic(
-    topic_id: str,
-    subtopic_id: str,
-    body: BriefingSubtopicUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await briefing_topic_service.update_subtopic(db, subtopic_id, body)
-    await db.commit()
-    return result
-
-
-@router.delete("/briefings/topics/{topic_id}/subtopics/{subtopic_id}", status_code=204)
-async def delete_subtopic(
-    topic_id: str,
-    subtopic_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    deleted = await briefing_topic_service.delete_subtopic(db, subtopic_id)
-    if not deleted:
-        raise NotFoundError("Subtopic not found", code="intelflow.subtopic_not_found")
-    await db.commit()
-
-
-# ======================== Briefings ========================
-
-
-@router.get("/briefings", response_model=PaginatedResponse[BriefingResponse])
-async def list_briefings(
-    space_id: str = Query("default"),
-    date_from: date | None = Query(None),
-    date_to: date | None = Query(None),
-    topic_id: str | None = Query(None),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-):
-    pagination = PaginationParams(page=page, page_size=page_size)
-    return await briefing_service.list_briefings(
-        db, space_id, date_from, date_to, topic_id, pagination
-    )
-
-
-@router.get("/briefings/{target_date}", response_model=list[BriefingResponse])
-async def get_briefings_by_date(
-    target_date: date,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    return await briefing_service.get_by_date(db, space_id, target_date)
-
-
-@router.get("/briefings/{target_date}/{domain}", response_model=BriefingResponse)
-async def get_briefing_by_date_and_domain(
-    target_date: date,
-    domain: str,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await briefing_service.get_by_date_and_topic(db, space_id, target_date, domain)
-    if not result:
-        raise NotFoundError("Briefing not found", code="intelflow.briefing_not_found")
-    return result
-
-
-@router.post("/briefings", response_model=BriefingResponse, status_code=201)
-async def create_briefing(
-    body: BriefingCreate,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await briefing_service.create_briefing(db, space_id, body)
-    await db.commit()
-    return result
-
-
-@router.patch("/briefings/{briefing_id}", response_model=BriefingResponse)
-async def update_briefing_status(
-    briefing_id: str,
-    body: BriefingUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await briefing_service.update_status(db, briefing_id, body)
-    await db.commit()
-    return result
-
-
-# ======================== Briefing Entries ========================
-
-
-@router.get(
-    "/briefings/{briefing_id}/entries",
-    response_model=list[BriefingEntryResponse],
-)
-async def list_briefing_entries(
-    briefing_id: str,
-    phase: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),
-):
-    return await briefing_service.get_entries(db, briefing_id, phase)
-
-
-@router.post(
-    "/briefings/{briefing_id}/entries",
-    response_model=BriefingEntryResponse,
-    status_code=201,
-)
-async def add_briefing_entry(
-    briefing_id: str,
-    body: BriefingEntryCreate,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await briefing_service.add_entry(db, briefing_id, space_id, body)
-    await db.commit()
-    return result
 
 
 # ======================== Dashboard ========================

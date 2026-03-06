@@ -65,6 +65,14 @@ SERVICES = [
         "health": "http://127.0.0.1:8795/health",
         "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
     },
+    {
+        "name": "auto-survey",
+        "type": "uvicorn",
+        "cmd": "/opt/homebrew/bin/uv run --project /Users/joneshong/workshop/stations/auto-survey auto-survey serve --host 127.0.0.1 --port 4102",
+        "port": 4102,
+        "health": "http://127.0.0.1:4102/api/people",
+        "workdir": "/Users/joneshong/workshop/stations/auto-survey",
+    },
     # ── Infrastructure Tools ──
     {
         "name": "litellm",
@@ -93,6 +101,12 @@ DOCKER_CONTAINERS = [
         "port": 9000,
         "health_cmd": None,  # Uses HTTP check
         "health_url": "http://127.0.0.1:9000/",
+    },
+    {
+        "name": "bark-server",
+        "port": 8090,
+        "health_cmd": None,
+        "health_url": "http://127.0.0.1:8090/ping",
     },
 ]
 
@@ -125,12 +139,25 @@ def ensure_dirs() -> None:
 
 
 def is_running(name: str) -> int | None:
-    """Return PID if service is running, else None."""
+    """Return PID if service is running, else None.
+    Detects zombie processes (state Z) as not running.
+    """
     pidfile = PID_DIR / f"{name}.pid"
     if pidfile.exists():
         try:
             pid = int(pidfile.read_text().strip())
             os.kill(pid, 0)  # Test if process exists
+            # Check for zombie: ps returns 'Z' state for defunct processes
+            result = subprocess.run(
+                ["ps", "-o", "state=", "-p", str(pid)],
+                capture_output=True,
+                text=True,
+            )
+            state = result.stdout.strip()
+            if state.startswith("Z"):
+                log(f"{name} (PID {pid}) is zombie — cleaning up")
+                pidfile.unlink(missing_ok=True)
+                return None
             return pid
         except (ValueError, ProcessLookupError, PermissionError):
             pidfile.unlink(missing_ok=True)
@@ -632,20 +659,31 @@ def cmd_rotate() -> None:
 # ── Main ───────────────────────────────────────────────────────
 
 
+def find_service(name: str) -> dict | None:
+    """Find a service by name."""
+    for svc in SERVICES:
+        if svc["name"] == name:
+            return svc
+    return None
+
+
 def print_help(prog: str) -> None:
-    print(f"Usage: {prog} {{daemon|start|stop|restart|status|rotate|logs}}")
+    print(f"Usage: {prog} {{daemon|start|stop|restart|status|rotate|logs}} [service]")
     print()
     print("Commands:")
     print("  daemon          Supervisor mode (used by LaunchAgent)")
-    print("  start           Start all services (foreground, one-shot)")
-    print("  stop            Stop all app services (reverse order)")
-    print("  restart         Stop + start")
+    print("  start [name]    Start all services, or a single service by name")
+    print("  stop [name]     Stop all app services, or a single service by name")
+    print("  restart [name]  Stop + start (all or single)")
     print("  status          Show all service status")
     print("  rotate          Manual log rotation/compression")
     print("  logs <svc>            Tail today's stdout log")
     print("  logs <svc> --error    Tail today's stderr log")
     print("  logs <svc> <date>     View historical log (auto-decompress)")
     print("  logs <svc> <date> --error  View historical error log")
+    print()
+    svc_names = [s["name"] for s in SERVICES]
+    print(f"Services: {', '.join(svc_names)}")
 
 
 def main() -> None:
@@ -660,14 +698,38 @@ def main() -> None:
         daemon_mode()
     elif cmd == "start":
         ensure_dirs()
-        start_all()
+        if rest:
+            svc = find_service(rest[0])
+            if not svc:
+                err(f"Unknown service: {rest[0]}")
+                sys.exit(1)
+            start_service(svc)
+        else:
+            start_all()
     elif cmd == "stop":
-        stop_all()
+        if rest:
+            svc = find_service(rest[0])
+            if not svc:
+                err(f"Unknown service: {rest[0]}")
+                sys.exit(1)
+            stop_service(svc)
+        else:
+            stop_all()
     elif cmd == "restart":
-        stop_all()
-        time.sleep(2)
-        ensure_dirs()
-        start_all()
+        if rest:
+            svc = find_service(rest[0])
+            if not svc:
+                err(f"Unknown service: {rest[0]}")
+                sys.exit(1)
+            stop_service(svc)
+            time.sleep(2)
+            ensure_dirs()
+            start_service(svc)
+        else:
+            stop_all()
+            time.sleep(2)
+            ensure_dirs()
+            start_all()
     elif cmd == "status":
         cmd_status()
     elif cmd == "rotate":

@@ -9,7 +9,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-_outputs_root = Path(os.environ.get("SCHEDULER_DATA_DIR", Path.home() / "workshop" / "outputs" / "scheduler"))
+_outputs_root = Path(
+    os.environ.get("SCHEDULER_DATA_DIR", Path.home() / "workshop" / "outputs" / "scheduler")
+)
 REGISTRY_DIR = _outputs_root
 REGISTRY_FILE = REGISTRY_DIR / "registry.json"
 LAUNCH_AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
@@ -49,7 +51,11 @@ def add_job(name: str, command: str, schedule: dict, description: str = ""):
 
     # Check duplicate
     if any(e["name"] == name for e in entries):
-        print(json.dumps({"error": f"Job '{name}' already exists. Remove it first or use a different name."}))
+        print(
+            json.dumps(
+                {"error": f"Job '{name}' already exists. Remove it first or use a different name."}
+            )
+        )
         return
 
     label = f"{LABEL_PREFIX}{name}"
@@ -72,16 +78,17 @@ def add_job(name: str, command: str, schedule: dict, description: str = ""):
     if schedule.get("run_at_load", False):
         plist["RunAtLoad"] = True
 
+    if schedule.get("keep_alive", False):
+        plist["KeepAlive"] = True
+        plist["ThrottleInterval"] = schedule.get("throttle_interval", 10)
+
     # Write plist
     plist_file = plist_path(name)
     with open(plist_file, "wb") as f:
         plistlib.dump(plist, f)
 
     # Load into launchd
-    result = subprocess.run(
-        ["launchctl", "load", str(plist_file)],
-        capture_output=True, text=True
-    )
+    result = subprocess.run(["launchctl", "load", str(plist_file)], capture_output=True, text=True)
 
     # Register
     entry = {
@@ -97,13 +104,19 @@ def add_job(name: str, command: str, schedule: dict, description: str = ""):
     entries.append(entry)
     save_registry(entries)
 
-    print(json.dumps({
-        "status": "added",
-        "name": name,
-        "plist": str(plist_file),
-        "launchctl": result.returncode == 0,
-        "schedule": schedule,
-    }, indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "status": "added",
+                "name": name,
+                "plist": str(plist_file),
+                "launchctl": result.returncode == 0,
+                "schedule": schedule,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 def resolve_plist(name: str, entry: dict | None = None) -> Path:
@@ -167,10 +180,7 @@ def list_jobs():
         return
 
     # Check actual launchd status
-    result = subprocess.run(
-        ["launchctl", "list"],
-        capture_output=True, text=True
-    )
+    result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
     loaded_labels = set(result.stdout) if result.returncode == 0 else set()
 
     output = []
@@ -190,13 +200,15 @@ def list_jobs():
                 parts.append(f"{cal['Hour']:02d}:{cal.get('Minute', 0):02d}")
             schedule_desc = " ".join(parts) or "calendar"
 
-        output.append({
-            "name": e["name"],
-            "enabled": e.get("enabled", True),
-            "schedule": schedule_desc,
-            "command": e["command"][:80],
-            "description": e.get("description", ""),
-        })
+        output.append(
+            {
+                "name": e["name"],
+                "enabled": e.get("enabled", True),
+                "schedule": schedule_desc,
+                "command": e["command"][:80],
+                "description": e.get("description", ""),
+            }
+        )
 
     print(json.dumps({"jobs": output, "count": len(output)}, indent=2, ensure_ascii=False))
 

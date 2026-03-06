@@ -141,6 +141,26 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "ws-auto-survey-wed",
+      "label": "com.joneshong.scheduler.ws-auto-survey-wed",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_auto_survey.py",
+      "schedule": { "calendar": { "Weekday": 3, "Hour": 13, "Minute": 30 } },
+      "description": "每週三 13:30: 自動填表提醒 — 每 10 分鐘 Bark 催 URL 直到收到",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-auto-survey-fri",
+      "label": "com.joneshong.scheduler.ws-auto-survey-fri",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_auto_survey.py",
+      "schedule": { "calendar": { "Weekday": 5, "Hour": 13, "Minute": 30 } },
+      "description": "每週五 13:30: 自動填表提醒 — 每 10 分鐘 Bark 催 URL 直到收到",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }

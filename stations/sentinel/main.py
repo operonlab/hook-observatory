@@ -192,7 +192,35 @@ async def _repair_monitor_loop() -> None:
                         tag=f"sentinel-{service}",
                     )
 
-                    # Dispatch repair
+                    # Layer 1: Try simple restart first (fast, no AI)
+                    from remediation import SimpleRestarter
+
+                    _simple = SimpleRestarter()
+                    if _simple.can_restart(service):
+                        logger.info("Attempting simple restart for %s", service)
+                        restarted = await _simple.try_restart(service)
+                        if restarted:
+                            # Wait for health check to confirm
+                            await asyncio.sleep(10)
+                            from checker import LIGHT_CHECKS, run_light_check
+
+                            check = next((c for c in LIGHT_CHECKS if c.name == service), None)
+                            if check:
+                                result = await run_light_check(check)
+                                if result.status == "healthy":
+                                    intervention_engine.set_repair_done(service, True)
+                                    await publish_push(
+                                        title=f"{service} 已修復（簡單重啟）",
+                                        body="直接重啟成功，無需 AI 介入",
+                                        severity="info",
+                                        tag=f"sentinel-{service}",
+                                    )
+                                    continue
+                        logger.warning(
+                            "Simple restart insufficient for %s, escalating to AI repair", service
+                        )
+
+                    # Layer 2: AI repair via tmux-relay (fallback)
                     pane = await remediator.dispatch(service, detail)
                     if pane:
                         intervention_engine.set_repairing(service, pane)

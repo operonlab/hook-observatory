@@ -19,6 +19,7 @@ const InvestPage = React.lazy(() => import('./modules/invest/pages'))
 const MatchcorePage = React.lazy(() => import('./modules/matchcore/pages'))
 const BriefingPage = React.lazy(() => import('./modules/briefing/pages'))
 const NodeflowPage = React.lazy(() => import('./modules/nodeflow/pages'))
+const NotificationPage = React.lazy(() => import('./modules/notification/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
@@ -221,6 +222,18 @@ function AppRoutes() {
             <AppShell>
               <ModuleSuspense>
                 <NodeflowPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/notification/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <NotificationPage />
               </ModuleSuspense>
             </AppShell>
           </AuthGuard>

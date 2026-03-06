@@ -17,5 +17,9 @@ class Settings(BaseSettings):
     playwright_cli: str = "npx @playwright/cli"
     pw_profile_dir: str = ""  # empty = use temp APFS clone
 
+    web_port: int = 4102
+    bark_device_key: str = "gx7KnK5f8iAKuqNLWzy5hP"
+    bark_server: str = "http://localhost:8090"
+
 
 settings = Settings()

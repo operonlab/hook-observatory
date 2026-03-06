@@ -48,3 +48,18 @@ class PushPayload(BaseModel):
     tag: str | None = None  # same tag → replace previous notification
     severity: str = "info"  # info, warning, critical
     user_id: str | None = None  # None = broadcast to all
+
+
+class NotificationLogResponse(BaseModel):
+    id: str
+    user_id: str | None
+    category: str
+    title: str
+    body: str
+    url: str | None
+    recipients: int
+    delivered: int
+    failed: int
+    source_event: str | None
+    source_data: dict | None
+    created_at: datetime

@@ -55,6 +55,7 @@ async def create_topic(
     db: AsyncSession = Depends(get_db),
 ):
     instance = await briefing_topic_service.create(db, space_id, body)
+    await db.commit()
     return briefing_topic_service.to_response(instance)
 
 
@@ -67,6 +68,7 @@ async def update_topic(
     instance = await briefing_topic_service.update(db, topic_id, body)
     if not instance:
         raise NotFoundError("Briefing topic not found", code="briefing.topic_not_found")
+    await db.commit()
     return briefing_topic_service.to_response(instance)
 
 
@@ -75,11 +77,14 @@ async def delete_topic(topic_id: str, db: AsyncSession = Depends(get_db)):
     deleted = await briefing_topic_service.delete(db, topic_id)
     if not deleted:
         raise NotFoundError("Briefing topic not found", code="briefing.topic_not_found")
+    await db.commit()
 
 
 @router.patch("/topics/{topic_id}/toggle", response_model=BriefingTopicResponse)
 async def toggle_topic(topic_id: str, db: AsyncSession = Depends(get_db)):
-    return await briefing_topic_service.toggle(db, topic_id)
+    result = await briefing_topic_service.toggle(db, topic_id)
+    await db.commit()
+    return result
 
 
 # ======================== Subtopics ========================
@@ -96,7 +101,9 @@ async def create_subtopic(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    return await briefing_topic_service.add_subtopic(db, topic_id, space_id, body)
+    result = await briefing_topic_service.add_subtopic(db, topic_id, space_id, body)
+    await db.commit()
+    return result
 
 
 @router.put(
@@ -109,6 +116,7 @@ async def update_subtopic(
     db: AsyncSession = Depends(get_db),
 ):
     result = await briefing_topic_service.update_subtopic(db, subtopic_id, body)
+    await db.commit()
     return result
 
 
@@ -120,6 +128,7 @@ async def delete_subtopic(
     deleted = await briefing_topic_service.delete_subtopic(db, subtopic_id)
     if not deleted:
         raise NotFoundError("Subtopic not found", code="briefing.subtopic_not_found")
+    await db.commit()
 
 
 # ======================== Analysts ========================
@@ -142,6 +151,7 @@ async def create_analyst(
     db: AsyncSession = Depends(get_db),
 ):
     instance = await analyst_service.create(db, space_id, body)
+    await db.commit()
     return analyst_service.to_response(instance)
 
 
@@ -154,6 +164,7 @@ async def update_analyst(
     instance = await analyst_service.update(db, analyst_id, body)
     if not instance:
         raise NotFoundError("Analyst not found", code="briefing.analyst_not_found")
+    await db.commit()
     return analyst_service.to_response(instance)
 
 
@@ -162,11 +173,14 @@ async def delete_analyst(analyst_id: str, db: AsyncSession = Depends(get_db)):
     deleted = await analyst_service.delete(db, analyst_id)
     if not deleted:
         raise NotFoundError("Analyst not found", code="briefing.analyst_not_found")
+    await db.commit()
 
 
 @router.patch("/analysts/{analyst_id}/toggle", response_model=AnalystResponse)
 async def toggle_analyst(analyst_id: str, db: AsyncSession = Depends(get_db)):
-    return await analyst_service.toggle(db, analyst_id)
+    result = await analyst_service.toggle(db, analyst_id)
+    await db.commit()
+    return result
 
 
 # ======================== Briefings ========================
@@ -224,7 +238,9 @@ async def create_briefing(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    return await briefing_service.create_briefing(db, space_id, body)
+    result = await briefing_service.create_briefing(db, space_id, body)
+    await db.commit()
+    return result
 
 
 @router.patch("/daily/{briefing_id}", response_model=BriefingResponse)
@@ -233,7 +249,9 @@ async def update_briefing_status(
     body: BriefingUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    return await briefing_service.update_status(db, briefing_id, body)
+    result = await briefing_service.update_status(db, briefing_id, body)
+    await db.commit()
+    return result
 
 
 # ======================== Entries ========================
@@ -262,7 +280,9 @@ async def add_entry(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    return await briefing_service.add_entry(db, briefing_id, space_id, body)
+    result = await briefing_service.add_entry(db, briefing_id, space_id, body)
+    await db.commit()
+    return result
 
 
 # ======================== Follow-Ups ========================
@@ -290,7 +310,9 @@ async def create_follow_up(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    return await follow_up_service.create_follow_up(db, briefing_id, space_id, body)
+    result = await follow_up_service.create_follow_up(db, briefing_id, space_id, body)
+    await db.commit()
+    return result
 
 
 # ======================== Frozen ========================

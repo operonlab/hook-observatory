@@ -19,11 +19,11 @@ def _build_fill_script(
 
     # Determine company selection strategy
     if company in company_options:
-        company_click = f'await page.click(\'[data-qa="option-{company}"]\');'
+        company_click = f"await page.click('[data-qa=\"option-{company}\"]');"
         company_fill = ""
     else:
         # Select "其他" and fill text input
-        company_click = 'await page.click(\'[data-qa="option-其他"]\');'
+        company_click = "await page.click('[data-qa=\"option-其他\"]');"
         company_fill = f"""
     await page.waitForTimeout(500);
     const otherInput = page.locator('[data-qa="subject-1"] input[type="text"], [data-qa="subject-1"] textarea, [data-qa="option-其他"] ~ input, [data-qa="option-其他"] ~ div input').first();
@@ -169,6 +169,7 @@ def fill_form(
         )
         submission.status = "success"
         submission.score = score
+        submission.answers_snapshot = answers
         submission.error_message = None
 
         if not existing:

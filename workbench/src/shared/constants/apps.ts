@@ -74,6 +74,15 @@ export const APP_LIST: AppInfo[] = [
     status: 'available',
   },
   {
+    id: 'notification',
+    name: '通知管理',
+    description: '推播發送、通知歷史、頻道管理',
+    icon: '\uD83D\uDD14',
+    path: '/notification',
+    color: '#cba6f7',
+    status: 'available',
+  },
+  {
     id: 'skillpath',
     name: '技能路徑',
     description: '技能樹、學習路徑、成長規劃',
@@ -99,6 +108,15 @@ export const APP_LIST: AppInfo[] = [
     path: '/matchcore',
     color: '#eba0ac',
     status: 'coming-soon',
+  },
+  {
+    id: 'briefing',
+    name: '每日簡報',
+    description: '多 AI 交叉辯論、每日情報摘要、領域追蹤',
+    icon: '\uD83D\uDCF0',
+    path: '/briefing',
+    color: '#c9a962',
+    status: 'available',
   },
   {
     id: 'agent-vista',
@@ -159,5 +177,15 @@ export const APP_LIST: AppInfo[] = [
     color: '#74c7ec',
     status: 'external',
     externalUrl: '/apps/sentinel/',
+  },
+  {
+    id: 'auto-survey',
+    name: '自動填表',
+    description: 'SurveyCake 自動填表、人員管理、排程通知',
+    icon: '📋',
+    path: '/auto-survey',
+    color: '#b4befe',
+    status: 'external',
+    externalUrl: '/apps/survey/',
   },
 ]
