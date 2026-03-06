@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.shared.errors import BadRequestError, ConflictError, NotFoundError
-from src.shared.fsm import validate_transition
+from src.shared.fsm import emit_state_changed, validate_transition
 
 from .deps import hash_password, verify_password
 from .lifecycle import UserLifecycle
@@ -289,10 +289,15 @@ class UserService:
             if status not in ("pending", "active", "suspended", "banned"):
                 raise BadRequestError(f"Invalid status: {status}", code="auth.invalid_status")
             validate_transition(UserLifecycle, user.status, status, "user")
+            old_status = user.status
             user.status = status
 
         await db.flush()
         await db.refresh(user)
+
+        if status is not None and old_status != status:
+            await emit_state_changed("auth", "user", user.id, old_status, status)
+
         return user
 
 

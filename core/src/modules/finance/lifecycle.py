@@ -11,6 +11,8 @@ validate status changes before persisting them via ``validate_transition()``.
 
 from statemachine import State, StateMachine
 
+from src.shared.fsm import register_fsm
+
 # ======================== Transaction ========================
 
 
@@ -83,3 +85,8 @@ class InstallmentLifecycle(StateMachine):
     # Transitions
     complete = active.to(completed)
     cancel = active.to(cancelled)
+
+
+register_fsm("finance.transaction", TransactionLifecycle)
+register_fsm("finance.subscription", SubscriptionLifecycle)
+register_fsm("finance.installment", InstallmentLifecycle)

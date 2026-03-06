@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db, require_permission
+from src.shared.fsm import get_allowed_transitions, get_fsm_registry_info
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .schemas import AuditLogResponse
@@ -55,3 +56,16 @@ async def get_entity_history(
     _user: dict = require_permission("admin.read"),
 ):
     return await audit_service.get_entity_history(db, module, entity_type, entity_id)
+
+
+@router.get("/_fsm/registry")
+async def fsm_registry():
+    """List all registered FSMs with their transition tables."""
+    return get_fsm_registry_info()
+
+
+@router.get("/_fsm/{key}/allowed")
+async def fsm_allowed(key: str, current: str):
+    """Get allowed target states for a given entity type and current state."""
+    targets = get_allowed_transitions(key, current)
+    return {"key": key, "current": current, "allowed_targets": targets}

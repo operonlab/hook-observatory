@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.events.types import NodeflowEvents
-from src.shared.fsm import validate_transition
+from src.shared.fsm import emit_state_changed, validate_transition
 from src.shared.models import _uuid7_hex
 
 from .executors import EXECUTOR_MAP
@@ -125,6 +125,9 @@ async def execute_flow(
         validate_transition(FlowRunLifecycle, flow_run.status, "completed", "FlowRun")
         flow_run.status = "completed"
         flow_run.finished_at = datetime.now(UTC)
+        await emit_state_changed(
+            "nodeflow", "flow_run", flow_run.id, "running", "completed", user_id
+        )
 
         await event_bus.publish(
             Event(
@@ -140,6 +143,7 @@ async def execute_flow(
         flow_run.status = "failed"
         flow_run.error = str(exc)
         flow_run.finished_at = datetime.now(UTC)
+        await emit_state_changed("nodeflow", "flow_run", flow_run.id, "running", "failed", user_id)
 
         await event_bus.publish(
             Event(

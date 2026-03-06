@@ -23,6 +23,8 @@ NodeRunLifecycle:
 
 from statemachine import State, StateMachine
 
+from src.shared.fsm import register_fsm
+
 
 class FlowLifecycle(StateMachine):
     """Flow status transitions."""
@@ -72,3 +74,8 @@ class NodeRunLifecycle(StateMachine):
     complete = running.to(completed)
     fail = running.to(failed)
     skip = pending.to(skipped)
+
+
+register_fsm("nodeflow.flow", FlowLifecycle)
+register_fsm("nodeflow.flow_run", FlowRunLifecycle)
+register_fsm("nodeflow.node_run", NodeRunLifecycle)

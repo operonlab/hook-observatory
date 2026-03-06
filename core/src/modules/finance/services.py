@@ -16,7 +16,7 @@ from src.events.bus import Event, event_bus
 from src.events.types import FinanceEvents
 from src.modules.finance.lifecycle import TransactionLifecycle
 from src.shared.errors import BadRequestError, NotFoundError
-from src.shared.fsm import validate_transition
+from src.shared.fsm import emit_state_changed, validate_transition
 from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -518,6 +518,11 @@ class TransactionService(
 
         await db.flush()
         await db.refresh(instance)
+
+        if old_status != instance.status:
+            await emit_state_changed(
+                "finance", "transaction", entity_id, old_status, instance.status, user_id
+            )
 
         # Audit diff
         new_snapshot = self._snapshot(instance)

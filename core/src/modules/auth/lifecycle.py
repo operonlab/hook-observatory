@@ -12,6 +12,8 @@ this does not require an FSM transition from ``pending``.
 
 from statemachine import State, StateMachine
 
+from src.shared.fsm import register_fsm
+
 
 class UserLifecycle(StateMachine):
     """Declarative user status transitions."""
@@ -28,3 +30,6 @@ class UserLifecycle(StateMachine):
     suspend = active.to(suspended)
     ban = active.to(banned) | suspended.to(banned)
     reactivate = suspended.to(active)
+
+
+register_fsm("auth.user", UserLifecycle)
