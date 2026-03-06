@@ -16,7 +16,17 @@ from .base import ALLOW, HookResult
 RUFF_BIN = "/opt/homebrew/bin/ruff"
 PY_EXTS = {".py"}
 JS_EXTS = {".ts", ".tsx", ".js", ".jsx"}
-SKIP_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build", ".next", ".worktrees"}
+SKIP_DIRS = {
+    "node_modules",
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".next",
+    ".worktrees",
+}
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
@@ -78,7 +88,11 @@ def _find_biome_bin(config_dir: str) -> str | None:
     if os.path.isfile(local_bin):
         return local_bin
     try:
-        subprocess.run(["biome", "--version"], capture_output=True, timeout=5)
+        subprocess.run(
+            ["biome", "--version"],
+            capture_output=True,
+            timeout=5,
+        )
         return "biome"
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
@@ -88,10 +102,15 @@ def _format_python(file_path: str) -> None:
     if not os.path.isfile(RUFF_BIN):
         return
     try:
-        subprocess.run([RUFF_BIN, "check", "--fix", "--silent", file_path],
-                       capture_output=True, text=True, timeout=15)
-        result = subprocess.run([RUFF_BIN, "format", "--quiet", file_path],
-                                capture_output=True, text=True, timeout=15)
+        subprocess.run(
+            [RUFF_BIN, "check", "--fix", "--silent", file_path],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        result = subprocess.run(
+            [RUFF_BIN, "format", "--quiet", file_path], capture_output=True, text=True, timeout=15
+        )
         if result.returncode == 0:
             _log(f"ruff OK: {file_path}")
         else:
@@ -110,7 +129,10 @@ def _format_js(file_path: str) -> None:
     try:
         result = subprocess.run(
             [biome_bin, "check", "--write", "--no-errors-on-unmatched", file_path],
-            capture_output=True, text=True, timeout=15, cwd=config_dir,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            cwd=config_dir,
         )
         if result.returncode == 0:
             _log(f"biome OK: {file_path}")

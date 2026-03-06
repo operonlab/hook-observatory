@@ -1,34 +1,39 @@
 """
-Voice notification handler — PreToolUse (AskUserQuestion) + Stop events.
+Voice notification handler with async TTS queue.
 
-Two modes:
-  PreToolUse/AskUserQuestion → random "請示" phrase, non-blocking TTS
-  Stop → background: parse transcript, LLM summarization, TTS playback
+Events:
+  PreToolUse/AskUserQuestion → random "請示" phrase
+  Notification → random "確認" phrase
+  Stop → "{label}任務完成了"
+
+Queue guarantees:
+  - Non-blocking enqueue (hook returns immediately)
+  - Sequential playback (one sound at a time, queued)
+  - Self-cleaning consumer (exits after 3s idle)
 
 TTS fallback chain: Workshop TTS service → edge-tts CLI → macOS say
-
-Set CLAUDE_VOICE=0 to disable.
+Disable: CLAUDE_VOICE=0
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import random
 import subprocess
-from urllib.request import Request, urlopen
 
-from .base import ALLOW, HOME, HookResult, find_executable, run_background
+from .base import ALLOW, HOME, HookResult
 
 # --- Configuration (env-overridable) ---
 TTS_URL = os.environ.get("CLAUDE_TTS_URL", "http://localhost:8841/api/tts/speak")
 VOICE = os.environ.get("CLAUDE_VOICE_ID", "zh-CN-YunjianNeural")
 RATE = os.environ.get("CLAUDE_VOICE_RATE", "+20%")
 PLAYBACK_VOL = os.environ.get("CLAUDE_VOICE_VOLUME", "0.3")
-NOTIFY_LEVEL = os.environ.get("CLAUDE_NOTIFY_LEVEL", "action")
 PYTHON_BIN = os.path.join(HOME, ".local", "bin", "python3")
 
-_SEVERITY_RANK = {"urgent": 4, "action": 3, "warning": 2, "info": 1}
+QUEUE_FILE = "/tmp/claude-tts-queue.jsonl"
+PID_FILE = "/tmp/claude-tts-consumer.pid"
 
 _ASK_PHRASES = [
     "少爺，維恩有問題想請示您",
@@ -38,7 +43,19 @@ _ASK_PHRASES = [
     "少爺，有個問題想請教您",
 ]
 
+_NOTIFY_PHRASES = [
+    "少爺，需要您的確認",
+    "少爺，這裡需要您過目一下",
+    "少爺，請您批准這個操作",
+    "少爺，維恩等候您的指示",
+]
+
 _NUM_CN = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
+
+
+# ---------------------------------------------------------------------------
+# Main handler (dispatcher entry point)
+# ---------------------------------------------------------------------------
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
@@ -46,62 +63,59 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         return ALLOW
 
     if event_type == "PreToolUse" and tool_name == "AskUserQuestion":
-        return _handle_ask()
+        _enqueue_tts(random.choice(_ASK_PHRASES))
+    elif event_type == "Notification":
+        _handle_notification(raw_input)
     elif event_type == "Stop":
-        return _handle_stop(raw_input)
+        _handle_stop()
     return ALLOW
 
 
-def _handle_ask() -> HookResult:
-    """AskUserQuestion: non-blocking TTS with random phrase."""
-    msg = random.choice(_ASK_PHRASES)
-    _tts_fire_and_forget(msg, severity="urgent", wait=False)
-    return ALLOW
-
-
-def _handle_stop(raw_input: str) -> HookResult:
-    """Stop: background transcript parsing + LLM summary + TTS."""
-    # Parse hook input for transcript path
+def _handle_notification(raw_input: str) -> None:
+    """Notification: TTS for permission prompts."""
     try:
         data = json.loads(raw_input) if raw_input.strip() else {}
     except (json.JSONDecodeError, AttributeError):
         data = {}
 
-    transcript_path = data.get("transcript_path", "")
-    label = _get_label()
+    message = data.get("message", "")
+    # User is already at the screen for these — skip
+    if "waiting for your input" in message.lower():
+        return
 
-    # All heavy work runs in background — hook returns immediately
-    _spawn_stop_background(transcript_path, label)
-    return ALLOW
+    _enqueue_tts(random.choice(_NOTIFY_PHRASES))
+
+
+def _handle_stop() -> None:
+    """Stop: announce task completion with session label."""
+    label = _get_label()
+    msg = f"少爺，{label}任務完成了" if label else "少爺，任務完成了"
+    _enqueue_tts(msg)
 
 
 # ---------------------------------------------------------------------------
-# Label detection (identifies this pane/session)
+# Label detection (tmux pane name > window name > cwd)
 # ---------------------------------------------------------------------------
 
 
 def _get_label() -> str:
-    """Get a meaningful label for this session (tmux pane name > cwd)."""
-    # 1) Env var
     label = os.environ.get("CLAUDE_LABEL", "")
     if label:
         return label
 
-    # 2) tmux identification
     pane_id = os.environ.get("TMUX_PANE", "")
     if pane_id:
         label = _tmux_label(pane_id)
         if label:
             return label
 
-    # 3) Fallback: cwd basename
     return os.path.basename(os.getcwd())
 
 
 def _tmux_label(pane_id: str) -> str:
-    """Extract label from tmux window/pane names."""
+    import re
 
-    def _tmux_query(fmt: str) -> str:
+    def _q(fmt: str) -> str:
         try:
             r = subprocess.run(
                 ["tmux", "display-message", "-t", pane_id, "-p", fmt],
@@ -113,23 +127,22 @@ def _tmux_label(pane_id: str) -> str:
         except Exception:
             return ""
 
-    # Window name (skip shell defaults)
-    win_name = _tmux_query("#W")
-    if win_name and win_name not in ("zsh", "bash", "fish", "sh", "python", "python3", "node", ""):
+    # Prefer meaningful window name
+    win_name = _q("#W")
+    shell_defaults = ("zsh", "bash", "fish", "sh", "python", "python3", "node", "")
+    if win_name and win_name not in shell_defaults:
         return win_name
 
-    # Pane title (strip leading non-alnum)
-    import re
-
-    pane_title = _tmux_query("#{pane_title}")
+    # Pane title (skip generic ones)
+    pane_title = _q("#{pane_title}")
     pane_title = re.sub(r"^[^\w]*", "", pane_title)
     skip = ("", "-zsh", "-bash", "Claude Code", "Gemini CLI", "Codex CLI")
     if pane_title and pane_title not in skip and "@" not in pane_title:
         return pane_title
 
     # Window N Pane N (Chinese numerals)
-    win_idx = _tmux_query("#I")
-    pane_idx = _tmux_query("#P")
+    win_idx = _q("#I")
+    pane_idx = _q("#P")
     if win_idx:
         w = _NUM_CN[int(win_idx)] if win_idx.isdigit() and int(win_idx) <= 9 else win_idx
         p = _NUM_CN[int(pane_idx)] if pane_idx.isdigit() and int(pane_idx) <= 9 else pane_idx
@@ -139,236 +152,144 @@ def _tmux_label(pane_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Background Stop processing
+# TTS Queue — file-based JSONL + flock + background consumer
 # ---------------------------------------------------------------------------
 
 
-def _spawn_stop_background(transcript_path: str, label: str) -> None:
-    """Spawn background process for Stop event heavy work."""
-    # Build a self-contained Python script to run in background
-    script = f"""
-import json, os, subprocess, sys, time
-from urllib.request import Request, urlopen
-
-HOME = {HOME!r}
-TTS_URL = {TTS_URL!r}
-VOICE = {VOICE!r}
-RATE = {RATE!r}
-PLAYBACK_VOL = {PLAYBACK_VOL!r}
-PYTHON_BIN = {PYTHON_BIN!r}
-transcript_path = {transcript_path!r}
-label = {label!r}
-
-DBG = "/tmp/voice-notify-debug.log"
-with open(DBG, "a") as f:
-    f.write(f"=== {{time.strftime('%H:%M:%S')}} Stop ===\\n")
-
-# Extract last user message from transcript
-last_user_msg = ""
-if transcript_path and os.path.isfile(transcript_path):
-    try:
-        with open(transcript_path) as f:
-            first = f.read(1)
-            f.seek(0)
-            if first == "{{":
-                data = json.load(f)
-                for msg in data.get("messages", []):
-                    if msg.get("type") != "user":
-                        continue
-                    content = msg.get("content", "")
-                    text = ""
-                    if isinstance(content, str):
-                        text = content.strip()
-                    elif isinstance(content, list):
-                        for c in content:
-                            if isinstance(c, dict) and c.get("text"):
-                                text = c["text"].strip()
-                                break
-                            elif isinstance(c, str):
-                                text = c.strip()
-                                break
-                    if text and not text.startswith("<system"):
-                        last_user_msg = text
-            else:
-                for line in f:
-                    try:
-                        obj = json.loads(line)
-                    except Exception:
-                        continue
-                    if obj.get("type") != "user":
-                        continue
-                    msg = obj.get("message", {{}})
-                    if isinstance(msg, dict):
-                        content = msg.get("content", "")
-                    else:
-                        content = obj.get("content", "")
-                    text = ""
-                    if isinstance(content, str):
-                        text = content.strip()
-                    elif isinstance(content, list):
-                        for c in content:
-                            if isinstance(c, dict) and c.get("text"):
-                                text = c["text"].strip()
-                                break
-                            elif isinstance(c, str):
-                                text = c.strip()
-                                break
-                    if text and not text.startswith("<system"):
-                        last_user_msg = text
-    except Exception:
-        pass
-if last_user_msg:
-    last_user_msg = last_user_msg[:80]
-
-# LLM summarization (codex → gemini fallback)
-task_desc = ""
-summary_prompt = f"用繁體中文10字內摘要這個需求，只輸出摘要不要其他文字：「{{last_user_msg}}」"
-codex_cooldown = "/tmp/voice-notify-codex-cooldown"
-cooldown_mins = 30
-
-if last_user_msg:
-    import shutil
-    use_codex = True
-    if os.path.isfile(codex_cooldown):
-        age = time.time() - os.path.getmtime(codex_cooldown)
-        if age < cooldown_mins * 60:
-            use_codex = False
-        else:
-            os.remove(codex_cooldown)
-
-    if use_codex and shutil.which("codex"):
-        try:
-            r = subprocess.run(
-                ["codex", "exec", "--skip-git-repo-check", summary_prompt],
-                capture_output=True, text=True, timeout=30,
-            )
-            task_desc = r.stdout.strip().split("\\n")[-1] if r.stdout.strip() else ""
-            if not task_desc:
-                open(codex_cooldown, "w").close()
-        except Exception:
-            open(codex_cooldown, "w").close()
-
-    if not task_desc and shutil.which("gemini"):
-        try:
-            r = subprocess.run(
-                ["gemini", "-p", summary_prompt, "-m", "gemini-2.5-flash"],
-                capture_output=True, text=True, timeout=30,
-            )
-            task_desc = r.stdout.strip().split("\\n")[-1] if r.stdout.strip() else ""
-        except Exception:
-            pass
-
-with open(DBG, "a") as f:
-    f.write(f"LAST_USER_MSG=[{{last_user_msg}}]\\n")
-    f.write(f"TASK_DESC=[{{task_desc}}]\\n")
-
-# Build message
-if task_desc:
-    bg_msg = f"少爺，{{task_desc}}已完成"
-elif label:
-    bg_msg = f"少爺，{{label}}已完成"
-else:
-    bg_msg = "少爺，任務完成了"
-
-with open(DBG, "a") as f:
-    f.write(f"BG_MSG=[{{bg_msg}}]\\n")
-
-# TTS playback
-payload = json.dumps({{
-    "text": bg_msg, "voice": VOICE, "rate": RATE,
-    "wait": True, "playback_volume": float(PLAYBACK_VOL),
-}})
-tts_ok = False
-try:
-    req = Request(TTS_URL, data=payload.encode(), headers={{"Content-Type": "application/json"}})
-    resp = urlopen(req, timeout=30)
-    if resp.status == 200 and "json" in (resp.headers.get("Content-Type") or ""):
-        tts_ok = True
-except Exception:
-    pass
-
-if not tts_ok:
-    subprocess.run(["killall", "afplay"], capture_output=True)
-    edge_tts = shutil.which("edge-tts")
-    if edge_tts:
-        tmp = "/tmp/claude-voice-notify-bg.mp3"
-        cmd = [
-            edge_tts, "--voice", VOICE, "--rate", RATE,
-            "--text", bg_msg, "--write-media", tmp,
-        ]
-        subprocess.run(cmd, capture_output=True, timeout=15)
-        subprocess.run(["afplay", "-v", PLAYBACK_VOL, tmp], capture_output=True, timeout=30)
-    elif shutil.which("say"):
-        tmp = "/tmp/claude-voice-notify-bg.aiff"
-        say_cmd = [
-            "say", "-v", "Meijia", "-r", "320",
-            "-o", tmp, bg_msg,
-        ]
-        subprocess.run(say_cmd, capture_output=True, timeout=15)
-        subprocess.run(["afplay", "-v", PLAYBACK_VOL, tmp], capture_output=True, timeout=30)
-"""
-    run_background(
-        [PYTHON_BIN, "-c", script],
+def _enqueue_tts(msg: str) -> None:
+    """Append to queue file (atomic via flock) and ensure consumer alive."""
+    entry = json.dumps(
+        {"text": msg, "voice": VOICE, "rate": RATE, "vol": PLAYBACK_VOL},
+        ensure_ascii=False,
     )
+    with open(QUEUE_FILE, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(entry + "\n")
+        fcntl.flock(f, fcntl.LOCK_UN)
+    _ensure_consumer()
 
 
-# ---------------------------------------------------------------------------
-# Foreground TTS (for PreToolUse quick phrases)
-# ---------------------------------------------------------------------------
+def _consumer_alive() -> bool:
+    """Check if TTS consumer process is still running."""
+    if not os.path.isfile(PID_FILE):
+        return False
+    try:
+        pid = int(open(PID_FILE).read().strip())
+        os.kill(pid, 0)  # signal 0 = existence check
+        return True
+    except (OSError, ValueError):
+        return False
 
 
-def _tts_fire_and_forget(msg: str, severity: str = "action", wait: bool = True) -> None:
-    """Send TTS request. Falls back through the chain on failure."""
-    min_rank = _SEVERITY_RANK.get(NOTIFY_LEVEL, 3)
-    cur_rank = _SEVERITY_RANK.get(severity, 3)
-    if cur_rank < min_rank:
-        if severity == "warning":
-            _macos_notify("Claude Code ⚠️", msg)
+def _ensure_consumer() -> None:
+    """Start background consumer if not already running."""
+    if _consumer_alive():
         return
 
-    payload = json.dumps(
-        {
-            "text": msg,
-            "voice": VOICE,
-            "rate": RATE,
-            "wait": wait,
-            "playback_volume": float(PLAYBACK_VOL),
-        }
+    # Consumer is a self-contained Python script
+    script = _build_consumer_script()
+    subprocess.Popen(
+        [PYTHON_BIN, "-c", script],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
-    max_time = 30 if wait else 5
 
-    # Try Workshop TTS service
+def _build_consumer_script() -> str:
+    """Build self-contained consumer script with current config baked in."""
+    return f"""\
+import fcntl, json, os, shutil, subprocess, sys, time
+from urllib.request import Request, urlopen
+
+QUEUE = {QUEUE_FILE!r}
+PID   = {PID_FILE!r}
+URL   = {TTS_URL!r}
+
+# Register PID
+with open(PID, "w") as f:
+    f.write(str(os.getpid()))
+
+
+def play(e):
+    text  = e["text"]
+    voice = e.get("voice", "zh-CN-YunjianNeural")
+    rate  = e.get("rate", "+20%")
+    vol   = e.get("vol", "0.3")
+
+    # 1) Workshop TTS service
     try:
-        req = Request(TTS_URL, data=payload.encode(), headers={"Content-Type": "application/json"})
-        resp = urlopen(req, timeout=max_time)
+        payload = json.dumps({{
+            "text": text, "voice": voice, "rate": rate,
+            "wait": True, "playback_volume": float(vol),
+        }})
+        req = Request(URL, data=payload.encode(),
+                      headers={{"Content-Type": "application/json"}})
+        resp = urlopen(req, timeout=30)
         if resp.status == 200 and "json" in (resp.headers.get("Content-Type") or ""):
-            if severity == "urgent":
-                _macos_notify("Claude Code", msg)
             return
     except Exception:
         pass
 
-    # Fallback: edge-tts
-    subprocess.run(["killall", "afplay"], capture_output=True)
-    edge_tts = find_executable("edge-tts")
-    if edge_tts:
-        tmp = "/tmp/claude-voice-notify.mp3"
-        run_background(
-            f'"{edge_tts}" --voice "{VOICE}" --rate "{RATE}" --text "{msg}" '
-            f'--write-media "{tmp}" 2>/dev/null && afplay -v {PLAYBACK_VOL} "{tmp}" 2>/dev/null'
+    # 2) edge-tts → afplay
+    if shutil.which("edge-tts"):
+        tmp = "/tmp/claude-tts-play.mp3"
+        subprocess.run(
+            ["edge-tts", "--voice", voice, "--rate", rate,
+             "--text", text, "--write-media", tmp],
+            capture_output=True, timeout=15,
         )
-        if severity == "urgent":
-            _macos_notify("Claude Code", msg)
+        subprocess.run(["afplay", "-v", vol, tmp],
+                       capture_output=True, timeout=30)
         return
 
-    # Fallback: macOS say
-    if find_executable("say"):
-        run_background(
-            f'say -v Meijia -r 320 -o /tmp/claude-voice-notify.aiff "{msg}" '
-            f"&& afplay -v {PLAYBACK_VOL} /tmp/claude-voice-notify.aiff"
+    # 3) macOS say → afplay
+    if shutil.which("say"):
+        tmp = "/tmp/claude-tts-play.aiff"
+        subprocess.run(
+            ["say", "-v", "Meijia", "-r", "320", "-o", tmp, text],
+            capture_output=True, timeout=15,
         )
+        subprocess.run(["afplay", "-v", vol, tmp],
+                       capture_output=True, timeout=30)
 
 
-def _macos_notify(title: str, msg: str) -> None:
-    run_background(["osascript", "-e", f'display notification "{msg}" with title "{title}"'])
+def drain():
+    if not os.path.isfile(QUEUE):
+        return []
+    with open(QUEUE, "r+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        lines = f.readlines()
+        f.seek(0)
+        f.truncate()
+        fcntl.flock(f, fcntl.LOCK_UN)
+    out = []
+    for ln in lines:
+        try:
+            out.append(json.loads(ln.strip()))
+        except Exception:
+            pass
+    return out
+
+
+# Main loop — drain queue, play sequentially, exit after 3s idle
+idle = 0.0
+while idle < 3.0:
+    entries = drain()
+    if not entries:
+        time.sleep(0.5)
+        idle += 0.5
+        continue
+    idle = 0.0
+    for e in entries:
+        try:
+            play(e)
+        except Exception:
+            pass
+
+# Cleanup
+try:
+    os.remove(PID)
+except Exception:
+    pass
+"""

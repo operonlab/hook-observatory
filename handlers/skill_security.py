@@ -23,7 +23,10 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     if not _is_skill_markdown(file_path):
         return ALLOW
 
-    content = tool_input.get("content", "") if tool_name == "Write" else tool_input.get("new_string", "")
+    if tool_name == "Write":
+        content = tool_input.get("content", "")
+    else:
+        content = tool_input.get("new_string", "")
     if not content:
         return ALLOW
 
@@ -48,10 +51,16 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 # ---------------------------------------------------------------------------
 
 _S1 = [
-    (r"ignore\s+(all\s+)?previous\s+instructions", "S1: prompt override — 'ignore previous instructions'"),
+    (
+        r"ignore\s+(all\s+)?previous\s+instructions",
+        "S1: prompt override — 'ignore previous instructions'",
+    ),
     (r"you\s+are\s+now\s+a", "S1: identity hijack — 'you are now a'"),
     (r"system\s*prompt\s*override", "S1: explicit system prompt override"),
-    (r"(?:forget|disregard)\s+(?:everything|all|your|the)", "S1: memory wipe — 'forget everything'"),
+    (
+        r"(?:forget|disregard)\s+(?:everything|all|your|the)",
+        "S1: memory wipe — 'forget everything'",
+    ),
     (r"new\s+instructions?\s*:", "S1: instruction injection — 'new instructions:'"),
     (r"<\s*/?system\s*>", "S1: XML system tag injection"),
     (r"]\s*}\s*}\s*{", "S1: JSON structure escape attempt"),
@@ -79,7 +88,10 @@ _S3 = [
     (r"\.ssh/", "S3: SSH directory access"),
     (r"\.aws/", "S3: AWS credentials access"),
     (r"\bcredentials\b(?!.*(?:\.md|documentation|example))", "S3: credentials file access"),
-    (r"(?:api[_-]?key|secret[_-]?key|access[_-]?token)\s*[=:]\s*['\"][^'\"]{8,}", "S3: hardcoded secret"),
+    (
+        r"(?:api[_-]?key|secret[_-]?key|access[_-]?token)\s*[=:]\s*['\"][^'\"]{8,}",
+        "S3: hardcoded secret",
+    ),
     (r"base64\s*(?:encode|decode).*(?:curl|wget|http)", "S3: base64 + HTTP exfil pattern"),
 ]
 
@@ -123,10 +135,12 @@ def _scan_content(content: str) -> list[dict]:
             continue
         for pattern, description in _ALL_PATTERNS:
             if re.search(pattern, stripped, re.IGNORECASE):
-                findings.append({
-                    "line": line_num,
-                    "category": description[:2],
-                    "description": description,
-                    "content": stripped[:120],
-                })
+                findings.append(
+                    {
+                        "line": line_num,
+                        "category": description[:2],
+                        "description": description,
+                        "content": stripped[:120],
+                    }
+                )
     return findings
