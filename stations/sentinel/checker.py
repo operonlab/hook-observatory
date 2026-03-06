@@ -94,6 +94,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="infra",
         url="http://127.0.0.1:8090/ping",
     ),
+    LightCheck(
+        name="ntfy",
+        group="infra",
+        url="http://127.0.0.1:9080/v1/health",
+    ),
     # ── internal ──
     LightCheck(
         name="core",

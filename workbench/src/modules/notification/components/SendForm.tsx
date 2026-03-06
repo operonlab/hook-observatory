@@ -218,7 +218,7 @@ export default function SendForm() {
               送達 {result.delivered} / 失敗 {result.failed}
             </div>
             <div className="mt-1 text-xs opacity-80">
-              Web Push: {result.channels.web_push} | Bark: {result.channels.bark ? 'OK' : 'N/A'}
+              Web Push: {result.channels.web_push} | Bark: {result.channels.bark ? 'OK' : 'N/A'} | ntfy: {result.channels.ntfy ? 'OK' : 'N/A'}
             </div>
           </div>
         </div>

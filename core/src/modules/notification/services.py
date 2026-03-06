@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.models import _uuid7_hex
 
 from .adapters.bark import send_bark
+from .adapters.ntfy import send_ntfy
 from .models import NotificationLog, PushSubscription
 from .push import send_push
 from .schemas import NotificationLogResponse, PushPayload, SubscriptionCreate, SubscriptionResponse
@@ -198,8 +199,21 @@ class NotificationService:
             logger.error("bark_delivery_error", error=str(e))
             return False
 
+    async def _deliver_ntfy(self, payload: PushPayload) -> bool:
+        """Deliver via ntfy (self-hosted push). Returns True if sent."""
+        try:
+            return await send_ntfy(
+                title=payload.title,
+                body=payload.body,
+                url=payload.url,
+                severity=payload.severity,
+            )
+        except Exception as e:
+            logger.error("ntfy_delivery_error", error=str(e))
+            return False
+
     async def send_notification(self, db: AsyncSession, payload: PushPayload) -> dict:
-        """Fan-out: deliver via Web Push + Bark in parallel."""
+        """Fan-out: deliver via Web Push + Bark + ntfy in parallel."""
         query = select(PushSubscription).where(PushSubscription.active == True)  # noqa: E712
 
         if payload.user_id:
@@ -217,13 +231,19 @@ class NotificationService:
             "severity": payload.severity,
         }
 
-        # Deliver Web Push + Bark in parallel
+        # Deliver Web Push + Bark + ntfy in parallel
         web_push_task = self._deliver_web_push(db, eligible, push_data)
         bark_task = self._deliver_bark(payload)
+        ntfy_task = self._deliver_ntfy(payload)
 
-        (delivered, failed, _expired_ids), bark_ok = await asyncio.gather(web_push_task, bark_task)
+        (delivered, failed, _expired_ids), bark_ok, ntfy_ok = await asyncio.gather(
+            web_push_task, bark_task, ntfy_task
+        )
 
         # Log the notification
+        total_delivered = delivered + (1 if bark_ok else 0) + (1 if ntfy_ok else 0)
+        total_failed = failed + (0 if bark_ok else 1) + (0 if ntfy_ok else 1)
+
         log = NotificationLog(
             id=_uuid7_hex(),
             user_id=payload.user_id,
@@ -232,27 +252,26 @@ class NotificationService:
             body=payload.body,
             url=payload.url,
             recipients=len(eligible),
-            delivered=delivered + (1 if bark_ok else 0),
-            failed=failed + (0 if bark_ok else 1),
+            delivered=total_delivered,
+            failed=total_failed,
             source_event=payload.tag,
             source_data={
                 "channels": {
                     "web_push": {"delivered": delivered, "failed": failed},
                     "bark": {"delivered": bark_ok},
+                    "ntfy": {"delivered": ntfy_ok},
                 }
             },
         )
         db.add(log)
         await db.flush()
 
-        total_delivered = delivered + (1 if bark_ok else 0)
-        total_failed = failed + (0 if bark_ok else 1)
-
         logger.info(
             "notification_sent",
             category=payload.category,
             web_push_delivered=delivered,
             bark_ok=bark_ok,
+            ntfy_ok=ntfy_ok,
             total_delivered=total_delivered,
         )
 
@@ -260,7 +279,7 @@ class NotificationService:
             "recipients": len(eligible),
             "delivered": total_delivered,
             "failed": total_failed,
-            "channels": {"web_push": delivered, "bark": bark_ok},
+            "channels": {"web_push": delivered, "bark": bark_ok, "ntfy": ntfy_ok},
         }
 
 
