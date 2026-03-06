@@ -31,7 +31,7 @@ export interface SendResult {
   recipients: number
   delivered: number
   failed: number
-  channels: { web_push: number; bark: boolean }
+  channels: { web_push: number; bark: boolean; ntfy: boolean }
 }
 
 export function sendNotification(data: SendPayload): Promise<SendResult> {
