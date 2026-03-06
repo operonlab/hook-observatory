@@ -108,6 +108,12 @@ DOCKER_CONTAINERS = [
         "health_cmd": None,
         "health_url": "http://127.0.0.1:8090/ping",
     },
+    {
+        "name": "ws-infra-ntfy-1",
+        "port": 9080,
+        "health_cmd": None,
+        "health_url": "http://127.0.0.1:9080/v1/health",
+    },
 ]
 
 # ANSI color codes
