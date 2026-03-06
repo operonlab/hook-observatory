@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAppOrder } from '@/hooks/useAppOrder'
 import { useAuth } from '@/hooks/useAuth'
-import { APP_LIST } from '@/shared/constants/apps'
 import type { AppInfo } from '@/types'
 
 function AppCard({
@@ -9,23 +9,50 @@ function AppCard({
   isHovered,
   onHover,
   onClick,
+  isDragOver,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
 }: {
   app: AppInfo
   isHovered: boolean
   onHover: (id: string | null) => void
   onClick: () => void
+  isDragOver: boolean
+  onDragStart: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragEnd: () => void
+  onDrop: (e: React.DragEvent) => void
 }) {
   return (
     <button
+      type="button"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.currentTarget.style.opacity = '0.4'
+        onDragStart()
+      }}
+      onDragOver={onDragOver}
+      onDragEnd={(e) => {
+        e.currentTarget.style.opacity = '1'
+        onDragEnd()
+      }}
+      onDrop={onDrop}
       onClick={onClick}
       onMouseEnter={() => onHover(app.id)}
       onMouseLeave={() => onHover(null)}
       className="group relative flex items-start gap-4 p-6 text-left transition-all"
       style={{
         backgroundColor: isHovered ? `${app.color}14` : 'transparent',
-        cursor: 'pointer',
+        cursor: 'grab',
         border: '1px solid rgba(255, 255, 255, 0.04)',
-        borderLeft: `2px solid ${isHovered ? app.color : `${app.color}40`}`,
+        borderLeft: isDragOver
+          ? `2px solid ${app.color}`
+          : `2px solid ${isHovered ? app.color : `${app.color}40`}`,
+        boxShadow: isDragOver ? `inset 0 0 0 1px ${app.color}40` : 'none',
+        transition: 'border 0.15s, box-shadow 0.15s, background-color 0.2s',
       }}
     >
       <span
@@ -67,14 +94,86 @@ function AppCard({
   )
 }
 
+function DraggableGrid({
+  apps,
+  section,
+  onReorder,
+  renderCard,
+}: {
+  apps: AppInfo[]
+  section: 'internal' | 'external'
+  onReorder: (section: 'internal' | 'external', fromId: string, toId: string) => void
+  renderCard: (app: AppInfo, isDragOver: boolean, handlers: DragHandlers) => React.ReactNode
+}) {
+  const dragId = useRef<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+
+  return (
+    <div className="grid grid-cols-1 gap-px sm:grid-cols-2 lg:grid-cols-3">
+      {apps.map((app) => {
+        const handlers: DragHandlers = {
+          onDragStart: () => {
+            dragId.current = app.id
+          },
+          onDragOver: (e: React.DragEvent) => {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            if (dragId.current && dragId.current !== app.id) {
+              setDragOverId(app.id)
+            }
+          },
+          onDragEnd: () => {
+            dragId.current = null
+            setDragOverId(null)
+          },
+          onDrop: (e: React.DragEvent) => {
+            e.preventDefault()
+            if (dragId.current && dragId.current !== app.id) {
+              onReorder(section, dragId.current, app.id)
+            }
+            dragId.current = null
+            setDragOverId(null)
+          },
+        }
+        return renderCard(app, dragOverId === app.id, handlers)
+      })}
+    </div>
+  )
+}
+
+interface DragHandlers {
+  onDragStart: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragEnd: () => void
+  onDrop: (e: React.DragEvent) => void
+}
+
 export default function Home() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const { sortedInternal, sortedExternal, comingSoon, reorder } = useAppOrder()
 
-  const internal = APP_LIST.filter((a) => a.status === 'available')
-  const external = APP_LIST.filter((a) => a.status === 'external')
-  const comingSoon = APP_LIST.filter((a) => a.status === 'coming-soon')
+  const renderCard = (app: AppInfo, isDragOver: boolean, handlers: DragHandlers) => (
+    <AppCard
+      key={app.id}
+      app={app}
+      isHovered={hoveredId === app.id}
+      onHover={setHoveredId}
+      onClick={() => {
+        if (app.externalUrl) {
+          window.location.href = app.externalUrl
+        } else {
+          navigate(app.path)
+        }
+      }}
+      isDragOver={isDragOver}
+      onDragStart={handlers.onDragStart}
+      onDragOver={handlers.onDragOver}
+      onDragEnd={handlers.onDragEnd}
+      onDrop={handlers.onDrop}
+    />
+  )
 
   return (
     <div className="min-h-full flex flex-col" style={{ backgroundColor: '#1a1b2e' }}>
@@ -98,7 +197,7 @@ export default function Home() {
           {user?.name ? `${user.name}` : 'Welcome'}
         </h1>
         <p className="mt-2 text-sm" style={{ color: 'rgba(255, 255, 255, 0.3)' }}>
-          選擇一個應用開始
+          拖拽調整順序，選擇一個應用開始
         </p>
       </div>
 
@@ -110,21 +209,16 @@ export default function Home() {
         >
           內部系統
         </p>
-        <div className="grid grid-cols-1 gap-px sm:grid-cols-2 lg:grid-cols-3">
-          {internal.map((app) => (
-            <AppCard
-              key={app.id}
-              app={app}
-              isHovered={hoveredId === app.id}
-              onHover={setHoveredId}
-              onClick={() => navigate(app.path)}
-            />
-          ))}
-        </div>
+        <DraggableGrid
+          apps={sortedInternal}
+          section="internal"
+          onReorder={reorder}
+          renderCard={renderCard}
+        />
       </div>
 
       {/* External apps — standalone stations */}
-      {external.length > 0 && (
+      {sortedExternal.length > 0 && (
         <div className="mx-auto w-full max-w-4xl px-6 pb-8">
           <p
             className="mb-4 text-xs tracking-wider uppercase"
@@ -132,19 +226,12 @@ export default function Home() {
           >
             外部系統
           </p>
-          <div className="grid grid-cols-1 gap-px sm:grid-cols-2 lg:grid-cols-3">
-            {external.map((app) => (
-              <AppCard
-                key={app.id}
-                app={app}
-                isHovered={hoveredId === app.id}
-                onHover={setHoveredId}
-                onClick={() => {
-                  window.location.href = app.externalUrl!
-                }}
-              />
-            ))}
-          </div>
+          <DraggableGrid
+            apps={sortedExternal}
+            section="external"
+            onReorder={reorder}
+            renderCard={renderCard}
+          />
         </div>
       )}
 
