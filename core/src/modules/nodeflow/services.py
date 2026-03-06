@@ -15,11 +15,13 @@ from sqlalchemy.orm import selectinload
 from src.events.bus import Event, event_bus
 from src.events.types import NodeflowEvents
 from src.shared.errors import BadRequestError, NotFoundError
+from src.shared.fsm import validate_transition
 from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
 from .engine import execute_flow
+from .lifecycle import FlowLifecycle
 from .models import Edge, Flow, FlowRun, Node
 from .schemas import (
     EdgeCreate,
@@ -101,26 +103,32 @@ class FlowService(BaseCRUDService[Flow, FlowCreate, FlowUpdate, FlowResponse]):
             raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
         if flow.status == "active":
             return self.to_response(flow)
+        validate_transition(FlowLifecycle, flow.status, "active", "Flow")
         flow.status = "active"
         await db.flush()
-        await event_bus.publish(Event(
-            type=NodeflowEvents.FLOW_ACTIVATED,
-            data={"flow_id": flow.id, "name": flow.name},
-            source="nodeflow",
-        ))
+        await event_bus.publish(
+            Event(
+                type=NodeflowEvents.FLOW_ACTIVATED,
+                data={"flow_id": flow.id, "name": flow.name},
+                source="nodeflow",
+            )
+        )
         return self.to_response(flow)
 
     async def pause(self, db: AsyncSession, flow_id: str) -> FlowResponse:
         flow = await db.get(Flow, flow_id)
         if not flow or flow.deleted_at is not None:
             raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
+        validate_transition(FlowLifecycle, flow.status, "paused", "Flow")
         flow.status = "paused"
         await db.flush()
-        await event_bus.publish(Event(
-            type=NodeflowEvents.FLOW_PAUSED,
-            data={"flow_id": flow.id, "name": flow.name},
-            source="nodeflow",
-        ))
+        await event_bus.publish(
+            Event(
+                type=NodeflowEvents.FLOW_PAUSED,
+                data={"flow_id": flow.id, "name": flow.name},
+                source="nodeflow",
+            )
+        )
         return self.to_response(flow)
 
     async def trigger_manual(
@@ -220,9 +228,7 @@ class EdgeService:
             await db.delete(edge)
             await db.flush()
 
-    async def list_by_flow(
-        self, db: AsyncSession, flow_id: str
-    ) -> list[EdgeResponse]:
+    async def list_by_flow(self, db: AsyncSession, flow_id: str) -> list[EdgeResponse]:
         q = select(Edge).where(Edge.flow_id == flow_id)
         q = _soft_delete_filter(q, Edge)
         rows: Sequence[Edge] = (await db.execute(q)).scalars().all()
@@ -312,9 +318,7 @@ class FlowRunService:
             page_size=p.page_size,
         )
 
-    async def get_detail(
-        self, db: AsyncSession, flow_run_id: str
-    ) -> FlowRunDetailResponse:
+    async def get_detail(self, db: AsyncSession, flow_run_id: str) -> FlowRunDetailResponse:
         q = (
             select(FlowRun)
             .where(FlowRun.id == flow_run_id)
@@ -367,9 +371,7 @@ async def on_any_event(event: Event) -> None:
                         flow_name=flow.name,
                         event_type=event.type,
                     )
-                    task = asyncio.create_task(
-                        _execute_in_session(flow.id, flow.space_id, event)
-                    )
+                    task = asyncio.create_task(_execute_in_session(flow.id, flow.space_id, event))
                     _background_tasks.add(task)
                     task.add_done_callback(_background_tasks.discard)
 

@@ -13,8 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.shared.errors import BadRequestError, ConflictError, NotFoundError
+from src.shared.fsm import validate_transition
 
 from .deps import hash_password, verify_password
+from .lifecycle import UserLifecycle
 from .models import OAuthAccount, Session, User
 from .schemas import OAuthAccountResponse, UserDetailResponse, UserResponse
 
@@ -69,9 +71,7 @@ class UserService:
 
     # --- Registration ---
 
-    async def register(
-        self, db: AsyncSession, email: str, password: str, name: str
-    ) -> User:
+    async def register(self, db: AsyncSession, email: str, password: str, name: str) -> User:
         existing = await self.get_by_email(db, email)
         if existing:
             raise ConflictError("Email already registered", code="auth.email_conflict")
@@ -88,9 +88,7 @@ class UserService:
 
     # --- Authentication ---
 
-    async def authenticate(
-        self, db: AsyncSession, email: str, password: str
-    ) -> User | None:
+    async def authenticate(self, db: AsyncSession, email: str, password: str) -> User | None:
         """Verify credentials. Returns User if valid, None otherwise."""
         user = await self.get_by_email(db, email)
         if not user or not user.password_hash:
@@ -161,9 +159,7 @@ class UserService:
 
         return user, is_new
 
-    async def get_oauth_accounts(
-        self, db: AsyncSession, user_id: str
-    ) -> list[OAuthAccount]:
+    async def get_oauth_accounts(self, db: AsyncSession, user_id: str) -> list[OAuthAccount]:
         q = select(OAuthAccount).where(OAuthAccount.user_id == user_id)
         return list((await db.execute(q)).scalars().all())
 
@@ -222,9 +218,7 @@ class UserService:
         """Revoke a single session (logout)."""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         await redis.delete(f"auth:session:{token_hash}")
-        await db.execute(
-            delete(Session).where(Session.token_hash == token_hash)
-        )
+        await db.execute(delete(Session).where(Session.token_hash == token_hash))
         await db.flush()
 
     async def revoke_all_sessions(self, db: AsyncSession, redis, user_id: str) -> int:
@@ -261,19 +255,13 @@ class UserService:
             # Escape ILIKE special characters to prevent wildcard injection
             escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{escaped}%"
-            base = base.where(
-                User.email.ilike(pattern) | User.display_name.ilike(pattern)
-            )
+            base = base.where(User.email.ilike(pattern) | User.display_name.ilike(pattern))
             count_base = count_base.where(
                 User.email.ilike(pattern) | User.display_name.ilike(pattern)
             )
 
         total = (await db.execute(count_base)).scalar_one()
-        q = (
-            base.order_by(User.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
+        q = base.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
         users = list((await db.execute(q)).scalars().all())
         return users, total
 
@@ -299,9 +287,8 @@ class UserService:
             user.role = role
         if status is not None:
             if status not in ("pending", "active", "suspended", "banned"):
-                raise BadRequestError(
-                    f"Invalid status: {status}", code="auth.invalid_status"
-                )
+                raise BadRequestError(f"Invalid status: {status}", code="auth.invalid_status")
+            validate_transition(UserLifecycle, user.status, status, "user")
             user.status = status
 
         await db.flush()

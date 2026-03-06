@@ -12,10 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.shared.embedding import get_embedding
 from src.shared.errors import NotFoundError
+from src.shared.fsm import validate_transition
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
 from .events import BriefingEvents
+from .lifecycle import BriefingLifecycle, EntryPhase
 from .models import (
     Briefing,
     BriefingAnalyst,
@@ -419,9 +421,7 @@ class BriefingService:
         for b in briefings:
             raw_count = sum(1 for e in b.entries if e.phase == "raw")
             analysis_count = sum(1 for e in b.entries if e.phase == "analysis")
-            conclusion_entry = next(
-                (e for e in b.entries if e.phase == "conclusion"), None
-            )
+            conclusion_entry = next((e for e in b.entries if e.phase == "conclusion"), None)
 
             domains.append(
                 DomainSummary(
@@ -450,9 +450,7 @@ class BriefingService:
             elif b.status != "completed" and worst_status != "failed":
                 worst_status = b.status
 
-        avg_confidence = (
-            sum(all_confidences) / len(all_confidences) if all_confidences else None
-        )
+        avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else None
 
         return DailySummaryResponse(
             date=target_date,
@@ -490,6 +488,7 @@ class BriefingService:
                 briefing.embedding = embedding
         db.add(briefing)
         await db.flush()
+        await db.refresh(briefing, ["entries", "follow_ups"])
         event_bus.publish(
             Event(
                 type=BriefingEvents.DAILY_COMPLETED,
@@ -508,9 +507,16 @@ class BriefingService:
         if not instance:
             raise NotFoundError("Briefing not found", code="briefing.not_found")
         if data.status:
+            validate_transition(
+                BriefingLifecycle, instance.status, data.status, entity_type="briefing"
+            )
             instance.status = data.status
         await db.flush()
+        await db.refresh(instance)
         return self._to_response(instance)
+
+    # Phase ordering for determining the latest phase in a briefing's entries
+    _PHASE_ORDER = {p: i for i, p in enumerate(("raw", "analysis", "debate", "conclusion"))}
 
     async def add_entry(
         self,
@@ -520,6 +526,15 @@ class BriefingService:
         data: BriefingEntryCreate,
         user_id: str | None = None,
     ) -> BriefingEntryResponse:
+        # Validate entry phase against the latest existing phase for this briefing
+        existing_q = select(BriefingEntry.phase).where(BriefingEntry.briefing_id == briefing_id)
+        existing_phases = (await db.execute(existing_q)).scalars().all()
+        if existing_phases:
+            latest_phase = max(existing_phases, key=lambda p: self._PHASE_ORDER.get(p, -1))
+            validate_transition(EntryPhase, latest_phase, data.phase, entity_type="briefing_entry")
+        else:
+            # No entries yet — only the initial phase (raw) is valid
+            validate_transition(EntryPhase, "raw", data.phase, entity_type="briefing_entry")
         entry = BriefingEntry(
             briefing_id=briefing_id,
             space_id=space_id,
@@ -616,9 +631,7 @@ class BriefingService:
 class FollowUpService:
     """Manage follow-up questions on briefings."""
 
-    async def list_follow_ups(
-        self, db: AsyncSession, briefing_id: str
-    ) -> list[FollowUpResponse]:
+    async def list_follow_ups(self, db: AsyncSession, briefing_id: str) -> list[FollowUpResponse]:
         q = (
             select(BriefingFollowUp)
             .where(BriefingFollowUp.briefing_id == briefing_id)
