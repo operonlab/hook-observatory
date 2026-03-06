@@ -79,6 +79,7 @@ def _handle_stop(raw_input: str) -> HookResult:
 # Label detection (identifies this pane/session)
 # ---------------------------------------------------------------------------
 
+
 def _get_label() -> str:
     """Get a meaningful label for this session (tmux pane name > cwd)."""
     # 1) Env var
@@ -99,11 +100,14 @@ def _get_label() -> str:
 
 def _tmux_label(pane_id: str) -> str:
     """Extract label from tmux window/pane names."""
+
     def _tmux_query(fmt: str) -> str:
         try:
             r = subprocess.run(
                 ["tmux", "display-message", "-t", pane_id, "-p", fmt],
-                capture_output=True, text=True, timeout=2,
+                capture_output=True,
+                text=True,
+                timeout=2,
             )
             return r.stdout.strip() if r.returncode == 0 else ""
         except Exception:
@@ -116,6 +120,7 @@ def _tmux_label(pane_id: str) -> str:
 
     # Pane title (strip leading non-alnum)
     import re
+
     pane_title = _tmux_query("#{pane_title}")
     pane_title = re.sub(r"^[^\w]*", "", pane_title)
     skip = ("", "-zsh", "-bash", "Claude Code", "Gemini CLI", "Codex CLI")
@@ -137,10 +142,11 @@ def _tmux_label(pane_id: str) -> str:
 # Background Stop processing
 # ---------------------------------------------------------------------------
 
+
 def _spawn_stop_background(transcript_path: str, label: str) -> None:
     """Spawn background process for Stop event heavy work."""
     # Build a self-contained Python script to run in background
-    script = f'''
+    script = f"""
 import json, os, subprocess, sys, time
 from urllib.request import Request, urlopen
 
@@ -192,7 +198,10 @@ if transcript_path and os.path.isfile(transcript_path):
                     if obj.get("type") != "user":
                         continue
                     msg = obj.get("message", {{}})
-                    content = msg.get("content", "") if isinstance(msg, dict) else obj.get("content", "")
+                    if isinstance(msg, dict):
+                        content = msg.get("content", "")
+                    else:
+                        content = obj.get("content", "")
                     text = ""
                     if isinstance(content, str):
                         text = content.strip()
@@ -265,7 +274,10 @@ with open(DBG, "a") as f:
     f.write(f"BG_MSG=[{{bg_msg}}]\\n")
 
 # TTS playback
-payload = json.dumps({{"text": bg_msg, "voice": VOICE, "rate": RATE, "wait": True, "playback_volume": float(PLAYBACK_VOL)}})
+payload = json.dumps({{
+    "text": bg_msg, "voice": VOICE, "rate": RATE,
+    "wait": True, "playback_volume": float(PLAYBACK_VOL),
+}})
 tts_ok = False
 try:
     req = Request(TTS_URL, data=payload.encode(), headers={{"Content-Type": "application/json"}})
@@ -280,14 +292,21 @@ if not tts_ok:
     edge_tts = shutil.which("edge-tts")
     if edge_tts:
         tmp = "/tmp/claude-voice-notify-bg.mp3"
-        subprocess.run([edge_tts, "--voice", VOICE, "--rate", RATE, "--text", bg_msg, "--write-media", tmp],
-                       capture_output=True, timeout=15)
+        cmd = [
+            edge_tts, "--voice", VOICE, "--rate", RATE,
+            "--text", bg_msg, "--write-media", tmp,
+        ]
+        subprocess.run(cmd, capture_output=True, timeout=15)
         subprocess.run(["afplay", "-v", PLAYBACK_VOL, tmp], capture_output=True, timeout=30)
     elif shutil.which("say"):
         tmp = "/tmp/claude-voice-notify-bg.aiff"
-        subprocess.run(["say", "-v", "Meijia", "-r", "320", "-o", tmp, bg_msg], capture_output=True, timeout=15)
+        say_cmd = [
+            "say", "-v", "Meijia", "-r", "320",
+            "-o", tmp, bg_msg,
+        ]
+        subprocess.run(say_cmd, capture_output=True, timeout=15)
         subprocess.run(["afplay", "-v", PLAYBACK_VOL, tmp], capture_output=True, timeout=30)
-'''
+"""
     run_background(
         [PYTHON_BIN, "-c", script],
     )
@@ -296,6 +315,7 @@ if not tts_ok:
 # ---------------------------------------------------------------------------
 # Foreground TTS (for PreToolUse quick phrases)
 # ---------------------------------------------------------------------------
+
 
 def _tts_fire_and_forget(msg: str, severity: str = "action", wait: bool = True) -> None:
     """Send TTS request. Falls back through the chain on failure."""
@@ -306,17 +326,21 @@ def _tts_fire_and_forget(msg: str, severity: str = "action", wait: bool = True) 
             _macos_notify("Claude Code ⚠️", msg)
         return
 
-    payload = json.dumps({
-        "text": msg, "voice": VOICE, "rate": RATE,
-        "wait": wait, "playback_volume": float(PLAYBACK_VOL),
-    })
+    payload = json.dumps(
+        {
+            "text": msg,
+            "voice": VOICE,
+            "rate": RATE,
+            "wait": wait,
+            "playback_volume": float(PLAYBACK_VOL),
+        }
+    )
 
     max_time = 30 if wait else 5
 
     # Try Workshop TTS service
     try:
-        req = Request(TTS_URL, data=payload.encode(),
-                      headers={"Content-Type": "application/json"})
+        req = Request(TTS_URL, data=payload.encode(), headers={"Content-Type": "application/json"})
         resp = urlopen(req, timeout=max_time)
         if resp.status == 200 and "json" in (resp.headers.get("Content-Type") or ""):
             if severity == "urgent":
@@ -342,10 +366,9 @@ def _tts_fire_and_forget(msg: str, severity: str = "action", wait: bool = True) 
     if find_executable("say"):
         run_background(
             f'say -v Meijia -r 320 -o /tmp/claude-voice-notify.aiff "{msg}" '
-            f'&& afplay -v {PLAYBACK_VOL} /tmp/claude-voice-notify.aiff'
+            f"&& afplay -v {PLAYBACK_VOL} /tmp/claude-voice-notify.aiff"
         )
 
 
 def _macos_notify(title: str, msg: str) -> None:
-    run_background(["osascript", "-e",
-                    f'display notification "{msg}" with title "{title}"'])
+    run_background(["osascript", "-e", f'display notification "{msg}" with title "{title}"'])
