@@ -58,6 +58,12 @@ class UserDetailResponse(UserResponse):
     oauth_accounts: list[OAuthAccountResponse] = []
 
 
+class PreferencesUpdate(BaseModel):
+    """Partial update — merges into existing preferences JSONB."""
+
+    app_order: dict[str, list[str]] | None = None
+
+
 class SessionResponse(BaseModel):
     user: UserResponse
     expires_at: datetime

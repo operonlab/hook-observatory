@@ -233,6 +233,25 @@ class UserService:
         await db.flush()
         return count
 
+    # --- Preferences ---
+
+    async def get_preferences(self, db: AsyncSession, user_id: str) -> dict:
+        user = await db.get(User, user_id)
+        if not user:
+            raise NotFoundError("User not found", code="auth.user_not_found")
+        return user.preferences or {}
+
+    async def update_preferences(
+        self, db: AsyncSession, user_id: str, patch: dict
+    ) -> dict:
+        user = await db.get(User, user_id)
+        if not user:
+            raise NotFoundError("User not found", code="auth.user_not_found")
+        merged = {**(user.preferences or {}), **patch}
+        user.preferences = merged
+        await db.flush()
+        return merged
+
     # --- Admin operations ---
 
     async def list_users(
