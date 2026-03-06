@@ -148,15 +148,15 @@ async def session_info(
 # --- OAuth routes ---
 
 
-@router.get("/oauth/google")
+@router.get("/login/google")
 async def oauth_google(request: Request):
     """Initiate Google OAuth flow."""
-    redirect_uri = f"{settings.oauth_redirect_base}/auth/oauth/google/callback"
+    redirect_uri = f"{settings.oauth_redirect_base}/auth/callback/google"
     request.session["oauth_redirect"] = request.query_params.get("redirect", "/")
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
-@router.get("/oauth/google/callback")
+@router.get("/callback/google")
 async def oauth_google_callback(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -194,15 +194,15 @@ async def oauth_google_callback(
     return RedirectResponse(url=redirect)
 
 
-@router.get("/oauth/github")
+@router.get("/login/github")
 async def oauth_github(request: Request):
     """Initiate GitHub OAuth flow."""
-    redirect_uri = f"{settings.oauth_redirect_base}/auth/oauth/github/callback"
+    redirect_uri = f"{settings.oauth_redirect_base}/auth/callback/github"
     request.session["oauth_redirect"] = request.query_params.get("redirect", "/")
     return await oauth.github.authorize_redirect(request, redirect_uri)
 
 
-@router.get("/oauth/github/callback")
+@router.get("/callback/github")
 async def oauth_github_callback(
     request: Request,
     db: AsyncSession = Depends(get_db),
