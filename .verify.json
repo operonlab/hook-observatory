@@ -1,0 +1,8 @@
+{
+  "commands": [
+    "ruff check stations/hook-observatory/handlers/ --quiet",
+    "cd stations/hook-observatory && python3 -c \"from handlers import REGISTRY; print('registry ok')\""
+  ],
+  "max_iterations": 5,
+  "timeout_minutes": 30
+}
