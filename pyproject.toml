@@ -18,6 +18,7 @@ packages = []
 target-version = "py312"
 line-length = 100
 src = ["core/src", "mcp", "scripts", "libs/python"]
+extend-exclude = [".claude/worktrees", ".worktrees"]
 
 [tool.ruff.lint]
 select = [

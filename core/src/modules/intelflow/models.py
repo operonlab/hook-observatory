@@ -5,7 +5,6 @@ All tables live in the `intelflow` PostgreSQL schema.
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    Boolean,
     Date,
     Float,
     ForeignKey,
@@ -13,7 +12,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -166,137 +164,6 @@ class TopicRelation(Base):
         primary_key=True,
     )
     weight: Mapped[float] = mapped_column(Float, server_default=text("1.0"))
-
-
-# ======================== Briefing Topics ========================
-
-
-class BriefingTopic(SpaceScopedModel):
-    """A configurable briefing topic — replaces V1's hardcoded 6 domains."""
-
-    __tablename__ = "briefing_topics"
-    __table_args__ = (
-        Index("idx_bt_name", "space_id", "name", unique=True),
-        {"schema": SCHEMA},
-    )
-
-    name: Mapped[str] = mapped_column(Text)
-    display_name: Mapped[str] = mapped_column(Text)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
-    priority: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sources: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    schedule: Mapped[str] = mapped_column(String(20), server_default=text("'daily'"))
-
-    # Relationships
-    subtopics: Mapped[list["BriefingSubtopic"]] = relationship(
-        back_populates="topic",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
-
-# ======================== Briefing Subtopics ========================
-
-
-class BriefingSubtopic(SpaceScopedModel):
-    """A subtopic within a briefing topic — e.g., weather → Taipei, Tokyo."""
-
-    __tablename__ = "briefing_subtopics"
-    __table_args__ = (
-        Index("idx_subtopics_topic", "topic_id"),
-        {"schema": SCHEMA},
-    )
-
-    topic_id: Mapped[str] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.briefing_topics.id", ondelete="CASCADE"),
-    )
-    name: Mapped[str] = mapped_column(Text)
-    parameters: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
-    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
-
-    # Relationships
-    topic: Mapped["BriefingTopic"] = relationship(back_populates="subtopics")
-
-
-# ======================== Briefings ========================
-
-# Pipeline status: searching → analyzing → debating → completed | failed
-BRIEFING_STATUSES = ("searching", "analyzing", "debating", "completed", "failed")
-# Entry phases: raw (search results), analysis (independent), debate (cross-review)
-ENTRY_PHASES = ("raw", "analysis", "debate")
-
-
-class Briefing(SpaceScopedModel):
-    """A daily intelligence briefing — one per date per topic."""
-
-    __tablename__ = "briefings"
-    __table_args__ = (
-        UniqueConstraint("date", "topic_id", name="uq_briefing_date_topic"),
-        Index("idx_briefings_date", "date"),
-        Index("idx_briefings_topic", "topic_id"),
-        {"schema": SCHEMA},
-    )
-
-    date: Mapped[str] = mapped_column(Date)
-    topic_id: Mapped[str | None] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.briefing_topics.id"),
-        nullable=True,
-    )
-    domain: Mapped[str] = mapped_column(Text)  # backward compat = briefing_topics.name
-    status: Mapped[str] = mapped_column(String(20), server_default=text("'searching'"))
-    # Legacy JSONB fields — kept nullable for migration, new data uses entries
-    raw_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    analyses: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    debate: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
-
-    # Relationships
-    topic: Mapped["BriefingTopic | None"] = relationship(lazy="selectin")
-    entries: Mapped[list["BriefingEntry"]] = relationship(
-        back_populates="briefing",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
-
-class BriefingEntry(SpaceScopedModel):
-    """A single entry in a briefing — one per phase per key.
-
-    phase: raw | analysis | debate
-    key: topic slug (e.g. "finance", "weather") or analyst name (e.g. "claude", "gemini")
-    """
-
-    __tablename__ = "briefing_entries"
-    __table_args__ = (
-        Index("idx_be_briefing", "briefing_id"),
-        Index("idx_be_phase", "phase"),
-        UniqueConstraint("briefing_id", "phase", "key", name="uq_be_briefing_phase_key"),
-        Index(
-            "idx_be_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        {"schema": SCHEMA},
-    )
-
-    briefing_id: Mapped[str] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.briefings.id", ondelete="CASCADE"),
-    )
-    phase: Mapped[str] = mapped_column(String(20))  # raw | analysis | debate
-    key: Mapped[str] = mapped_column(Text)  # e.g. "finance", "claude"
-    content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
-    meta: Mapped[dict | None] = mapped_column("metadata", JSONB, server_default=text("'{}'::jsonb"))
-
-    # Relationships
-    briefing: Mapped["Briefing"] = relationship(back_populates="entries")
 
 
 # ======================== Archive Tables ========================

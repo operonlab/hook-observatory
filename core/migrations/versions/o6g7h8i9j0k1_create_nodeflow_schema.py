@@ -5,16 +5,16 @@ Revises: n5f6g7h8i9j0
 Create Date: 2026-03-03
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "o6g7h8i9j0k1"
-down_revision: Union[str, None] = "n5f6g7h8i9j0"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "n5f6g7h8i9j0"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 SCHEMA = "nodeflow"
 
@@ -28,8 +28,15 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), primary_key=True),
         sa.Column("space_id", sa.String(32), nullable=False, index=True),
         sa.Column("created_by", sa.String(32), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("name", sa.Text, nullable=False),
         sa.Column("description", sa.Text, nullable=True),
@@ -39,7 +46,9 @@ def upgrade() -> None:
         schema=SCHEMA,
     )
     op.create_index("idx_nf_flow_space_status", "flows", ["space_id", "status"], schema=SCHEMA)
-    op.create_index("idx_nf_flow_space_trigger", "flows", ["space_id", "trigger_type"], schema=SCHEMA)
+    op.create_index(
+        "idx_nf_flow_space_trigger", "flows", ["space_id", "trigger_type"], schema=SCHEMA
+    )
 
     # ── nodes ──
     op.create_table(
@@ -47,10 +56,22 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), primary_key=True),
         sa.Column("space_id", sa.String(32), nullable=False, index=True),
         sa.Column("created_by", sa.String(32), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("flow_id", sa.String(32), sa.ForeignKey(f"{SCHEMA}.flows.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "flow_id",
+            sa.String(32),
+            sa.ForeignKey(f"{SCHEMA}.flows.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("node_type", sa.Text, nullable=False),
         sa.Column("label", sa.Text, nullable=False),
         sa.Column("config", postgresql.JSONB, nullable=True),
@@ -66,12 +87,34 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), primary_key=True),
         sa.Column("space_id", sa.String(32), nullable=False, index=True),
         sa.Column("created_by", sa.String(32), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("flow_id", sa.String(32), sa.ForeignKey(f"{SCHEMA}.flows.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("source_node_id", sa.String(32), sa.ForeignKey(f"{SCHEMA}.nodes.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("target_node_id", sa.String(32), sa.ForeignKey(f"{SCHEMA}.nodes.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "flow_id",
+            sa.String(32),
+            sa.ForeignKey(f"{SCHEMA}.flows.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "source_node_id",
+            sa.String(32),
+            sa.ForeignKey(f"{SCHEMA}.nodes.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "target_node_id",
+            sa.String(32),
+            sa.ForeignKey(f"{SCHEMA}.nodes.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("source_port", sa.Text, nullable=False, server_default=sa.text("'output'")),
         schema=SCHEMA,
     )
@@ -89,19 +132,35 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), primary_key=True),
         sa.Column("space_id", sa.String(32), nullable=False, index=True),
         sa.Column("created_by", sa.String(32), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("flow_id", sa.String(32), sa.ForeignKey(f"{SCHEMA}.flows.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "flow_id",
+            sa.String(32),
+            sa.ForeignKey(f"{SCHEMA}.flows.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("status", sa.Text, nullable=False, server_default=sa.text("'running'")),
         sa.Column("trigger_event", postgresql.JSONB, nullable=True),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "started_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error", sa.Text, nullable=True),
         schema=SCHEMA,
     )
     op.create_index("idx_nf_flowrun_flow", "flow_runs", ["flow_id"], schema=SCHEMA)
-    op.create_index("idx_nf_flowrun_space_status", "flow_runs", ["space_id", "status"], schema=SCHEMA)
+    op.create_index(
+        "idx_nf_flowrun_space_status", "flow_runs", ["space_id", "status"], schema=SCHEMA
+    )
 
     # ── node_run_logs ──
     op.create_table(
@@ -109,11 +168,28 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), primary_key=True),
         sa.Column("space_id", sa.String(32), nullable=False, index=True),
         sa.Column("created_by", sa.String(32), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("flow_run_id", sa.String(32), sa.ForeignKey(f"{SCHEMA}.flow_runs.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("node_id", sa.String(32), sa.ForeignKey(f"{SCHEMA}.nodes.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "flow_run_id",
+            sa.String(32),
+            sa.ForeignKey(f"{SCHEMA}.flow_runs.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "node_id",
+            sa.String(32),
+            sa.ForeignKey(f"{SCHEMA}.nodes.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("status", sa.Text, nullable=False, server_default=sa.text("'pending'")),
         sa.Column("input_data", postgresql.JSONB, nullable=True),
         sa.Column("output_data", postgresql.JSONB, nullable=True),

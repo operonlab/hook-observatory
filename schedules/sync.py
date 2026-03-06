@@ -142,7 +142,11 @@ def main() -> None:
             continue
 
         command = job.get("command", "")
-        schedule = json.dumps(job.get("schedule", {}))
+        schedule_data = dict(job.get("schedule", {}))
+        # Daemon services automatically get KeepAlive
+        if job.get("type") == "daemon":
+            schedule_data.setdefault("keep_alive", True)
+        schedule = json.dumps(schedule_data)
         description = job.get("description", "")
 
         print(f"[add] {name} → {command}")

@@ -268,7 +268,15 @@ def _scrape_usage_page() -> dict:
         # 3. Wait for Google SSO redirect, then goto usage page
         import time as _time
 
-        _time.sleep(5)
+        # Bring iTerm2 back to front so the headed browser doesn't block the user
+        _time.sleep(0.3)  # let Chrome window appear first
+        subprocess.run(
+            ["osascript", "-e", 'tell application "iTerm2" to activate'],
+            capture_output=True,
+            timeout=5,
+        )
+
+        _time.sleep(4)
 
         # Check if we landed on /new (SSO redirect) — need second goto
         loc_result = subprocess.run(
@@ -338,7 +346,21 @@ def _scrape_usage_page() -> dict:
             )
             return {}
 
-        return _parse_usage_page_text(eval_result.stdout)
+        # Playwright CLI eval wraps body text as a JSON-encoded string with
+        # escaped \n.  Decode it so _parse_usage_page_text sees real newlines.
+        text = eval_result.stdout
+        for _line in text.split("\n"):
+            stripped = _line.strip()
+            if stripped.startswith('"') and stripped.endswith('"') and len(stripped) > 200:
+                try:
+                    decoded = json.loads(stripped)
+                    if isinstance(decoded, str):
+                        text = decoded
+                        break
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        return _parse_usage_page_text(text)
 
     except subprocess.TimeoutExpired:
         log.warning("pw_scrape_timeout")
@@ -397,9 +419,41 @@ def _parse_usage_page_text(text: str) -> dict:
             if pcts and "seven_day" not in result:
                 result["seven_day"] = {"utilization": float(pcts[0])}
 
+        # "Extra usage" section — "$X.XX spent", "X% used", "$NN limit", balance
+        # Wide window (30 lines) to reach "Current balance" past blank lines
+        if "extra usage" in lower and "extra_usage" not in result:
+            extra_ctx = "\n".join(lines[i : min(len(lines), i + 30)])
+            spent_m = re.findall(r"\$(\d+(?:\.\d+)?)\s*spent", extra_ctx)
+            pcts = re.findall(r"(\d+(?:\.\d+)?)\s*%\s*used", extra_ctx)
+            limit_m = re.search(
+                r"\$(\d+(?:\.\d+)?)\s*\n\s*Monthly spend limit",
+                extra_ctx,
+                re.IGNORECASE,
+            )
+            balance_m = re.search(
+                r"(-?\$\d+(?:\.\d+)?)\s*\n\s*Current balance",
+                extra_ctx,
+                re.IGNORECASE,
+            )
+            if pcts or spent_m:
+                ex: dict = {"is_enabled": True}
+                if spent_m:
+                    ex["used_credits"] = int(float(spent_m[0]) * 100)
+                if limit_m:
+                    ex["monthly_limit"] = int(float(limit_m.group(1)) * 100)
+                if pcts:
+                    ex["utilization"] = float(pcts[0])
+                if balance_m:
+                    bal_str = balance_m.group(1).replace("$", "")
+                    ex["balance_cents"] = int(float(bal_str) * 100)
+                result["extra_usage"] = ex
+
     if result:
         log.info(
-            "pw_scrape_parsed", five_hour=result.get("five_hour"), seven_day=result.get("seven_day")
+            "pw_scrape_parsed",
+            five_hour=result.get("five_hour"),
+            seven_day=result.get("seven_day"),
+            extra_usage=result.get("extra_usage"),
         )
 
     return result
@@ -598,9 +652,11 @@ async def get_quota(force: bool = False) -> dict:
 
     if fetch_cc:
         cc_raw = results[2] if not isinstance(results[2], Exception) else {}
-        # Playwright fallback if API returned nothing
-        if not cc_raw:
-            cc_raw = await _fetch_cc_via_playwright()
+        # Playwright fallback if API returned nothing or used stale/fallback cache
+        if not cc_raw or _cc_last_fetch_mode in ("backoff_fallback", "error_fallback", "failed"):
+            pw_data = await _fetch_cc_via_playwright()
+            if pw_data:
+                cc_raw = pw_data
         if cc_raw:
             _cc_raw_result = cc_raw
             _cc_raw_result_ts = now
@@ -673,10 +729,12 @@ def _parse_cc(data: dict) -> dict:
     if "extra_usage" in data:
         ex = data["extra_usage"]
         if ex.get("is_enabled"):
-            used = (ex.get("used_credits") or 0) / 100
-            limit = (ex.get("monthly_limit") or 0) / 100
-            pct = round(ex.get("utilization") or 0)
-            result["ex"] = f"${used:.2f}/${limit:.0f} {pct}%"
+            balance = (ex.get("balance_cents") or 0) / 100
+            if balance > 0:
+                used = (ex.get("used_credits") or 0) / 100
+                limit = (ex.get("monthly_limit") or 0) / 100
+                pct = round(ex.get("utilization") or 0)
+                result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余${balance:.2f}"
         else:
             result["ex"] = "off"
     return result

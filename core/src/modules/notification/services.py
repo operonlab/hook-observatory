@@ -3,7 +3,7 @@
 import asyncio
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.models import _uuid7_hex
@@ -11,7 +11,7 @@ from src.shared.models import _uuid7_hex
 from .adapters.bark import send_bark
 from .models import NotificationLog, PushSubscription
 from .push import send_push
-from .schemas import PushPayload, SubscriptionCreate, SubscriptionResponse
+from .schemas import NotificationLogResponse, PushPayload, SubscriptionCreate, SubscriptionResponse
 
 logger = structlog.get_logger()
 
@@ -105,6 +105,45 @@ class NotificationService:
         await db.flush()
         await db.refresh(sub)
         return sub
+
+    async def list_notification_logs(
+        self,
+        db: AsyncSession,
+        *,
+        category: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[NotificationLogResponse], int]:
+        """Query notification history with pagination."""
+        query = select(NotificationLog).order_by(NotificationLog.created_at.desc())
+        count_query = select(func.count()).select_from(NotificationLog)
+
+        if category:
+            query = query.where(NotificationLog.category == category)
+            count_query = count_query.where(NotificationLog.category == category)
+
+        total = (await db.execute(count_query)).scalar() or 0
+        offset = (page - 1) * page_size
+        rows = list((await db.execute(query.offset(offset).limit(page_size))).scalars().all())
+
+        items = [
+            NotificationLogResponse(
+                id=r.id,
+                user_id=r.user_id,
+                category=r.category,
+                title=r.title,
+                body=r.body,
+                url=r.url,
+                recipients=r.recipients,
+                delivered=r.delivered,
+                failed=r.failed,
+                source_event=r.source_event,
+                source_data=r.source_data,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+        return items, total
 
     async def _deliver_web_push(
         self, db: AsyncSession, eligible: list[PushSubscription], push_data: dict

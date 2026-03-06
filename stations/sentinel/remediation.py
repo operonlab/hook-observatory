@@ -1,4 +1,4 @@
-"""Auto-remediation via tmux-relay: dispatch claude -p repair agents."""
+"""Auto-remediation: simple restart first, AI repair as fallback."""
 
 from __future__ import annotations
 
@@ -15,6 +15,86 @@ logger = logging.getLogger(__name__)
 RELAY_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/relay.sh"
 PANE_POOL_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/pane_pool.sh"
 SIGNAL_DIR = Path("/tmp")
+
+WORKSHOP_SERVICES = Path.home() / "workshop/scripts/workshop_services.py"
+PYTHON = Path.home() / ".local/bin/python3"
+
+# Map sentinel service names → workshop_services.py service names
+# Only services managed by workshop_services.py are eligible for simple restart
+SIMPLE_RESTART_MAP: dict[str, str] = {
+    "core": "core",
+    "hook-observatory": "hook-observatory",
+    "system-monitor": "system-monitor",
+    "agent-metrics": "agent-metrics",
+    "agent-vista": "agent-vista",
+    "litellm": "litellm",
+    "auto-survey": "auto-survey",
+}
+
+# Docker-managed services: restart via docker
+DOCKER_RESTART_MAP: dict[str, str] = {
+    "postgres": "ws-infra-postgres-1",
+    "redis": "ws-infra-redis-1",
+    "rustfs": "ws-infra-rustfs-1",
+    "bark": "bark-server",
+}
+
+
+class SimpleRestarter:
+    """Fast, direct service restart without AI involvement."""
+
+    async def try_restart(self, service: str) -> bool:
+        """Attempt a simple restart. Returns True if the restart command succeeded."""
+        if service in SIMPLE_RESTART_MAP:
+            return await self._restart_workshop_service(SIMPLE_RESTART_MAP[service])
+        if service in DOCKER_RESTART_MAP:
+            return await self._restart_docker(DOCKER_RESTART_MAP[service])
+        return False
+
+    @staticmethod
+    def can_restart(service: str) -> bool:
+        return service in SIMPLE_RESTART_MAP or service in DOCKER_RESTART_MAP
+
+    async def _restart_workshop_service(self, name: str) -> bool:
+        if not WORKSHOP_SERVICES.exists():
+            logger.warning("workshop_services.py not found")
+            return False
+        try:
+            # Stop first (kill old process + clean PID), then start
+            for action in ("stop", "start"):
+                proc = await asyncio.create_subprocess_exec(
+                    str(PYTHON),
+                    str(WORKSHOP_SERVICES),
+                    action,
+                    name,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await asyncio.wait_for(proc.communicate(), timeout=45)
+            logger.info("Simple restart succeeded for %s", name)
+            return True
+        except (TimeoutError, FileNotFoundError, OSError) as e:
+            logger.error("Simple restart failed for %s: %s", name, e)
+            return False
+
+    async def _restart_docker(self, container: str) -> bool:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker",
+                "restart",
+                container,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            if proc.returncode == 0:
+                logger.info("Docker restart succeeded for %s", container)
+                return True
+            logger.error("Docker restart failed for %s: %s", container, stderr.decode()[:200])
+            return False
+        except (TimeoutError, FileNotFoundError) as e:
+            logger.error("Docker restart failed for %s: %s", container, e)
+            return False
 
 
 @dataclass

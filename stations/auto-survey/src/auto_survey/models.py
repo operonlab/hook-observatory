@@ -1,8 +1,9 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -11,6 +12,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def _today():
+    return date.today()
 
 
 def _utcnow():
@@ -23,6 +28,22 @@ def _uuid():
 
 class Base(DeclarativeBase):
     pass
+
+
+class DailyRun(Base):
+    """Track daily survey run status for smart notification."""
+
+    __tablename__ = "daily_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, default=_today)
+    attend_url: Mapped[str | None] = mapped_column(Text)
+    quiz_url: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    # pending | running | completed | failed
+    result_summary: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class Survey(Base):
@@ -78,6 +99,7 @@ class Submission(Base):
     person_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("people.id"), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)  # success | failed | skipped
     score: Mapped[int | None] = mapped_column(Integer)
+    answers_snapshot: Mapped[dict | None] = mapped_column(JSONB)  # {subject_id: answer_text}
     error_message: Mapped[str | None] = mapped_column(Text)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

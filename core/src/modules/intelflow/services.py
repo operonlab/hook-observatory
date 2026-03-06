@@ -4,7 +4,6 @@ This is the PUBLIC API of the intelflow module.
 Other modules import from here, never from models.py.
 """
 
-from datetime import date
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -13,15 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.events.types import IntelflowEvents
 from src.shared.embedding import get_embedding
-from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
 from .models import (
-    Briefing,
-    BriefingEntry,
-    BriefingSubtopic,
-    BriefingTopic,
     Report,
     ReportArchive,
     ReportTopic,
@@ -30,17 +24,6 @@ from .models import (
     TopicRelation,
 )
 from .schemas import (
-    BriefingCreate,
-    BriefingEntryCreate,
-    BriefingEntryResponse,
-    BriefingResponse,
-    BriefingSubtopicCreate,
-    BriefingSubtopicResponse,
-    BriefingSubtopicUpdate,
-    BriefingTopicCreate,
-    BriefingTopicResponse,
-    BriefingTopicUpdate,
-    BriefingUpdate,
     DashboardResponse,
     ReportBrief,
     ReportCreate,
@@ -391,410 +374,6 @@ class TopicService:
         )
 
 
-# ======================== BriefingTopic Service ========================
-
-
-class BriefingTopicService(
-    BaseCRUDService[BriefingTopic, BriefingTopicCreate, BriefingTopicUpdate, BriefingTopicResponse]
-):
-    model = BriefingTopic
-    audit_module = "intelflow"
-    audit_entity_type = "briefing_topics"
-
-    def to_response(self, instance: BriefingTopic) -> BriefingTopicResponse:
-        subtopics = []
-        if hasattr(instance, "subtopics") and instance.subtopics:
-            subtopics = [
-                BriefingSubtopicResponse(
-                    id=s.id,
-                    space_id=s.space_id,
-                    created_by=s.created_by,
-                    created_at=s.created_at,
-                    updated_at=s.updated_at,
-                    topic_id=s.topic_id,
-                    name=s.name,
-                    parameters=s.parameters or {},
-                    enabled=s.enabled,
-                )
-                for s in instance.subtopics
-            ]
-        return BriefingTopicResponse(
-            id=instance.id,
-            space_id=instance.space_id,
-            created_by=instance.created_by,
-            created_at=instance.created_at,
-            updated_at=instance.updated_at,
-            name=instance.name,
-            display_name=instance.display_name,
-            description=instance.description,
-            enabled=instance.enabled,
-            priority=instance.priority,
-            prompt_template=instance.prompt_template,
-            sources=instance.sources or [],
-            schedule=instance.schedule,
-            subtopics=subtopics,
-        )
-
-    async def toggle(self, db: AsyncSession, topic_id: str) -> BriefingTopicResponse:
-        """Quick enable/disable toggle."""
-        instance = await db.get(BriefingTopic, topic_id)
-        if not instance:
-            raise NotFoundError(
-                "Briefing topic not found", code="intelflow.briefing_topic_not_found"
-            )
-        instance.enabled = not instance.enabled
-        await db.flush()
-        return self.to_response(instance)
-
-    async def add_subtopic(
-        self,
-        db: AsyncSession,
-        topic_id: str,
-        space_id: str,
-        data: BriefingSubtopicCreate,
-        user_id: str | None = None,
-    ) -> BriefingSubtopicResponse:
-        parent = await db.get(BriefingTopic, topic_id)
-        if not parent:
-            raise NotFoundError(
-                "Briefing topic not found", code="intelflow.briefing_topic_not_found"
-            )
-        subtopic = BriefingSubtopic(
-            topic_id=topic_id,
-            space_id=space_id,
-            created_by=user_id,
-            name=data.name,
-            parameters=data.parameters,
-            enabled=data.enabled,
-        )
-        db.add(subtopic)
-        await db.flush()
-        return BriefingSubtopicResponse(
-            id=subtopic.id,
-            space_id=subtopic.space_id,
-            created_by=subtopic.created_by,
-            created_at=subtopic.created_at,
-            updated_at=subtopic.updated_at,
-            topic_id=subtopic.topic_id,
-            name=subtopic.name,
-            parameters=subtopic.parameters or {},
-            enabled=subtopic.enabled,
-        )
-
-    async def update_subtopic(
-        self,
-        db: AsyncSession,
-        subtopic_id: str,
-        data: BriefingSubtopicUpdate,
-    ) -> BriefingSubtopicResponse:
-        subtopic = await db.get(BriefingSubtopic, subtopic_id)
-        if not subtopic:
-            raise NotFoundError("Subtopic not found", code="intelflow.subtopic_not_found")
-        update_data = data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(subtopic, key, value)
-        await db.flush()
-        return BriefingSubtopicResponse(
-            id=subtopic.id,
-            space_id=subtopic.space_id,
-            created_by=subtopic.created_by,
-            created_at=subtopic.created_at,
-            updated_at=subtopic.updated_at,
-            topic_id=subtopic.topic_id,
-            name=subtopic.name,
-            parameters=subtopic.parameters or {},
-            enabled=subtopic.enabled,
-        )
-
-    async def delete_subtopic(self, db: AsyncSession, subtopic_id: str) -> bool:
-        subtopic = await db.get(BriefingSubtopic, subtopic_id)
-        if not subtopic:
-            return False
-        await db.delete(subtopic)
-        await db.flush()
-        return True
-
-    async def seed_defaults(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        user_id: str | None = None,
-    ) -> list[BriefingTopicResponse]:
-        """Seed 6 default briefing topics if none exist."""
-        count = (
-            await db.execute(
-                select(func.count())
-                .select_from(BriefingTopic)
-                .where(BriefingTopic.space_id == space_id)
-            )
-        ).scalar_one()
-        if count > 0:
-            return []
-
-        defaults: list[dict[str, Any]] = [
-            {
-                "name": "tech-trends",
-                "display_name": "科技趨勢",
-                "description": "追蹤最新科技發展、突破性技術與產業變革",
-                "schedule": "daily",
-                "priority": 1,
-            },
-            {
-                "name": "financial-markets",
-                "display_name": "金融市場",
-                "description": "全球金融市場動態、匯率、加密貨幣與投資趨勢",
-                "schedule": "daily",
-                "priority": 2,
-            },
-            {
-                "name": "weather",
-                "display_name": "天氣預報",
-                "description": "關注城市天氣預報與氣候變化",
-                "schedule": "daily",
-                "priority": 3,
-                "subtopics": [
-                    {"name": "台北", "parameters": {"location": "Taipei"}},
-                    {"name": "東京", "parameters": {"location": "Tokyo"}},
-                    {"name": "紐約", "parameters": {"location": "New York"}},
-                ],
-            },
-            {
-                "name": "industry-news",
-                "display_name": "產業動態",
-                "description": "各產業最新消息、併購、市場趨勢與競爭格局",
-                "schedule": "daily",
-                "priority": 4,
-            },
-            {
-                "name": "open-source",
-                "display_name": "開源社群",
-                "description": "開源專案更新、社群動態與重要 release",
-                "schedule": "daily",
-                "priority": 5,
-            },
-            {
-                "name": "ai-research",
-                "display_name": "AI 研究",
-                "description": "人工智慧最新研究論文、模型發布與技術突破",
-                "schedule": "daily",
-                "priority": 6,
-            },
-        ]
-
-        results: list[BriefingTopicResponse] = []
-        for topic_data in defaults:
-            subtopics_data = topic_data.pop("subtopics", [])
-            create_data = BriefingTopicCreate(**topic_data)
-            instance = BriefingTopic(
-                space_id=space_id,
-                created_by=user_id,
-                **create_data.model_dump(),
-            )
-            db.add(instance)
-            await db.flush()
-
-            for sub in subtopics_data:
-                sub_obj = BriefingSubtopic(
-                    topic_id=instance.id,
-                    space_id=space_id,
-                    created_by=user_id,
-                    name=sub["name"],
-                    parameters=sub.get("parameters", {}),
-                    enabled=True,
-                )
-                db.add(sub_obj)
-            await db.flush()
-
-            # Refresh to load subtopics relationship
-            await db.refresh(instance, ["subtopics"])
-            results.append(self.to_response(instance))
-
-        return results
-
-
-# ======================== Briefing Service ========================
-
-
-class BriefingService:
-    """Daily briefing operations."""
-
-    async def list_briefings(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        date_from: date | None = None,
-        date_to: date | None = None,
-        topic_id: str | None = None,
-        pagination: PaginationParams | None = None,
-    ) -> PaginatedResponse[BriefingResponse]:
-        p = pagination or PaginationParams()
-        base = select(Briefing).where(Briefing.space_id == space_id)
-        if date_from:
-            base = base.where(Briefing.date >= date_from)
-        if date_to:
-            base = base.where(Briefing.date <= date_to)
-        if topic_id:
-            base = base.where(Briefing.topic_id == topic_id)
-
-        count_q = select(func.count()).select_from(base.subquery())
-        total = (await db.execute(count_q)).scalar_one()
-        q = (
-            base.order_by(Briefing.date.desc())
-            .offset((p.page - 1) * p.page_size)
-            .limit(p.page_size)
-        )
-        rows = (await db.execute(q)).scalars().all()
-        return PaginatedResponse[BriefingResponse](
-            items=[self._to_response(b) for b in rows],
-            total=total,
-            page=p.page,
-            page_size=p.page_size,
-        )
-
-    async def get_by_date(
-        self, db: AsyncSession, space_id: str, target_date: date
-    ) -> list[BriefingResponse]:
-        q = (
-            select(Briefing)
-            .where(Briefing.space_id == space_id, Briefing.date == target_date)
-            .order_by(Briefing.domain)
-        )
-        rows = (await db.execute(q)).scalars().all()
-        return [self._to_response(b) for b in rows]
-
-    async def get_by_date_and_topic(
-        self, db: AsyncSession, space_id: str, target_date: date, domain: str
-    ) -> BriefingResponse | None:
-        q = select(Briefing).where(
-            Briefing.space_id == space_id,
-            Briefing.date == target_date,
-            Briefing.domain == domain,
-        )
-        instance = (await db.execute(q)).scalar_one_or_none()
-        if not instance:
-            return None
-        return self._to_response(instance)
-
-    async def create_briefing(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        data: BriefingCreate,
-        user_id: str | None = None,
-    ) -> BriefingResponse:
-        briefing = Briefing(
-            space_id=space_id,
-            created_by=user_id,
-            date=data.date,
-            topic_id=data.topic_id,
-            domain=data.domain,
-            status=data.status,
-            raw_data=data.raw_data,
-            analyses=data.analyses,
-            debate=data.debate,
-        )
-        # Generate embedding for debate content (legacy path)
-        if data.debate:
-            embedding = await get_embedding(data.debate)
-            if embedding:
-                briefing.embedding = embedding
-        db.add(briefing)
-        await db.flush()
-        event_bus.publish(
-            Event(
-                type=IntelflowEvents.BRIEFING_GENERATED,
-                data={"briefing_id": briefing.id, "date": str(data.date), "domain": data.domain},
-                source="intelflow",
-                user_id=user_id,
-            )
-        )
-        return self._to_response(briefing)
-
-    async def update_status(
-        self, db: AsyncSession, briefing_id: str, data: BriefingUpdate
-    ) -> BriefingResponse:
-        q = select(Briefing).where(Briefing.id == briefing_id)
-        instance = (await db.execute(q)).scalar_one_or_none()
-        if not instance:
-            raise NotFoundError("Briefing not found", code="intelflow.briefing_not_found")
-        if data.status:
-            instance.status = data.status
-        await db.flush()
-        return self._to_response(instance)
-
-    async def add_entry(
-        self,
-        db: AsyncSession,
-        briefing_id: str,
-        space_id: str,
-        data: BriefingEntryCreate,
-        user_id: str | None = None,
-    ) -> BriefingEntryResponse:
-        entry = BriefingEntry(
-            briefing_id=briefing_id,
-            space_id=space_id,
-            created_by=user_id,
-            phase=data.phase,
-            key=data.key,
-            content=data.content,
-            meta=data.metadata,
-        )
-        # Generate per-entry embedding
-        embedding = await get_embedding(data.content)
-        if embedding:
-            entry.embedding = embedding
-        db.add(entry)
-        await db.flush()
-        return self._entry_to_response(entry)
-
-    async def get_entries(
-        self,
-        db: AsyncSession,
-        briefing_id: str,
-        phase: str | None = None,
-    ) -> list[BriefingEntryResponse]:
-        q = select(BriefingEntry).where(BriefingEntry.briefing_id == briefing_id)
-        if phase:
-            q = q.where(BriefingEntry.phase == phase)
-        q = q.order_by(BriefingEntry.phase, BriefingEntry.key)
-        rows = (await db.execute(q)).scalars().all()
-        return [self._entry_to_response(e) for e in rows]
-
-    def _to_response(self, instance: Briefing) -> BriefingResponse:
-        entries = []
-        if instance.entries:
-            entries = [self._entry_to_response(e) for e in instance.entries]
-        return BriefingResponse(
-            id=instance.id,
-            space_id=instance.space_id,
-            created_by=instance.created_by,
-            created_at=instance.created_at,
-            updated_at=instance.updated_at,
-            date=instance.date,
-            topic_id=instance.topic_id,
-            domain=instance.domain,
-            status=instance.status,
-            raw_data=instance.raw_data,
-            analyses=instance.analyses,
-            debate=instance.debate,
-            entries=entries,
-        )
-
-    def _entry_to_response(self, entry: BriefingEntry) -> BriefingEntryResponse:
-        return BriefingEntryResponse(
-            id=entry.id,
-            space_id=entry.space_id,
-            created_by=entry.created_by,
-            created_at=entry.created_at,
-            updated_at=entry.updated_at,
-            briefing_id=entry.briefing_id,
-            phase=entry.phase,
-            key=entry.key,
-            content=entry.content,
-            metadata=entry.meta or {},
-        )
-
-
 # ======================== SearchSession Service ========================
 
 
@@ -841,12 +420,6 @@ class DashboardService:
             )
         ).scalar_one()
 
-        total_briefings = (
-            await db.execute(
-                select(func.count()).select_from(Briefing).where(Briefing.space_id == space_id)
-            )
-        ).scalar_one()
-
         recent = (
             (
                 await db.execute(
@@ -863,7 +436,6 @@ class DashboardService:
         return DashboardResponse(
             total_reports=total_reports,
             total_topics=total_topics,
-            total_briefings=total_briefings,
             recent_reports=[
                 ReportBrief(
                     id=r.id,
@@ -900,7 +472,5 @@ class DashboardService:
 
 report_service = ReportService()
 topic_service = TopicService()
-briefing_topic_service = BriefingTopicService()
-briefing_service = BriefingService()
 search_session_service = SearchSessionService()
 dashboard_service = DashboardService()

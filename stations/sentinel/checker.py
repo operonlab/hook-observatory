@@ -89,6 +89,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="infra",
         url="http://127.0.0.1:11434/",
     ),
+    LightCheck(
+        name="bark",
+        group="infra",
+        url="http://127.0.0.1:8090/ping",
+    ),
     # ── internal ──
     LightCheck(
         name="core",
@@ -119,6 +124,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:8080/intelflow/",
         expect_contains='<div id="root">',
     ),
+    LightCheck(
+        name="frontend-briefing",
+        group="internal",
+        url="http://127.0.0.1:8080/briefing/",
+        expect_contains='<div id="root">',
+    ),
     # ── external (stations) ──
     LightCheck(
         name="hook-observatory",
@@ -138,7 +149,7 @@ LIGHT_CHECKS: list[LightCheck] = [
     LightCheck(
         name="tmux-webui",
         group="external",
-        url="http://127.0.0.1:9527/",
+        url="http://127.0.0.1:8765/",
     ),
     LightCheck(
         name="agent-metrics",
@@ -154,6 +165,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         name="file-manager",
         group="external",
         url="http://127.0.0.1:8850/",
+    ),
+    LightCheck(
+        name="auto-survey",
+        group="external",
+        url="http://127.0.0.1:4102/api/people",
     ),
 ]
 
@@ -183,6 +199,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="frontend-intelflow-render",
         group="internal",
         url="http://127.0.0.1:8080/intelflow/",
+        playwright_code=_PW_ROOT_CHECK,
+    ),
+    DeepCheck(
+        name="frontend-briefing-render",
+        group="internal",
+        url="http://127.0.0.1:8080/briefing/",
         playwright_code=_PW_ROOT_CHECK,
     ),
     # ── external (station HTML — body > *) ──
@@ -220,6 +242,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="sentinel-render",
         group="external",
         url="http://127.0.0.1:8080/apps/sentinel/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="auto-survey-render",
+        group="external",
+        url="http://127.0.0.1:8080/apps/survey/",
         playwright_code=_PW_BODY_CHECK,
     ),
 ]
@@ -337,12 +365,14 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "frontend-render": "fe",
         "frontend-memvault-render": "mv",
         "frontend-intelflow-render": "if",
+        "frontend-briefing-render": "bf",
         "hook-observatory-render": "hook",
         "agent-vista-render": "vista",
         "system-monitor-render": "sysm",
         "tmux-webui-render": "tmux",
         "agent-metrics-render": "am",
         "sentinel-render": "sntl",
+        "auto-survey-render": "asrv",
     }
     session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
     start = time.monotonic()

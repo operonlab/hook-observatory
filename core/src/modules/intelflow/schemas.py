@@ -87,111 +87,6 @@ class TopicGraphResponse(BaseModel):
     edges: list[TopicGraphEdge]
 
 
-# ======================== Briefing Topic ========================
-
-
-class BriefingTopicCreate(BaseModel):
-    name: str
-    display_name: str
-    description: str | None = None
-    enabled: bool = True
-    priority: int = 0
-    prompt_template: str | None = None
-    sources: list[dict] = Field(default_factory=list)
-    schedule: str = "daily"
-
-
-class BriefingTopicUpdate(BaseModel):
-    display_name: str | None = None
-    description: str | None = None
-    enabled: bool | None = None
-    priority: int | None = None
-    prompt_template: str | None = None
-    sources: list[dict] | None = None
-    schedule: str | None = None
-
-
-class BriefingSubtopicResponse(SpaceScopedResponse):
-    topic_id: str
-    name: str
-    parameters: dict = {}
-    enabled: bool = True
-
-
-class BriefingTopicResponse(SpaceScopedResponse):
-    name: str
-    display_name: str
-    description: str | None = None
-    enabled: bool = True
-    priority: int = 0
-    prompt_template: str | None = None
-    sources: list[dict] = []
-    schedule: str = "daily"
-    subtopics: list[BriefingSubtopicResponse] = []
-
-
-# ======================== Briefing Subtopic ========================
-
-
-class BriefingSubtopicCreate(BaseModel):
-    name: str
-    parameters: dict = Field(default_factory=dict)
-    enabled: bool = True
-
-
-class BriefingSubtopicUpdate(BaseModel):
-    name: str | None = None
-    parameters: dict | None = None
-    enabled: bool | None = None
-
-
-# ======================== Briefing Entry ========================
-
-
-class BriefingEntryCreate(BaseModel):
-    phase: str  # raw | analysis | debate
-    key: str  # e.g. "finance", "claude"
-    content: str
-    metadata: dict = Field(default_factory=dict)
-
-
-class BriefingEntryResponse(SpaceScopedResponse):
-    briefing_id: str
-    phase: str
-    key: str
-    content: str
-    metadata: dict = {}
-
-
-# ======================== Briefing ========================
-
-
-class BriefingCreate(BaseModel):
-    date: date
-    topic_id: str | None = None
-    domain: str
-    status: str = "searching"
-    # Legacy fields — for backward compatibility with V1 data
-    raw_data: dict | None = None
-    analyses: dict | None = None
-    debate: str | None = None
-
-
-class BriefingUpdate(BaseModel):
-    status: str | None = None
-
-
-class BriefingResponse(SpaceScopedResponse):
-    date: date
-    topic_id: str | None = None
-    domain: str
-    status: str = "searching"
-    raw_data: dict | None = None
-    analyses: dict | None = None
-    debate: str | None = None
-    entries: list[BriefingEntryResponse] = []
-
-
 # ======================== Search ========================
 
 
@@ -237,7 +132,6 @@ class SearchSessionResponse(SpaceScopedResponse):
 class DashboardResponse(BaseModel):
     total_reports: int = 0
     total_topics: int = 0
-    total_briefings: int = 0
     recent_reports: list[ReportBrief] = []
 
 

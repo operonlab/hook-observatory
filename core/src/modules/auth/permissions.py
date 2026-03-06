@@ -8,16 +8,27 @@ from typing import Any
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     "admin": ["*"],
     "user": [
-        "finance.read", "finance.write",
-        "taskflow.read", "taskflow.write",
-        "ideagraph.read", "ideagraph.write",
-        "intelflow.read", "intelflow.write",
-        "memvault.read", "memvault.write",
-        "skillpath.read", "skillpath.write",
-        "workpool.read", "workpool.write",
-        "matchcore.read", "matchcore.write",
+        "finance.read",
+        "finance.write",
+        "taskflow.read",
+        "taskflow.write",
+        "ideagraph.read",
+        "ideagraph.write",
+        "intelflow.read",
+        "intelflow.write",
+        "memvault.read",
+        "memvault.write",
+        "skillpath.read",
+        "skillpath.write",
+        "workpool.read",
+        "workpool.write",
+        "matchcore.read",
+        "matchcore.write",
+        "notification.read",
+        "notification.write",
         "plugin.use",
-        "profile.read", "profile.write",
+        "profile.read",
+        "profile.write",
     ],
     "guest": [
         "finance.read",
@@ -57,9 +68,7 @@ class PolicyEngine:
         self._policies: list[dict] = []
 
     def add_policy(self, name: str, effect: str, condition):
-        self._policies.append(
-            {"name": name, "effect": effect, "condition": condition}
-        )
+        self._policies.append({"name": name, "effect": effect, "condition": condition})
 
     def evaluate(self, ctx: RequestContext) -> tuple[bool, str]:
         # RBAC check first

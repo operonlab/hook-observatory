@@ -1,18 +1,15 @@
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
 
 _url = settings.database_url.replace("postgresql://", "postgresql+psycopg://")
-engine = create_engine(_url, pool_pre_ping=True, pool_size=5)
-
-
-@event.listens_for(engine, "connect")
-def _set_search_path(dbapi_conn, connection_record):
-    cursor = dbapi_conn.cursor()
-    cursor.execute(f"SET search_path TO {settings.schema_name}, public")
-    cursor.close()
-
+engine = create_engine(
+    _url,
+    pool_pre_ping=True,
+    pool_size=5,
+    connect_args={"options": f"-c search_path={settings.schema_name},public"},
+)
 
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
