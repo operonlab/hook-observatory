@@ -19,6 +19,7 @@ from . import (
     auto_format,
     bash_safety,
     cleanup_versions,
+    context_inject,
     external,
     issue_sync,
     observability,
@@ -27,6 +28,7 @@ from . import (
     session_pipeline,
     skill_security,
     verify_commit,
+    verify_completion,
     voice_notify,
 )
 from .base import ALLOW, HookResult
@@ -77,9 +79,11 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "SubagentStart": [
+        (None, context_inject.handle),
         (None, observability.handle),
     ],
     "SubagentStop": [
+        (None, verify_completion.handle),
         (None, observability.handle),
     ],
     "PreCompact": [
