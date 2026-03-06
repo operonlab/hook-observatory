@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""  # base64url-encoded applicationServerKey
     vapid_contact: str = "mailto:admin@joneshong.com"
 
+    # Bark (iPhone push via self-hosted Bark server)
+    bark_server_url: str = ""  # e.g. http://localhost:8090
+    bark_device_key: str = ""  # device key from Bark iOS app
+
     # Plugins
     plugin_dir: str = "plugins"
 
