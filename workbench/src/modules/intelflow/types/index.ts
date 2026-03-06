@@ -87,7 +87,6 @@ export interface SearchCheckResult {
 export interface DashboardData {
   total_reports: number
   total_topics: number
-  total_briefings: number
   recent_reports: ReportBrief[]
 }
 
@@ -96,81 +95,3 @@ export interface TimelineEntry {
   count: number
 }
 
-// Briefing Subtopic
-export interface BriefingSubtopic extends BaseEntity {
-  topic_id: string
-  name: string
-  parameters: Record<string, unknown>
-  enabled: boolean
-}
-
-// Briefing Topic
-export interface BriefingTopic extends BaseEntity {
-  name: string
-  display_name: string
-  description: string | null
-  enabled: boolean
-  priority: number
-  prompt_template: string | null
-  sources: Record<string, unknown>[]
-  schedule: string
-  subtopics: BriefingSubtopic[]
-}
-
-export interface BriefingTopicCreate {
-  name: string
-  display_name: string
-  description?: string
-  enabled?: boolean
-  priority?: number
-  prompt_template?: string
-  sources?: Record<string, unknown>[]
-  schedule?: string
-}
-
-export interface BriefingTopicUpdate {
-  display_name?: string
-  description?: string
-  enabled?: boolean
-  priority?: number
-  prompt_template?: string
-  sources?: Record<string, unknown>[]
-  schedule?: string
-}
-
-export interface BriefingSubtopicCreate {
-  name: string
-  parameters?: Record<string, unknown>
-  enabled?: boolean
-}
-
-export interface BriefingSubtopicUpdate {
-  name?: string
-  parameters?: Record<string, unknown>
-  enabled?: boolean
-}
-
-// Briefing Entry (normalized per-entry storage)
-export interface BriefingEntry {
-  id: string
-  space_id: string
-  briefing_id: string
-  phase: 'raw' | 'analysis' | 'debate'
-  key: string
-  content: string
-  metadata: Record<string, unknown>
-  created_at: string
-  updated_at: string
-}
-
-// Briefing (daily briefing report)
-export interface Briefing extends BaseEntity {
-  date: string
-  topic_id: string | null
-  domain: string
-  status: string
-  raw_data: Record<string, string> | null
-  analyses: Record<string, string> | null
-  debate: string | null
-  entries: BriefingEntry[]
-}

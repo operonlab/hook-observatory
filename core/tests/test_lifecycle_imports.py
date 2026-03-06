@@ -173,43 +173,28 @@ class TestMemvaultBlockFrozen:
 
 
 # ============================================================
-# 4. src.modules.intelflow.models -- ReportFrozen & BriefingFrozen
+# 4. src.modules.intelflow.models -- ReportFrozen
+#    src.modules.briefing.models -- BriefingFrozen
 # ============================================================
 
 
 class TestIntelflowFrozenModels:
-    """Verify ReportFrozen and BriefingFrozen exist."""
+    """Verify ReportFrozen exists in intelflow."""
 
     def test_import_report_frozen(self):
         from src.modules.intelflow.models import ReportFrozen
 
         assert ReportFrozen is not None
 
-    def test_import_briefing_frozen(self):
-        from src.modules.intelflow.models import BriefingFrozen
-
-        assert BriefingFrozen is not None
-
     def test_report_frozen_tablename(self):
         from src.modules.intelflow.models import ReportFrozen
 
         assert ReportFrozen.__tablename__ == "reports_frozen"
 
-    def test_briefing_frozen_tablename(self):
-        from src.modules.intelflow.models import BriefingFrozen
-
-        assert BriefingFrozen.__tablename__ == "briefings_frozen"
-
     def test_report_frozen_schema(self):
         from src.modules.intelflow.models import ReportFrozen
 
         schema = ReportFrozen.__table_args__[-1].get("schema")
-        assert schema == "intelflow"
-
-    def test_briefing_frozen_schema(self):
-        from src.modules.intelflow.models import BriefingFrozen
-
-        schema = BriefingFrozen.__table_args__[-1].get("schema")
         assert schema == "intelflow"
 
     def test_report_frozen_has_s3_uri(self):
@@ -219,8 +204,28 @@ class TestIntelflowFrozenModels:
         assert hasattr(ReportFrozen, "content_hash")
         assert hasattr(ReportFrozen, "frozen_at")
 
+
+class TestBriefingFrozenModels:
+    """Verify BriefingFrozen exists in briefing module."""
+
+    def test_import_briefing_frozen(self):
+        from src.modules.briefing.models import BriefingFrozen
+
+        assert BriefingFrozen is not None
+
+    def test_briefing_frozen_tablename(self):
+        from src.modules.briefing.models import BriefingFrozen
+
+        assert BriefingFrozen.__tablename__ == "briefings_frozen"
+
+    def test_briefing_frozen_schema(self):
+        from src.modules.briefing.models import BriefingFrozen
+
+        schema = BriefingFrozen.__table_args__[-1].get("schema")
+        assert schema == "briefing"
+
     def test_briefing_frozen_has_s3_uri(self):
-        from src.modules.intelflow.models import BriefingFrozen
+        from src.modules.briefing.models import BriefingFrozen
 
         assert hasattr(BriefingFrozen, "s3_uri")
         assert hasattr(BriefingFrozen, "content_hash")

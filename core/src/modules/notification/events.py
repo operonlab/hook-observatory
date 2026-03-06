@@ -26,19 +26,19 @@ EVENT_PUSH_MAP: dict[str, dict] = {
         "tag": "taskflow-completed",
         "url": "/taskflow",
     },
-    "intelflow.briefing.generated": {
-        "category": "intelflow",
+    "briefing.daily.completed": {
+        "category": "briefing",
         "title": "每日簡報已生成",
         "severity": "info",
-        "tag": "intelflow-briefing",
-        "url": "/intelflow",
+        "tag": "briefing-daily",
+        "url": "/briefing",
     },
 }
 
 
 @event_bus.on("finance.budget.exceeded")
 @event_bus.on("taskflow.task.completed")
-@event_bus.on("intelflow.briefing.generated")
+@event_bus.on("briefing.daily.completed")
 async def on_mapped_event(event: Event) -> None:
     """Push notification for mapped EventBus events."""
     mapping = EVENT_PUSH_MAP.get(event.type)
