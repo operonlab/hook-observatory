@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.models import _uuid7_hex
 
+from .adapters.bark import send_bark
 from .models import NotificationLog, PushSubscription
 from .push import send_push
 from .schemas import PushPayload, SubscriptionCreate, SubscriptionResponse
@@ -105,28 +106,16 @@ class NotificationService:
         await db.refresh(sub)
         return sub
 
-    async def send_notification(self, db: AsyncSession, payload: PushPayload) -> dict:
-        """Fan-out: send push notification to matching subscriptions."""
-        query = select(PushSubscription).where(PushSubscription.active == True)  # noqa: E712
+    async def _deliver_web_push(
+        self, db: AsyncSession, eligible: list[PushSubscription], push_data: dict
+    ) -> tuple[int, int, list[str]]:
+        """Deliver via Web Push to all eligible subscriptions.
 
-        if payload.user_id:
-            query = query.where(PushSubscription.user_id == payload.user_id)
+        Returns (delivered, failed, expired_ids).
+        """
+        if not eligible:
+            return 0, 0, []
 
-        subs: list[PushSubscription] = list((await db.execute(query)).scalars().all())
-
-        # Filter by category preference
-        eligible = [s for s in subs if s.preferences.get(payload.category, True)]
-
-        push_data = {
-            "title": payload.title,
-            "body": payload.body,
-            "url": payload.url,
-            "icon": payload.icon or "/icons/icon-192.png",
-            "tag": payload.tag,
-            "severity": payload.severity,
-        }
-
-        # Send in parallel
         tasks = [send_push(s.endpoint, s.p256dh, s.auth, push_data) for s in eligible]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -142,13 +131,58 @@ class NotificationService:
                 if result is False:
                     expired_ids.append(eligible[i].id)
 
-        # Mark expired subscriptions as inactive
         if expired_ids:
             await db.execute(
                 update(PushSubscription)
                 .where(PushSubscription.id.in_(expired_ids))
                 .values(active=False)
             )
+
+        return delivered, failed, expired_ids
+
+    async def _deliver_bark(self, payload: PushPayload) -> bool:
+        """Deliver via Bark (iPhone push). Returns True if sent."""
+        severity_to_level = {
+            "critical": "timeSensitive",
+            "warning": "timeSensitive",
+            "info": "active",
+        }
+        try:
+            return await send_bark(
+                title=payload.title,
+                body=payload.body,
+                url=payload.url,
+                group=payload.category,
+                level=severity_to_level.get(payload.severity, "active"),
+            )
+        except Exception as e:
+            logger.error("bark_delivery_error", error=str(e))
+            return False
+
+    async def send_notification(self, db: AsyncSession, payload: PushPayload) -> dict:
+        """Fan-out: deliver via Web Push + Bark in parallel."""
+        query = select(PushSubscription).where(PushSubscription.active == True)  # noqa: E712
+
+        if payload.user_id:
+            query = query.where(PushSubscription.user_id == payload.user_id)
+
+        subs: list[PushSubscription] = list((await db.execute(query)).scalars().all())
+        eligible = [s for s in subs if s.preferences.get(payload.category, True)]
+
+        push_data = {
+            "title": payload.title,
+            "body": payload.body,
+            "url": payload.url,
+            "icon": payload.icon or "/icons/icon-192.png",
+            "tag": payload.tag,
+            "severity": payload.severity,
+        }
+
+        # Deliver Web Push + Bark in parallel
+        web_push_task = self._deliver_web_push(db, eligible, push_data)
+        bark_task = self._deliver_bark(payload)
+
+        (delivered, failed, _expired_ids), bark_ok = await asyncio.gather(web_push_task, bark_task)
 
         # Log the notification
         log = NotificationLog(
@@ -159,22 +193,36 @@ class NotificationService:
             body=payload.body,
             url=payload.url,
             recipients=len(eligible),
-            delivered=delivered,
-            failed=failed,
+            delivered=delivered + (1 if bark_ok else 0),
+            failed=failed + (0 if bark_ok else 1),
             source_event=payload.tag,
+            source_data={
+                "channels": {
+                    "web_push": {"delivered": delivered, "failed": failed},
+                    "bark": {"delivered": bark_ok},
+                }
+            },
         )
         db.add(log)
         await db.flush()
 
+        total_delivered = delivered + (1 if bark_ok else 0)
+        total_failed = failed + (0 if bark_ok else 1)
+
         logger.info(
-            "push_notification_sent",
+            "notification_sent",
             category=payload.category,
-            recipients=len(eligible),
-            delivered=delivered,
-            failed=failed,
+            web_push_delivered=delivered,
+            bark_ok=bark_ok,
+            total_delivered=total_delivered,
         )
 
-        return {"recipients": len(eligible), "delivered": delivered, "failed": failed}
+        return {
+            "recipients": len(eligible),
+            "delivered": total_delivered,
+            "failed": total_failed,
+            "channels": {"web_push": delivered, "bark": bark_ok},
+        }
 
 
 notification_service = NotificationService()
