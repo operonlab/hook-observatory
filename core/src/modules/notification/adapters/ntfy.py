@@ -19,25 +19,35 @@ SEVERITY_TO_PRIORITY = {
 
 
 def _send_ntfy_sync(server: str, topic: str, payload: dict) -> bool:
-    """Synchronous HTTP POST to ntfy server (runs in executor)."""
+    """Synchronous HTTP POST to ntfy server (runs in executor).
+
+    Uses JSON body format to support UTF-8 titles (HTTP headers are latin-1 only).
+    """
+    import json
     import urllib.error
     import urllib.request
 
-    url = f"{server.rstrip('/')}/{topic}"
+    url = f"{server.rstrip('/')}"
 
     if not url.startswith(("http://", "https://")):
         logger.error("ntfy_invalid_scheme", url=url)
         return False
 
     try:
-        data = payload.get("body", "").encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST")  # noqa: S310
-        req.add_header("Title", payload.get("title", ""))
-        req.add_header("Priority", payload.get("priority", "default"))
+        json_payload = {
+            "topic": topic,
+            "title": payload.get("title", ""),
+            "message": payload.get("body", ""),
+            "priority": _PRIORITY_MAP.get(payload.get("priority", "default"), 3),
+        }
         if payload.get("tags"):
-            req.add_header("Tags", payload["tags"])
+            json_payload["tags"] = payload["tags"].split(",")
         if payload.get("click"):
-            req.add_header("Click", payload["click"])
+            json_payload["click"] = payload["click"]
+
+        data = json.dumps(json_payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")  # noqa: S310
+        req.add_header("Content-Type", "application/json")
 
         with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
             return resp.status == 200
@@ -47,6 +57,16 @@ def _send_ntfy_sync(server: str, topic: str, payload: dict) -> bool:
     except Exception as e:
         logger.error("ntfy_send_error", error=str(e))
         return False
+
+
+# ntfy JSON API uses numeric priority: 1=min, 2=low, 3=default, 4=high, 5=urgent
+_PRIORITY_MAP = {
+    "urgent": 5,
+    "high": 4,
+    "default": 3,
+    "low": 2,
+    "min": 1,
+}
 
 
 async def send_ntfy(
