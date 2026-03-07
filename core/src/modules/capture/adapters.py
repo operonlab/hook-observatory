@@ -67,9 +67,13 @@ class BaseCaptureAdapter:
             return 1.0
         total_weight = sum(self.field_weights.values())
         filled_weight = sum(
-            w for field, w in self.field_weights.items() if payload.get(field)
+            w for field, w in self.field_weights.items()
+            if payload.get(field) is not None and payload.get(field) != ""
         )
         return round(filled_weight / total_weight, 2) if total_weight else 1.0
 
     def missing_fields(self, payload: dict[str, Any]) -> list[str]:
-        return [f for f, w in self.field_weights.items() if not payload.get(f) and w > 0]
+        return [
+            f for f, w in self.field_weights.items()
+            if w > 0 and (payload.get(f) is None or payload.get(f) == "")
+        ]

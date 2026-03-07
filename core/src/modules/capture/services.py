@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.shared.errors import BadRequestError, NotFoundError
 
-from .models import Capture
+from .models import Capture, CaptureEnrichment
 from .registry import get_adapter
 from .schemas import (
     CaptureCreate,
@@ -20,6 +21,8 @@ from .schemas import (
     CaptureStats,
     CaptureUpdate,
 )
+
+MAX_PAYLOAD_BYTES = 16 * 1024  # 16KB
 
 
 class CaptureService:
@@ -31,6 +34,22 @@ class CaptureService:
         user_id: str | None = None,
         user_prefs: dict[str, Any] | None = None,
     ) -> Capture:
+        from .schemas import CAPTURABLE_MODULES
+
+        # Module whitelist
+        if data.module not in CAPTURABLE_MODULES:
+            raise BadRequestError(
+                f"Module '{data.module}' does not support capture. "
+                f"Supported: {', '.join(sorted(CAPTURABLE_MODULES))}"
+            )
+
+        # Validate payload size
+        payload_size = len(json.dumps(data.payload))
+        if payload_size > MAX_PAYLOAD_BYTES:
+            raise BadRequestError(
+                f"Payload too large: {payload_size} bytes (max {MAX_PAYLOAD_BYTES})"
+            )
+
         adapter = get_adapter(data.module, data.entity_type)
         payload = dict(data.payload)
 
@@ -52,6 +71,7 @@ class CaptureService:
             raw_input=data.raw_input,
             completeness=completeness,
             status="pending",
+            group_id=data.group_id,
             expires_at=datetime.now(UTC) + timedelta(days=ttl_days),
         )
         db.add(capture)
@@ -88,11 +108,14 @@ class CaptureService:
         status: str = "pending",
         limit: int = 50,
         offset: int = 0,
+        user_id: str | None = None,
     ) -> tuple[list[Capture], int]:
         base = select(Capture).where(
             Capture.space_id == space_id,
             Capture.deleted_at.is_(None),
         )
+        if user_id:
+            base = base.where(Capture.created_by == user_id)
         if module:
             base = base.where(Capture.module == module)
         if entity_type:
@@ -113,6 +136,8 @@ class CaptureService:
         capture_id: str,
         data: CaptureUpdate,
         user_prefs: dict[str, Any] | None = None,
+        agent_id: str | None = None,
+        expected_version: int | None = None,
     ) -> Capture:
         capture = await self.get(db, capture_id)
         if not capture:
@@ -120,16 +145,52 @@ class CaptureService:
         if capture.status != "pending":
             raise BadRequestError(f"Cannot update capture in status '{capture.status}'")
 
+        # Optimistic locking
+        if expected_version is not None and capture.version != expected_version:
+            from src.shared.errors import ConflictError
+
+            raise ConflictError(
+                f"Version conflict: expected {expected_version}, current {capture.version}"
+            )
+
         if data.payload is not None:
-            merged = {**capture.payload, **data.payload}
+            old_payload = dict(capture.payload)
+            merged = {**old_payload, **data.payload}
             adapter = get_adapter(capture.module, capture.entity_type)
             if adapter:
                 merged = adapter.smart_defaults(merged, user_prefs or {})
                 capture.completeness = adapter.compute_completeness(merged)
             capture.payload = merged
+
+            # Record enrichment delta
+            delta = {k: v for k, v in data.payload.items() if old_payload.get(k) != v}
+            if delta:
+                prev = {k: old_payload.get(k) for k in delta}
+                enrichment = CaptureEnrichment(
+                    capture_id=capture_id,
+                    agent_id=agent_id or "user",
+                    delta=delta,
+                    previous_values=prev,
+                )
+                db.add(enrichment)
+
+                await event_bus.publish(
+                    Event(
+                        type="capture.enriched",
+                        data={
+                            "capture_id": capture_id,
+                            "agent_id": agent_id or "user",
+                            "delta_fields": list(delta.keys()),
+                            "completeness": capture.completeness,
+                        },
+                        source="capture",
+                    )
+                )
+
         if data.raw_input is not None:
             capture.raw_input = data.raw_input
 
+        capture.version += 1
         await db.flush()
         return capture
 
@@ -201,11 +262,14 @@ class CaptureService:
             promoted_id=promoted_id,
         )
 
-    async def stats(self, db: AsyncSession, space_id: str) -> CaptureStats:
-        base = select(Capture).where(
-            Capture.space_id == space_id,
-            Capture.deleted_at.is_(None),
-        )
+    async def stats(
+        self, db: AsyncSession, space_id: str, user_id: str | None = None
+    ) -> CaptureStats:
+        filters = [Capture.space_id == space_id, Capture.deleted_at.is_(None)]
+        if user_id:
+            filters.append(Capture.created_by == user_id)
+
+        base = select(Capture).where(*filters)
         # Total
         total = (
             await db.execute(select(func.count()).select_from(base.subquery()))
@@ -214,7 +278,7 @@ class CaptureService:
         # By module
         mod_stmt = (
             select(Capture.module, func.count())
-            .where(Capture.space_id == space_id, Capture.deleted_at.is_(None))
+            .where(*filters)
             .group_by(Capture.module)
         )
         by_module = dict((await db.execute(mod_stmt)).all())
@@ -222,7 +286,7 @@ class CaptureService:
         # By status
         status_stmt = (
             select(Capture.status, func.count())
-            .where(Capture.space_id == space_id, Capture.deleted_at.is_(None))
+            .where(*filters)
             .group_by(Capture.status)
         )
         by_status = dict((await db.execute(status_stmt)).all())
@@ -241,6 +305,8 @@ class CaptureService:
             raw_input=capture.raw_input,
             completeness=capture.completeness,
             status=capture.status,
+            version=capture.version,
+            group_id=capture.group_id,
             promoted_id=capture.promoted_id,
             promoted_at=capture.promoted_at,
             expires_at=capture.expires_at,

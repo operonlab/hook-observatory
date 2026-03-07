@@ -158,6 +158,7 @@ class PluginEvents:
 
 class CaptureEvents:
     CREATED = "capture.created"
+    ENRICHED = "capture.enriched"
     PROMOTED = "capture.promoted"
     EXPIRED = "capture.expired"
 
