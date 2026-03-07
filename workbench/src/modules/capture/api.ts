@@ -9,6 +9,8 @@ export interface Capture {
   raw_input: string | null
   completeness: number
   status: 'pending' | 'promoted' | 'expired'
+  version: number
+  group_id: string | null
   promoted_id: string | null
   promoted_at: string | null
   expires_at: string | null

@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.deps import get_current_user, get_db
+from src.shared.deps import get_db, require_permission
+from src.shared.errors import ForbiddenError
 
 from .schemas import (
     CaptureCreate,
@@ -24,12 +25,28 @@ async def _get_user_prefs(db: AsyncSession, user_id: str) -> dict:
     return await user_service.get_preferences(db, user_id)
 
 
+def _check_owner(capture, user: dict) -> None:
+    """Ensure the current user owns this capture."""
+    if capture.created_by and capture.created_by != user.get("id"):
+        raise ForbiddenError("Not the owner of this capture", code="capture.forbidden")
+
+
+# Permission mapping: promote checks target module's write permission
+_MODULE_WRITE_PERMS = {
+    "finance": "finance.write",
+    "invest": "invest.write",
+    "taskflow": "taskflow.write",
+    "ideagraph": "ideagraph.write",
+    "intelflow": "intelflow.write",
+}
+
+
 @router.post("", response_model=CaptureResponse, status_code=201)
 async def create_capture(
     data: CaptureCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = require_permission("capture.write"),
 ):
     user_prefs = await _get_user_prefs(db, user["id"])
     capture = await capture_service.create(
@@ -48,11 +65,11 @@ async def list_captures(
     limit: int = Query(50, le=100),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = require_permission("capture.read"),
 ):
     items, _total = await capture_service.list(
         db, space_id, module=module, entity_type=entity_type, status=status,
-        limit=limit, offset=offset,
+        limit=limit, offset=offset, user_id=user.get("id"),
     )
     return [capture_service.to_response(c) for c in items]
 
@@ -61,21 +78,23 @@ async def list_captures(
 async def capture_stats(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = require_permission("capture.read"),
 ):
-    return await capture_service.stats(db, space_id)
+    return await capture_service.stats(db, space_id, user_id=user.get("id"))
 
 
 @router.get("/{capture_id}", response_model=CaptureResponse)
 async def get_capture(
     capture_id: str,
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = require_permission("capture.read"),
 ):
     capture = await capture_service.get(db, capture_id)
     if not capture:
         from src.shared.errors import NotFoundError
+
         raise NotFoundError("capture", capture_id)
+    _check_owner(capture, user)
     return capture_service.to_response(capture)
 
 
@@ -84,8 +103,14 @@ async def update_capture(
     capture_id: str,
     data: CaptureUpdate,
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = require_permission("capture.write"),
 ):
+    capture = await capture_service.get(db, capture_id)
+    if not capture:
+        from src.shared.errors import NotFoundError
+
+        raise NotFoundError("capture", capture_id)
+    _check_owner(capture, user)
     user_prefs = await _get_user_prefs(db, user["id"])
     capture = await capture_service.update(db, capture_id, data, user_prefs=user_prefs)
     await db.commit()
@@ -96,8 +121,23 @@ async def update_capture(
 async def promote_capture(
     capture_id: str,
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = require_permission("capture.write"),
 ):
+    capture = await capture_service.get(db, capture_id)
+    if not capture:
+        from src.shared.errors import NotFoundError
+
+        raise NotFoundError("capture", capture_id)
+    _check_owner(capture, user)
+    # Verify user has write permission on target module
+    target_perm = _MODULE_WRITE_PERMS.get(capture.module)
+    if target_perm:
+        from src.modules.auth.permissions import has_permission
+
+        if not has_permission(user.get("role", "guest"), target_perm):
+            raise ForbiddenError(
+                f"Permission denied: {target_perm}", code=f"{capture.module}.forbidden"
+            )
     result = await capture_service.promote(db, capture_id, user_id=user.get("id"))
     await db.commit()
     return result
@@ -107,7 +147,13 @@ async def promote_capture(
 async def delete_capture(
     capture_id: str,
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = require_permission("capture.write"),
 ):
+    capture = await capture_service.get(db, capture_id)
+    if not capture:
+        from src.shared.errors import NotFoundError
+
+        raise NotFoundError("capture", capture_id)
+    _check_owner(capture, user)
     await capture_service.delete(db, capture_id)
     await db.commit()
