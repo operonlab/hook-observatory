@@ -156,6 +156,12 @@ class PluginEvents:
     HOOK_TRIGGERED = "plugin.hook.triggered"
 
 
+class CaptureEvents:
+    CREATED = "capture.created"
+    PROMOTED = "capture.promoted"
+    EXPIRED = "capture.expired"
+
+
 class SystemEvents:
     HEALTH_CHECKED = "system.health.checked"
     CONFIG_CHANGED = "system.config.changed"
