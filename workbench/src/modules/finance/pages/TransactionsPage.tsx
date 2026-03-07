@@ -1,5 +1,6 @@
 import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import CaptureInbox from '@/modules/capture/CaptureInbox'
 import { analyticsApi, categoryApi } from '../api'
 import CategoryTree from '../components/CategoryTree'
 import TransactionForm from '../components/TransactionForm'
@@ -110,6 +111,9 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+
+      {/* Capture Inbox — pending captures from MCP/CLI */}
+      <CaptureInbox module="finance" entityType="transaction" onPromoted={handleSaved} />
 
       {/* Content: sidebar category tree (desktop) + transaction list */}
       <div className="flex gap-6">
