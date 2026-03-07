@@ -26,7 +26,8 @@ async def lifespan(app: FastAPI):
     import src.modules.finance.events
     import src.modules.invest.events
     import src.modules.nodeflow.events  # registers @event_bus.on handlers
-    import src.modules.notification.events  # noqa: F401 — registers @event_bus.on handlers
+    import src.modules.notification.events
+    import src.modules.taskflow.events  # noqa: F401
 
     # Startup: init event bus, load plugins, register nodeflow
     event_bus.use(logging_middleware)
