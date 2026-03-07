@@ -1,8 +1,17 @@
-export default function TaskflowPage() {
+import { Route, Routes } from 'react-router-dom'
+import TaskflowLayout from '../components/TaskflowLayout'
+import DashboardPage from './DashboardPage'
+import StatsPage from './StatsPage'
+import TasksPage from './TasksPage'
+
+export default function TaskflowPages() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-[var(--text)]">任務排程</h1>
-      <p className="text-[var(--subtext0)] mt-2">Coming soon...</p>
-    </div>
+    <Routes>
+      <Route element={<TaskflowLayout />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="tasks" element={<TasksPage />} />
+        <Route path="stats" element={<StatsPage />} />
+      </Route>
+    </Routes>
   )
 }
