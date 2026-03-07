@@ -11,6 +11,9 @@ Usage:
     capture promote <id> [--json]
     capture delete <id>
     capture stats [--json]
+    capture batch-promote <id1> <id2> ...
+    capture batch-fill <id1> <id2> ... -p '{"wallet_id":"xxx"}'
+    capture history <id> [--json]
 
 Symlink: ln -sf ~/workshop/core/cli/capture.py ~/.local/bin/capture
 """
@@ -195,6 +198,73 @@ def cmd_stats(args):
             print(f"  {k}: {v}")
 
 
+def cmd_batch_promote(args):
+    c = _client()
+    try:
+        results = c.batch_promote(args.ids)
+    except (APIConnectionError, APIError) as e:
+        _err(str(e))
+
+    if _json_out(results, args):
+        return
+
+    print(f"Batch promote: {len(results)} results")
+    for r in results:
+        cid = r.get("capture_id", r.get("id", "?"))[:12]
+        if r.get("success"):
+            print(f"  {cid}  promoted -> {r.get('promoted_id', '?')[:12]}")
+        else:
+            missing = ", ".join(r.get("missing_fields", []))
+            error = r.get("error", "failed")
+            print(f"  {cid}  FAILED  {error}" + (f" (missing: {missing})" if missing else ""))
+
+
+def cmd_batch_fill(args):
+    c = _client()
+    try:
+        payload = json.loads(args.payload)
+    except json.JSONDecodeError as e:
+        _err(f"Invalid JSON payload: {e}")
+
+    try:
+        results = c.batch_fill(args.ids, payload)
+    except (APIConnectionError, APIError) as e:
+        _err(str(e))
+
+    if _json_out(results, args):
+        return
+
+    print(f"Batch fill: {len(results)} updated")
+    for r in results:
+        cid = r.get("id", "?")[:12]
+        missing = r.get("missing_fields", [])
+        status_str = "complete" if not missing else f"missing: {', '.join(missing)}"
+        print(f"  {cid}  {_bar(r.get('completeness', 0))}  {status_str}")
+
+
+def cmd_history(args):
+    c = _client()
+    try:
+        history = c.enrichments(args.id)
+    except (APIConnectionError, APIError) as e:
+        _err(str(e))
+
+    if _json_out(history, args):
+        return
+
+    if not history:
+        print("No enrichment history.")
+        return
+
+    print(f"Enrichment history for {args.id[:12]}... ({len(history)} entries)")
+    for entry in history:
+        agent = entry.get("agent_id", "unknown")
+        ts = str(entry.get("created_at", entry.get("timestamp", "")))[:19]
+        delta = entry.get("delta", {})
+        delta_str = ", ".join(f"{k}={v}" for k, v in delta.items()) if delta else "(no fields)"
+        print(f"  {ts}  {agent:20s}  {delta_str}")
+
+
 # ── Argparse ──────────────────────────────────────────────────────
 
 
@@ -249,6 +319,25 @@ def main():
     p_stats = sub.add_parser("stats", help="Capture statistics")
     p_stats.add_argument("--json", action="store_true")
     p_stats.set_defaults(func=cmd_stats)
+
+    # batch-promote
+    p_bpromote = sub.add_parser("batch-promote", help="Batch promote multiple captures")
+    p_bpromote.add_argument("ids", nargs="+", metavar="id", help="Capture IDs to promote")
+    p_bpromote.add_argument("--json", action="store_true")
+    p_bpromote.set_defaults(func=cmd_batch_promote)
+
+    # batch-fill
+    p_bfill = sub.add_parser("batch-fill", help="Batch fill fields into multiple captures")
+    p_bfill.add_argument("ids", nargs="+", metavar="id", help="Capture IDs to update")
+    p_bfill.add_argument("--payload", "-p", required=True, help="JSON fields to fill")
+    p_bfill.add_argument("--json", action="store_true")
+    p_bfill.set_defaults(func=cmd_batch_fill)
+
+    # history
+    p_history = sub.add_parser("history", help="Show enrichment history for a capture")
+    p_history.add_argument("id", help="Capture ID")
+    p_history.add_argument("--json", action="store_true")
+    p_history.set_defaults(func=cmd_history)
 
     args = parser.parse_args()
     if not args.command:

@@ -2,6 +2,7 @@ import { LayoutDashboard, LayoutGrid, LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import CaptureBadge from '@/modules/capture/CaptureBadge'
 import { APP_LIST } from '@/shared/constants/apps'
 import AppLauncher from '@/shell/AppLauncher'
 
@@ -97,6 +98,9 @@ export default function AppHeader() {
         />
 
         {showLauncher && <AppLauncher onClose={() => setShowLauncher(false)} />}
+
+        {/* Capture Badge */}
+        <CaptureBadge />
 
         {/* Separator */}
         <span

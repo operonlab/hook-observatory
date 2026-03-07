@@ -182,3 +182,10 @@ class InstallmentCaptureAdapter(BaseCaptureAdapter):
         data = InstallmentPlanCreate(**payload, tags=tags)
         instance = await installment_service.create(db, space_id, data, created_by)
         return instance.id
+
+
+ADAPTERS: list[BaseCaptureAdapter] = [
+    TransactionCaptureAdapter(),
+    SubscriptionCaptureAdapter(),
+    InstallmentCaptureAdapter(),
+]
