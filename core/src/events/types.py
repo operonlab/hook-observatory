@@ -43,9 +43,10 @@ class FinanceEvents:
 
 class TaskflowEvents:
     TASK_CREATED = "taskflow.task.created"
-    TASK_ACCEPTED = "taskflow.task.accepted"
+    TASK_UPDATED = "taskflow.task.updated"
     TASK_COMPLETED = "taskflow.task.completed"
-    TASK_BLOCKED = "taskflow.task.blocked"
+    TASK_STATUS_CHANGED = "taskflow.task.status_changed"
+    TASK_DELETED = "taskflow.task.deleted"
     REPORT_GENERATED = "taskflow.report.generated"
 
 
