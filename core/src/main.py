@@ -126,3 +126,7 @@ app.include_router(skillpath_router, prefix="/api/skillpath", tags=["skillpath"]
 app.include_router(workpool_router, prefix="/api/workpool", tags=["workpool"])
 app.include_router(matchcore_router, prefix="/api/matchcore", tags=["matchcore"])
 app.include_router(nodeflow_router, prefix="/api/nodeflow", tags=["nodeflow"])
+
+from src.modules.capture.routes import router as capture_router  # noqa: E402
+
+app.include_router(capture_router, prefix="/api/captures", tags=["capture"])

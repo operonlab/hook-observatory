@@ -26,6 +26,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "matchcore.write",
         "notification.read",
         "notification.write",
+        "invest.read",
+        "invest.write",
+        "capture.read",
+        "capture.write",
         "plugin.use",
         "profile.read",
         "profile.write",
@@ -36,6 +40,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "ideagraph.read",
         "intelflow.read",
         "memvault.read",
+        "capture.read",
     ],
 }
 
