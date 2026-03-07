@@ -1,4 +1,13 @@
-import { AlertCircle, ArrowUpRight, Clock, Trash2, X } from 'lucide-react'
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { type Capture, type CapturePromoteResult, captureApi } from './api'
 
@@ -84,11 +93,16 @@ export default function CaptureInbox({ module, entityType, onPromoted }: Capture
   const [editing, setEditing] = useState<string | null>(null)
   const [promoting, setPromoting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(true)
 
   const load = useCallback(() => {
     captureApi
       .list({ module, entity_type: entityType, status: 'pending', limit: 50 })
-      .then(setCaptures)
+      .then((data) => {
+        setCaptures(data)
+        // Auto-expand when 3 or fewer captures
+        setCollapsed((prev) => (data.length <= 3 ? false : prev))
+      })
       .catch(() => {})
   }, [module, entityType])
 
@@ -97,6 +111,16 @@ export default function CaptureInbox({ module, entityType, onPromoted }: Capture
   }, [load])
 
   if (captures.length === 0) return null
+
+  const avgCompleteness =
+    captures.length > 0
+      ? Math.round((captures.reduce((s, c) => s + c.completeness, 0) / captures.length) * 100)
+      : 0
+
+  const now = Date.now()
+  const expiringSoon = captures.filter(
+    (c) => c.expires_at && new Date(c.expires_at).getTime() - now < 3 * 24 * 60 * 60 * 1000,
+  )
 
   const handlePromote = async (id: string) => {
     setPromoting(id)
@@ -153,69 +177,105 @@ export default function CaptureInbox({ module, entityType, onPromoted }: Capture
 
   return (
     <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-3">
-      <div className="flex items-center gap-1.5 mb-2">
-        <AlertCircle size={14} className="text-amber-500" />
+      {/* Header — always visible, click to toggle */}
+      <button
+        type="button"
+        className="w-full flex items-center gap-1.5 mb-2 text-left"
+        onClick={() => setCollapsed((v) => !v)}
+      >
+        <AlertCircle size={14} className="text-amber-500 shrink-0" />
         <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
           Captures ({captures.length})
         </span>
-      </div>
+        {expiringSoon.length > 0 && (
+          <span className="flex items-center gap-0.5 text-[10px] text-red-500 font-medium">
+            <AlertTriangle size={11} />
+            {expiringSoon.length} expiring
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-500">
+          {collapsed && <span>avg {avgCompleteness}%</span>}
+          {collapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+        </span>
+      </button>
 
-      {error && <div className="text-[11px] text-red-500 mb-2 px-1">{error}</div>}
+      {collapsed ? (
+        <div className="text-[11px] text-amber-700 dark:text-amber-400 px-0.5">
+          {captures.length} 筆待處理捕捉，平均完整度 {avgCompleteness}%
+        </div>
+      ) : (
+        <>
+          {error && <div className="text-[11px] text-red-500 mb-2 px-1">{error}</div>}
 
-      <div className="space-y-1.5">
-        {captures.map((c) => (
-          <div key={c.id}>
-            <div className="flex items-center gap-2 group">
-              <div className="flex-1 min-w-0">
-                <div className="text-xs truncate">{desc(c)}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <CompletionBar value={c.completeness} />
-                  <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                    <Clock size={9} />
-                    {timeAgo(c.created_at)}
-                  </span>
+          <div className="space-y-1.5">
+            {captures.map((c) => {
+              const isExpiring =
+                c.expires_at && new Date(c.expires_at).getTime() - now < 3 * 24 * 60 * 60 * 1000
+              return (
+                <div key={c.id}>
+                  <div className="flex items-center gap-2 group">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs truncate">{desc(c)}</span>
+                        {isExpiring && (
+                          <AlertTriangle
+                            size={11}
+                            className="text-red-500 shrink-0"
+                            title="Expiring soon"
+                          />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <CompletionBar value={c.completeness} />
+                        <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                          <Clock size={9} />
+                          {timeAgo(c.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {c.missing_fields.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setEditing(editing === c.id ? null : c.id)}
+                          className="text-[10px] px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          title="Fill fields"
+                        >
+                          Fill
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handlePromote(c.id)}
+                        disabled={promoting === c.id}
+                        className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-900 text-green-600"
+                        title="Promote"
+                      >
+                        <ArrowUpRight size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(c.id)}
+                        className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-400"
+                        title="Delete"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  {editing === c.id && (
+                    <FieldEditor
+                      capture={c}
+                      onSave={(payload) => handleUpdate(c.id, payload)}
+                      onClose={() => setEditing(null)}
+                    />
+                  )}
                 </div>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {c.missing_fields.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setEditing(editing === c.id ? null : c.id)}
-                    className="text-[10px] px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    title="Fill fields"
-                  >
-                    Fill
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handlePromote(c.id)}
-                  disabled={promoting === c.id}
-                  className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-900 text-green-600"
-                  title="Promote"
-                >
-                  <ArrowUpRight size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(c.id)}
-                  className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-400"
-                  title="Delete"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            </div>
-            {editing === c.id && (
-              <FieldEditor
-                capture={c}
-                onSave={(payload) => handleUpdate(c.id, payload)}
-                onClose={() => setEditing(null)}
-              />
-            )}
+              )
+            })}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   )
 }

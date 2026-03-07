@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Capture MCP Server — progressive data enrichment for all modules.
 
-6 tools: capture (create), capture_list, capture_update, capture_promote, capture_stats, capture_delete.
+9 tools: capture (create), capture_list, capture_update, capture_promote, capture_stats,
+capture_delete, capture_batch_promote, capture_batch_fill, capture_enrichments.
 Uses workshop.clients.capture SDK.
 
 Usage:
@@ -127,6 +128,51 @@ async def list_tools() -> list[Tool]:
                 "required": ["capture_id"],
             },
         ),
+        Tool(
+            name="capture_batch_promote",
+            description="批次晉升多筆捕捉資料為正式記錄",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "capture_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "要晉升的捕捉 ID 列表",
+                    },
+                },
+                "required": ["capture_ids"],
+            },
+        ),
+        Tool(
+            name="capture_batch_fill",
+            description="批次將相同欄位填入多筆捕捉資料（progressive enrichment）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "capture_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "要更新的捕捉 ID 列表",
+                    },
+                    "payload": {
+                        "type": "object",
+                        "description": "要填入的欄位（所有指定捕捉皆會套用）",
+                    },
+                },
+                "required": ["capture_ids", "payload"],
+            },
+        ),
+        Tool(
+            name="capture_enrichments",
+            description="取得捕捉資料的 enrichment 歷史紀錄（哪個 agent 在何時填入哪些欄位）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "capture_id": {"type": "string", "description": "捕捉 ID"},
+                },
+                "required": ["capture_id"],
+            },
+        ),
     ]
 
 
@@ -223,6 +269,52 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "capture_delete":
             await to_thread(client.delete, capture_id=arguments["capture_id"])
             return text_result("Capture deleted.")
+
+        elif name == "capture_batch_promote":
+            results = await to_thread(
+                client.batch_promote, capture_ids=arguments["capture_ids"]
+            )
+            lines = [f"Batch promote: {len(results)} results"]
+            for r in results:
+                cid = r.get("capture_id", r.get("id", "?"))[:12]
+                if r.get("success"):
+                    lines.append(f"  {cid}...  promoted -> {r.get('promoted_id', '?')[:12]}...")
+                else:
+                    missing = ", ".join(r.get("missing_fields", []))
+                    error = r.get("error", "failed")
+                    detail = f" (missing: {missing})" if missing else ""
+                    lines.append(f"  {cid}...  FAILED  {error}{detail}")
+            return text_result("\n".join(lines))
+
+        elif name == "capture_batch_fill":
+            results = await to_thread(
+                client.batch_fill,
+                capture_ids=arguments["capture_ids"],
+                payload=arguments["payload"],
+            )
+            lines = [f"Batch fill: {len(results)} updated"]
+            for r in results:
+                cid = r.get("id", "?")[:12]
+                pct = int(r.get("completeness", 0) * 100)
+                missing = r.get("missing_fields", [])
+                status_str = "complete" if not missing else f"missing: {', '.join(missing)}"
+                lines.append(f"  {cid}...  {pct}%  {status_str}")
+            return text_result("\n".join(lines))
+
+        elif name == "capture_enrichments":
+            history = await to_thread(
+                client.enrichments, capture_id=arguments["capture_id"]
+            )
+            if not history:
+                return text_result("No enrichment history found.")
+            lines = [f"Enrichment history ({len(history)} entries):"]
+            for entry in history:
+                agent = entry.get("agent_id", "unknown")
+                ts = str(entry.get("created_at", entry.get("timestamp", "")))[:19]
+                delta = entry.get("delta", {})
+                delta_str = ", ".join(f"{k}={v}" for k, v in delta.items()) if delta else "(no fields)"
+                lines.append(f"  {ts}  {agent}  {delta_str}")
+            return text_result("\n".join(lines))
 
         else:
             return text_result(f"Unknown tool: {name}")

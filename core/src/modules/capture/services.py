@@ -192,6 +192,7 @@ class CaptureService:
 
         capture.version += 1
         await db.flush()
+        await db.refresh(capture)
         return capture
 
     async def delete(self, db: AsyncSession, capture_id: str) -> None:
@@ -314,6 +315,38 @@ class CaptureService:
             created_at=capture.created_at,
             updated_at=capture.updated_at,
         )
+
+    async def batch_promote(
+        self,
+        db: AsyncSession,
+        capture_ids: list[str],
+        user_id: str | None = None,
+    ) -> list[CapturePromoteResult]:
+        results = []
+        for cid in capture_ids:
+            try:
+                result = await self.promote(db, cid, user_id=user_id)
+                results.append(result)
+            except Exception as e:
+                results.append(
+                    CapturePromoteResult(
+                        success=False,
+                        capture_id=cid,
+                        error=str(e),
+                    )
+                )
+        return results
+
+    async def get_enrichments(
+        self, db: AsyncSession, capture_id: str
+    ) -> list[CaptureEnrichment]:
+        stmt = (
+            select(CaptureEnrichment)
+            .where(CaptureEnrichment.capture_id == capture_id)
+            .order_by(CaptureEnrichment.created_at.desc())
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
     async def expire_stale(self, db: AsyncSession) -> int:
         """Expire captures past their TTL. Returns count of expired records."""

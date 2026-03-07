@@ -57,6 +57,11 @@ class CaptureStats(BaseModel):
     by_status: dict[str, int]
 
 
+class BatchFillRequest(BaseModel):
+    capture_ids: list[str]
+    payload: dict[str, Any]
+
+
 class CaptureEnrichmentResponse(BaseModel):
     id: str
     capture_id: str

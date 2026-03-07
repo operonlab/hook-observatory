@@ -47,7 +47,7 @@ class Capture(TimestampMixin, SoftDeleteMixin, Base):
     )
 
 
-class CaptureEnrichment(Base):
+class CaptureEnrichment(TimestampMixin, Base):
     """Audit trail for each enrichment step on a capture."""
 
     __tablename__ = "capture_enrichments"
@@ -60,8 +60,5 @@ class CaptureEnrichment(Base):
     agent_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     delta: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     previous_values: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="now()"
-    )
 
     capture: Mapped["Capture"] = relationship(back_populates="enrichments")

@@ -61,3 +61,12 @@ class CaptureClient(BaseClient):
 
     def stats(self) -> dict:
         return self._get("/stats")
+
+    def batch_promote(self, capture_ids: list[str]) -> list[dict]:
+        return self._post("/batch/promote", body=capture_ids)
+
+    def batch_fill(self, capture_ids: list[str], payload: dict) -> list[dict]:
+        return self._patch("/batch/fill", body={"capture_ids": capture_ids, "payload": payload})
+
+    def enrichments(self, capture_id: str) -> list[dict]:
+        return self._get(f"/{capture_id}/enrichments")

@@ -51,6 +51,11 @@ def upgrade() -> None:
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
         ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
         sa.ForeignKeyConstraint(
             ["capture_id"],
             ["shared.captures.id"],
