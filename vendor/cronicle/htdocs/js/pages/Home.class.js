@@ -7,48 +7,91 @@ Class.subclass( Page.Base, "Page.Home", {
 		this.worker = new Worker('js/home-worker.js');
 		this.worker.onmessage = this.render_upcoming_events.bind(this);
 		
-		var html = '';
-		html += '<div style="padding:10px 20px 20px 20px">';
+		this.div.html(`
 		
-		// header stats
-		html += '<div id="d_home_header_stats"></div>';
-		html += '<div style="height:20px;"></div>';
+		<div style="padding:10px 20px 20px 20px">
+    
+        <!-- Header stats -->
+
+        <div id="d_home_header_stats"></div>
+        <div style="height:12px;"></div>     
 		
-		// active jobs
-		html += '<div class="subtitle">';
-			html += 'Active Jobs';
-			html += '<div class="clear"></div>';
-		html += '</div>';
-		html += '<div id="d_home_active_jobs"></div>';
-		html += '<div style="height:20px;"></div>';
-		
-		// queued jobs
-		html += '<div id="d_home_queue_container" style="display:none">';
-			html += '<div class="subtitle">';
-				html += 'Event Queues';
-				html += '<div class="clear"></div>';
-			html += '</div>';
-			html += '<div id="d_home_queued_jobs"></div>';
-			html += '<div style="height:20px;"></div>';
-		html += '</div>';
-		
-		// upcoming events
-		html += '<div id="d_home_upcoming_header" class="subtitle">';
-		html += '</div>';
-		html += '<div id="d_home_upcoming_events" class="loading"></div>';
-		html += '</div>'; // container
-		
-		this.div.html( html );
+		<!-- Event Flow -->
+
+		<div class="subtitle">
+		  ${_t('home.subtitle_event_flow')}
+		  <div class="subtitle_widget"><i class="fa fa-refresh" onClick="$P().refresh_completed_job_chart();$P().refresh_header_stats();$P().refresh_upcoming_events()">&nbsp;</i></div>
+		  <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i>
+			<select id="fe_cmp_job_chart_scale" class="subtitle_menu" onChange="$P().refresh_completed_job_chart();app.setPref('job_chart_scale', this.value)">
+			<option value="linear">linear</option><option value="logarithmic">logarithmic</option></select>
+		  </div>
+		  <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i>
+			  <select id="fe_cmp_job_chart_limit" class="subtitle_menu" style="width:75px;" onChange="$P().refresh_completed_job_chart();app.setPref('job_chart_limit', this.value)">
+			  <option value="1">hide</option> 
+			  <option value="50">Last 50</option>
+			  <option value="10">Last 10</option>
+			  <option value="25">Last 25</option>
+			  <option value="35">Last 35</option>
+			  <option value="100">Last 100</option>
+			  <option value="120">Last 120</option>
+			  <option value="150">Last 150</option>
+			  <option value="250">Last 250</option>
+			  <option value="500">Last 500</option>
+			  </select>	  
+		  </div>
+		  <div class="subtitle_widget"><span id="chart_times" ></span></div>
+		  <div class="clear"></div>
+		</div>
+
+		<canvas id="d_home_completed_jobs" height="35px"></canvas>
+		<div style="height:10px;"></div>
+
+		<!-- Active jobs -->
+
+        <div class="subtitle">
+            ${_t('home.subtitle_active_jobs')}
+            <div class="clear"></div>
+        </div>
+        <div id="d_home_active_jobs"></div>
+        <div style="height:20px;"></div>
+        </div>
+
+		<!-- Queued jobs -->
+		<div id="d_home_queue_container" style="display:none">
+        <div class="subtitle">
+            ${_t('home.subtitle_event_queues')}
+            <div class="clear"></div>
+        </div>
+        <div id="d_home_queued_jobs"></div>
+        <div style="height:20px;"></div>
+        </div>
+
+		<!-- Upcoming events-->
+        <div id="d_home_upcoming_header" class="subtitle">
+        </div>
+        <div id="d_home_upcoming_events" class="loading"></div>
+        </div> 
+		<div id="upcoming_grid" class="upcoming grid-container"></div>
+		`)
 	},
-	
+
 	onActivate: function(args) {
 		// page activation
 		if (!this.requireLogin(args)) return true;
 		
 		if (!args) args = {};
 		this.args = args;
+
+        // initial event flow rendering
+		let ui = app.config.ui || {}
+		let lmt = Number(app.getPref('job_chart_limit') || ui.job_chart_limit || 50)
+		let scale = app.getPref('job_chart_scale') || ui.job_chart_scale || 'linear'
+		let lmtActual = [1, 10, 25, 35, 50, 100, 120, 150, 250, 500].includes(lmt) ? lmt : 50
+		document.getElementById('fe_cmp_job_chart_scale').value = scale;
+		document.getElementById('fe_cmp_job_chart_limit').value = lmtActual;
+
 		
-		app.setWindowTitle('Home');
+		app.setWindowTitle(_t('home.home'));
 		app.showTabBar(true);
 		
 		this.upcoming_offset = 0;
@@ -65,113 +108,120 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		// render upcoming event filters
 		var html = '';
-		html += 'Upcoming Events';
+		html += _t('home.subtitle_upcoming');
 		
-		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_home_keywords" size="10" placeholder="Find events..." style="border:0px;" value="' + escape_text_field_value( args.keywords ) + '"/></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_home_keywords" size="10" placeholder="' + _t('home.search_placeholder') + '" style="border:0px;border-radius:5px" value="' + escape_text_field_value( args.keywords ) + '"/></div>';
 		
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_target" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">All Servers</option>' + this.render_target_menu_options( args.target ) + '</select></div>';
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_plugin" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">All Plugins</option>' + render_menu_options( app.plugins, args.plugin, false ) + '</select></div>';
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_cat" class="subtitle_menu" style="width:95px;" onChange="$P().set_search_filters()"><option value="">All Categories</option>' + render_menu_options( app.categories, args.category, false ) + '</select></div>';
+		let ue_options = [
+			{title: _t('home.grid_view'), id: "grid"},
+			{title: _t('home.compact_view'), id: "compact"},
+			{title: _t('home.show_all'), id: "all"}
+		]
+		let up_event_select = render_menu_options( ue_options , app.getPref('fe_up_eventlimit') || 'grid', false ) + '</select>'
+
+		html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_up_eventlimit" class="subtitle_menu" onChange="$P().nav_upcoming($P().upcoming_offset);">${up_event_select}</div>`;
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_target" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">' + _t('home.filter_all_servers') + '</option>' + this.render_target_menu_options( args.target ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_plugin" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">' + _t('home.filter_all_plugins') + '</option>' + render_menu_options( app.plugins, args.plugin, false ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_cat" class="subtitle_menu" style="width:95px;" onChange="$P().set_search_filters()"><option value="">' + _t('home.filter_all_categories') + '</option>' + render_menu_options( app.categories, args.category, false ) + '</select></div>';
 		
 		html += '<div class="clear"></div>';
 		
-		$('#d_home_upcoming_header').html( html );
+		// $('#d_home_upcoming_header').html( html );
+		document.getElementById('d_home_upcoming_header').innerHTML = html
 		
 		setTimeout( function() {
-			$('#fe_home_keywords').keypress( function(event) {
-				if (event.keyCode == '13') { // enter key
+			document.getElementById('fe_home_keywords').addEventListener('keypress', function(event) {
+				if (event.key === 'Enter') { // Enter key
 					event.preventDefault();
 					$P().set_search_filters();
 				}
-			} ); 
+			});
 		}, 1 );
 		
 		// refresh datas
-		$('#d_home_active_jobs').html( this.get_active_jobs_html() );
+		// $('#d_home_active_jobs').html( this.get_active_jobs_html() );
+		document.getElementById('d_home_active_jobs').innerHTML = this.get_active_jobs_html()
 		this.refresh_upcoming_events();
 		this.refresh_header_stats();
+		this.refresh_completed_job_chart();
 		this.refresh_event_queues();
+
+		const self = this;
+		self.observer = new MutationObserver((mutationList, observer)=> {
+			self.refresh_completed_job_chart(); 
+		});
+		self.observer.observe(document.querySelector('body'), {attributes: true})
 		
 		return true;
 	},
 	
-	refresh_header_stats: function() {
+	refresh_header_stats: function () {
 		// refresh daemons stats in header fieldset
 		var html = '';
 		var stats = app.state ? (app.state.stats || {}) : {};
 		var servers = app.servers || {};
-		
-		html += '<fieldset style="margin-top:0px; margin-right:0px; padding-top:10px;"><legend>Server Stats</legend>';
-			
-			html += '<div style="float:left; width:25%;">';
-				var active_events = find_objects( app.schedule, { enabled: 1 } );
-				
-				html += '<div class="info_label">TOTAL EVENTS</div>';
-				html += '<div class="info_value">' + commify( active_events.length ) + '</div>';
-				
-				html += '<div class="info_label">TOTAL CATEGORIES</div>';
-				html += '<div class="info_value">' + commify( app.categories.length ) + '</div>';
-				
-				html += '<div class="info_label">TOTAL PLUGINS</div>';
-				html += '<div class="info_value">' + commify( app.plugins.length ) + '</div>';
-			html += '</div>';
-			
-			html += '<div style="float:left; width:25%;">';
-				html += '<div class="info_label">JOBS COMPLETED TODAY</div>';
-				html += '<div class="info_value">' + commify( stats.jobs_completed || 0 ) + '</div>';
-				
-				html += '<div class="info_label">JOBS FAILED TODAY</div>';
-				html += '<div class="info_value">' + commify( stats.jobs_failed || 0 ) + '</div>';
-				
-				html += '<div class="info_label">JOB SUCCESS RATE</div>';
-				html += '<div class="info_value">' + pct( (stats.jobs_completed || 0) - (stats.jobs_failed || 0), stats.jobs_completed || 1 ) + '</div>';
-			html += '</div>';
-			
-			html += '<div style="float:left; width:25%;">';
-				html += '<div class="info_label">TOTAL SERVERS</div>';
-				html += '<div class="info_value">' + commify( num_keys(servers) ) + '</div>';
-				
-				var total_cpu = 0;
-				var total_mem = 0;
-				for (var hostname in servers) {
-					// daemon process cpu, all servers
-					var server = servers[hostname];
-					if (server.data && !server.disabled) {
-						total_cpu += (server.data.cpu || 0);
-						total_mem += (server.data.mem || 0);
-					}
-				}
-				for (var id in app.activeJobs) {
-					// active job process cpu, all jobs
-					var job = app.activeJobs[id];
-					if (job.cpu) total_cpu += (job.cpu.current || 0);
-					if (job.mem) total_mem += (job.mem.current || 0);
-				}
-				html += '<div class="info_label">TOTAL CPU IN USE</div>';
-				html += '<div class="info_value">' + short_float(total_cpu) + '%</div>';
-				
-				html += '<div class="info_label">TOTAL RAM IN USE</div>';
-				html += '<div class="info_value">' + get_text_from_bytes(total_mem) + '</div>';
-			html += '</div>';
-			
-			html += '<div style="float:left; width:25%;">';
-				var mserver = servers[ app.masterHostname ] || {};
-				html += '<div class="info_label">MASTER SERVER UPTIME</div>';
-				html += '<div class="info_value">' + get_text_from_seconds( mserver.uptime || 0, false, true ) + '</div>';
-				
-				var job_avg = (stats.jobs_elapsed || 0) / (stats.jobs_completed || 1);
-				html += '<div class="info_label">AVERAGE JOB DURATION</div>';
-				html += '<div class="info_value">' + get_text_from_seconds( job_avg, false, true ) + '</div>';
-				
-				var log_size_avg = (stats.jobs_log_size || 0) / (stats.jobs_completed || 1);
-				html += '<div class="info_label">AVERAGE JOB LOG SIZE</div>';
-				html += '<div class="info_value">' + get_text_from_bytes(log_size_avg) + '</div>';
-			html += '</div>';
-			
-			html += '<div class="clear"></div>';
-		html += '</fieldset>';
-		
-		$('#d_home_header_stats').html( html );
+		var ui = app.config.ui || {};
+		var active_events = find_objects( app.schedule, { enabled: 1 } );
+		var mserver = servers[ app.managerHostname ] || {};
+
+		var total_cpu = 0;
+		var total_mem = 0;
+		for (var hostname in servers) {
+			// daemon process cpu, all servers
+			var server = servers[hostname];
+			if (server.data && !server.disabled) {
+				total_cpu += (server.data.cpu || 0);
+				total_mem += (server.data.mem || 0);
+			}
+		}
+		for (var id in app.activeJobs) {
+			// active job process cpu, all jobs
+			var job = app.activeJobs[id];
+			if (job.cpu) total_cpu += (job.cpu.current || 0);
+			if (job.mem) total_mem += (job.mem.current || 0);
+		}
+
+		 // fix "sticky" tooltip
+		$(document).tooltip("disable")
+		$(document).tooltip("enable")
+
+		let errBg = stats.jobs_completed > 0 && (stats.jobs_failed || 0)/stats.jobs_completed > (parseFloat(ui.err_rate) || 0.03) ? 'red2' : 'gray'
+		let errorLog = Object.entries(stats.errorLog || {})
+		let runs_failed = Object.values(stats.errorLog || {}).reduce((a,b)=>a+b, 0)
+		let errTitle = errorLog.slice(0,21).sort((a,b)=> a[1] < b[1] ? 1 : -1).map(e=>`${e[0]}:\t<b>${e[1]}</b>`).join("\n")
+		if(stats.jobs_failed > runs_failed ) errTitle  = `<u>Failed to start: <b>${stats.jobs_failed - runs_failed }</b></u> \n` + errTitle 
+    // xhtml
+
+	let failed_badge = `<span style="cursor:pointer;" onclick='Nav.go("History?sub=error_history&error=1&max=${stats.jobs_failed || 0}")' title="${errTitle}" class="color_label ${errBg}">${stats.jobs_failed || 0}</span>&nbsp;`
+	
+	status_bar = [
+		{name: "EVENTS", value:  active_events.length},
+		{name: "CATS", value:  app.categories.length},
+		// {name: "PLUGINS", value:  app.plugins.length},
+		{name: "JOBS", value:  stats.jobs_completed || 0},
+		{name: "FAILED", value: failed_badge},
+		{name: "SUCCESS", value:  pct( (stats.jobs_completed || 0) - (stats.jobs_failed || 0), stats.jobs_completed || 1 )},
+		{name: "LOG SIZE", value: get_text_from_bytes((stats.jobs_log_size || 0) / (stats.jobs_completed || 1))},
+		{name: "UPTIME", value:  get_text_from_seconds( mserver.uptime || 0, false, true )},
+		{name: "CPU", value:  `${short_float(total_cpu)}%`},
+		{name: "MEMORY", value:  get_text_from_bytes(total_mem)},
+		{name: "SERVERS", value:  num_keys(servers)}
+	]
+
+	html = '<div class="stats grid-container">'
+	status_bar.forEach(e=>{
+		html += `<div class="stats grid-item"><div class="flex-container-stats">
+		     <div style="padding:2px;font-size:100%"><b>${e.name}:&nbsp;</b></div>
+			 <div style="padding:2px;font-size:100%"><b>&nbsp;${e.value}&nbsp;</b></div>
+		</div></div>
+	`
+	})
+
+	html += "</div>"
+
+	
+
+	document.getElementById('d_home_header_stats').innerHTML = html;
 	},
 	
 	refresh_upcoming_events: function() {
@@ -188,6 +238,7 @@ Class.subclass( Page.Base, "Page.Home", {
 	
 	nav_upcoming: function(offset) {
 		// refresh upcoming events with new offset
+		app.setPref('fe_up_eventlimit', document.getElementById('fe_up_eventlimit').value)
 		this.upcoming_offset = offset;
 		this.render_upcoming_events({
 			data: this.upcoming_events
@@ -196,18 +247,18 @@ Class.subclass( Page.Base, "Page.Home", {
 	
 	set_search_filters: function() {
 		// grab values from search filters, and refresh
-		var args = this.args;
-		
-		args.plugin = $('#fe_home_plugin').val();
+		var args = this.args;		
+
+		args.plugin = document.getElementById('fe_home_plugin').value;
 		if (!args.plugin) delete args.plugin;
-		
-		args.target = $('#fe_home_target').val();
+
+		args.target = document.getElementById('fe_home_target').value;
 		if (!args.target) delete args.target;
-		
-		args.category = $('#fe_home_cat').val();
+
+		args.category = document.getElementById('fe_home_cat').value;
 		if (!args.category) delete args.category;
-		
-		args.keywords = $('#fe_home_keywords').val();
+
+		args.keywords = document.getElementById('fe_home_keywords').value;
 		if (!args.keywords) delete args.keywords;
 		
 		this.nav_upcoming(0);
@@ -215,22 +266,41 @@ Class.subclass( Page.Base, "Page.Home", {
 	
 	render_upcoming_events: function(e) {
 		// receive data from worker, render table now
-		var self = this;
+		const self = this;
 		var html = '';
 		var now = app.epoch || hires_time_now();
 		var args = this.args;
 		this.upcoming_events = e.data;
 		
-		/*var elapsed = now - this.worker_start_time;
-		delete this.worker_start_time;
-		Debug.trace('Home', "Worker elapsed time: " + elapsed + ' sec for ' + app.schedule.length + ' events.');*/
-		
+		var viewType = document.getElementById('fe_up_eventlimit').value;
+		let isGrid = viewType === 'grid'
+
 		// apply filters
 		var events = [];
+		var stubCounter = {}
+		var stubTitle = {}
+		var maxSchedRows = 25;
 		
 		for (var idx = 0, len = e.data.length; idx < len; idx++) {
 			var stub = e.data[idx];
 			var item = find_object( app.schedule, { id: stub.id } ) || {};
+			
+			if (viewType == "compact" || isGrid) { // one row per event, use badge for job count
+				let hhFormat = app.hh24 ? 'H:mm z' : 'h:mm A z'
+			    var currSched = moment.tz(stub.epoch * 1000, item.timezone || app.tz).format(hhFormat);
+			    var currCD = get_text_from_seconds_round(Math.max(60, stub.epoch - now), false);
+
+				if (!stubCounter[stub.id]) {
+					stubCounter[stub.id] = 1;
+					stubTitle[stub.id] = `<table><tr><th>No.</th><th>Schedule</th><th>Countdown</th><tr><td>1</td><td>| ${currSched}&nbsp;&nbsp;</td><td> | ${currCD} </td></tr>`
+				}
+				else {
+					stubCounter[stub.id] += 1;
+					if (stubCounter[stub.id] <= maxSchedRows) stubTitle[stub.id] += `<tr><td>${stubCounter[stub.id]} </td><td>| ${currSched}&nbsp;&nbsp;</td><td>| ${currCD} </td></tr>`
+					continue
+				}
+			}
+
 			
 			// category filter
 			if (args.category && (item.category != args.category)) continue;
@@ -247,12 +317,14 @@ Class.subclass( Page.Base, "Page.Home", {
 			
 			events.push( stub );
 		} // foreach item in schedule
+
+		let xhtml = ''
 		
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) + 50) / 7 );
 		
 		var cols = ['Event Name', 'Category', 'Plugin', 'Target', 'Scheduled Time', 'Countdown', 'Actions'];
-		var limit = 25;
+		var limit = Math.round((window.innerWidth)/350)*(window.innerHeight < 800 ? 3 : 4) // upcoming 3 or 4 rows
 		
 		html += this.getPaginatedTable({
 			resp: {
@@ -261,7 +333,7 @@ Class.subclass( Page.Base, "Page.Home", {
 					length: events.length
 				}
 			},
-			cols: cols,
+			cols: isGrid ? [] : cols,
 			data_type: 'pending event',
 			limit: limit,
 			offset: this.upcoming_offset,
@@ -283,15 +355,41 @@ Class.subclass( Page.Base, "Page.Home", {
 				var nice_countdown = 'Now';
 				if (stub.epoch > now) {
 					nice_countdown = get_text_from_seconds_round( Math.max(60, stub.epoch - now), false );
+					nice_countdown_short = get_text_from_seconds_round( Math.max(60, stub.epoch - now), true ).replace(' hr', 'h');
 				}
 				
 				if (group && item.multiplex) {
 					group = copy_object(group);
 					group.multiplex = 1;
 				}
+
+				let badge = '';
+				if(viewType == "compact" || isGrid) {
+				  var overLimitRows = stubCounter[stub.id] > maxSchedRows ? ` + ${stubCounter[stub.id] - maxSchedRows} more` : '';
+				  var scheduleList = stubTitle[stub.id] + `</table><span><b>${overLimitRows}</span></b>`
+				  var jobCount = stubCounter[stub.id]
+				  if(jobCount < 10 ) jobCount = `&nbsp;${jobCount}&nbsp;`;
+				  badge = `<span title="${scheduleList}" class="color_label gray">${jobCount}</span>`;
+				}
+
+				let extraSpace = isGrid ? '<span>&nbsp;</span>' : '<span>&nbsp;&nbsp;</span>'
+				let eventName = self.getNiceEvent('<b>' + item.title + '</b>', col_width, 'float:left', extraSpace)
+
+				if(isGrid) {
+					
+					badge = stubCounter[stub.id] > 1 ? `+${stubCounter[stub.id]-1}` : ''
+
+					// turn minute/hour to min/h if event name is too long
+					if(Math.max(60, stub.epoch - now) <= 60*5) { // for minute/soon (larger font)
+						nice_countdown = `<div title="${scheduleList}">${item.title.length > 18 ? nice_countdown_short : nice_countdown}</div>`
+					}
+					else { // regular
+					   nice_countdown = `<div title="${scheduleList}">${item.title.length > 26 ? nice_countdown_short : nice_countdown}</div>`
+					}					
+				}
 				
 				var tds = [
-					'<div class="td_big" style="white-space:nowrap;"><a href="#Schedule?sub=edit_event&id='+item.id+'">' + self.getNiceEvent('<b>' + item.title + '</b>', col_width) + '</a></div>',
+					`<a style="float:left" href="#Schedule?sub=edit_event&id=${item.id}"> ${eventName}</a>${badge}`,
 					self.getNiceCategory( cat, col_width ),
 					self.getNicePlugin( plugin, col_width ),
 					self.getNiceGroup( group, item.target, col_width ),
@@ -305,12 +403,174 @@ Class.subclass( Page.Base, "Page.Home", {
 					if (tds.className) tds.className += ' '; else tds.className = '';
 					tds.className += cat.color;
 				}
-				
-				return tds;
+
+				if(!app.state.enabled) tds.className += ' disabled'
+
+				if (isGrid) {
+					let proximity = ''
+					if (stub.epoch - now <= 60*5) proximity = 'soon'
+					if (stub.epoch - now <= 60) proximity = 'minute'
+
+					xhtml += `
+				<div id="up_${stub.id}" class="upcoming ${proximity} grid-item ${tds.className || ''}">
+				 <div class="flex-container">
+				  <div style="text-overflow:ellipsis;overflow:hidden;white-space: nowrap;">${tds[0]}</div>
+				 <div style="font-size:14px"><b>${nice_countdown}</b></div>
+				</div>				
+				</div>	
+			   `
+					//    <div> <i style="width:20px;cursor:pointer;padding: 2px" class="fa fa fa-plus-circle" title="Add Event" onmouseup="$P().edit_event(-1)"></i></div>
+
+				}
+				else {  // compact table 
+					return tds
+				}
+
+
+
 			} // row callback
 		}); // table
+
+		$('#upcoming_grid').html(xhtml)
+				
+		// $('#d_home_upcoming_events').removeClass('loading').html( html );
+		let upcoming = document.getElementById('d_home_upcoming_events');
+		upcoming.classList.remove('loading');
+		upcoming.innerHTML = html;
+	},
+
+	refresh_completed_job_chart: async function () {
+	
+		if (document.getElementById('fe_cmp_job_chart_limit').value < 2) {
+			
+			if(app.jobHistoryChart) {
+				app.jobHistoryChart.destroy()
+				location.reload(true) // no easy way to kill graph, just reload the page
+			}			
+			return 
+		}
+
+		let jobLimit = document.getElementById('fe_cmp_job_chart_limit').value || 50;
+
+		let body = { offset: 0, limit: jobLimit, session_id: localStorage['session_id']}
+
+		fetch('api/app/get_history', {method: 'POST', body: JSON.stringify(body)})
+		.then(response => {
+			if(!response.ok) throw new Error('Failed to fetch job history')
+			return response.json()
+		})
+		.then(data => { 
+			
+			if(!data.rows) throw new Error('Job history: Response has no rows')
+
+			let jobs = data.rows.reverse().filter(e=>e.event_title);
+
+			if(jobs.length > 1) {
+				let jFrom =  moment.unix(jobs[0].time_start).format('MMM DD, HH:mm:ss');
+				let jTo =  moment.unix(jobs[jobs.length-1].time_start + (jobs[jobs.length-1].elapsed || 0)).format('MMM DD, HH:mm:ss');
+				document.getElementById('chart_times').textContent  = ` from ${jFrom} | to ${jTo}`
+			}
+
+			let isDark = app.getPref('theme') === 'dark'
+			let green = isDark ? '#44bb44DD' : '#90EE90AA' // success
+			let orange = isDark ? '#bbbb44DD' : '#FFA500AA'  // warning
+			let red = isDark ? '#bb4444DD' : '#F88379AA'  // error
+			let statusMap = { 0: green, 255: orange }
+
+			let labels = jobs.map(e => '')
+			if(jobLimit <= 100) labels = jobs.map((j, i) => i == 0 ? j.event_title.substring(0, 4) : j.event_title);
+
+			let ctx = document.getElementById('d_home_completed_jobs');
+			// var gradient = ctx.createLinearGradient(0, 0, 0, 400);
+			// gradient.addColorStop(0, 'rgba(250,174,50,1)');   
+			// gradient.addColorStop(1, 'rgba(250,174,50,0)');
+
+
+			let datasets = [{
+				label: 'Completed Jobs',
+				// data: jobs.map(j => Math.ceil(j.elapsed/60)),
+				data: jobs.map(j => Math.ceil(j.elapsed) + 1),
+				backgroundColor: jobs.map(j => statusMap[j.code] || red),
+				jobs: jobs,
+
+				// borderWidth: 0.3
+			}];
+			let scaleType =  document.getElementById('fe_cmp_job_chart_scale').value || 'logarithmic';
+
+			// if chart is already generated only update data
+			if(app.jobHistoryChart) {
+				app.jobHistoryChart.data.datasets = datasets;
+				app.jobHistoryChart.data.labels = labels;
+				app.jobHistoryChart.options.scales.yAxes[0].type = scaleType;
+				app.jobHistoryChart.options.scales.yAxes[0]
+				app.jobHistoryChart.options.layout.padding.bottom = jobLimit > 50 ? 50 : 20  
+				app.jobHistoryChart.update()
+				return
+			} 
+
 		
-		$('#d_home_upcoming_events').removeClass('loading').html( html );
+			app.jobHistoryChart = new Chart(ctx, {
+				type: 'bar',
+				data: {
+					//labels: jobs.map(j => moment.unix(j.epoch).format('MM/D, H:mm:ss')),
+					labels: labels,
+					datasets: datasets
+				},
+				options: {
+
+					legend: { display: false },
+					animation: {duration: 0},
+					layout: { padding: { bottom: jobLimit > 50 ? 50 : 20 } },
+					tooltips: {
+
+						yAlign: 'top',
+						titleFontSize: 14,
+						titleFontColor: 'orange',
+						displayColors: false,
+						callbacks: {
+							title: function (ti, dt) { return dt.datasets[0].jobs[ti[0].index].event_title + (dt.datasets[0].jobs[ti[0].index].arg ? ('@' + filterXSS(dt.datasets[0].jobs[ti[0].index].arg)) : '') },
+							label: function (ti, dt) {
+								//var job = jobs[ti.index]
+								let job = dt.datasets[0].jobs[ti.index] ;
+								return [
+									"Started on " + job.hostname + ' @ ' + moment.unix(job.time_start).format('HH:mm:ss, MMM D'),
+									"plugin: " + job.plugin_title,
+									"elapsed in " + get_text_from_seconds_round_custom(job.elapsed),
+									(job.description || ''),
+
+
+								]
+							}
+						}
+					}
+					, scales: {
+						xAxes: [{
+							gridLines: { color: 'rgb(170, 170, 170)', lineWidth: 0.3 },
+						}],
+						yAxes: [{
+							type: scaleType,
+							gridLines: { color: 'rgb(170, 170, 170)', lineWidth: 0.3  },
+							ticks: {
+								display: false,
+								beginAtZero: true,
+								//stepSize: 1,
+								//suggestedMax: 10
+							}
+						}]
+					}
+				}
+			});
+
+			ctx.ondblclick = function(evt){
+				let activePoints = app.jobHistoryChart.getElementsAtEvent(evt);
+				let firstPoint = activePoints[0];
+				let job = app.jobHistoryChart.data.datasets[firstPoint._datasetIndex].jobs[firstPoint._index]
+				window.open("#JobDetails?id=" + job.id, "_blank");
+			};
+		}) // end respose data processing
+		.catch(e => console.error(e.message));
+			
+
 	},
 	
 	get_active_jobs_html: function() {
@@ -325,66 +585,121 @@ Class.subclass( Page.Base, "Page.Home", {
 		for (var id in app.activeJobs) {
 			jobs.push( app.activeJobs[id] );
 		}
+
+		if(jobs.length === 0) return '<div style="display:flex;justify-content: center;font-weight:bold;">' + _t('home.no_active_jobs') + '<div>'
 		
 		// sort events by time_start descending
 		this.jobs = jobs.sort( function(a, b) {
-			return (a.time_start < b.time_start) ? 1 : -1;
+			if(parseInt(a.repeat)) return -1
+			if(a.plugin === 'workflow') return  -1
+			if(parseInt(b.repeat)) return 1
+			if(b.plugin === 'workflow') return 1
+			return (a.time_start - b.time_start)
+			// return (a.time_start > b.time_start) ? 1 : -1;
 		} );
 		
-		var cols = ['Job ID', 'Event Name', 'Category', 'Hostname', 'Elapsed', 'Progress', 'Remaining', 'Actions'];
+		let cols = this.jobs.length > 0 ? ['Job ID', 'Event Name', 'Argument', 'Category', 'Hostname', 'Elapsed', 'Progress', 'Remaining', 'Performance', 'Memo', 'Status', 'Actions'] : [];
 		
 		// render table
-		var self = this;
+		const self = this;
+
+		function getJobStateInfo(code) {
+			let color = 'green'
+			let stateInfo = 'Success'
+			let title = ''
+			if( parseInt(code) % 255) {
+				color = 'red'
+				stateInfo = `Error: ${code}`
+			}
+			else if (code == 255) {
+				color = 'yellow'
+				stateInfo = 'Warning'
+			}
+			
+			return `<span class="color_label ${color}">⬤ &nbsp;&nbsp;${stateInfo} &nbsp;&nbsp;</span>`
+		}
+
 		html += this.getBasicTable( this.jobs, cols, 'active job', function(job, idx) {
-			var actions = [
+			let actions = [
 				// '<span class="link" onMouseUp="$P().go_job_details('+idx+')"><b>Details</b></span>',
-				'<span class="link" onMouseUp="$P().abort_job('+idx+')"><b>Abort Job</b></span>'
+				'<span class="link" onMouseUp="$P().abort_job('+idx+')"><b>Abort Job</b></span>', 				
 			];
+
+			if(parseInt(job.repeat)) actions.push('<span class="link" onMouseUp="$P().suspend_job('+idx+')"><b>Stop Job</b></span>')
 			
-			var cat = job.category ? find_object( app.categories || [], { id: job.category } ) : { title: 'n/a' };
+			let cat = job.category ? find_object( app.categories || [], { id: job.category } ) : { title: 'n/a' };
 			// var group = item.target ? find_object( app.server_groups || [], { id: item.target } ) : null;
-			var plugin = job.plugin ? find_object( app.plugins || [], { id: job.plugin } ) : { title: 'n/a' };
-			var tds = null;
-			
+			let plugin = job.plugin ? find_object( app.plugins || [], { id: job.plugin } ) : { title: 'n/a' };
+			let tds = null;
+
+			let nice_event = self.getNiceEvent( job.event_title, col_width )
+			let nice_arg = self.getNiceArgument(job.arg, 30)
+
+			let niceJob = job.repeat ? `<div style="white-space:nowrap;"><i class="fa fa-play-circle">&nbsp;</i>${job.id}</div>` : self.getNiceJob(job.id)
+
 			if (job.pending && job.log_file) {
-				// job in retry delay
+				// job in retry delay or in repeat cycle
+
+				let perf = ''
+				let memo = ''
+				let remain = 'n/a'
+
+				if(job.cycles) {
+					// remain = getJobStateInfo(job.code)
+					// last 10 runs
+					memo = Array.isArray(job.trend) ? (job.trend.slice(-10).map(e=> e.code ? ( parseInt(e.code) === 255 ? '⚠' : '✖') : '✔').join('|')) : ''
+					perf =  `cycle: ${job.cycles} | ❤ ${job.health}%`
+				}
+
 				tds = [
-					'<div class="td_big"><span class="link" onMouseUp="$P().go_job_details('+idx+')">' + self.getNiceJob(job) + '</span></div>',
-					self.getNiceEvent( job.event_title, col_width ),
+					'<div class="td_big"><span class="link" onMouseUp="$P().go_job_details('+idx+')">' + niceJob + '</span></div>',
+					nice_event,
+					nice_arg,
 					self.getNiceCategory( cat, col_width ),
 					// self.getNicePlugin( plugin ),
 					self.getNiceGroup( null, job.hostname, col_width ),
 					'<div id="d_home_jt_elapsed_'+job.id+'">' + self.getNiceJobElapsedTime(job) + '</div>',
 					'<div id="d_home_jt_progress_'+job.id+'">' + self.getNiceJobPendingText(job) + '</div>',
-					'n/a',
+					'n/a', // remain,
+					perf,
+					memo,
+					job.cycles ? getJobStateInfo(job.code) : '',
 					actions.join(' | ')
 				];
 			}
 			else if (job.pending) {
 				// multiplex stagger delay
 				tds = [
-					'<div class="td_big">' + self.getNiceJob(job) + '</div>',
-					self.getNiceEvent( job.event_title, col_width ),
+					'<div class="td_big">' + niceJob + '</div>',
+					nice_event,
+					nice_arg,
 					self.getNiceCategory( cat, col_width ),
 					// self.getNicePlugin( plugin ),
 					self.getNiceGroup( null, job.hostname, col_width ),
 					'n/a',
 					'<div id="d_home_jt_progress_'+job.id+'">' + self.getNiceJobPendingText(job) + '</div>',
-					'n/a',
+					'n/a', //remain
+					'', // perf
+					'', // memo
+					'', // state
 					actions.join(' | ')
 				];
 			} // pending job
 			else {
 				// active job
 				tds = [
-					'<div class="td_big"><span class="link" onMouseUp="$P().go_job_details('+idx+')">' + self.getNiceJob(job) + '</span></div>',
-					self.getNiceEvent( job.event_title, col_width ),
+					'<div class="td_big"><span class="link" onMouseUp="$P().go_job_details('+idx+')">' + niceJob + '</span></div>',
+					nice_event,
+					nice_arg,
 					self.getNiceCategory( cat, col_width ),
 					// self.getNicePlugin( plugin ),
 					self.getNiceGroup( null, job.hostname, col_width ),
 					'<div id="d_home_jt_elapsed_'+job.id+'">' + self.getNiceJobElapsedTime(job) + '</div>',
 					'<div id="d_home_jt_progress_'+job.id+'">' + self.getNiceJobProgressBar(job) + '</div>',
 					'<div id="d_home_jt_remaining_'+job.id+'">' + self.getNiceJobRemainingTime(job) + '</div>',
+					`<div style="width:180px;max-width:180px;" id="d_home_jt_perf_${job.id}"> ${job.cpu ? short_float(job.cpu.current) + '% | ' + get_text_from_bytes(job.mem.current) + ' | ' + get_text_from_bytes(job.log_file_size) : ''} </div>`,
+					'<div style="width:180px;max-width:180px;" id="d_home_jt_memo_'+job.id+'">' + '</div>',
+					job.cycles ? getJobStateInfo(job.last_exit_code) : '',
 					actions.join(' | ')
 				];
 			} // active job
@@ -462,7 +777,8 @@ Class.subclass( Page.Base, "Page.Home", {
 			
 		} ); // getBasicTable
 		
-		$('#d_home_queued_jobs').html( html );
+		// $('#d_home_queued_jobs').html( html );
+		document.getElementById('d_home_queued_jobs').innerHTML = html
 		$('#d_home_queue_container').show();
 	},
 	
@@ -478,10 +794,26 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		app.confirm( '<span style="color:red">Abort Job</span>', "Are you sure you want to abort the job &ldquo;<b>"+job.id+"</b>&rdquo;?</br>(Event: "+job.event_title+")", "Abort", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Aborting job..." );
+				app.showProgress( 1.0, _t('home.aborting_job') );
 				app.api.post( 'app/abort_job', job, function(resp) {
 					app.hideProgress();
 					app.showMessage('success', "Job '"+job.event_title+"' was aborted successfully.");
+				} );
+			}
+		} );
+	},
+
+	suspend_job: function(idx) {
+		// add "suspended" property to runnig repeat job, so it will exit upon current cycle completion
+		let job = this.jobs[idx];
+		if(!job.repeat) return app.showMessage('error', _t('home.only_repeat_job_can_be_suspended'));
+		if(job.suspended) return app.showMessage('error', _t('home.job_is_already_suspended'));
+		app.confirm( '<span style="color:red">Abort Job</span>', `This will prevent job &ldquo;<b> ${job.id}</b>&rdquo; (${job.event_title}) to get into the next cycle. Do you want to continue?</br>`, "Suspend", function(result) {
+			if (result) {
+				app.showProgress( 1.0, _t('home.suspending_job') );
+				app.api.post( 'app/update_job', { suspended: true, id: job.id, hostname: job.hostname }, function(resp) {
+					app.hideProgress();
+					app.showMessage('success', _t('home.job_suspended_successfully'));
 				} );
 			}
 		} );
@@ -493,10 +825,10 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		app.confirm( '<span style="color:red">Flush Event Queue</span>', "Are you sure you want to flush the queue for event &ldquo;<b>"+stub.title+"</b>&rdquo;?", "Flush", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Flushing event queue..." );
+				app.showProgress( 1.0, _t('home.flushing_event_queue') );
 				app.api.post( 'app/flush_event_queue', stub, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Event queue for '"+stub.title+"' was flushed successfully.");
+					app.showMessage('success', _t('home.event_queue_for') + "'"+stub.title+"' was flushed successfully.");
 				} );
 			}
 		} );
@@ -519,7 +851,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		else extra_attribs = 'title="'+Math.floor( (counter / 1.0) * 100 )+'%"';
 		
 		html += '<div class="progress_bar_container '+extra_classes+'" style="width:'+this.bar_width+'px; margin:0;" '+extra_attribs+'>';
-			html += '<div class="progress_bar_inner" style="width:'+cx+'px;"></div>';
+			html += `<div class="progress_bar_inner" style="${job.plugin == 'workflow' ? 'background-color:green':''};width:${cx}px;"></div>`;
 		html += '</div>';
 		
 		return html;
@@ -554,7 +886,8 @@ Class.subclass( Page.Base, "Page.Home", {
 		// received status update (websocket), update page if needed
 		if (data.jobs_changed) {
 			// refresh tables
-			$('#d_home_active_jobs').html( this.get_active_jobs_html() );
+			// $('#d_home_active_jobs').html( this.get_active_jobs_html() );
+			document.getElementById('d_home_active_jobs').innerHTML = this.get_active_jobs_html() 
 		}
 		else {
 			// update progress, time remaining, no refresh
@@ -563,16 +896,33 @@ Class.subclass( Page.Base, "Page.Home", {
 				
 				if (job.pending) {
 					// update countdown
-					$('#d_home_jt_progress_' + job.id).html( this.getNiceJobPendingText(job) );
+					// $('#d_home_jt_progress_' + job.id).html( this.getNiceJobPendingText(job) );
+					document.getElementById('d_home_jt_progress_' + job.id).innerHTML = this.getNiceJobPendingText(job);
 					
 					if (job.log_file) {
 						// retry delay
-						$('#d_home_jt_elapsed_' + job.id).html( this.getNiceJobElapsedTime(job) );
+						// $('#d_home_jt_elapsed_' + job.id).html( this.getNiceJobElapsedTime(job) );
+						document.getElementById('d_home_jt_elapsed_' + job.id).innerHTML = this.getNiceJobElapsedTime(job);
 					}
 				} // pending job
 				else {
-					$('#d_home_jt_elapsed_' + job.id).html( this.getNiceJobElapsedTime(job) );
-					$('#d_home_jt_remaining_' + job.id).html( this.getNiceJobRemainingTime(job) );
+					// $('#d_home_jt_elapsed_' + job.id).html( this.getNiceJobElapsedTime(job) );
+					// $('#d_home_jt_remaining_' + job.id).html( this.getNiceJobRemainingTime(job) );
+					document.getElementById('d_home_jt_elapsed_' + job.id).innerHTML = this.getNiceJobElapsedTime(job);
+					document.getElementById('d_home_jt_remaining_' + job.id).innerHTML = this.getNiceJobRemainingTime(job);
+					
+					if(job.memo) {
+						let memoClass = String(job.memo).startsWith('OK:') ? 'color_label green' : ''
+						if(String(job.memo).startsWith('WARN:')) memoClass = 'color_label yellow'
+						if(String(job.memo).startsWith('ERR:')) memoClass = 'color_label red'
+						// $('#d_home_jt_memo_' + job.id).html(`<span class="${memoClass}">${encode_entities(job.memo)}</span>`);
+						document.getElementById('d_home_jt_memo_' + job.id).innerHTML = `<span class="${memoClass}">${encode_entities(job.memo)}</span>`
+					}
+
+					if(job.cpu) {
+						// $('#d_home_jt_perf_' + job.id).text(short_float(job.cpu.current) + '% | ' + get_text_from_bytes(job.mem.current) + ' | ' + get_text_from_bytes(job.log_file_size))
+						document.getElementById('d_home_jt_perf_' + job.id).textContent = short_float(job.cpu.current) + '% | ' + get_text_from_bytes(job.mem.current) + ' | ' + get_text_from_bytes(job.log_file_size)
+					}
 					
 					// update progress bar without redrawing it (so animation doesn't jitter)
 					var counter = job.progress || 1;
@@ -598,6 +948,15 @@ Class.subclass( Page.Base, "Page.Home", {
 		// recieved data update (websocket)
 		switch (key) {
 			case 'state':
+				// update chart only on job completion
+				if(this.curr_compl_job_count != value.stats.jobs_completed) {
+					this.refresh_completed_job_chart()				 
+				}
+				this.curr_compl_job_count = value.stats.jobs_completed;
+				this.refresh_upcoming_events();
+				this.refresh_header_stats();
+				
+				break;
 			case 'schedule':
 				// state update (new cursors)
 				// $('#d_home_upcoming_events').html( this.get_upcoming_events_html() );
@@ -615,6 +974,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		// called 250ms after latest window resize
 		// so we can run more expensive redraw operations
 		$('#d_home_active_jobs').html( this.get_active_jobs_html() );
+		this.refresh_completed_job_chart()
 		this.refresh_header_stats();
 		this.refresh_event_queues();
 		
@@ -628,6 +988,7 @@ Class.subclass( Page.Base, "Page.Home", {
 	onDeactivate: function() {
 		// called when page is deactivated
 		// this.div.html( '' );
+		if(this.observer) this.observer.disconnect() 
 		return true;
 	}
 	

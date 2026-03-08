@@ -7,13 +7,17 @@ Class.add( Page.Admin, {
 		textarea: "Text Box",
 		checkbox: "Checkbox",
 		hidden: "Hidden",
-		select: "Menu"
+		select: "Menu",
+		eventlist: "Event List",
+		filelist: "File List"
 	},
-	
+
 	gosub_plugins: function(args) {
 		// show plugin list
 		this.div.removeClass('loading');
-		app.setWindowTitle( "Plugins" );
+		app.setWindowTitle( _t('admin_plugins.plugins') );
+		
+		if(this.observer) this.observer.disconnect() // kill old observer if set by editor
 		
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) + 500) / 6 );
@@ -24,24 +28,21 @@ Class.add( Page.Admin, {
 		
 		html += this.getSidebarTabs( 'plugins',
 			[
-				['activity', "Activity Log"],
-				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin.config_keys')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
 		
-		var cols = ['Plugin Name', 'Author', '# of Events', 'Created', 'Modified', 'Actions'];
+		var cols = [_t('admin_plugins.plugin_name'), 'Author', '# of Events', 'Created', 'Modified', 'Actions'];
 		
 		// html += '<div style="padding:5px 15px 15px 15px;">';
-		html += '<div style="padding:20px 20px 30px 20px">';
-		
-		html += '<div class="subtitle">';
-			html += 'Plugins';
-			// html += '<div class="clear"></div>';
-		html += '</div>';
+		html += `<div style="padding:20px 20px 30px 20px"><div class="subtitle">${_t('admin_plugins.plugins')}</div>`
 		
 		// sort by title ascending
 		this.plugins = app.plugins.sort( function(a, b) {
@@ -53,7 +54,8 @@ Class.add( Page.Admin, {
 		html += this.getBasicTable( this.plugins, cols, 'plugin', function(plugin, idx) {
 			var actions = [
 				'<span class="link" onMouseUp="$P().edit_plugin('+idx+')"><b>Edit</b></span>',
-				'<span class="link" onMouseUp="$P().delete_plugin('+idx+')"><b>Delete</b></span>'
+				'<span class="link" onMouseUp="$P().delete_plugin('+idx+')"><b>Delete</b></span>',
+				'<span class="link" onMouseUp="$P().export_plugin('+idx+')"><b>Export</b></span>'
 			];
 			
 			var plugin_events = find_objects( app.schedule, { plugin: plugin.id } );
@@ -78,7 +80,9 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:140px;" onMouseUp="$P().edit_plugin(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add New Plugin...</div></td>';
+			html += '<td><div class="button" style="width:140px;" onMouseUp="$P().edit_plugin(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + _t('admin_plugins.add_new_plugin') + '</div></td>';
+			html += '<td width="50">&nbsp;</td>'
+			html += '<td><div class="button" style="width:140px;" onMouseUp="$P().import_plugin()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i> ' + _t('admin_plugins.from_json') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '</div>'; // padding
@@ -98,6 +102,113 @@ Class.add( Page.Admin, {
 		this.plugin = this.plugins[idx];
 		this.show_delete_plugin_dialog();
 	},
+
+	setImportEditor: function() {
+
+		const self = this;
+		
+		let editor = CodeMirror.fromTextArea(document.getElementById("plugin_import"), {
+			mode: 'application/json',
+			styleActiveLine: true,
+			lineWrapping: false,
+			scrollbarStyle: "overlay",
+			lineNumbers: false,
+			theme: app.getPref('theme') == 'dark' ? 'gruvbox-dark' : 'default',
+			matchBrackets: true,
+			// gutters: [''],
+			lint: true
+		})
+
+		editor.on('change', function(cm){
+			document.getElementById("plugin_import").value = editor.getValue();
+		 });
+
+		editor.setSize('52vw', '52vh')
+
+	},
+
+	export_plugin: function(idx) {
+		let plug = this.plugins[idx];
+		let data;
+		if(plug) {
+			plug = deep_copy_object(plug)
+			delete plug.username
+			delete plug.created
+			delete plug.modified
+			delete plug.id
+			data = JSON.stringify(plug, null, 2)
+		}	
+		else { return }
+
+		app.show_info(`
+		<span > Back Up Scheduler<br><br></span><textarea id="conf_export" rows="22" cols="80">${data}</textarea><br>
+		<div class="caption"> Use this output to import plugin via "From Json" option on some other Cronicle instance (command binary should be exported/installed separetly) </div>
+		`, '', function (result) {
+
+	 });
+
+	},
+
+	import_plugin: function (args) {
+
+		const self = this;
+
+		setTimeout(() => self.setImportEditor(), 30)
+		app.confirm(`<span>Import Plugin from JSON<br><br>
+		<textarea id="plugin_import" rows="16" cols="80"></textarea><br>
+		`, '', "Import", function (result) {
+			if (result) {
+				var importData = document.getElementById('plugin_import').value;
+				let plugin;
+				try {	plugin = JSON.parse(importData)
+				} catch (e) {
+					return app.doError(_t('admin_plugins.invalid_json') + e.message)					
+				}
+
+				let newPlugin = {}
+
+				if(!plugin.title) return app.doError(_t('admin_plugins.plugin_is_missing_title'))
+				if(find_object(self.plugins, {title: plugin.title})) return app.doError(`Plugin with title [${plugin.title}] already exist`)
+				if(!plugin.command) return app.doError(_t('admin_plugins.plugin_is_missing_command'))
+
+				if(Array.isArray(plugin.params)) {
+					newPlugin.params = plugin.params
+					for(let i = 0; i < plugin.params.length; i++){
+						let e = plugin.params[i]
+						if(!e.id) return app.doError(_t('admin_plugins.one_of_the_plugin_parameters_is_missing_'))
+						if(!e.type) return app.doError(_t('admin_plugins.one_of_the_plugin_parameters_is_missing_'))
+						// if(!e.title) return app.doError("One of the plugin parameters is missing [title] property")
+					}
+				}				
+				
+				newPlugin.title = plugin.title
+				newPlugin.command = plugin.command
+				newPlugin.enabled = !!plugin.enabled
+				newPlugin.ipc = !!plugin.ipc
+				newPlugin.wf = !!plugin.wf
+				newPlugin.stdin = !!plugin.stdin
+				if(typeof plugin.uid === 'string' || parseInt(plugin.uid)) newPlugin.uid = plugin.uid
+				if(typeof plugin.gid === 'string' || parseInt(plugin.gid)) newPlugin.gid = plugin.gid
+				if(typeof plugin.cwd === 'string') newPlugin.cwd = plugin.cwd
+				if(typeof plugin.script === 'string') newPlugin.script = plugin.script 
+
+				app.showProgress(1.0, _t('admin_plugins.importing'));
+				app.api.post('app/create_plugin', newPlugin, function (resp) {
+					app.hideProgress();
+
+					report = `Plugin ${newPlugin.title} [ ${resp.id} ] has been created`
+					
+					setTimeout(function () {
+						Nav.go('#Admin?sub=plugins', 'force');
+						app.show_info(`<div ><table class="data_table">${report}</table></div>`, '');
+
+					}, 50);
+
+				});
+			}
+		});
+	},
+
 	
 	show_delete_plugin_dialog: function() {
 		// delete selected plugin
@@ -106,16 +217,16 @@ Class.add( Page.Admin, {
 		// check for events first
 		var plugin_events = find_objects( app.schedule, { plugin: plugin.id } );
 		var num_events = plugin_events.length;
-		if (num_events) return app.doError("Sorry, you cannot delete a plugin that has events assigned to it.");
+		if (num_events) return app.doError(_t('admin_plugins.sorry_you_cannot_delete_a_plugin_that_ha'));
 		
 		// proceed with delete
 		var self = this;
-		app.confirm( '<span style="color:red">Delete Plugin</span>', "Are you sure you want to delete the plugin <b>"+plugin.title+"</b>?  There is no way to undo this action.", "Delete", function(result) {
+		app.confirm( '<span style="color:red">' + _t('admin_plugins.delete_plugin') + '</span>', "Are you sure you want to delete the plugin <b>"+plugin.title+"</b>?  There is no way to undo this action.", "Delete", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting Plugin..." );
+				app.showProgress( 1.0, _t('admin_plugins.deleting_plugin') );
 				app.api.post( 'app/delete_plugin', plugin, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "The Plugin '"+self.plugin.title+"' was deleted successfully.");
+					app.showMessage('success', _t('admin_plugins.the_plugin') + self.plugin.title + "' was deleted successfully.");
 					// self.gosub_plugins(self.args);
 					
 					Nav.go('Admin?sub=plugins', 'force');
@@ -127,22 +238,24 @@ Class.add( Page.Admin, {
 	gosub_new_plugin: function(args) {
 		// create new plugin
 		var html = '';
-		app.setWindowTitle( "Add New Plugin" );
+		app.setWindowTitle( _t('admin_plugins.add_new_plugin') );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'new_plugin',
 			[
-				['activity', "Activity Log"],
-				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['new_plugin', "Add New Plugin"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin.config_keys')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['new_plugin', _t('admin_plugins.add_new_plugin')],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
 		
-		html += '<div style="padding:20px;"><div class="subtitle">Add New Plugin</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + _t('admin_plugins.add_new_plugin') + '</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -162,10 +275,10 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">' + _t('admin_plugins.cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_plugin()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Plugin</div></td>';
-			html += '</tr></table>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_plugin()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + _t('admin_plugins.create_plugin') + '</div></td>';
+				html += '</tr></table>';
 			
 		html += '</td></tr>';
 		html += '</table></center>';
@@ -199,7 +312,7 @@ Class.add( Page.Admin, {
 		
 		this.plugin = plugin;
 		
-		app.showProgress( 1.0, "Creating plugin..." );
+		app.showProgress( 1.0, _t('admin_plugins.creating_plugin') );
 		app.api.post( 'app/create_plugin', plugin, this.new_plugin_finish.bind(this) );
 	},
 	
@@ -210,39 +323,44 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=plugins');
 		
 		setTimeout( function() {
-			app.showMessage('success', "The new plugin was created successfully.");
+			app.showMessage('success', _t('admin_plugins.the_new_plugin_was_created_successfully'));
 		}, 150 );
 	},
 	
 	gosub_edit_plugin: function(args) {
 		// edit plugin subpage
-		var plugin = find_object( app.plugins, { id: args.id } );
-		if (!plugin) return app.doError("Could not locate Plugin with ID: " + args.id);
+		let plugin = find_object( app.plugins, { id: args.id } );
+		if (!plugin) return app.doError(_t('admin_plugins.could_not_locate_plugin_with_id') + args.id);
+		let secret = find_object( app.secrets, { id: args.id } ) || {};
 		
 		// make local copy so edits don't affect main app list until save
 		this.plugin = deep_copy_object( plugin );
 		
-		var html = '';
-		app.setWindowTitle( "Editing Plugin \"" + plugin.title + "\"" );
+		let html = '';
+		app.setWindowTitle( _t('admin_plugins.editing_plugin') + plugin.title + '"' );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'edit_plugin',
 			[
-				['activity', "Activity Log"],
-				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['edit_plugin', "Edit Plugin"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin.config_keys')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['edit_plugin', 'Edit Plugin'],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
+
+		let secretInfo = secret.size > 0 ? `Edit Secrets (${secret.size})` : 'Attach Secrets'
 		
-		html += '<div style="padding:20px;"><div class="subtitle">Editing Plugin &ldquo;' + plugin.title + '&rdquo;</div></div>';
-		
-		html += '<div style="padding:0px 20px 50px 20px">';
-		html += '<center>';
-		html += '<table style="margin:0;">';
+		html += `<div style="padding:20px;"><div class="subtitle">${_t('admin_plugins.editing_plugin')}${plugin.title}&rdquo;
+		<div class="subtitle_widget"><a href="#Admin?sub=secrets&id=${plugin.id}" ><b>${secretInfo}</b></a></div>
+		</div></div><div style="padding:0px 20px 50px 20px"><center>
+		<table style="margin:0;">
+		`
 		
 		html += this.get_plugin_edit_html();
 		
@@ -250,13 +368,13 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">' + _t('admin_plugins.cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_plugin_dialog()">Delete Plugin...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_plugin_dialog()">' + _t('admin_plugins.delete_plugin') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_plugin()">Copy Plugin...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_plugin()">' + _t('admin_plugins.copy_plugin') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_plugin()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_plugin()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + _t('admin_plugins.save_changes') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -280,7 +398,10 @@ Class.add( Page.Admin, {
 		delete plugin.created;
 		delete plugin.modified;
 		delete plugin.username;
-		
+		delete plugin.secret;
+		delete plugin.secret_preview;
+		delete plugin.secret_value;
+
 		plugin.title = "Copy of " + plugin.title;
 		
 		this.plugin_copy = plugin;
@@ -295,7 +416,7 @@ Class.add( Page.Admin, {
 		
 		this.plugin = plugin;
 		
-		app.showProgress( 1.0, "Saving plugin..." );
+		app.showProgress( 1.0, _t('admin_plugins.saving_plugin') );
 		app.api.post( 'app/update_plugin', plugin, this.save_plugin_finish.bind(this) );
 	},
 	
@@ -305,7 +426,7 @@ Class.add( Page.Admin, {
 		var plugin = this.plugin;
 		
 		app.hideProgress();
-		app.showMessage('success', "The plugin was saved successfully.");
+		app.showMessage('success', _t('admin_plugins.the_plugin_was_saved_successfully'));
 		window.scrollTo( 0, 0 );
 		
 		// copy active jobs to array
@@ -319,19 +440,65 @@ Class.add( Page.Admin, {
 		if (!plugin.enabled && jobs.length) {
 			app.confirm( '<span style="color:red">Abort Jobs</span>', "There " + ((jobs.length != 1) ? 'are' : 'is') + " currently still " + jobs.length + " active " + pluralize('job', jobs.length) + " using the disabled plugin <b>"+plugin.title+"</b>.  Do you want to abort " + ((jobs.length != 1) ? 'these' : 'it') + " now?", "Abort", function(result) {
 				if (result) {
-					app.showProgress( 1.0, "Aborting " + pluralize('Job', jobs.length) + "..." );
+					app.showProgress( 1.0, _t('admin_plugins.aborting') + pluralize('Job', jobs.length) + '...' );
 					app.api.post( 'app/abort_jobs', { plugin: plugin.id }, function(resp) {
 						app.hideProgress();
 						if (resp.count > 0) {
 							app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " aborted successfully.");
 						}
 						else {
-							app.showMessage('warning', "No jobs were aborted.  It is likely they completed while the dialog was up.");
+							app.showMessage('warning', _t('admin_plugins.no_jobs_were_aborted_it_is_likely_they_c'));
 						}
 					} );
 				} // clicked Abort
 			} ); // app.confirm
 		} // disabled + jobs
+
+	},
+
+	resolveSyntax: function() {
+		let cmd = $('#fe_ep_command').val()
+		let syntax = 'shell'
+		if(cmd.indexOf('node') > -1) syntax = 'javascript'
+		else if(cmd.indexOf('node') > -1) syntax = 'javascript'
+		else if(cmd.indexOf('python') > -1) syntax = 'python'
+		else if(cmd.indexOf('powershell') > -1) syntax = 'powershell'
+		else if(cmd.indexOf('pwsh') > -1) syntax = 'powershell'
+		else if(cmd.indexOf('groovy') > -1) syntax = 'groovy'
+		else if(cmd.indexOf('java') > -1) syntax = 'text/x-java'
+		return syntax
+	},
+
+	setScriptEditor: function (id) {
+		const self = this
+		let plugin = this.plugin
+		let editor = CodeMirror.fromTextArea(document.getElementById(id), {
+			mode: self.resolveSyntax(),
+			styleActiveLine: true,
+			lineWrapping: false,
+			scrollbarStyle: "overlay",
+			// lineNumbers: true,
+			theme: app.getPref('theme') == 'dark' ? 'ambiance' : 'default',
+			matchBrackets: true,
+			// gutters: [''],
+			lint: true,
+			extraKeys: {
+				"F11": (cm) => cm.setOption("fullScreen", !cm.getOption("fullScreen")),
+				"Esc": (cm) => cm.getOption("fullScreen") ? cm.setOption("fullScreen", false) : null,
+				"Ctrl-/": (cm) => cm.execCommand('toggleComment')
+			}	
+		})	
+
+		self.observer = new MutationObserver((mutationList, observer)=> {
+			editor.setOption('theme', app.getPref('theme') == 'dark' ? 'ambiance' : 'default')
+		});
+		self.observer.observe(document.querySelector('body'), {attributes: true})
+
+		editor.on('change', (cm) =>  { plugin.script = cm.getValue() });
+		editor.setValue(plugin.script || '');
+		editor.setSize('900px', '25vh');
+
+		  
 	},
 	
 	get_plugin_edit_html: function() {
@@ -341,56 +508,83 @@ Class.add( Page.Admin, {
 		
 		// Internal ID
 		if (plugin.id && this.isAdmin()) {
-			html += get_form_table_row( 'Plugin ID', '<div style="font-size:14px;">' + plugin.id + '</div>' );
-			html += get_form_table_caption( "The internal Plugin ID used for API calls.  This cannot be changed." );
+			html += get_form_table_row( _t('admin_plugins.plugin_id'), '<div style="font-size:14px;">' + plugin.id + '</div>' );
+			html += get_form_table_caption( _t('admin_plugins.the_internal_plugin_id_used_for_api_call') );
 			html += get_form_table_spacer();
 		}
 		
 		// plugin title
-		html += get_form_table_row( 'Plugin Name', '<input type="text" id="fe_ep_title" size="35" value="'+escape_text_field_value(plugin.title)+'" spellcheck="false"/>' );
-		html += get_form_table_caption( "Enter a name for the Plugin.  Ideally it should be somewhat short, and Title Case." );
+		html += get_form_table_row( _t('admin_plugins.plugin_name'), '<input type="text" id="fe_ep_title" size="35" value="'+escape_text_field_value(plugin.title)+'" spellcheck="false"/>' );
+		html += get_form_table_caption( _t('admin_plugins.enter_a_name_for_the_plugin_ideally_it_s') );
 		html += get_form_table_spacer();
 		
 		// plugin enabled
-		html += get_form_table_row( 'Active', '<input type="checkbox" id="fe_ep_enabled" value="1" ' + (plugin.enabled ? 'checked="checked"' : '') + '/><label for="fe_ep_enabled">Plugin Enabled</label>' );
-		html += get_form_table_caption( "Select whether events using this Plugin should be enabled or disabled in the schedule." );
+		html += get_form_table_row( _t('admin_plugins.active'), '<input type="checkbox" id="fe_ep_enabled" value="1" ' + (plugin.enabled ? 'checked="checked"' : '') + '/><label for="fe_ep_enabled">Plugin Enabled</label>' );
+		html += get_form_table_caption( _t('admin_plugins.select_whether_events_using_this_plugin_') );
 		html += get_form_table_spacer();
-		
-		// command
-		html += get_form_table_row('Executable:', '<textarea id="fe_ep_command" style="width:550px; height:50px; resize:vertical;" spellcheck="false" onkeydown="return $P().stopEnter(this,event)">'+escape_text_field_value(plugin.command)+'</textarea>');
+
+		// allow workflow
+		html += get_form_table_row( _t('admin_plugins.workflow'), '<input type="checkbox" id="fe_wf_enabled" value="1" ' + (plugin.wf ? 'checked="checked"' : '') + '/><label for="fe_wf_enabled">Workflow Enabled</label>' );
+		html += get_form_table_caption( _t('admin_plugins.generate_wfsignature_variable_as_a_temp_') );
+		html += get_form_table_spacer();
+
+		// ipc
+		html += get_form_table_row( _t('admin_plugins.ipc'), '<input type="checkbox" id="fe_ep_ipc" value="1" ' + (plugin.ipc ? 'checked="checked"' : '') + '/><label for="fe_ep_ipc">Connect process with ipc</label>' );
+		html += get_form_table_caption( _t('admin_plugins.create_ipc_channel_between_cronicle_engi') );
+		html += get_form_table_spacer();
+
+
+	
+		// Command
+		html += get_form_table_row(_t('admin_plugins.executable'), `<input type="text" size="50" id="fe_ep_command" spellcheck="false" value="${escape_text_field_value(plugin.command)}" />`)
 		html += get_form_table_caption(
-			'Enter the filesystem path to your executable, including any command-line arguments.<br/>' + 
-			'Do not include any pipes or redirects -- for those, please use the <b>Shell Plugin</b>.' 
+			_t('admin_plugins.enter_the_filesystem_path_to_your_execut')			
 		);
 		html += get_form_table_spacer();
-		
+
+		// stdin
+		html += get_form_table_row(_t('admin_plugins.stdin'), '<input type="checkbox" id="fe_ep_stdin" value="1" ' + (plugin.stdin ? 'checked="checked"' : '') + '/><label for="fe_ep_stdin">Pipe a script</label>');
+		html += get_form_table_caption(_t('admin_plugins.pipe_below_script_to_plugin_child_proces'));
+		html += get_form_table_spacer();
+
+		// Script 
+		html += get_form_table_row(_t('admin_plugins.script'), `
+		  <textarea id="fe_ep_script" spellcheck="false">${plugin.script || ''}</textarea>
+		  <script>$P().setScriptEditor('fe_ep_script')</script>`);
+		html += get_form_table_caption(`You can pipe this script to bash/node/python/pwsh stdin instead of storing a script on the filesystem`);
+		html += get_form_table_spacer();
+
 		// params editor
-		html += get_form_table_row( 'Parameters:', '<div id="d_ep_params">' + this.get_plugin_params_html() + '</div>' );
+		html += get_form_table_row( _t('admin_plugins.parameters'), '<div id="d_ep_params">' + this.get_plugin_params_html() + '</div>' );
 		html += get_form_table_caption( 
 			'<div style="margin-top:5px;">Parameters are passed to your Plugin via JSON, and as environment variables.<br/>' + 
-			'For example, you can use this to customize the PATH variable, if your Plugin requires it.</div>' 
+			'For example, you can use this to customize the PATH variable, if your Plugin requires it.</div>'
 		);
 		html += get_form_table_spacer();
 		
 		// advanced options
 		var adv_expanded = !!(plugin.cwd || plugin.uid);
-		html += get_form_table_row( 'Advanced', 
-			'<div style="font-size:13px;'+(adv_expanded ? 'display:none;' : '')+'"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Advanced Options</span></div>' + 
-			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;'+(adv_expanded ? '' : 'display:none;')+'"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Advanced Options</legend>' + 
-				'<div class="plugin_params_label">Working Directory (CWD):</div>' + 
-				'<div class="plugin_params_content"><input type="text" id="fe_ep_cwd" size="50" value="'+escape_text_field_value(plugin.cwd)+'" placeholder="" spellcheck="false"/></div>' + 
-				
-				'<div class="plugin_params_label">Run as User (UID):</div>' + 
-				'<div class="plugin_params_content"><input type="text" id="fe_ep_uid" size="20" value="'+escape_text_field_value(plugin.uid)+'" placeholder="" spellcheck="false"/></div>' + 
-				
-				'<div class="plugin_params_label">Run as Group (GID):</div>' + 
-				'<div class="plugin_params_content"><input type="text" id="fe_ep_gid" size="20" value="'+escape_text_field_value(plugin.gid)+'" placeholder="" spellcheck="false"/></div>' + 
-				
-			'</fieldset>'
-		);
+		html += get_form_table_row( _t('admin_plugins.advanced'), 
+		`<div autocomplete="off" style="font-size:13px;${adv_expanded ? 'display:none;' : ''}"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Advanced Options</span></div>
+		<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;${adv_expanded ? '' : 'display:none;'}"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Advanced Options</legend>
+			<div class="plugin_params_label">Working Directory (CWD):</div>
+			<div class="plugin_params_content"><input type="text" id="fe_ep_cwd" size="50" value="${escape_text_field_value(plugin.cwd)}" placeholder="" spellcheck="false"/></div> 
+			
+			<div class="plugin_params_label">Run as User (UID):</div>
+			<div class="plugin_params_content"><input type="text" id="fe_ep_uid" size="20" value="${escape_text_field_value(plugin.uid)}" placeholder="" spellcheck="false"/></div> 
+			<div class="plugin_params_label">Run as Group (GID):</div>
+			<div class="plugin_params_content"><input type="text" id="fe_ep_gid" size="20" value="${escape_text_field_value(plugin.gid)}" placeholder="" spellcheck="false"/></div>
+
+		    <input name="DummyUsername" type="text" style="display:none;">
+            <input name="DummyPassword" type="password" style="display:none;"></input>
+
+        </fieldset>
+		`);
+
 		html += get_form_table_caption(
-			"Optionally enter a working directory path, and/or a custom UID/GID for the Plugin.<br>" + 
-			"The UID/GID may be either numerical or strings ('root', 'wheel', etc.)." 
+		`Optionally enter a working directory path, and/or a custom UID/GID for the Plugin.<br>
+		 The UID/GID may be either numerical or strings ('root', 'wheel', etc.).<br>
+		`
 		);
 		html += get_form_table_spacer();
 		
@@ -413,15 +607,17 @@ Class.add( Page.Admin, {
 		var html = '';
 		var ctype_labels = this.ctype_labels;
 		
-		var cols = ['Param ID', 'Label', 'Control Type', 'Description', 'Actions'];
+		var cols = [_t('admin_plugins.parameter_id').replace(':', ''), _t('admin_plugins.label').replace(':', ''), _t('admin_plugins.control_type').replace(':', ''), 'Description', 'Actions'];
 		
 		html += '<table class="data_table" width="100%">';
 		html += '<tr><th>' + cols.join('</th><th>').replace(/\s+/g, '&nbsp;') + '</th></tr>';
 		for (var idx = 0, len = params.length; idx < len; idx++) {
 			var param = params[idx];
 			var actions = [
+				'<span class="link" onMouseUp="$P().up_plugin_param('+idx+')"><b>Up</b></span>',
+				'<span class="link" onMouseUp="$P().down_plugin_param('+idx+')"><b>Down</b></span>',
 				'<span class="link" onMouseUp="$P().edit_plugin_param('+idx+')"><b>Edit</b></span>',
-				'<span class="link" onMouseUp="$P().delete_plugin_param('+idx+')"><b>Delete</b></span>'
+				'<span class="link" onMouseUp="$P().delete_plugin_param('+idx+')"><b>Delete</b></span>',				
 			];
 			html += '<tr>';
 			html += '<td><span class="link" style="font-family:monospace; font-weight:bold; white-space:nowrap;" onMouseUp="$P().edit_plugin_param('+idx+')"><i class="fa fa-cog">&nbsp;&nbsp;</i>' + param.id + '</span></td>';
@@ -470,7 +666,7 @@ Class.add( Page.Admin, {
 		}
 		html += '</table>';
 		
-		html += '<div class="button mini" style="width:110px; margin:10px 0 0 0" onMouseUp="$P().edit_plugin_param(-1)">Add Parameter...</div>';
+		html += '<div class="button mini" style="width:110px; margin:10px 0 0 0" onMouseUp="$P().edit_plugin_param(-1)">' + _t('admin_plugins.add_parameter') + '</div>';
 		
 		return html;
 	},
@@ -496,15 +692,17 @@ Class.add( Page.Admin, {
 			['textarea', ctype_labels.textarea],
 			['checkbox', ctype_labels.checkbox],
 			['select', ctype_labels.select],
-			['hidden', ctype_labels.hidden]
+			['hidden', ctype_labels.hidden],
+			['eventlist', ctype_labels.eventlist],
+			['filelist', ctype_labels.filelist],
 		];
 		
 		html += '<table>' + 
-			get_form_table_row('Parameter ID:', '<input type="text" id="fe_epp_id" size="20" value="'+escape_text_field_value(param.id)+'"/>') + 
-			get_form_table_caption("Enter an ID for the parameter, which will be the JSON key.") + 
+			get_form_table_row(_t('admin_plugins.parameter_id'), '<input type="text" id="fe_epp_id" size="20" value="'+escape_text_field_value(param.id)+'"/>') + 
+			get_form_table_caption(_t('admin_plugins.enter_an_id_for_the_parameter_which_will')) + 
 			get_form_table_spacer() + 
-			get_form_table_row('Label:', '<input type="text" id="fe_epp_title" size="35" value="'+escape_text_field_value(param.title)+'"/>') + 
-			get_form_table_caption("Enter a label, which will be displayed next to the control.") + 
+			get_form_table_row(_t('admin_plugins.label'), '<input type="text" id="fe_epp_title" size="35" value="'+escape_text_field_value(param.title)+'"/>') + 
+			get_form_table_caption(_t('admin_plugins.enter_a_label_which_will_be_displayed_ne')) + 
 			// get_form_table_spacer() + 
 			// get_form_table_row('Control Type:', '<select id="fe_epp_ctype" onChange="$P().change_plugin_control_type()">' + render_menu_options(ctype_options, param.type, false) + '</select>') + 
 			// get_form_table_caption("Select the type of control you want to display.") + 
@@ -515,7 +713,7 @@ Class.add( Page.Admin, {
 			html += '<div id="d_epp_editor" style="margin:5px 10px 5px 10px;">' + this.get_plugin_param_editor_html() + '</div>';
 		html += '</fieldset>';
 		
-		app.confirm( '<i class="fa fa-cog">&nbsp;&nbsp;</i>' + (edit ? "Edit Parameter" : "Add Parameter"), html, edit ? "OK" : "Add", function(result) {
+		app.confirm( '<i class="fa fa-cog">&nbsp;&nbsp;</i>' + (edit ? _t('admin_plugins.editing_plugin').replace("'\\", '') : _t('admin_plugins.add_parameter').replace('...', '')), html, edit ? "OK" : _t('admin_plugins.add_parameter').replace('...', ''), function(result) {
 			app.clearError();
 			
 			if (result) {
@@ -529,7 +727,7 @@ Class.add( Page.Admin, {
 				else {
 					// add new, check for unique id
 					if (find_object(self.plugin.params, { id: param.id })) {
-						return add.badField('fe_epp_id', "That parameter ID is already taken.  Please enter a unique value.");
+						return add.badField('fe_epp_id', _t('admin_plugins.that_parameter_id_is_already_taken_pleas'));
 					}
 					
 					self.plugin.params.push( param );
@@ -555,37 +753,42 @@ Class.add( Page.Admin, {
 		
 		switch (param.type) {
 			case 'text':
-				html += get_form_table_row('Size:', '<input type="text" id="fe_epp_text_size" size="5" value="'+escape_text_field_value(param.size)+'"/>');
-				html += get_form_table_caption("Enter the size of the text field, in characters.");
+				html += get_form_table_row(_t('admin_plugins.size'), '<input type="text" id="fe_epp_text_size" size="5" value="'+escape_text_field_value(param.size)+'"/>');
+				html += get_form_table_caption(_t('admin_plugins.enter_the_size_of_the_text_field_in_char'));
 				html += get_form_table_spacer('short transparent');
-				html += get_form_table_row('Default Value:', '<input type="text" id="fe_epp_text_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
-				html += get_form_table_caption("Enter the default value for the text field.");
+				html += get_form_table_row(_t('admin_plugins.default_value'), '<input type="text" id="fe_epp_text_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
+				html += get_form_table_caption(_t('admin_plugins.enter_the_default_value_for_the_text_fie'));
 			break;
 			
 			case 'textarea':
-				html += get_form_table_row('Rows:', '<input type="text" id="fe_epp_textarea_rows" size="5" value="'+escape_text_field_value(param.rows || 5)+'"/>');
-				html += get_form_table_caption("Enter the number of visible rows to allocate for the text box.");
+				html += get_form_table_row(_t('admin_plugins.rows'), '<input type="text" id="fe_epp_textarea_rows" size="5" value="'+escape_text_field_value(param.rows || 5)+'"/>');
+				html += get_form_table_caption(_t('admin_plugins.enter_the_number_of_visible_rows_to_allo'));
 				html += get_form_table_spacer('short transparent');
-				html += get_form_table_row('Default Text:', '<textarea id="fe_epp_textarea_value" style="width:99%; height:60px; resize:none;" spellcheck="false">'+escape_text_field_value(param.value)+'</textarea>');
-				html += get_form_table_caption("Optionally enter default text for the text box.");
+				html += get_form_table_row(_t('admin_plugins.default_text'), '<textarea id="fe_epp_textarea_value" style="width:99%; height:60px; resize:none;" spellcheck="false">'+escape_text_field_value(param.value)+'</textarea>');
+				html += get_form_table_caption(_t('admin_plugins.optionally_enter_default_text_for_the_te'));
 			break;
 			
 			case 'checkbox':
-				html += get_form_table_row('Default State:', '<select id="fe_epp_checkbox_value">' + render_menu_options([[0,'Unchecked'], [1,'Checked']], param.value, false) + '</select>');
-				html += get_form_table_caption("Select whether the checkbox should be initially checked or unchecked.");
+				html += get_form_table_row(_t('admin_plugins.default_state'), '<select id="fe_epp_checkbox_value">' + render_menu_options([[0,'Unchecked'], [1,'Checked']], param.value, false) + '</select>');
+				html += get_form_table_caption(_t('admin_plugins.select_whether_the_checkbox_should_be_in'));
 			break;
 			
 			case 'hidden':
-				html += get_form_table_row('Value:', '<input type="text" id="fe_epp_hidden_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
-				html += get_form_table_caption("Enter the value for the hidden field.");
+				html += get_form_table_row(_t('admin_plugins.value'), '<input type="text" id="fe_epp_hidden_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
+				html += get_form_table_caption(_t('admin_plugins.enter_the_value_for_the_hidden_field'));
 			break;
 			
 			case 'select':
-				html += get_form_table_row('Menu Items:', '<input type="text" id="fe_epp_select_items" size="35" value="'+escape_text_field_value(param.items ? param.items.join(', ') : '')+'" spellcheck="false"/>');
-				html += get_form_table_caption("Enter a comma-separated list of items for the menu.");
+				html += get_form_table_row(_t('admin_plugins.menu_items'), '<input type="text" id="fe_epp_select_items" size="35" value="'+escape_text_field_value(param.items ? param.items.join(', ') : '')+'" spellcheck="false"/>');
+				html += get_form_table_caption(_t('admin_plugins.enter_a_commaseparated_list_of_items_for'));
 				html += get_form_table_spacer('short transparent');
-				html += get_form_table_row('Selected Item:', '<input type="text" id="fe_epp_select_value" size="20" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
-				html += get_form_table_caption("Optionally enter an item to be selected by default.");
+				html += get_form_table_row(_t('admin_plugins.selected_item'), '<input type="text" id="fe_epp_select_value" size="20" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
+				html += get_form_table_caption(_t('admin_plugins.optionally_enter_an_item_to_be_selected_'));
+			break;
+
+			case 'filelist':
+				html += get_form_table_row(_t('admin_plugins.theme'), '<select id="fe_epp_filelist_theme">' + render_menu_options(['default','darcula','gruvbox-dark', 'solarized light', 'solarized dark'], param.value, false) + '</select>');
+				html += get_form_table_caption(_t('admin_plugins.file_editor_theme'));
 			break;
 		} // switch type
 		
@@ -598,28 +801,28 @@ Class.add( Page.Admin, {
 		var param = { type: this.plugin_param.type };
 		
 		param.id = trim( $('#fe_epp_id').val() );
-		if (!param.id) return app.badField('fe_epp_id', "Please enter an ID for the plugin parameter.");
-		if (!param.id.match(/^\w+$/)) return app.badField('fe_epp_id', "The parameter ID needs to be alphanumeric.");
+		if (!param.id) return app.badField('fe_epp_id', _t('admin_plugins.please_enter_an_id_for_the_plugin_parame'));
+		if (!param.id.match(/^\w+$/)) return app.badField('fe_epp_id', _t('admin_plugins.the_parameter_id_needs_to_be_alphanumeri'));
 		
 		param.title = trim( $('#fe_epp_title').val() );
-		if ((param.type != 'hidden') && !param.title) return app.badField('fe_epp_title', "Please enter a label for the plugin parameter.");
+		if ((param.type != 'hidden') && !param.title) return app.badField('fe_epp_title', _t('admin_plugins.please_enter_a_label_for_the_plugin_para'));
 		
 		switch (param.type) {
 			case 'text':
 				param.size = trim( $('#fe_epp_text_size').val() );
-				if (!param.size.match(/^\d+$/)) return app.badField('fe_epp_text_size', "Please enter a size for the text field.");
+				if (!param.size.match(/^\d+$/)) return app.badField('fe_epp_text_size', _t('admin_plugins.please_enter_a_size_for_the_text_field'));
 				param.size = parseInt( param.size );
-				if (!param.size) return app.badField('fe_epp_text_size', "Please enter a size for the text field.");
-				if (param.size > 40) return app.badField('fe_epp_text_size', "The text field size needs to be between 1 and 40 characters.");
+				if (!param.size) return app.badField('fe_epp_text_size', _t('admin_plugins.please_enter_a_size_for_the_text_field'));
+				if (param.size > 40) return app.badField('fe_epp_text_size', _t('admin_plugins.the_text_field_size_needs_to_be_between_'));
 				param.value = trim( $('#fe_epp_text_value').val() );
 			break;
 			
 			case 'textarea':
 				param.rows = trim( $('#fe_epp_textarea_rows').val() );
-				if (!param.rows.match(/^\d+$/)) return app.badField('fe_epp_textarea_rows', "Please enter a number of rows for the text box.");
+				if (!param.rows.match(/^\d+$/)) return app.badField('fe_epp_textarea_rows', _t('admin_plugins.please_enter_a_number_of_rows_for_the_te'));
 				param.rows = parseInt( param.rows );
-				if (!param.rows) return app.badField('fe_epp_textarea_rows', "Please enter a number of rows for the text box.");
-				if (param.rows > 50) return app.badField('fe_epp_textarea_rows', "The text box rows needs to be between 1 and 50.");
+				if (!param.rows) return app.badField('fe_epp_textarea_rows', _t('admin_plugins.please_enter_a_number_of_rows_for_the_te'));
+				if (param.rows > 50) return app.badField('fe_epp_textarea_rows', _t('admin_plugins.the_text_box_rows_needs_to_be_between_1_'));
 				param.value = trim( $('#fe_epp_textarea_value').val() );
 			break;
 			
@@ -632,10 +835,14 @@ Class.add( Page.Admin, {
 			break;
 			
 			case 'select':
-				if (!$('#fe_epp_select_items').val().match(/\S/)) return app.badField('fe_epp_select_items', "Please enter a comma-separated list of items for the menu.");
+				if (!$('#fe_epp_select_items').val().match(/\S/)) return app.badField('fe_epp_select_items', _t('admin_plugins.please_enter_a_commaseparated_list_of_it'));
 				param.items = trim( $('#fe_epp_select_items').val() ).split(/\,\s*/);
 				param.value = trim( $('#fe_epp_select_value').val() );
-				if (param.value && !find_in_array(param.items, param.value)) return app.badField('fe_epp_select_value', "The default value you entered was not found in the list of menu items.");
+				if (param.value && !find_in_array(param.items, param.value)) return app.badField('fe_epp_select_value', _t('admin_plugins.the_default_value_you_entered_was_not_fo'));
+			break;
+
+			case 'filelist':
+				param.theme = trim( $('#fe_epp_filelist_theme').val() );
 			break;
 		}
 		
@@ -659,24 +866,49 @@ Class.add( Page.Admin, {
 		this.plugin.params.splice( idx, 1 );
 		this.refresh_plugin_params();
 	},
+
+	up_plugin_param: function(idx) {
+		// move app parameter
+		if( !parseInt(idx)) return
+		let arr = this.plugin.params
+		let curr = arr[idx]
+		arr[idx] = arr[idx-1]
+		arr[idx-1] = curr
+		this.refresh_plugin_params();
+	},
+
+	down_plugin_param: function(idx) {
+		// move app parameter
+		let arr = this.plugin.params
+		if(parseInt(idx) >= arr.length - 1) return
+		let curr = arr[idx]
+		arr[idx] = arr[idx+1]
+		arr[idx+1] = curr
+		this.refresh_plugin_params();
+	},
 	
 	refresh_plugin_params: function() {
 		// redraw plugin param area after change
 		$('#d_ep_params').html( this.get_plugin_params_html() );
 	},
-	
+
 	get_plugin_form_json: function() {
 		// get plugin elements from form, used for new or edit
 		var plugin = this.plugin;
 		
 		plugin.title = trim( $('#fe_ep_title').val() );
-		if (!plugin.title) return app.badField('fe_ep_title', "Please enter a title for the Plugin.");
+		if (!plugin.title) return app.badField('fe_ep_title', _t('admin_plugins.please_enter_a_title_for_the_plugin'));
 		
 		plugin.enabled = $('#fe_ep_enabled').is(':checked') ? 1 : 0;
+		plugin.ipc = $('#fe_ep_ipc').is(':checked') ? 1 : 0;
+		plugin.wf = $('#fe_wf_enabled').is(':checked') ? 1 : 0;
+
+		plugin.stdin = $('#fe_ep_stdin').is(':checked') ? 1 : 0;
+		// script value is set directly in editor
 		
 		plugin.command = trim( $('#fe_ep_command').val() );
-		if (!plugin.command) return app.badField('fe_ep_command', "Please enter a filesystem path to the executable command for the Plugin.");
-		if (plugin.command.match(/[\n\r]/)) return app.badField('fe_ep_command', "You must not include any newlines (EOLs) in your command.  Please consider using the built-in Shell Plugin.");
+		if (!plugin.command) return app.badField('fe_ep_command', _t('admin_plugins.please_enter_a_filesystem_path_to_the_ex'));
+		if (plugin.command.match(/[\n\r]/)) return app.badField('fe_ep_command', _t('admin_plugins.you_must_not_include_any_newlines_eols_i'));
 		
 		plugin.cwd = trim( $('#fe_ep_cwd').val() );
 		plugin.uid = trim( $('#fe_ep_uid').val() );
