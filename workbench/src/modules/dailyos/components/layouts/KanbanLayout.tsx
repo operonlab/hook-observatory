@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { MethodConfig, PlanItem } from '../../types'
 
 interface KanbanLayoutProps {
@@ -6,31 +6,33 @@ interface KanbanLayoutProps {
   config: MethodConfig
   onToggle?: (item: PlanItem) => void
   onMoveRight?: (item: PlanItem) => void
+  onMoveLeft?: (item: PlanItem) => void
 }
 
-const _COLUMNS: { key: PlanItem['status']; label: string; color: string }[] = [
-  { key: 'pending', label: '待辦', color: '#a6adc8' },
-  { key: 'done', label: '完成', color: '#a6e3a1' },
-]
-
-// For kanban, we treat 'pending' items that are in-progress conceptually
-// by adding a middle "doing" column based on convention
+// Kanban uses a 3-column layout: todo -> doing -> done
 const KANBAN_COLUMNS = [
-  { key: 'todo', label: '待辦', color: '#a6adc8', statusFilter: 'pending' as const, isFirst: true },
-  { key: 'doing', label: '進行中', color: '#89b4fa', statusFilter: null, isFirst: false },
-  { key: 'done', label: '完成', color: '#a6e3a1', statusFilter: 'done' as const, isFirst: false },
-]
+  { key: 'todo', label: '待辦', color: '#a6adc8' },
+  { key: 'doing', label: '進行中', color: '#89b4fa' },
+  { key: 'done', label: '完成', color: '#a6e3a1' },
+] as const
 
-export default function KanbanLayout({ items, config, onMoveRight }: KanbanLayoutProps) {
-  // Split pending items: first item = doing, rest = todo
+export default function KanbanLayout({
+  items,
+  config,
+  onMoveRight,
+  onMoveLeft,
+}: KanbanLayoutProps) {
   const pendingItems = items
     .filter((i) => i.status === 'pending')
     .sort((a, b) => a.sort_order - b.sort_order)
   const doneItems = items.filter((i) => i.status === 'done')
 
-  // Simple split: items with is_frog or first pending item = "doing"
-  const doingItems = pendingItems.slice(0, 1)
-  const todoItems = pendingItems.slice(1)
+  // Doing column: frog items first, then items explicitly categorized as "doing"
+  const doingItems = pendingItems.filter(
+    (i) => i.is_frog || i.category === 'doing',
+  )
+  const doingIds = new Set(doingItems.map((i) => i.id))
+  const todoItems = pendingItems.filter((i) => !doingIds.has(i.id))
 
   const columnData = [
     { ...KANBAN_COLUMNS[0], items: todoItems },
@@ -42,7 +44,7 @@ export default function KanbanLayout({ items, config, onMoveRight }: KanbanLayou
 
   return (
     <div className="grid grid-cols-3 gap-3">
-      {columnData.map((col) => {
+      {columnData.map((col, colIndex) => {
         const isOverWip = wipLimit && col.items.length > wipLimit
 
         return (
@@ -90,6 +92,18 @@ export default function KanbanLayout({ items, config, onMoveRight }: KanbanLayou
                     className="flex items-center gap-2 px-2.5 py-2 rounded-md"
                     style={{ backgroundColor: 'var(--do-bg-surface)' }}
                   >
+                    {/* Move left button */}
+                    {onMoveLeft && colIndex > 0 && item.status !== 'done' && (
+                      <button
+                        type="button"
+                        onClick={() => onMoveLeft(item)}
+                        className="shrink-0 p-0.5 rounded transition-colors hover:bg-[rgba(255,255,255,0.05)]"
+                        style={{ color: 'var(--do-text-muted)' }}
+                        title="移動到前一欄"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                    )}
                     {item.is_frog && <span className="text-[10px]">🐸</span>}
                     <span
                       className="flex-1 text-[12px] min-w-0 truncate"
@@ -100,7 +114,8 @@ export default function KanbanLayout({ items, config, onMoveRight }: KanbanLayou
                     >
                       {item.title}
                     </span>
-                    {onMoveRight && item.status !== 'done' && (
+                    {/* Move right button */}
+                    {onMoveRight && colIndex < KANBAN_COLUMNS.length - 1 && (
                       <button
                         type="button"
                         onClick={() => onMoveRight(item)}

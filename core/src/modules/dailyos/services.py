@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.models import _uuid7_hex
@@ -22,6 +23,7 @@ from .schemas import (
     MethodResponse,
     MethodSelectionCreate,
     MethodSelectionResponse,
+    MethodSelectionUpdate,
     MethodUpdate,
 )
 from .strategies.base import MethodStrategy
@@ -169,7 +171,7 @@ class MethodSelectionService(
     BaseCRUDService[
         MethodSelection,
         MethodSelectionCreate,
-        MethodUpdate,  # reuse for generic updates
+        MethodSelectionUpdate,
         MethodSelectionResponse,
     ]
 ):
@@ -343,7 +345,11 @@ class DailyPlanService:
         user_id: str | None = None,
         context: str = "default",
     ) -> DailyPlan:
-        """Get today's plan, or create one if it doesn't exist."""
+        """Get today's plan, or create one if it doesn't exist.
+
+        When creating a new plan, checks the most recent previous plan for
+        incomplete items and carries them forward via strategy.handle_overflow().
+        """
         today = date.today()
 
         # Check for existing plan
@@ -357,7 +363,58 @@ class DailyPlanService:
         if existing:
             return existing
 
-        return await self.create_plan(db, space_id, today, user_id, context)
+        # Create today's plan
+        plan = await self.create_plan(db, space_id, today, user_id, context)
+
+        # Look for the most recent previous plan to carry forward incomplete items
+        prev_q = (
+            select(DailyPlan)
+            .where(
+                DailyPlan.space_id == space_id,
+                DailyPlan.context == context,
+                DailyPlan.plan_date < today,
+                DailyPlan.deleted_at == None,  # noqa: E711
+            )
+            .options(
+                selectinload(DailyPlan.method_selection).selectinload(
+                    MethodSelection.method
+                )
+            )
+            .order_by(DailyPlan.plan_date.desc())
+            .limit(1)
+        )
+        prev_plan = (await db.execute(prev_q)).scalar_one_or_none()
+
+        if prev_plan and prev_plan.items and prev_plan.method_selection:
+            method = prev_plan.method_selection.method
+            effective_config = {
+                **method.config,
+                **(prev_plan.method_selection.overrides or {}),
+            }
+            strategy = MethodStrategy.from_config(effective_config)
+            overflow = strategy.handle_overflow(prev_plan.items)
+            carry_items = overflow.get("carry", [])
+            if carry_items:
+                # carry_count already incremented by strategy.handle_overflow()
+                # Merge carry items into today's plan (avoiding duplicates)
+                existing_ids = {i.get("id") for i in (plan.items or [])}
+                merged = list(plan.items or [])
+                for item in carry_items:
+                    if item.get("id") not in existing_ids:
+                        merged.append(item)
+                plan.items = merged
+                # Store overflow metadata in method_state
+                stale_items = overflow.get("stale", [])
+                plan.method_state = {
+                    **(plan.method_state or {}),
+                    "carried_from": prev_plan.plan_date.isoformat(),
+                    "carry_count": len(carry_items),
+                    "stale_count": len(stale_items),
+                }
+                await db.flush()
+                await db.refresh(plan)
+
+        return plan
 
     async def update_plan(
         self,
@@ -367,7 +424,17 @@ class DailyPlanService:
         user_id: str | None = None,
     ) -> DailyPlan | None:
         """Update a daily plan's items, state, reflection, or score."""
-        plan = await db.get(DailyPlan, plan_id)
+        # Eagerly load method_selection -> method to avoid MissingGreenlet
+        stmt = (
+            select(DailyPlan)
+            .where(DailyPlan.id == plan_id)
+            .options(
+                selectinload(DailyPlan.method_selection).selectinload(
+                    MethodSelection.method
+                )
+            )
+        )
+        plan = (await db.execute(stmt)).scalar_one_or_none()
         if not plan or plan.deleted_at is not None:
             return None
 
@@ -533,10 +600,24 @@ class DailyPlanService:
             try:
                 from src.modules.taskflow.services import task_service
 
-                tasks_response = await task_service.list(
-                    db, space_id, PaginationParams(page=1, page_size=100)
+                # Pull today's active tasks (excludes done/cancelled)
+                today_tasks = await task_service.get_today_tasks(db, space_id)
+
+                # Optionally include overdue tasks
+                auto_include_overdue = sources.get("taskflow", {}).get(
+                    "auto_include_overdue", False
                 )
-                for task_resp in tasks_response.items:
+                overdue_tasks: list = []
+                if auto_include_overdue:
+                    upcoming = await task_service.get_upcoming_tasks(
+                        db, space_id, days=0
+                    )
+                    # upcoming with days=0 returns tasks with due_date <= now,
+                    # which are overdue. Deduplicate against today_tasks.
+                    today_ids = {t.id for t in today_tasks}
+                    overdue_tasks = [t for t in upcoming if t.id not in today_ids]
+
+                for task_resp in [*today_tasks, *overdue_tasks]:
                     items.append(
                         {
                             "id": task_resp.id,

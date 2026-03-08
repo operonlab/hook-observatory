@@ -60,6 +60,10 @@ class MethodSelectionCreate(BaseModel):
     overrides: dict | None = None
 
 
+class MethodSelectionUpdate(BaseModel):
+    overrides: dict | None = None
+
+
 class MethodSelectionResponse(SpaceScopedResponse):
     method_id: str
     context: str = "default"

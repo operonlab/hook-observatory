@@ -1,4 +1,4 @@
-import { Clock } from 'lucide-react'
+import { Clock, CalendarClock } from 'lucide-react'
 import type { MethodConfig, PlanItem } from '../../types'
 import PlanItemRow from '../PlanItemRow'
 
@@ -45,6 +45,36 @@ export default function TimelineLayout({ items, config, onToggle }: TimelineLayo
     } else {
       unscheduled.push(item)
     }
+  }
+
+  // Empty state when no items exist
+  if (items.length === 0) {
+    const emptyMessage =
+      config.ui_hints?.empty_state_message_zh ||
+      config.ui_hints?.empty_state_message ||
+      '拖入任務到時間軸，規劃你的一天'
+
+    return (
+      <div
+        className="rounded-lg border p-8 text-center"
+        style={{
+          borderColor: 'var(--do-border)',
+          backgroundColor: 'var(--do-bg-elevated)',
+        }}
+      >
+        <CalendarClock
+          size={32}
+          className="mx-auto mb-3"
+          style={{ color: 'var(--do-text-muted)' }}
+        />
+        <p className="text-[13px] mb-1" style={{ color: 'var(--do-text-secondary)' }}>
+          {emptyMessage}
+        </p>
+        <p className="text-[11px]" style={{ color: 'var(--do-text-muted)' }}>
+          {dayStart} - {dayEnd}
+        </p>
+      </div>
+    )
   }
 
   return (

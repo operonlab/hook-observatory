@@ -1,6 +1,6 @@
-import { AlertCircle, CheckCircle2, Clock, Plus, TrendingUp } from 'lucide-react'
+import { AlertCircle, Calendar, CheckCircle2, Clock, Plus, TrendingUp } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { dashboardApi } from '../api'
 import type { Task, TaskProgressStats } from '../types'
 import { PRIORITY_CONFIG, SOURCE_CONFIG, STATUS_CONFIG } from '../types'
@@ -132,9 +132,22 @@ export default function DashboardPage() {
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-base font-medium" style={{ color: 'var(--tf-text)' }}>
-          任務概覽
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-medium" style={{ color: 'var(--tf-text)' }}>
+            任務概覽
+          </h1>
+          <Link
+            to="/dailyos"
+            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors hover:opacity-80"
+            style={{
+              color: 'var(--tf-text-tertiary)',
+              backgroundColor: 'var(--tf-bg-surface)',
+            }}
+          >
+            <Calendar size={12} />
+            每日規劃
+          </Link>
+        </div>
         <button
           type="button"
           onClick={() => navigate('/taskflow/tasks')}

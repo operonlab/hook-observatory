@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, RefreshCw } from 'lucide-react'
+import { ArrowRight, BookOpen, Check, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { configApi, planApi } from '../api'
@@ -36,6 +36,8 @@ export default function PlannerPage() {
   const [selection, setSelection] = useState<MethodSelection | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reflection, setReflection] = useState('')
+  const [savingReflection, setSavingReflection] = useState(false)
 
   const loadData = useCallback(() => {
     setLoading(true)
@@ -44,6 +46,7 @@ export default function PlannerPage() {
       .then(([todayPlan, activeSelection]) => {
         setPlan(todayPlan)
         setSelection(activeSelection)
+        if (todayPlan?.reflection) setReflection(todayPlan.reflection)
       })
       .catch(() => setError('載入失敗'))
       .finally(() => setLoading(false))
@@ -74,11 +77,53 @@ export default function PlannerPage() {
     [plan],
   )
 
+  const handleAssignCategory = useCallback(
+    (itemId: string, categoryId: string) => {
+      if (!plan) return
+      const updatedItems = plan.items.map((i) =>
+        i.id === itemId ? { ...i, category: categoryId } : i,
+      )
+      setPlan({ ...plan, items: updatedItems })
+      planApi.update(plan.id, { items: updatedItems }).catch(() => {
+        // Revert on error
+        setPlan(plan)
+      })
+    },
+    [plan],
+  )
+
   const handleMoveRight = useCallback(
     (item: PlanItem) => {
       if (!plan) return
+      // 3-state: todo (pending, no category) -> doing (pending, category=doing) -> done
+      let updatedItems: PlanItem[]
+      if (item.category === 'doing') {
+        // doing -> done
+        updatedItems = plan.items.map((i) =>
+          i.id === item.id
+            ? { ...i, status: 'done' as PlanItem['status'], category: undefined }
+            : i,
+        )
+      } else {
+        // todo -> doing
+        updatedItems = plan.items.map((i) =>
+          i.id === item.id ? { ...i, category: 'doing' } : i,
+        )
+      }
+      setPlan({ ...plan, items: updatedItems })
+      planApi.update(plan.id, { items: updatedItems }).catch(() => {
+        setPlan(plan)
+      })
+    },
+    [plan],
+  )
+
+  const handleMoveLeft = useCallback(
+    (item: PlanItem) => {
+      if (!plan) return
+      // doing -> todo: remove the "doing" category
       const updatedItems = plan.items.map((i) =>
-        i.id === item.id ? { ...i, status: 'done' as PlanItem['status'] } : i,
+        i.id === item.id ? { ...i, category: undefined } : i,
       )
       setPlan({ ...plan, items: updatedItems })
       planApi.update(plan.id, { items: updatedItems }).catch(() => {
@@ -99,6 +144,19 @@ export default function PlannerPage() {
       })
       .catch(() => {})
   }, [plan])
+
+  const handleCompleteReview = useCallback(() => {
+    if (!plan) return
+    setSavingReflection(true)
+    planApi
+      .update(plan.id, { reflection })
+      .then(() => planApi.transition(plan.id, 'completed'))
+      .then((updated) => {
+        setPlan(updated)
+      })
+      .catch(() => {})
+      .finally(() => setSavingReflection(false))
+  }, [plan, reflection])
 
   // Loading state
   if (loading) {
@@ -220,10 +278,15 @@ export default function PlannerPage() {
           <ColumnsLayout items={items} config={methodConfig} onToggle={handleToggle} />
         )}
         {layoutType === 'grid' && (
-          <GridLayout items={items} config={methodConfig} onToggle={handleToggle} />
+          <GridLayout items={items} config={methodConfig} onToggle={handleToggle} onAssignCategory={handleAssignCategory} />
         )}
         {layoutType === 'kanban' && (
-          <KanbanLayout items={items} config={methodConfig} onMoveRight={handleMoveRight} />
+          <KanbanLayout
+            items={items}
+            config={methodConfig}
+            onMoveRight={handleMoveRight}
+            onMoveLeft={handleMoveLeft}
+          />
         )}
         {layoutType === 'timeline' && (
           <TimelineLayout items={items} config={methodConfig} onToggle={handleToggle} />
@@ -235,8 +298,54 @@ export default function PlannerPage() {
         <ProgressBar done={doneCount} total={totalCount} />
       )}
 
+      {/* Reflection Section (reviewing status) */}
+      {plan?.status === 'reviewing' && (
+        <div
+          className="rounded-lg border p-4 space-y-3"
+          style={{
+            borderColor: 'var(--do-reviewing)',
+            backgroundColor: 'rgba(249, 226, 175, 0.05)',
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm">🔍</span>
+            <h3 className="text-[13px] font-medium" style={{ color: 'var(--do-reviewing)' }}>
+              每日回顧
+            </h3>
+          </div>
+          <textarea
+            value={reflection}
+            onChange={(e) => setReflection(e.target.value)}
+            placeholder="今天完成了什麼？有什麼收穫或值得改進的地方？"
+            rows={4}
+            className="w-full rounded-md border px-3 py-2 text-[13px] resize-y focus:outline-none"
+            style={{
+              borderColor: 'var(--do-border)',
+              backgroundColor: 'var(--do-bg-surface)',
+              color: 'var(--do-text)',
+            }}
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleCompleteReview}
+              disabled={savingReflection}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-medium transition-colors disabled:opacity-50"
+              style={{
+                backgroundColor: 'rgba(166, 227, 161, 0.15)',
+                color: 'var(--do-completed)',
+                border: '1px solid rgba(166, 227, 161, 0.4)',
+              }}
+            >
+              <Check size={14} />
+              {savingReflection ? '儲存中...' : '完成回顧'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Transition Button */}
-      {canTransition && (
+      {canTransition && plan?.status !== 'reviewing' && (
         <div className="flex justify-end">
           <button
             type="button"
