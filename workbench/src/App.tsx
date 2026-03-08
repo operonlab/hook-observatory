@@ -17,11 +17,8 @@ const SkillpathPage = React.lazy(() => import('./modules/skillpath/pages'))
 const WorkpoolPage = React.lazy(() => import('./modules/workpool/pages'))
 const InvestPage = React.lazy(() => import('./modules/invest/pages'))
 const MatchcorePage = React.lazy(() => import('./modules/matchcore/pages'))
-const BriefingPage = React.lazy(() => import('./modules/briefing/pages'))
 const NodeflowPage = React.lazy(() => import('./modules/nodeflow/pages'))
-const NotificationPage = React.lazy(() => import('./modules/notification/pages'))
-const DailyosPage = React.lazy(() => import('./modules/dailyos/pages'))
-const CapturePage = React.lazy(() => import('./modules/capture/pages'))
+const AnvilPage = React.lazy(() => import('./modules/anvil/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
@@ -146,18 +143,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/briefing/*"
-        element={
-          <AuthGuard>
-            <AppShell>
-              <ModuleSuspense>
-                <BriefingPage />
-              </ModuleSuspense>
-            </AppShell>
-          </AuthGuard>
-        }
-      />
-      <Route
         path="/intelflow/*"
         element={
           <AuthGuard>
@@ -230,18 +215,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/notification/*"
-        element={
-          <AuthGuard>
-            <AppShell>
-              <ModuleSuspense>
-                <NotificationPage />
-              </ModuleSuspense>
-            </AppShell>
-          </AuthGuard>
-        }
-      />
-      <Route
         path="/matchcore/*"
         element={
           <AuthGuard>
@@ -254,24 +227,12 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/capture/*"
+        path="/anvil/*"
         element={
           <AuthGuard>
             <AppShell>
               <ModuleSuspense>
-                <CapturePage />
-              </ModuleSuspense>
-            </AppShell>
-          </AuthGuard>
-        }
-      />
-      <Route
-        path="/dailyos/*"
-        element={
-          <AuthGuard>
-            <AppShell>
-              <ModuleSuspense>
-                <DailyosPage />
+                <AnvilPage />
               </ModuleSuspense>
             </AppShell>
           </AuthGuard>
