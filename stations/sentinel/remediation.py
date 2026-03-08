@@ -29,6 +29,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "agent-vista": "agent-vista",
     "litellm": "litellm",
     "auto-survey": "auto-survey",
+    "capture-console": "capture-console",
 }
 
 # Docker-managed services: restart via docker
