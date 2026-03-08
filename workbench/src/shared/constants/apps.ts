@@ -217,6 +217,16 @@ export const APP_LIST: AppInfo[] = [
     externalUrl: '/apps/anvil/',
   },
   {
+    id: 'scheduler',
+    name: '排程管理',
+    description: '定時任務排程、執行紀錄、Web UI 管理',
+    icon: '\u23F0',
+    path: '/scheduler',
+    color: '#89dceb',
+    status: 'external',
+    externalUrl: '/apps/scheduler/',
+  },
+  {
     id: 'fsm-dashboard',
     name: '狀態機儀表板',
     description: 'FSM 狀態圖視覺化、轉換模擬器、全域狀態機總覽',

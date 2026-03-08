@@ -45,6 +45,9 @@ dotclaude
 # Worktrees
 .worktrees/
 
+# Data (runtime state, not source code)
+data/
+
 # Outputs (skill/script working artifacts, not source code)
 outputs/
 

@@ -163,6 +163,16 @@
       "enabled": true
     },
     {
+      "name": "ws-finance-billing",
+      "label": "com.joneshong.scheduler.ws-finance-billing",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_finance_billing.py",
+      "schedule": { "calendar": { "Hour": 6, "Minute": 0 } },
+      "description": "每日 6AM: 訂閱帳單 + 分期到期自動生成交易紀錄",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-capture-expire",
       "label": "com.joneshong.scheduler.ws-capture-expire",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_capture_expire.py",

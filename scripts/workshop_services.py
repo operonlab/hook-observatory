@@ -81,6 +81,14 @@ SERVICES = [
         "health": "http://127.0.0.1:4103/docs",
         "workdir": "/Users/joneshong/workshop/stations/anvil/src",
     },
+    {
+        "name": "cronicle",
+        "type": "binary",
+        "cmd": "node /Users/joneshong/workshop/vendor/cronicle/lib/main.js",
+        "port": 4105,
+        "health": "http://127.0.0.1:4105/api/app/ping",
+        "workdir": "/Users/joneshong/workshop/vendor/cronicle",
+    },
     # ── Infrastructure Tools ──
     {
         "name": "litellm",
