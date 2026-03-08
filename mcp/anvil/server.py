@@ -362,5 +362,93 @@ async def anvil_sync_skills() -> str:
     return "\n".join(parts)
 
 
+@mcp.tool()
+async def anvil_lifecycle_runs(
+    status: str = "",
+    limit: int = 10,
+) -> str:
+    """List recent skill lifecycle pipeline runs.
+
+    Args:
+        status: Filter by status (running, completed, failed, partial). Empty = all.
+        limit: Max results (default 10).
+    """
+
+    def _run():
+        with _client() as c:
+            return c.list_lifecycle_runs(
+                status=status or None,
+                limit=limit,
+            )
+
+    data = await asyncio.to_thread(_run)
+    items = data.get("items", [])
+    if not items:
+        return "No lifecycle runs found."
+
+    lines = [
+        "## Lifecycle Runs",
+        "",
+        "| Run ID | Status | Date | Pass Rate | Skills |",
+        "|--------|--------|------|-----------|--------|",
+    ]
+    for r in items:
+        total = r.get("total_skills", 0) or 1
+        passed = r.get("test_passed", 0)
+        rate = f"{(passed / total * 100):.0f}%" if total > 0 else "—"
+        date = r.get("started_at", "")[:10]
+        lines.append(
+            f"| {r['run_id']} | {r['status']} | {date} | {rate} | {r.get('total_skills', 0)} |"
+        )
+    lines.append(f"\n**Total:** {data.get('total', 0)} runs")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def anvil_lifecycle_detail(run_id: str) -> str:
+    """Get detailed results of a specific lifecycle run.
+
+    Args:
+        run_id: The lifecycle run ID (e.g. lifecycle-20260309-011152).
+    """
+
+    def _run():
+        with _client() as c:
+            return c.get_lifecycle_run(run_id)
+
+    r = await asyncio.to_thread(_run)
+
+    lines = [
+        f"## Lifecycle Run: {r['run_id']}",
+        "",
+        f"**Status:** {r['status']}  **Trigger:** {r['trigger']}",
+        f"**Started:** {r.get('started_at', '')}  **Completed:** {r.get('completed_at', '—')}",
+        "",
+        "### Test Results",
+        f"- Passed: {r.get('test_passed', 0)} / {r.get('total_skills', 0)}",
+        f"- Partial: {r.get('test_partial', 0)}",
+        f"- Failed: {r.get('test_failed', 0)}",
+        "",
+        "### Security",
+        f"- Clean: {r.get('sec_clean', 0)}",
+        f"- Warned: {r.get('sec_warned', 0)}",
+        f"- Blocked: {r.get('sec_blocked', 0)}",
+        "",
+        "### Optimization",
+        f"- Skills optimized: {r.get('optimized', 0)}",
+        f"- Changes applied: {r.get('changes_applied', 0)}",
+    ]
+
+    skipped = r.get("skipped_phases", [])
+    if skipped:
+        lines.append(f"\n**Skipped:** {', '.join(skipped)}")
+    errors = r.get("errors", {})
+    if errors:
+        lines.append("\n**Errors:**")
+        for phase, msg in errors.items():
+            lines.append(f"- {phase}: {msg}")
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     mcp.run()

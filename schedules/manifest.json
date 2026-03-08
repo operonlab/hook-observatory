@@ -181,6 +181,18 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "ws-skill-lifecycle",
+      "label": "com.joneshong.scheduler.ws-skill-lifecycle",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_skill_lifecycle.py --trigger cron",
+      "schedule": { "calendar": { "Weekday": 0, "Hour": 2, "Minute": 0 } },
+      "description": "每週日 2AM: skill lifecycle — test + security + catalog → Anvil DB",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true,
+      "catch_up": false,
+      "timeout": 300
     }
   ]
 }

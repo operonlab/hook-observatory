@@ -229,3 +229,61 @@ class Correction(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class LifecycleRun(Base):
+    """Skill lifecycle pipeline run record."""
+
+    __tablename__ = "lifecycle_runs"
+    __table_args__ = (
+        Index("idx_lifecycle_runs_run_id", "run_id", unique=True),
+        Index("idx_lifecycle_runs_status", "status"),
+        Index("idx_lifecycle_runs_started", "started_at"),
+        {"schema": "anvil"},
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    run_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'running'")
+    )
+    trigger: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=text("'manual'")
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Phase results: {"test": {"status": "ok", "duration_ms": 5000}, ...}
+    phases: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+
+    # Test metrics
+    total_skills: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    test_passed: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    test_partial: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    test_failed: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+    # Security metrics
+    sec_clean: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    sec_warned: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    sec_blocked: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+    # Optimize metrics
+    optimized: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    changes_applied: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+    # Detailed per-skill results
+    test_details: Mapped[dict | None] = mapped_column(JSONB)
+    security_details: Mapped[dict | None] = mapped_column(JSONB)
+    catalog_snapshot: Mapped[dict | None] = mapped_column(JSONB)
+
+    # Skipped/errors
+    skipped_phases: Mapped[dict | list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    errors: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))

@@ -295,6 +295,44 @@ class AnvilClient:
             body["approved_by"] = approved_by
         return self._put(f"/api/anvil/corrections/{correction_id}", body)
 
+    # ======================== Lifecycle Runs ========================
+
+    def create_lifecycle_run(
+        self,
+        trigger: str = "manual",
+        skipped_phases: list[str] | None = None,
+    ) -> dict:
+        """Create a new lifecycle run. POST /api/anvil/lifecycle/runs"""
+        body: dict[str, Any] = {"trigger": trigger}
+        if skipped_phases:
+            body["skipped_phases"] = skipped_phases
+        return self._post("/api/anvil/lifecycle/runs", body)
+
+    def list_lifecycle_runs(
+        self,
+        status: str | None = None,
+        trigger: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        """List lifecycle runs. GET /api/anvil/lifecycle/runs"""
+        return self._get(
+            "/api/anvil/lifecycle/runs",
+            {"status": status, "trigger": trigger, "limit": limit, "offset": offset},
+        )
+
+    def get_lifecycle_run(self, run_id: str) -> dict:
+        """Get a lifecycle run. GET /api/anvil/lifecycle/runs/{run_id}"""
+        return self._get(f"/api/anvil/lifecycle/runs/{run_id}")
+
+    def update_lifecycle_run(self, run_id: str, **kwargs: Any) -> dict:
+        """Update a lifecycle run. PATCH /api/anvil/lifecycle/runs/{run_id}"""
+        return self._request("PATCH", f"/api/anvil/lifecycle/runs/{run_id}", json=kwargs).json()
+
+    def get_lifecycle_trends(self, days: int = 30) -> dict:
+        """Get lifecycle trends. GET /api/anvil/lifecycle/trends"""
+        return self._get("/api/anvil/lifecycle/trends", {"days": days})
+
     # ======================== Local Operations ========================
 
     def scan_skills_dir(self, skills_dir: str = "~/.claude/skills") -> list[dict]:
