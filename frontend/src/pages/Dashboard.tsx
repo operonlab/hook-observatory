@@ -9,15 +9,19 @@ import SessionList from "../components/SessionList.tsx";
 const REFRESH = 30_000;
 
 export default function Dashboard() {
-  const { data: summary, error: e1, refresh: r1 } = useSWR("summary", api.summary, { refreshInterval: REFRESH });
-  const { data: health, error: e2, refresh: r2 } = useSWR("health", api.health, { refreshInterval: REFRESH });
-  const { data: byEvent, error: e3, refresh: r3 } = useSWR("byEvent", api.byEvent, { refreshInterval: REFRESH, fallback: [] });
-  const { data: byTool, error: e4, refresh: r4 } = useSWR("byTool", () => api.byTool(), { refreshInterval: REFRESH, fallback: [] });
-  const { data: sessions, error: e5, refresh: r5 } = useSWR("sessions", () => api.bySession(), { refreshInterval: REFRESH, fallback: [] });
-  const { data: timeline, error: e6, refresh: r6 } = useSWR("timeline", () => api.timeline(), { refreshInterval: REFRESH, fallback: [] });
+  const { data: allStats, error: statsError, refresh: refreshStats } = useSWR(
+    "allStats",
+    api.allStats,
+    { refreshInterval: REFRESH },
+  );
+  const { data: health, error: healthError, refresh: refreshHealth } = useSWR(
+    "health",
+    api.health,
+    { refreshInterval: REFRESH },
+  );
 
-  const error = e1 || e2 || e3 || e4 || e5 || e6;
-  const refreshAll = () => { r1(); r2(); r3(); r4(); r5(); r6(); };
+  const error = statsError || healthError;
+  const refreshAll = () => { refreshStats(); refreshHealth(); };
 
   return (
     <div className="space-y-6">
@@ -39,18 +43,18 @@ export default function Dashboard() {
       )}
 
       {/* Stats overview */}
-      <StatsOverview summary={summary} health={health} />
+      <StatsOverview summary={allStats?.summary ?? null} health={health} />
 
       {/* Charts row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <EventTypeChart data={byEvent ?? []} />
-        <TimelineChart data={timeline ?? []} />
+        <EventTypeChart data={allStats?.by_event ?? []} />
+        <TimelineChart data={allStats?.timeline ?? []} />
       </div>
 
       {/* Second row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ToolUsageChart data={byTool ?? []} />
-        <SessionList data={sessions ?? []} />
+        <ToolUsageChart data={allStats?.by_tool ?? []} />
+        <SessionList data={allStats?.sessions ?? []} />
       </div>
     </div>
   );

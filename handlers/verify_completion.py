@@ -195,7 +195,8 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     if agent_type and agent_type not in _CODE_AGENTS:
         return ALLOW
 
-    # Find verify config
+    # Find verify config (also captures the project root for command execution)
+    root = _find_project_root(cwd)
     config = _find_verify_config(cwd)
     if not config or not config.get("commands"):
         return ALLOW
@@ -226,8 +227,8 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
             "Allowing completion — please review manually."
         )
 
-    # Run verification
-    results = _run_verify(commands, cwd)
+    # Run verification from git root so relative paths in .verify.json resolve correctly
+    results = _run_verify(commands, root)
     all_passed = all(r["passed"] for r in results)
 
     if all_passed:

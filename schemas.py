@@ -75,3 +75,11 @@ class SessionStats(BaseModel):
 class TimelineBucket(BaseModel):
     bucket: datetime
     count: int
+
+
+class AllStats(BaseModel):
+    summary: SummaryStats
+    by_event: list[EventTypeStats]
+    by_tool: list[ToolStats]
+    sessions: list[SessionStats]
+    timeline: list[TimelineBucket]

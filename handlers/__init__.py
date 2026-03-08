@@ -67,7 +67,6 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "Notification": [
-        (None, voice_notify.handle),
         (None, observability.handle),
     ],
     "SessionEnd": [

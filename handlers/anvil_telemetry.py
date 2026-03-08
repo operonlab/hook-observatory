@@ -13,7 +13,7 @@ import os
 
 from .base import ALLOW, HookResult, run_background
 
-ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:4102")
+ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:4103")
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
@@ -26,19 +26,22 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     if not skill_name:
         return ALLOW
 
-    # Parse raw_input for additional context
+    # Parse raw_input for session context + tool_response
     try:
         parsed = json.loads(raw_input) if raw_input.strip() else {}
     except (json.JSONDecodeError, AttributeError):
         parsed = {}
 
-    # Build invocation payload
     data = parsed.get("data", parsed)
+    tool_response = data.get("tool_response", {})
+
+    # Build invocation payload
     payload = {
         "skill_name": skill_name,
         "session_id": data.get("session_id", ""),
         "agent_model": data.get("agent_model", ""),
-        "success": True,  # PostToolUse = completed successfully
+        "success": tool_response.get("success", True),
+        "error_message": tool_response.get("error", None),
         "tool_calls_count": 1,
         "payload": {
             "args": tool_input.get("args", ""),
@@ -47,7 +50,6 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     }
 
     # Fire-and-forget HTTP POST to Anvil API
-    # Use curl via run_background to avoid import overhead
     curl_cmd = [
         "curl",
         "-s",
