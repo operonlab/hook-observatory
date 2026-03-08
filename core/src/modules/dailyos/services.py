@@ -93,6 +93,41 @@ class MethodService(BaseCRUDService[Method, MethodCreate, MethodUpdate, MethodRe
             deleted_at=instance.deleted_at,
         )
 
+    async def list_methods(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        pagination: PaginationParams | None = None,
+        include_presets: bool = True,
+    ) -> PaginatedResponse[MethodResponse]:
+        """List methods for a space, optionally including system presets."""
+        p = pagination or PaginationParams()
+        filters = [Method.deleted_at == None]  # noqa: E711
+        if include_presets:
+            from sqlalchemy import or_
+
+            filters.append(or_(Method.space_id == space_id, Method.space_id == "system"))
+        else:
+            filters.append(Method.space_id == space_id)
+
+        count_q = select(func.count()).select_from(Method).where(*filters)
+        total = (await db.execute(count_q)).scalar_one()
+
+        q = (
+            select(Method)
+            .where(*filters)
+            .order_by(Method.is_preset.desc(), Method.created_at.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows: Sequence[Method] = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[MethodResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
+
     async def clone_method(
         self,
         db: AsyncSession,
@@ -395,6 +430,92 @@ class DailyPlanService:
             completion_score=instance.completion_score,
             deleted_at=instance.deleted_at,
         )
+
+    async def list_plans(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        pagination: PaginationParams | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> PaginatedResponse[DailyPlanResponse]:
+        """List daily plans for a space with optional date range filter."""
+        p = pagination or PaginationParams()
+        filters = [
+            DailyPlan.space_id == space_id,
+            DailyPlan.deleted_at == None,  # noqa: E711
+        ]
+        if date_from:
+            filters.append(DailyPlan.plan_date >= date_from)
+        if date_to:
+            filters.append(DailyPlan.plan_date <= date_to)
+
+        count_q = select(func.count()).select_from(DailyPlan).where(*filters)
+        total = (await db.execute(count_q)).scalar_one()
+
+        q = (
+            select(DailyPlan)
+            .where(*filters)
+            .order_by(DailyPlan.plan_date.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows: Sequence[DailyPlan] = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[DailyPlanResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
+
+    async def transition_status(
+        self,
+        db: AsyncSession,
+        plan_id: str,
+        new_status: str,
+        user_id: str | None = None,
+        comment: str | None = None,
+    ) -> DailyPlan:
+        """Transition a plan's status (planning → active → reviewing → completed)."""
+        valid_transitions = {
+            "planning": ["active"],
+            "active": ["reviewing", "completed"],
+            "reviewing": ["completed", "active"],
+        }
+        plan = await db.get(DailyPlan, plan_id)
+        if not plan or plan.deleted_at is not None:
+            raise NotFoundError("Plan not found", code="dailyos.plan_not_found")
+
+        allowed = valid_transitions.get(plan.status, [])
+        if new_status not in allowed:
+            raise BadRequestError(
+                f"Cannot transition from '{plan.status}' to '{new_status}'",
+                code="dailyos.invalid_transition",
+            )
+        plan.status = new_status
+        if comment and new_status == "completed":
+            plan.reflection = comment
+        await db.flush()
+        await db.refresh(plan)
+        return plan
+
+    async def preview_method(
+        self,
+        db: AsyncSession,
+        method_id: str,
+    ) -> dict:
+        """Preview what a method would produce as a plan."""
+        method = await db.get(Method, method_id)
+        if not method or method.deleted_at is not None:
+            raise NotFoundError("Method not found", code="dailyos.method_not_found")
+
+        strategy = MethodStrategy.from_config(method.config)
+        return {
+            "method": method_service.to_response(method),
+            "suggested_items": [],
+            "frog_ids": [],
+            "warnings": strategy.validate_plan([]),
+        }
 
     async def _pull_items(
         self,
