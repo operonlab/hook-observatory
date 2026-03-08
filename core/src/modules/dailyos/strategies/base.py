@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import date, timedelta
 from typing import Any
 
 
@@ -89,4 +90,36 @@ class MethodStrategy(ABC):
             est = item.get("estimated_hours") or 0
             if est > filt["estimated_hours_lte"]:
                 return False
+
+        # due_date_within_days: item's due_date is within N days from now
+        if "due_date_within_days" in filt:
+            due_str = item.get("due_date")
+            if not due_str:
+                return False
+            try:
+                due = date.fromisoformat(due_str[:10])  # handle datetime isoformat too
+            except (ValueError, TypeError):
+                return False
+            deadline = date.today() + timedelta(days=filt["due_date_within_days"])
+            if due > deadline:
+                return False
+
+        # has_due_date: filter items that have/don't have a due date
+        if "has_due_date" in filt:
+            has_due = item.get("due_date") is not None
+            if has_due != filt["has_due_date"]:
+                return False
+
+        # source: filter by source (personal/family/company)
+        if "source" in filt:
+            if item.get("source") not in filt["source"]:
+                return False
+
+        # tags_include: item must have at least one of these tags
+        if "tags_include" in filt:
+            item_tags = set(item.get("tags") or [])
+            required_tags = set(filt["tags_include"])
+            if not item_tags & required_tags:
+                return False
+
         return True

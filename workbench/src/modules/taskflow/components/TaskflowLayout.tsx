@@ -1,4 +1,4 @@
-import { BarChart3, CheckSquare, LayoutDashboard } from 'lucide-react'
+import { BarChart3, Calendar, CheckSquare, LayoutDashboard } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import '../styles/taskflow.css'
 
@@ -57,6 +57,21 @@ export default function TaskflowLayout() {
               </NavLink>
             )
           })}
+
+          {/* Cross-module link */}
+          <div className="pt-2 mt-2 border-t" style={{ borderColor: 'var(--tf-border)' }}>
+            <NavLink
+              to="/dailyos"
+              className="flex items-center gap-3 px-3 py-2.5 text-[13px] rounded-md transition-colors"
+              style={{
+                color: 'var(--tf-text-muted)',
+                borderLeft: '2px solid transparent',
+              }}
+            >
+              <Calendar size={15} />
+              每日規劃
+            </NavLink>
+          </div>
         </nav>
       </aside>
 
