@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
         settings.validate_secret_key()
 
     # Import event subscribers so @event_bus.on decorators register handlers
+    import src.modules.dailyos.events
     import src.modules.finance.events
     import src.modules.invest.events
     import src.modules.nodeflow.events  # registers @event_bus.on handlers
@@ -128,5 +129,7 @@ app.include_router(matchcore_router, prefix="/api/matchcore", tags=["matchcore"]
 app.include_router(nodeflow_router, prefix="/api/nodeflow", tags=["nodeflow"])
 
 from src.modules.capture.routes import router as capture_router  # noqa: E402
+from src.modules.dailyos.routes import router as dailyos_router  # noqa: E402
 
 app.include_router(capture_router, prefix="/api/captures", tags=["capture"])
+app.include_router(dailyos_router, prefix="/api/dailyos", tags=["dailyos"])

@@ -83,6 +83,15 @@ export const APP_LIST: AppInfo[] = [
     status: 'available',
   },
   {
+    id: 'dailyos',
+    name: '每日規劃',
+    description: '每日計劃、方法論管理、儀式循環引擎',
+    icon: '📅',
+    path: '/dailyos',
+    color: '#cba6f7',
+    status: 'available',
+  },
+  {
     id: 'skillpath',
     name: '技能路徑',
     description: '技能樹、學習路徑、成長規劃',
