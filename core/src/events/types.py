@@ -163,6 +163,17 @@ class CaptureEvents:
     EXPIRED = "capture.expired"
 
 
+class DailyosEvents:
+    METHOD_CREATED = "dailyos.method.created"
+    METHOD_UPDATED = "dailyos.method.updated"
+    METHOD_DELETED = "dailyos.method.deleted"
+    METHOD_SWITCHED = "dailyos.method.switched"
+    PLAN_CREATED = "dailyos.plan.created"
+    PLAN_UPDATED = "dailyos.plan.updated"
+    PLAN_COMPLETED = "dailyos.plan.completed"
+    REVIEW_SUBMITTED = "dailyos.review.submitted"
+
+
 class SystemEvents:
     HEALTH_CHECKED = "system.health.checked"
     CONFIG_CHANGED = "system.config.changed"
