@@ -4,7 +4,7 @@ Class.add( Page.Admin, {
 	
 	gosub_api_keys: function(args) {
 		// show API Key list
-		app.setWindowTitle( "API Keys" );
+		app.setWindowTitle( _t('admin_api_keys.api_keys') );
 		this.div.addClass('loading');
 		app.api.post( 'app/get_api_keys', copy_object(args), this.receive_keys.bind(this) );
 	},
@@ -28,21 +28,23 @@ Class.add( Page.Admin, {
 		
 		html += this.getSidebarTabs( 'api_keys',
 			[
-				['activity', "Activity Log"],
-				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin_config_keys.configs')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
 		
-		var cols = ['App Title', 'API Key', 'Status', 'Author', 'Created', 'Actions'];
+		var cols = [_t('admin_api_keys.app_title'), _t('admin_api_keys.api_key'), _t('admin_api_keys.status'), 'Author', 'Created', 'Actions'];
 		
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
 		html += '<div class="subtitle">';
-			html += 'API Keys';
+			html += _t('admin_api_keys.api_keys');
 			html += '<div class="clear"></div>';
 		html += '</div>';
 		
@@ -64,7 +66,7 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_api_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add API Key...</div></td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_api_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + _t('admin_api_keys.add_api_key') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '</div>'; // padding
@@ -88,22 +90,24 @@ Class.add( Page.Admin, {
 	gosub_new_api_key: function(args) {
 		// create new API Key
 		var html = '';
-		app.setWindowTitle( "New API Key" );
+		app.setWindowTitle( _t('admin_api_keys.new_api_key') );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'new_api_key',
 			[
-				['activity', "Activity Log"],
-				['api_keys', "API Keys"],
-				['new_api_key', "New API Key"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin_config_keys.configs')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['new_api_key', _t('admin_api_keys.new_api_key')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
 		
-		html += '<div style="padding:20px;"><div class="subtitle">New API Key</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + _t('admin_api_keys.new_api_key') + '</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -117,10 +121,10 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">'+_t('admin_api_keys.cancel')+'</div></td>';
 				html += '<td width="50">&nbsp;</td>';
 				
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_api_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Key</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_api_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>'+_t('admin_api_keys.create_key')+'</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -149,12 +153,12 @@ Class.add( Page.Admin, {
 		if (!api_key) return; // error
 		
 		if (!api_key.title.length) {
-			return app.badField('#fe_ak_title', "Please enter an app title for the new API Key.");
+			return app.badField('#fe_ak_title', _t('admin_api_keys.please_enter_an_app_title_for_the_new_ap'));
 		}
 		
 		this.api_key = api_key;
 		
-		app.showProgress( 1.0, "Creating API Key..." );
+		app.showProgress( 1.0, _t('admin_api_keys.creating_api_key') );
 		app.api.post( 'app/create_api_key', api_key, this.new_api_key_finish.bind(this) );
 	},
 	
@@ -165,7 +169,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=edit_api_key&id=' + resp.id);
 		
 		setTimeout( function() {
-			app.showMessage('success', "The new API Key was created successfully.");
+			app.showMessage('success', _t('admin_api_keys.the_new_api_key_was_created_successfully'));
 		}, 150 );
 	},
 	
@@ -180,22 +184,24 @@ Class.add( Page.Admin, {
 		var html = '';
 		this.api_key = resp.api_key;
 		
-		app.setWindowTitle( "Editing API Key \"" + (this.api_key.title) + "\"" );
+		app.setWindowTitle( _t('admin_api_keys.editing_api_key') + '"' + (this.api_key.title) + '"' );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'edit_api_key',
 			[
-				['activity', "Activity Log"],
-				['api_keys', "API Keys"],
-				['edit_api_key', "Edit API Key"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin.config_keys')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['edit_api_key', _t('admin_api_keys.editing_api_key')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
 		
-		html += '<div style="padding:20px;"><div class="subtitle">Editing API Key &ldquo;' + (this.api_key.title) + '&rdquo;</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + _t('admin_api_keys.editing_api_key') + ' &ldquo;' + (this.api_key.title) + '&rdquo;</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center>';
@@ -207,11 +213,11 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">'+_t('admin_api_keys.cancel')+'</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_api_key_dialog()">Delete Key...</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_api_key_dialog()">'+_t('admin_api_keys.delete_key')+'</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_api_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_api_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>'+_t('admin_api_keys.save_changes')+'</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -233,14 +239,14 @@ Class.add( Page.Admin, {
 		
 		this.api_key = api_key;
 		
-		app.showProgress( 1.0, "Saving API Key..." );
+		app.showProgress( 1.0, _t('admin_api_keys.saving_api_key') );
 		app.api.post( 'app/update_api_key', api_key, this.save_api_key_finish.bind(this) );
 	},
 	
 	save_api_key_finish: function(resp, tx) {
 		// new API Key saved successfully
 		app.hideProgress();
-		app.showMessage('success', "The API Key was saved successfully.");
+		app.showMessage('success', _t('admin_api_keys.the_api_key_was_saved_successfully'));
 		window.scrollTo( 0, 0 );
 	},
 	
@@ -249,7 +255,7 @@ Class.add( Page.Admin, {
 		var self = this;
 		app.confirm( '<span style="color:red">Delete API Key</span>', "Are you sure you want to <b>permanently delete</b> the API Key \""+this.api_key.title+"\"?  There is no way to undo this action.", 'Delete', function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting API Key..." );
+				app.showProgress( 1.0, _t('admin_api_keys.deleting_api_key') );
 				app.api.post( 'app/delete_api_key', self.api_key, self.delete_api_key_finish.bind(self) );
 			}
 		} );
@@ -263,7 +269,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=api_keys', 'force');
 		
 		setTimeout( function() {
-			app.showMessage('success', "The API Key '"+self.api_key.title+"' was deleted successfully.");
+			app.showMessage('success', _t('admin_api_keys.the_api_key') + "'"+self.api_key.title+"' was deleted successfully.");
 		}, 150 );
 	},
 	
@@ -273,23 +279,23 @@ Class.add( Page.Admin, {
 		var api_key = this.api_key;
 		
 		// API Key
-		html += get_form_table_row( 'API Key', '<input type="text" id="fe_ak_key" size="35" value="'+escape_text_field_value(api_key.key)+'" spellcheck="false"/>&nbsp;<span class="link addme" onMouseUp="$P().generate_key()">&laquo; Generate Random</span>' );
-		html += get_form_table_caption( "The API Key string is used to authenticate API calls." );
+		html += get_form_table_row( _t('admin_api_keys.api_key'), '<input type="text" id="fe_ak_key" size="35" value="'+escape_text_field_value(api_key.key)+'" spellcheck="false"/>&nbsp;<span class="link addme" onMouseUp="$P().generate_key()">&laquo; Generate Random</span>' );
+		html += get_form_table_caption( _t('admin_api_keys.the_api_key_string_is_used_to_authentica') );
 		html += get_form_table_spacer();
 		
 		// status
-		html += get_form_table_row( 'Status', '<select id="fe_ak_status">' + render_menu_options([[1,'Active'], [0,'Disabled']], api_key.active) + '</select>' );
+		html += get_form_table_row( _t('admin_api_keys.status'), '<select id="fe_ak_status">' + render_menu_options([[1,'Active'], [0,'Disabled']], api_key.active) + '</select>' );
 		html += get_form_table_caption( "'Disabled' means that the API Key remains in the system, but it cannot be used for any API calls." );
 		html += get_form_table_spacer();
 		
 		// title
-		html += get_form_table_row( 'App Title', '<input type="text" id="fe_ak_title" size="30" value="'+escape_text_field_value(api_key.title)+'" spellcheck="false"/>' );
-		html += get_form_table_caption( "Enter the title of the application that will be using the API Key.");
+		html += get_form_table_row( _t('admin_api_keys.app_title'), '<input type="text" id="fe_ak_title" size="30" value="'+escape_text_field_value(api_key.title)+'" spellcheck="false"/>' );
+		html += get_form_table_caption( _t('admin_api_keys.enter_the_title_of_the_application_that_') );
 		html += get_form_table_spacer();
 		
 		// description
-		html += get_form_table_row('App Description', '<textarea id="fe_ak_desc" style="width:550px; height:50px; resize:vertical;">'+escape_text_field_value(api_key.description)+'</textarea>');
-		html += get_form_table_caption( "Optionally enter a more detailed description of the application." );
+		html += get_form_table_row(_t('admin_api_keys.app_description'), '<textarea id="fe_ak_desc" style="width:550px; height:50px; resize:vertical;">'+escape_text_field_value(api_key.description)+'</textarea>');
+		html += get_form_table_caption( _t('admin_api_keys.optionally_enter_a_more_detailed_descrip') );
 		html += get_form_table_spacer();
 		
 		// privilege list
@@ -304,8 +310,8 @@ Class.add( Page.Admin, {
 				priv_html += '</div>';
 			}
 		}
-		html += get_form_table_row( 'Privileges', priv_html );
-		html += get_form_table_caption( "Select which privileges the API Key should have." );
+		html += get_form_table_row( _t('admin_api_keys.privileges'), priv_html );
+		html += get_form_table_caption( _t('admin_api_keys.select_which_privileges_the_api_key_shou') );
 		html += get_form_table_spacer();
 		
 		return html;
@@ -321,7 +327,7 @@ Class.add( Page.Admin, {
 		api_key.description = $('#fe_ak_desc').val();
 		
 		if (!api_key.key.length) {
-			return app.badField('#fe_ak_key', "Please enter an API Key string, or generate a random one.");
+			return app.badField('#fe_ak_key', _t('admin_api_keys.please_enter_an_api_key_string_or_genera'));
 		}
 		
 		for (var idx = 0, len = config.privilege_list.length; idx < len; idx++) {

@@ -7,7 +7,13 @@
 	<meta name="description" content="A simple distributed task scheduler and runner.">
 	<meta name="author" content="Joseph Huckaby">
 	<link rel="shortcut icon" href="/favicon.ico">
-	
+	<link rel="manifest" href="manifest.json">
+	<meta name="theme-color" content="#3f7ed5">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="default">
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="apple-touch-icon" href="images/icon-192.png">
+
 	<!-- BUILD: COMBINE_STYLE_START -->
 	<link rel="stylesheet" href="css/base.css">
 	<link rel="stylesheet" href="css/style.css">
@@ -41,12 +47,12 @@
 			<!-- Main Content Area -->
 			<div class="tab_bar" style="display:none">
 				<div id="tab_Login" class="tab inactive" style="display:none"><span class="content"></span></div>
-				<div id="tab_Home" class="tab inactive"><span class="content"><i class="mdi mdi-home-variant mdi-lg">&nbsp;</i>Home</span></div>
-				<div id="tab_Schedule" class="tab inactive"><span class="content"><i class="mdi mdi-calendar-clock mdi-lg">&nbsp;</i>Schedule</span></div>
-				<div id="tab_History" class="tab inactive"><span class="content"><i class="fa fa-history">&nbsp;</i>Completed</span></div>
-				<div id="tab_JobDetails" class="tab inactive" style="display:none"><span class="content"><i class="fa fa-pie-chart">&nbsp;</i>Job Details</span></div>
-				<div id="tab_MyAccount" class="tab inactive"><span class="content"><i class="mdi mdi-account mdi-lg">&nbsp;</i>My Account</span></div>
-				<div id="tab_Admin" class="tab inactive" style="display:none"><span class="content"><i class="mdi mdi-lock mdi-lg">&nbsp;</i>Admin</span></div>
+				<div id="tab_Home" class="tab inactive"><span class="content"><i class="mdi mdi-home-variant mdi-lg">&nbsp;</i><span data-i18n="common.tab_home">Home</span></span></div>
+				<div id="tab_Schedule" class="tab inactive"><span class="content"><i class="mdi mdi-calendar-clock mdi-lg">&nbsp;</i><span data-i18n="common.tab_schedule">Schedule</span></span></div>
+				<div id="tab_History" class="tab inactive"><span class="content"><i class="fa fa-history">&nbsp;</i><span data-i18n="common.tab_completed">Completed</span></span></div>
+				<div id="tab_JobDetails" class="tab inactive" style="display:none"><span class="content"><i class="fa fa-pie-chart">&nbsp;</i><span data-i18n="common.tab_job_details">Job Details</span></span></div>
+				<div id="tab_MyAccount" class="tab inactive"><span class="content"><i class="mdi mdi-account mdi-lg">&nbsp;</i><span data-i18n="common.tab_my_account">My Account</span></span></div>
+				<div id="tab_Admin" class="tab inactive" style="display:none"><span class="content"><i class="mdi mdi-lock mdi-lg">&nbsp;</i><span data-i18n="common.tab_admin">Admin</span></span></div>
 				
 				<div id="d_tab_master" class="tab_widget" onMouseUp="app.toggleMasterSwitch()"></div>
 				<div id="d_tab_time" class="tab_widget"><i class="fa fa-clock-o">&nbsp;</i><span></span></div>
@@ -94,7 +100,8 @@
 	<script src="js/common/page.js"></script>
 	<script src="js/common/dialog.js"></script>
 	<script src="js/common/base.js"></script>
-	
+
+	<script src="js/i18n.js"></script>
 	<script src="js/app.js"></script>
 	<script src="js/pages/Base.class.js"></script>
 	<script src="js/pages/Home.class.js"></script>
@@ -110,10 +117,21 @@
 	<script src="js/pages/admin/Plugins.js"></script>
 	<script src="js/pages/admin/Activity.js"></script>
 	<script src="js/pages/admin/APIKeys.js"></script>
+	<script src="js/pages/admin/ConfigKeys.js"></script>
+	<script src="js/pages/admin/Secrets.js"></script>
 	<!-- BUILD: COMBINE_SCRIPT_END -->
 	
 	<script src="/socket.io/socket.io.js"></script>
 	<script src="/api/app/config"></script>
+
+	<script>
+		if (window.I18n) I18n.init();
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.register('sw.js').catch(function(err) {
+				console.warn('SW registration failed:', err);
+			});
+		}
+	</script>
 
 </body>
 </html>

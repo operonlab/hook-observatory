@@ -11,18 +11,21 @@ app.extend({
 	activeJobs: {},
 	eventQueue: {},
 	state: null,
+	filter: {
+		schedule: {	}
+	},
 	plain_text_post: true,
 	clock_visible: false,
 	scroll_time_visible: false,
 	default_prefs: {
 		schedule_group_by: 'category'
 	},
-	
+
 	receiveConfig: function(resp) {
 		// receive config from server
 		if (resp.code) {
-			app.showProgress( 1.0, "Waiting for master server..." );
-			setTimeout( function() { load_script( '/api/app/config' ); }, 1000 );
+			app.showProgress( 1.0, _t('app.waiting_for_manager_server') );
+			setTimeout( function() { load_script( 'api/app/config' ); }, 1000 );
 			return;
 		}
 		delete resp.code;
@@ -31,13 +34,15 @@ app.extend({
 		for (var key in resp) {
 			this[key] = resp[key];
 		}
+
+		this.initTheme()
 		
 		// allow visible app name to be changed in config
 		this.name = config.name;
-		$('#d_header_title').html( '<b>' + this.name + '</b>' );
+		$('#d_header_title').html( '<b>' + filterXSS(this.name) + '</b>' );
 		
-		// hit the master server directly from now on
-		this.setMasterHostname( resp.master_hostname );
+		// hit the manager server directly from now on
+		this.setmanagerHostname( resp.manager_hostname );
 		
 		this.config.Page = [
 			{ ID: 'Home' },
@@ -63,23 +68,28 @@ app.extend({
 		if (this.abort) return; // fatal error, do not initialize app
 		
 		if (!this.config) {
-			// must be in master server wait loop
+			// must be in manager server wait loop
 			this.initReady = true;
 			return;
 		}
-		
+
 		if (!this.servers) this.servers = {};
 		this.server_groups = [];
 		
 		// timezone support
 		this.tz = this.config.tz || jstz.determine().name();
 		this.zones = moment.tz.names();
+
+		this.hh24 = (this.config.ui || {}).hh24
+		if(this.hh24) { // override hour labels
+			_hour_names = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23']
+		}
 		
 		// preload a few essential images
 		for (var idx = 0, len = this.preload_images.length; idx < len; idx++) {
 			var filename = '' + this.preload_images[idx];
 			var img = new Image();
-			img.src = '/images/'+filename;
+			img.src = 'images/'+filename;
 		}
 		
 		// populate prefs for first time user
@@ -120,12 +130,74 @@ app.extend({
 	
 	updateHeaderInfo: function() {
 		// update top-right display
-		var html = '';
-		html += '<div id="d_header_divider" class="right" style="margin-right:0;"></div>';
-		html += '<div class="header_option logout right" onMouseUp="app.doUserLogout()"><i class="fa fa-power-off fa-lg">&nbsp;&nbsp;</i>Logout</div>';
-		html += '<div id="d_header_divider" class="right"></div>';
-		html += '<div id="d_header_user_bar" class="right" style="background-image:url(' + this.getUserAvatarURL( this.retina ? 64 : 32 ) + ')" onMouseUp="app.doMyAccount()">' + (this.user.full_name || app.username).replace(/\s+.+$/, '') + '</div>';
+		let userName = (this.user.full_name || app.username).replace(/\s+.+$/, '') 
+		let avatarUrl = this.getUserAvatarURL( this.retina ? 64 : 32 )
+		let html = `
+		<div id="d_header_divider" class="right" style="margin-right:0;"></div>
+		<div class="header_option logout right" onMouseUp="app.doUserLogout()"><i class="fa fa-power-off fa-lg">&nbsp;&nbsp;</i>${_t('common.logout')}</div>
+		<div id="d_header_divider" class="right"></div>
+		<div id="d_theme_ctrl" class="header_option right" onmouseup="app.toggleTheme()"></div>
+		<div id="d_header_divider" class="right"></div>
+		<div id="d_lang_ctrl" class="header_option right" onmouseup="app.showLangMenu(event)"><i class="fa fa-language"></i></div>
+		<div id="d_header_divider" class="right"></div>
+		<div id="d_header_user_bar" class="right" style="background-image:url(${avatarUrl})" onMouseUp="app.doMyAccount()">${userName}</div>
+		`
 		$('#d_header_user_container').html( html );
+		this.initTheme();
+	},
+
+	showLangMenu: function(e) {
+		// show language selection dropdown
+		if ($('#d_lang_menu').length) { $('#d_lang_menu').remove(); return; }
+		var langs = (window.I18n && I18n.languages) || { 'en': 'English' };
+		var currentLang = (window.I18n && I18n.getLang()) || 'en';
+		var html = '<div id="d_lang_menu" class="lang_dropdown">';
+		for (var code in langs) {
+			var cls = (code === currentLang) ? 'lang_option active' : 'lang_option';
+			html += '<div class="' + cls + '" onmouseup="app.switchLang(\'' + code + '\')">' + langs[code] + '</div>';
+		}
+		html += '</div>';
+		$('body').append(html);
+		var ctrl = $('#d_lang_ctrl');
+		var pos = ctrl.offset();
+		$('#d_lang_menu').css({ top: pos.top + ctrl.outerHeight(), right: $(window).width() - pos.left - ctrl.outerWidth() });
+		setTimeout(function() { $(document).one('click', function() { $('#d_lang_menu').remove(); }); }, 10);
+	},
+
+	switchLang: function(lang) {
+		$('#d_lang_menu').remove();
+		if (window.I18n) {
+			I18n.setLang(lang);
+			// Reload the page to apply translations
+			location.reload();
+		}
+	},
+
+	// overwriting getUserAvatarURL to handle custom avatar url from external auth provider
+	getUserAvatarURL: function() {
+		// user may have custom avatar
+		if (this.user && this.user.avatar_url) {			
+			try { // try parse URL in order to encode any special characters in URL / prevent html injection
+				return new URL(app.user.avatar_url).toString() 
+			}
+			catch { 
+				// on any error proceed with gravatar
+			}
+		}
+
+		// get URL to user's avatar using Gravatar.com service
+		let size = 0;
+		let email = '';
+		if (arguments.length == 2) {
+			email = arguments[0];
+			size = arguments[1];
+		}
+		else if (arguments.length == 1) {
+			email = this.user.email;
+			size = arguments[0];
+		}
+		
+		return '//en.gravatar.com/avatar/' + hex_md5( email.toLowerCase() ) + '.jpg?s=' + size + '&d=mm';
 	},
 	
 	doUserLogin: function(resp) {
@@ -134,10 +206,11 @@ app.extend({
 		delete resp.code;
 		
 		for (var key in resp) {
+			if(key === 'secrets' && !this.isAdmin()) continue // secrets admin only
 			this[key] = resp[key];
 		}
 		
-		if (this.isCategoryLimited() || this.isGroupLimited()) {
+		if (this.isCategoryLimited()  || this.isGroupLimited() ) {
 			this.pruneSchedule();
 			this.pruneCategories();
 			this.pruneActiveJobs();
@@ -151,9 +224,9 @@ app.extend({
 		// update clock
 		this.setHeaderClock( this.epoch );
 		
-		// show scheduler master switch
-		this.updateMasterSwitch();
-		if (this.hasPrivilege('state_update')) $('#d_tab_master').addClass('active');
+		// show scheduler manager switch
+		this.updatemanagerSwitch();
+		if (this.hasPrivilege('state_update')) $('#d_tab_manager').addClass('active');
 		
 		// show admin tab if user is worthy
 		if (this.isAdmin()) $('#tab_Admin').show();
@@ -169,7 +242,7 @@ app.extend({
 		
 		if (!bad_cookie) {
 			// user explicitly logging out
-			this.showProgress(1.0, "Logging out...");
+			this.showProgress(1.0, _t('app.logging_out'));
 			this.setPref('username', '');
 		}
 		
@@ -186,7 +259,7 @@ app.extend({
 			self.setPref('session_id', '');
 			
 			$('#d_header_user_container').html( '' );
-			$('#d_tab_master').html( '' );
+			$('#d_tab_manager').html( '' );
 			
 			$('div.header_clock_layer').fadeTo( 1000, 0 );
 			$('#d_tab_time > span').html( '' );
@@ -209,8 +282,11 @@ app.extend({
 			
 			setTimeout( function() {
 				if (!app.config.external_users) {
-					if (bad_cookie) self.showMessage('error', "Your session has expired.  Please log in again.");
-					else self.showMessage('success', "You were logged out successfully.");
+					if (bad_cookie) {
+						self.showMessage('error', _t('app.your_session_has_expired_please_log_in_a'));
+						console.log('bad cookieee', bad_cookie)
+					}
+					else self.showMessage('success', _t('app.you_were_logged_out_successfully'));
 				}
 				
 				self.activeJobs = {};
@@ -218,6 +294,7 @@ app.extend({
 				delete self.schedule;
 				delete self.categories;
 				delete self.plugins;
+				delete self.secrets;
 				delete self.server_groups;
 				delete self.epoch;
 				
@@ -229,8 +306,8 @@ app.extend({
 	
 	doExternalLogin: function() {
 		// login using external user management system
-		// Force API to hit current page hostname vs. master server, so login redirect URL reflects it
-		app.api.post( '/api/user/external_login', { cookie: document.cookie }, function(resp) {
+		// Force API to hit current page hostname vs. manager server, so login redirect URL reflects it
+		app.api.post( 'user/external_login', { cookie: document.cookie }, function(resp) {
 			if (resp.user) {
 				Debug.trace("User Session Resume: " + resp.username + ": " + resp.session_id);
 				app.hideProgress();
@@ -239,7 +316,7 @@ app.extend({
 			}
 			else if (resp.location) {
 				Debug.trace("External User API requires redirect");
-				app.showProgress(1.0, "Logging in...");
+				app.showProgress(1.0, _t('app.logging_in'));
 				setTimeout( function() { window.location = resp.location; }, 250 );
 			}
 			else app.doError(resp.description || "Unknown login error.");
@@ -252,18 +329,40 @@ app.extend({
 		url += (url.match(/\?/) ? '&' : '?') + 'logout=1';
 		
 		Debug.trace("External User API requires redirect");
-		app.showProgress(1.0, "Logging out...");
+		app.showProgress(1.0, _t('app.logging_out'));
 		setTimeout( function() { window.location = url; }, 250 );
+	},
+
+	show_info: function(title) {
+        // just display stuff and close dialog
+		this.confirm_callback = this.hideDialog;
+
+		let buttons_html = `
+		  <center><table><tr>
+		  <td><div class="button" style="width:100px; font-weight:normal;" onMouseUp="app.confirm_click(false)">OK</div></td>
+		  </tr></table></center>
+		`
+
+		let html = `
+		  <div class="dialog_title">${title}</div>
+		  <div class="dialog_buttons">${buttons_html}</div>
+		`
+		Dialog.showAuto( "", html );
+		// special mode for key capture
+		Dialog.active = 'confirmation';
 	},
 	
 	socketConnect: function() {
 		// init socket.io client
 		var self = this;
-		
-		var url = this.proto + this.masterHostname + ':' + this.port;
-		if (!config.web_socket_use_hostnames && this.servers && this.servers[this.masterHostname] && this.servers[this.masterHostname].ip) {
+
+		let socket_io_path = "/socket.io"
+		if ((/^\/\w+$/i).test(config.base_path)) socket_io_path = config.base_path + "/socket.io"		
+
+		var url = this.proto + this.managerHostname + ':' + this.port;
+		if (!config.web_socket_use_hostnames && this.servers && this.servers[this.managerHostname] && this.servers[this.managerHostname].ip) {
 			// use ip instead of hostname if available
-			url = this.proto + this.servers[this.masterHostname].ip + ':' + this.port;
+			url = this.proto + this.servers[this.managerHostname].ip + ':' + this.port;
 		}
 		if (!config.web_direct_connect) {
 			url = this.proto + location.host;
@@ -284,7 +383,8 @@ app.extend({
 			reconnectionDelay: 1000,
 			reconnectionDelayMax: 2000,
 			reconnectionAttempts: 9999,
-			timeout: 3000
+			timeout: 3000,
+			path: socket_io_path,
 		} );
 		
 		socket.on('connect', function() {
@@ -327,17 +427,17 @@ app.extend({
 		} );
 		
 		socket.on('status', function(data) {
-			if (!data.master) {
-				// OMG we're not talking to master anymore?
-				self.recalculateMaster(data);
+			if (!data.manager) {
+				// OMG we're not talking to manager anymore?
+				self.recalculatemanager(data);
 			}
 			else {
-				// connected to master
+				// connected to manager
 				self.epoch = data.epoch;
 				self.servers = data.servers;
 				self.setHeaderClock( data.epoch );
 				
-				// update active jobs
+				// update active jobs				
 				self.updateActiveJobs( data );
 				
 				// notify current page
@@ -346,11 +446,11 @@ app.extend({
 				if (page && page.onStatusUpdate) page.onStatusUpdate(data);
 				
 				// remove dialog if present
-				if (self.waitingForMaster && self.progress) {
+				if (self.waitingFormanager && self.progress) {
 					self.hideProgress();
-					delete self.waitingForMaster;
+					delete self.waitingFormanager;
 				}
-			} // master
+			} // manager
 		} );
 		
 		socket.on('update', function(data) {
@@ -358,6 +458,7 @@ app.extend({
 			var limited_user = self.isCategoryLimited() || self.isGroupLimited();
 			
 			for (var key in data) {
+				if(key === 'secrets' && !self.isAdmin()) continue // secrets are admin only
 				self[key] = data[key];
 				
 				if (limited_user) {
@@ -370,8 +471,8 @@ app.extend({
 				if (page && page.onDataUpdate) page.onDataUpdate(key, data[key]);
 			}
 			
-			// update master switch (once per minute)
-			if (data.state) self.updateMasterSwitch();
+			// update manager switch (once per minute)
+			if (data.state) self.updatemanagerSwitch();
 			
 			// clear event autosave data if schedule was updated
 			if (data.schedule) delete self.autosave_event;
@@ -393,6 +494,9 @@ app.extend({
 		var jobs = data.active_jobs;
 		var changed = false;
 		
+		// hide silent jobs?
+		// if(jobs) jobs = jobs.map(j=>!j.silent)
+		
 		// determine if jobs have been added or deleted
 		for (var id in jobs) {
 			// check for new jobs added
@@ -404,7 +508,7 @@ app.extend({
 		}
 		
 		this.activeJobs = jobs;
-		if (this.isCategoryLimited() || this.isGroupLimited()) this.pruneActiveJobs();
+		if (this.isCategoryLimited()  || this.isGroupLimited() ) this.pruneActiveJobs();
 		data.jobs_changed = changed;
 	},
 	
@@ -436,7 +540,7 @@ app.extend({
 	},
 	
 	pruneCategories: function() {
-		// remove categories that the user should not see, due to category privs
+		// remove categories that the user should not see, due to category/group privs
 		if (!this.categories || !this.categories.length) return;
 		var new_items = [];
 		
@@ -459,7 +563,7 @@ app.extend({
 		if (this.isAdmin()) return false;
 		return( app.user && app.user.privileges && app.user.privileges.grp_limit );
 	},
-	
+
 	hasCategoryAccess: function(cat_id) {
 		// check if user has access to specific category
 		if (!app.user || !app.user.privileges) return false;
@@ -469,24 +573,24 @@ app.extend({
 		var priv_id = 'cat_' + cat_id;
 		return( !!app.user.privileges[priv_id] );
 	},
-	
+
 	hasGroupAccess: function(grp_id) {
 		// check if user has access to specific server group
 		if (!app.user || !app.user.privileges) return false;
 		if (app.user.privileges.admin) return true;
 		if (!app.user.privileges.grp_limit) return true;
-		
+
 		var priv_id = 'grp_' + grp_id;
 		var result = !!app.user.privileges[priv_id];
 		if (result) return true;
-		
+
 		// make sure grp_id is a hostname from this point on
 		if (find_object(app.server_groups, { id: grp_id })) return false;
-		
+
 		var groups = app.server_groups.filter( function(group) {
 			return grp_id.match( group.regexp );
 		} );
-		
+
 		// we just need one group to match, then the user has permission to target the server
 		for (var idx = 0, len = groups.length; idx < len; idx++) {
 			priv_id = 'grp_' + groups[idx].id;
@@ -503,29 +607,29 @@ app.extend({
 		return( !!app.user.privileges[priv_id] );
 	},
 	
-	recalculateMaster: function(data) {
-		// Oops, we're connected to a slave!  Master must have been restarted.
-		// If slave knows who is master, switch now, otherwise go into wait loop
+	recalculatemanager: function(data) {
+		// Oops, we're connected to a worker!  manager must have been restarted.
+		// If worker knows who is manager, switch now, otherwise go into wait loop
 		var self = this;
-		this.showProgress( 1.0, "Waiting for master server..." );
-		this.waitingForMaster = true;
+		this.showProgress( 1.0, _t('app.waiting_for_manager_server') );
+		this.waitingFormanager = true;
 		
-		if (data.master_hostname) {
-			// reload browser which should connect to master
+		if (data.manager_hostname) {
+			// reload browser which should connect to manager
 			location.reload();
 		}
 	},
 	
-	setMasterHostname: function(hostname) {
-		// set new master hostname, update stuff
-		Debug.trace("New Master Hostname: " + hostname);
-		this.masterHostname = hostname;
+	setmanagerHostname: function(hostname) {
+		// set new manager hostname, update stuff
+		Debug.trace("New manager Hostname: " + hostname);
+		this.managerHostname = hostname;
 		
 		if (config.web_direct_connect) {
-			this.base_api_url = this.proto + this.masterHostname + ':' + this.port + config.base_api_uri;
-			if (!config.web_socket_use_hostnames && this.servers && this.servers[this.masterHostname] && this.servers[this.masterHostname].ip) {
+			this.base_api_url = this.proto + this.managerHostname + ':' + this.port + config.base_api_uri;
+			if (!config.web_socket_use_hostnames && this.servers && this.servers[this.managerHostname] && this.servers[this.managerHostname].ip) {
 				// use ip instead of hostname if available
-				this.base_api_url = this.proto + this.servers[this.masterHostname].ip + ':' + this.port + config.base_api_uri;
+				this.base_api_url = this.proto + this.servers[this.managerHostname].ip + ':' + this.port + config.base_api_uri;
 			}
 		}
 		else {
@@ -583,8 +687,8 @@ app.extend({
 		);
 	},
 	
-	updateMasterSwitch: function() {
-		// update master switch display
+	updatemanagerSwitch: function() {
+		// update manager switch display
 		var html = '';
 		if (this.hasPrivilege('state_update')) {
 			html = '<i '+(this.state.enabled ? 'class="fa fa-check-square-o">' : 'class="fa fa-square-o">')+'</i>&nbsp;<b>Scheduler Enabled</b>';
@@ -594,28 +698,24 @@ app.extend({
 			else html = '<i class="fa fa-times">&nbsp;</i><b>Scheduler Disabled</b>';
 		}
 		
-		$('#d_tab_master')
+		$('#d_tab_manager')
 			.css( 'color', this.state.enabled ? '#3f7ed5' : '#777' )
 			.html( html );
 	},
 	
-	toggleMasterSwitch: function() {
-		// toggle master scheduler switch on/off
+	togglemanagerSwitch: function() {
+		// toggle manager scheduler switch on/off
 		var self = this;
 		var enabled = this.state.enabled ? 0 : 1;
-		var action = enabled ? 'enable' : 'disable';
 		
 		if (!this.hasPrivilege('state_update')) return;
 		
-		app.confirm( '<span style="color:red">Toggle Scheduler</span>', "Are you sure you want to " + action + " the scheduler?", ucfirst(action), function(result) {
-			if (result) {
-				app.hideDialog();
-				app.api.post( 'app/update_master_state', { enabled: enabled }, function(resp) {
-					app.showMessage('success', "Scheduler has been " + (enabled ? 'enabled' : 'disabled') + ".");
-					self.state.enabled = enabled;
-					self.updateMasterSwitch();
-				} );
-			}
+		// $('#d_tab_manager > i').removeClass().addClass('fa fa-spin fa-spinner');
+		
+		app.api.post( 'app/update_manager_state', { enabled: enabled }, function(resp) {
+			app.showMessage('success', _t('app.scheduler_has_been') + (enabled ? 'enabled' : 'disabled') + ".");
+			self.state.enabled = enabled;
+			self.updatemanagerSwitch();
 		} );
 	},
 	
@@ -672,10 +772,14 @@ app.extend({
 	
 	password_strengthify: function(sel) {
 		// add password strength meter (text field should be wrapped by div)
+
+		let user = app.user || {}
+		if(user.ext_auth) return // no password strength for external auth
+
 		var $field = $(sel);
 		var $div = $field.parent();
 		
-		var $cont = $('<div class="psi_container" title="Password strength indicator" onClick="window.open(\'https://tech.dropbox.com/2012/04/zxcvbn-realistic-password-strength-estimation/\')"></div>');
+		var $cont = $('<div class="psi_container" title="Password strength indicator" onClick=""></div>');
 		$cont.css('width', $field[0].offsetWidth );
 		$cont.html( '<div class="psi_bar"></div>' );
 		$div.append( $cont );
@@ -686,19 +790,40 @@ app.extend({
 			}, 1 );
 		} );
 		
-		if (!window.zxcvbn) load_script('js/external/zxcvbn.js');
+		//if (!window.zxcvbn) load_script('js/external/zxcvbn.js');
 	},
 	
-	update_password_strength: function($field, $cont) {
+	update_password_strength: function ($field, $cont) {
+
 		// update password strength indicator after keypress
+
+		let score = 0
+		let crack_time = 'instant'
+		let password = $field.val()
+		if(password.length > 20) score = 3
+
 		if (window.zxcvbn) {
-			var password = $field.val();
-			var result = zxcvbn( password );
+			var result = zxcvbn(password);
 			// Debug.trace("Password score: " + password + ": " + result.score);
 			var $bar = $cont.find('div.psi_bar');
 			$bar.removeClass('str0 str1 str2 str3 str4');
 			if (password.length) $bar.addClass('str' + result.score);
 			app.last_password_strength = result;
+		}
+		else { // basic strength checker
+			if (password.match(/[a-z]+/)) score += 0.5
+			if (password.match(/[A-Z]+/)) score += 0.5
+			if (password.match(/[0-9]+/)) score += 1
+			if (password.match(/[$@#&!]+/)) score += 1
+			if (password.length >= 8) {
+				score += 0.5
+				crack_time = 'few hours or days'
+			} else { score -= 0.5}
+
+			app.last_password_strength = {
+				score: score,
+				crack_time_display: crack_time
+			}
 		}
 	},
 	
@@ -770,9 +895,63 @@ function get_pretty_int_list(arr, ranges) {
 	return arr.slice(0, arr.length - 1).join(', ') + ' and ' + arr[ arr.length - 1 ];
 }
 
-function summarize_event_timing(timing, timezone) {
+function summarize_event_interval(interval, short) {	
+	if(!parseInt(interval)) return 'Inactive Interval' // sanity, should check before passing this arg
+	if(interval % (3600*24) === 0) {
+		return (short ? `Every ${interval/(3600*24)} days` : `Interval: Every ${interval/(3600*24)} days`)
+	}
+	if(interval % 3600 === 0) {
+		return (short ? `Every ${interval/3600} hours` : `Interval: Every ${interval/3600} hours`)
+	}
+	return  (short ? `Every ${interval/60} min` : `Interval: Every ${interval/60} minutes` )
+
+}
+
+function summarize_repeat_interval(interval, short) {	
+	if(!parseInt(interval)) return 'Inactive' // sanity, should check before passing this arg
+	if(interval % (3600*24) === 0) {
+		return (short ? `⟳ ${interval/(3600*24)} day` : `Repeat after: ${interval/(3600*24)} day/s`)
+	}
+	if(interval % 3600 === 0) {
+		return (short ? `⟳ ${interval/3600} h` : `Repeat after: ${interval/3600} hour/s`)
+	}
+	if(interval % 60 === 0) {
+		return (short ? `⟳ ${interval/60} min` : `Repeat after: ${interval/60} minute/s`)
+	}
+	return  (short ? `⟳ ${interval} s` : `Repeat after: ${interval} second/s` )
+
+}
+
+// override get_nice_time from base class
+function get_nice_time(epoch, secs) {
+	let dargs = get_date_args(epoch);
+	if (dargs.min < 10) dargs.min = '0' + dargs.min;
+	if (dargs.sec < 10) dargs.sec = '0' + dargs.sec;
+	let output = (app.hh24 ? dargs.hour : dargs.hour12) + ':' + dargs.min;
+	let ampm = app.hh24 ? '' : dargs.ampm.toUpperCase()
+	if (secs) output += ':' + dargs.sec;
+	output += ' ' + ampm;
+	return output;
+}
+
+function summarize_event_timing_short(timing) {		
+	if(!timing) return "On Demand"
+	let type = 'Hourly'
+	let total = (timing.minutes || []).length || 60
+	if(timing.hours) { total = total*(timing.hours.length || 24); type = 'Daily'} else { total = total*24}
+	if(timing.weekdays) { total = total*(timing.weekdays.length || 1); type = 'Weekly'}
+	if(timing.days) { total = total*(timing.days.length || 1); type = 'Monthly'}
+	if(timing.months) { total = total*(timing.months.length || 1); type = 'Yearly'}
+	if(timing.years) { total = total*(timing.years.length || 1); type = 'Custom'}
+	return `${type} :: ${total}`
+}
+
+function summarize_event_timing(timing, timezone, extra) {
 	// summarize event timing into human-readable string
-	if (!timing) return "On demand";
+	if (!timing && extra) {
+		return `<span title="${'Extra Ticks: ' + extra.toString().split(/[\,\;\|]/).filter(e => e).join(', ')}">On Demand +</span>`
+	}
+	if (!timing) { return "On demand" };	
 	
 	// years
 	var year_str = '';
@@ -810,7 +989,7 @@ function summarize_event_timing(timing, timezone) {
 	var hour_str = '';
 	if (timing.hours && timing.hours.length) {
 		hour_str = get_pretty_int_list(timing.hours, true).replace(/(\d+)/g, function(m_all, m_g1) {
-			return _hour_names[ parseInt(m_g1) ];
+              return _hour_names[ parseInt(m_g1) ];
 		});
 	}
 	
@@ -849,10 +1028,13 @@ function summarize_event_timing(timing, timezone) {
 	
 	// compress single hour + single minute
 	if (timing.hours && timing.hours.length == 1 && timing.minutes && timing.minutes.length == 1) {
+		new_str = hour_str + min_str;
+		if(!app.hh24) {
 		hour_str.match(/^(\d+)(\w+)$/);
 		var hr = RegExp.$1;
 		var ampm = RegExp.$2;
 		var new_str = hr + min_str + ampm;
+		}
 		
 		if (mday_str || wday_str) groups.push( 'at ' + new_str );
 		else groups.push( 'daily at ' + new_str );
@@ -897,7 +1079,12 @@ function summarize_event_timing(timing, timezone) {
 		output += ' (' + moment.tz.zone(timezone).abbr( (new Date()).getTime() ) + ')';
 	}
 	
-	return output;
+	if(extra) {
+		let xtitle = extra.toString().split(/[\,\;\|]/).filter(e=>e).join(', ')
+		return `<span title="Extra Ticks: ${xtitle}">${output} +</span>`
+	}
+	
+	return output
 };
 
 function detect_num_interval(arr, max) {
