@@ -1,0 +1,73 @@
+/* DailyOS — Catppuccin Mocha Mauve-accent Theme
+   Scoped under .dailyos to avoid conflicts with global theme */
+
+.dailyos {
+  /* Backgrounds */
+  --do-bg: #1e1e2e;
+  --do-bg-elevated: #242438;
+  --do-bg-surface: #2a2a3e;
+  --do-border: #383854;
+
+  /* Brand accent — mauve (ritual/planning) */
+  --do-accent: #cba6f7;
+  --do-accent-alpha: rgba(203, 166, 247, 0.15);
+  --do-accent-dim: rgba(203, 166, 247, 0.6);
+
+  /* Semantic status colors */
+  --do-planning: #a6adc8;
+  --do-active: #89b4fa;
+  --do-reviewing: #f9e2af;
+  --do-completed: #a6e3a1;
+
+  /* Priority colors */
+  --do-urgent: #f38ba8;
+  --do-high: #fab387;
+  --do-medium: #89b4fa;
+  --do-low: #a6adc8;
+
+  /* Text hierarchy */
+  --do-text: #cdd6f4;
+  --do-text-secondary: #a6adc8;
+  --do-text-tertiary: #7f849c;
+  --do-text-muted: #585b70;
+
+  /* Frog accent */
+  --do-frog: #a6e3a1;
+  --do-frog-alpha: rgba(166, 227, 161, 0.15);
+
+  /* Apply base styles */
+  background-color: var(--do-bg);
+  color: var(--do-text);
+  min-height: 100%;
+}
+
+/* Scrollbar */
+.dailyos ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dailyos ::-webkit-scrollbar-track {
+  background: var(--do-bg);
+}
+
+.dailyos ::-webkit-scrollbar-thumb {
+  background: var(--do-border);
+  border-radius: 3px;
+}
+
+.dailyos ::-webkit-scrollbar-thumb:hover {
+  background: var(--do-text-tertiary);
+}
+
+/* Prevent horizontal overflow */
+.dailyos {
+  overflow-x: hidden;
+}
+
+/* Mobile bottom padding for tab bar */
+@media (max-width: 767px) {
+  .dailyos > main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}

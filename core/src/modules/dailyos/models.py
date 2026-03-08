@@ -1,0 +1,156 @@
+"""Daily OS ORM models — methods, method configs, and daily plans.
+
+All tables live in the `dailyos` PostgreSQL schema.
+IDs: String(32) + uuid7().hex.
+"""
+
+from datetime import date, datetime
+
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.shared.models import SpaceScopedModel
+
+SCHEMA = "dailyos"
+
+
+class Method(SpaceScopedModel):
+    """A planning method template — system preset or user-created custom."""
+
+    __tablename__ = "methods"
+    __table_args__ = (
+        Index("idx_method_space", "space_id"),
+        Index(
+            "idx_method_unique_slug",
+            "space_id",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        {"schema": SCHEMA},
+    )
+
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    name_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icon: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    is_preset: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false")
+    )
+    cloned_from_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.methods.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    config: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+
+    version: Mapped[int] = mapped_column(
+        Integer, server_default=text("1")
+    )
+
+    layout_type: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'list'")
+    )
+
+    tags: Mapped[list[str] | None] = mapped_column(
+        ARRAY(Text), nullable=True
+    )
+
+
+class MethodSelection(SpaceScopedModel):
+    """Per-space active method selection, with optional context scoping."""
+
+    __tablename__ = "method_selections"
+    __table_args__ = (
+        Index(
+            "idx_ms_unique_active",
+            "space_id",
+            "context",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND is_active = true"),
+        ),
+        {"schema": SCHEMA},
+    )
+
+    method_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.methods.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    context: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'default'")
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true")
+    )
+
+    overrides: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True
+    )
+
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    deactivated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    method: Mapped["Method"] = relationship(lazy="selectin")
+
+
+class DailyPlan(SpaceScopedModel):
+    """A single day's plan — created using the active method strategy."""
+
+    __tablename__ = "daily_plans"
+    __table_args__ = (
+        Index(
+            "idx_dp_unique_date",
+            "space_id",
+            "plan_date",
+            "context",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        {"schema": SCHEMA},
+    )
+
+    plan_date: Mapped[date] = mapped_column(Date, nullable=False)
+    context: Mapped[str] = mapped_column(Text, server_default=text("'default'"))
+    method_selection_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.method_selections.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    status: Mapped[str] = mapped_column(
+        Text, server_default=text("'planning'")
+    )
+
+    items: Mapped[list[dict]] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
+
+    method_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    reflection: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completion_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    method_selection: Mapped["MethodSelection | None"] = relationship(lazy="selectin")
