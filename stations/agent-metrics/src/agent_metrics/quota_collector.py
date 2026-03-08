@@ -141,9 +141,9 @@ async def fetch_cc_quota(client: httpx.AsyncClient) -> dict:
                 retry_seconds = int(float(retry_after))
             except ValueError:
                 retry_seconds = 0
-            # Exponential backoff: 600s, 1200s, 2400s... capped at 1h
+            # Exponential backoff: 1800s, 3600s, 7200s, 14400s, 28800s (cap 8h)
             base_backoff = settings.CC_QUOTA_BACKOFF_SECONDS * (
-                2 ** min(_cc_consecutive_failures - 1, 3)
+                2 ** min(_cc_consecutive_failures - 1, 4)
             )
             backoff = max(base_backoff, retry_seconds)
             _cc_backoff_until = now + backoff
@@ -206,7 +206,8 @@ def _scrape_usage_page() -> dict:
     """Sync: pw_session clone → open claude.ai → Google SSO → goto usage → eval → cleanup.
 
     Uses pw_session.py to APFS-clone ~/.playwright-profiles/master (has Google auth),
-    then opens a headed browser. Google SSO auto-redirects to /new, so we do a second
+    then opens a headless browser with stealth config (anti-detection + UA spoof)
+    window position (anti-focus-stealing). Google SSO auto-redirects to /new, so we do a second
     goto to /settings/usage. Extracts body text via `eval` and parses percentages.
 
     Returns data in the same shape as the OAuth API: {five_hour: {utilization: N}, ...}
@@ -243,16 +244,17 @@ def _scrape_usage_page() -> dict:
         session_id = f"{sid}-ccq"
         usage_url = "https://claude.ai/settings/usage"
 
-        # 2. Open browser (headed — Cloudflare blocks headless)
+        # 2. Open browser (headless + stealth config)
+        # Anti-detection args + UA spoof come from PLAYWRIGHT_MCP_CONFIG env var
+        # (set in ~/.zshenv → ~/.playwright-profiles/stealth.config.json)
         open_result = subprocess.run(
             [
                 "npx",
                 "@playwright/cli",
-                f"-s={session_id}",
-                "open",
-                "--headed",
                 "--profile",
                 profile_dir,
+                f"-s={session_id}",
+                "open",
                 usage_url,
             ],
             capture_output=True,
@@ -267,14 +269,6 @@ def _scrape_usage_page() -> dict:
 
         # 3. Wait for Google SSO redirect, then goto usage page
         import time as _time
-
-        # Bring iTerm2 back to front so the headed browser doesn't block the user
-        _time.sleep(0.3)  # let Chrome window appear first
-        subprocess.run(
-            ["osascript", "-e", 'tell application "iTerm2" to activate'],
-            capture_output=True,
-            timeout=5,
-        )
 
         _time.sleep(4)
 
@@ -636,14 +630,17 @@ async def get_quota(force: bool = False) -> dict:
     if not force and _cache and (now - _cache_ts) < settings.QUOTA_CACHE_TTL:
         return _cache
 
-    # CC: 15-min interval with API → Playwright fallback chain
+    # CC: 30-min interval with API → Playwright fallback chain
     fetch_cc = (
         force or not _cc_raw_result or (now - _cc_raw_result_ts) >= settings.CC_QUOTA_FETCH_INTERVAL
     )
 
+    # If API is in backoff, skip API entirely and go straight to Playwright
+    cc_in_backoff = _cc_backoff_until > now
+
     async with httpx.AsyncClient() as client:
         coros: list = [fetch_cx_quota(client), fetch_gm_quota(client)]
-        if fetch_cc:
+        if fetch_cc and not cc_in_backoff:
             coros.append(fetch_cc_quota(client))
         results = await asyncio.gather(*coros, return_exceptions=True)
 
@@ -651,7 +648,16 @@ async def get_quota(force: bool = False) -> dict:
     gm_raw = results[1] if not isinstance(results[1], Exception) else {}
 
     if fetch_cc:
-        cc_raw = results[2] if not isinstance(results[2], Exception) else {}
+        if cc_in_backoff:
+            # API in backoff — go directly to Playwright
+            cc_raw = {}
+            log.info(
+                "cc_api_in_backoff_using_playwright",
+                backoff_remaining_s=int(_cc_backoff_until - now),
+            )
+        else:
+            cc_raw = results[2] if not isinstance(results[2], Exception) else {}
+
         # Playwright fallback if API returned nothing or used stale/fallback cache
         if not cc_raw or _cc_last_fetch_mode in ("backoff_fallback", "error_fallback", "failed"):
             pw_data = await _fetch_cc_via_playwright()

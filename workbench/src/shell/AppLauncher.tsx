@@ -60,7 +60,8 @@ export default function AppLauncher({ onClose }: AppLauncherProps) {
                 if (app.externalUrl) {
                   window.location.href = app.externalUrl
                 } else {
-                  navigate(app.path)
+                  // Full page load to ensure correct manifest for PWA install on mobile
+                  window.location.href = app.path + '/'
                 }
                 onClose()
               }}

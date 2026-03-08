@@ -50,7 +50,7 @@ export function createCrudApi<T, C, U>(basePath: string) {
 
     update: (id: string, data: U) =>
       request<T>(`${basePath}/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         body: JSON.stringify(data),
       }),
 

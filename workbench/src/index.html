@@ -21,7 +21,21 @@
         window.addEventListener("load", () => {
           navigator.serviceWorker
             .register("/sw.js")
-            .then((reg) => console.log("SW registered:", reg.scope))
+            .then((reg) => {
+              console.log("SW registered:", reg.scope);
+              // Detect SW update: when new SW activates, reload to avoid
+              // stale JS chunks referencing deleted hashed assets (404)
+              reg.addEventListener("updatefound", () => {
+                const nw = reg.installing;
+                if (!nw) return;
+                nw.addEventListener("statechange", () => {
+                  if (nw.state === "activated" && navigator.serviceWorker.controller) {
+                    console.log("SW updated — reloading for new version");
+                    window.location.reload();
+                  }
+                });
+              });
+            })
             .catch((err) => console.log("SW registration failed:", err));
         });
       }

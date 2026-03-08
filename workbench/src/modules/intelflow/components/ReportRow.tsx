@@ -4,9 +4,10 @@ import type { Report, ReportBrief } from '../types'
 
 interface ReportRowProps {
   report: Report | ReportBrief
+  onDelete?: (id: string) => void
 }
 
-export default function ReportRow({ report }: ReportRowProps) {
+export default function ReportRow({ report, onDelete }: ReportRowProps) {
   const navigate = useNavigate()
 
   const date = new Date(report.created_at).toLocaleDateString('zh-TW', {
@@ -16,9 +17,8 @@ export default function ReportRow({ report }: ReportRowProps) {
   })
 
   return (
-    <button
-      onClick={() => navigate(`/intelflow/reports/${report.id}`)}
-      className="flex w-full items-center gap-3 border-b px-4 py-4 text-left transition-colors min-h-[60px]"
+    <div
+      className="flex w-full items-center gap-3 border-b px-4 py-4 transition-colors min-h-[60px] group"
       style={{ borderColor: 'var(--if-border)' }}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = 'var(--if-bg-surface)'
@@ -29,7 +29,12 @@ export default function ReportRow({ report }: ReportRowProps) {
     >
       <FileText size={15} style={{ color: 'var(--if-text-muted)', flexShrink: 0 }} />
 
-      <div className="flex-1 min-w-0">
+      {/* Clickable area for navigation */}
+      <button
+        type="button"
+        onClick={() => navigate(`/intelflow/reports/${report.id}`)}
+        className="flex-1 min-w-0 text-left"
+      >
         <div className="text-sm font-medium leading-snug" style={{ color: 'var(--if-text)' }}>
           {report.title}
         </div>
@@ -52,7 +57,7 @@ export default function ReportRow({ report }: ReportRowProps) {
             ))}
           </div>
         </div>
-      </div>
+      </button>
 
       {'skill_name' in report && report.skill_name && (
         <span
@@ -66,7 +71,25 @@ export default function ReportRow({ report }: ReportRowProps) {
         </span>
       )}
 
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(report.id)
+          }}
+          className="text-[12px] px-2 py-1 rounded shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{
+            backgroundColor: 'rgba(243,139,168,0.1)',
+            color: '#f38ba8',
+            border: '1px solid rgba(243,139,168,0.2)',
+          }}
+        >
+          刪除
+        </button>
+      )}
+
       <ChevronRight size={14} style={{ color: 'var(--if-text-dim)', flexShrink: 0 }} />
-    </button>
+    </div>
   )
 }

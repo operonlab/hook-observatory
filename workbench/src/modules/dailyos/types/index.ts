@@ -113,6 +113,7 @@ export interface OverflowConfig {
 }
 
 export interface MethodConfig {
+  dimensions?: string[]
   max_items?: number | null
   categories?: CategoryDef[]
   ordering?: 'sequential' | 'priority' | 'time' | 'free' | 'category'
@@ -150,6 +151,18 @@ export interface MethodSelection extends BaseEntity {
   activated_at: string
   deactivated_at: string | null
   method: Method | null
+}
+
+export interface DimensionConflict {
+  dimension: string
+  replaced_method_id: string
+  replaced_method_name: string
+}
+
+export interface ActivateResponse {
+  selection: MethodSelection
+  replaced: DimensionConflict[]
+  active_count: number
 }
 
 // ─── Daily Plan ───

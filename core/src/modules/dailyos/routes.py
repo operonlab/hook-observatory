@@ -15,11 +15,12 @@ from src.shared.schemas import PaginatedResponse, PaginationParams
 from .schemas import (
     DailyPlanResponse,
     DailyPlanUpdate,
+    MethodActivateRequest,
+    MethodActivateResponse,
     MethodCreate,
     MethodPreviewResponse,
     MethodResponse,
     MethodSelectionResponse,
-    MethodSwitchRequest,
     MethodUpdate,
     PlanTransitionRequest,
 )
@@ -102,37 +103,37 @@ async def clone_method(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("dailyos.write"),
 ):
-    instance = await method_service.clone_method(
-        db, method_id, space_id, user_id=user.get("id")
-    )
+    instance = await method_service.clone_method(db, method_id, space_id, user_id=user.get("id"))
     await db.commit()
     return method_service.to_response(instance)
 
 
-# ======================== Active Method Config ========================
+# ======================== Active Method Config (Multi-Active) ========================
 
 
-@router.get("/config/method", response_model=MethodSelectionResponse | None)
-async def get_active_method(
+@router.get("/config/method", response_model=list[MethodSelectionResponse])
+async def get_active_methods(
     space_id: str = Query("default"),
     context: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("dailyos.read"),
 ):
-    selection = await method_selection_service.get_active(db, space_id, context)
-    if not selection:
-        return None
-    return method_selection_service.to_response(selection)
+    """Return all currently active method selections."""
+    selections = await method_selection_service.get_active(db, space_id, context)
+    return [method_selection_service.to_response(s) for s in selections]
 
 
-@router.put("/config/method", response_model=MethodSelectionResponse)
-async def switch_method(
-    data: MethodSwitchRequest,
+@router.post("/config/method/activate", response_model=MethodActivateResponse)
+async def activate_method(
+    data: MethodActivateRequest,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("dailyos.write"),
 ):
-    selection = await method_selection_service.switch_method(
+    """Activate a method. All methods compose freely — no conflicts."""
+    from .services import guide_service
+
+    selection, replaced = await method_selection_service.activate_method(
         db,
         space_id,
         method_id=data.method_id,
@@ -141,7 +142,59 @@ async def switch_method(
         overrides=data.overrides,
     )
     await db.commit()
-    return method_selection_service.to_response(selection)
+    active_selections = await method_selection_service.get_active(db, space_id, data.context)
+    active_count = len(active_selections)
+
+    # Invalidate guide cache so it regenerates with new method set
+    slugs = [s.method.slug for s in active_selections if s.method]
+    await guide_service.invalidate(slugs)
+    return MethodActivateResponse(
+        selection=method_selection_service.to_response(selection),
+        replaced=replaced,
+        active_count=active_count,
+    )
+
+
+@router.delete("/config/method/{selection_id}", response_model=MethodSelectionResponse)
+async def deactivate_method(
+    selection_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    """Deactivate a specific method selection."""
+    from .services import guide_service
+
+    sel = await method_selection_service.deactivate_method(db, selection_id)
+    await db.commit()
+
+    # Invalidate guide cache
+    remaining = await method_selection_service.get_active(db, sel.space_id, sel.context)
+    slugs = [s.method.slug for s in remaining if s.method]
+    await guide_service.invalidate(slugs)
+
+    return method_selection_service.to_response(sel)
+
+
+@router.get("/config/guide")
+async def get_composite_guide(
+    space_id: str = Query("default"),
+    context: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    """Generate a natural-language composite guide from all active methods."""
+    from .services import guide_service
+
+    selections = await method_selection_service.get_active(db, space_id, context)
+    methods = [s.method for s in selections if s.method]
+    if not methods:
+        return {"guide": "", "method_count": 0}
+    guide_text = await guide_service.generate(methods)
+    return {
+        "guide": guide_text,
+        "method_count": len(methods),
+        "method_names": [m.name_zh or m.name for m in methods],
+    }
 
 
 @router.get("/config/method/history", response_model=PaginatedResponse[MethodSelectionResponse])
@@ -154,9 +207,7 @@ async def method_history(
     user: dict = require_permission("dailyos.read"),
 ):
     pagination = PaginationParams(page=page, page_size=page_size)
-    return await method_selection_service.get_history(
-        db, space_id, context, pagination
-    )
+    return await method_selection_service.get_history(db, space_id, context, pagination)
 
 
 # ======================== Strategy Preview ========================

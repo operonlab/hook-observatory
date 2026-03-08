@@ -10,7 +10,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="/apps/tmux/manifest.json">
 <link rel="apple-touch-icon" href="/apps/tmux/icon-192.png">
-<link rel="stylesheet" href="static/css/main.css?v=2">
+<link rel="stylesheet" href="static/css/main.css?v={{ git_hash }}">
 <title>tmux Web Controller</title>
 </head>
 <body>
@@ -89,7 +89,7 @@
     <div class="ac-wrap">
       <div class="ac-list" id="ac-list"></div>
       <div class="input-row">
-        <input type="file" id="file-input" accept="image/*,application/pdf,text/*,.json,.csv,.log,.md,.py,.js,.ts,.sh" hidden>
+        <input type="file" id="file-input" accept="image/*,application/pdf,text/*,.json,.csv,.log,.md,.py,.js,.ts,.sh" multiple hidden>
         <button class="upload-btn" id="upload-btn" title="Upload file" disabled>&#x1F4CE;</button>
         <button class="relay-toggle" id="relay-toggle" title="Auto-Relay: OFF">&#x21C4;</button>
         <textarea id="input" rows="1" placeholder="Type a message..." disabled></textarea>
@@ -103,15 +103,30 @@
 <div class="gesture-indicator" id="gesture-indicator"></div>
 
 <!-- JS modules (order matters: terminal first, then keys, then others, app last) -->
-<script src="static/js/terminal.js?v=2"></script>
-<script src="static/js/metrics.js?v=2"></script>
-<script src="static/js/app.js?v=2"></script>
-<script src="static/js/keys.js?v=2"></script>
-<script src="static/js/autocomplete.js?v=2"></script>
-<script src="static/js/gestures.js?v=2"></script>
+<script src="static/js/terminal.js?v={{ git_hash }}"></script>
+<script src="static/js/metrics.js?v={{ git_hash }}"></script>
+<script src="static/js/app.js?v={{ git_hash }}"></script>
+<script src="static/js/keys.js?v={{ git_hash }}"></script>
+<script src="static/js/autocomplete.js?v={{ git_hash }}"></script>
+<script src="static/js/gestures.js?v={{ git_hash }}"></script>
 <script>
 if('serviceWorker' in navigator){
+  // Auto-reload when a new SW takes control (cache busted)
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
   navigator.serviceWorker.register('sw.js').then((reg) => {
+    // Force update check on load — ensures new SW is detected quickly
+    reg.update();
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing;
+      if (nw) nw.addEventListener('statechange', () => {
+        if (nw.state === 'activated' && navigator.serviceWorker.controller) location.reload();
+      });
+    });
     if (Notification.permission === 'granted') {
       (async () => {
         try {

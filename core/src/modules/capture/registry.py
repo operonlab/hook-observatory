@@ -34,6 +34,7 @@ _ADAPTER_MODULES = [
     "finance_adapter",
     "taskflow_adapter",
     "invest_adapter",
+    "dailyos_adapter",
 ]
 
 
@@ -49,8 +50,6 @@ def discover_adapters() -> None:
             if hasattr(mod, "ADAPTERS"):
                 for adapter in mod.ADAPTERS:
                     _register(adapter)
-                    logger.debug(
-                        "Registered adapter: %s.%s", adapter.module, adapter.entity_type
-                    )
+                    logger.debug("Registered adapter: %s.%s", adapter.module, adapter.entity_type)
         except ImportError:
             logger.warning("Failed to import adapter module: %s", mod_name)

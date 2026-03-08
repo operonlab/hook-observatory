@@ -1,10 +1,11 @@
-import { Bell, Clock, Send } from 'lucide-react'
+import { Bell, Clock, Send, Wifi } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import '../styles/notification.css'
 
 const NAV_ITEMS = [
   { id: 'history', label: '通知記錄', icon: Clock, path: '/notification' },
   { id: 'send', label: '發送通知', icon: Send, path: '/notification/send' },
+  { id: 'subscriptions', label: '訂閱裝置', icon: Wifi, path: '/notification/subscriptions' },
 ] as const
 
 export default function NotificationLayout() {
@@ -12,7 +13,7 @@ export default function NotificationLayout() {
 
   const isActive = (item: (typeof NAV_ITEMS)[number]) => {
     if (item.id === 'history') return location.pathname === '/notification'
-    return location.pathname.startsWith(item.path)
+    return location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
   }
 
   return (

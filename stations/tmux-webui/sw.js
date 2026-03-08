@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tmux-webui-v2-__GIT_HASH__';
+const CACHE_NAME = 'tmux-webui-__GIT_HASH__';
 
 // ── Web Push ──
 self.addEventListener('push', (event) => {
@@ -29,66 +29,19 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-const PRECACHE_URLS = [
-  './',
-  './static/css/main.css',
-  './static/js/terminal.js',
-  './static/js/metrics.js',
-  './static/js/app.js',
-  './static/js/keys.js',
-  './static/js/autocomplete.js',
-  './static/js/gestures.js',
-  './icon-192.png',
-  './icon-512.png',
-];
+// Push-Only SW: no cache strategy (iOS Safari SW cache is too buggy for
+// operation-heavy apps — stale assets, POST interference, cookie isolation).
+// Static assets rely on normal HTTP caching (Cache-Control headers).
 
 self.addEventListener('install', (e) => {
+  // Purge any leftover caches from previous SW versions
   e.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE_URLS))
+    caches.keys()
+      .then(keys => Promise.all(keys.map(k => caches.delete(k))))
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url);
-
-  // Skip: WebSocket, API, non-GET
-  if (e.request.method !== 'GET') return;
-  if (url.pathname.includes('/api/')) return;
-  if (url.pathname.includes('/ws/')) return;
-
-  // HTML (navigation): Network-First
-  if (e.request.mode === 'navigate') {
-    e.respondWith(
-      fetch(e.request)
-        .then(res => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-          return res;
-        })
-        .catch(() => caches.match(e.request))
-    );
-    return;
-  }
-
-  // Static assets: Cache-First
-  e.respondWith(
-    caches.match(e.request, { ignoreSearch: true })
-      .then(cached => cached || fetch(e.request).then(res => {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
-        return res;
-      }))
-  );
+  e.waitUntil(self.clients.claim());
 });

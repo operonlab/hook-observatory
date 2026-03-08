@@ -108,8 +108,17 @@ async def list_tools() -> list[Tool]:
         # Project Management
         Tool(
             name="project_list",
-            description="List all team-task projects with name, mode, status, goal.",
-            inputSchema={"type": "object", "properties": {}},
+            description="List team-task projects with name, mode, status, goal.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max number of projects to return",
+                    },
+                },
+            },
         ),
         Tool(
             name="project_create",
@@ -347,8 +356,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return text_result(_format_runs(runs))
 
         elif name == "project_list":
+            limit = arguments.get("limit", 20)
             projects = await to_thread(client.list_projects)
-            return text_result(_format_projects(projects))
+            total_count = len(projects)
+            projects = projects[:limit]
+            header = f"Showing {len(projects)} of {total_count} projects\n\n"
+            return text_result(header + _format_projects(projects))
 
         elif name == "project_create":
             result = await to_thread(

@@ -33,7 +33,6 @@ class PolicyDataProvider:
     def __init__(self) -> None:
         self.api_url = f"http://{settings.HOST}:{settings.PORT}"
         self.latest_file = _resolve_path(settings.COLLECTION_LATEST_FILE)
-        self.sysmon_url = settings.SYSMON_URL
         self.state_path = _resolve_path(settings.MODEL_POLICY_STATE_PATH)
         self.config_path = _resolve_path(settings.MODEL_POLICY_CONFIG_PATH)
 
@@ -43,9 +42,6 @@ class PolicyDataProvider:
         if data:
             return data
         data = self._try_latest_json()
-        if data:
-            return data
-        data = self._try_sysmon()
         if data:
             return data
         return {"cc_5h_pct": None, "cc_7d_pct": None, "source": "unavailable"}
@@ -62,9 +58,7 @@ class PolicyDataProvider:
         boost_t = thresholds.get("boost", {})
         normal_t = thresholds.get("normal", {})
 
-        is_boost = cc_5h < boost_t.get("cc_5h_below", 25) and cc_7d < boost_t.get(
-            "cc_7d_below", 40
-        )
+        is_boost = cc_5h < boost_t.get("cc_5h_below", 25) and cc_7d < boost_t.get("cc_7d_below", 40)
         is_normal = cc_5h > normal_t.get("cc_5h_above", 50) or cc_7d > normal_t.get(
             "cc_7d_above", 60
         )
@@ -117,25 +111,6 @@ class PolicyDataProvider:
             if cc:
                 cc["source"] = "latest_json"
                 return cc
-        except Exception:
-            pass
-        return None
-
-    def _try_sysmon(self) -> dict | None:
-        """Fetch CC usage from sysmon API (V1 fallback)."""
-        if not self.sysmon_url:
-            return None
-        try:
-            req = urllib.request.Request(
-                self.sysmon_url,
-                headers={"Accept": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read())
-            cc_5h = self._parse_pct(data.get("llm_cc_5h", "?"))
-            cc_7d = self._parse_pct(data.get("llm_cc_7d", "?"))
-            if cc_5h is not None:
-                return {"cc_5h_pct": cc_5h, "cc_7d_pct": cc_7d, "source": "sysmon"}
         except Exception:
             pass
         return None

@@ -22,9 +22,7 @@ class CaptureAdapter(Protocol):
     # Default TTL in days for captures of this type
     default_ttl_days: int
 
-    def smart_defaults(
-        self, payload: dict[str, Any], user_prefs: dict[str, Any]
-    ) -> dict[str, Any]:
+    def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         """Apply smart defaults to fill inferable fields. Returns enriched payload."""
         ...
 
@@ -56,9 +54,11 @@ class BaseCaptureAdapter:
     default_values: dict[str, Any] = {}
     default_ttl_days: int = 30
 
-    def smart_defaults(
-        self, payload: dict[str, Any], user_prefs: dict[str, Any]
-    ) -> dict[str, Any]:
+    # Mapping: field_name → resolver_key (e.g. {"wallet_id": "finance.wallet"})
+    # Resolved automatically before promote() via resolve_references()
+    reference_fields: dict[str, str] = {}
+
+    def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}
         return result
 
@@ -67,13 +67,15 @@ class BaseCaptureAdapter:
             return 1.0
         total_weight = sum(self.field_weights.values())
         filled_weight = sum(
-            w for field, w in self.field_weights.items()
+            w
+            for field, w in self.field_weights.items()
             if payload.get(field) is not None and payload.get(field) != ""
         )
         return round(filled_weight / total_weight, 2) if total_weight else 1.0
 
     def missing_fields(self, payload: dict[str, Any]) -> list[str]:
         return [
-            f for f, w in self.field_weights.items()
+            f
+            for f, w in self.field_weights.items()
             if w > 0 and (payload.get(f) is None or payload.get(f) == "")
         ]

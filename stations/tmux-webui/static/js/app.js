@@ -21,6 +21,7 @@ window.tmuxState = {
   paneEls: {},
   paneInfo: {},
   paneOrder: [],
+  paneInputs: {},  // per-pane input buffer
   currentLayout: 'auto',
   customWeights: null,
   currentTool: null,
@@ -159,6 +160,7 @@ window.sendInput = function() {
   window.tmuxWs.send({ type:'input', pane:S.focusedPane, text });
   inputEl.value = '';
   inputEl.style.height = 'auto';
+  S.paneInputs[S.focusedPane] = '';
   if (S.paneEls[S.focusedPane]) S.paneEls[S.focusedPane].resetScroll();
 };
 
@@ -212,39 +214,52 @@ relayToggle.addEventListener('click', () => {
 uploadBtn.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async () => {
-  const file = fileInput.files[0];
-  if (!file) return;
+  const files = [...fileInput.files];
+  if (!files.length) return;
 
   uploadBtn.classList.add('uploading');
   uploadBtn.disabled = true;
 
-  try {
-    const form = new FormData();
-    form.append('file', file);
-    const basePath = location.pathname.replace(/\/+$/, '') || '';
-    const res = await fetch(basePath + '/api/upload', { method: 'POST', body: form });
+  const basePath = location.pathname.replace(/\/+$/, '') || '';
+  const paths = [];
+  const errors = [];
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
+  for (const file of files) {
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(basePath + '/api/upload', { method: 'POST', body: form });
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 302 || res.redirected) {
+          throw new Error('Session expired — please re-login');
+        }
+        const err = await res.json().catch(() => ({ detail: 'Upload failed' }));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const { path } = await res.json();
+      paths.push(path);
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message}`);
     }
+  }
 
-    const { path } = await res.json();
-    const insert = `@${path} `;
-
-    // Insert at cursor position
+  if (paths.length) {
+    const insert = ' ' + paths.map(p => `@${p}`).join(' ') + ' ';
     const start = inputEl.selectionStart || inputEl.value.length;
     const end = inputEl.selectionEnd || start;
     inputEl.value = inputEl.value.slice(0, start) + insert + inputEl.value.slice(end);
     inputEl.selectionStart = inputEl.selectionEnd = start + insert.length;
     inputEl.focus();
-  } catch (err) {
-    window.flashInputError(err.message || 'Upload failed');
-  } finally {
-    uploadBtn.classList.remove('uploading');
-    uploadBtn.disabled = false;
-    fileInput.value = '';  // reset so same file can be re-selected
   }
+  if (errors.length) {
+    window.flashInputError(errors.join('; '));
+  }
+
+  uploadBtn.classList.remove('uploading');
+  uploadBtn.disabled = false;
+  fileInput.value = '';
 });
 
 // ========================================================================
@@ -428,6 +443,15 @@ function savePaneOrder() {
 function loadPaneOrder() {
   try { const s = localStorage.getItem('tmux-webui-order-'+S.currentSession); if (s) S.paneOrder = JSON.parse(s); else S.paneOrder = []; } catch(e) { S.paneOrder = []; }
 }
+function saveFocusedPane() {
+  if (S.currentSession && S.focusedPane) { try { localStorage.setItem('tmux-webui-focus-'+S.currentSession, S.focusedPane); } catch(e) {} }
+}
+function loadFocusedPane() {
+  // URL query param takes priority over localStorage
+  const urlPane = new URLSearchParams(location.search).get('pane');
+  if (urlPane) return urlPane;
+  try { return localStorage.getItem('tmux-webui-focus-'+S.currentSession) || ''; } catch(e) { return ''; }
+}
 
 // ========================================================================
 // 9. Pane Management
@@ -518,6 +542,10 @@ function buildPaneEl(p) {
 }
 
 function setFocus(paneId) {
+  // Save current pane's input buffer before switching
+  if (S.focusedPane && S.focusedPane !== paneId) {
+    S.paneInputs[S.focusedPane] = inputEl.value;
+  }
   S.focusedPane = paneId;
   Object.values(S.paneEls).forEach(pe => pe.box.classList.remove('focused'));
   if (S.paneEls[paneId]) {
@@ -527,9 +555,13 @@ function setFocus(paneId) {
     const toolName = toolKey ? ` [${TOOL_PROFILES[toolKey].name}]` : '';
     focusLabel.textContent = info ? `${info.window_name}:${info.pane}${toolName}` : paneId;
     updateToolState(toolKey);
+    // Restore this pane's input buffer
+    inputEl.value = S.paneInputs[paneId] || '';
+    inputEl.style.height = 'auto';
     // Auto-resize tmux pane to match browser display cols/rows
     setTimeout(() => { if (window._fitPane) window._fitPane(paneId); }, 50);
   }
+  saveFocusedPane();
   updateMobilePaneTabs();
 }
 
@@ -539,7 +571,7 @@ function renderPanes(panes) {
   const newIds = new Set(panes.map(p => p.id));
 
   for (const gone of existingIds) {
-    if (!newIds.has(gone)) { S.paneEls[gone].box.remove(); delete S.paneEls[gone]; delete S.paneInfo[gone]; }
+    if (!newIds.has(gone)) { S.paneEls[gone].box.remove(); delete S.paneEls[gone]; delete S.paneInfo[gone]; delete S.paneInputs[gone]; }
   }
   for (const p of panes) {
     if (!S.paneEls[p.id]) {
@@ -559,7 +591,11 @@ function renderPanes(panes) {
   applyLayout();
 
   if (newIds.has(oldFocus)) setFocus(oldFocus);
-  else if (panes.length > 0) setFocus(panes[0].id);
+  else {
+    const saved = loadFocusedPane();
+    if (saved && newIds.has(saved)) setFocus(saved);
+    else if (panes.length > 0) setFocus(panes[0].id);
+  }
 
   if (S.maximizedPane && newIds.has(S.maximizedPane)) {
     container.classList.add('has-maximized');
@@ -580,10 +616,16 @@ function updateMobilePaneTabs() {
   const isMobile = window.matchMedia('(max-width:600px)').matches;
   const panes = S.paneOrder.filter(id => S.paneEls[id]);
 
-  if (!isMobile || panes.length <= 1) {
+  if (!isMobile) {
     mobilePaneTabs.classList.remove('visible');
-    // Show all panes on desktop
     panes.forEach(id => S.paneEls[id].box.classList.remove('mobile-active'));
+    return;
+  }
+
+  if (panes.length <= 1) {
+    mobilePaneTabs.classList.remove('visible');
+    // Single pane — still needs mobile-active to be visible on mobile
+    panes.forEach(id => S.paneEls[id].box.classList.add('mobile-active'));
     return;
   }
 
@@ -704,6 +746,7 @@ window.tmuxWs = (function() {
     S.paneEls = {};
     S.paneInfo = {};
     S.paneOrder = [];
+    S.paneInputs = {};
     S.currentTool = null;
     container.innerHTML = '';
 
@@ -781,6 +824,7 @@ window.tmuxWs = (function() {
     S.paneEls = {};
     S.paneInfo = {};
     S.paneOrder = [];
+    S.paneInputs = {};
   }
 
   return { connect, disconnect, send, isConnected };

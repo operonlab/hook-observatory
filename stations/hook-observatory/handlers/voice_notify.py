@@ -3,7 +3,6 @@ Voice notification handler with async TTS queue.
 
 Events:
   PreToolUse/AskUserQuestion → random "請示" phrase
-  Notification → random "確認" phrase
   Stop → task summary from state file, or "視窗X面板Y任務完成了"
 
 Queue guarantees:
@@ -44,13 +43,6 @@ _ASK_PHRASES = [
     "少爺，有個問題想請教您",
 ]
 
-_NOTIFY_PHRASES = [
-    "少爺，需要您的確認",
-    "少爺，這裡需要您過目一下",
-    "少爺，請您批准這個操作",
-    "少爺，維恩等候您的指示",
-]
-
 _NUM_CN = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
 
 
@@ -65,21 +57,9 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 
     if event_type == "PreToolUse" and tool_name == "AskUserQuestion":
         _enqueue_tts(random.choice(_ASK_PHRASES))
-    elif event_type == "Notification":
-        _handle_notification(raw_input)
     elif event_type == "Stop":
         _handle_stop()
     return ALLOW
-
-
-def _handle_notification(raw_input: str) -> None:
-    """Notification: TTS for permission prompts."""
-    try:
-        json.loads(raw_input) if raw_input.strip() else {}
-    except (json.JSONDecodeError, AttributeError):
-        pass
-
-    _enqueue_tts(random.choice(_NOTIFY_PHRASES))
 
 
 def _handle_stop() -> None:

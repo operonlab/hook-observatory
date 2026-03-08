@@ -412,6 +412,7 @@ class TransactionService(
             created_by=instance.created_by,
             created_at=instance.created_at,
             updated_at=instance.updated_at,
+            icon_url=instance.icon_url,
             type=instance.type,
             amount=instance.amount,
             currency=instance.currency,
@@ -698,6 +699,7 @@ class SubscriptionService(
             created_by=instance.created_by,
             created_at=instance.created_at,
             updated_at=instance.updated_at,
+            icon_url=instance.icon_url,
             name=instance.name,
             amount=instance.amount,
             currency=instance.currency,
@@ -712,6 +714,8 @@ class SubscriptionService(
             status=instance.status,
             next_billing=instance.next_billing,
             notes=instance.notes,
+            reminder_days=instance.reminder_days,
+            tags=instance.tags or [],
             is_private=instance.is_private,
         )
 
@@ -764,6 +768,7 @@ class InstallmentPlanService(
             created_by=instance.created_by,
             created_at=instance.created_at,
             updated_at=instance.updated_at,
+            icon_url=instance.icon_url,
             description=instance.description,
             total_amount=instance.total_amount,
             currency=instance.currency,
@@ -781,6 +786,7 @@ class InstallmentPlanService(
             start_date=instance.start_date,
             end_date=instance.end_date,
             status=instance.status,
+            tags=instance.tags or [],
             is_private=instance.is_private,
         )
 

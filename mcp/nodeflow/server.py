@@ -100,6 +100,11 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "flow_id": {"type": "string", "description": "Flow ID"},
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Max number of nodes to return",
+                    },
                 },
                 "required": ["flow_id"],
             },
@@ -127,6 +132,11 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "flow_id": {"type": "string", "description": "Flow ID"},
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Max number of edges to return",
+                    },
                 },
                 "required": ["flow_id"],
             },
@@ -264,8 +274,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return text_result(f"Flow triggered. Run ID: {run_id}")
 
             case "nodeflow_nodes":
+                limit = arguments.get("limit", 50)
                 result = await to_thread(client.list_nodes, arguments["flow_id"])
-                return text_result(_format_nodes(result))
+                items = result if isinstance(result, list) else result.get("items", [])
+                total_count = len(items)
+                items = items[:limit]
+                return text_result(
+                    f"Showing {len(items)} of {total_count} nodes\n\n" + _format_nodes(items)
+                )
 
             case "nodeflow_create_node":
                 data = {
@@ -282,8 +298,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 )
 
             case "nodeflow_edges":
+                limit = arguments.get("limit", 50)
                 result = await to_thread(client.list_edges, arguments["flow_id"])
-                return text_result(_format_edges(result))
+                items = result if isinstance(result, list) else result.get("items", [])
+                total_count = len(items)
+                items = items[:limit]
+                return text_result(
+                    f"Showing {len(items)} of {total_count} edges\n\n" + _format_edges(items)
+                )
 
             case "nodeflow_runs":
                 result = await to_thread(

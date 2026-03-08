@@ -6,6 +6,7 @@ import type {
   Category,
   CategoryCreate,
   InstallmentPlan,
+  InstallmentPlanCreate,
   MonthlySummary,
   MonthlyTrend,
   NetWorthPoint,
@@ -19,6 +20,21 @@ import type {
   WalletCreate,
   WalletUpdate,
 } from '../types'
+
+// ─── Icon Upload ───
+
+export async function uploadIcon(file: File): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/finance/upload-icon', {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  })
+  if (!res.ok) throw new Error('Upload failed')
+  const data = await res.json()
+  return data.icon_url as string
+}
 
 // ─── CRUD APIs ───
 
@@ -59,6 +75,7 @@ export const categoryApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  delete: (id: string) => request<void>(`/finance/categories/${id}`, { method: 'DELETE' }),
 }
 
 export const subscriptionApi = createCrudApi<Subscription, SubscriptionCreate, SubscriptionUpdate>(
@@ -88,14 +105,22 @@ export const walletApi = {
 export const installmentApi = {
   list: (page = 1, pageSize = 20) =>
     request<PaginatedResponse<InstallmentPlan>>(
-      `/finance/installments?page=${page}&page_size=${pageSize}`,
+      `/finance/installment-plans?page=${page}&page_size=${pageSize}`,
     ),
 
-  get: (id: string) => request<InstallmentPlan>(`/finance/installments/${id}`),
+  get: (id: string) => request<InstallmentPlan>(`/finance/installment-plans/${id}`),
 
-  cancel: (id: string) => request<void>(`/finance/installments/${id}/cancel`, { method: 'POST' }),
+  create: (data: InstallmentPlanCreate) =>
+    request<InstallmentPlan>('/finance/installment-plans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
-  payoff: (id: string) => request<void>(`/finance/installments/${id}/payoff`, { method: 'POST' }),
+  cancel: (id: string) =>
+    request<void>(`/finance/installment-plans/${id}/cancel`, { method: 'POST' }),
+
+  payoff: (id: string) =>
+    request<void>(`/finance/installment-plans/${id}/payoff`, { method: 'POST' }),
 }
 
 export const budgetApi = {
@@ -109,6 +134,29 @@ export const budgetApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+}
+
+// ─── Tag Styles ───
+
+export const tagStyleApi = {
+  get: () => request<{ styles: Record<string, string> }>('/finance/tag-styles'),
+  put: (styles: Record<string, string>) =>
+    request<{ styles: Record<string, string> }>('/finance/tag-styles', {
+      method: 'PUT',
+      body: JSON.stringify({ styles }),
+    }),
+}
+
+// ─── Exchange Rates ───
+
+export interface ExchangeRates {
+  base: string
+  rates: Record<string, number>
+  date: string
+}
+
+export const exchangeRateApi = {
+  get: () => request<ExchangeRates>('/finance/exchange-rates'),
 }
 
 // ─── Analytics APIs ───

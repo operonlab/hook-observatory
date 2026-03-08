@@ -1,20 +1,9 @@
 import { useState } from 'react'
-import InstallmentTracker from '../components/InstallmentTracker'
-import SubscriptionList from '../components/SubscriptionList'
 import WalletForm from '../components/WalletForm'
 import WalletList from '../components/WalletList'
 import type { Wallet } from '../types'
 
-type Tab = 'wallets' | 'installments' | 'subscriptions'
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'wallets', label: '錢包' },
-  { id: 'installments', label: '分期付款' },
-  { id: 'subscriptions', label: '訂閱管理' },
-]
-
 export default function WalletsPage() {
-  const [tab, setTab] = useState<Tab>('wallets')
   const [editWallet, setEditWallet] = useState<Wallet | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -25,46 +14,18 @@ export default function WalletsPage() {
         錢包與資產
       </h1>
 
-      {/* Tabs */}
-      <div
-        className="flex gap-1 p-1 rounded-lg"
-        style={{ backgroundColor: 'var(--fn-bg-surface)' }}
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className="flex-1 py-2 text-xs rounded-md transition-colors"
-            style={{
-              backgroundColor: tab === t.id ? 'var(--fn-bg-elevated)' : 'transparent',
-              color: tab === t.id ? 'var(--fn-accent)' : 'var(--fn-text-tertiary)',
-              fontWeight: tab === t.id ? 500 : 400,
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <WalletList
+        key={refreshKey}
+        onEdit={(w) => {
+          setEditWallet(w)
+          setShowForm(true)
+        }}
+        onAdd={() => {
+          setEditWallet(null)
+          setShowForm(true)
+        }}
+      />
 
-      {/* Tab content */}
-      {tab === 'wallets' && (
-        <WalletList
-          key={refreshKey}
-          onEdit={(w) => {
-            setEditWallet(w)
-            setShowForm(true)
-          }}
-          onAdd={() => {
-            setEditWallet(null)
-            setShowForm(true)
-          }}
-        />
-      )}
-      {tab === 'installments' && <InstallmentTracker />}
-      {tab === 'subscriptions' && <SubscriptionList />}
-
-      {/* Wallet form modal */}
       {showForm && (
         <WalletForm
           wallet={editWallet}

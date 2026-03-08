@@ -18,7 +18,7 @@ _DEFAULT_CONFIG_PATH = _DEFAULT_CONFIG_DIR / "config.toml"
 
 @dataclass
 class Config:
-    port: int = 4102
+    port: int = 4103
     host: str = "127.0.0.1"
     database_url: str = "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"
     skills_dir: Path = Path.home() / ".claude" / "skills"

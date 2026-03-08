@@ -1,4 +1,4 @@
-import { Copy, Zap } from 'lucide-react'
+import { Copy, X, Zap } from 'lucide-react'
 import type { Method } from '../types'
 
 const LAYOUT_LABELS: Record<string, string> = {
@@ -9,14 +9,30 @@ const LAYOUT_LABELS: Record<string, string> = {
   kanban: '看板',
 }
 
+const DIMENSION_LABELS: Record<string, string> = {
+  prioritization: '優先排序',
+  execution: '執行節奏',
+  flow: '工作流',
+  ritual: '每日儀式',
+}
+
 interface MethodCardProps {
   method: Method
   onActivate?: (method: Method) => void
+  onDeactivate?: (method: Method) => void
   onClone?: (method: Method) => void
   isActive?: boolean
 }
 
-export default function MethodCard({ method, onActivate, onClone, isActive }: MethodCardProps) {
+export default function MethodCard({
+  method,
+  onActivate,
+  onDeactivate,
+  onClone,
+  isActive,
+}: MethodCardProps) {
+  const dimensions = method.config?.dimensions || []
+
   return (
     <div
       className="rounded-lg border p-4 transition-colors"
@@ -63,7 +79,7 @@ export default function MethodCard({ method, onActivate, onClone, isActive }: Me
         </p>
       )}
 
-      {/* Tags + Layout */}
+      {/* Tags + Layout + Dimensions */}
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         <span
           className="text-[10px] px-1.5 py-0.5 rounded"
@@ -74,6 +90,18 @@ export default function MethodCard({ method, onActivate, onClone, isActive }: Me
         >
           {LAYOUT_LABELS[method.layout_type] || method.layout_type}
         </span>
+        {dimensions.map((dim) => (
+          <span
+            key={dim}
+            className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{
+              color: '#89b4fa',
+              backgroundColor: 'rgba(137, 180, 250, 0.12)',
+            }}
+          >
+            {DIMENSION_LABELS[dim] || dim}
+          </span>
+        ))}
         {method.tags?.map((tag) => (
           <span
             key={tag}
@@ -114,6 +142,21 @@ export default function MethodCard({ method, onActivate, onClone, isActive }: Me
           >
             <Zap size={12} />
             啟用
+          </button>
+        )}
+        {onDeactivate && isActive && (
+          <button
+            type="button"
+            onClick={() => onDeactivate(method)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors"
+            style={{
+              backgroundColor: 'rgba(243, 139, 168, 0.1)',
+              color: '#f38ba8',
+              border: '1px solid rgba(243, 139, 168, 0.25)',
+            }}
+          >
+            <X size={12} />
+            停用
           </button>
         )}
         {onClone && method.is_preset && (

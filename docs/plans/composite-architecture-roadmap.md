@@ -5,11 +5,11 @@
 
 ## 背景與目標
 
-Workshop 已有 5 個服務完成四層複合架構（SDK → CLI → MCP → Skill），作為黃金標準：
-- agent-metrics、sandbox-executor、hook-observatory、tmux-relay、memvault
+Workshop 已有 **21+ 個服務** 完成 SDK 層，其中 17 個有 MCP server，7 個核心模組有 CLI。
+原始黃金標準 5 服務（agent-metrics、sandbox-executor、hook-observatory、tmux-relay、memvault）已擴展至大規模覆蓋。
 
-其餘 8 個核心模組和 5 個工作站仍停留在部分實裝（僅 HTTP API 或僅 MCP）。
-本計劃將所有服務統一升級到完整的四層架構。
+> **2026-03-07 更新**：Wave 1-3 的 SDK 層已全部完成（20+ clients），大部分 MCP 和 CLI 也已到位。
+> 剩餘缺口：invest（缺 CLI+MCP）、taskflow/ideagraph（純骨架，待 V2 建設）、anvil（缺 onboarding）。
 
 **目標**: 讓每個有意義的服務都具備 SDK + CLI + MCP + Skill（視需求），確保 Claude Code、外部腳本、人類終端都能統一操作。
 
@@ -19,28 +19,34 @@ Workshop 已有 5 個服務完成四層複合架構（SDK → CLI → MCP → Sk
 
 ### 核心模組 (~/workshop/core/src/modules/)
 
-| 模組 | HTTP API | SDK | CLI | MCP | Skill | 優先級 |
-|------|----------|-----|-----|-----|-------|--------|
-| **finance** | ✅ | ❌ | ❌ | ✅ (3 伺服器, 27 工具) | ❌ | P1 |
-| **taskflow** | ✅ | ❌ | ❌ | ✅ (~10 工具) | ❌ | P1 |
-| **intelflow** | ✅ | ❌ | ❌ | 🔶 (2 工具) | ❌ | P1 |
-| **ideagraph** | 🔶 | ❌ | ❌ | 🔶 (規劃中) | ❌ | P2 |
-| **nodeflow** | ✅ | ❌ | ❌ | ❌ | ❌ | P2 |
-| **notification** | ✅ | ❌ | ❌ | ❌ | ❌ | P3 |
-| **auth** | ✅ | ❌ | ❌ | ❌ | ❌ | P3 |
-| **admin** | ✅ | ❌ | ❌ | ❌ | ❌ | P3 |
+| 模組 | HTTP API | SDK | CLI | MCP | Skill | 狀態 |
+|------|----------|-----|-----|-----|-------|------|
+| **finance** | ✅ | ✅ | ✅ | ✅ (3 伺服器, 27 工具) | ✅ | ✅ 完成 |
+| **intelflow** | ✅ | ✅ | ✅ | ✅ (2 工具) | ✅ | ✅ 完成 |
+| **memvault** | ✅ | ✅ | ✅ | ✅ (8 工具) | ✅ | ✅ 完成 |
+| **nodeflow** | ✅ | ✅ | ✅ | ✅ (6 工具) | ✅ | ✅ 完成 |
+| **briefing** | ✅ | — | — | — | — | ✅ 生產（獨立 module） |
+| **notification** | ✅ | ✅ | ✅ | — | — | ✅ 完成 |
+| **auth** | ✅ | ✅ | ✅ | — | — | ✅ 完成 |
+| **admin** | ✅ | ✅ | ✅ | — | — | ✅ 完成 |
+| **invest** | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ 缺 CLI+MCP |
+| **taskflow** | 🏗 骨架 | — | — | — | — | 🏗 待 V2 建設 |
+| **ideagraph** | 🏗 骨架 | — | — | — | — | 🏗 待 V2 建設 |
 
 ### 工作站 (~/workshop/stations/)
 
-| 工作站 | HTTP API | SDK | CLI | MCP | Skill | 優先級 |
-|--------|----------|-----|-----|-----|-------|--------|
-| **sentinel** (4101) | ✅ | ❌ | ❌ | ❌ | ❌ | P1 |
-| **system-monitor** (9526) | ✅ | ❌ | ❌ | ❌ | ✅ (system-map) | P2 |
-| **envkit** | ❌ | ❌ | ✅ | ❌ | ❌ | P2 |
-| **tmux-webui** (9527) | ✅+WS | ❌ | ❌ | ❌ | ✅ (tmux-expert) | P3 |
-| **session-archiver** | 🔶 | ❌ | ❌ | ❌ | ❌ | P3 |
+| 工作站 | HTTP API | SDK | CLI | MCP | Skill | 狀態 |
+|--------|----------|-----|-----|-----|-------|------|
+| **sentinel** (4101) | ✅ | ✅ | ✅ | ✅ (5 工具) | ✅ | ✅ 完成 |
+| **system-monitor** (9526) | ✅ | ✅ | ✅ | ✅ (4 工具) | ✅ | ✅ 完成 |
+| **envkit** | — | ✅ | ✅ | ✅ (4 工具) | ✅ | ✅ 完成 |
+| **anvil** (4102) | ✅ | ✅ | ✅ (18 cmd) | ✅ (8 工具) | ✅ | ⚠️ 缺 onboarding |
+| **tmux-webui** (9527) | ✅+WS | ✅ | — | ✅ (3 工具) | ✅ | ✅ 完成 |
+| **session-archiver** | — | ✅ | ✅ | — | — | ✅ 完成 |
+| **session-redactor** | — | ✅ | ✅ | ✅ (5 工具) | ✅ | ✅ 完成 |
+| **session-intelligence** | — | ✅ | ✅ | ✅ (6 工具) | ✅ | ✅ 完成 |
 
-*跳過: agent-vista（Go 語言, 獨立生態）、session-redactor（僅規格書）、invest/skillpath/matchcore/workpool（骨架階段）*
+*跳過: agent-vista（Go 語言, 獨立生態）*
 
 ### 已完成的黃金標準（參考實作）
 

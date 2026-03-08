@@ -19,6 +19,14 @@ from workshop.clients.sentinel import SentinelClient, SentinelError
 server = Server("sentinel")
 client = SentinelClient()
 
+# -- Response size limits --
+_MAX_SERVICES = 30
+_MAX_INCIDENTS = 10
+_MAX_OPERATIONS = 20
+_MAX_UPTIME_DAYS = 14
+_MAX_UPTIME_SERVICES = 20
+_MAX_DETAIL_LEN = 200
+
 
 def text_result(text: str) -> list[TextContent]:
     return [TextContent(type="text", text=text)]
@@ -26,6 +34,12 @@ def text_result(text: str) -> list[TextContent]:
 
 def json_text(data) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2, default=str)
+
+
+def _truncate(s: str | None, maxlen: int = _MAX_DETAIL_LEN) -> str | None:
+    if s and len(s) > maxlen:
+        return s[:maxlen] + "..."
+    return s
 
 
 @server.list_tools()
@@ -37,7 +51,16 @@ async def list_tools() -> list[Tool]:
                 "Get Sentinel overall status dashboard -- shows all monitored services "
                 "with their health status, response times, and last check time."
             ),
-            inputSchema={"type": "object", "properties": {}},
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": _MAX_SERVICES,
+                        "description": "Max services to return",
+                    },
+                },
+            },
         ),
         Tool(
             name="sentinel_service",
@@ -60,14 +83,27 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "page": {"type": "integer", "default": 1, "description": "Page number"},
-                    "limit": {"type": "integer", "default": 20, "description": "Page size"},
+                    "limit": {
+                        "type": "integer",
+                        "default": _MAX_INCIDENTS,
+                        "description": "Page size (max 20)",
+                    },
                 },
             },
         ),
         Tool(
             name="sentinel_operations",
             description="List active agent operations (agents currently working on services).",
-            inputSchema={"type": "object", "properties": {}},
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": _MAX_OPERATIONS,
+                        "description": "Max operations to return",
+                    },
+                },
+            },
         ),
         Tool(
             name="sentinel_uptime",
@@ -77,8 +113,13 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "days": {
                         "type": "integer",
-                        "default": 90,
-                        "description": "Number of days to look back (max 365)",
+                        "default": _MAX_UPTIME_DAYS,
+                        "description": f"Number of days to look back (default {_MAX_UPTIME_DAYS}, max 365)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": _MAX_UPTIME_SERVICES,
+                        "description": "Max services to include",
                     },
                 },
             },
@@ -91,7 +132,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         match name:
             case "sentinel_status":
+                limit = min(arguments.get("limit", _MAX_SERVICES), _MAX_SERVICES)
                 result = await to_thread(client.get_status_summary)
+                services = result.get("services", [])
+                total = len(services)
+                result["services"] = services[:limit]
+                result["total_services"] = total
+                if total > limit:
+                    result["truncated"] = f"Showing {limit}/{total} services"
                 return text_result(json_text(result))
 
             case "sentinel_service":
@@ -101,17 +149,48 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             case "sentinel_incidents":
                 page = arguments.get("page", 1)
-                limit = arguments.get("limit", 20)
+                limit = min(arguments.get("limit", _MAX_INCIDENTS), 20)
                 result = await to_thread(client.list_incidents, page, limit)
+                # Truncate long detail fields in each incident
+                for item in result.get("items", []):
+                    if "detail" in item:
+                        item["detail"] = _truncate(item["detail"])
                 return text_result(json_text(result))
 
             case "sentinel_operations":
+                limit = min(arguments.get("limit", _MAX_OPERATIONS), _MAX_OPERATIONS)
                 result = await to_thread(client.list_operations)
-                return text_result(json_text(result))
+                # result is a list from the API
+                items = result if isinstance(result, list) else result.get("items", [])
+                total = len(items)
+                output = {
+                    "total_count": total,
+                    "items": items[:limit],
+                }
+                if total > limit:
+                    output["truncated"] = f"Showing {limit}/{total} operations"
+                return text_result(json_text(output))
 
             case "sentinel_uptime":
-                days = arguments.get("days", 90)
+                days = min(arguments.get("days", _MAX_UPTIME_DAYS), 365)
+                svc_limit = min(arguments.get("limit", _MAX_UPTIME_SERVICES), _MAX_UPTIME_SERVICES)
                 result = await to_thread(client.get_uptime, days)
+                services = result.get("services", [])
+                total_svcs = len(services)
+                # Limit number of services
+                services = services[:svc_limit]
+                # Limit days per service (keep most recent)
+                for svc in services:
+                    day_list = svc.get("days", [])
+                    if len(day_list) > _MAX_UPTIME_DAYS:
+                        svc["days"] = day_list[-_MAX_UPTIME_DAYS:]
+                        svc["days_truncated"] = (
+                            f"Showing last {_MAX_UPTIME_DAYS} of {len(day_list)} days"
+                        )
+                result["services"] = services
+                result["total_services"] = total_svcs
+                if total_svcs > svc_limit:
+                    result["truncated"] = f"Showing {svc_limit}/{total_svcs} services"
                 return text_result(json_text(result))
 
             case _:

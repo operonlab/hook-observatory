@@ -73,6 +73,14 @@ SERVICES = [
         "health": "http://127.0.0.1:4102/api/people",
         "workdir": "/Users/joneshong/workshop/stations/auto-survey",
     },
+    {
+        "name": "anvil",
+        "type": "uvicorn",
+        "cmd": "/Users/joneshong/workshop/stations/anvil/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port 4103",
+        "port": 4103,
+        "health": "http://127.0.0.1:4103/docs",
+        "workdir": "/Users/joneshong/workshop/stations/anvil/src",
+    },
     # ── Infrastructure Tools ──
     {
         "name": "litellm",

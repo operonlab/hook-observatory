@@ -161,6 +161,16 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "ws-capture-expire",
+      "label": "com.joneshong.scheduler.ws-capture-expire",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_capture_expire.py",
+      "schedule": { "calendar": { "Hour": 3, "Minute": 0 } },
+      "description": "每日 3AM: 過期 stale captures（超過 expires_at 的待處理項目）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }

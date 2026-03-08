@@ -48,7 +48,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:4102",
-        "https://claw.joneshong.com",
+        "https://workshop.joneshong.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

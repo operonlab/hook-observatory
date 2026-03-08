@@ -31,7 +31,7 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Take a full macOS environment snapshot -- captures Homebrew formulae/casks, "
                 "Python packages, Node.js packages, shell config, Docker, apps, and CLI tools. "
-                "Returns YAML output."
+                "Returns YAML output. Use summary=true (default) to get category counts + top items only."
             ),
             inputSchema={
                 "type": "object",
@@ -39,6 +39,11 @@ async def list_tools() -> list[Tool]:
                     "output_file": {
                         "type": "string",
                         "description": "Optional file path to save the snapshot YAML. If omitted, returns content directly.",
+                    },
+                    "summary": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "If true, return summary (counts + top items per category) instead of full YAML.",
                     },
                 },
             },
@@ -106,10 +111,44 @@ async def list_tools() -> list[Tool]:
                             "cli",
                         ],
                     },
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum number of items to return per category.",
+                    },
                 },
             },
         ),
     ]
+
+
+def _summarize_snapshot(yaml_text: str) -> str:
+    """Summarize a full snapshot YAML into category counts + top items."""
+    lines = yaml_text.splitlines()
+    summary_lines: list[str] = ["# Environment Snapshot (Summary)\n"]
+    current_section = ""
+    section_items: list[str] = []
+
+    def flush_section():
+        if current_section and section_items:
+            summary_lines.append(f"## {current_section} ({len(section_items)} items)")
+            for item in section_items[:5]:
+                summary_lines.append(f"  - {item.strip().lstrip('- ')}")
+            if len(section_items) > 5:
+                summary_lines.append(f"  ... and {len(section_items) - 5} more")
+            summary_lines.append("")
+
+    for line in lines:
+        stripped = line.rstrip()
+        if stripped and not stripped.startswith(" ") and stripped.endswith(":"):
+            flush_section()
+            current_section = stripped.rstrip(":")
+            section_items = []
+        elif stripped.startswith("  - ") or stripped.startswith("  "):
+            section_items.append(stripped)
+
+    flush_section()
+    return "\n".join(summary_lines)
 
 
 @server.call_tool()
@@ -119,6 +158,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             case "envkit_snapshot":
                 output_file = arguments.get("output_file")
                 result = await to_thread(client.snapshot, output_file)
+                summary = arguments.get("summary", True)
+                if summary and not output_file and isinstance(result, str):
+                    result = _summarize_snapshot(result)
+                elif isinstance(result, str) and len(result) > 5000:
+                    result = result[:5000] + f"\n\n... (truncated, {len(result)} chars total)"
                 return text_result(result)
 
             case "envkit_verify":
@@ -135,6 +179,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             case "envkit_list":
                 category = arguments.get("category", "all")
                 result = await to_thread(client.list_items, category)
+                limit = arguments.get("limit", 50)
+                if isinstance(result, str):
+                    lines = result.splitlines()
+                    if len(lines) > limit:
+                        result = (
+                            "\n".join(lines[:limit])
+                            + f"\n\n... ({len(lines)} lines total, showing {limit})"
+                        )
                 return text_result(result)
 
             case _:

@@ -16,11 +16,21 @@ from src.modules.finance.schemas import (
 
 from .adapters import BaseCaptureAdapter
 
+# Register finance resolvers on import
+from .finance_resolvers import register_finance_resolvers
+
+register_finance_resolvers()
+
 
 class TransactionCaptureAdapter(BaseCaptureAdapter):
     module = "finance"
     entity_type = "transaction"
     default_ttl_days = 30
+
+    reference_fields = {
+        "wallet_id": "finance.wallet",
+        "category_id": "finance.category",
+    }
 
     field_weights = {
         "amount": 25,
@@ -38,24 +48,17 @@ class TransactionCaptureAdapter(BaseCaptureAdapter):
         "status": "completed",
     }
 
-    def smart_defaults(
-        self, payload: dict[str, Any], user_prefs: dict[str, Any]
-    ) -> dict[str, Any]:
+    def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}
 
-        # Use default wallet from user preferences
         if not result.get("wallet_id") and user_prefs.get("default_wallet_id"):
             result["wallet_id"] = user_prefs["default_wallet_id"]
 
-        # Default transacted_at to now
         if not result.get("transacted_at"):
             result["transacted_at"] = datetime.now(UTC).isoformat()
 
-        # Infer payment_method from wallet type if we have wallet info
         if not result.get("payment_method") and result.get("wallet_id"):
-            result["payment_method"] = user_prefs.get(
-                "_wallet_payment_method", "credit_card"
-            )
+            result["payment_method"] = user_prefs.get("_wallet_payment_method", "credit_card")
         elif not result.get("payment_method"):
             result["payment_method"] = "credit_card"
 
@@ -69,6 +72,8 @@ class TransactionCaptureAdapter(BaseCaptureAdapter):
         created_by: str | None,
     ) -> str:
         from src.modules.finance.services import transaction_service
+
+        # Reference fields already resolved by resolve_references() in services.py
 
         # Coerce types for Pydantic
         if "amount" in payload:
@@ -89,6 +94,11 @@ class SubscriptionCaptureAdapter(BaseCaptureAdapter):
     entity_type = "subscription"
     default_ttl_days = 30
 
+    reference_fields = {
+        "wallet_id": "finance.wallet",
+        "category_id": "finance.category",
+    }
+
     field_weights = {
         "name": 30,
         "amount": 25,
@@ -103,9 +113,7 @@ class SubscriptionCaptureAdapter(BaseCaptureAdapter):
         "currency": "TWD",
     }
 
-    def smart_defaults(
-        self, payload: dict[str, Any], user_prefs: dict[str, Any]
-    ) -> dict[str, Any]:
+    def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}
         if not result.get("start_date"):
             result["start_date"] = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -135,6 +143,10 @@ class InstallmentCaptureAdapter(BaseCaptureAdapter):
     entity_type = "installment"
     default_ttl_days = 30
 
+    reference_fields = {
+        "wallet_id": "finance.wallet",
+    }
+
     field_weights = {
         "description": 15,
         "total_amount": 20,
@@ -151,15 +163,12 @@ class InstallmentCaptureAdapter(BaseCaptureAdapter):
         "payment_method": "credit_card",
     }
 
-    def smart_defaults(
-        self, payload: dict[str, Any], user_prefs: dict[str, Any]
-    ) -> dict[str, Any]:
+    def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}
         if not result.get("start_date"):
             result["start_date"] = datetime.now(UTC).strftime("%Y-%m-%d")
         if not result.get("wallet_id") and user_prefs.get("default_wallet_id"):
             result["wallet_id"] = user_prefs["default_wallet_id"]
-        # Auto-calc installment_amount if we have total_amount and num_installments
         total = result.get("total_amount")
         count = result.get("num_installments")
         if total and count and not result.get("installment_amount"):

@@ -1,5 +1,7 @@
 """Capture SDK client — progressive data enrichment pipeline."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from ._base import BaseClient

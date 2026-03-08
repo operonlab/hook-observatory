@@ -1,7 +1,7 @@
 # Architecture Constraints
 
 ## Modular Monolith
-- Single deployable unit: all 13 domain modules in one FastAPI process (port 8800)
+- Single deployable unit: all 13 domain modules in one FastAPI process (port 8801)
 - Two hot-path services run separately: realtime/LiveKit (8830), media/STT-TTS (8831)
 - Frontend: single React app (workbench/, port 3000) — NO micro-frontend, NO Module Federation
 
@@ -38,7 +38,8 @@
 - Keep payloads lean: IDs + essential data only; fetch full records via service imports
 
 ## Service Taxonomy
-- **Core Modules** (DB-backed): auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin, nodeflow, notification, invest
+- **Foundation** (infra modules): auth, admin, capture (shared schema, cross-module)
+- **Core Modules** (DB-backed): finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest
 - **Stations** (`stations/`): standalone local tools, no Core DB dependency
 - **Bridges** (`bridges/`): external platform connectors (LINE, Telegram, Discord)
 - **MCP servers** (`mcp/`): SDK-based protocol access to core services and stations (16 servers)

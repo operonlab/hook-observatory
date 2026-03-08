@@ -24,8 +24,14 @@ export default function ReportList() {
     activeTag,
     allTags,
     fetchReports,
+    deleteReport,
     setActiveTag,
   } = useReports()
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('確定要刪除這份報告嗎？')) return
+    await deleteReport(id)
+  }
   const [searchText, setSearchText] = useState('')
   const [tagsExpanded, setTagsExpanded] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('date-desc')
@@ -176,7 +182,9 @@ export default function ReportList() {
             />
           </div>
         ) : sorted.length > 0 ? (
-          sorted.map((report) => <ReportRow key={report.id} report={report} />)
+          sorted.map((report) => (
+            <ReportRow key={report.id} report={report} onDelete={handleDelete} />
+          ))
         ) : (
           <div className="p-8 text-center text-sm" style={{ color: 'var(--if-text-dim)' }}>
             {searchText ? '無搜尋結果' : '尚無報告'}

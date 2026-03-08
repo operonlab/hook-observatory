@@ -24,7 +24,10 @@ async def _get_user_prefs(db: AsyncSession, user_id: str) -> dict:
     """Fetch user preferences for smart defaults."""
     from src.modules.auth.services import user_service
 
-    return await user_service.get_preferences(db, user_id)
+    try:
+        return await user_service.get_preferences(db, user_id)
+    except Exception:
+        return {}
 
 
 def _check_owner(capture, user: dict) -> None:
@@ -70,8 +73,14 @@ async def list_captures(
     user: dict = require_permission("capture.read"),
 ):
     items, _total = await capture_service.list(
-        db, space_id, module=module, entity_type=entity_type, status=status,
-        limit=limit, offset=offset, user_id=user.get("id"),
+        db,
+        space_id,
+        module=module,
+        entity_type=entity_type,
+        status=status,
+        limit=limit,
+        offset=offset,
+        user_id=user.get("id"),
     )
     return [capture_service.to_response(c) for c in items]
 
@@ -91,9 +100,7 @@ async def batch_promote(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("capture.write"),
 ):
-    results = await capture_service.batch_promote(
-        db, capture_ids, user_id=user.get("id")
-    )
+    results = await capture_service.batch_promote(db, capture_ids, user_id=user.get("id"))
     await db.commit()
     return results
 
@@ -179,7 +186,10 @@ async def promote_capture(
                 f"Permission denied: {target_perm}", code=f"{capture.module}.forbidden"
             )
     result = await capture_service.promote(db, capture_id, user_id=user.get("id"))
-    await db.commit()
+    if result.success:
+        await db.commit()
+    else:
+        await db.rollback()
     return result
 
 
@@ -197,6 +207,16 @@ async def delete_capture(
     _check_owner(capture, user)
     await capture_service.delete(db, capture_id)
     await db.commit()
+
+
+@router.post("/expire-stale")
+async def expire_stale_captures(
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("admin.write"),
+):
+    count = await capture_service.expire_stale(db)
+    await db.commit()
+    return {"expired": count}
 
 
 @router.get("/{capture_id}/enrichments", response_model=list[CaptureEnrichmentResponse])

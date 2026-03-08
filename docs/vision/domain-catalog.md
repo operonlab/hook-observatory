@@ -62,6 +62,28 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 
 ---
 
+#### capture — 漸進式資料捕捉管線
+
+| 屬性 | 數值 |
+|----------|-------|
+| **依賴項目** | auth, 各目標模組 (finance, taskflow, invest...) |
+| **被依賴於** | 無 (各模組透過 adapter 被動支援) |
+| **MCP 伺服器** | `workshop-capture` (9 tools) |
+| **四層架構** | SDK ✅ CLI ✅ MCP ✅ |
+| **DB Schema** | `shared` (跨模組基礎設施) |
+
+**功能能力**:
+- 快速捕捉不完整資料片段 (Capture)
+- Smart defaults + completeness 計算
+- 漸進式充實 (Progressive Enrichment) + 審計軌跡
+- 晉升為正式記錄 (Promote to formal record)
+- 批次操作 (batch promote / batch fill)
+- TTL 自動過期
+
+**Adapter 機制**: 每個目標模組實作 `BaseCaptureAdapter`，定義 `field_weights`、`smart_defaults()`、`promote()`。目前支援 finance (transaction/subscription/installment)、taskflow (task)、invest (trade)。
+
+---
+
 ### 領域服務 (Domain Services)
 
 #### finance — 會計與財務
@@ -611,22 +633,26 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 
 | 服務 | 類型 | 四層狀態 | MCP 伺服器 | 工具數 |
 |---------|------|----------|------------|-------|
-| auth | 基礎層 | SDK+CLI | — | — |
-| admin | 基礎層 | SDK+CLI | — | — |
-| finance | 領域服務 | SDK+CLI+MCP+Skill | `finance` + `finance-wallet` + `finance-analytics` | ~27 |
-| taskflow | 領域服務 | MCP 運作中 | `workshop-taskflow` + `workshop-taskflow-reports` | ~15 |
-| ideagraph | 領域服務 | MCP 運作中 | `workshop-ideagraph` + `workshop-ideagraph-ai` | ~13 |
-| intelflow | 領域服務 | SDK+CLI+MCP+Skill | `intelflow` | ~2 |
-| memvault | 領域服務 | SDK+CLI+MCP+Skill | `memvault` | 8 |
-| skillpath | 領域服務 | 未開始 | — | — |
-| workpool | 領域服務 | 未開始 | — | — |
-| matchcore | 領域服務 | 未開始 | — | — |
-| nodeflow | 領域服務 | SDK+CLI+MCP+Skill | `nodeflow` | 6 |
-| notification | 領域服務 | SDK+CLI | — | — |
-| invest | 領域服務 | 骨架 | — | — |
+| auth | 基礎層 | ✅ SDK+CLI | — | — |
+| admin | 基礎層 | ✅ SDK+CLI | — | — |
+| capture | 基礎層 | ✅ SDK+CLI+MCP | `capture` | 9 |
+| finance | 領域服務 | ✅ SDK+CLI+MCP+Skill | `finance` + `finance-wallet` + `finance-analytics` | ~27 |
+| briefing | 領域服務 | ✅ SDK+CLI（705L svc, 19 API, 13 tsx） | — | — |
+| taskflow | 領域服務 | 🏗 骨架（10L 占位 routes） | — | — |
+| ideagraph | 領域服務 | 🏗 骨架（10L 占位 routes） | — | — |
+| intelflow | 領域服務 | ✅ SDK+CLI+MCP+Skill | `intelflow` | ~2 |
+| memvault | 領域服務 | ✅ SDK+CLI+MCP+Skill | `memvault` | 8 |
+| skillpath | 領域服務 | 🏗 骨架（未啟動） | — | — |
+| workpool | 領域服務 | 🏗 骨架（未啟動） | — | — |
+| matchcore | 領域服務 | 🏗 骨架（未啟動） | — | — |
+| nodeflow | 領域服務 | ⚙️ SDK+CLI+MCP+Skill | `nodeflow` | 6 |
+| notification | 領域服務 | ✅ SDK+CLI（三通道推播） | — | — |
+| invest | 領域服務 | ⚙️ SDK（428L svc, 8 tsx, 缺 CLI+MCP） | — | — |
 | social-hooks | 橋接層 | 未開始 | — | — |
 | media | 熱路徑 | core/services/ | — | — |
-| agent-metrics | 工作站 | SDK+CLI+MCP+Skill | `agent-metrics` | 10 |
+| agent-metrics | 工作站 | ✅ SDK+CLI+MCP+Skill | `agent-metrics` | 10 |
+| anvil | 工作站 | ✅ SDK+CLI+MCP（6表, 25 API, 缺 onboarding） | `anvil` | 8 |
+| auto-survey | 工作站 | ✅ Playwright+Gemini, Web UI | — | — |
 | hook-observatory | 工作站 | SDK+CLI+MCP | `hook-observatory` | 4 |
 | sandbox-executor | 工作站 | SDK+CLI+MCP+Skill | `sandbox` | 2 |
 | sentinel | 工作站 | SDK+CLI+MCP+Skill | `sentinel` | 5 |
@@ -647,11 +673,11 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 
 | 類型 | 項目 | 資料存放地 |
 |------|-------|---------------|
-| **基礎層 (Foundation)** | auth, admin | PostgreSQL |
-| **領域服務 (Domain Service)** | finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest | PostgreSQL (每個模組一個 schema) |
+| **基礎層 (Foundation)** | auth, admin, capture | PostgreSQL (`shared` schema) |
+| **領域服務 (Domain Service)** | finance, briefing, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest | PostgreSQL (每個模組一個 schema) |
 | **橋接層 (Bridge)** | social-hooks | 外部 + 事件總線 (Event Bus) |
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
-| **工作站 (Station)** | agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-redactor, system-monitor, tmux-relay, tmux-webui + session-pipeline, session-intelligence (CLI-only) | 本地 SQLite / 無狀態 |
+| **工作站 (Station)** | agent-metrics, agent-vista, anvil, auto-survey, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-redactor, session-intelligence, session-pipeline, system-monitor, tmux-relay, tmux-webui | 本地 SQLite / 無狀態 |
 | **第三方 (Vendor)** | observability (@disler) | 獨立運行 |
 | **組合 (Composition)** | 法律顧問, 教會音樂, 虛擬客服, ERP/POS | 上述服務的組合 |
 

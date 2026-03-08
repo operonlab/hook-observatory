@@ -1,21 +1,18 @@
 import { ArrowRight, BookOpen, Check, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { configApi, planApi } from '../api'
+import AddItemInput from '../components/AddItemInput'
+import CompositeGuide from '../components/CompositeGuide'
 import ColumnsLayout from '../components/layouts/ColumnsLayout'
 import GridLayout from '../components/layouts/GridLayout'
 import KanbanLayout from '../components/layouts/KanbanLayout'
 import ListLayout from '../components/layouts/ListLayout'
 import TimelineLayout from '../components/layouts/TimelineLayout'
+import MethodSwitcher from '../components/MethodSwitcher'
 import ProgressBar from '../components/ProgressBar'
-import type {
-  DailyPlan,
-  LayoutType,
-  Method,
-  MethodConfig,
-  MethodSelection,
-  PlanItem,
-} from '../types'
+import { useActiveMethod } from '../hooks/useActiveMethod'
+import { useTodayPlan } from '../hooks/useTodayPlan'
+import type { PlanItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
 
 const NEXT_STATUS: Record<string, string> = {
@@ -32,131 +29,80 @@ const TRANSITION_LABELS: Record<string, string> = {
 
 export default function PlannerPage() {
   const navigate = useNavigate()
-  const [plan, setPlan] = useState<DailyPlan | null>(null)
-  const [selection, setSelection] = useState<MethodSelection | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+
+  // Store-backed state
+  const {
+    selections,
+    method,
+    layoutType,
+    config: methodConfig,
+    loading: methodLoading,
+    error: methodError,
+    refresh: refreshMethod,
+  } = useActiveMethod()
+
+  const {
+    plan,
+    items,
+    loading: planLoading,
+    addItem,
+    removeItem,
+    editItem,
+    reorderItem,
+    reorderItems,
+    toggleItem,
+    assignCategory,
+    scheduleItem,
+    moveRight,
+    moveLeft,
+    transitionPlan,
+    completeReview,
+    refresh: refreshPlan,
+  } = useTodayPlan()
+
+  // Local-only UI state (input buffer)
   const [reflection, setReflection] = useState('')
   const [savingReflection, setSavingReflection] = useState(false)
 
-  const loadData = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    Promise.all([planApi.today().catch(() => null), configApi.getActive().catch(() => null)])
-      .then(([todayPlan, activeSelection]) => {
-        setPlan(todayPlan)
-        setSelection(activeSelection)
-        if (todayPlan?.reflection) setReflection(todayPlan.reflection)
-      })
-      .catch(() => setError('載入失敗'))
-      .finally(() => setLoading(false))
-  }, [])
+  // Sync reflection from plan on first load
+  const [reflectionSynced, setReflectionSynced] = useState(false)
+  if (plan?.reflection && !reflectionSynced) {
+    setReflection(plan.reflection)
+    setReflectionSynced(true)
+  }
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  const loading = methodLoading || planLoading
+  const error = methodError
 
-  const method: Method | null = selection?.method || null
-  const methodConfig: MethodConfig = method?.config || {}
-  const layoutType: LayoutType = method?.layout_type || 'list'
+  const handleRefresh = () => {
+    refreshMethod()
+    refreshPlan()
+  }
 
-  const handleToggle = useCallback(
-    (item: PlanItem) => {
-      if (!plan) return
-      const updatedItems = plan.items.map((i) =>
-        i.id === item.id
-          ? { ...i, status: (i.status === 'done' ? 'pending' : 'done') as PlanItem['status'] }
-          : i,
-      )
-      setPlan({ ...plan, items: updatedItems })
-      planApi.update(plan.id, { items: updatedItems }).catch(() => {
-        // Revert on error
-        setPlan(plan)
-      })
-    },
-    [plan],
-  )
+  // Adapters: layouts pass PlanItem objects, store takes string IDs
+  const handleToggle = (item: PlanItem) => toggleItem(item.id)
+  const handleMoveRight = (item: PlanItem) => moveRight(item.id)
+  const handleMoveLeft = (item: PlanItem) => moveLeft(item.id)
+  const handleDragToColumn = (itemId: string, column: 'todo' | 'doing' | 'done') => {
+    if (column === 'done') editItem(itemId, { status: 'done', category: undefined })
+    else if (column === 'doing') editItem(itemId, { status: 'pending', category: 'doing' })
+    else editItem(itemId, { status: 'pending', category: undefined })
+  }
 
-  const handleAssignCategory = useCallback(
-    (itemId: string, categoryId: string) => {
-      if (!plan) return
-      const updatedItems = plan.items.map((i) =>
-        i.id === itemId ? { ...i, category: categoryId } : i,
-      )
-      setPlan({ ...plan, items: updatedItems })
-      planApi.update(plan.id, { items: updatedItems }).catch(() => {
-        // Revert on error
-        setPlan(plan)
-      })
-    },
-    [plan],
-  )
-
-  const handleMoveRight = useCallback(
-    (item: PlanItem) => {
-      if (!plan) return
-      // 3-state: todo (pending, no category) -> doing (pending, category=doing) -> done
-      let updatedItems: PlanItem[]
-      if (item.category === 'doing') {
-        // doing -> done
-        updatedItems = plan.items.map((i) =>
-          i.id === item.id
-            ? { ...i, status: 'done' as PlanItem['status'], category: undefined }
-            : i,
-        )
-      } else {
-        // todo -> doing
-        updatedItems = plan.items.map((i) =>
-          i.id === item.id ? { ...i, category: 'doing' } : i,
-        )
-      }
-      setPlan({ ...plan, items: updatedItems })
-      planApi.update(plan.id, { items: updatedItems }).catch(() => {
-        setPlan(plan)
-      })
-    },
-    [plan],
-  )
-
-  const handleMoveLeft = useCallback(
-    (item: PlanItem) => {
-      if (!plan) return
-      // doing -> todo: remove the "doing" category
-      const updatedItems = plan.items.map((i) =>
-        i.id === item.id ? { ...i, category: undefined } : i,
-      )
-      setPlan({ ...plan, items: updatedItems })
-      planApi.update(plan.id, { items: updatedItems }).catch(() => {
-        setPlan(plan)
-      })
-    },
-    [plan],
-  )
-
-  const handleTransition = useCallback(() => {
+  const handleTransition = () => {
     if (!plan) return
     const next = NEXT_STATUS[plan.status]
-    if (!next) return
-    planApi
-      .transition(plan.id, next)
-      .then((updated) => {
-        setPlan(updated)
-      })
-      .catch(() => {})
-  }, [plan])
+    if (next) transitionPlan(next)
+  }
 
-  const handleCompleteReview = useCallback(() => {
-    if (!plan) return
+  const handleCompleteReview = async () => {
     setSavingReflection(true)
-    planApi
-      .update(plan.id, { reflection })
-      .then(() => planApi.transition(plan.id, 'completed'))
-      .then((updated) => {
-        setPlan(updated)
-      })
-      .catch(() => {})
-      .finally(() => setSavingReflection(false))
-  }, [plan, reflection])
+    try {
+      await completeReview(reflection)
+    } finally {
+      setSavingReflection(false)
+    }
+  }
 
   // Loading state
   if (loading) {
@@ -181,7 +127,7 @@ export default function PlannerPage() {
           <p className="text-[13px] mb-3">{error}</p>
           <button
             type="button"
-            onClick={loadData}
+            onClick={handleRefresh}
             className="flex items-center gap-1.5 mx-auto px-3 py-1.5 rounded-md text-[12px]"
             style={{ color: 'var(--do-accent)', backgroundColor: 'var(--do-accent-alpha)' }}
           >
@@ -193,10 +139,12 @@ export default function PlannerPage() {
     )
   }
 
-  // No active method
-  if (!selection || !method) {
+  // No active method — show switcher so user can activate directly
+  if (selections.length === 0 || !method) {
     return (
-      <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
+        {/* Quick switch strip — even without an active method */}
+        <MethodSwitcher />
         <div
           className="rounded-lg border p-8 text-center"
           style={{ borderColor: 'var(--do-border)', backgroundColor: 'var(--do-bg-elevated)' }}
@@ -206,7 +154,7 @@ export default function PlannerPage() {
             尚未選擇方法論
           </h2>
           <p className="text-[13px] mb-4" style={{ color: 'var(--do-text-secondary)' }}>
-            選擇一個每日規劃方法來開始你的一天
+            點擊上方任一方法直接啟用，或前往管理頁面了解更多
           </p>
           <button
             type="button"
@@ -219,14 +167,13 @@ export default function PlannerPage() {
             }}
           >
             <BookOpen size={14} />
-            選擇方法論
+            查看方法論詳情
           </button>
         </div>
       </div>
     )
   }
 
-  const items = plan?.items || []
   const doneCount = items.filter((i) => i.status === 'done').length
   const totalCount = items.length
   const statusConfig = plan ? PLAN_STATUS_CONFIG[plan.status] : null
@@ -234,17 +181,49 @@ export default function PlannerPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
+      {/* Method quick-switch strip */}
+      <MethodSwitcher />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-lg">{method.icon || '📋'}</span>
+          {/* Method icon stack */}
+          <div className="flex items-center">
+            {selections.map((sel, idx) => (
+              <span
+                key={sel.id}
+                className="text-lg"
+                style={{ marginLeft: idx > 0 ? '-4px' : 0, zIndex: selections.length - idx }}
+                title={sel.method?.name_zh || sel.method?.name || ''}
+              >
+                {sel.method?.icon || '📋'}
+              </span>
+            ))}
+          </div>
           <div>
             <h1 className="text-base font-medium" style={{ color: 'var(--do-text)' }}>
-              {method.name_zh || method.name}
+              {selections.length === 1
+                ? method.name_zh || method.name
+                : `${selections.length} 個方法組合`}
             </h1>
-            <span className="text-[11px]" style={{ color: 'var(--do-text-muted)' }}>
-              {plan?.plan_date || '今日'}
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px]" style={{ color: 'var(--do-text-muted)' }}>
+                {plan?.plan_date || '今日'}
+              </span>
+              {selections.length > 1 &&
+                selections.map((sel) => (
+                  <span
+                    key={sel.id}
+                    className="text-[10px] px-1 py-0.5 rounded"
+                    style={{
+                      color: 'var(--do-text-tertiary)',
+                      backgroundColor: 'var(--do-bg-surface)',
+                    }}
+                  >
+                    {sel.method?.name_zh || sel.method?.name}
+                  </span>
+                ))}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -257,28 +236,52 @@ export default function PlannerPage() {
               {statusConfig.icon} {statusConfig.label}
             </span>
           )}
-          {/* Switch Method */}
+          {/* Manage Methods */}
           <button
             type="button"
             onClick={() => navigate('/dailyos/methods')}
             className="text-[11px] px-2 py-1 rounded transition-colors"
             style={{ color: 'var(--do-text-tertiary)', backgroundColor: 'var(--do-bg-surface)' }}
           >
-            切換
+            管理
           </button>
         </div>
       </div>
 
+      {/* Composite Method Guide — LLM-generated */}
+      <CompositeGuide methodCount={selections.length} />
+
+      {/* Add Item Input */}
+      {plan && <AddItemInput onAdd={(title) => addItem(title)} />}
+
       {/* Layout Renderer */}
       <div>
         {layoutType === 'list' && (
-          <ListLayout items={items} config={methodConfig} onToggle={handleToggle} />
+          <ListLayout
+            items={items}
+            config={methodConfig}
+            onToggle={handleToggle}
+            onReorderItems={reorderItems}
+            onEdit={editItem}
+            onRemove={removeItem}
+          />
         )}
         {layoutType === 'columns' && (
-          <ColumnsLayout items={items} config={methodConfig} onToggle={handleToggle} />
+          <ColumnsLayout
+            items={items}
+            config={methodConfig}
+            onToggle={handleToggle}
+            onAssignCategory={assignCategory}
+            onReorderItems={reorderItems}
+          />
         )}
         {layoutType === 'grid' && (
-          <GridLayout items={items} config={methodConfig} onToggle={handleToggle} onAssignCategory={handleAssignCategory} />
+          <GridLayout
+            items={items}
+            config={methodConfig}
+            onToggle={handleToggle}
+            onAssignCategory={assignCategory}
+          />
         )}
         {layoutType === 'kanban' && (
           <KanbanLayout
@@ -286,10 +289,16 @@ export default function PlannerPage() {
             config={methodConfig}
             onMoveRight={handleMoveRight}
             onMoveLeft={handleMoveLeft}
+            onDragToColumn={handleDragToColumn}
           />
         )}
         {layoutType === 'timeline' && (
-          <TimelineLayout items={items} config={methodConfig} onToggle={handleToggle} />
+          <TimelineLayout
+            items={items}
+            config={methodConfig}
+            onToggle={handleToggle}
+            onSchedule={scheduleItem}
+          />
         )}
       </div>
 

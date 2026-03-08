@@ -248,12 +248,12 @@ async def anvil_stats(skill_name: str = "", period: str = "7d") -> str:
 
 
 @mcp.tool()
-async def anvil_catalog(status: str = "active") -> str:
-    """List all registered skills with metadata."""
+async def anvil_catalog(status: str = "active", limit: int = 50) -> str:
+    """List registered skills with metadata. Use limit to control result size."""
 
     def _run():
         with _client() as c:
-            return c.list_skills(status=status)
+            return c.list_skills(status=status, limit=limit)
 
     result = await asyncio.to_thread(_run)
     return _format_catalog(result)

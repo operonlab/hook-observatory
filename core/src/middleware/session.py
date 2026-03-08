@@ -20,6 +20,20 @@ class SessionMiddleware(BaseHTTPMiddleware):
     """Read/write signed session cookie + Redis lookup on every request."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # --- Internal API key bypass (SDK/MCP/CLI) ---
+        internal_key = request.headers.get("x-internal-key")
+        if internal_key and settings.internal_api_key and internal_key == settings.internal_api_key:
+            request.state.user = {
+                "id": "system",
+                "email": "system@internal",
+                "role": "admin",
+                "status": "active",
+            }
+            request.state.session = {}
+            request.state._session_modified = False
+            request.state._session_cleared = False
+            return await call_next(request)
+
         # --- Decode session token from cookie ---
         session_token: str | None = None
         cookie_value = request.cookies.get(settings.session_cookie_name)

@@ -340,12 +340,18 @@ export default function MemoryBrowser() {
     fetchBlocks,
     fetchProfile,
     selectBlock,
+    deleteBlock,
     setPage,
     setFilters,
     setViewMode,
     kg_activeTab,
     setKgActiveTab,
   } = useMemvaultStore()
+
+  const handleDeleteBlock = async (id: string) => {
+    if (!window.confirm('確定要刪除這筆記憶嗎？')) return
+    await deleteBlock(id)
+  }
 
   const { query, results, isSearching, setQuery, searchNow, clear } = useMemorySearch()
 
@@ -482,6 +488,7 @@ export default function MemoryBrowser() {
                       block={block}
                       compact={viewMode === 'list'}
                       onClick={() => selectBlock(block)}
+                      onDelete={handleDeleteBlock}
                     />
                   ))}
                 </div>

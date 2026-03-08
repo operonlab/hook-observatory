@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Pencil, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { categoryApi } from '../api'
 import type { Category, CategoryCreate } from '../types'
@@ -76,18 +76,32 @@ export default function CategoryTree({
           {cat.name}
         </span>
         {editable && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              setEditingId(cat.id)
-              setEditValue(cat.name)
-            }}
-            className="ml-auto shrink-0 opacity-0 group-hover:opacity-100 p-0.5"
-            style={{ color: 'var(--fn-text-muted)' }}
-          >
-            <Pencil size={10} />
-          </button>
+          <span className="ml-auto flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditingId(cat.id)
+                setEditValue(cat.name)
+              }}
+              className="opacity-0 group-hover:opacity-100 p-0.5"
+              style={{ color: 'var(--fn-text-muted)' }}
+            >
+              <Pencil size={10} />
+            </button>
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation()
+                await categoryApi.delete(cat.id)
+                onRefresh?.()
+              }}
+              className="opacity-0 group-hover:opacity-100 p-0.5"
+              style={{ color: '#f38ba8' }}
+            >
+              <Trash2 size={10} />
+            </button>
+          </span>
         )}
       </>
     )
@@ -127,7 +141,7 @@ export default function CategoryTree({
         <button
           type="button"
           onClick={() => onSelect?.(isSelected ? null : cat.id)}
-          className="w-full flex items-center gap-1.5 py-1.5 px-2 rounded text-left transition-colors"
+          className="group w-full flex items-center gap-1.5 py-1.5 px-2 rounded text-left transition-colors"
           style={{
             paddingLeft: `${depth * 16 + 8}px`,
             backgroundColor: isSelected ? 'var(--fn-accent-alpha)' : 'transparent',

@@ -11,11 +11,11 @@ const MODULE_COLORS: Record<string, string> = {
 }
 
 const MODULE_LABELS: Record<string, string> = {
-  finance: 'FIN',
-  taskflow: 'TASK',
-  invest: 'INV',
-  ideagraph: 'IDEA',
-  intelflow: 'INTEL',
+  finance: '記帳',
+  taskflow: '任務',
+  invest: '投資',
+  ideagraph: '靈感',
+  intelflow: '情報',
 }
 
 interface CaptureListProps {
@@ -73,7 +73,7 @@ function InlineFieldEditor({
     >
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] font-medium" style={{ color: 'var(--subtext0)' }}>
-          Fill missing fields
+          補充缺漏欄位
         </span>
         <button type="button" onClick={onClose} className="hover:opacity-70">
           <X size={12} style={{ color: 'var(--overlay0)' }} />
@@ -100,7 +100,7 @@ function InlineFieldEditor({
           className="text-[11px] px-3 py-1 rounded font-medium"
           style={{ backgroundColor: 'var(--blue)', color: 'var(--base)' }}
         >
-          Save
+          儲存
         </button>
       </form>
     </div>
@@ -136,7 +136,7 @@ function CaptureDetail({
         style={{ color: 'var(--overlay1)' }}
       >
         {isExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-        {isExpanded ? 'Hide' : 'Details'}
+        {isExpanded ? '收起' : '詳情'}
       </button>
 
       {isExpanded && (
@@ -182,8 +182,7 @@ function CaptureDetail({
             className="mt-2 text-[11px] px-2 py-1 rounded border"
             style={{ borderColor: 'var(--surface1)', color: 'var(--blue)' }}
           >
-            Fill {capture.missing_fields.length} field
-            {capture.missing_fields.length > 1 ? 's' : ''}
+            補充 {capture.missing_fields.length} 個欄位
           </button>
         ))}
     </div>
@@ -288,7 +287,7 @@ function CaptureRow({
               disabled={promotingId === capture.id}
               className="p-1 rounded hover:opacity-80 transition-opacity"
               style={{ color: 'var(--green)' }}
-              title="Promote"
+              title="提升為正式紀錄"
             >
               <ArrowUpRight size={14} />
             </button>
@@ -301,7 +300,7 @@ function CaptureRow({
             }}
             className="p-1 rounded hover:opacity-80 transition-opacity"
             style={{ color: 'var(--red)' }}
-            title="Delete"
+            title="刪除"
           >
             <Trash2 size={12} />
           </button>
@@ -341,10 +340,11 @@ export default function CaptureList({
     try {
       const result = await onPromote(id)
       if (!result.success) {
-        setError(result.error || `Missing: ${result.missing_fields.join(', ')}`)
+        setError(result.error || `缺少欄位：${result.missing_fields.join(', ')}`)
       }
-    } catch {
-      setError('Promote failed')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '提升失敗'
+      setError(msg)
     } finally {
       setPromotingId(null)
     }
@@ -355,7 +355,7 @@ export default function CaptureList({
       <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--overlay0)' }}>
         <div className="text-center">
           <div className="text-2xl mb-2">📭</div>
-          <div className="text-sm">No captures found</div>
+          <div className="text-sm">尚無捕捉紀錄</div>
         </div>
       </div>
     )

@@ -18,6 +18,46 @@ const MODULE_PWA: Record<string, ModulePWA> = {
     icon: '/icons/icon-intelflow-192.png',
     themeColor: '#94e2d5',
   },
+  finance: {
+    manifest: '/manifest-finance.json',
+    icon: '/icons/icon-finance-192.png',
+    themeColor: '#a6e3a1',
+  },
+  taskflow: {
+    manifest: '/manifest-taskflow.json',
+    icon: '/icons/icon-taskflow-192.png',
+    themeColor: '#cba6f7',
+  },
+  ideagraph: {
+    manifest: '/manifest-ideagraph.json',
+    icon: '/icons/icon-ideagraph-192.png',
+    themeColor: '#f9e2af',
+  },
+  admin: {
+    manifest: '/manifest-admin.json',
+    icon: '/icons/icon-admin-192.png',
+    themeColor: '#a6adc8',
+  },
+  nodeflow: {
+    manifest: '/manifest-nodeflow.json',
+    icon: '/icons/icon-nodeflow-192.png',
+    themeColor: '#fab387',
+  },
+  invest: {
+    manifest: '/manifest-invest.json',
+    icon: '/icons/icon-invest-192.png',
+    themeColor: '#f38ba8',
+  },
+  notification: {
+    manifest: '/manifest-notification.json',
+    icon: '/icons/icon-notification-192.png',
+    themeColor: '#cba6f7',
+  },
+  briefing: {
+    manifest: '/manifest-briefing.json',
+    icon: '/icons/icon-briefing-192.png',
+    themeColor: '#c9a962',
+  },
 }
 
 const DEFAULT_PWA: ModulePWA = {

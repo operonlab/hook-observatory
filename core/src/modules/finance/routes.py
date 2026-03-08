@@ -3,12 +3,19 @@
 Prefix: /api/finance (mounted in main.py)
 """
 
-from fastapi import APIRouter, Depends, Query
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db, require_permission
-from src.shared.errors import NotFoundError
+from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
+
+ICON_DIR = Path(__file__).resolve().parents[4] / "data" / "finance-icons"
+ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
+MAX_ICON_SIZE = 2 * 1024 * 1024  # 2 MB
 
 from .schemas import (
     BudgetCreate,
@@ -16,6 +23,7 @@ from .schemas import (
     CategoryCreate,
     CategoryResponse,
     CategoryUpdate,
+    ExchangeRateResponse,
     InstallmentPlanCreate,
     InstallmentPlanResponse,
     InstallmentPlanUpdate,
@@ -26,6 +34,8 @@ from .schemas import (
     SubscriptionCreate,
     SubscriptionResponse,
     SubscriptionUpdate,
+    TagStylesResponse,
+    TagStylesUpdate,
     TransactionCreate,
     TransactionResponse,
     TransactionUpdate,
@@ -116,6 +126,17 @@ async def update_wallet(
         raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
     await db.commit()
     return wallet_service.to_response(instance)
+
+
+@router.delete("/wallets/{wallet_id}", status_code=204)
+async def delete_wallet(
+    wallet_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.write"),
+):
+    if not await wallet_service.delete(db, wallet_id, user_id=user.get("id")):
+        raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
+    await db.commit()
 
 
 @router.post("/wallets/{wallet_id}/sync", response_model=WalletSnapshotResponse)
@@ -262,9 +283,7 @@ async def update_transaction(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await transaction_service.update(
-        db, transaction_id, data, user_id=user.get("id")
-    )
+    instance = await transaction_service.update(db, transaction_id, data, user_id=user.get("id"))
     if not instance:
         raise NotFoundError("Transaction not found", code="finance.transaction_not_found")
     await db.commit()
@@ -411,13 +430,22 @@ async def update_subscription(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await subscription_service.update(
-        db, subscription_id, data, user_id=user.get("id")
-    )
+    instance = await subscription_service.update(db, subscription_id, data, user_id=user.get("id"))
     if not instance:
         raise NotFoundError("Subscription not found", code="finance.subscription_not_found")
     await db.commit()
     return subscription_service.to_response(instance)
+
+
+@router.delete("/subscriptions/{subscription_id}", status_code=204)
+async def delete_subscription(
+    subscription_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.write"),
+):
+    if not await subscription_service.delete(db, subscription_id, user_id=user.get("id")):
+        raise NotFoundError("Subscription not found", code="finance.subscription_not_found")
+    await db.commit()
 
 
 # ======================== Installment Plans ========================
@@ -550,6 +578,18 @@ async def execute_transfer(
     return [transaction_service.to_response(out_txn), transaction_service.to_response(in_txn)]
 
 
+# ======================== Exchange Rates ========================
+
+
+@router.get("/exchange-rates", response_model=ExchangeRateResponse)
+async def get_exchange_rates_endpoint(
+    user: dict = require_permission("finance.read"),
+):
+    from .exchange import get_exchange_rates
+
+    return await get_exchange_rates()
+
+
 # ======================== Summary ========================
 
 
@@ -571,3 +611,84 @@ async def get_monthly_trends(
     user: dict = require_permission("finance.read"),
 ):
     return await summary_service.monthly_trends(db, space_id, months, user_id=user.get("id"))
+
+
+# ======================== Icon Upload ========================
+
+
+@router.post("/upload-icon")
+async def upload_icon(
+    file: UploadFile,
+    user: dict = require_permission("finance.write"),
+):
+    """Upload an image to use as icon for transactions/subscriptions/installments."""
+    if file.content_type not in ALLOWED_TYPES:
+        raise BadRequestError(
+            f"Unsupported file type: {file.content_type}", code="finance.invalid_icon_type"
+        )
+    data = await file.read()
+    if len(data) > MAX_ICON_SIZE:
+        raise BadRequestError("Icon file too large (max 2MB)", code="finance.icon_too_large")
+
+    import hashlib
+
+    ext = Path(file.filename or "icon.png").suffix or ".png"
+    name = hashlib.sha256(data).hexdigest()[:16] + ext
+    ICON_DIR.mkdir(parents=True, exist_ok=True)
+    dest = ICON_DIR / name
+    dest.write_bytes(data)
+
+    return {"icon_url": f"/finance/icons/{name}"}
+
+
+@router.get("/icons/{filename}")
+async def serve_icon(filename: str):
+    """Serve an uploaded icon file."""
+    path = ICON_DIR / filename
+    if not path.is_file() or not path.resolve().is_relative_to(ICON_DIR.resolve()):
+        raise NotFoundError("Icon not found", code="finance.icon_not_found")
+    return FileResponse(path)
+
+
+# ======================== Tag Styles ========================
+
+
+@router.get("/tag-styles", response_model=TagStylesResponse)
+async def get_tag_styles(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    from .models import TagStyle
+
+    result = await db.execute(TagStyle.__table__.select().where(TagStyle.space_id == space_id))
+    row = result.first()
+    return TagStylesResponse(styles=row.styles if row else {})
+
+
+@router.put("/tag-styles", response_model=TagStylesResponse)
+async def update_tag_styles(
+    body: TagStylesUpdate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.write"),
+):
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from .models import TagStyle
+
+    stmt = (
+        pg_insert(TagStyle)
+        .values(
+            space_id=space_id,
+            created_by=user.get("id"),
+            styles=body.styles,
+        )
+        .on_conflict_do_update(
+            index_elements=["space_id"],
+            set_={"styles": body.styles},
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return TagStylesResponse(styles=body.styles)

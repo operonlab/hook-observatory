@@ -77,6 +77,13 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Brief description of what this code does (for logging)",
                     },
+                    "max_output": {
+                        "type": "integer",
+                        "minimum": 500,
+                        "maximum": 5000,
+                        "default": 3000,
+                        "description": "Max chars for stdout truncation (default: 3000, max: 5000)",
+                    },
                 },
                 "required": ["language", "code"],
             },
@@ -102,7 +109,10 @@ async def list_tools() -> list[Tool]:
 # ======================== Result Formatting ========================
 
 
-def _format_result(result, description=None) -> str:
+def _format_result(result, description=None, max_output: int = 3000) -> str:
+    max_stderr = max(max_output // 3, 500)  # stderr cap = 1/3 of stdout cap, min 500
+    max_structured = max_output + 2000  # structured slightly higher than stdout
+
     parts = []
     if description:
         parts.append(f"## Task: {description}")
@@ -115,16 +125,16 @@ def _format_result(result, description=None) -> str:
 
     if result.stdout.strip():
         stdout = (
-            result.stdout[:5000] + "\n... (truncated)"
-            if len(result.stdout) > 5000
+            result.stdout[:max_output] + f"\n... (truncated, {len(result.stdout)} total chars)"
+            if len(result.stdout) > max_output
             else result.stdout
         )
         parts.append(f"\n### stdout\n```\n{stdout}\n```")
 
     if result.stderr.strip():
         stderr = (
-            result.stderr[:2000] + "\n... (truncated)"
-            if len(result.stderr) > 2000
+            result.stderr[:max_stderr] + f"\n... (truncated, {len(result.stderr)} total chars)"
+            if len(result.stderr) > max_stderr
             else result.stderr
         )
         parts.append(f"\n### stderr\n```\n{stderr}\n```")
@@ -144,7 +154,11 @@ def _format_result(result, description=None) -> str:
                 if not isinstance(data, str)
                 else data
             )
-            truncated = data_str[:8000] + "\n... (truncated)" if len(data_str) > 8000 else data_str
+            truncated = (
+                data_str[:max_structured] + f"\n... (truncated, {len(data_str)} total chars)"
+                if len(data_str) > max_structured
+                else data_str
+            )
             parts.append(f"{label_str}```json\n{truncated}\n```")
 
     return "\n".join(parts)
@@ -160,9 +174,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         code = arguments.get("code", "")
         timeout = arguments.get("timeout", 30)
         description = arguments.get("description")
+        max_output = min(arguments.get("max_output", 3000), 5000)
 
         result = await to_thread(client.execute, code, language, timeout)
-        return text_result(_format_result(result, description))
+        return text_result(_format_result(result, description, max_output=max_output))
 
     elif name == "sandbox_info":
         language = arguments.get("language", "python")

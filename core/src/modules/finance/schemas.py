@@ -92,6 +92,7 @@ class CategoryResponse(SpaceScopedResponse):
 
 
 class InstallmentPlanCreate(BaseModel):
+    icon_url: str | None = None
     description: str
     total_amount: Decimal
     currency: str = "TWD"
@@ -108,10 +109,12 @@ class InstallmentPlanCreate(BaseModel):
     payment_detail: str | None = None
     start_date: date
     end_date: date | None = None
+    tags: list[str] = Field(default_factory=list)
     is_private: bool = False
 
 
 class InstallmentPlanUpdate(BaseModel):
+    icon_url: str | None = None
     description: str | None = None
     billing_day: int | None = None
     merchant: str | None = None
@@ -119,10 +122,12 @@ class InstallmentPlanUpdate(BaseModel):
     payment_detail: str | None = None
     end_date: date | None = None
     status: str | None = None
+    tags: list[str] | None = None
     is_private: bool | None = None
 
 
 class InstallmentPlanResponse(SpaceScopedResponse):
+    icon_url: str | None = None
     description: str
     total_amount: Decimal
     currency: str
@@ -140,6 +145,7 @@ class InstallmentPlanResponse(SpaceScopedResponse):
     start_date: date
     end_date: date | None = None
     status: str = "active"
+    tags: list[str] = Field(default_factory=list)
     is_private: bool = False
 
 
@@ -147,6 +153,7 @@ class InstallmentPlanResponse(SpaceScopedResponse):
 
 
 class TransactionCreate(BaseModel):
+    icon_url: str | None = None
     type: str  # income / expense / transfer
     amount: Decimal
     currency: str = "TWD"
@@ -171,6 +178,7 @@ class TransactionCreate(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
+    icon_url: str | None = None
     type: str | None = None
     amount: Decimal | None = None
     currency: str | None = None
@@ -191,6 +199,7 @@ class TransactionUpdate(BaseModel):
 
 
 class TransactionResponse(SpaceScopedResponse):
+    icon_url: str | None = None
     type: str
     amount: Decimal
     currency: str
@@ -219,6 +228,7 @@ class TransactionResponse(SpaceScopedResponse):
 
 
 class SubscriptionCreate(BaseModel):
+    icon_url: str | None = None
     name: str
     amount: Decimal
     currency: str = "TWD"
@@ -232,10 +242,13 @@ class SubscriptionCreate(BaseModel):
     end_date: date | None = None
     next_billing: date | None = None
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    reminder_days: int | None = None
     is_private: bool = False
 
 
 class SubscriptionUpdate(BaseModel):
+    icon_url: str | None = None
     name: str | None = None
     amount: Decimal | None = None
     currency: str | None = None
@@ -249,10 +262,13 @@ class SubscriptionUpdate(BaseModel):
     status: str | None = None
     next_billing: date | None = None
     notes: str | None = None
+    tags: list[str] | None = None
+    reminder_days: int | None = None
     is_private: bool | None = None
 
 
 class SubscriptionResponse(SpaceScopedResponse):
+    icon_url: str | None = None
     name: str
     amount: Decimal
     currency: str
@@ -267,6 +283,8 @@ class SubscriptionResponse(SpaceScopedResponse):
     status: str = "active"
     next_billing: date | None = None
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    reminder_days: int | None = None
     is_private: bool = False
 
 
@@ -345,6 +363,15 @@ class ReconcileResponse(BaseModel):
     last_synced_at: datetime | None = None
 
 
+# ======================== Exchange Rate ========================
+
+
+class ExchangeRateResponse(BaseModel):
+    base: str = "USD"
+    rates: dict[str, float] = Field(default_factory=dict)
+    date: str = ""
+
+
 # ======================== Summary ========================
 
 
@@ -390,3 +417,14 @@ class NetWorthPointResponse(BaseModel):
     e_wallet: Decimal = Decimal("0")
     investment: Decimal = Decimal("0")
     credit_card: Decimal = Decimal("0")
+
+
+# ======================== Tag Styles ========================
+
+
+class TagStylesUpdate(BaseModel):
+    styles: dict[str, str]  # {tag_name: color_hex}
+
+
+class TagStylesResponse(BaseModel):
+    styles: dict[str, str] = Field(default_factory=dict)

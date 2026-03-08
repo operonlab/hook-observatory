@@ -100,6 +100,11 @@ async def list_tools() -> list[Tool]:
                         "description": "篩選 confidence 等級",
                     },
                     "tag": {"type": "string", "description": "篩選 tag"},
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "回傳筆數上限",
+                    },
                 },
             },
         ),
@@ -122,6 +127,11 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "category": {"type": "string", "description": "篩選態度類別"},
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "回傳筆數上限",
+                    },
                 },
             },
         ),
@@ -143,7 +153,13 @@ async def list_tools() -> list[Tool]:
             description="查詢 Skill 熟練度排行（按 proficiency score 降序）",
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "回傳筆數上限",
+                    },
+                },
             },
         ),
     ]
@@ -192,18 +208,19 @@ async def handle_recall(args: dict) -> list[TextContent]:
     if mode == "cascade":
         return await handle_kg_cascade_recall({"query": query, "top_k": max_results})
 
-    result = await to_thread(
+    raw = await to_thread(
         client.recall, query, top_k=max_results, min_score=args.get("min_score", 0.3)
     )
+    results = raw.get("results", []) if isinstance(raw, dict) else raw
 
-    if result:
+    if results:
         blocks_text = "\n\n---\n\n".join(
             f"**[Score {r['score']}]** ({r['block']['block_type']})\n"
             f"Tags: {', '.join(r['block'].get('tags', []))}\n"
             f"{r['block']['content'][:300]}..."
-            for r in result
+            for r in results
         )
-        return text_result(f"Found {len(result)} memories (semantic search)\n\n{blocks_text}")
+        return text_result(f"Found {len(results)} memories (semantic search)\n\n{blocks_text}")
 
     return text_result(f"No matching memories found for: {query}")
 
@@ -239,19 +256,22 @@ async def handle_profile(args: dict) -> list[TextContent]:
 
 async def handle_kg_wisdom(args: dict) -> list[TextContent]:
     """memvault_kg_wisdom -- list wisdom nodes."""
-    result = await to_thread(
-        client.wisdom, confidence=args.get("confidence"), tag=args.get("tag")
-    )
+    result = await to_thread(client.wisdom, confidence=args.get("confidence"), tag=args.get("tag"))
     if not result:
         return text_result("No wisdom nodes found.")
+
+    total = len(result)
+    limit = args.get("limit", 20)
+    items = result[:limit]
 
     wisdom_text = "\n\n---\n\n".join(
         f"**[{w['confidence']}]** {w['wisdom']}\n"
         f"Bridge: {w['bridge_entity']} | Evidence: {w.get('evidence_count', '?')}"
         + (f"\nTags: {', '.join(w.get('tags', []))}" if w.get("tags") else "")
-        for w in result
+        for w in items
     )
-    return text_result(f"# Wisdom Nodes ({len(result)} total)\n\n{wisdom_text}")
+    truncated = f" (showing {limit} of {total})" if total > limit else ""
+    return text_result(f"# Wisdom Nodes ({total} total{truncated})\n\n{wisdom_text}")
 
 
 async def handle_kg_cascade_recall(args: dict) -> list[TextContent]:
@@ -309,12 +329,17 @@ async def handle_attitude_current(args: dict) -> list[TextContent]:
     if not result:
         return text_result("No active attitude facts found.")
 
+    total = len(result)
+    limit = args.get("limit", 20)
+    items = result[:limit]
+
     facts_text = "\n\n---\n\n".join(
         f"**[{a['category']}]** {a['fact']}\n"
         f"Confidence: {a.get('confidence', 0.5):.2f} | Operation: {a.get('operation', 'ADD')}"
-        for a in result
+        for a in items
     )
-    return text_result(f"# Current Attitudes ({len(result)} active)\n\n{facts_text}")
+    truncated = f" (showing {limit} of {total})" if total > limit else ""
+    return text_result(f"# Current Attitudes ({total} active{truncated})\n\n{facts_text}")
 
 
 async def handle_attitude_evolve(args: dict) -> list[TextContent]:
@@ -347,14 +372,19 @@ async def handle_skill_proficiency(args: dict) -> list[TextContent]:
     if not result:
         return text_result("No skill proficiency data found.")
 
+    total = len(result)
+    limit = args.get("limit", 20)
+    items = result[:limit]
+
     rows = "\n".join(
         f"  {i + 1:2d}. {p['skill_name']:<40s} "
         f"proficiency={p.get('proficiency', 0):.2f}  "
         f"invocations={p.get('invocation_count', 0)}  "
         f"success_rate={p.get('success_rate', 0):.0%}"
-        for i, p in enumerate(result)
+        for i, p in enumerate(items)
     )
-    return text_result(f"# Skill Proficiency Ranking ({len(result)} skills)\n\n{rows}")
+    truncated = f" (showing {limit} of {total})" if total > limit else ""
+    return text_result(f"# Skill Proficiency Ranking ({total} skills{truncated})\n\n{rows}")
 
 
 # ======================== Resources ========================

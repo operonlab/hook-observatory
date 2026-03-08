@@ -85,10 +85,19 @@ export interface HealthResponse {
   total_events_processed: number;
 }
 
+export interface AllStats {
+  summary: SummaryStats;
+  by_event: EventTypeStats[];
+  by_tool: ToolStats[];
+  sessions: SessionStats[];
+  timeline: TimelineBucket[];
+}
+
 // --- API functions ---
 
 export const api = {
   health: () => request<HealthResponse>("/api/health"),
+  allStats: () => request<AllStats>("/api/stats/all"),
   summary: () => request<SummaryStats>("/api/stats/summary"),
   byEvent: () => request<EventTypeStats[]>("/api/stats/by-event"),
   byTool: (limit = 20) => request<ToolStats[]>(`/api/stats/by-tool?limit=${limit}`),

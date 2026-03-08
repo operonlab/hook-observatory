@@ -44,6 +44,11 @@ async def list_tools() -> list[Tool]:
                         "description": "Session name to get details for (windows + panes). "
                         "If omitted, lists all sessions.",
                     },
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max number of sessions/windows/panes to return",
+                    },
                 },
             },
         ),
@@ -93,6 +98,11 @@ async def list_tools() -> list[Tool]:
                         "default": False,
                         "description": "Refresh autocomplete cache before querying",
                     },
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max number of autocomplete suggestions to return",
+                    },
                 },
                 "required": ["query"],
             },
@@ -106,12 +116,24 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         match name:
             case "tmux_webui_sessions":
                 session = arguments.get("session")
+                limit = arguments.get("limit", 20)
                 if session:
                     windows = await to_thread(client.list_windows, session)
                     panes = await to_thread(client.list_panes, session)
-                    result = {"session": session, "windows": windows, "panes": panes}
+                    result = {
+                        "session": session,
+                        "total_windows": len(windows),
+                        "total_panes": len(panes),
+                        "windows": windows[:limit],
+                        "panes": panes[:limit],
+                    }
                 else:
-                    result = await to_thread(client.list_sessions)
+                    sessions = await to_thread(client.list_sessions)
+                    total_count = len(sessions)
+                    result = {
+                        "total_count": total_count,
+                        "items": sessions[:limit],
+                    }
                 return text_result(json_text(result))
 
             case "tmux_webui_relay":
@@ -142,7 +164,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     await to_thread(client.refresh_autocomplete)
                 query = arguments.get("query", "")
                 type_filter = arguments.get("type")
+                limit = arguments.get("limit", 20)
                 result = await to_thread(client.autocomplete, query, type_filter)
+                # Slice suggestions if present
+                if isinstance(result, dict) and "suggestions" in result:
+                    total_count = len(result["suggestions"])
+                    result = {
+                        "total_count": total_count,
+                        "items": result["suggestions"][:limit],
+                    }
+                elif isinstance(result, list):
+                    total_count = len(result)
+                    result = {
+                        "total_count": total_count,
+                        "items": result[:limit],
+                    }
                 return text_result(json_text(result))
 
             case _:

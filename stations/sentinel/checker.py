@@ -106,11 +106,7 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:8801/health",
         expect_json={"status": "healthy"},
     ),
-    LightCheck(
-        name="gateway",
-        group="internal",
-        url="http://127.0.0.1:8800/",
-    ),
+    # V1 gateway retired (2026-03-08)
     LightCheck(
         name="frontend",
         group="internal",
@@ -283,6 +279,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         url="http://127.0.0.1:8080/apps/anvil/",
         playwright_code=_PW_BODY_CHECK,
     ),
+    DeepCheck(
+        name="capture-console-render",
+        group="external",
+        url="http://127.0.0.1:8080/capture",
+        playwright_code=_PW_ROOT_CHECK,
+    ),
 ]
 
 # ── Group lookup for state.py ──
@@ -408,6 +410,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "sentinel-render": "sntl",
         "auto-survey-render": "asrv",
         "anvil-render": "anvl",
+        "capture-console-render": "cap",
     }
     session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
     start = time.monotonic()

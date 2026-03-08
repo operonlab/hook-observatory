@@ -100,7 +100,9 @@ services:
       - ntfy-data:/var/lib/ntfy
     environment:
       TZ: Asia/Taipei
-      NTFY_BASE_URL: http://127.0.0.1:9080
+      NTFY_BASE_URL: https://ntfy.joneshong.com
+      NTFY_UPSTREAM_BASE_URL: https://ntfy.sh
+      NTFY_LOG_LEVEL: DEBUG
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/v1/health"]

@@ -1,8 +1,10 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { categoryApi, transactionApi, walletApi } from '../api'
+import { categoryApi, exchangeRateApi, tagStyleApi, transactionApi, walletApi } from '../api'
 import type { Category, PaymentMethod, Transaction, TransactionType, Wallet } from '../types'
 import { PAYMENT_METHOD_LABELS } from '../types'
+import IconUpload from './IconUpload'
+import TagInput, { itemsToNames, itemsToStyles, type TagItem, tagsToItems } from './TagInput'
 
 interface TransactionFormProps {
   transaction?: Transaction | null
@@ -10,10 +12,23 @@ interface TransactionFormProps {
   onSaved: () => void
 }
 
+const CURRENCY_OPTIONS = [
+  { value: 'TWD', label: 'TWD' },
+  { value: 'USD', label: 'USD' },
+  { value: 'JPY', label: 'JPY' },
+  { value: 'EUR', label: 'EUR' },
+  { value: 'GBP', label: 'GBP' },
+  { value: 'CNY', label: 'CNY' },
+  { value: 'KRW', label: 'KRW' },
+  { value: 'HKD', label: 'HKD' },
+  { value: 'SGD', label: 'SGD' },
+]
+
 function getInitialForm(transaction?: Transaction | null) {
   return {
     type: (transaction?.type ?? 'expense') as TransactionType,
     amount: transaction?.amount?.toString() ?? '',
+    currency: transaction?.currency ?? 'TWD',
     description: transaction?.description ?? '',
     merchant: transaction?.merchant ?? '',
     payment_method: (transaction?.payment_method ?? 'credit_card') as PaymentMethod,
@@ -21,7 +36,6 @@ function getInitialForm(transaction?: Transaction | null) {
     category_id: transaction?.category_id ?? '',
     wallet_id: transaction?.wallet_id ?? '',
     transfer_to_wallet_id: transaction?.transfer_to_wallet_id ?? '',
-    tags: transaction?.tags?.join(', ') ?? '',
     transacted_at: transaction?.transacted_at
       ? new Date(transaction.transacted_at).toISOString().slice(0, 16)
       : new Date().toISOString().slice(0, 16),
@@ -35,6 +49,10 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState(() => getInitialForm(transaction))
+  const [iconUrl, setIconUrl] = useState<string | null>(transaction?.icon_url ?? null)
+  const [tags, setTags] = useState<TagItem[]>([])
+  const [tagStyles, setTagStyles] = useState<Record<string, string>>({})
+  const [rates, setRates] = useState<Record<string, number>>({})
 
   useEffect(() => {
     categoryApi
@@ -45,32 +63,45 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
       .list()
       .then((r) => setWallets(r.items))
       .catch(() => {})
+    exchangeRateApi
+      .get()
+      .then((d) => setRates(d.rates))
+      .catch(() => {})
+    tagStyleApi
+      .get()
+      .then((d) => {
+        setTagStyles(d.styles)
+        if (transaction?.tags) {
+          setTags(tagsToItems(transaction.tags, d.styles))
+        }
+      })
+      .catch(() => {
+        if (transaction?.tags) setTags(tagsToItems(transaction.tags, {}))
+      })
   }, [])
-
-  const buildCommonFields = () => {
-    const tags = form.tags
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean)
-    return {
-      type: form.type,
-      amount: Number(form.amount),
-      description: form.description || undefined,
-      merchant: form.merchant || undefined,
-      payment_method: form.payment_method,
-      payment_detail: form.payment_detail || undefined,
-      category_id: form.category_id || undefined,
-      tags,
-      transacted_at: new Date(form.transacted_at).toISOString(),
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setError(null)
     try {
-      const common = buildCommonFields()
+      // Save tag styles
+      const merged = { ...tagStyles, ...itemsToStyles(tags) }
+      tagStyleApi.put(merged).catch(() => {})
+
+      const common = {
+        type: form.type,
+        amount: Number(Number(form.amount).toFixed(2)),
+        currency: form.currency,
+        description: form.description || undefined,
+        merchant: form.merchant || undefined,
+        payment_method: form.payment_method,
+        payment_detail: form.payment_detail || undefined,
+        category_id: form.category_id || undefined,
+        tags: itemsToNames(tags),
+        icon_url: iconUrl ?? undefined,
+        transacted_at: new Date(form.transacted_at).toISOString(),
+      }
       if (isEdit && transaction) {
         await transactionApi.update(transaction.id, {
           ...common,
@@ -93,20 +124,22 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
     }
   }
 
-  const fieldStyle = {
+  const fs = {
     borderColor: 'var(--fn-border)',
     backgroundColor: 'var(--fn-bg-surface)',
     color: 'var(--fn-text)',
   }
 
+  const twdRate =
+    form.currency !== 'TWD' && rates.TWD && rates[form.currency]
+      ? rates.TWD / rates[form.currency]
+      : null
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div
         className="w-full max-w-lg mx-4 rounded-lg border overflow-y-auto max-h-[90vh]"
-        style={{
-          backgroundColor: 'var(--fn-bg-elevated)',
-          borderColor: 'var(--fn-border)',
-        }}
+        style={{ backgroundColor: 'var(--fn-bg-elevated)', borderColor: 'var(--fn-border)' }}
       >
         <div
           className="flex items-center justify-between px-5 py-4 border-b"
@@ -120,14 +153,11 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
           {error && (
             <div
               className="px-3 py-2 rounded text-xs"
-              style={{
-                backgroundColor: 'rgba(243, 139, 168, 0.1)',
-                color: 'var(--fn-expense)',
-              }}
+              style={{ backgroundColor: 'rgba(243,139,168,0.1)', color: 'var(--fn-expense)' }}
             >
               {error}
             </div>
@@ -152,8 +182,31 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
             ))}
           </div>
 
-          {/* Amount + Date row */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Icon + Description */}
+          <div className="flex items-end gap-3">
+            <div className="shrink-0">
+              <span className="text-[11px] block mb-1" style={{ color: 'var(--fn-text-tertiary)' }}>
+                圖示
+              </span>
+              <IconUpload value={iconUrl} onChange={setIconUrl} size="sm" />
+            </div>
+            <label className="flex-1 space-y-1">
+              <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
+                描述
+              </span>
+              <input
+                type="text"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="午餐、交通費..."
+                className="w-full px-3 py-2 text-sm rounded border"
+                style={fs}
+              />
+            </label>
+          </div>
+
+          {/* Amount + Currency + Date */}
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-2">
             <label className="space-y-1">
               <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
                 金額
@@ -165,8 +218,25 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
                 value={form.amount}
                 onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                 className="w-full px-3 py-2 text-sm rounded border"
-                style={fieldStyle}
+                style={fs}
               />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
+                幣別
+              </span>
+              <select
+                value={form.currency}
+                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+                className="w-full px-3 py-2 text-sm rounded border"
+                style={fs}
+              >
+                {CURRENCY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.value}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="space-y-1">
               <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
@@ -178,38 +248,40 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
                 value={form.transacted_at}
                 onChange={(e) => setForm((f) => ({ ...f, transacted_at: e.target.value }))}
                 className="w-full px-3 py-2 text-sm rounded border"
-                style={fieldStyle}
+                style={fs}
               />
             </label>
           </div>
 
-          {/* Description + Merchant */}
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
-                描述
+          {/* Exchange rate hint */}
+          {twdRate && form.amount && (
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded text-[11px]"
+              style={{ backgroundColor: 'var(--fn-accent-alpha)', color: 'var(--fn-text-muted)' }}
+            >
+              <span style={{ fontSize: 14 }}>💱</span>
+              <span>
+                {form.currency} 1 ≈ NT${twdRate.toFixed(2)} · 換算約{' '}
+                <strong style={{ color: 'var(--fn-text)' }}>
+                  NT${Math.round(Number(form.amount) * twdRate).toLocaleString()}
+                </strong>
               </span>
-              <input
-                type="text"
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                className="w-full px-3 py-2 text-sm rounded border"
-                style={fieldStyle}
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
-                商家
-              </span>
-              <input
-                type="text"
-                value={form.merchant}
-                onChange={(e) => setForm((f) => ({ ...f, merchant: e.target.value }))}
-                className="w-full px-3 py-2 text-sm rounded border"
-                style={fieldStyle}
-              />
-            </label>
-          </div>
+            </div>
+          )}
+
+          {/* Merchant */}
+          <label className="space-y-1">
+            <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
+              商家
+            </span>
+            <input
+              type="text"
+              value={form.merchant}
+              onChange={(e) => setForm((f) => ({ ...f, merchant: e.target.value }))}
+              className="w-full px-3 py-2 text-sm rounded border"
+              style={fs}
+            />
+          </label>
 
           {/* Payment + Wallet */}
           <div className="grid grid-cols-2 gap-3">
@@ -220,13 +292,10 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
               <select
                 value={form.payment_method}
                 onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    payment_method: e.target.value as PaymentMethod,
-                  }))
+                  setForm((f) => ({ ...f, payment_method: e.target.value as PaymentMethod }))
                 }
                 className="w-full px-3 py-2 text-sm rounded border"
-                style={fieldStyle}
+                style={fs}
               >
                 {Object.entries(PAYMENT_METHOD_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -244,7 +313,7 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
                 onChange={(e) => setForm((f) => ({ ...f, wallet_id: e.target.value }))}
                 required
                 className="w-full px-3 py-2 text-sm rounded border"
-                style={fieldStyle}
+                style={fs}
               >
                 <option value="">選擇錢包</option>
                 {wallets.map((w) => (
@@ -264,15 +333,10 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
               </span>
               <select
                 value={form.transfer_to_wallet_id}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    transfer_to_wallet_id: e.target.value,
-                  }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, transfer_to_wallet_id: e.target.value }))}
                 required
                 className="w-full px-3 py-2 text-sm rounded border"
-                style={fieldStyle}
+                style={fs}
               >
                 <option value="">選擇目標錢包</option>
                 {wallets
@@ -295,7 +359,7 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
               value={form.category_id}
               onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))}
               className="w-full px-3 py-2 text-sm rounded border"
-              style={fieldStyle}
+              style={fs}
             >
               <option value="">未分類</option>
               {categories.map((c) => (
@@ -308,19 +372,12 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
           </label>
 
           {/* Tags */}
-          <label className="space-y-1">
+          <div className="space-y-1">
             <span className="text-[11px]" style={{ color: 'var(--fn-text-tertiary)' }}>
-              標籤（逗號分隔）
+              標籤
             </span>
-            <input
-              type="text"
-              value={form.tags}
-              onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-              className="w-full px-3 py-2 text-sm rounded border"
-              placeholder="午餐, 同事"
-              style={fieldStyle}
-            />
-          </label>
+            <TagInput value={tags} onChange={setTags} placeholder="輸入後按 Enter 新增" />
+          </div>
 
           {/* Submit */}
           <div className="flex justify-end gap-2 pt-2">
@@ -336,10 +393,7 @@ export default function TransactionForm({ transaction, onClose, onSaved }: Trans
               type="submit"
               disabled={saving}
               className="px-4 py-2 text-xs rounded font-medium disabled:opacity-50"
-              style={{
-                backgroundColor: 'var(--fn-accent)',
-                color: 'var(--fn-bg)',
-              }}
+              style={{ backgroundColor: 'var(--fn-accent)', color: 'var(--fn-bg)' }}
             >
               {saving ? '儲存中...' : isEdit ? '更新' : '新增'}
             </button>
