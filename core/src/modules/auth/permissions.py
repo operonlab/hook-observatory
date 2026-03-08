@@ -30,6 +30,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "invest.write",
         "capture.read",
         "capture.write",
+        "dailyos.read",
+        "dailyos.write",
         "plugin.use",
         "profile.read",
         "profile.write",
@@ -41,6 +43,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "intelflow.read",
         "memvault.read",
         "capture.read",
+        "dailyos.read",
     ],
 }
 

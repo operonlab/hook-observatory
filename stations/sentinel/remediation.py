@@ -30,6 +30,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "litellm": "litellm",
     "auto-survey": "auto-survey",
     "capture-console": "capture-console",
+    "anvil": "anvil",
 }
 
 # Docker-managed services: restart via docker

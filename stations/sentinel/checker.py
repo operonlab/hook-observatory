@@ -135,6 +135,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:8080/briefing/",
         expect_contains='<div id="root">',
     ),
+    LightCheck(
+        name="frontend-dailyos",
+        group="internal",
+        url="http://127.0.0.1:8080/dailyos/",
+        expect_contains='<div id="root">',
+    ),
     # ── external (stations) ──
     LightCheck(
         name="hook-observatory",
@@ -181,6 +187,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="external",
         url="http://127.0.0.1:4104/health",
     ),
+    LightCheck(
+        name="anvil",
+        group="external",
+        url="http://127.0.0.1:4103/docs",
+    ),
 ]
 
 
@@ -215,6 +226,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="frontend-briefing-render",
         group="internal",
         url="http://127.0.0.1:8080/briefing/",
+        playwright_code=_PW_ROOT_CHECK,
+    ),
+    DeepCheck(
+        name="frontend-dailyos-render",
+        group="internal",
+        url="http://127.0.0.1:8080/dailyos/",
         playwright_code=_PW_ROOT_CHECK,
     ),
     # ── external (station HTML — body > *) ──
@@ -258,6 +275,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="auto-survey-render",
         group="external",
         url="http://127.0.0.1:8080/apps/survey/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="anvil-render",
+        group="external",
+        url="http://127.0.0.1:8080/apps/anvil/",
         playwright_code=_PW_BODY_CHECK,
     ),
 ]
@@ -376,6 +399,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "frontend-memvault-render": "mv",
         "frontend-intelflow-render": "if",
         "frontend-briefing-render": "bf",
+        "frontend-dailyos-render": "dos",
         "hook-observatory-render": "hook",
         "agent-vista-render": "vista",
         "system-monitor-render": "sysm",
@@ -383,6 +407,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "agent-metrics-render": "am",
         "sentinel-render": "sntl",
         "auto-survey-render": "asrv",
+        "anvil-render": "anvl",
     }
     session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
     start = time.monotonic()
