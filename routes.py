@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from models import HookEvent
 from schemas import (
+    AllStats,
     EventListResponse,
     EventResponse,
     EventTypeStats,
@@ -94,6 +95,83 @@ async def stats_summary(
     return SummaryStats(total=row.total, today=row.today, unique_sessions=row.unique_sessions)
 
 
+@router.get("/api/stats/all")
+async def stats_all(
+    db: AsyncSession = Depends(get_session),
+    _user: dict = Depends(require_auth),
+) -> AllStats:
+    """All dashboard stats in a single request."""
+    # Run all queries concurrently via a single DB session
+    summary_r, event_r, tool_r, session_r, timeline_r = (
+        await db.execute(
+            text("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS today,
+                    COUNT(DISTINCT session_id) AS unique_sessions
+                FROM hook_observatory.events
+            """)
+        ),
+        await db.execute(
+            text("""
+                SELECT event_type, COUNT(*) AS count,
+                    COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS today
+                FROM hook_observatory.events
+                GROUP BY event_type ORDER BY count DESC
+            """)
+        ),
+        await db.execute(
+            text("""
+                SELECT tool_name, COUNT(*) AS count
+                FROM hook_observatory.events
+                WHERE tool_name IS NOT NULL
+                GROUP BY tool_name ORDER BY count DESC
+                LIMIT 20
+            """)
+        ),
+        await db.execute(
+            text("""
+                SELECT session_id, COUNT(*) AS event_count,
+                    MIN(created_at) AS first_seen, MAX(created_at) AS last_seen
+                FROM hook_observatory.events
+                WHERE session_id IS NOT NULL
+                GROUP BY session_id
+                ORDER BY last_seen DESC
+                LIMIT 20
+            """)
+        ),
+        await db.execute(
+            text("""
+                SELECT date_trunc('hour', created_at) AS bucket,
+                    COUNT(*) AS count
+                FROM hook_observatory.events
+                WHERE created_at > now() - interval '7 days'
+                GROUP BY bucket ORDER BY bucket
+            """)
+        ),
+    )
+
+    row = summary_r.one()
+    return AllStats(
+        summary=SummaryStats(total=row.total, today=row.today, unique_sessions=row.unique_sessions),
+        by_event=[
+            EventTypeStats(event_type=r.event_type, count=r.count, today=r.today)
+            for r in event_r.all()
+        ],
+        by_tool=[ToolStats(tool_name=r.tool_name, count=r.count) for r in tool_r.all()],
+        sessions=[
+            SessionStats(
+                session_id=r.session_id,
+                event_count=r.event_count,
+                first_seen=r.first_seen,
+                last_seen=r.last_seen,
+            )
+            for r in session_r.all()
+        ],
+        timeline=[TimelineBucket(bucket=r.bucket, count=r.count) for r in timeline_r.all()],
+    )
+
+
 @router.get("/api/stats/by-event")
 async def stats_by_event(
     db: AsyncSession = Depends(get_session),
@@ -108,7 +186,9 @@ async def stats_by_event(
             GROUP BY event_type ORDER BY count DESC
         """)
     )
-    return [EventTypeStats(event_type=r.event_type, count=r.count, today=r.today) for r in result.all()]
+    return [
+        EventTypeStats(event_type=r.event_type, count=r.count, today=r.today) for r in result.all()
+    ]
 
 
 @router.get("/api/stats/by-tool")
