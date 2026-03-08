@@ -218,84 +218,87 @@ async def process_subscription_billing(db: AsyncSession, space_id: str) -> int:
     processed = 0
 
     for sub in subs:
-        billing_period = sub.next_billing.isoformat()
-        invoice_number = f"sub:{sub.id}:{billing_period}"
+        # Catch-up loop: process ALL missed billing periods, not just one.
+        # If the cron job was down for days, this ensures every period is billed.
+        while sub.next_billing <= today:
+            billing_period = sub.next_billing.isoformat()
+            invoice_number = f"sub:{sub.id}:{billing_period}"
 
-        # Idempotency check: skip if transaction already exists for this period
-        existing_q = select(func.count()).where(
-            Transaction.invoice_number == invoice_number,
-        )
-        existing_count = (await db.execute(existing_q)).scalar_one()
-
-        if existing_count > 0:
-            logger.debug(
-                "subscription_billing_skipped",
-                subscription_id=sub.id,
-                billing_period=billing_period,
-                reason="already_billed",
+            # Idempotency check: skip if transaction already exists for this period
+            existing_q = select(func.count()).where(
+                Transaction.invoice_number == invoice_number,
             )
-            # Still advance next_billing to avoid re-checking
+            existing_count = (await db.execute(existing_q)).scalar_one()
+
+            if existing_count > 0:
+                logger.debug(
+                    "subscription_billing_skipped",
+                    subscription_id=sub.id,
+                    billing_period=billing_period,
+                    reason="already_billed",
+                )
+                # Still advance next_billing to avoid re-checking
+                sub.next_billing = _next_billing_date(sub.next_billing, sub.billing_cycle)
+                await db.flush()
+                continue
+
+            # Create billing transaction
+            txn_id = uuid7().hex
+            now = datetime.now(UTC)
+            txn = Transaction(
+                id=txn_id,
+                space_id=space_id,
+                created_by=sub.created_by,
+                type="expense",
+                amount=sub.amount,
+                currency=sub.currency,
+                description=f"Subscription: {sub.name}",
+                payment_method=sub.payment_method or "auto",
+                payment_detail=sub.payment_detail,
+                category_id=sub.category_id,
+                wallet_id=sub.wallet_id,
+                status="completed",
+                invoice_number=invoice_number,
+                transacted_at=now,
+            )
+            db.add(txn)
+
+            # Update wallet balance (expense = negative delta)
+            if sub.wallet_id:
+                await _adjust_wallet_balance(db, sub.wallet_id, -sub.amount)
+
+            # Advance to next billing period
+            old_next = sub.next_billing
             sub.next_billing = _next_billing_date(sub.next_billing, sub.billing_cycle)
+
             await db.flush()
-            continue
+            processed += 1
 
-        # Create billing transaction
-        txn_id = uuid7().hex
-        now = datetime.now(UTC)
-        txn = Transaction(
-            id=txn_id,
-            space_id=space_id,
-            created_by=sub.created_by,
-            type="expense",
-            amount=sub.amount,
-            currency=sub.currency,
-            description=f"Subscription: {sub.name}",
-            payment_method=sub.payment_method or "auto",
-            payment_detail=sub.payment_detail,
-            category_id=sub.category_id,
-            wallet_id=sub.wallet_id,
-            status="completed",
-            invoice_number=invoice_number,
-            transacted_at=now,
-        )
-        db.add(txn)
-
-        # Update wallet balance (expense = negative delta)
-        if sub.wallet_id:
-            await _adjust_wallet_balance(db, sub.wallet_id, -sub.amount)
-
-        # Advance to next billing period
-        old_next = sub.next_billing
-        sub.next_billing = _next_billing_date(sub.next_billing, sub.billing_cycle)
-
-        await db.flush()
-        processed += 1
-
-        await event_bus.publish(
-            Event(
-                type=FinanceEvents.SUBSCRIPTION_RENEWED,
-                data={
-                    "subscription_id": sub.id,
-                    "transaction_id": txn_id,
-                    "name": sub.name,
-                    "amount": str(sub.amount),
-                    "billing_period": billing_period,
-                    "next_billing": sub.next_billing.isoformat(),
-                },
-                source="finance.cron",
-                user_id=sub.created_by,
+            await event_bus.publish(
+                Event(
+                    type=FinanceEvents.SUBSCRIPTION_RENEWED,
+                    data={
+                        "subscription_id": sub.id,
+                        "transaction_id": txn_id,
+                        "name": sub.name,
+                        "amount": str(sub.amount),
+                        "billing_period": billing_period,
+                        "next_billing": sub.next_billing.isoformat(),
+                    },
+                    source="finance.cron",
+                    user_id=sub.created_by,
+                )
             )
-        )
 
-        logger.info(
-            "subscription_billed",
-            subscription_id=sub.id,
-            name=sub.name,
-            amount=str(sub.amount),
-            billing_period=billing_period,
-            old_next_billing=old_next.isoformat(),
-            new_next_billing=sub.next_billing.isoformat(),
-        )
+            logger.info(
+                "subscription_billed",
+                subscription_id=sub.id,
+                name=sub.name,
+                amount=str(sub.amount),
+                billing_period=billing_period,
+                old_next_billing=old_next.isoformat(),
+                new_next_billing=sub.next_billing.isoformat(),
+            )
 
     logger.info(
         "subscription_billing_processed",
