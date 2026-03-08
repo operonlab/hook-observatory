@@ -84,6 +84,11 @@ async def list_tools() -> list[types.Tool]:
                         "type": "string",
                         "description": "Filter by project directory name (partial match, optional)",
                     },
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max sessions to return (default: 20, 0 = all)",
+                    },
                 },
             },
         ),
@@ -176,7 +181,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         elif name == "session_intel_sessions":
             days = int(arguments.get("days", 7))
             project = arguments.get("project") or None
-            result = await asyncio.to_thread(_client.session_list, days=days, project=project)
+            limit = int(arguments.get("limit", 20))
+            result = await asyncio.to_thread(
+                _client.session_list, days=days, project=project, limit=limit
+            )
             return _json_text(result)
 
         elif name == "session_intel_patterns":

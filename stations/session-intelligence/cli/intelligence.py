@@ -69,12 +69,15 @@ def _fmt_stats(data: dict) -> str:
     return "\n".join(lines)
 
 
-def _fmt_sessions(sessions: list) -> str:
+def _fmt_sessions(data: dict) -> str:
+    total_count = data.get("total_count", 0)
+    sessions = data.get("items", [])
     if not sessions:
         return "  No sessions found."
+    showing = f"showing {len(sessions)}" if len(sessions) < total_count else "all"
     lines = [
         _hr("="),
-        f"  RECENT SESSIONS  ({len(sessions)} total)",
+        f"  RECENT SESSIONS  ({total_count} total, {showing})",
         _hr("-"),
         f"  {'SESSION ID':<44} {'PROJECT':<28} {'MSGS':>5} {'REDACT':>6}  MODIFIED",
         _hr("-"),
@@ -256,7 +259,7 @@ def cmd_stats(args: argparse.Namespace, client: SessionIntelligenceClient) -> No
 
 
 def cmd_sessions(args: argparse.Namespace, client: SessionIntelligenceClient) -> None:
-    data = client.session_list(days=args.days, project=args.project)
+    data = client.session_list(days=args.days, project=args.project, limit=args.limit)
     if args.json:
         print(json.dumps(data, ensure_ascii=False, default=str))
     else:
@@ -332,6 +335,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_sessions.add_argument("--days", type=int, default=7, help="Look-back period (default: 7)")
     p_sessions.add_argument(
         "--project", default=None, help="Filter by project name (partial match)"
+    )
+    p_sessions.add_argument(
+        "--limit", type=int, default=0, help="Max sessions to return (default: 0 = all)"
     )
     p_sessions.set_defaults(func=cmd_sessions)
 

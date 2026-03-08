@@ -59,6 +59,7 @@ interface IntelflowState {
   // Actions — Reports
   fetchReports: (page?: number) => Promise<void>
   fetchReportById: (id: string) => Promise<void>
+  deleteReport: (id: string) => Promise<void>
   setActiveTag: (tag: string | null) => void
   clearSelectedReport: () => void
 
@@ -185,6 +186,20 @@ export const useIntelflowStore = create<IntelflowState>()(
           set({ error: err instanceof Error ? err.message : 'Failed to fetch report' })
         } finally {
           set({ reportDetailLoading: false })
+        }
+      },
+
+      deleteReport: async (id: string) => {
+        set({ error: null })
+        try {
+          await intelflowApi.delete(id)
+          set((state) => ({
+            reports: state.reports.filter((r) => r.id !== id),
+            reportsTotal: state.reportsTotal - 1,
+            selectedReport: state.selectedReport?.id === id ? null : state.selectedReport,
+          }))
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : 'Failed to delete report' })
         }
       },
 

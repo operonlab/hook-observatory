@@ -65,6 +65,7 @@ class BaseClient:
         self.space_id = space_id or os.environ.get("WORKSHOP_SPACE_ID", "default")
         self.prefix = f"{self.base_url}/api/{module}"
         self._timeout = timeout
+        self._internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
         self._client: httpx.Client | None = None
 
     @property
@@ -85,6 +86,10 @@ class BaseClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         """Send an HTTP request with standard error handling."""
+        if self._internal_key:
+            headers = kwargs.pop("headers", {})
+            headers["X-Internal-Key"] = self._internal_key
+            kwargs["headers"] = headers
         try:
             resp = self.client.request(method, f"{self.prefix}{path}", **kwargs)
             resp.raise_for_status()

@@ -79,8 +79,8 @@ class Settings(BaseSettings):
 
     # --- LLM Quota Collector ---
     QUOTA_CACHE_TTL: int = 120
-    CC_QUOTA_FETCH_INTERVAL: int = 900  # 15 min — CC fetched less often than CX/GM
-    CC_QUOTA_BACKOFF_SECONDS: int = 600
+    CC_QUOTA_FETCH_INTERVAL: int = 1800  # 30 min — reduce API pressure
+    CC_QUOTA_BACKOFF_SECONDS: int = 1800  # 30 min base, exponential up to 8h
     CC_QUOTA_STALE_MAX_SECONDS: int = 86400
     PW_SESSION_SCRIPT: str = str(Path.home() / ".claude" / "scripts" / "pw_session.py")
     PW_SCRAPE_TIMEOUT: int = 60

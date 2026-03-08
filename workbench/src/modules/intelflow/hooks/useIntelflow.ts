@@ -33,6 +33,7 @@ export function useReports() {
     activeTag,
     allTags,
     fetchReports,
+    deleteReport,
     setActiveTag,
   } = useIntelflowStore()
 
@@ -49,6 +50,7 @@ export function useReports() {
     activeTag,
     allTags,
     fetchReports,
+    deleteReport,
     setActiveTag,
   }
 }

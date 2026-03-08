@@ -95,7 +95,7 @@ async def create_block(
     return memory_block_service.to_response(instance)
 
 
-@router.patch("/blocks/{block_id}", response_model=MemoryBlockResponse)
+@router.put("/blocks/{block_id}", response_model=MemoryBlockResponse)
 async def update_block(
     block_id: str,
     body: MemoryBlockUpdate,
@@ -158,7 +158,11 @@ async def search(
     if query_embedding is None:
         # Fallback: ILIKE text search when Ollama is unavailable
         results = await memory_block_service.text_search(
-            db, space_id, q, top_k, scope=scope,
+            db,
+            space_id,
+            q,
+            top_k,
+            scope=scope,
         )
         meta = SearchMetadata(
             vector_used=False,
@@ -174,7 +178,12 @@ async def search(
         )
 
     results, meta = await memory_block_service.semantic_search(
-        db, space_id, query_embedding, top_k=top_k, query=q, scope=scope,
+        db,
+        space_id,
+        query_embedding,
+        top_k=top_k,
+        query=q,
+        scope=scope,
     )
     return EnhancedSearchResult(
         results=results,
@@ -514,8 +523,7 @@ async def thaw_frozen_block(
     actual_hash = compute_content_hash(data)
     if actual_hash != frozen.content_hash:
         raise BadRequestError(
-            f"Content hash mismatch: expected "
-            f"{frozen.content_hash}, got {actual_hash}",
+            f"Content hash mismatch: expected {frozen.content_hash}, got {actual_hash}",
             code="memvault.integrity_error",
         )
 

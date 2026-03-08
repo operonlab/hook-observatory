@@ -23,6 +23,12 @@ export default function WalletList({ onEdit, onAdd }: WalletListProps) {
       .finally(() => setLoading(false))
   }
 
+  const handleDeleteWallet = async (wallet: Wallet) => {
+    if (!confirm(`確定要刪除錢包「${wallet.name}」嗎？`)) return
+    await walletApi.delete(wallet.id)
+    setWallets((prev) => prev.filter((w) => w.id !== wallet.id))
+  }
+
   useEffect(() => {
     fetchWallets()
   }, [])
@@ -65,7 +71,7 @@ export default function WalletList({ onEdit, onAdd }: WalletListProps) {
       {/* Wallet grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {wallets.map((w) => (
-          <WalletCard key={w.id} wallet={w} onEdit={onEdit} />
+          <WalletCard key={w.id} wallet={w} onEdit={onEdit} onDelete={handleDeleteWallet} />
         ))}
 
         {/* Add wallet */}

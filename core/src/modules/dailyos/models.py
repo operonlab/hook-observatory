@@ -50,29 +50,18 @@ class Method(SpaceScopedModel):
     icon: Mapped[str | None] = mapped_column(Text, nullable=True)
     color: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    is_preset: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("false")
-    )
+    is_preset: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     cloned_from_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey(f"{SCHEMA}.methods.id", ondelete="SET NULL"),
-        nullable=True
+        String(32), ForeignKey(f"{SCHEMA}.methods.id", ondelete="SET NULL"), nullable=True
     )
 
-    config: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default=text("'{}'::jsonb")
-    )
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
 
-    version: Mapped[int] = mapped_column(
-        Integer, server_default=text("1")
-    )
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
 
-    layout_type: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'list'")
-    )
+    layout_type: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'list'"))
 
-    tags: Mapped[list[str] | None] = mapped_column(
-        ARRAY(Text), nullable=True
-    )
+    tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
 
 
 class MethodSelection(SpaceScopedModel):
@@ -81,9 +70,10 @@ class MethodSelection(SpaceScopedModel):
     __tablename__ = "method_selections"
     __table_args__ = (
         Index(
-            "idx_ms_unique_active",
+            "idx_ms_unique_active_method",
             "space_id",
             "context",
+            "method_id",
             unique=True,
             postgresql_where=text("deleted_at IS NULL AND is_active = true"),
         ),
@@ -91,28 +81,19 @@ class MethodSelection(SpaceScopedModel):
     )
 
     method_id: Mapped[str] = mapped_column(
-        String(32), ForeignKey(f"{SCHEMA}.methods.id", ondelete="CASCADE"),
-        nullable=False
+        String(32), ForeignKey(f"{SCHEMA}.methods.id", ondelete="CASCADE"), nullable=False
     )
 
-    context: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'default'")
-    )
+    context: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'default'"))
 
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true")
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
 
-    overrides: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     activated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    deactivated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     method: Mapped["Method"] = relationship(lazy="selectin")
 
@@ -136,17 +117,12 @@ class DailyPlan(SpaceScopedModel):
     plan_date: Mapped[date] = mapped_column(Date, nullable=False)
     context: Mapped[str] = mapped_column(Text, server_default=text("'default'"))
     method_selection_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey(f"{SCHEMA}.method_selections.id", ondelete="SET NULL"),
-        nullable=True
+        String(32), ForeignKey(f"{SCHEMA}.method_selections.id", ondelete="SET NULL"), nullable=True
     )
 
-    status: Mapped[str] = mapped_column(
-        Text, server_default=text("'planning'")
-    )
+    status: Mapped[str] = mapped_column(Text, server_default=text("'planning'"))
 
-    items: Mapped[list[dict]] = mapped_column(
-        JSONB, server_default=text("'[]'::jsonb")
-    )
+    items: Mapped[list[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
 
     method_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 

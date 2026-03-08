@@ -90,12 +90,19 @@ def should_search(query: str) -> tuple[bool, str]:
         return False, "greeting"
     # Memory keywords force search
     memory_kw = [
-        "記得", "之前", "上次", "remember", "previously",
-        "earlier", "last time", "recall",
+        "記得",
+        "之前",
+        "上次",
+        "remember",
+        "previously",
+        "earlier",
+        "last time",
+        "recall",
     ]
     if any(kw in stripped.lower() for kw in memory_kw):
         return True, "memory_keyword"
     return True, "default"
+
 
 # ======================== MemoryBlock Service ========================
 
@@ -205,7 +212,7 @@ class MemoryBlockService(
         space_id: str,
         query_embedding: list[float],
         top_k: int = 10,
-        threshold: float = 0.5,
+        threshold: float = 0.3,
         tags: list[str] | None = None,
         block_type: str | None = None,
         include_warm: bool = True,
@@ -235,19 +242,28 @@ class MemoryBlockService(
         # Defense ⑦: Parse scope and build extra filters
         extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
 
-        # Phase B1: Run vector search + keyword search in parallel
-        vector_coro = self._vector_search_combined(
-            db, space_id, query_embedding, top_k, threshold, tags, block_type,
+        # Phase B1: Run vector search + keyword search sequentially
+        # (async SQLAlchemy session does not support concurrent queries)
+        vector_results = await self._vector_search_combined(
+            db,
+            space_id,
+            query_embedding,
+            top_k,
+            threshold,
+            tags,
+            block_type,
             extra_filters=extra_filters,
         )
 
         if query:
-            keyword_coro = self._keyword_search(
-                db, space_id, query, top_k, tags, block_type,
+            keyword_results = await self._keyword_search(
+                db,
+                space_id,
+                query,
+                top_k,
+                tags,
+                block_type,
                 extra_filters=extra_filters,
-            )
-            vector_results, keyword_results = await asyncio.gather(
-                vector_coro, keyword_coro
             )
             meta.keyword_used = True
             # RRF Fusion
@@ -258,7 +274,11 @@ class MemoryBlockService(
         # Warm tier: text-based augmentation for older blocks
         if include_warm and len(results) < top_k:
             warm_results = await self._warm_tier_search(
-                db, space_id, top_k - len(results), tags, block_type,
+                db,
+                space_id,
+                top_k - len(results),
+                tags,
+                block_type,
                 extra_filters=extra_filters,
             )
             results.extend(warm_results)
@@ -320,12 +340,24 @@ class MemoryBlockService(
     ) -> list[SemanticSearchResult]:
         """Run vector search: subtable first, fallback to inline."""
         results = await self._search_via_subtable(
-            db, space_id, query_embedding, top_k, threshold, tags, block_type,
+            db,
+            space_id,
+            query_embedding,
+            top_k,
+            threshold,
+            tags,
+            block_type,
             extra_filters=extra_filters,
         )
         if not results:
             results = await self._search_via_inline(
-                db, space_id, query_embedding, top_k, threshold, tags, block_type,
+                db,
+                space_id,
+                query_embedding,
+                top_k,
+                threshold,
+                tags,
+                block_type,
                 extra_filters=extra_filters,
             )
         return results
@@ -421,18 +453,17 @@ class MemoryBlockService(
         for rank, r in enumerate(keyword_results):
             block_id = r.block.id
             keyword_ids.add(block_id)
-            scores[block_id] = scores.get(block_id, 0) + (
-                1.0 / (k + rank) * (1 + keyword_boost)
-            )
+            scores[block_id] = scores.get(block_id, 0) + (1.0 / (k + rank) * (1 + keyword_boost))
             if block_id not in best_result or r.score > best_result[block_id].score:
                 best_result[block_id] = r
 
-        # Sort by fused score
+        # Sort by fused score, but keep original similarity as the result score
+        # (RRF scores are tiny ~0.01 and unsuitable for downstream min_score filtering)
         sorted_ids = sorted(scores, key=lambda bid: scores[bid], reverse=True)
         return [
             SemanticSearchResult(
                 block=best_result[bid].block,
-                score=round(scores[bid], 4),
+                score=round(best_result[bid].score, 4),
             )
             for bid in sorted_ids
         ]

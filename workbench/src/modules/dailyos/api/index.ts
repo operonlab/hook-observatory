@@ -1,6 +1,7 @@
 import { createCrudApi, request } from '@/api/client'
 import type { PaginatedResponse } from '@/types'
 import type {
+  ActivateResponse,
   DailyPlan,
   Method,
   MethodCreate,
@@ -34,21 +35,27 @@ export const methodApi = {
 
 export const configApi = {
   getActive: (context = 'default') =>
-    request<MethodSelection>(`/dailyos/config/method?context=${context}`),
+    request<MethodSelection[]>(`/dailyos/config/method?context=${context}`),
 
-  switchMethod: (data: {
-    method_id: string
-    context?: string
-    overrides?: Record<string, unknown>
-  }) =>
-    request<MethodSelection>('/dailyos/config/method', {
-      method: 'PUT',
+  activate: (data: { method_id: string; context?: string; overrides?: Record<string, unknown> }) =>
+    request<ActivateResponse>('/dailyos/config/method/activate', {
+      method: 'POST',
       body: JSON.stringify(data),
+    }),
+
+  deactivate: (selectionId: string) =>
+    request<MethodSelection>(`/dailyos/config/method/${selectionId}`, {
+      method: 'DELETE',
     }),
 
   history: (context = 'default', page = 1) =>
     request<PaginatedResponse<MethodSelection>>(
       `/dailyos/config/method/history?context=${context}&page=${page}`,
+    ),
+
+  getGuide: (context = 'default') =>
+    request<{ guide: string; method_count: number; method_names: string[] }>(
+      `/dailyos/config/guide?context=${context}`,
     ),
 }
 

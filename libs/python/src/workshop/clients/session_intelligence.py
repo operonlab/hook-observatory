@@ -92,29 +92,39 @@ class SessionIntelligenceClient:
             "redaction_stats": redaction_stats,
         }
 
-    def session_list(self, days: int = 7, project: str | None = None) -> list:
+    def session_list(
+        self,
+        days: int = 7,
+        project: str | None = None,
+        limit: int = 0,
+    ) -> dict:
         """List recent sessions with metadata.
 
         Args:
             days: Look back N days.
             project: Filter by project directory name (partial match).
+            limit: Max sessions to return (0 = all).
 
         Returns:
-            list of dicts with session_id, project, size_bytes, messages,
-            created_at, modified_at, redactions
+            dict with total_count and items (list of session dicts without file_path)
         """
         sessions = self._scan_sessions(days=days)
 
         if project:
             sessions = [s for s in sessions if project.lower() in s["project"].lower()]
 
+        total_count = len(sessions)
+
+        if limit > 0:
+            sessions = sessions[:limit]
+
         # Enrich with redaction data
         redaction_map = self._redaction_by_session()
         for s in sessions:
-            sid = s["session_id"]
-            s["redactions"] = redaction_map.get(sid, 0)
+            s["redactions"] = redaction_map.get(s["session_id"], 0)
+            s.pop("file_path", None)
 
-        return sessions
+        return {"total_count": total_count, "items": sessions}
 
     # ======================== Patterns ========================
 

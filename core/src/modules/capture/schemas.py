@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 # Modules that support capture (whitelist)
-CAPTURABLE_MODULES = {"finance", "invest", "taskflow", "ideagraph", "intelflow"}
+CAPTURABLE_MODULES = {"finance", "invest", "taskflow", "ideagraph", "intelflow", "dailyos"}
 
 
 class CaptureCreate(BaseModel):

@@ -24,6 +24,12 @@ def _serialize_value(value: Any) -> Any:
         return str(value)
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    # numpy arrays from pgvector — skip large vectors to avoid audit log bloat
+    if hasattr(value, "tolist"):
+        items = value.tolist()
+        if len(items) > 32:
+            return f"<vector({len(items)})>"
+        return items
     if isinstance(value, (list, tuple)):
         return [_serialize_value(v) for v in value]
     if isinstance(value, dict):
@@ -132,6 +138,26 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
 
     def _has_soft_delete(self) -> bool:
         return hasattr(self.model, "deleted_at")
+
+    # --- Lookup helpers ---
+
+    name_column: str = "name"
+
+    async def find_by_name(self, db: AsyncSession, space_id: str, name: str) -> ModelT | None:
+        """Fuzzy name lookup. Returns first match or None."""
+        col = getattr(self.model, self.name_column)
+        q = select(self.model).where(
+            self.model.space_id == space_id,  # type: ignore[attr-defined]
+            col.ilike(f"%{name}%"),
+        )
+        if self._has_soft_delete():
+            q = q.where(self.model.deleted_at == None)  # noqa: E711
+        if hasattr(self.model, "is_active"):
+            q = q.where(self.model.is_active == True)  # noqa: E712
+        if hasattr(self.model, "sort_order"):
+            q = q.order_by(self.model.sort_order)
+        q = q.limit(1)
+        return (await db.execute(q)).scalars().first()
 
     # --- CRUD operations ---
 

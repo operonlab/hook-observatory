@@ -6,12 +6,14 @@ PRESETS: list[dict] = [
         "slug": "ivy-lee",
         "name": "Ivy Lee Method",
         "name_zh": "\u827e\u7dad\u00b7\u674e\u6cd5",
+        "description": "每晚選出明天最重要的 6 件事，按優先順序排列。隔天從第一件做起，做完才做下一件。未完成的滾入隔天重新排序。百年經典，以簡馭繁。",  # noqa: E501
         "icon": "\U0001f4dd",
         "color": "#cba6f7",
         "layout_type": "list",
         "is_preset": True,
         "tags": ["focus", "simplicity", "classic"],
         "config": {
+            "dimensions": ["prioritization"],
             "max_items": 6,
             "categories": [],
             "ordering": "sequential",
@@ -71,12 +73,14 @@ PRESETS: list[dict] = [
         "slug": "one-three-five",
         "name": "1-3-5 Rule",
         "name_zh": "1-3-5 \u6cd5\u5247",
+        "description": "每天規劃 1 件大事、3 件中事、5 件小事，共 9 件。大事需要深度專注，中事半小時內可完成，小事是五分鐘雜務。結構化但保持彈性。",  # noqa: E501
         "icon": "\U0001f3af",
         "color": "#89b4fa",
         "layout_type": "columns",
         "is_preset": True,
         "tags": ["balanced", "structured", "popular"],
         "config": {
+            "dimensions": ["prioritization"],
             "max_items": 9,
             "categories": [
                 {
@@ -172,12 +176,14 @@ PRESETS: list[dict] = [
         "slug": "eat-the-frog",
         "name": "Eat the Frog",
         "name_zh": "\u5403\u6389\u90a3\u96bb\u9752\u86d9",
+        "description": "一早就做你最抗拒但最重要的那件事。「青蛙」吃完，剩下的一天都會很順。適合拖延症者——把最難的事先解決，心理壓力立刻減半。",  # noqa: E501
         "icon": "\U0001f438",
         "color": "#a6e3a1",
         "layout_type": "list",
         "is_preset": True,
         "tags": ["focus", "procrastination", "morning"],
         "config": {
+            "dimensions": ["prioritization"],
             "max_items": None,
             "categories": [],
             "ordering": "priority",
@@ -253,12 +259,14 @@ PRESETS: list[dict] = [
         "slug": "time-blocking",
         "name": "Time Blocking",
         "name_zh": "\u6642\u9593\u5340\u584a\u6cd5",
+        "description": "把一天切成時間區塊，每個區塊分配給特定任務。強制單工、防止無意識切換。適合會議多、容易被打斷的人。",  # noqa: E501
         "icon": "\U0001f550",
         "color": "#fab387",
         "layout_type": "timeline",
         "is_preset": True,
         "tags": ["time-management", "calendar", "structured"],
         "config": {
+            "dimensions": ["execution"],
             "max_items": None,
             "categories": [],
             "ordering": "time",
@@ -334,12 +342,14 @@ PRESETS: list[dict] = [
         "slug": "eisenhower",
         "name": "Eisenhower Matrix",
         "name_zh": "\u827e\u68ee\u8c6a\u77e9\u9663",
+        "description": "所有待辦按「緊急 × 重要」分入四象限：立刻做、安排時間、委派他人、直接刪除。幫你分辨「看起來急但不重要」的偽優先事項。",  # noqa: E501
         "icon": "\U0001f396\ufe0f",
         "color": "#f9e2af",
         "layout_type": "grid",
         "is_preset": True,
         "tags": ["prioritization", "decision-making", "classic"],
         "config": {
+            "dimensions": ["prioritization"],
             "max_items": None,
             "categories": [
                 {
@@ -454,12 +464,14 @@ PRESETS: list[dict] = [
         "slug": "kanban-daily",
         "name": "Daily Kanban",
         "name_zh": "\u6bcf\u65e5\u770b\u677f",
+        "description": "三欄看板：待辦 → 進行中 → 完成。限制「進行中」不超過 3 件，強制做完一件再開下一件。視覺化進度，減少多工。",  # noqa: E501
         "icon": "\U0001f4ca",
         "color": "#94e2d5",
         "layout_type": "kanban",
         "is_preset": True,
         "tags": ["visual", "flow", "agile"],
         "config": {
+            "dimensions": ["flow"],
             "max_items": None,
             "categories": [
                 {
@@ -552,12 +564,14 @@ PRESETS: list[dict] = [
         "slug": "pomodoro",
         "name": "Pomodoro Technique",
         "name_zh": "\u756a\u8304\u9418\u5de5\u4f5c\u6cd5",
+        "description": "25 分鐘專注 + 5 分鐘休息為一個番茄鐘，每 4 輪長休 15 分鐘。估算任務需幾顆番茄，追蹤實際消耗，持續校準時間感。",  # noqa: E501
         "icon": "\U0001f345",
         "color": "#f38ba8",
         "layout_type": "list",
         "is_preset": True,
         "tags": ["focus", "time-management", "breaks"],
         "config": {
+            "dimensions": ["execution"],
             "max_items": None,
             "categories": [],
             "ordering": "priority",
@@ -637,6 +651,88 @@ PRESETS: list[dict] = [
                 "show_time_column": True,
                 "show_frog_badge": True,
                 "empty_state_message_zh": "\u52a0\u5165\u4efb\u52d9\uff0c\u4f30\u7b97\u756a\u8304\u9418\u6578\u91cf\uff0c\u958b\u59cb\u5c08\u6ce8\u3002",  # noqa: E501
+                "compact_mode": False,
+            },
+        },
+    },
+    # ======================== 8. Daily Reset ========================
+    {
+        "slug": "daily-reset",
+        "name": "Daily Reset",
+        "name_zh": "每日復盤法",
+        "description": "起床先看昨晚的預排，增刪調整後訂一個「今日必達」目標（不能太大也不能太小）。一天結束時回顧完成度、寫反思，再粗排明天計畫。隔天起床重複循環。",  # noqa: E501
+        "icon": "\U0001f504",
+        "color": "#74c7ec",
+        "layout_type": "list",
+        "is_preset": True,
+        "tags": ["ritual", "reflection", "simple", "daily-cycle"],
+        "config": {
+            "dimensions": ["ritual"],
+            "max_items": None,
+            "categories": [],
+            "ordering": "priority",
+            "sequential_strict": False,
+            "frog": {
+                "enabled": True,
+                "count": 1,
+                "label": "Must-Do",
+                "label_zh": "今日必達",
+                "icon": "\u2b50",
+                "auto_suggest": False,
+                "suggest_criteria": {},
+                "must_do_first": False,
+            },
+            "time_awareness": {"enabled": False, "mode": "none"},
+            "review_cycle": {
+                "morning_review": {
+                    "enabled": True,
+                    "default_time": "07:30",
+                    "prompt_zh": "看昨晚預排，增刪調整，選出今日必達目標",
+                },
+                "evening_review": {
+                    "enabled": True,
+                    "default_time": "21:00",
+                    "prompt_zh": "回顧今天完成度，寫反思，粗排明天計畫",
+                },
+                "weekly_review": {
+                    "enabled": True,
+                    "day_of_week": 0,
+                    "prompt_zh": "回顧一週完成度與節奏，調整下週方向",
+                },
+            },
+            "completion_rule": {
+                "mode": "frog_plus_percentage",
+                "threshold": 0.5,
+                "frog_required": True,
+                "streak_tracking": True,
+                "celebration": {
+                    "on_frog_done": "今日必達 ✓ 完成！剩下的都是 bonus。",
+                    "on_day_complete": "完美收工！明天繼續。",
+                },
+            },
+            "overflow": {
+                "mode": "carry_forward",
+                "max_carry_days": 3,
+                "stale_warning_days": 2,
+            },
+            "item_sources": {
+                "taskflow": {
+                    "enabled": True,
+                    "auto_include_due_today": True,
+                    "auto_include_overdue": True,
+                },
+                "finance": {"enabled": False},
+                "invest": {"enabled": False},
+                "briefing": {"enabled": True, "include_types": ["daily_briefing"]},
+                "capture": {"enabled": True, "include_types": ["pending_captures"]},
+            },
+            "ui_hints": {
+                "show_numbers": False,
+                "show_category_headers": False,
+                "show_progress_bar": True,
+                "show_time_column": False,
+                "show_frog_badge": True,
+                "empty_state_message_zh": "先選出「今日必達」，再安排其他待辦。不確定就問自己：今天只能做一件事，做哪件？",  # noqa: E501
                 "compact_mode": False,
             },
         },

@@ -24,13 +24,15 @@ Modular Monolith + Event-Driven workspace.
 - **Observability**: OpenTelemetry + LGTM (dev) / SigNoz (prod)
 
 ## Structure
-- `core/` — Modular Monolith (10 Core Modules + hot-path services)
-  - `core/src/modules/` — Domain modules (auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin)
+- `core/` — Modular Monolith (13 Core Modules + hot-path services)
+  - `core/src/modules/` — Domain modules (auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin, nodeflow, notification, invest)
   - `core/services/realtime/` — LiveKit WebRTC gateway
   - `core/services/media/` — STT/TTS/image processing
 - `workbench/` — Single React application
-- `mcp/` — MCP adapter layer (thin wrappers over Core API)
-- `stations/` — Standalone local tools (system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor, agent-vista)
+- `mcp/` — MCP server layer (17 servers: SDK-based protocol access to core services and stations)
+- `stations/` — Standalone local tools (agent-metrics, agent-vista, anvil, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-intelligence, session-pipeline, session-redactor, system-monitor, tmux-relay, tmux-webui)
+  - Each station's CLI lives in `stations/{name}/cli/`
+- `core/cli/` — Core module CLI wrappers (finance, intelflow, auth, admin, notification, memvault, nodeflow)
 - `vendor/` — Third-party community tools (observability)
 - `bridges/` — External platform connectors (LINE, Telegram, Discord)
 - `plugins/` — Plugin packages
@@ -45,12 +47,13 @@ Modular Monolith + Event-Driven workspace.
 
 ## Service Taxonomy
 - **Foundation**: auth, admin
-- **Domain Services** (DB-backed): finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore
-- **Bridges**: External connectors (social-hooks, notification)
+- **Domain Services** (DB-backed): finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest
+- **Bridges**: External connectors (social-hooks)
 - **Hot-path Services**: media (STT/TTS/image), realtime (LiveKit)
-- **Stations**: Standalone local tools (system-monitor, envkit, tmux-webui, session-redactor, sandbox-executor, agent-vista)
+- **Stations**: Standalone local tools (agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-intelligence, session-pipeline, session-redactor, system-monitor, tmux-relay, tmux-webui)
 - **Vendor**: Third-party community tools (observability)
 - **Compositions**: Service assemblies for specific use cases (Legal Advisor, Church Music, Virtual CS, ERP/POS)
+- **SDK Clients**: `libs/python/src/workshop/clients/` — unified Python SDK layer for all services (20+ clients)
 
 ## Core Concepts
 - **LEGO Composition**: Services are reusable blocks. Projects = extend services + compose them. No "project vs module" distinction.

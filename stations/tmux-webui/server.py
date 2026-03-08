@@ -152,6 +152,7 @@ async def index(request: Request):
         {
             "request": request,
             "config": cfg,
+            "git_hash": GIT_HASH,
         },
     )
 

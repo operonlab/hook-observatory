@@ -52,3 +52,25 @@ export function listHistory(params: {
   if (params.category) qs.set('category', params.category)
   return request<PaginatedResponse<NotificationLog>>(`/notification/history?${qs.toString()}`)
 }
+
+export interface Subscription {
+  id: string
+  user_id: string
+  endpoint: string
+  app_scope: string
+  active: boolean
+  preferences: Record<string, boolean>
+  created_at: string
+  updated_at: string
+}
+
+export function listSubscriptions(): Promise<Subscription[]> {
+  return request<Subscription[]>('/notification/subscriptions')
+}
+
+export function deleteSubscription(endpoint: string): Promise<{ unsubscribed: boolean }> {
+  const qs = new URLSearchParams({ endpoint })
+  return request<{ unsubscribed: boolean }>(`/notification/subscriptions?${qs.toString()}`, {
+    method: 'DELETE',
+  })
+}

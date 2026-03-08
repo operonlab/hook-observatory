@@ -26,10 +26,16 @@ const TYPE_CONFIG: Record<
 interface TransactionListProps {
   month?: string
   walletId?: string
+  categoryId?: string
   onEdit?: (txn: Transaction) => void
 }
 
-export default function TransactionList({ month, walletId, onEdit }: TransactionListProps) {
+export default function TransactionList({
+  month,
+  walletId,
+  categoryId,
+  onEdit,
+}: TransactionListProps) {
   const [items, setItems] = useState<Transaction[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -45,6 +51,7 @@ export default function TransactionList({ month, walletId, onEdit }: Transaction
         page_size: pageSize,
         month,
         wallet_id: walletId,
+        category_id: categoryId,
         type: filters.type || undefined,
         search: filters.search || undefined,
       })
@@ -54,7 +61,7 @@ export default function TransactionList({ month, walletId, onEdit }: Transaction
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false))
-  }, [page, month, walletId, filters])
+  }, [page, month, walletId, categoryId, filters])
 
   const totalPages = Math.ceil(total / pageSize)
 
@@ -115,11 +122,9 @@ export default function TransactionList({ month, walletId, onEdit }: Transaction
             const cfg = TYPE_CONFIG[txn.type]
             const Icon = cfg.icon
             return (
-              <button
-                type="button"
+              <div
                 key={txn.id}
-                onClick={() => onEdit?.(txn)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors text-left"
+                className="group flex items-center gap-1 rounded-md transition-colors"
                 style={{ backgroundColor: 'transparent' }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'var(--fn-accent-alpha)'
@@ -128,45 +133,90 @@ export default function TransactionList({ month, walletId, onEdit }: Transaction
                   e.currentTarget.style.backgroundColor = 'transparent'
                 }}
               >
-                <div
-                  className="flex items-center justify-center w-8 h-8 rounded-full shrink-0"
+                <button
+                  type="button"
+                  onClick={() => onEdit?.(txn)}
+                  className="flex-1 flex items-center gap-3 px-3 py-2.5 text-left min-w-0"
+                >
+                  {txn.icon_url ? (
+                    <img
+                      src={`/api${txn.icon_url}`}
+                      alt=""
+                      className="w-8 h-8 rounded-full shrink-0 object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="flex items-center justify-center w-8 h-8 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: `${cfg.color}20`,
+                        color: cfg.color,
+                      }}
+                    >
+                      <Icon size={14} />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[13px] truncate" style={{ color: 'var(--fn-text)' }}>
+                        {txn.description || txn.merchant || cfg.label}
+                      </span>
+                      <span
+                        className="text-[13px] font-medium shrink-0"
+                        style={{ color: cfg.color }}
+                      >
+                        {formatAmount(txn)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px]" style={{ color: 'var(--fn-text-muted)' }}>
+                        {new Date(txn.transacted_at).toLocaleDateString('zh-TW')}
+                      </span>
+                      {txn.category_name && (
+                        <span
+                          className="text-[11px] px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: 'var(--fn-bg-surface)',
+                            color: 'var(--fn-text-tertiary)',
+                          }}
+                        >
+                          {txn.category_name}
+                        </span>
+                      )}
+                      <span className="text-[11px]" style={{ color: 'var(--fn-text-muted)' }}>
+                        {PAYMENT_METHOD_LABELS[txn.payment_method]}
+                      </span>
+                      {txn.tags?.map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[10px] px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: 'var(--fn-accent-alpha)',
+                            color: 'var(--fn-accent)',
+                          }}
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await transactionApi.delete(txn.id)
+                    setItems((prev) => prev.filter((t) => t.id !== txn.id))
+                    setTotal((prev) => prev - 1)
+                  }}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 text-[12px] px-2 py-1 rounded mr-2"
                   style={{
-                    backgroundColor: `${cfg.color}20`,
-                    color: cfg.color,
+                    backgroundColor: 'rgba(243,139,168,0.1)',
+                    color: '#f38ba8',
+                    border: '1px solid rgba(243,139,168,0.2)',
                   }}
                 >
-                  <Icon size={14} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] truncate" style={{ color: 'var(--fn-text)' }}>
-                      {txn.description || txn.merchant || cfg.label}
-                    </span>
-                    <span className="text-[13px] font-medium shrink-0" style={{ color: cfg.color }}>
-                      {formatAmount(txn)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px]" style={{ color: 'var(--fn-text-muted)' }}>
-                      {new Date(txn.transacted_at).toLocaleDateString('zh-TW')}
-                    </span>
-                    {txn.category_name && (
-                      <span
-                        className="text-[11px] px-1.5 py-0.5 rounded"
-                        style={{
-                          backgroundColor: 'var(--fn-bg-surface)',
-                          color: 'var(--fn-text-tertiary)',
-                        }}
-                      >
-                        {txn.category_name}
-                      </span>
-                    )}
-                    <span className="text-[11px]" style={{ color: 'var(--fn-text-muted)' }}>
-                      {PAYMENT_METHOD_LABELS[txn.payment_method]}
-                    </span>
-                  </div>
-                </div>
-              </button>
+                  刪除
+                </button>
+              </div>
             )
           })}
         </div>

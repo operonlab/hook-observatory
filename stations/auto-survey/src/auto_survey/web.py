@@ -292,6 +292,11 @@ def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(str(STATIC_DIR / "sw.js"), media_type="application/javascript")
+
+
 # ── Helpers ──────────────────────────────────────────────
 
 

@@ -1,4 +1,10 @@
-"""Capture Console Station — Gemini CLI pane manager + WebSocket relay."""
+"""Capture Console Station — Gemini CLI headless enrichment + WebSocket relay.
+
+Architecture:
+  - WebSocket relay: browser → WS → gemini -p (headless) → parsed response
+  - Each message spawns a headless Gemini CLI subprocess (no TUI parsing needed)
+  - tmux pane (default:3.1) kept for manual Gemini interaction / health display
+"""
 
 from __future__ import annotations
 
@@ -6,6 +12,8 @@ import asyncio
 import json
 import logging
 import os
+import re
+import shutil
 import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -17,40 +25,49 @@ log = logging.getLogger("capture-console")
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-TMUX_SESSION = os.getenv("CAPTURE_TMUX_SESSION", "workshop")
-GEMINI_WINDOW = os.getenv("CAPTURE_GEMINI_WINDOW", "gemini-enrichment")
-POLL_INTERVAL = float(os.getenv("CAPTURE_POLL_INTERVAL", "0.35"))
+TMUX_SESSION = os.getenv("CAPTURE_TMUX_SESSION", "default")
+GEMINI_WINDOW = os.getenv("CAPTURE_GEMINI_WINDOW", "3")
+GEMINI_PANE = os.getenv("CAPTURE_GEMINI_PANE", "1")
 HOST = os.getenv("CAPTURE_HOST", "127.0.0.1")
 PORT = int(os.getenv("CAPTURE_PORT", "4104"))
+GEMINI_TIMEOUT = float(os.getenv("CAPTURE_GEMINI_TIMEOUT", "30"))
 
-SYSTEM_PROMPT = """\
-You are a capture enrichment assistant for the Workshop platform.
-When the user gives you a brief description, parse it into structured capture data.
+GEMINI_TARGET = f"{TMUX_SESSION}:{GEMINI_WINDOW}.{GEMINI_PANE}"
 
-ALWAYS respond with a JSON block in this format:
-```json
-{
-  "module": "finance|taskflow|invest",
-  "entity_type": "transaction|subscription|installment|task|trade",
-  "payload": { ... structured fields ... },
-  "confidence": 0.0-1.0,
-  "notes": "any clarification"
-}
-```
+SYSTEM_PROMPT = (
+    "你是 Workshop 平台的捕捉解析助理。"
+    "使用者會給你簡短的自然語言描述（如消費、任務、投資），"
+    "你必須將其解析成結構化 JSON。\n\n"
+    "## 規則\n"
+    "1. 禁止使用任何工具或 MCP server。只回覆純文字 JSON。\n"
+    "2. 回覆格式必須是 ```json\\n{...}\\n``` code block。\n"
+    "3. 用繁體中文回覆 notes 欄位。\n\n"
+    "## JSON 結構\n"
+    "```json\n"
+    '{"module":"finance|taskflow|invest",'
+    '"entity_type":"transaction|subscription|installment|task|trade",'
+    '"payload":{...},"confidence":0.0-1.0,"notes":"..."}\n'
+    "```\n\n"
+    "## Payload 欄位\n"
+    "- finance/transaction: type(expense|income), amount, description, currency(TWD), "
+    "payment_method(credit_card|cash|transfer), category_id, wallet_id, transacted_at\n"
+    "- finance/subscription: name, amount, billing_cycle(monthly|yearly), start_date\n"
+    "- taskflow/task: title, description, priority(low|medium|high|urgent), due_date, source, project\n"
+    "- invest/trade: position_id, type(buy|sell), shares, price, traded_at, currency\n\n"
+    "## 智慧預設\n"
+    "未指定時：type=expense, currency=TWD, payment_method=credit_card, priority=medium\n"
+    "transacted_at 預設今天。"
+)
 
-Field reference:
-- finance/transaction: type(income|expense), amount(number), description, category_id, wallet_id, payment_method(cash|credit_card|bank_transfer|e_wallet), transacted_at
-- finance/subscription: name, amount, billing_cycle(monthly|yearly|weekly), start_date, wallet_id, category_id
-- taskflow/task: title, description, priority(low|medium|high|urgent), due_date, source(personal|work|capture), project
-- invest/trade: position_id, type(buy|sell), shares(number), price(number), traded_at, currency
+# Regex to extract JSON from markdown code block
+_JSON_BLOCK_RE = re.compile(r"```json\s*([\s\S]*?)```")
+_JSON_OBJECT_RE = re.compile(r"\{[\s\S]*\"module\"[\s\S]*\"payload\"[\s\S]*\}")
 
-Smart defaults: expense for amounts, TWD currency, credit_card payment, personal source, medium priority.
-Current date context will be provided. Always respond in the user's language.
-"""
 
 # ---------------------------------------------------------------------------
-# tmux helpers
+# tmux helpers (for health check / manual pane)
 # ---------------------------------------------------------------------------
+
 
 async def _run(args: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
     proc = await asyncio.create_subprocess_exec(
@@ -60,81 +77,130 @@ async def _run(args: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         return -1, "", "timeout"
     return proc.returncode or 0, (stdout or b"").decode(), (stderr or b"").decode()
 
 
-async def pane_exists() -> bool:
-    """Check if the Gemini enrichment pane exists."""
-    rc, out, _ = await _run([
-        "tmux", "list-windows", "-t", TMUX_SESSION, "-F", "#{window_name}",
-    ])
+async def gemini_pane_alive() -> bool:
+    """Check if the Gemini pane exists in tmux."""
+    rc, out, _ = await _run(
+        [
+            "tmux",
+            "list-panes",
+            "-t",
+            f"{TMUX_SESSION}:{GEMINI_WINDOW}",
+            "-F",
+            "#{pane_index}\t#{pane_current_command}",
+        ]
+    )
     if rc != 0:
         return False
-    return GEMINI_WINDOW in out.strip().split("\n")
+    for line in out.strip().split("\n"):
+        parts = line.split("\t")
+        if len(parts) >= 2 and parts[0] == GEMINI_PANE:
+            return True
+    return False
 
 
-async def ensure_gemini_pane() -> str:
-    """Ensure the Gemini CLI pane exists. Returns the tmux target."""
-    target = f"{TMUX_SESSION}:{GEMINI_WINDOW}"
-    if await pane_exists():
-        return target
-
-    log.info("Creating Gemini enrichment pane: %s", target)
-    # Create a new window
-    rc, _, err = await _run([
-        "tmux", "new-window", "-t", TMUX_SESSION, "-n", GEMINI_WINDOW, "-d",
-    ])
-    if rc != 0:
-        log.error("Failed to create window: %s", err)
-        raise RuntimeError(f"tmux new-window failed: {err}")
-
-    # Start Gemini CLI in interactive mode
-    await asyncio.sleep(0.5)
-    await send_keys(target, "gemini", literal=True)
-    await send_keys(target, "Enter", literal=False)
-
-    # Wait for Gemini to start
-    for _ in range(20):
-        await asyncio.sleep(0.5)
-        content = await capture_pane(target)
-        # Gemini CLI shows a prompt like "> " or "│" when ready
-        if ">" in content or "│" in content or "gemini" in content.lower():
-            break
-
-    # Send system prompt
-    await send_keys(target, SYSTEM_PROMPT.replace("\n", " "), literal=True)
-    await send_keys(target, "Enter", literal=False)
-
-    # Wait for response to system prompt
-    await asyncio.sleep(3)
-    log.info("Gemini pane ready: %s", target)
-    return target
+async def gemini_cli_available() -> bool:
+    """Check if gemini CLI is installed."""
+    return shutil.which("gemini") is not None
 
 
-async def send_keys(target: str, text: str, literal: bool = True) -> bool:
-    args = ["tmux", "send-keys", "-t", target]
-    if literal:
-        args += ["-l", text]
-    else:
-        args.append(text)
-    rc, _, _ = await _run(args)
-    return rc == 0
+# ---------------------------------------------------------------------------
+# Gemini headless query
+# ---------------------------------------------------------------------------
 
 
-async def capture_pane(target: str, lines: int = 100) -> str:
-    rc, out, _ = await _run([
-        "tmux", "capture-pane", "-t", target, "-p", "-S", f"-{lines}",
-    ])
-    return out if rc == 0 else ""
+async def query_gemini(user_message: str) -> str:
+    """Query Gemini CLI in headless pipe mode.
+
+    Uses `gemini -p` which outputs plain text (no TUI decorations).
+    Each call is stateless — no conversation history preserved.
+    """
+    full_prompt = f"{SYSTEM_PROMPT}\n\n---\n使用者輸入：{user_message}"
+
+    proc = await asyncio.create_subprocess_exec(
+        "gemini",
+        "-p",
+        full_prompt,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=GEMINI_TIMEOUT)
+    except TimeoutError:
+        proc.kill()
+        raise TimeoutError("Gemini CLI timed out")
+
+    if proc.returncode != 0:
+        err = (stderr or b"").decode()[:200]
+        raise RuntimeError(f"Gemini CLI failed (exit {proc.returncode}): {err}")
+
+    return _clean_gemini_output((stdout or b"").decode())
+
+
+# Lines from gemini CLI stderr/hooks that leak into output
+_NOISE_PATTERNS = [
+    "Created execution plan for",
+    "Expanding hook command:",
+    "Hook execution for",
+    "Loaded cached credentials",
+    "Server '",
+    "total duration:",
+    "(cwd:",
+    "MCP issues detected",
+    "Run /mcp",
+    "Using model:",
+    "Model:",
+    "I'll ",
+    "Let me ",
+]
+
+
+def _clean_gemini_output(text: str) -> str:
+    """Strip Gemini CLI noise (hook execution, server loading) from output."""
+    lines = text.split("\n")
+    clean = []
+    for line in lines:
+        if any(pat in line for pat in _NOISE_PATTERNS):
+            continue
+        clean.append(line)
+    # Trim leading/trailing blank lines
+    while clean and not clean[0].strip():
+        clean.pop(0)
+    while clean and not clean[-1].strip():
+        clean.pop()
+    return "\n".join(clean)
+
+
+def extract_json_from_response(text: str) -> dict | None:
+    """Extract JSON object from Gemini's response text."""
+    # Try markdown code block first
+    m = _JSON_BLOCK_RE.search(text)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+
+    # Try raw JSON object
+    m = _JSON_OBJECT_RE.search(text)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    return None
 
 
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Capture Console", version="0.1.0")
+app = FastAPI(title="Capture Console", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -146,8 +212,13 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    has_pane = await pane_exists()
-    return {"status": "ok", "gemini_pane": has_pane}
+    pane_alive = await gemini_pane_alive()
+    cli_ok = await gemini_cli_available()
+    return {
+        "status": "ok" if cli_ok else "degraded",
+        "gemini_cli": cli_ok,
+        "gemini_pane": pane_alive,
+    }
 
 
 @app.websocket("/ws")
@@ -155,21 +226,28 @@ async def ws_chat(ws: WebSocket):
     await ws.accept()
     log.info("WebSocket connected")
 
-    # Ensure Gemini pane exists
-    try:
-        target = await ensure_gemini_pane()
-        await ws.send_json({"type": "status", "message": "Connected to Gemini enrichment pane."})
-    except Exception as e:
-        await ws.send_json({"type": "error", "message": f"Failed to start Gemini: {e}"})
+    cli_ok = await gemini_cli_available()
+    if not cli_ok:
+        await ws.send_json(
+            {
+                "type": "error",
+                "message": "Gemini CLI not found. Install with: npm i -g @anthropic/gemini-cli",
+            }
+        )
         await ws.close()
         return
 
-    # Get initial pane snapshot
-    last_content = await capture_pane(target)
+    await ws.send_json(
+        {
+            "type": "status",
+            "message": "已連線 Gemini 解析引擎",
+            "gemini_pane": await gemini_pane_alive(),
+            "gemini_ready": True,
+        }
+    )
 
     try:
         while True:
-            # Wait for user message
             raw = await ws.receive_text()
             try:
                 data = json.loads(raw)
@@ -190,49 +268,44 @@ async def ws_chat(ws: WebSocket):
             prompt_parts = []
             if context:
                 prompt_parts.append(
-                    f"[Context: {context.get('module')}/{context.get('entity_type')}, "
-                    f"missing={context.get('missing_fields', [])}, "
-                    f"current payload={json.dumps(context.get('payload', {}), ensure_ascii=False)}]"
+                    f"[補充情境: {context.get('module')}/{context.get('entity_type')}, "
+                    f"缺少欄位={context.get('missing_fields', [])}, "
+                    f"目前 payload={json.dumps(context.get('payload', {}), ensure_ascii=False)}]"
                 )
             prompt_parts.append(text)
             full_prompt = " ".join(prompt_parts)
 
-            # Snapshot before sending
-            before = await capture_pane(target)
+            # Query Gemini headless
+            try:
+                log.info("Querying Gemini: %s", full_prompt[:100])
+                response = await query_gemini(full_prompt)
 
-            # Send to Gemini pane
-            await send_keys(target, full_prompt, literal=True)
-            await send_keys(target, "Enter", literal=False)
-
-            # Poll for response
-            stable_count = 0
-            prev_new = ""
-            max_polls = 120  # ~42 seconds max
-
-            for _ in range(max_polls):
-                await asyncio.sleep(POLL_INTERVAL)
-                current = await capture_pane(target)
-
-                # Extract new content (after the user's input)
-                new_content = _extract_new_content(before, current, full_prompt)
-
-                if new_content and new_content != prev_new:
-                    # Send incremental chunk
-                    await ws.send_json({
+                # Send the full response as a single chunk
+                await ws.send_json(
+                    {
                         "type": "chunk",
-                        "text": new_content,
+                        "text": response.strip(),
                         "msg_id": msg_id,
-                    })
-                    prev_new = new_content
-                    stable_count = 0
-                elif new_content:
-                    stable_count += 1
+                    }
+                )
+            except TimeoutError:
+                await ws.send_json(
+                    {
+                        "type": "chunk",
+                        "text": "Gemini 回應逾時，請重試。",
+                        "msg_id": msg_id,
+                    }
+                )
+            except Exception as e:
+                log.error("Gemini query failed: %s", e)
+                await ws.send_json(
+                    {
+                        "type": "chunk",
+                        "text": f"查詢失敗：{e}",
+                        "msg_id": msg_id,
+                    }
+                )
 
-                # If content hasn't changed for ~1.4 seconds (4 polls), consider done
-                if stable_count >= 4 and new_content:
-                    break
-
-            # Signal completion
             await ws.send_json({"type": "done", "msg_id": msg_id})
 
     except WebSocketDisconnect:
@@ -243,42 +316,6 @@ async def ws_chat(ws: WebSocket):
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
-
-
-def _extract_new_content(before: str, current: str, user_input: str) -> str:
-    """Extract new content that appeared after the user's input."""
-    before_lines = before.strip().split("\n")
-    current_lines = current.strip().split("\n")
-
-    # Find where the user's input appears in current
-    input_start = -1
-    input_short = user_input[:40]  # Use first 40 chars for matching
-    for i, line in enumerate(current_lines):
-        if input_short in line:
-            input_start = i
-            break
-
-    if input_start < 0:
-        # Try matching from the end of before content
-        # Return lines that are in current but not in before
-        if len(current_lines) > len(before_lines):
-            new_lines = current_lines[len(before_lines):]
-            return "\n".join(new_lines).strip()
-        return ""
-
-    # Everything after the input line is the response
-    response_lines = current_lines[input_start + 1:]
-
-    # Filter out the Gemini prompt characters
-    cleaned = []
-    for line in response_lines:
-        stripped = line.strip()
-        # Skip empty prompt indicators
-        if stripped in (">", "│", ""):
-            continue
-        cleaned.append(line)
-
-    return "\n".join(cleaned).strip()
 
 
 # ---------------------------------------------------------------------------

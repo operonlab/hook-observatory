@@ -24,6 +24,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.shared.models import Base, SpaceScopedModel
@@ -124,6 +125,7 @@ class InstallmentPlan(SpaceScopedModel):
     __tablename__ = "installment_plans"
     __table_args__ = ({"schema": SCHEMA},)
 
+    icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False)
     currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'TWD'"))
@@ -149,6 +151,9 @@ class InstallmentPlan(SpaceScopedModel):
     status: Mapped[str] = mapped_column(
         Text, server_default=text("'active'")
     )  # active/completed/cancelled
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]"), default=list
+    )
     is_private: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
 
@@ -185,6 +190,7 @@ class Transaction(SpaceScopedModel):
         {"schema": SCHEMA},
     )
 
+    icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     type: Mapped[str] = mapped_column(Text, nullable=False)  # income/expense/transfer
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False)
     currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'TWD'"))
@@ -281,6 +287,7 @@ class Subscription(SpaceScopedModel):
         {"schema": SCHEMA},
     )
 
+    icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False)
     currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'TWD'"))
@@ -301,6 +308,10 @@ class Subscription(SpaceScopedModel):
     )  # active/paused/cancelled
     next_billing: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]"), default=list
+    )
+    reminder_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_private: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
 
@@ -365,3 +376,18 @@ class Budget(SpaceScopedModel):
     budget_amount: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False)
     savings_target: Mapped[Decimal | None] = mapped_column(Numeric(15, 4), nullable=True)
     is_private: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+
+
+# ======================== Tag Styles ========================
+
+
+class TagStyle(SpaceScopedModel):
+    """Per-space tag color mapping stored as JSONB."""
+
+    __tablename__ = "tag_styles"
+    __table_args__ = (
+        Index("idx_tag_styles_space", "space_id", unique=True),
+        {"schema": SCHEMA},
+    )
+
+    styles: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), default=dict)

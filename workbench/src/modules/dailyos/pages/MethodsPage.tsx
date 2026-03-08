@@ -6,7 +6,7 @@ import type { Method, MethodSelection } from '../types'
 
 export default function MethodsPage() {
   const [methods, setMethods] = useState<Method[]>([])
-  const [activeSelection, setActiveSelection] = useState<MethodSelection | null>(null)
+  const [activeSelections, setActiveSelections] = useState<MethodSelection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -18,11 +18,11 @@ export default function MethodsPage() {
       methodApi
         .listAll({ include_presets: true })
         .catch(() => ({ items: [], total: 0, page: 1, page_size: 50 })),
-      configApi.getActive().catch(() => null),
+      configApi.getActive().catch(() => [] as MethodSelection[]),
     ])
-      .then(([result, selection]) => {
+      .then(([result, selections]) => {
         setMethods(result.items)
-        setActiveSelection(selection)
+        setActiveSelections(selections)
       })
       .catch(() => setError('載入失敗'))
       .finally(() => setLoading(false))
@@ -35,13 +35,40 @@ export default function MethodsPage() {
   const handleActivate = useCallback((method: Method) => {
     setActionLoading(method.id)
     configApi
-      .switchMethod({ method_id: method.id })
-      .then((sel) => {
-        setActiveSelection(sel)
+      .activate({ method_id: method.id })
+      .then((resp) => {
+        // Refresh active selections to get accurate state
+        configApi
+          .getActive()
+          .then(setActiveSelections)
+          .catch(() => {
+            // Fallback: add new selection, remove replaced
+            const replacedIds = new Set(resp.replaced.map((r) => r.replaced_method_id))
+            setActiveSelections((prev) => [
+              resp.selection,
+              ...prev.filter((s) => !replacedIds.has(s.method_id)),
+            ])
+          })
       })
       .catch(() => {})
       .finally(() => setActionLoading(null))
   }, [])
+
+  const handleDeactivate = useCallback(
+    (method: Method) => {
+      const sel = activeSelections.find((s) => s.method_id === method.id)
+      if (!sel) return
+      setActionLoading(method.id)
+      configApi
+        .deactivate(sel.id)
+        .then(() => {
+          setActiveSelections((prev) => prev.filter((s) => s.id !== sel.id))
+        })
+        .catch(() => {})
+        .finally(() => setActionLoading(null))
+    },
+    [activeSelections],
+  )
 
   const handleClone = useCallback((method: Method) => {
     setActionLoading(method.id)
@@ -89,7 +116,7 @@ export default function MethodsPage() {
 
   const presets = methods.filter((m) => m.is_preset)
   const custom = methods.filter((m) => !m.is_preset)
-  const activeMethodId = activeSelection?.method_id || null
+  const activeMethodIds = new Set(activeSelections.map((s) => s.method_id))
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
@@ -98,6 +125,14 @@ export default function MethodsPage() {
         <h1 className="text-base font-medium" style={{ color: 'var(--do-text)' }}>
           方法論管理
         </h1>
+        {activeSelections.length > 0 && (
+          <span
+            className="text-[11px] px-2 py-1 rounded"
+            style={{ color: 'var(--do-accent)', backgroundColor: 'var(--do-accent-alpha)' }}
+          >
+            {activeSelections.length} 個啟用中
+          </span>
+        )}
       </div>
 
       {/* System Methods */}
@@ -114,8 +149,9 @@ export default function MethodsPage() {
               <div key={method.id} style={{ opacity: actionLoading === method.id ? 0.6 : 1 }}>
                 <MethodCard
                   method={method}
-                  isActive={method.id === activeMethodId}
+                  isActive={activeMethodIds.has(method.id)}
                   onActivate={handleActivate}
+                  onDeactivate={handleDeactivate}
                   onClone={handleClone}
                 />
               </div>
@@ -142,8 +178,9 @@ export default function MethodsPage() {
               <div key={method.id} style={{ opacity: actionLoading === method.id ? 0.6 : 1 }}>
                 <MethodCard
                   method={method}
-                  isActive={method.id === activeMethodId}
+                  isActive={activeMethodIds.has(method.id)}
                   onActivate={handleActivate}
+                  onDeactivate={handleDeactivate}
                 />
               </div>
             ))}

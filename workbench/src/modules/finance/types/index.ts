@@ -7,6 +7,7 @@ export type TransactionStatus = 'completed' | 'scheduled' | 'cancelled' | 'pendi
 export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'e_payment' | 'bank_transfer'
 
 export interface Transaction extends BaseEntity {
+  icon_url: string | null
   type: TransactionType
   amount: number
   currency: string
@@ -31,6 +32,7 @@ export interface Transaction extends BaseEntity {
 }
 
 export interface TransactionCreate {
+  icon_url?: string
   type: TransactionType
   amount: number
   currency?: string
@@ -49,6 +51,7 @@ export interface TransactionCreate {
 }
 
 export interface TransactionUpdate {
+  icon_url?: string
   type?: TransactionType
   amount?: number
   description?: string
@@ -92,6 +95,7 @@ export type BillingCycle = 'monthly' | 'yearly' | 'weekly'
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
 
 export interface Subscription extends BaseEntity {
+  icon_url: string | null
   name: string
   amount: number
   currency: string
@@ -106,11 +110,14 @@ export interface Subscription extends BaseEntity {
   end_date: string | null
   status: SubscriptionStatus
   next_billing: string | null
+  reminder_days: number | null
   notes: string | null
+  tags: string[]
   is_private: boolean
 }
 
 export interface SubscriptionCreate {
+  icon_url?: string
   name: string
   amount: number
   currency?: string
@@ -122,11 +129,14 @@ export interface SubscriptionCreate {
   payment_detail?: string
   start_date: string
   end_date?: string
+  reminder_days?: number
   notes?: string
+  tags?: string[]
   is_private?: boolean
 }
 
 export interface SubscriptionUpdate {
+  icon_url?: string
   name?: string
   amount?: number
   billing_cycle?: BillingCycle
@@ -134,7 +144,9 @@ export interface SubscriptionUpdate {
   category_id?: string
   wallet_id?: string
   status?: SubscriptionStatus
+  reminder_days?: number
   notes?: string
+  tags?: string[]
   is_private?: boolean
 }
 
@@ -181,6 +193,7 @@ export interface WalletUpdate {
 export type InstallmentStatus = 'active' | 'completed' | 'cancelled'
 
 export interface InstallmentPlan extends BaseEntity {
+  icon_url: string | null
   description: string
   total_amount: number
   currency: string
@@ -196,10 +209,31 @@ export interface InstallmentPlan extends BaseEntity {
   start_date: string
   end_date: string | null
   status: InstallmentStatus
+  tags: string[]
   is_private: boolean
   paid_count: number
   paid_amount: number
   remaining_amount: number
+}
+
+export interface InstallmentPlanCreate {
+  icon_url?: string
+  description: string
+  total_amount: number
+  currency?: string
+  num_installments: number
+  installment_amount: number
+  interest_rate?: number
+  billing_day?: number
+  merchant?: string
+  category_id?: string
+  wallet_id: string
+  payment_method: string
+  payment_detail?: string
+  start_date: string
+  end_date?: string
+  tags?: string[]
+  is_private?: boolean
 }
 
 // ─── Budget ───

@@ -1,4 +1,4 @@
-import { ArrowUpRight, Loader2, Send, Sparkles, Zap } from 'lucide-react'
+import { ArrowUpRight, Bug, Loader2, Send, Sparkles, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Capture, CapturePromoteResult } from '../api'
 import { captureApi } from '../api'
@@ -86,7 +86,7 @@ function ParsedCaptureCard({
       style={{ borderColor: 'var(--green)', backgroundColor: 'var(--surface0)' }}
     >
       <div className="text-[10px] font-medium mb-1" style={{ color: 'var(--green)' }}>
-        Parsed: {parsed.module}/{parsed.entity_type}
+        已解析：{parsed.module}/{parsed.entity_type}
         {parsed.confidence && (
           <span className="ml-2 opacity-70">({Math.round(parsed.confidence * 100)}%)</span>
         )}
@@ -110,7 +110,7 @@ function ParsedCaptureCard({
           opacity: applying ? 0.5 : 1,
         }}
       >
-        {applying ? 'Applying...' : hasSelected ? 'Apply to selected' : 'Create capture'}
+        {applying ? '套用中…' : hasSelected ? '套用到選取項目' : '建立捕捉'}
       </button>
     </div>
   )
@@ -120,22 +120,39 @@ function AssistantMessage({
   msg,
   applying,
   hasSelected,
+  debugMode,
   onApply,
 }: {
   msg: ChatMessage
   applying: boolean
   hasSelected: boolean
+  debugMode: boolean
   onApply: (p: ParsedCapture) => void
 }) {
+  const hasParsed = !!msg.parsed
+  // In normal mode with parsed result: show only notes (if any)
+  // In debug mode or no parsed result: show full raw content
+  const showRawContent = debugMode || !hasParsed
+
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%]">
-        <div
-          className="px-3 py-2 rounded-lg text-[13px] whitespace-pre-wrap"
-          style={{ backgroundColor: 'var(--surface0)', color: 'var(--text)' }}
-        >
-          {msg.content}
-        </div>
+        {showRawContent && (
+          <div
+            className="px-3 py-2 rounded-lg text-[13px] whitespace-pre-wrap"
+            style={{ backgroundColor: 'var(--surface0)', color: 'var(--text)' }}
+          >
+            {msg.content}
+          </div>
+        )}
+        {hasParsed && !debugMode && msg.parsed?.notes && (
+          <div
+            className="px-3 py-1.5 rounded-lg text-[12px]"
+            style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
+          >
+            {msg.parsed.notes}
+          </div>
+        )}
         {msg.parsed && (
           <ParsedCaptureCard
             parsed={msg.parsed}
@@ -223,7 +240,7 @@ export default function EnrichmentChat({
     {
       role: 'system',
       content:
-        'Capture Console ready. Type anything to capture — I will parse it into structured data.\n\nExamples:\n- "午餐 星巴克 180"\n- "buy 10 TSMC at 850"\n- "fix login bug by Friday"',
+        '捕捉台就緒。輸入任何內容，AI 會自動解析成結構化資料。\n\n範例：\n- 「午餐 星巴克 180」\n- 「買 10 張台積電 850」\n- 「週五前修好登入 bug」',
       timestamp: Date.now(),
     },
   ])
@@ -231,6 +248,7 @@ export default function EnrichmentChat({
   const [isConnected, setIsConnected] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [applying, setApplying] = useState(false)
+  const [debugMode, setDebugMode] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -291,9 +309,9 @@ export default function EnrichmentChat({
         ...prev,
         {
           role: 'system',
-          content: `Selected: [${selectedCapture.module}/${selectedCapture.entity_type}] ${desc}\nCompleteness: ${Math.round(selectedCapture.completeness * 100)}%${
+          content: `已選取：[${selectedCapture.module}/${selectedCapture.entity_type}] ${desc}\n完整度：${Math.round(selectedCapture.completeness * 100)}%${
             selectedCapture.missing_fields.length > 0
-              ? `\nMissing: ${selectedCapture.missing_fields.join(', ')}`
+              ? `\n缺少：${selectedCapture.missing_fields.join(', ')}`
               : ''
           }`,
           timestamp: Date.now(),
@@ -352,7 +370,7 @@ export default function EnrichmentChat({
         await onUpdate(selectedCapture.id, parsed.payload)
         setMessages((prev) => [
           ...prev,
-          { role: 'system', content: 'Fields applied to capture.', timestamp: Date.now() },
+          { role: 'system', content: '已套用欄位到捕捉紀錄。', timestamp: Date.now() },
         ])
       } else {
         // Create new capture from parsed data
@@ -366,7 +384,7 @@ export default function EnrichmentChat({
           ...prev,
           {
             role: 'system',
-            content: `Capture created: ${parsed.module}/${parsed.entity_type}`,
+            content: `已建立捕捉：${parsed.module}/${parsed.entity_type}`,
             timestamp: Date.now(),
           },
         ])
@@ -374,7 +392,7 @@ export default function EnrichmentChat({
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: 'system', content: 'Failed to apply.', timestamp: Date.now() },
+        { role: 'system', content: '套用失敗。', timestamp: Date.now() },
       ])
     } finally {
       setApplying(false)
@@ -389,8 +407,8 @@ export default function EnrichmentChat({
       {
         role: 'system',
         content: result.success
-          ? `Promoted to ${result.promoted_id}`
-          : `Promote failed: ${result.error || result.missing_fields.join(', ')}`,
+          ? `已提升為正式紀錄：${result.promoted_id}`
+          : `提升失敗：${result.error || result.missing_fields.join(', ')}`,
         timestamp: Date.now(),
       },
     ])
@@ -406,7 +424,7 @@ export default function EnrichmentChat({
         <div className="flex items-center gap-2">
           <Sparkles size={14} style={{ color: 'var(--yellow)' }} />
           <span className="text-xs font-medium" style={{ color: 'var(--text)' }}>
-            Enrichment Chat
+            AI 對話
           </span>
           <span
             className="text-[10px] px-1.5 py-0.5 rounded-full"
@@ -415,8 +433,20 @@ export default function EnrichmentChat({
               color: 'var(--base)',
             }}
           >
-            {isConnected ? 'connected' : 'offline'}
+            {isConnected ? '已連線' : '離線'}
           </span>
+          <button
+            type="button"
+            onClick={() => setDebugMode((d) => !d)}
+            className="p-1 rounded transition-opacity"
+            style={{
+              color: debugMode ? 'var(--yellow)' : 'var(--overlay0)',
+              opacity: debugMode ? 1 : 0.5,
+            }}
+            title={debugMode ? '關閉除錯模式' : '開啟除錯模式'}
+          >
+            <Bug size={13} />
+          </button>
         </div>
         {selectedCapture && selectedCapture.status === 'pending' && (
           <button
@@ -426,7 +456,7 @@ export default function EnrichmentChat({
             style={{ backgroundColor: 'var(--green)', color: 'var(--base)' }}
           >
             <ArrowUpRight size={12} />
-            Promote
+            提升
           </button>
         )}
       </div>
@@ -442,6 +472,7 @@ export default function EnrichmentChat({
                 msg={msg}
                 applying={applying}
                 hasSelected={!!selectedCapture}
+                debugMode={debugMode}
                 onApply={handleApplyParsed}
               />
             )}
@@ -451,7 +482,7 @@ export default function EnrichmentChat({
         {isStreaming && (
           <div className="flex items-center gap-1.5" style={{ color: 'var(--overlay0)' }}>
             <Loader2 size={12} className="animate-spin" />
-            <span className="text-[11px]">Thinking...</span>
+            <span className="text-[11px]">思考中…</span>
           </div>
         )}
 
@@ -477,7 +508,7 @@ export default function EnrichmentChat({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
-              selectedCapture ? `Enrich ${selectedCapture.entity_type}...` : 'Type to capture...'
+              selectedCapture ? `補充 ${selectedCapture.entity_type}…` : '輸入內容快速捕捉…'
             }
             className="flex-1 bg-transparent outline-none text-sm"
             style={{ color: 'var(--text)' }}

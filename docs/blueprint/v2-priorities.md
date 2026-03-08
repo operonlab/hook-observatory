@@ -12,16 +12,16 @@ target_lang: zh-TW
 
 ## 優先順序總覽
 
-| 順位 | 模組 | 目標 | 為什麼優先 | 詳細文件 |
-|------|------|------|-----------|---------|
-| **P1** | memvault | Claude Code 持久化記憶 + Knowledge Graph | 每天都在用，改善記憶品質 = 改善所有工作品質 | [p1-memvault.md](./p1-memvault.md) |
-| **P2** | intelflow (Smart Search V2) | 搜尋報告結構化儲存 + UI | 搜尋是高頻操作，散落 .md 檔已造成痛點 | [p2-intelflow.md](./p2-intelflow.md) |
-| **P3** | stations 整合 | 系統工具現代化 | 散落 V1 工具需統一管理 + tmux-webui 手機體驗 | [p3-stations.md](./p3-stations.md) |
-| **P4** | auth + admin | Google/GitHub OAuth + 管理系統 | 所有模組的前提基礎，V1 缺口多 | [p4-auth.md](./p4-auth.md) |
-| **P5** | finance | 完整個人財務管理 | 記帳是每日剛需，V1 MCP-only 缺 UI/分析/預算 | [p5-finance.md](./p5-finance.md) |
-| **P6** | taskflow | 排程 + 日曆 + 任務追蹤 + 報告 | 多來源任務管理 + 自動產出日誌/週報/月報 | [p6-taskflow.md](./p6-taskflow.md) |
-| **P7** | ideagraph | AI 輔助靈感孵化 + 知識圖譜 | 想法散落各處，需要系統化捕捉→精煉→連結→驗證 | [p7-ideagraph.md](./p7-ideagraph.md) |
-| **P8** | notification + bridges | 通知推播 + 社群平台橋接 | 所有模組都需要通知使用者；LINE/Telegram 雙向互動是剛需 | [p8-notification.md](./p8-notification.md) |
+| 順位 | 模組 | 目標 | 為什麼優先 | 狀態 | 詳細文件 |
+|------|------|------|-----------|------|---------|
+| **P1** | memvault | Claude Code 持久化記憶 + Knowledge Graph | 每天都在用，改善記憶品質 = 改善所有工作品質 | ✅ 完成 | [p1-memvault.md](./p1-memvault.md) |
+| **P2** | intelflow (Smart Search V2) | 搜尋報告結構化儲存 + UI | 搜尋是高頻操作，散落 .md 檔已造成痛點 | ✅ 完成 | [p2-intelflow.md](./p2-intelflow.md) |
+| **P3** | stations 整合 | 系統工具現代化 | 散落 V1 工具需統一管理 + tmux-webui 手機體驗 | ✅ 完成 | [p3-stations.md](./p3-stations.md) |
+| **P4** | auth + admin | Google/GitHub OAuth + 管理系統 | 所有模組的前提基礎，V1 缺口多 | ✅ 完成 | [p4-auth.md](./p4-auth.md) |
+| **P5** | finance | 完整個人財務管理 | 記帳是每日剛需，V1 MCP-only 缺 UI/分析/預算 | ✅ 完成 | [p5-finance.md](./p5-finance.md) |
+| **P6** | taskflow | 排程 + 日曆 + 任務追蹤 + 報告 | 多來源任務管理 + 自動產出日誌/週報/月報 | 🏗 骨架 | [p6-taskflow.md](./p6-taskflow.md) |
+| **P7** | ideagraph | AI 輔助靈感孵化 + 知識圖譜 | 想法散落各處，需要系統化捕捉→精煉→連結→驗證 | 🏗 骨架 | [p7-ideagraph.md](./p7-ideagraph.md) |
+| **P8** | notification + bridges | 通知推播 + 社群平台橋接 | 所有模組都需要通知使用者；LINE/Telegram 雙向互動是剛需 | ✅ 完成 | [p8-notification.md](./p8-notification.md) |
 
 ### 依賴關係
 

@@ -75,10 +75,22 @@ class MethodSelectionResponse(SpaceScopedResponse):
     deleted_at: datetime | None = None
 
 
-class MethodSwitchRequest(BaseModel):
+class MethodActivateRequest(BaseModel):
     method_id: str
     context: str = "default"
     overrides: dict | None = None
+
+
+class DimensionConflict(BaseModel):
+    dimension: str
+    replaced_method_id: str
+    replaced_method_name: str
+
+
+class MethodActivateResponse(BaseModel):
+    selection: MethodSelectionResponse
+    replaced: list[DimensionConflict] = Field(default_factory=list)
+    active_count: int = 1
 
 
 # ======================== Daily Plan ========================

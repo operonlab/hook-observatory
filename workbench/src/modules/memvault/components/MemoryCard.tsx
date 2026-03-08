@@ -4,6 +4,7 @@ import { BLOCK_TYPE_CONFIG } from '../types'
 interface MemoryCardProps {
   block: MemoryBlock
   onClick?: () => void
+  onDelete?: (id: string) => void
   compact?: boolean
 }
 
@@ -22,7 +23,7 @@ function hexToRgba(cssVar: string, alpha: number): string {
   return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
 }
 
-export default function MemoryCard({ block, onClick, compact = false }: MemoryCardProps) {
+export default function MemoryCard({ block, onClick, onDelete, compact = false }: MemoryCardProps) {
   const config = BLOCK_TYPE_CONFIG[block.block_type] ?? BLOCK_TYPE_CONFIG.general
   const confidencePct = `${Math.round(block.confidence * 100)}%`
   const badgeBg = hexToRgba(config.color, 0.18)
@@ -77,6 +78,24 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
             {relativeTime(block.updated_at)}
           </span>
         </div>
+
+        {onDelete && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(block.id)
+            }}
+            className="text-[12px] px-2 py-1 rounded shrink-0"
+            style={{
+              backgroundColor: 'rgba(243,139,168,0.1)',
+              color: '#f38ba8',
+              border: '1px solid rgba(243,139,168,0.2)',
+            }}
+          >
+            刪除
+          </button>
+        )}
       </div>
     )
   }
@@ -134,9 +153,29 @@ export default function MemoryCard({ block, onClick, compact = false }: MemoryCa
         </div>
       )}
 
-      <p className="text-xs" style={{ color: 'var(--subtext1)' }}>
-        {relativeTime(block.updated_at)}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs" style={{ color: 'var(--subtext1)' }}>
+          {relativeTime(block.updated_at)}
+        </p>
+
+        {onDelete && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(block.id)
+            }}
+            className="text-[12px] px-2 py-1 rounded"
+            style={{
+              backgroundColor: 'rgba(243,139,168,0.1)',
+              color: '#f38ba8',
+              border: '1px solid rgba(243,139,168,0.2)',
+            }}
+          >
+            刪除
+          </button>
+        )}
+      </div>
     </div>
   )
 }

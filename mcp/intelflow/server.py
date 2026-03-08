@@ -96,14 +96,27 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "page_size": {"type": "integer", "default": 50},
+                    "page_size": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size (max 100)",
+                    },
                 },
             },
         ),
         Tool(
             name="intelflow_topic_graph",
             description="Get topic relationship graph (nodes + edges).",
-            inputSchema={"type": "object", "properties": {}},
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "max_nodes": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum number of nodes to return",
+                    },
+                },
+            },
         ),
         Tool(
             name="intelflow_briefings",
@@ -120,7 +133,16 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="intelflow_dashboard",
             description="Get Intelflow dashboard summary (report counts, recent activity).",
-            inputSchema={"type": "object", "properties": {}},
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "max_list_items": {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Maximum items per list field in dashboard",
+                    },
+                },
+            },
         ),
     ]
 
@@ -190,9 +212,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 )
 
             case "intelflow_topics":
+                page_size = min(arguments.get("page_size", 50), 100)
                 result = await to_thread(
                     client.list_topics,
-                    page_size=arguments.get("page_size", 50),
+                    page_size=page_size,
                 )
                 items = result.get("items", []) if isinstance(result, dict) else result
                 if not items:
@@ -204,6 +227,26 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             case "intelflow_topic_graph":
                 result = await to_thread(client.get_topic_graph)
+                max_nodes = arguments.get("max_nodes", 50)
+                if isinstance(result, dict):
+                    nodes = result.get("nodes", [])
+                    total_nodes = len(nodes)
+                    if total_nodes > max_nodes:
+                        kept_ids = {n.get("id") for n in nodes[:max_nodes]}
+                        edges = result.get("edges", [])
+                        total_edges = len(edges)
+                        filtered_edges = [
+                            e
+                            for e in edges
+                            if e.get("source") in kept_ids and e.get("target") in kept_ids
+                        ]
+                        result = {
+                            "total_nodes": total_nodes,
+                            "total_edges": total_edges,
+                            "nodes": nodes[:max_nodes],
+                            "edges": filtered_edges,
+                            "truncated": True,
+                        }
                 return text_result(json_text(result))
 
             case "intelflow_briefings":
@@ -224,6 +267,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             case "intelflow_dashboard":
                 result = await to_thread(client.get_dashboard)
+                max_list_items = arguments.get("max_list_items", 10)
+                if isinstance(result, dict):
+                    for key, val in result.items():
+                        if isinstance(val, list) and len(val) > max_list_items:
+                            result[key] = val[:max_list_items]
+                            result[f"{key}_total"] = len(val)
                 return text_result(json_text(result))
 
             case _:

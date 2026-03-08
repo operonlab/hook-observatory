@@ -19,7 +19,7 @@ class ScoringConfig:
     recency_half_life: float = 14.0
     recency_weight: float = 0.15
     length_anchor: int = 500
-    min_score: float = 0.20
+    min_score: float = 0.10
     mmr_threshold: float = 0.85
     stages_enabled: dict[str, bool] = field(
         default_factory=lambda: {
@@ -81,35 +81,23 @@ class ScoringPipeline:
         now = datetime.now(UTC)
 
         # Stage 1: Recency Boost
-        results = self._run_stage(
-            "recency", results, meta, self._apply_recency, now=now
-        )
+        results = self._run_stage("recency", results, meta, self._apply_recency, now=now)
 
         # Stage 2: Importance Weight
-        results = self._run_stage(
-            "importance", results, meta, self._apply_importance
-        )
+        results = self._run_stage("importance", results, meta, self._apply_importance)
 
         # Stage 3: Length Normalization
-        results = self._run_stage(
-            "length_norm", results, meta, self._apply_length_norm
-        )
+        results = self._run_stage("length_norm", results, meta, self._apply_length_norm)
 
         # Stage 4: Time Decay
-        results = self._run_stage(
-            "time_decay", results, meta, self._apply_time_decay
-        )
+        results = self._run_stage("time_decay", results, meta, self._apply_time_decay)
 
         # Stage 5: Hard Min Score
-        results = self._run_stage(
-            "min_score", results, meta, self._apply_min_score
-        )
+        results = self._run_stage("min_score", results, meta, self._apply_min_score)
 
         # Stage 6: Noise Filter
         before_noise = len(results)
-        results = self._run_stage(
-            "noise_filter", results, meta, self._apply_noise_filter
-        )
+        results = self._run_stage("noise_filter", results, meta, self._apply_noise_filter)
         meta.noise_filtered = before_noise - len(results)
 
         # Stage 7: MMR Diversity
@@ -156,7 +144,7 @@ class ScoringPipeline:
 
     def _apply_importance(self, results: list[dict]) -> list[dict]:
         for r in results:
-            confidence = r.get("confidence", 0.0) or 0.0
+            confidence = r.get("confidence") or 0.5  # unset → neutral
             r["score"] *= 0.7 + 0.3 * confidence
         return results
 
@@ -170,9 +158,16 @@ class ScoringPipeline:
         return results
 
     def _apply_time_decay(self, results: list[dict]) -> list[dict]:
+        """Decay score based on age. Recent memories score higher."""
+        now = datetime.now(UTC)
         for r in results:
-            confidence = r.get("confidence", 0.0) or 0.0
-            r["score"] *= 0.5 + 0.5 * confidence
+            created_at = r.get("created_at")
+            if created_at:
+                age_days = max((now - created_at).total_seconds() / 86400, 0)
+                # Gentle decay: 30-day half-life, floor at 0.6
+                decay = 0.6 + 0.4 * math.exp(-age_days / 30.0)
+                r["score"] *= decay
+            # No penalty if created_at is missing
         return results
 
     def _apply_min_score(self, results: list[dict]) -> list[dict]:

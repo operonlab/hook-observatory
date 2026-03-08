@@ -93,9 +93,7 @@ class CaptureService:
         return capture
 
     async def get(self, db: AsyncSession, capture_id: str) -> Capture | None:
-        stmt = select(Capture).where(
-            Capture.id == capture_id, Capture.deleted_at.is_(None)
-        )
+        stmt = select(Capture).where(Capture.id == capture_id, Capture.deleted_at.is_(None))
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -216,21 +214,38 @@ class CaptureService:
 
         adapter = get_adapter(capture.module, capture.entity_type)
         if not adapter:
-            raise BadRequestError(
-                f"No adapter for {capture.module}.{capture.entity_type}"
-            )
+            raise BadRequestError(f"No adapter for {capture.module}.{capture.entity_type}")
 
         missing = adapter.missing_fields(capture.payload)
 
-        # The actual validation happens in the adapter's promote method
+        # Resolve reference fields (name → UUID, auto-create if missing)
         try:
+            payload = dict(capture.payload)
+            if adapter.reference_fields:
+                from .resolvers import resolve_references
+
+                payload = await resolve_references(
+                    adapter.reference_fields,
+                    payload,
+                    db,
+                    capture.space_id,
+                    user_id or capture.created_by,
+                )
+                # Persist resolved UUIDs back to capture payload
+                updated = dict(capture.payload)
+                for field in adapter.reference_fields:
+                    if field in payload:
+                        updated[field] = payload[field]
+                capture.payload = updated
+
             promoted_id = await adapter.promote(
-                dict(capture.payload),
+                payload,
                 db,
                 capture.space_id,
                 user_id or capture.created_by,
             )
         except Exception as e:
+            await db.rollback()
             return CapturePromoteResult(
                 success=False,
                 capture_id=capture_id,
@@ -272,24 +287,14 @@ class CaptureService:
 
         base = select(Capture).where(*filters)
         # Total
-        total = (
-            await db.execute(select(func.count()).select_from(base.subquery()))
-        ).scalar() or 0
+        total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar() or 0
 
         # By module
-        mod_stmt = (
-            select(Capture.module, func.count())
-            .where(*filters)
-            .group_by(Capture.module)
-        )
+        mod_stmt = select(Capture.module, func.count()).where(*filters).group_by(Capture.module)
         by_module = dict((await db.execute(mod_stmt)).all())
 
         # By status
-        status_stmt = (
-            select(Capture.status, func.count())
-            .where(*filters)
-            .group_by(Capture.status)
-        )
+        status_stmt = select(Capture.status, func.count()).where(*filters).group_by(Capture.status)
         by_status = dict((await db.execute(status_stmt)).all())
 
         return CaptureStats(total=total, by_module=by_module, by_status=by_status)
@@ -337,9 +342,7 @@ class CaptureService:
                 )
         return results
 
-    async def get_enrichments(
-        self, db: AsyncSession, capture_id: str
-    ) -> list[CaptureEnrichment]:
+    async def get_enrichments(self, db: AsyncSession, capture_id: str) -> list[CaptureEnrichment]:
         stmt = (
             select(CaptureEnrichment)
             .where(CaptureEnrichment.capture_id == capture_id)
@@ -351,14 +354,11 @@ class CaptureService:
     async def expire_stale(self, db: AsyncSession) -> int:
         """Expire captures past their TTL. Returns count of expired records."""
         now = datetime.now(UTC)
-        stmt = (
-            select(Capture)
-            .where(
-                Capture.status == "pending",
-                Capture.expires_at.isnot(None),
-                Capture.expires_at <= now,
-                Capture.deleted_at.is_(None),
-            )
+        stmt = select(Capture).where(
+            Capture.status == "pending",
+            Capture.expires_at.isnot(None),
+            Capture.expires_at <= now,
+            Capture.deleted_at.is_(None),
         )
         result = await db.execute(stmt)
         captures = list(result.scalars().all())

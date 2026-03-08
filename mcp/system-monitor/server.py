@@ -19,6 +19,18 @@ from workshop.clients.system_monitor import SystemMonitorClient, SystemMonitorEr
 server = Server("system-monitor")
 client = SystemMonitorClient()
 
+# -- Response size limits --
+_MAX_HISTORY = 10
+_MAX_SERVICES = 30
+_MAX_LOG_LINES = 30
+_MAX_LARGE_FILES = 20
+_MAX_CACHES = 15
+_MAX_STALE_FILES = 15
+_MAX_ALERTS = 10
+_MAX_GUARDIAN = 10
+_MAX_REPORTS = 10
+_MAX_REPORT_CONTENT_LEN = 3000
+
 
 def text_result(text: str) -> list[TextContent]:
     return [TextContent(type="text", text=text)]
@@ -26,6 +38,17 @@ def text_result(text: str) -> list[TextContent]:
 
 def json_text(data) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2, default=str)
+
+
+def _truncate(s: str | None, maxlen: int) -> str | None:
+    if s and len(s) > maxlen:
+        return s[:maxlen] + f"\n... (truncated, {len(s)} chars total)"
+    return s
+
+
+def _slim_service(svc: dict) -> dict:
+    """Keep only MCP-relevant fields for a service entry."""
+    return {k: svc[k] for k in ("label", "type", "status", "pid") if k in svc}
 
 
 @server.list_tools()
@@ -43,7 +66,7 @@ async def list_tools() -> list[Tool]:
                     "include_history": {
                         "type": "boolean",
                         "default": False,
-                        "description": "Include historical snapshots (max 30)",
+                        "description": f"Include historical snapshots (max {_MAX_HISTORY})",
                     },
                 },
             },
@@ -63,8 +86,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "lines": {
                         "type": "integer",
-                        "default": 50,
-                        "description": "Number of log lines (when label is provided)",
+                        "default": _MAX_LOG_LINES,
+                        "description": f"Number of log lines (when label is provided, max {_MAX_LOG_LINES})",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": _MAX_SERVICES,
+                        "description": "Max services to list",
                     },
                 },
             },
@@ -80,7 +108,16 @@ async def list_tools() -> list[Tool]:
                 "Full disk scan -- large files, caches, reclaimable space. "
                 "Takes ~30s but cached for 5 minutes."
             ),
-            inputSchema={"type": "object", "properties": {}},
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": _MAX_LARGE_FILES,
+                        "description": "Max items per category (large_files, caches, etc.)",
+                    },
+                },
+            },
         ),
         Tool(
             name="sysmon_alerts",
@@ -92,6 +129,11 @@ async def list_tools() -> list[Tool]:
                         "type": "boolean",
                         "default": False,
                         "description": "Include memory guardian operation log",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": _MAX_ALERTS,
+                        "description": "Max alerts to return",
                     },
                 },
             },
@@ -112,7 +154,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "limit": {
                         "type": "integer",
-                        "default": 20,
+                        "default": _MAX_REPORTS,
                         "description": "Max reports to list",
                     },
                 },
@@ -129,16 +171,28 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 status = await to_thread(client.get_status)
                 if arguments.get("include_history"):
                     history = await to_thread(client.get_history)
-                    status["history"] = history.get("snapshots", [])
+                    snapshots = history.get("snapshots", [])
+                    total = len(snapshots)
+                    status["history"] = snapshots[:_MAX_HISTORY]
+                    status["history_total"] = total
+                    if total > _MAX_HISTORY:
+                        status["history_truncated"] = f"Showing {_MAX_HISTORY}/{total} snapshots"
                 return text_result(json_text(status))
 
             case "sysmon_services":
                 label = arguments.get("label")
                 if label:
-                    lines = arguments.get("lines", 50)
+                    lines = min(arguments.get("lines", _MAX_LOG_LINES), _MAX_LOG_LINES)
                     result = await to_thread(client.get_service_logs, label, lines)
                 else:
+                    limit = min(arguments.get("limit", _MAX_SERVICES), _MAX_SERVICES)
                     result = await to_thread(client.list_services)
+                    services = result.get("services", [])
+                    total = len(services)
+                    result["services"] = [_slim_service(s) for s in services[:limit]]
+                    result["total"] = total
+                    if total > limit:
+                        result["truncated"] = f"Showing {limit}/{total} services"
                 return text_result(json_text(result))
 
             case "sysmon_disk_summary":
@@ -146,23 +200,54 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return text_result(json_text(result))
 
             case "sysmon_disk_scan":
+                limit = min(arguments.get("limit", _MAX_LARGE_FILES), _MAX_LARGE_FILES)
                 result = await to_thread(client.disk_scan)
+                # Truncate each list-type category
+                for key in ("large_files", "stale_files", "caches", "reclaimable"):
+                    if key in result and isinstance(result[key], list):
+                        total = len(result[key])
+                        cap = _MAX_CACHES if key == "caches" else limit
+                        result[key] = result[key][:cap]
+                        if total > cap:
+                            result[f"{key}_total"] = total
+                # Remove raw path fields that aren't useful for MCP consumers
+                for key in ("large_files", "stale_files"):
+                    for item in result.get(key, []):
+                        item.pop("full_path", None)
                 return text_result(json_text(result))
 
             case "sysmon_alerts":
+                limit = min(arguments.get("limit", _MAX_ALERTS), _MAX_ALERTS)
                 alerts = await to_thread(client.list_alerts)
+                alert_list = alerts.get("alerts", [])
+                total_alerts = len(alert_list)
+                alerts["alerts"] = alert_list[:limit]
+                alerts["total"] = total_alerts
+                if total_alerts > limit:
+                    alerts["truncated"] = f"Showing {limit}/{total_alerts} alerts"
+
                 if arguments.get("include_guardian"):
                     guardian = await to_thread(client.get_guardian_log)
-                    alerts["guardian"] = guardian.get("entries", [])
+                    entries = guardian.get("entries", [])
+                    total_entries = len(entries)
+                    alerts["guardian"] = entries[:_MAX_GUARDIAN]
+                    alerts["guardian_total"] = total_entries
+                    if total_entries > _MAX_GUARDIAN:
+                        alerts["guardian_truncated"] = (
+                            f"Showing {_MAX_GUARDIAN}/{total_entries} entries"
+                        )
                 return text_result(json_text(alerts))
 
             case "sysmon_reports":
                 filename = arguments.get("filename")
                 if filename:
                     result = await to_thread(client.get_report, filename)
+                    # Truncate long report content
+                    if "content" in result:
+                        result["content"] = _truncate(result["content"], _MAX_REPORT_CONTENT_LEN)
                 else:
                     rtype = arguments.get("type")
-                    limit = arguments.get("limit", 20)
+                    limit = min(arguments.get("limit", _MAX_REPORTS), _MAX_REPORTS)
                     result = await to_thread(client.list_reports, rtype, limit)
                 return text_result(json_text(result))
 

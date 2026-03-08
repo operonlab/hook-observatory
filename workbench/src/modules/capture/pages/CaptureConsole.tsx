@@ -5,32 +5,32 @@ import CaptureList from '../components/CaptureList'
 import EnrichmentChat from '../components/EnrichmentChat'
 
 export default function CaptureConsole() {
-  const [captures, setCaptures] = useState<Capture[]>([])
+  const [allCaptures, setAllCaptures] = useState<Capture[]>([])
   const [stats, setStats] = useState<CaptureStats | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [moduleFilter, setModuleFilter] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('pending')
-  const [chatOpen, setChatOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
 
   const reload = useCallback(() => {
     setRefreshKey((k) => k + 1)
   }, [])
 
+  // Fetch all captures for current status (no module filter — done client-side)
   useEffect(() => {
     captureApi
-      .list({
-        module: moduleFilter ?? undefined,
-        status: statusFilter,
-        limit: 100,
-      })
-      .then(setCaptures)
+      .list({ status: statusFilter, limit: 100 })
+      .then(setAllCaptures)
       .catch(() => {})
     captureApi
       .stats()
       .then(setStats)
       .catch(() => {})
-  }, [refreshKey, moduleFilter, statusFilter])
+  }, [refreshKey, statusFilter])
+
+  // Client-side module filtering — instant tab switch
+  const captures = moduleFilter ? allCaptures.filter((c) => c.module === moduleFilter) : allCaptures
 
   const selected = selectedId ? (captures.find((c) => c.id === selectedId) ?? null) : null
 
@@ -67,7 +67,7 @@ export default function CaptureConsole() {
       >
         <div className="flex items-center gap-3">
           <h1 className="text-base font-medium" style={{ color: 'var(--text)' }}>
-            Capture Console
+            快速捕捉
           </h1>
           {stats && (
             <div className="flex items-center gap-2">
@@ -75,13 +75,13 @@ export default function CaptureConsole() {
                 className="text-xs px-2 py-0.5 rounded-full"
                 style={{ backgroundColor: 'var(--surface0)', color: 'var(--yellow)' }}
               >
-                {stats.by_status.pending ?? 0} pending
+                {stats.by_status.pending ?? 0} 待處理
               </span>
               <span
                 className="text-xs px-2 py-0.5 rounded-full"
                 style={{ backgroundColor: 'var(--surface0)', color: 'var(--green)' }}
               >
-                {stats.by_status.promoted ?? 0} promoted
+                {stats.by_status.promoted ?? 0} 已提升
               </span>
             </div>
           )}
@@ -95,7 +95,7 @@ export default function CaptureConsole() {
           onClick={() => setChatOpen(!chatOpen)}
         >
           {chatOpen ? <X size={14} /> : <MessageSquare size={14} />}
-          {chatOpen ? 'List' : 'Chat'}
+          {chatOpen ? '列表' : '對話'}
         </button>
       </div>
 
@@ -105,12 +105,12 @@ export default function CaptureConsole() {
         style={{ borderColor: 'var(--surface0)' }}
       >
         {[
-          { key: null, label: 'All' },
-          { key: 'finance', label: 'Finance', color: '#a6e3a1' },
-          { key: 'taskflow', label: 'Taskflow', color: '#cba6f7' },
-          { key: 'invest', label: 'Invest', color: '#f38ba8' },
-          { key: 'ideagraph', label: 'Ideagraph', color: '#f9e2af' },
-          { key: 'intelflow', label: 'Intelflow', color: '#94e2d5' },
+          { key: null, label: '全部' },
+          { key: 'finance', label: '記帳', color: '#a6e3a1' },
+          { key: 'taskflow', label: '任務', color: '#cba6f7' },
+          { key: 'invest', label: '投資', color: '#f38ba8' },
+          { key: 'ideagraph', label: '靈感', color: '#f9e2af' },
+          { key: 'intelflow', label: '情報', color: '#94e2d5' },
         ].map((tab) => (
           <button
             key={tab.key ?? 'all'}
@@ -133,7 +133,7 @@ export default function CaptureConsole() {
         ))}
 
         <div className="ml-auto flex items-center gap-1">
-          {['pending', 'promoted', 'expired'].map((s) => (
+          {(['pending', 'promoted', 'expired'] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -144,7 +144,7 @@ export default function CaptureConsole() {
                 color: statusFilter === s ? 'var(--text)' : 'var(--overlay0)',
               }}
             >
-              {s}
+              {{ pending: '待處理', promoted: '已提升', expired: '已過期' }[s]}
             </button>
           ))}
         </div>

@@ -5,6 +5,8 @@ Usage:
     intelflow reports list [--topic T] [--tag T] [--limit N]
     intelflow reports get <id>
     intelflow reports search <query> [--limit N]
+    intelflow reports check <query> [--threshold 0.7]
+    intelflow reports create --title T --query Q --content C [--tags t1,t2] [--sources JSON] [--skill S]
     intelflow topics list
     intelflow topics graph
     intelflow briefings list [--date-from D] [--date-to D]
@@ -89,6 +91,50 @@ def cmd_reports_search(args):
             score = r.get("score", r.get("similarity", 0))
             print(f"  [{score:.3f}] {r.get('title', '?')[:60]}")
             print(f"           id={r.get('id', r.get('report_id', '?'))[:12]}")
+    except (APIError, APIConnectionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_reports_check(args):
+    client = IntelflowClient()
+    try:
+        result = client.check_duplicate(args.query, threshold=args.threshold)
+        if args.json:
+            _json_out(result, True)
+            return
+        if result.get("exists"):
+            matches = result.get("matches", [])
+            print(f"Found {len(matches)} similar report(s):\n")
+            for m in matches:
+                score = m.get("score", 0)
+                rpt = m.get("report", m)
+                print(f"  [{score:.3f}] {rpt.get('title', '?')[:60]}")
+                print(f"           id={rpt.get('id', '?')[:12]}")
+        else:
+            print("No similar reports found.")
+    except (APIError, APIConnectionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_reports_create(args):
+    client = IntelflowClient()
+    try:
+        sources = json.loads(args.sources) if args.sources else []
+        tags = [t.strip() for t in args.tags.split(",")] if args.tags else []
+        result = client.create_report(
+            title=args.title,
+            query=args.query,
+            content=args.content,
+            sources=sources,
+            tags=tags,
+            skill_name=args.skill,
+        )
+        if args.json:
+            _json_out(result, True)
+            return
+        print(f"Report created: {result.get('id', '?')}")
     except (APIError, APIConnectionError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -214,6 +260,22 @@ def main():
     p_rsearch.add_argument("query", help="Search query")
     p_rsearch.add_argument("--limit", type=int, default=5)
     p_rsearch.set_defaults(func=cmd_reports_search)
+
+    p_rcheck = rsub.add_parser("check", help="Check for duplicate reports")
+    p_rcheck.add_argument("query", help="Query to check")
+    p_rcheck.add_argument("--threshold", type=float, default=0.7)
+    p_rcheck.set_defaults(func=cmd_reports_check)
+
+    p_rcreate = rsub.add_parser("create", help="Create a new report")
+    p_rcreate.add_argument("--title", required=True, help="Report title")
+    p_rcreate.add_argument("--query", required=True, help="Original query")
+    p_rcreate.add_argument("--content", required=True, help="Report content (Markdown)")
+    p_rcreate.add_argument("--tags", help="Comma-separated tags")
+    p_rcreate.add_argument(
+        "--sources", help='JSON array of sources, e.g. [{"url":"...","title":"..."}]'
+    )
+    p_rcreate.add_argument("--skill", help="Skill name (e.g. smart-search)")
+    p_rcreate.set_defaults(func=cmd_reports_create)
 
     # topics
     p_topics = sub.add_parser("topics", help="Topic management")

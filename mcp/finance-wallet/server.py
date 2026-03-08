@@ -67,6 +67,14 @@ async def list_tools() -> list[Tool]:
                     "color": {"type": "string"},
                     "sort_order": {"type": "integer"},
                     "is_private": {"type": "boolean", "default": False},
+                    "page": {"type": "integer", "default": 1, "description": "頁碼（list 時使用）"},
+                    "page_size": {
+                        "type": "integer",
+                        "default": 20,
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "每頁筆數（list 時使用，上限 50）",
+                    },
                 },
                 "required": ["action"],
             },
@@ -234,11 +242,14 @@ async def handle_manage_wallets(args: dict) -> list[TextContent]:
     action = args["action"]
 
     if action == "list":
-        result = await to_thread(client.list_wallets)
+        page = args.get("page", 1)
+        page_size = min(args.get("page_size", 20), 50)
+        result = await to_thread(client.list_wallets, page=page, page_size=page_size)
         items = result if isinstance(result, list) else result.get("items", [])
+        total_count = result.get("total", len(items)) if isinstance(result, dict) else len(items)
         if not items:
             return text_result("No wallets found.")
-        lines = ["# Wallets\n"]
+        lines = [f"# Wallets (showing {len(items)} of {total_count}, page {page})\n"]
         total_net = 0
         for w in items:
             balance = float(w.get("current_balance", 0))
@@ -250,7 +261,8 @@ async def handle_manage_wallets(args: dict) -> list[TextContent]:
                 f"  {icon} {w['name']}  {fmt_amount(balance)}  "
                 f"[{w['type']}]{credit}{private}  id={w['id'][:8]}"
             )
-        lines.append(f"\nNet worth: {fmt_amount(total_net)}")
+        lines.append(f"\nNet worth (this page): {fmt_amount(total_net)}")
+        lines.append(f"total_count: {total_count}")
         return text_result("\n".join(lines))
 
     if action == "create":

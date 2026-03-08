@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/Users/joneshong/.local/bin/python3
 """Memvault CLI - Command-line interface for the Memvault memory system.
 
 Uses the shared workshop SDK client instead of raw HTTP calls.
@@ -1033,7 +1033,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("query", help="Search query")
     p.add_argument("--top-k", type=int, default=5, help="Number of results (default: 5)")
     p.add_argument(
-        "--min-score", type=float, default=0.3,
+        "--min-score",
+        type=float,
+        default=0.3,
         help="Minimum similarity score (default: 0.3)",
     )
 
@@ -1041,8 +1043,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("extract", parents=[common], help="Create a new memory block")
     p.add_argument("text", help="Block content")
     p.add_argument(
-        "--type", choices=["knowledge", "skill", "attitude", "general"],
-        default="general", help="Block type (default: general)",
+        "--type",
+        choices=["knowledge", "skill", "attitude", "general"],
+        default="general",
+        help="Block type (default: general)",
     )
     p.add_argument("--tags", default=None, help="Comma-separated tags")
     p.add_argument("--session", default=None, help="Source session ID")
@@ -1062,8 +1066,10 @@ def build_parser() -> argparse.ArgumentParser:
     # wisdom
     p = sub.add_parser("wisdom", parents=[common], help="List wisdom nodes")
     p.add_argument(
-        "--confidence", choices=["HIGH", "MEDIUM", "LOW"],
-        default=None, help="Filter by confidence level",
+        "--confidence",
+        choices=["HIGH", "MEDIUM", "LOW"],
+        default=None,
+        help="Filter by confidence level",
     )
     p.add_argument("--tag", default=None, help="Filter by tag")
 
@@ -1188,7 +1194,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # attitude-evolve
     p = sub.add_parser(
-        "attitude-evolve", parents=[common], help="Evolve an attitude (ADD/UPDATE/NOOP)",
+        "attitude-evolve",
+        parents=[common],
+        help="Evolve an attitude (ADD/UPDATE/NOOP)",
     )
     p.add_argument("fact", help="Attitude fact text")
     p.add_argument("category", help="Category")

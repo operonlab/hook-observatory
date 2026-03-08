@@ -134,8 +134,10 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum records to return (default: 30)",
+                        "description": "Maximum records to return (default: 30, max: 100)",
                         "default": 30,
+                        "minimum": 1,
+                        "maximum": 100,
                     },
                     "session_id": {
                         "type": "string",
@@ -173,13 +175,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return json_result(patterns)
 
         elif name == "session_redactor_history":
-            limit = arguments.get("limit", 30)
+            limit = min(arguments.get("limit", 30), 100)  # cap at 100
             session_id = arguments.get("session_id")
             if session_id:
                 records = await to_thread(client.get_session_history, session_id)
+                records = records[:limit]  # SDK has no limit param; truncate here
             else:
                 records = await to_thread(client.get_history, limit)
-            return json_result(records)
+            total_count = len(records)
+            return json_result({"total_count": total_count, "records": records})
 
         else:
             return text_result(f"Unknown tool: {name}")
