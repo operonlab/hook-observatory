@@ -176,6 +176,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="external",
         url="http://127.0.0.1:4102/api/people",
     ),
+    LightCheck(
+        name="capture-console",
+        group="external",
+        url="http://127.0.0.1:4104/health",
+    ),
 ]
 
 
