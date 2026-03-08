@@ -64,7 +64,7 @@ def run_tests() -> dict[str, Any]:
         return phase
 
     rc, stdout, stderr = run_cmd(
-        [PYTHON, str(TESTER_SCRIPT), "--json"],
+        [PYTHON, str(TESTER_SCRIPT), "--format", "json"],
         timeout=120,
     )
 
@@ -155,29 +155,62 @@ def extract_test_metrics(test_phase: dict) -> dict[str, Any]:
     """Extract test metrics from test phase results."""
     results = test_phase.get("results", {})
 
-    # Handle different output formats from run_all.py
-    if isinstance(results, dict):
-        skills = results.get("skills", results.get("results", []))
-    elif isinstance(results, list):
-        skills = results
+    # run_all.py --format json outputs: {"meta": {...}, "skills": {"name": {"tests": {...}, ...}}}
+    skills_data = results.get("skills", {})
+
+    # skills_data can be dict (name→data) or list
+    if isinstance(skills_data, dict):
+        skill_items = [(name, data) for name, data in skills_data.items()]
+    elif isinstance(skills_data, list):
+        skill_items = [(s.get("skill_name", s.get("name", "unknown")), s) for s in skills_data]
     else:
-        skills = []
+        skill_items = []
 
-    total = len(skills)
-    passed = sum(1 for s in skills if s.get("status") == "PASS" or s.get("result") == "PASS")
-    partial = sum(1 for s in skills if s.get("status") == "PARTIAL" or s.get("result") == "PARTIAL")
-    failed = total - passed - partial
-
-    # Build test details for DB
+    total = len(skill_items)
+    passed = 0
+    partial = 0
+    failed = 0
     test_details = []
-    for s in skills:
-        name = s.get("skill_name", s.get("name", "unknown"))
-        status = (s.get("status") or s.get("result", "unknown")).lower()
-        checks = s.get("checks", s.get("tests", []))
+
+    for name, data in skill_items:
+        tests = data.get("tests", {})
+        # Determine overall skill status from individual test results
+        statuses = (
+            [t.get("status", "PASS") for t in tests.values()] if isinstance(tests, dict) else []
+        )
+        if not statuses or all(s == "PASS" for s in statuses):
+            skill_status = "pass"
+            passed += 1
+        elif any(s == "FAIL" for s in statuses):
+            skill_status = "fail"
+            failed += 1
+        else:
+            skill_status = "partial"
+            partial += 1
+
+        # Build checks list
+        checks = []
+        if isinstance(tests, dict):
+            for test_id, test_data in tests.items():
+                issues = test_data.get("issues", [])
+                checks.append(
+                    {
+                        "id": test_id,
+                        "name": test_id,
+                        "passed": test_data.get("status") == "PASS",
+                        "detail": "; ".join(
+                            i.get("message", str(i)) if isinstance(i, dict) else str(i)
+                            for i in issues
+                        )
+                        if issues
+                        else "OK",
+                    }
+                )
+
         test_details.append(
             {
                 "skill_name": name,
-                "status": status,
+                "status": skill_status,
                 "checks": checks,
             }
         )
@@ -195,27 +228,42 @@ def extract_security_metrics(sec_phase: dict) -> dict[str, Any]:
     """Extract security metrics from security phase results."""
     results = sec_phase.get("results", {})
 
-    if isinstance(results, dict):
-        skills = results.get("skills", results.get("results", []))
-    elif isinstance(results, list):
+    # security-scan.py --batch --json outputs: list of {skill, result, findings, ...}
+    if isinstance(results, list):
         skills = results
+    elif isinstance(results, dict):
+        skills = results.get("skills", results.get("results", []))
     else:
         skills = []
 
-    clean = sum(1 for s in skills if s.get("status") == "PASS" or not s.get("findings"))
-    warned = sum(1 for s in skills if s.get("status") == "WARN")
-    blocked = sum(1 for s in skills if s.get("status") == "BLOCK")
+    clean = sum(1 for s in skills if s.get("result") == "PASS" and not s.get("findings"))
+    warned = sum(1 for s in skills if s.get("result") == "WARN")
+    blocked = sum(1 for s in skills if s.get("result") == "BLOCK")
 
     security_details = []
     for s in skills:
-        name = s.get("skill_name", s.get("name", "unknown"))
+        name = s.get("skill", s.get("skill_name", s.get("name", "unknown")))
         findings = s.get("findings", [])
-        status = "clean" if not findings else ("block" if s.get("status") == "BLOCK" else "warn")
+        if s.get("result") == "BLOCK":
+            status = "block"
+        elif findings:
+            status = "warn"
+        else:
+            status = "clean"
         security_details.append(
             {
                 "skill_name": name,
                 "status": status,
-                "findings": findings[:10],  # Cap findings
+                "findings": [
+                    {
+                        "id": f.get("id", f.get("category", "")),
+                        "severity": f.get("severity", ""),
+                        "pattern": f.get("pattern", f.get("description", "")),
+                        "line": f.get("line", 0),
+                        "context": f.get("context", f.get("match", "")),
+                    }
+                    for f in findings[:10]
+                ],
             }
         )
 

@@ -37,8 +37,8 @@ class LifecycleRunUpdate(BaseModel):
     sec_blocked: int | None = None
     optimized: int | None = None
     changes_applied: int | None = None
-    test_details: dict[str, Any] | None = None
-    security_details: dict[str, Any] | None = None
+    test_details: list[Any] | dict[str, Any] | None = None
+    security_details: list[Any] | dict[str, Any] | None = None
     catalog_snapshot: dict[str, Any] | None = None
     skipped_phases: list[str] | None = None
     errors: dict[str, str] | None = None
