@@ -83,6 +83,15 @@ export const APP_LIST: AppInfo[] = [
     status: 'available',
   },
   {
+    id: 'capture',
+    name: 'Capture Console',
+    description: 'Quick capture + AI enrichment console',
+    icon: '\u26A1',
+    path: '/capture',
+    color: '#f9e2af',
+    status: 'available',
+  },
+  {
     id: 'dailyos',
     name: '每日規劃',
     description: '每日計劃、方法論管理、儀式循環引擎',
