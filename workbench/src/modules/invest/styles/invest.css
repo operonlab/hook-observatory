@@ -1,0 +1,61 @@
+/* Invest — Catppuccin Mocha Pink-accent Theme
+   Scoped under .invest to avoid conflicts with global theme */
+
+.invest {
+  /* Backgrounds */
+  --iv-bg: #1e1e2e;
+  --iv-bg-elevated: #242438;
+  --iv-bg-surface: #2a2a3e;
+  --iv-border: #383854;
+
+  /* Brand accent — pink (invest) */
+  --iv-accent: #f38ba8;
+  --iv-accent-alpha: rgba(243, 139, 168, 0.15);
+  --iv-accent-dim: rgba(243, 139, 168, 0.6);
+
+  /* Semantic */
+  --iv-profit: #a6e3a1;
+  --iv-loss: #f38ba8;
+
+  /* Text hierarchy */
+  --iv-text: #cdd6f4;
+  --iv-text-secondary: #a6adc8;
+  --iv-text-tertiary: #7f849c;
+  --iv-text-muted: #585b70;
+
+  /* Apply base styles */
+  background-color: var(--iv-bg);
+  color: var(--iv-text);
+  min-height: 100%;
+}
+
+/* Scrollbar */
+.invest ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.invest ::-webkit-scrollbar-track {
+  background: var(--iv-bg);
+}
+
+.invest ::-webkit-scrollbar-thumb {
+  background: var(--iv-border);
+  border-radius: 3px;
+}
+
+.invest ::-webkit-scrollbar-thumb:hover {
+  background: var(--iv-text-tertiary);
+}
+
+/* Prevent horizontal overflow */
+.invest {
+  overflow-x: hidden;
+}
+
+/* Mobile bottom padding for tab bar */
+@media (max-width: 767px) {
+  .invest > main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}

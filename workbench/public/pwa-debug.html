@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PWA Debug</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:monospace;background:#1e1e2e;color:#cdd6f4;padding:16px;font-size:13px;line-height:1.6}
+h1{color:#89b4fa;font-size:18px;margin-bottom:12px}
+h2{color:#a6e3a1;font-size:14px;margin:16px 0 8px}
+.ok{color:#a6e3a1}.err{color:#f38ba8}.warn{color:#f9e2af}
+pre{background:#181825;padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0;white-space:pre-wrap;word-break:break-all}
+button{background:#89b4fa;color:#1e1e2e;border:none;padding:8px 16px;border-radius:4px;font-size:13px;margin:4px;cursor:pointer}
+button:active{opacity:0.7}
+.card{background:#181825;border:1px solid #313244;border-radius:8px;padding:12px;margin:8px 0}
+</style>
+</head>
+<body>
+<h1>PWA Diagnostic</h1>
+<div id="out"></div>
+<div style="margin-top:16px">
+  <button onclick="runDiag()">Re-run Diagnostic</button>
+  <button onclick="forceSwUpdate()">Force SW Update</button>
+  <button onclick="clearAllCaches()">Clear All Caches</button>
+  <button onclick="unregisterSw()">Unregister SW</button>
+</div>
+
+<h2>Module Install Links</h2>
+<div id="links"></div>
+
+<script>
+const MODULES = ['finance','taskflow','ideagraph','admin','intelflow','memvault','nodeflow','invest','notification','briefing'];
+
+function $(s){return document.querySelector(s)}
+function log(html){$('#out').innerHTML += html + '<br>'}
+function ok(t){return `<span class="ok">[OK]</span> ${t}`}
+function err(t){return `<span class="err">[ERR]</span> ${t}`}
+function warn(t){return `<span class="warn">[WARN]</span> ${t}`}
+
+async function runDiag(){
+  const out = $('#out');
+  out.innerHTML = '';
+
+  // 1. Current page info
+  log('<h2>1. Current Page</h2>');
+  log(`URL: ${location.href}`);
+  log(`Protocol: ${location.protocol}`);
+
+  // 2. Manifest link in DOM
+  log('<h2>2. Manifest Link in DOM</h2>');
+  const manifestLink = document.querySelector('link[rel="manifest"]');
+  if(manifestLink){
+    const href = manifestLink.getAttribute('href');
+    log(`href: <b>${href}</b>`);
+    if(href === '/manifest.json'){
+      log(warn('Points to ROOT manifest — this page will install as "Workshop" not a module'));
+    } else if(href.includes('manifest-')){
+      log(ok('Points to module-specific manifest'));
+    }
+    // Fetch and show manifest content
+    try{
+      const r = await fetch(href);
+      const m = await r.json();
+      log(`<pre>${JSON.stringify(m, null, 2)}</pre>`);
+      log(`start_url: <b>${m.start_url}</b>`);
+      log(`scope: <b>${m.scope}</b>`);
+      log(`id: <b>${m.id}</b>`);
+      log(`name: <b>${m.name}</b>`);
+    }catch(e){log(err(`Failed to fetch manifest: ${e.message}`))}
+  } else {
+    log(err('No <link rel="manifest"> found in DOM!'));
+  }
+
+  // 3. Service Worker
+  log('<h2>3. Service Worker</h2>');
+  if('serviceWorker' in navigator){
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(reg){
+      log(`SW scope: ${reg.scope}`);
+      log(`SW state: ${reg.active?.state || 'no active SW'}`);
+      log(`SW scriptURL: ${reg.active?.scriptURL || 'none'}`);
+      if(reg.waiting) log(warn('A new SW is WAITING to activate'));
+      if(reg.installing) log(warn('A new SW is INSTALLING'));
+    } else {
+      log(warn('No SW registered for this scope'));
+    }
+    // Check all registrations
+    const regs = await navigator.serviceWorker.getRegistrations();
+    log(`Total SW registrations: ${regs.length}`);
+    regs.forEach((r,i) => log(`  [${i}] scope=${r.scope} active=${r.active?.state||'none'}`));
+  } else {
+    log(err('Service Worker not supported'));
+  }
+
+  // 4. Cache Storage
+  log('<h2>4. Cache Storage</h2>');
+  if('caches' in window){
+    const keys = await caches.keys();
+    log(`Cache names: ${keys.length ? keys.join(', ') : '(empty)'}`);
+    for(const k of keys){
+      const cache = await caches.open(k);
+      const entries = await cache.keys();
+      log(`  ${k}: ${entries.length} entries`);
+      // Show manifest-related entries
+      const manifestEntries = entries.filter(e => e.url.includes('manifest'));
+      manifestEntries.forEach(e => log(`    ${warn(e.url)}`));
+    }
+  }
+
+  // 5. Display mode
+  log('<h2>5. Display Mode</h2>');
+  const standalone = window.matchMedia('(display-mode: standalone)').matches;
+  const fullscreen = window.matchMedia('(display-mode: fullscreen)').matches;
+  if(standalone) log(warn('Running as STANDALONE PWA (installed app) — manifest is LOCKED from install time'));
+  else if(fullscreen) log(warn('Running in fullscreen mode'));
+  else log(ok('Running in browser — manifest can be read fresh'));
+
+  // 6. iOS detection
+  log('<h2>6. Platform</h2>');
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const android = /Android/.test(navigator.userAgent);
+  const chrome = /Chrome/.test(navigator.userAgent);
+  const safari = /Safari/.test(navigator.userAgent) && !chrome;
+  log(`iOS: ${ios}, Android: ${android}, Chrome: ${chrome}, Safari: ${safari}`);
+  log(`UA: ${navigator.userAgent}`);
+  if(ios && standalone) log(err('iOS standalone PWA — you MUST delete the old app from home screen and re-add'));
+}
+
+async function forceSwUpdate(){
+  if(!('serviceWorker' in navigator)) return;
+  const reg = await navigator.serviceWorker.getRegistration();
+  if(reg){
+    await reg.update();
+    log(ok('SW update check triggered. Reload the page.'));
+  }
+}
+
+async function clearAllCaches(){
+  const keys = await caches.keys();
+  await Promise.all(keys.map(k => caches.delete(k)));
+  log(ok(`Cleared ${keys.length} caches. Reload the page.`));
+}
+
+async function unregisterSw(){
+  const regs = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(regs.map(r => r.unregister()));
+  log(ok(`Unregistered ${regs.length} SW(s). Reload the page.`));
+}
+
+// Generate module links
+const linksDiv = $('#links');
+MODULES.forEach(m => {
+  const a = document.createElement('a');
+  a.href = `/${m}/`;
+  a.textContent = m;
+  a.style.cssText = 'display:inline-block;background:#313244;color:#89b4fa;padding:8px 12px;margin:4px;border-radius:4px;text-decoration:none';
+  linksDiv.appendChild(a);
+});
+
+runDiag();
+</script>
+</body>
+</html>

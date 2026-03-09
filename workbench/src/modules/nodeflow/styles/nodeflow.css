@@ -1,0 +1,57 @@
+/* Nodeflow — Catppuccin Mocha Peach-accent Theme
+   Scoped under .nodeflow to avoid conflicts with global theme */
+
+.nodeflow {
+  /* Backgrounds */
+  --nf-bg: #1e1e2e;
+  --nf-bg-elevated: #242438;
+  --nf-bg-surface: #2a2a3e;
+  --nf-border: #383854;
+
+  /* Brand accent — peach (nodeflow) */
+  --nf-accent: #fab387;
+  --nf-accent-alpha: rgba(250, 179, 135, 0.15);
+  --nf-accent-dim: rgba(250, 179, 135, 0.6);
+
+  /* Text hierarchy */
+  --nf-text: #cdd6f4;
+  --nf-text-secondary: #a6adc8;
+  --nf-text-tertiary: #7f849c;
+  --nf-text-muted: #585b70;
+
+  /* Apply base styles */
+  background-color: var(--nf-bg);
+  color: var(--nf-text);
+  min-height: 100%;
+}
+
+/* Scrollbar */
+.nodeflow ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.nodeflow ::-webkit-scrollbar-track {
+  background: var(--nf-bg);
+}
+
+.nodeflow ::-webkit-scrollbar-thumb {
+  background: var(--nf-border);
+  border-radius: 3px;
+}
+
+.nodeflow ::-webkit-scrollbar-thumb:hover {
+  background: var(--nf-text-tertiary);
+}
+
+/* Prevent horizontal overflow */
+.nodeflow {
+  overflow-x: hidden;
+}
+
+/* Mobile bottom padding for tab bar */
+@media (max-width: 767px) {
+  .nodeflow > main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}

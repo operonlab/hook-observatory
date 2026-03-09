@@ -1,0 +1,22 @@
+{
+  "id": "/nodeflow",
+  "name": "事件流程",
+  "short_name": "NodeFlow",
+  "start_url": "/nodeflow/",
+  "scope": "/nodeflow/",
+  "display": "standalone",
+  "background_color": "#1e1e2e",
+  "theme_color": "#fab387",
+  "icons": [
+    {
+      "src": "/icons/icon-nodeflow-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-nodeflow-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
