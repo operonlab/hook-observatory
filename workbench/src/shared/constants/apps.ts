@@ -236,4 +236,14 @@ export const APP_LIST: AppInfo[] = [
     status: 'external',
     externalUrl: '/fsm-dashboard.html',
   },
+  {
+    id: 'browser-bridge',
+    name: '瀏覽器橋接',
+    description: '遠端瀏覽器控制、自動化橋接、Playwright 整合',
+    icon: '🌐',
+    path: '/browser-bridge',
+    color: '#89dceb',
+    status: 'external',
+    externalUrl: '/apps/bridge/',
+  },
 ]
