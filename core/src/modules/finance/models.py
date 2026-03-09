@@ -46,7 +46,7 @@ class Wallet(SpaceScopedModel):
             "space_id",
             "name",
             unique=True,
-            postgresql_where=text("is_active = true"),
+            postgresql_where=text("is_active = true AND deleted_at IS NULL"),
         ),
         {"schema": SCHEMA},
     )
@@ -87,7 +87,7 @@ class Category(SpaceScopedModel):
             text("COALESCE(parent_id, '')"),
             "name",
             unique=True,
-            postgresql_where=text("is_active = true"),
+            postgresql_where=text("is_active = true AND deleted_at IS NULL"),
         ),
         {"schema": SCHEMA},
     )

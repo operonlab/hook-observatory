@@ -8,29 +8,20 @@ These functions call ``db.flush()`` but never ``db.commit()``.
 """
 
 from datetime import UTC, date, datetime
-from decimal import Decimal
 
 import structlog
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid_utils import uuid7
 
 from src.events.bus import Event, event_bus
 from src.events.types import FinanceEvents
 
-from .models import InstallmentPlan, Subscription, Transaction, Wallet
+from .models import InstallmentPlan, Subscription, Transaction
+from .services import _adjust_wallet_balance
 
 logger = structlog.get_logger()
-
-
-async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decimal) -> None:
-    """Atomic delta update on wallet current_balance."""
-    await db.execute(
-        update(Wallet)
-        .where(Wallet.id == wallet_id)
-        .values(current_balance=Wallet.current_balance + delta)
-    )
 
 
 async def process_installment_due(db: AsyncSession) -> int:
