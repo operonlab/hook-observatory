@@ -18,6 +18,7 @@ from . import (
     anvil_telemetry,
     auto_format,
     bash_safety,
+    claudemd_suggest,
     cleanup_versions,
     context_inject,
     external,
@@ -79,6 +80,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "SessionStart": [
         (None, external.sync_login),
+        (None, claudemd_suggest.handle),
         (None, cleanup_versions.handle),
         (None, pm_autopilot.handle),
         (None, observability.handle),
