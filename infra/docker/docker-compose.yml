@@ -1,6 +1,6 @@
 # ws-infra — Workshop Infrastructure Stack
 # Usage: docker compose -p ws-infra up -d
-# All 4 foundation services for the Workshop platform.
+# All foundation services for the Workshop platform.
 # Container names follow compose convention: ws-infra-{service}-1
 
 services:
@@ -89,6 +89,21 @@ services:
       timeout: 5s
       retries: 3
 
+  bark:
+    image: finab/bark-server:latest
+    restart: unless-stopped
+    ports:
+      - "8090:8080"
+    volumes:
+      - bark-data:/data
+    environment:
+      TZ: Asia/Taipei
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   ntfy:
     image: binwiederhier/ntfy:latest
     container_name: ntfy
@@ -118,5 +133,7 @@ volumes:
   rustfs-logs:
   filebrowser-data:
   filebrowser-db:
+  bark-data:
+    external: true
   ntfy-cache:
   ntfy-data:

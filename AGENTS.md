@@ -46,7 +46,7 @@ Modular Monolith + Event-Driven workspace.
 - `docs-en/` — English backup (original English versions)
 
 ## Service Taxonomy
-- **Foundation**: auth, admin
+- **Foundation**: auth, admin, capture (shared schema, cross-module intake)
 - **Domain Services** (DB-backed): finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest
 - **Bridges**: External connectors (social-hooks)
 - **Hot-path Services**: media (STT/TTS/image), realtime (LiveKit)

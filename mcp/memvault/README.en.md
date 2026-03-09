@@ -74,4 +74,4 @@ mcp/memvault/
 
 - **Tool names remain unchanged**: Names like `memvault_recall` will remain consistent to avoid requiring simultaneous changes to Claude Code's settings/hooks.
 - **Gradual switchover**: First, create the API in Core, then switch the MCP Server endpoint, verify, and finally decommission the old MCP Server.
-- **Hook compatibility**: The SessionEnd hook (`extract_v2_async.py`) will eventually be changed to `curl POST /api/memvault/extract`.
+- **Hook compatibility**: The SessionEnd hook (`extract_async.py`) will eventually be changed to `curl POST /api/memvault/extract`.

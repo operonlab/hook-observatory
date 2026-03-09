@@ -164,6 +164,10 @@ def main() -> None:
 5. 技術洞察 — workaround、gotcha、best practice
 6. 共同成果 — 一起完成了什麼重要的事
 7. 最近關注 — 使用者最近在研究或關心什麼
+8. CLAUDE.md 候選 — 環境怪癖、反覆 gotcha、必要指令慣例、架構鐵律
+   判斷標準：「如果下次 session 沒有這條資訊，AI 會不會犯同樣的錯誤？」
+   → Yes = 標記 [CLAUDE]（將建議寫入 CLAUDE.md/rules）
+   → No = 標記 [MEMORY]（存入 memvault 按需召喚）
 
 忽略：簡單檔案讀寫、常規 git 操作、trivial 問答。
 
@@ -176,9 +180,7 @@ def main() -> None:
 **Tags**: [3-8 個小寫標籤，逗號分隔。包括工具名、技術名、概念名。例如: react, zustand, safari-bug, css-grid。禁止使用過於泛泛的單詞標籤如: ai, technical, design, code, tool, system, project, workflow — 必須用複合標籤如: ai-memory, technical-insight, css-design, cli-tool]
 **Project**: {cwd}
 
-- [記憶點 1]
-- [記憶點 2]
-- [記憶點 N]
+- [CLAUDE] 或 [MEMORY] 記憶點內容（每條必須以標記開頭）
 
 **Attitudes**: [使用者表達的偏好/信念/原則，格式 category|fact，0-5 條]
   - category 只限: tool_behavior | config | architecture | workflow | preference | technical | naming | syntax | performance
@@ -245,6 +247,10 @@ def main() -> None:
 5. **去重** — 合併重複或高度相似的記憶點
 6. **精簡** — 總記憶點控制在 3-7 條，寧精不濫
 7. **Attitudes 驗證** — category 必須在以下 9 個枚舉值中：tool_behavior, config, architecture, workflow, preference, technical, naming, syntax, performance。刪除不確定或猜測性態度，刪除 category 不在枚舉中的條目
+8. **目的地分類** — 每條記憶點必須以 [CLAUDE] 或 [MEMORY] 開頭：
+   - [CLAUDE]: 環境怪癖、反覆 gotcha、必要指令、架構鐵律（缺了會重複犯錯）
+   - [MEMORY]: 決策、修正、成就、關注、偏好（按需回憶即可）
+   - 過度標記 [CLAUDE] 會污染 context window — 每次萃取最多 2 條 [CLAUDE]
 
 ## 輸出格式
 
@@ -412,6 +418,19 @@ def main() -> None:
     tags_list = [t.strip() for t in entry_tags.split(",") if t.strip()]
 
     log(f"Parsed: topic='{entry_topic}' type={entry_type} -> {v2_type} tags={entry_tags}")
+
+    # ---------------------------------------------------------------------------
+    # 8.5. Extract [CLAUDE] suggestions → staging file, strip tags from content
+    # ---------------------------------------------------------------------------
+    claude_suggestions = _extract_claude_suggestions(
+        entry_content, session_id, entry_project or cwd, entry_topic
+    )
+    if claude_suggestions:
+        _write_claude_staging(claude_suggestions)
+        log(f"{len(claude_suggestions)} CLAUDE.md suggestion(s) staged.")
+
+    # Strip [CLAUDE]/[MEMORY] tags from content before storing in memvault
+    entry_content = _strip_destination_tags(entry_content)
 
     # ---------------------------------------------------------------------------
     # 9. POST to Core API (with V1 fallback)
@@ -618,6 +637,56 @@ def _extract_content(text: str) -> str:
                 break
             content_lines.append(line)
     return "\n".join(content_lines)
+
+
+def _extract_claude_suggestions(
+    content: str, session_id: str, project: str, topic: str
+) -> list[dict]:
+    """Extract lines starting with [CLAUDE] and return as staging entries."""
+    suggestions = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- [CLAUDE]"):
+            suggestion_text = stripped[len("- [CLAUDE]") :].strip()
+            if suggestion_text:
+                suggestions.append(
+                    {
+                        "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "session_id": session_id,
+                        "project": project,
+                        "suggestion": suggestion_text,
+                        "source_topic": topic,
+                        "reviewed": False,
+                    }
+                )
+    return suggestions
+
+
+def _write_claude_staging(suggestions: list[dict]) -> None:
+    """Append CLAUDE.md suggestions to staging JSONL file."""
+    staging_dir = Path.home() / ".claude" / "data" / "claudemd-suggestions"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    staging_file = staging_dir / "pending.jsonl"
+    try:
+        with open(staging_file, "a", encoding="utf-8") as f:
+            for entry in suggestions:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        log(f"Failed to write CLAUDE.md staging: {e}")
+
+
+def _strip_destination_tags(content: str) -> str:
+    """Remove [CLAUDE]/[MEMORY] tags from bullet points for clean memvault storage."""
+    lines = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- [CLAUDE] "):
+            lines.append("- " + stripped[len("- [CLAUDE] ") :])
+        elif stripped.startswith("- [MEMORY] "):
+            lines.append("- " + stripped[len("- [MEMORY] ") :])
+        else:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
