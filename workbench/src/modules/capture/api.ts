@@ -71,4 +71,9 @@ export const captureApi = {
   delete: (id: string) => request<void>(`/captures/${id}`, { method: 'DELETE' }),
 
   stats: () => request<CaptureStats>('/captures/stats'),
+
+  fillOptions: (module: string, entityType: string) =>
+    request<Record<string, { id: string; name: string }[]>>(
+      `/captures/fill-options?module=${module}&entity_type=${entityType}`,
+    ),
 }

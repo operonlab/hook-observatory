@@ -130,6 +130,42 @@ async def batch_fill(
     return responses
 
 
+@router.get("/fill-options")
+async def fill_options(
+    module: str,
+    entity_type: str,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("capture.read"),
+):
+    """Return selectable options for reference fields (wallet_id, category_id, etc.)."""
+    from .registry import get_adapter
+
+    adapter = get_adapter(module, entity_type)
+    if not adapter or not getattr(adapter, "reference_fields", None):
+        return {}
+
+    options: dict[str, list[dict[str, str]]] = {}
+    for field, resolver_key in adapter.reference_fields.items():
+        parts = resolver_key.split(".")
+        if parts[0] == "finance" and parts[1] == "wallet":
+            from src.modules.finance.services import wallet_service
+
+            result = await wallet_service.list(db, space_id, user_id=user.get("id"))
+            options[field] = [{"id": w.id, "name": w.name} for w in result.items]
+        elif parts[0] == "finance" and parts[1] == "category":
+            from src.modules.finance.services import category_service
+
+            result = await category_service.list(db, space_id, user_id=user.get("id"))
+            options[field] = [{"id": c.id, "name": c.name} for c in result.items]
+        elif parts[0] == "invest" and parts[1] == "account":
+            from src.modules.invest.services import account_service
+
+            result = await account_service.list(db, space_id)
+            options[field] = [{"id": a.id, "name": a.name} for a in result.items]
+    return options
+
+
 @router.get("/{capture_id}", response_model=CaptureResponse)
 async def get_capture(
     capture_id: str,
