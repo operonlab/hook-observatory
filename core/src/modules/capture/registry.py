@@ -8,16 +8,25 @@ import logging
 import pkgutil
 from pathlib import Path
 
-from .adapters import BaseCaptureAdapter
+from .adapters import AdapterManifest, BaseCaptureAdapter
 
 logger = logging.getLogger(__name__)
 
 _ADAPTERS: dict[tuple[str, str], BaseCaptureAdapter] = {}
+_MANIFESTS: dict[tuple[str, str], AdapterManifest] = {}
 _discovered = False
 
 
 def _register(adapter: BaseCaptureAdapter) -> None:
-    _ADAPTERS[(adapter.module, adapter.entity_type)] = adapter
+    key = (adapter.module, adapter.entity_type)
+    _ADAPTERS[key] = adapter
+    if hasattr(adapter, "manifest") and callable(adapter.manifest):
+        try:
+            _MANIFESTS[key] = adapter.manifest()
+        except Exception as e:
+            logger.warning(
+                "manifest_extraction_failed: %s.%s error=%s", adapter.module, adapter.entity_type, e
+            )
 
 
 def get_adapter(module: str, entity_type: str) -> BaseCaptureAdapter | None:
@@ -32,10 +41,34 @@ def list_adapters() -> list[tuple[str, str]]:
     return list(_ADAPTERS.keys())
 
 
+def list_manifests() -> list[AdapterManifest]:
+    """Return all registered adapter manifests."""
+    if not _discovered:
+        discover_adapters()
+    return list(_MANIFESTS.values())
+
+
+def get_permissions() -> dict[str, str]:
+    """Return module → permission mapping derived from registered manifests.
+
+    Replaces the hardcoded _MODULE_WRITE_PERMS dict in routes.py.
+    Each module maps to its write permission string (e.g. "finance" → "finance.write").
+    When multiple entity_types exist for the same module, all must agree on permission
+    (first registered wins per module key).
+    """
+    if not _discovered:
+        discover_adapters()
+    perms: dict[str, str] = {}
+    for manifest in _MANIFESTS.values():
+        perms.setdefault(manifest.module, manifest.permission)
+    return perms
+
+
 def reset_registry() -> None:
     """Reset discovery state. Useful for testing."""
     global _discovered
     _ADAPTERS.clear()
+    _MANIFESTS.clear()
     _discovered = False
 
 
