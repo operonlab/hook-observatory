@@ -195,6 +195,28 @@ export interface DailyPlan extends BaseEntity {
   completion_score: number | null
 }
 
+// ─── Recurring Item ───
+
+export interface RecurringItem {
+  id: string
+  title: string
+  recurrence_type: 'daily' | 'weekly' | 'monthly'
+  day_of_week?: number // 0=Mon...6=Sun
+  day_of_month?: number // 1-31
+  start_time?: string // "HH:MM"
+  end_time?: string // "HH:MM"
+  category?: string
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export type RecurringItemCreate = Omit<
+  RecurringItem,
+  'id' | 'is_active' | 'created_at' | 'updated_at'
+>
+export type RecurringItemUpdate = Partial<RecurringItemCreate> & { is_active?: boolean }
+
 // ─── Plan Status Config ───
 
 export interface PlanStatusConfig {
@@ -205,18 +227,23 @@ export interface PlanStatusConfig {
 }
 
 export const PLAN_STATUS_CONFIG: Record<PlanStatus, PlanStatusConfig> = {
-  planning: { label: '規劃中', color: '#a6adc8', bgColor: 'rgba(166, 173, 200, 0.15)', icon: '📝' },
-  active: { label: '執行中', color: '#89b4fa', bgColor: 'rgba(137, 180, 250, 0.15)', icon: '🚀' },
+  planning: {
+    label: '規劃中',
+    color: '#a6adc8',
+    bgColor: 'rgba(166, 173, 200, 0.15)',
+    icon: 'pencil',
+  },
+  active: { label: '執行中', color: '#89b4fa', bgColor: 'rgba(137, 180, 250, 0.15)', icon: 'play' },
   reviewing: {
     label: '回顧中',
     color: '#f9e2af',
     bgColor: 'rgba(249, 226, 175, 0.15)',
-    icon: '🔍',
+    icon: 'eye',
   },
   completed: {
     label: '已完成',
     color: '#a6e3a1',
     bgColor: 'rgba(166, 227, 161, 0.15)',
-    icon: '✅',
+    icon: 'check-circle',
   },
 }

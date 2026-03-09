@@ -1,4 +1,4 @@
-import { BookOpen, Calendar, History } from 'lucide-react'
+import { BookOpen, Calendar, CalendarDays, History, Repeat } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import '../styles/dailyos.css'
 
@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { id: 'planner', label: '今日規劃', icon: Calendar, path: '/dailyos' },
   { id: 'methods', label: '方法論', icon: BookOpen, path: '/dailyos/methods' },
   { id: 'history', label: '歷史紀錄', icon: History, path: '/dailyos/history' },
+  { id: 'recurring', label: '固定行程', icon: Repeat, path: '/dailyos/recurring' },
 ] as const
 
 export default function DailyosLayout() {
@@ -31,7 +32,7 @@ export default function DailyosLayout() {
           className="flex items-center gap-2.5 px-5 py-4 border-b"
           style={{ borderColor: 'var(--do-border)' }}
         >
-          <span className="text-lg">📅</span>
+          <CalendarDays size={20} style={{ color: 'var(--do-accent)' }} />
           <span className="text-sm font-medium tracking-wide" style={{ color: 'var(--do-accent)' }}>
             每日規劃
           </span>

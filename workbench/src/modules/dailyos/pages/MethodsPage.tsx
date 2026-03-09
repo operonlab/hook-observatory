@@ -1,10 +1,12 @@
 import { RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { configApi, methodApi } from '../api'
 import MethodCard from '../components/MethodCard'
 import type { Method, MethodSelection } from '../types'
 
 export default function MethodsPage() {
+  const navigate = useNavigate()
   const [methods, setMethods] = useState<Method[]>([])
   const [activeSelections, setActiveSelections] = useState<MethodSelection[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,27 +34,35 @@ export default function MethodsPage() {
     loadData()
   }, [loadData])
 
-  const handleActivate = useCallback((method: Method) => {
-    setActionLoading(method.id)
-    configApi
-      .activate({ method_id: method.id })
-      .then((resp) => {
-        // Refresh active selections to get accurate state
-        configApi
-          .getActive()
-          .then(setActiveSelections)
-          .catch(() => {
-            // Fallback: add new selection, remove replaced
-            const replacedIds = new Set(resp.replaced.map((r) => r.replaced_method_id))
-            setActiveSelections((prev) => [
-              resp.selection,
-              ...prev.filter((s) => !replacedIds.has(s.method_id)),
-            ])
-          })
-      })
-      .catch(() => {})
-      .finally(() => setActionLoading(null))
-  }, [])
+  const handleActivate = useCallback(
+    (method: Method) => {
+      setActionLoading(method.id)
+      configApi
+        .activate({ method_id: method.id })
+        .then((resp) => {
+          // Refresh active selections to get accurate state
+          configApi
+            .getActive()
+            .then((sels) => {
+              setActiveSelections(sels)
+              // Navigate to planner to see the layout in action
+              navigate('/dailyos')
+            })
+            .catch(() => {
+              // Fallback: add new selection, remove replaced
+              const replacedIds = new Set(resp.replaced.map((r) => r.replaced_method_id))
+              setActiveSelections((prev) => [
+                resp.selection,
+                ...prev.filter((s) => !replacedIds.has(s.method_id)),
+              ])
+              navigate('/dailyos')
+            })
+        })
+        .catch(() => {})
+        .finally(() => setActionLoading(null))
+    },
+    [navigate],
+  )
 
   const handleDeactivate = useCallback(
     (method: Method) => {

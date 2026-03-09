@@ -1,29 +1,52 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useMethodStore } from '../stores/methodStore'
 
 export function useTodayPlan() {
   const {
     todayPlan,
     planItems,
-    loading,
+    planLoading,
+    addItem,
+    removeItem,
+    editItem,
+    reorderItem,
+    reorderItems,
     toggleItem,
+    assignCategory,
+    scheduleItem,
+    moveRight,
+    moveLeft,
     transitionPlan,
+    completeReview,
     updatePlanItems,
     fetchTodayPlan,
   } = useMethodStore()
 
+  const fetched = useRef(false)
   useEffect(() => {
-    if (!todayPlan) {
+    if (!fetched.current) {
+      fetched.current = true
       fetchTodayPlan()
     }
-  }, [todayPlan, fetchTodayPlan])
+  }, [fetchTodayPlan])
 
   return {
     plan: todayPlan,
     items: planItems,
-    loading: loading && !todayPlan,
+    loading: planLoading,
+    addItem,
+    removeItem,
+    editItem,
+    reorderItem,
+    reorderItems,
     toggleItem,
+    assignCategory,
+    scheduleItem,
+    moveRight,
+    moveLeft,
     transitionPlan,
+    completeReview,
     updatePlanItems,
+    refresh: fetchTodayPlan,
   }
 }

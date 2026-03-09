@@ -1,4 +1,15 @@
-import { ArrowRight, BookOpen, Check, RefreshCw } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  Calendar,
+  Check,
+  CheckCircle,
+  Eye,
+  Pencil,
+  Play,
+  RefreshCw,
+  Search,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AddItemInput from '../components/AddItemInput'
@@ -8,12 +19,20 @@ import GridLayout from '../components/layouts/GridLayout'
 import KanbanLayout from '../components/layouts/KanbanLayout'
 import ListLayout from '../components/layouts/ListLayout'
 import TimelineLayout from '../components/layouts/TimelineLayout'
+import MethodInfoPanel from '../components/MethodInfoPanel'
 import MethodSwitcher from '../components/MethodSwitcher'
 import ProgressBar from '../components/ProgressBar'
 import { useActiveMethod } from '../hooks/useActiveMethod'
 import { useTodayPlan } from '../hooks/useTodayPlan'
 import type { PlanItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
+
+const STATUS_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  pencil: Pencil,
+  play: Play,
+  eye: Eye,
+  'check-circle': CheckCircle,
+}
 
 const NEXT_STATUS: Record<string, string> = {
   planning: 'active',
@@ -30,7 +49,6 @@ const TRANSITION_LABELS: Record<string, string> = {
 export default function PlannerPage() {
   const navigate = useNavigate()
 
-  // Store-backed state
   const {
     selections,
     method,
@@ -48,7 +66,6 @@ export default function PlannerPage() {
     addItem,
     removeItem,
     editItem,
-    reorderItem,
     reorderItems,
     toggleItem,
     assignCategory,
@@ -60,11 +77,9 @@ export default function PlannerPage() {
     refresh: refreshPlan,
   } = useTodayPlan()
 
-  // Local-only UI state (input buffer)
   const [reflection, setReflection] = useState('')
   const [savingReflection, setSavingReflection] = useState(false)
 
-  // Sync reflection from plan on first load
   const [reflectionSynced, setReflectionSynced] = useState(false)
   if (plan?.reflection && !reflectionSynced) {
     setReflection(plan.reflection)
@@ -79,7 +94,6 @@ export default function PlannerPage() {
     refreshPlan()
   }
 
-  // Adapters: layouts pass PlanItem objects, store takes string IDs
   const handleToggle = (item: PlanItem) => toggleItem(item.id)
   const handleMoveRight = (item: PlanItem) => moveRight(item.id)
   const handleMoveLeft = (item: PlanItem) => moveLeft(item.id)
@@ -104,7 +118,7 @@ export default function PlannerPage() {
     }
   }
 
-  // Loading state
+  // Loading
   if (loading) {
     return (
       <div className="flex justify-center py-24">
@@ -116,7 +130,7 @@ export default function PlannerPage() {
     )
   }
 
-  // Error state
+  // Error
   if (error) {
     return (
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
@@ -139,17 +153,16 @@ export default function PlannerPage() {
     )
   }
 
-  // No active method — show switcher so user can activate directly
+  // No active method
   if (selections.length === 0 || !method) {
     return (
-      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
-        {/* Quick switch strip — even without an active method */}
+      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5">
         <MethodSwitcher />
         <div
           className="rounded-lg border p-8 text-center"
           style={{ borderColor: 'var(--do-border)', backgroundColor: 'var(--do-bg-elevated)' }}
         >
-          <span className="text-3xl mb-3 block">📅</span>
+          <Calendar size={36} className="mx-auto mb-3" style={{ color: 'var(--do-text-muted)' }} />
           <h2 className="text-[15px] font-medium mb-2" style={{ color: 'var(--do-text)' }}>
             尚未選擇方法論
           </h2>
@@ -179,42 +192,136 @@ export default function PlannerPage() {
   const statusConfig = plan ? PLAN_STATUS_CONFIG[plan.status] : null
   const canTransition = plan && NEXT_STATUS[plan.status]
 
+  const StatusIcon = statusConfig ? STATUS_ICONS[statusConfig.icon] : null
+
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
-      {/* Method quick-switch strip */}
+    <div className="p-4 md:p-6 lg:p-8">
+      {/* Method quick-switch strip — full width */}
       <MethodSwitcher />
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Method icon stack */}
-          <div className="flex items-center">
-            {selections.map((sel, idx) => (
-              <span
-                key={sel.id}
-                className="text-lg"
-                style={{ marginLeft: idx > 0 ? '-4px' : 0, zIndex: selections.length - idx }}
-                title={sel.method?.name_zh || sel.method?.name || ''}
-              >
-                {sel.method?.icon || '📋'}
-              </span>
-            ))}
-          </div>
+      {/* Mobile compact header — visible below lg */}
+      <div className="lg:hidden mt-4 flex items-center justify-between px-1">
+        <div className="min-w-0">
+          <h1
+            className="text-[14px] font-semibold tracking-tight truncate"
+            style={{ color: 'var(--do-text)' }}
+          >
+            {selections.length === 1
+              ? method.name_zh || method.name
+              : `${selections.length} 個方法組合`}
+          </h1>
+          <span
+            className="flex items-center gap-1 text-[11px]"
+            style={{ color: 'var(--do-text-muted)' }}
+          >
+            <Calendar size={11} />
+            {plan?.plan_date || '今日'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {statusConfig && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md font-medium"
+              style={{ color: statusConfig.color, backgroundColor: statusConfig.bgColor }}
+            >
+              {StatusIcon && <StatusIcon size={12} />}
+              {statusConfig.label}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ Two-column layout (lg+) ═══ */}
+      <div className="mt-4 lg:mt-5 flex flex-col lg:flex-row gap-5 lg:gap-6">
+        {/* ─── Main content area ─── */}
+        <div className="flex-1 min-w-0 space-y-4">
+          {plan && <AddItemInput onAdd={(title) => addItem(title)} />}
+
           <div>
-            <h1 className="text-base font-medium" style={{ color: 'var(--do-text)' }}>
-              {selections.length === 1
-                ? method.name_zh || method.name
-                : `${selections.length} 個方法組合`}
-            </h1>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px]" style={{ color: 'var(--do-text-muted)' }}>
+            {layoutType === 'list' && (
+              <ListLayout
+                items={items}
+                config={methodConfig}
+                onToggle={handleToggle}
+                onReorderItems={reorderItems}
+                onEdit={editItem}
+                onRemove={removeItem}
+              />
+            )}
+            {layoutType === 'columns' && (
+              <ColumnsLayout
+                items={items}
+                config={methodConfig}
+                onToggle={handleToggle}
+                onAssignCategory={assignCategory}
+                onReorderItems={reorderItems}
+              />
+            )}
+            {layoutType === 'grid' && (
+              <GridLayout
+                items={items}
+                config={methodConfig}
+                onToggle={handleToggle}
+                onAssignCategory={assignCategory}
+              />
+            )}
+            {layoutType === 'kanban' && (
+              <KanbanLayout
+                items={items}
+                config={methodConfig}
+                onMoveRight={handleMoveRight}
+                onMoveLeft={handleMoveLeft}
+                onDragToColumn={handleDragToColumn}
+              />
+            )}
+            {layoutType === 'timeline' && (
+              <TimelineLayout
+                items={items}
+                config={methodConfig}
+                onToggle={handleToggle}
+                onSchedule={scheduleItem}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* ─── Sidebar ─── */}
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-4">
+          {/* Plan summary card */}
+          <div className="do-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2
+                className="text-[14px] font-semibold tracking-tight truncate"
+                style={{ color: 'var(--do-text)' }}
+              >
+                {selections.length === 1
+                  ? method.name_zh || method.name
+                  : `${selections.length} 個方法組合`}
+              </h2>
+              {statusConfig && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md font-medium shrink-0"
+                  style={{ color: statusConfig.color, backgroundColor: statusConfig.bgColor }}
+                >
+                  {StatusIcon && <StatusIcon size={11} />}
+                  {statusConfig.label}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span
+                className="flex items-center gap-1 text-[11px]"
+                style={{ color: 'var(--do-text-muted)' }}
+              >
+                <Calendar size={11} />
                 {plan?.plan_date || '今日'}
               </span>
               {selections.length > 1 &&
                 selections.map((sel) => (
                   <span
                     key={sel.id}
-                    className="text-[10px] px-1 py-0.5 rounded"
+                    className="text-[10px] px-1.5 py-0.5 rounded"
                     style={{
                       color: 'var(--do-text-tertiary)',
                       backgroundColor: 'var(--do-bg-surface)',
@@ -224,153 +331,84 @@ export default function PlannerPage() {
                   </span>
                 ))}
             </div>
+
+            {/* Progress */}
+            {methodConfig.ui_hints?.show_progress_bar !== false && totalCount > 0 && (
+              <>
+                <div style={{ height: '1px', backgroundColor: 'var(--do-border)', opacity: 0.4 }} />
+                <ProgressBar done={doneCount} total={totalCount} />
+              </>
+            )}
+
+            {/* Transition button */}
+            {canTransition && plan?.status !== 'reviewing' && (
+              <>
+                <div style={{ height: '1px', backgroundColor: 'var(--do-border)', opacity: 0.4 }} />
+                <button
+                  type="button"
+                  onClick={handleTransition}
+                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-medium transition-colors cursor-pointer"
+                  style={{
+                    backgroundColor: 'var(--do-accent-alpha)',
+                    color: 'var(--do-accent)',
+                    border: '1px solid var(--do-accent-dim)',
+                  }}
+                >
+                  {TRANSITION_LABELS[plan?.status] || '下一步'}
+                  <ArrowRight size={14} />
+                </button>
+              </>
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Status Badge */}
-          {statusConfig && (
-            <span
-              className="text-[11px] px-2 py-1 rounded font-medium"
-              style={{ color: statusConfig.color, backgroundColor: statusConfig.bgColor }}
+
+          {/* Method info — always visible */}
+          <MethodInfoPanel method={method} />
+
+          {/* Composite guide */}
+          <CompositeGuide methodCount={selections.length} />
+
+          {/* Reflection (reviewing status) */}
+          {plan?.status === 'reviewing' && (
+            <div
+              className="do-card p-4 space-y-3"
+              style={{ borderColor: 'rgba(249, 226, 175, 0.3)' }}
             >
-              {statusConfig.icon} {statusConfig.label}
-            </span>
+              <div className="flex items-center gap-2">
+                <Search size={14} style={{ color: 'var(--do-reviewing)' }} />
+                <h3 className="text-[13px] font-medium" style={{ color: 'var(--do-reviewing)' }}>
+                  每日回顧
+                </h3>
+              </div>
+              <textarea
+                value={reflection}
+                onChange={(e) => setReflection(e.target.value)}
+                placeholder="今天完成了什麼？有什麼收穫或值得改進的地方？"
+                rows={4}
+                className="w-full rounded-md border px-3 py-2 text-[13px] resize-y focus:outline-none"
+                style={{
+                  borderColor: 'var(--do-border)',
+                  backgroundColor: 'var(--do-bg-surface)',
+                  color: 'var(--do-text)',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleCompleteReview}
+                disabled={savingReflection}
+                className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-medium transition-colors disabled:opacity-50 cursor-pointer"
+                style={{
+                  backgroundColor: 'rgba(166, 227, 161, 0.15)',
+                  color: 'var(--do-completed)',
+                  border: '1px solid rgba(166, 227, 161, 0.4)',
+                }}
+              >
+                <Check size={14} />
+                {savingReflection ? '儲存中...' : '完成回顧'}
+              </button>
+            </div>
           )}
-          {/* Manage Methods */}
-          <button
-            type="button"
-            onClick={() => navigate('/dailyos/methods')}
-            className="text-[11px] px-2 py-1 rounded transition-colors"
-            style={{ color: 'var(--do-text-tertiary)', backgroundColor: 'var(--do-bg-surface)' }}
-          >
-            管理
-          </button>
-        </div>
+        </aside>
       </div>
-
-      {/* Composite Method Guide — LLM-generated */}
-      <CompositeGuide methodCount={selections.length} />
-
-      {/* Add Item Input */}
-      {plan && <AddItemInput onAdd={(title) => addItem(title)} />}
-
-      {/* Layout Renderer */}
-      <div>
-        {layoutType === 'list' && (
-          <ListLayout
-            items={items}
-            config={methodConfig}
-            onToggle={handleToggle}
-            onReorderItems={reorderItems}
-            onEdit={editItem}
-            onRemove={removeItem}
-          />
-        )}
-        {layoutType === 'columns' && (
-          <ColumnsLayout
-            items={items}
-            config={methodConfig}
-            onToggle={handleToggle}
-            onAssignCategory={assignCategory}
-            onReorderItems={reorderItems}
-          />
-        )}
-        {layoutType === 'grid' && (
-          <GridLayout
-            items={items}
-            config={methodConfig}
-            onToggle={handleToggle}
-            onAssignCategory={assignCategory}
-          />
-        )}
-        {layoutType === 'kanban' && (
-          <KanbanLayout
-            items={items}
-            config={methodConfig}
-            onMoveRight={handleMoveRight}
-            onMoveLeft={handleMoveLeft}
-            onDragToColumn={handleDragToColumn}
-          />
-        )}
-        {layoutType === 'timeline' && (
-          <TimelineLayout
-            items={items}
-            config={methodConfig}
-            onToggle={handleToggle}
-            onSchedule={scheduleItem}
-          />
-        )}
-      </div>
-
-      {/* Progress Bar */}
-      {methodConfig.ui_hints?.show_progress_bar !== false && totalCount > 0 && (
-        <ProgressBar done={doneCount} total={totalCount} />
-      )}
-
-      {/* Reflection Section (reviewing status) */}
-      {plan?.status === 'reviewing' && (
-        <div
-          className="rounded-lg border p-4 space-y-3"
-          style={{
-            borderColor: 'var(--do-reviewing)',
-            backgroundColor: 'rgba(249, 226, 175, 0.05)',
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm">🔍</span>
-            <h3 className="text-[13px] font-medium" style={{ color: 'var(--do-reviewing)' }}>
-              每日回顧
-            </h3>
-          </div>
-          <textarea
-            value={reflection}
-            onChange={(e) => setReflection(e.target.value)}
-            placeholder="今天完成了什麼？有什麼收穫或值得改進的地方？"
-            rows={4}
-            className="w-full rounded-md border px-3 py-2 text-[13px] resize-y focus:outline-none"
-            style={{
-              borderColor: 'var(--do-border)',
-              backgroundColor: 'var(--do-bg-surface)',
-              color: 'var(--do-text)',
-            }}
-          />
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={handleCompleteReview}
-              disabled={savingReflection}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-medium transition-colors disabled:opacity-50"
-              style={{
-                backgroundColor: 'rgba(166, 227, 161, 0.15)',
-                color: 'var(--do-completed)',
-                border: '1px solid rgba(166, 227, 161, 0.4)',
-              }}
-            >
-              <Check size={14} />
-              {savingReflection ? '儲存中...' : '完成回顧'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Transition Button */}
-      {canTransition && plan?.status !== 'reviewing' && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleTransition}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-medium transition-colors"
-            style={{
-              backgroundColor: 'var(--do-accent-alpha)',
-              color: 'var(--do-accent)',
-              border: '1px solid var(--do-accent-dim)',
-            }}
-          >
-            {TRANSITION_LABELS[plan?.status] || '下一步'}
-            <ArrowRight size={14} />
-          </button>
-        </div>
-      )}
     </div>
   )
 }

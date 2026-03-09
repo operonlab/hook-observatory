@@ -23,8 +23,16 @@ from .schemas import (
     MethodSelectionResponse,
     MethodUpdate,
     PlanTransitionRequest,
+    RecurringItemCreate,
+    RecurringItemResponse,
+    RecurringItemUpdate,
 )
-from .services import daily_plan_service, method_selection_service, method_service
+from .services import (
+    daily_plan_service,
+    method_selection_service,
+    method_service,
+    recurring_item_service,
+)
 
 router = APIRouter(tags=["dailyos"])
 
@@ -295,3 +303,59 @@ async def transition_plan(
     )
     await db.commit()
     return daily_plan_service.to_response(plan)
+
+
+# ======================== Recurring Items ========================
+
+
+@router.get("/recurring", response_model=list[RecurringItemResponse])
+async def list_recurring_items(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    return await recurring_item_service.list_items(db, space_id)
+
+
+@router.post("/recurring", response_model=RecurringItemResponse, status_code=201)
+async def create_recurring_item(
+    data: RecurringItemCreate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    item = await recurring_item_service.create_item(db, space_id, data, user_id=user.get("id"))
+    await db.commit()
+    return item
+
+
+@router.put("/recurring/{item_id}", response_model=RecurringItemResponse)
+async def update_recurring_item(
+    item_id: str,
+    data: RecurringItemUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    item = await recurring_item_service.update_item(db, item_id, data)
+    await db.commit()
+    return item
+
+
+@router.delete("/recurring/{item_id}", status_code=204)
+async def delete_recurring_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    await recurring_item_service.delete_item(db, item_id)
+    await db.commit()
+
+
+@router.get("/recurring/for-date/{target_date}", response_model=list[RecurringItemResponse])
+async def get_recurring_for_date(
+    target_date: date,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    return await recurring_item_service.get_items_for_date(db, space_id, target_date)
