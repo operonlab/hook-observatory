@@ -673,8 +673,11 @@ function renderWindowTabs(windows, activeWin) {
   windows.forEach(w => {
     const tab = document.createElement('button');
     tab.className = 'win-tab' + (w.index === activeWin ? ' active' : '');
-    tab.textContent = `${w.index}:${w.name} (${w.panes})`;
-    tab.title = `Window ${w.index}: ${w.name}`;
+    const maxLen = 8;
+    const shortName = w.name.length > maxLen ? w.name.slice(0, maxLen) + '\u2026' : w.name;
+    tab.textContent = `${w.index}:${shortName}`;
+    if (w.panes > 1) tab.textContent += ` (${w.panes})`;
+    tab.title = `${w.index}: ${w.name} (${w.panes} panes)`;
     tab.addEventListener('click', () => {
       if (w.index === S.activeWindowIdx) return;
       window.tmuxWs?.send({ type:'switch_window', window:w.index });
@@ -740,15 +743,20 @@ window.tmuxWs = (function() {
   }
 
   function connect(session) {
+    // Preserve input text across reconnects
+    const savedInputs = S.currentSession === session ? { ...S.paneInputs } : {};
+    const savedText = inputEl.value;
     if (ws) { ws.close(); ws = null; }
     S.currentSession = session;
     S.focusedPane = '';
     S.paneEls = {};
     S.paneInfo = {};
     S.paneOrder = [];
-    S.paneInputs = {};
+    S.paneInputs = savedInputs;
     S.currentTool = null;
     container.innerHTML = '';
+    // Restore input text after reconnect
+    if (savedText) inputEl.value = savedText;
 
     loadPaneOrder();
 
@@ -783,6 +791,8 @@ window.tmuxWs = (function() {
         window.flashInputError(data.message);
       } else if (data.type === 'autocomplete') {
         window.handleAutocomplete?.(data.results);
+      } else if (data.type === 'tts') {
+        window.playTTS?.(data.id, data.text);
       } else if (data.type === 'error') {
         container.innerHTML = `<div class="welcome" style="color:var(--red)">${esc(data.message)}</div>`;
       }
@@ -870,8 +880,9 @@ sessionsEl.addEventListener('change', () => {
 // 14. Quick-Action Buttons
 // ========================================================================
 
-document.querySelectorAll('.qbtn').forEach(btn => {
-  btn.addEventListener('click', () => {
+document.querySelectorAll('.qbtn[data-key]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
     const key = btn.dataset.key;
     if (!window.tmuxWs.isConnected() || !S.focusedPane) return;
     window.tmuxWs.send({ type:'key', pane:S.focusedPane, key });
@@ -952,8 +963,75 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
 })();
 
 // ========================================================================
-// 18. (reserved)
+// 18. TTS Playback
 // ========================================================================
+
+(function() {
+  const TTS_KEY = 'tmux-tts-enabled';
+  let ttsEnabled = localStorage.getItem(TTS_KEY) !== '0';
+
+  function getBasePath() { return location.pathname.replace(/\/+$/, '') || ''; }
+
+  // Show TTS toast — tap to play (bypasses autoplay policy)
+  function showTTSToast(id, text) {
+    const ind = document.getElementById('tts-indicator');
+    if (!ind) return;
+    ind.innerHTML = '<span class="tts-play-icon">\u25B6</span> ' + (text || 'TTS');
+    ind.classList.add('active');
+    ind.style.pointerEvents = 'auto';
+    ind.onclick = function() {
+      const audio = new Audio(`${getBasePath()}/api/tts/${id}`);
+      audio.play().catch(() => {});
+      ind.classList.remove('active');
+      ind.onclick = null;
+      ind.style.pointerEvents = '';
+    };
+    // Auto-dismiss after 8s if not tapped
+    clearTimeout(ind._timer);
+    ind._timer = setTimeout(() => {
+      ind.classList.remove('active');
+      ind.onclick = null;
+      ind.style.pointerEvents = '';
+    }, 8000);
+  }
+
+  window.playTTS = function(id, text) {
+    if (!ttsEnabled) return;
+    // Try autoplay first; if blocked, show tap-to-play toast
+    const audio = new Audio(`${getBasePath()}/api/tts/${id}`);
+    const p = audio.play();
+    if (p && p.catch) {
+      p.catch(() => showTTSToast(id, text));
+    }
+    // Always show text indicator briefly
+    const ind = document.getElementById('tts-indicator');
+    if (ind && !ind.classList.contains('active')) {
+      ind.textContent = text || '';
+      ind.classList.add('active');
+      clearTimeout(ind._timer);
+      ind._timer = setTimeout(() => ind.classList.remove('active'), 3000);
+    }
+  };
+
+  function updateTTSBtn(btn, on) {
+    btn.textContent = on ? '\uD83D\uDD0A' : '\uD83D\uDD07';
+    btn.classList.toggle('active', on);
+    btn.title = on ? 'TTS: ON' : 'TTS: OFF';
+  }
+
+  window.toggleTTS = function() {
+    ttsEnabled = !ttsEnabled;
+    localStorage.setItem(TTS_KEY, ttsEnabled ? '1' : '0');
+    const btn = document.getElementById('tts-toggle');
+    if (btn) updateTTSBtn(btn, ttsEnabled);
+  };
+
+  // Init button state
+  requestAnimationFrame(() => {
+    const btn = document.getElementById('tts-toggle');
+    if (btn) updateTTSBtn(btn, ttsEnabled);
+  });
+})();
 
 // ========================================================================
 // 19. Init

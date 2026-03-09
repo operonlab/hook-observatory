@@ -58,6 +58,7 @@ select:focus{outline:none;border-color:var(--accent)}
   padding:4px 12px;border:1px solid var(--border);border-radius:6px 6px 0 0;
   background:var(--surface);color:var(--dim);font-size:11px;font-family:inherit;
   cursor:pointer;transition:all .15s;border-bottom:none;
+  max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .win-tab:hover{color:var(--text);background:var(--surface2)}
 .win-tab.active{color:var(--accent-h);background:var(--surface2);border-color:var(--accent)}
@@ -198,13 +199,14 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
 }
 .qico{font-size:15px;opacity:.6}
 .qbtn:hover{color:var(--text);border-color:var(--accent)}
+.qbtn:active{background:var(--accent);color:#fff;border-color:var(--accent);transition:none}
 /* Functional button colors */
 .qbtn[data-key="Escape"]{color:var(--yellow);border-color:rgba(251,191,36,.3)}
 .qbtn[data-key="Escape"]:hover{border-color:var(--yellow)}
 .qbtn[data-key="Tab"]{color:var(--cyan);border-color:rgba(34,211,238,.3)}
 .qbtn[data-key="Tab"]:hover{border-color:var(--cyan)}
-.qbtn[data-key="DC"]{color:var(--red);border-color:rgba(248,113,113,.3)}
-.qbtn[data-key="DC"]:hover{border-color:var(--red)}
+.qbtn[data-key="BSpace"]{color:var(--red);border-color:rgba(248,113,113,.3)}
+.qbtn[data-key="BSpace"]:hover{border-color:var(--red)}
 .qbtn[data-key="Enter"]{color:var(--green);border-color:rgba(74,222,128,.3)}
 .qbtn[data-key="Enter"]:hover{border-color:var(--green)}
 .qbtn[data-key="C-c"]:hover{border-color:var(--accent)}
@@ -414,6 +416,14 @@ footer{padding-bottom:env(safe-area-inset-bottom)}
   .quick-actions .qbtn{display:inline-flex !important}
   footer.mobile-collapsed .qbtn[data-key="Escape"]{display:inline-flex !important}
 }
+
+/* ── TTS indicator / tap-to-play toast ── */
+.tts-indicator{position:fixed;top:52px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.9);color:var(--fg);padding:8px 20px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200;max-width:85vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border:1px solid transparent}
+.tts-indicator.active{opacity:1}
+.tts-indicator .tts-play-icon{color:var(--green);font-size:14px;margin-right:4px}
+@media(hover:none){.tts-indicator.active{border-color:var(--accent);padding:10px 22px;font-size:14px}}
+#tts-toggle{font-size:14px;min-width:28px}
+#tts-toggle.active{color:var(--green);border-color:rgba(74,222,128,.3)}
 
 /* ── Gesture feedback ── */
 .gesture-indicator{
