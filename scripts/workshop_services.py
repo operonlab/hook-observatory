@@ -15,6 +15,10 @@ import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 
+# ── Daemon PATH (launchd does not inherit .zshenv) ─────────────
+_DAEMON_PATH = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/joneshong/.local/bin"
+_DAEMON_ENV = {**dict(os.environ), "PATH": _DAEMON_PATH}
+
 # ── Configuration ──────────────────────────────────────────────
 LOG_BASE = Path("/opt/homebrew/var/log/workshop")
 PID_DIR = Path("/opt/homebrew/var/run/workshop")
@@ -100,18 +104,10 @@ SERVICES = [
     {
         "name": "cronicle",
         "type": "binary",
-        "cmd": "node /Users/joneshong/workshop/vendor/cronicle/lib/main.js",
+        "cmd": "/opt/homebrew/bin/node /Users/joneshong/workshop/vendor/cronicle/lib/main.js",
         "port": 4105,
         "health": "http://127.0.0.1:4105/api/app/ping",
         "workdir": "/Users/joneshong/workshop/vendor/cronicle",
-    },
-    {
-        "name": "browser-bridge",
-        "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/browser-bridge/.venv/bin/python3 -m uvicorn browser_bridge.app:app --host 127.0.0.1 --port 4106",
-        "port": 4106,
-        "health": "http://127.0.0.1:4106/health",
-        "workdir": "/Users/joneshong/workshop/stations/browser-bridge",
     },
     # ── Infrastructure Tools ──
     {
@@ -349,6 +345,7 @@ def start_service(svc: dict) -> None:
             stdout=fout,
             stderr=ferr,
             start_new_session=True,
+            env=_DAEMON_ENV,
         )
 
     pid = proc.pid
@@ -661,9 +658,9 @@ def cmd_logs(args_rest: list[str]) -> int:
         target_gz = Path(str(target) + ".gz")
 
         if target.exists():
-            subprocess.run(["less", str(target)])
+            subprocess.run(["/usr/bin/less", str(target)])
         elif target_gz.exists():
-            subprocess.run(["zless", str(target_gz)])
+            subprocess.run(["/usr/bin/zless", str(target_gz)])
         else:
             # Check for split files
             splits = sorted(log_dir.glob(f"{target_date}.*.{suffix}")) + sorted(
@@ -682,7 +679,7 @@ def cmd_logs(args_rest: list[str]) -> int:
                             data += gz.read()
                     else:
                         data += f.read_bytes()
-                proc = subprocess.Popen(["less"], stdin=subprocess.PIPE)
+                proc = subprocess.Popen(["/usr/bin/less"], stdin=subprocess.PIPE)
                 proc.communicate(data)
             else:
                 err(f"No log found: {target}")
@@ -695,7 +692,7 @@ def cmd_logs(args_rest: list[str]) -> int:
             log(f"Log file not yet created: {target}")
             log("Waiting for first output...")
         try:
-            subprocess.run(["tail", "-f", str(target)])
+            subprocess.run(["/usr/bin/tail", "-f", str(target)])
         except Exception:
             err(f"Cannot tail {target} — file may not exist yet.")
             return 1
