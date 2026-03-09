@@ -14,12 +14,8 @@ from __future__ import annotations
 import sys
 
 import click
-
-from workshop.clients.browser_bridge import (
-    BrowserBridgeClient,
-    BrowserBridgeError,
-    BrowserBridgeConnectionError,
-)
+from workshop.clients._base import APIConnectionError, APIError
+from workshop.clients.browser_bridge import BrowserBridgeClient
 
 
 def _err(msg: str) -> None:
@@ -28,16 +24,16 @@ def _err(msg: str) -> None:
 
 
 def _handle(fn):
-    """Decorator: catch BrowserBridge errors and exit cleanly."""
+    """Decorator: catch API errors and exit cleanly."""
     import functools
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except BrowserBridgeConnectionError as e:
+        except APIConnectionError as e:
             _err(str(e))
-        except BrowserBridgeError as e:
+        except APIError as e:
             _err(f"[{e.status_code}] {e.detail}")
 
     return wrapper
@@ -65,10 +61,11 @@ def main() -> None:
 def providers(as_json: bool) -> None:
     """List available browser providers."""
     with BrowserBridgeClient() as client:
-        data = client.providers()
+        data = client.list_providers()
 
     if as_json:
         import json
+
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
         return
 
@@ -96,10 +93,11 @@ def providers(as_json: bool) -> None:
 def sessions(as_json: bool) -> None:
     """List active browser sessions."""
     with BrowserBridgeClient() as client:
-        data = client.sessions()
+        data = client.list_sessions()
 
     if as_json:
         import json
+
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
         return
 
@@ -124,26 +122,23 @@ def sessions(as_json: bool) -> None:
 
 @main.command(name="new")
 @click.argument("provider")
-@click.option("--model", "-m", default=None, help="Model to use (provider default if omitted)")
-@click.option("--system", "-s", default=None, help="System prompt")
 @click.option("--json", "as_json", is_flag=True, help="Output raw JSON")
 @_handle
-def new_conversation(provider: str, model: str | None, system: str | None, as_json: bool) -> None:
+def new_conversation(provider: str, as_json: bool) -> None:
     """Start a new conversation with PROVIDER."""
     with BrowserBridgeClient() as client:
-        data = client.new_conversation(provider=provider, model=model, system_prompt=system)
+        data = client.new_conversation(provider=provider)
 
     if as_json:
         import json
+
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
         return
 
-    conv_id = data.get("id", "?")
-    click.echo(f"Conversation started.")
+    conv_id = data.get("id", data.get("conversation_id", "?"))
+    click.echo("Conversation started.")
     click.echo(f"  ID:       {conv_id}")
     click.echo(f"  Provider: {data.get('provider', provider)}")
-    if data.get("model"):
-        click.echo(f"  Model:    {data['model']}")
 
 
 # ------------------------------------------------------------------ #
@@ -178,10 +173,11 @@ def chat(
             if not conv:
                 _err("Failed to create conversation (no ID returned)")
 
-        data = client.chat(conversation_id=conv, message=prompt, timeout=timeout)
+        data = client.chat(provider=provider, prompt=prompt, timeout=timeout, conversation_id=conv)
 
     if as_json:
         import json
+
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
         return
 
@@ -211,10 +207,11 @@ def chat(
 def history(conv_id: str, limit: int, as_json: bool) -> None:
     """Show message history for CONV_ID."""
     with BrowserBridgeClient() as client:
-        data = client.history(conversation_id=conv_id, limit=limit)
+        data = client.get_history(conversation_id=conv_id, limit=limit)
 
     if as_json:
         import json
+
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
         return
 
@@ -246,6 +243,7 @@ def health(as_json: bool) -> None:
 
     if as_json:
         import json
+
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
         return
 
