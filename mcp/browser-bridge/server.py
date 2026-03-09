@@ -40,44 +40,43 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="bridge_chat",
-            description="向指定瀏覽器 session 發送訊息並取得 AI 回應",
+            description="向指定 provider 發送訊息並取得 AI 回應（透過瀏覽器自動化）",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "session_id": {"type": "string", "description": "Session ID"},
-                    "message": {"type": "string", "description": "發送的訊息"},
-                    "provider": {"type": "string", "description": "AI 提供者（可選，使用 session 預設）"},
+                    "provider": {"type": "string", "description": "AI 提供者（如 grok, notebooklm）"},
+                    "prompt": {"type": "string", "description": "發送的訊息"},
+                    "conversation_id": {"type": "string", "description": "對話 ID（可選，用於延續對話）"},
                 },
-                "required": ["session_id", "message"],
+                "required": ["provider", "prompt"],
             },
         ),
         Tool(
             name="bridge_new",
-            description="建立新的瀏覽器 AI session",
+            description="建立新的瀏覽器 AI 對話",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "provider": {"type": "string", "description": "AI 提供者（如 chatgpt, claude, gemini）"},
-                    "title": {"type": "string", "description": "Session 標題"},
+                    "provider": {"type": "string", "description": "AI 提供者（如 grok, notebooklm）"},
                 },
                 "required": ["provider"],
             },
         ),
         Tool(
             name="bridge_history",
-            description="取得指定 session 的對話歷史",
+            description="取得對話歷史",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "session_id": {"type": "string", "description": "Session ID"},
+                    "conversation_id": {"type": "string", "description": "對話 ID（可選）"},
+                    "provider": {"type": "string", "description": "篩選特定提供者（可選）"},
                     "limit": {"type": "integer", "default": 20, "description": "最多回傳筆數"},
                 },
-                "required": ["session_id"],
             },
         ),
         Tool(
             name="bridge_sessions",
-            description="列出所有瀏覽器 AI sessions",
+            description="列出所有瀏覽器 sessions",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -107,24 +106,24 @@ async def call_tool(name: str, arguments: dict):
         if name == "bridge_chat":
             result = await to_thread(
                 client.chat,
-                session_id=arguments["session_id"],
-                message=arguments["message"],
-                provider=arguments.get("provider"),
+                provider=arguments["provider"],
+                prompt=arguments["prompt"],
+                conversation_id=arguments.get("conversation_id"),
             )
             return json_result(result)
 
         elif name == "bridge_new":
             result = await to_thread(
-                client.new_session,
+                client.new_conversation,
                 provider=arguments["provider"],
-                title=arguments.get("title"),
             )
             return json_result(result)
 
         elif name == "bridge_history":
             result = await to_thread(
                 client.get_history,
-                session_id=arguments["session_id"],
+                conversation_id=arguments.get("conversation_id"),
+                provider=arguments.get("provider"),
                 limit=arguments.get("limit", 20),
             )
             return json_result(result)

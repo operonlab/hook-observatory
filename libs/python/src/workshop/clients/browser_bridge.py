@@ -7,9 +7,8 @@ Usage:
     from workshop.clients.browser_bridge import BrowserBridgeClient
 
     client = BrowserBridgeClient()
-    providers = client.providers()
-    conv = client.new_conversation(provider="openai", model="gpt-4o")
-    reply = client.chat(conversation_id=conv["id"], message="Hello!")
+    providers = client.list_providers()
+    result = client.chat(provider="grok", prompt="Hello!")
 """
 
 from __future__ import annotations
@@ -19,25 +18,7 @@ from typing import Any
 
 import httpx
 
-
-class BrowserBridgeError(Exception):
-    """Raised on Browser Bridge API errors."""
-
-    def __init__(self, status_code: int, detail: str):
-        self.status_code = status_code
-        self.detail = detail
-        super().__init__(f"BrowserBridge error {status_code}: {detail}")
-
-
-class BrowserBridgeConnectionError(Exception):
-    """Raised when the browser-bridge station is unreachable."""
-
-    def __init__(self, url: str):
-        self.url = url
-        super().__init__(
-            f"Cannot connect to browser-bridge at {url}. "
-            "Start station: cd stations/browser-bridge && python3 -m uvicorn main:app --port 4106"
-        )
+from ._base import APIConnectionError, APIError
 
 
 class BrowserBridgeClient:
@@ -51,15 +32,11 @@ class BrowserBridgeClient:
     def __init__(
         self,
         base_url: str | None = None,
-        timeout: float = 60.0,
+        timeout: float = 120.0,
     ):
         self.base_url = base_url or os.environ.get("BRIDGE_URL", "http://127.0.0.1:4106")
         self._timeout = timeout
         self._client: httpx.Client | None = None
-
-    # ------------------------------------------------------------------ #
-    # HTTP primitives                                                      #
-    # ------------------------------------------------------------------ #
 
     @property
     def _http(self) -> httpx.Client:
@@ -74,101 +51,22 @@ class BrowserBridgeClient:
             resp.raise_for_status()
             return resp
         except httpx.ConnectError:
-            raise BrowserBridgeConnectionError(self.base_url) from None
+            raise APIConnectionError(self.base_url) from None
         except httpx.HTTPStatusError as e:
-            raise BrowserBridgeError(e.response.status_code, e.response.text[:500]) from e
+            raise APIError(e.response.status_code, e.response.text[:500]) from e
 
     def _get(self, path: str, params: dict | None = None) -> Any:
-        return self._request("GET", path, params={k: v for k, v in (params or {}).items() if v is not None}).json()
+        return self._request(
+            "GET", path,
+            params={k: v for k, v in (params or {}).items() if v is not None},
+        ).json()
 
     def _post(self, path: str, body: dict | None = None, timeout: float | None = None) -> Any:
         return self._request(
-            "POST",
-            path,
+            "POST", path,
             json=body or {},
             timeout=timeout or self._timeout,
         ).json()
-
-    def _delete(self, path: str) -> None:
-        self._request("DELETE", path)
-
-    # ------------------------------------------------------------------ #
-    # Providers                                                            #
-    # ------------------------------------------------------------------ #
-
-    def providers(self) -> list[dict]:
-        """List available LLM providers and their models.
-
-        Returns:
-            List of provider dicts with keys: id, name, models.
-        """
-        return self._get("/providers")
-
-    # ------------------------------------------------------------------ #
-    # Sessions                                                             #
-    # ------------------------------------------------------------------ #
-
-    def sessions(self) -> list[dict]:
-        """List active browser sessions.
-
-        Returns:
-            List of session dicts with keys: id, created_at, provider.
-        """
-        return self._get("/sessions")
-
-    # ------------------------------------------------------------------ #
-    # Conversations                                                        #
-    # ------------------------------------------------------------------ #
-
-    def new_conversation(
-        self,
-        provider: str,
-        model: str | None = None,
-        session_id: str | None = None,
-        system_prompt: str | None = None,
-    ) -> dict:
-        """Create a new conversation thread.
-
-        Args:
-            provider: Provider ID (e.g. "openai", "anthropic").
-            model: Model identifier. Uses provider default if omitted.
-            session_id: Reuse an existing browser session. Creates new one if omitted.
-            system_prompt: Optional system prompt for the conversation.
-
-        Returns:
-            Conversation dict with keys: id, provider, model, created_at.
-        """
-        payload: dict[str, Any] = {"provider": provider}
-        if model:
-            payload["model"] = model
-        if session_id:
-            payload["session_id"] = session_id
-        if system_prompt:
-            payload["system_prompt"] = system_prompt
-        return self._post("/conversations", payload)
-
-    def history(self, conversation_id: str, limit: int = 50) -> list[dict]:
-        """Retrieve message history for a conversation.
-
-        Args:
-            conversation_id: Conversation ID returned by new_conversation().
-            limit: Maximum number of messages to return (default 50).
-
-        Returns:
-            List of message dicts with keys: role, content, timestamp.
-        """
-        return self._get(
-            f"/conversations/{conversation_id}/history",
-            params={"limit": limit},
-        )
-
-    def delete_conversation(self, conversation_id: str) -> None:
-        """Delete a conversation and its message history.
-
-        Args:
-            conversation_id: Conversation ID to delete.
-        """
-        self._delete(f"/conversations/{conversation_id}")
 
     # ------------------------------------------------------------------ #
     # Chat                                                                 #
@@ -176,25 +74,113 @@ class BrowserBridgeClient:
 
     def chat(
         self,
-        conversation_id: str,
-        message: str,
-        timeout: float = 120.0,
+        provider: str,
+        prompt: str,
+        timeout: float | None = None,
+        conversation_id: str | None = None,
     ) -> dict:
-        """Send a message and receive the assistant reply.
+        """Send a prompt to a provider and get the response.
 
         Args:
-            conversation_id: Conversation ID from new_conversation().
-            message: User message text.
-            timeout: Per-request timeout in seconds (default 120 for long LLM calls).
+            provider: Provider name (e.g. "grok", "notebooklm").
+            prompt: User message text.
+            timeout: Per-request timeout in seconds.
+            conversation_id: Optional conversation ID for continuity.
 
         Returns:
-            Response dict with keys: role, content, usage (tokens), latency_ms.
+            Response dict with status, provider, response, elapsed, etc.
         """
-        return self._post(
-            f"/conversations/{conversation_id}/chat",
-            body={"message": message},
-            timeout=timeout,
-        )
+        body: dict[str, Any] = {"provider": provider, "prompt": prompt}
+        if timeout:
+            body["timeout"] = timeout
+        if conversation_id:
+            body["conversation_id"] = conversation_id
+        return self._post("/api/bridge/chat", body, timeout=timeout or 180.0)
+
+    # ------------------------------------------------------------------ #
+    # Conversations                                                        #
+    # ------------------------------------------------------------------ #
+
+    def new_conversation(self, provider: str) -> dict:
+        """Start a new conversation with a provider.
+
+        Args:
+            provider: Provider name.
+
+        Returns:
+            Response dict with status and conversation info.
+        """
+        return self._post("/api/bridge/new", {"provider": provider})
+
+    def get_history(
+        self,
+        conversation_id: str | None = None,
+        provider: str | None = None,
+        limit: int = 50,
+    ) -> dict:
+        """Get conversation history.
+
+        Args:
+            conversation_id: Specific conversation (returns messages).
+            provider: Filter by provider (returns conversations).
+            limit: Max results.
+
+        Returns:
+            Dict with messages or conversations list.
+        """
+        params: dict[str, Any] = {"limit": limit}
+        if conversation_id:
+            params["conversation_id"] = conversation_id
+        if provider:
+            params["provider"] = provider
+        return self._get("/api/bridge/history", params)
+
+    # ------------------------------------------------------------------ #
+    # Sessions                                                             #
+    # ------------------------------------------------------------------ #
+
+    def list_sessions(
+        self,
+        provider: str | None = None,
+        active_only: bool = False,
+        limit: int = 50,
+    ) -> dict:
+        """List browser sessions.
+
+        Args:
+            provider: Filter by provider.
+            active_only: Only active sessions.
+            limit: Max results.
+
+        Returns:
+            Dict with sessions list and stats.
+        """
+        params: dict[str, Any] = {"limit": limit}
+        if provider:
+            params["provider"] = provider
+        if active_only:
+            params["active_only"] = "true"
+        return self._get("/api/bridge/sessions", params)
+
+    # ------------------------------------------------------------------ #
+    # Providers                                                            #
+    # ------------------------------------------------------------------ #
+
+    def list_providers(self) -> dict:
+        """List available AI providers.
+
+        Returns:
+            Dict with providers list.
+        """
+        return self._get("/api/bridge/providers")
+
+    # ------------------------------------------------------------------ #
+    # Health                                                               #
+    # ------------------------------------------------------------------ #
+
+    def health(self) -> dict:
+        """Check station health."""
+        return self._get("/health")
 
     # ------------------------------------------------------------------ #
     # Context manager                                                      #
