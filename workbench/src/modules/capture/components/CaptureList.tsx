@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowUpRight, ChevronDown, ChevronUp, Clock, Trash2, X } from 'lucide-react'
-import { useState } from 'react'
-import type { Capture, CapturePromoteResult } from '../api'
+import { useEffect, useState } from 'react'
+import { type Capture, type CapturePromoteResult, captureApi } from '../api'
 
 const MODULE_COLORS: Record<string, string> = {
   finance: '#a6e3a1',
@@ -45,6 +45,44 @@ function CompletionBar({ value }: { value: number }) {
   )
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  wallet_id: '錢包',
+  category_id: '分類',
+  payment_method: '付款方式',
+  amount: '金額',
+  type: '類型',
+  description: '描述',
+  transacted_at: '交易時間',
+  name: '名稱',
+  billing_cycle: '帳單週期',
+  start_date: '開始日期',
+  num_installments: '期數',
+  total_amount: '總金額',
+  installment_amount: '每期金額',
+  merchant: '商家',
+  account_id: '帳戶',
+}
+
+const STATIC_OPTIONS: Record<string, { id: string; name: string }[]> = {
+  payment_method: [
+    { id: 'credit_card', name: '信用卡' },
+    { id: 'cash', name: '現金' },
+    { id: 'debit_card', name: '金融卡' },
+    { id: 'bank_transfer', name: '銀行轉帳' },
+    { id: 'e_wallet', name: '電子錢包' },
+  ],
+  type: [
+    { id: 'expense', name: '支出' },
+    { id: 'income', name: '收入' },
+    { id: 'transfer', name: '轉帳' },
+  ],
+  billing_cycle: [
+    { id: 'monthly', name: '每月' },
+    { id: 'yearly', name: '每年' },
+    { id: 'weekly', name: '每週' },
+  ],
+}
+
 function InlineFieldEditor({
   capture,
   onSave,
@@ -55,7 +93,17 @@ function InlineFieldEditor({
   onClose: () => void
 }) {
   const [fields, setFields] = useState<Record<string, string>>({})
+  const [refOptions, setRefOptions] = useState<Record<string, { id: string; name: string }[]>>({})
   const missing = capture.missing_fields || []
+
+  useEffect(() => {
+    captureApi
+      .fillOptions(capture.module, capture.entity_type)
+      .then(setRefOptions)
+      .catch(() => {})
+  }, [capture.module, capture.entity_type])
+
+  const getOptions = (field: string) => refOptions[field] || STATIC_OPTIONS[field] || null
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,6 +113,8 @@ function InlineFieldEditor({
     }
     if (Object.keys(payload).length > 0) onSave(payload)
   }
+
+  const inputStyle = { borderColor: 'var(--surface1)', color: 'var(--text)' }
 
   return (
     <div
@@ -80,21 +130,41 @@ function InlineFieldEditor({
         </button>
       </div>
       <form onSubmit={handleSubmit} className="space-y-2">
-        {missing.map((field) => (
-          <label key={field} className="flex items-center gap-2">
-            <span className="text-[11px] w-28 shrink-0" style={{ color: 'var(--subtext1)' }}>
-              {field}
-            </span>
-            <input
-              type="text"
-              value={fields[field] || ''}
-              onChange={(e) => setFields((p) => ({ ...p, [field]: e.target.value }))}
-              className="flex-1 text-xs px-2 py-1 rounded border bg-transparent outline-none focus:ring-1"
-              style={{ borderColor: 'var(--surface1)', color: 'var(--text)' }}
-              placeholder={field}
-            />
-          </label>
-        ))}
+        {missing.map((field) => {
+          const options = getOptions(field)
+          const label = FIELD_LABELS[field] || field
+          return (
+            <label key={field} className="flex items-center gap-2">
+              <span className="text-[11px] w-28 shrink-0" style={{ color: 'var(--subtext1)' }}>
+                {label}
+              </span>
+              {options ? (
+                <select
+                  value={fields[field] || ''}
+                  onChange={(e) => setFields((p) => ({ ...p, [field]: e.target.value }))}
+                  className="flex-1 text-xs px-2 py-1 rounded border bg-transparent outline-none focus:ring-1"
+                  style={inputStyle}
+                >
+                  <option value="">選擇{label}</option>
+                  {options.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={fields[field] || ''}
+                  onChange={(e) => setFields((p) => ({ ...p, [field]: e.target.value }))}
+                  className="flex-1 text-xs px-2 py-1 rounded border bg-transparent outline-none focus:ring-1"
+                  style={inputStyle}
+                  placeholder={label}
+                />
+              )}
+            </label>
+          )
+        })}
         <button
           type="submit"
           className="text-[11px] px-3 py-1 rounded font-medium"
