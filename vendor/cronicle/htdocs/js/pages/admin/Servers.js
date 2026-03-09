@@ -5,7 +5,7 @@ Class.add( Page.Admin, {
 	gosub_servers: function(args) {
 		// show server list, server groups
 		this.div.removeClass('loading');
-		app.setWindowTitle( "Servers" );
+		app.setWindowTitle( (window._t ? _t('admin_servers.servers') : "Servers") );
 		
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) + 400) / 9 );
@@ -20,7 +20,7 @@ Class.add( Page.Admin, {
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
-				['servers', "Servers"],
+				['servers', (window._t ? _t('admin_servers.servers') : "Servers")],
 				['users', "Users"]
 			]
 		);
@@ -126,7 +126,7 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:25px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().add_server()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Server...</div></td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().add_server()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_servers.add_server') : 'Add Server...') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '<div style="height:30px;"></div>';
@@ -178,7 +178,7 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:25px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_group(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Group...</div></td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_group(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_servers.add_group') : 'Add Group...') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '</div>'; // padding
@@ -191,10 +191,10 @@ Class.add( Page.Admin, {
 		// add a server right away, from the nearby list
 		var server = this.servers[idx];
 		
-		app.showProgress( 1.0, "Adding server..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_servers.adding_server') : "Adding server...") );
 		app.api.post( 'app/add_server', { hostname: server.ip || server.hostname }, function(resp) {
 			app.hideProgress();
-			app.showMessage('success', "Server was added successfully.");
+			app.showMessage('success', (window._t ? _t('admin_servers.server_was_added_successfully') : "Server was added successfully."));
 			// self['gosub_servers'](self.args);
 		} ); // api.post
 	},
@@ -209,8 +209,8 @@ Class.add( Page.Admin, {
 		
 		html += '<center><table>' + 
 			// get_form_table_spacer() + 
-			get_form_table_row('Hostname or IP:', '<input type="text" id="fe_as_hostname" style="width:280px" value="" spellcheck="false"/>') + 
-			get_form_table_caption("Enter the hostname or IP of the server you want to add.") + 
+			get_form_table_row((window._t ? _t('admin_servers.hostname_or_ip') : 'Hostname or IP:'), '<input type="text" id="fe_as_hostname" style="width:280px" value="" spellcheck="false"/>') + 
+			get_form_table_caption((window._t ? _t('admin_servers.enter_the_hostname_or_ip_of_the_server_y') : "Enter the hostname or IP of the server you want to add.")) + 
 		'</table></center>';
 		
 		app.confirm( '<i class="mdi mdi-desktop-tower mdi-lg">&nbsp;&nbsp;</i>Add Server', html, "Add Server", function(result) {
@@ -218,15 +218,15 @@ Class.add( Page.Admin, {
 			
 			if (result) {
 				var hostname = $('#fe_as_hostname').val().toLowerCase();
-				if (!hostname) return app.badField('fe_as_hostname', "Please enter a server hostname or IP address.");
-				if (!hostname.match(/^[\w\-\.]+$/)) return app.badField('fe_as_hostname', "Please enter a valid server hostname or IP address.");
-				if (app.servers[hostname]) return app.badField('fe_as_hostname', "That server is already in the cluster.");
+				if (!hostname) return app.badField('fe_as_hostname', (window._t ? _t('admin_servers.please_enter_a_server_hostname_or_ip_add') : "Please enter a server hostname or IP address."));
+				if (!hostname.match(/^[\w\-\.]+$/)) return app.badField('fe_as_hostname', (window._t ? _t('admin_servers.please_enter_a_valid_server_hostname_or_') : "Please enter a valid server hostname or IP address."));
+				if (app.servers[hostname]) return app.badField('fe_as_hostname', (window._t ? _t('admin_servers.that_server_is_already_in_the_cluster') : "That server is already in the cluster."));
 				Dialog.hide();
 				
-				app.showProgress( 1.0, "Adding server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.adding_server') : "Adding server...") );
 				app.api.post( 'app/add_server', { hostname: hostname }, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server was added successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_was_added_successfully') : "Server was added successfully."));
 					// self['gosub_servers'](self.args);
 				} ); // api.post
 			} // user clicked add
@@ -242,16 +242,16 @@ Class.add( Page.Admin, {
 		var server = this.servers[idx];
 		
 		var jobs = find_objects( app.activeJobs, { hostname: server.hostname } );
-		if (jobs.length) return app.doError("Sorry, you cannot remove a server that has active jobs running on it.");
+		if (jobs.length) return app.doError((window._t ? _t('admin_servers.sorry_you_cannot_remove_a_server_that_ha') : "Sorry, you cannot remove a server that has active jobs running on it."));
 		
 		// proceed with remove
 		var self = this;
 		app.confirm( '<span style="color:red">Remove Server</span>', "Are you sure you want to remove the server <b>"+server.hostname+"</b>?", "Remove", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Removing server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.removing_server') : "Removing server...") );
 				app.api.post( 'app/remove_server', server, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server was removed successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_was_removed_successfully') : "Server was removed successfully."));
 					// self.gosub_servers(self.args);
 				} );
 			}
@@ -273,20 +273,20 @@ Class.add( Page.Admin, {
 		
 		// Internal ID
 		if (edit && this.isAdmin()) {
-			html += get_form_table_row( 'Group ID', '<div style="font-size:14px;">' + group.id + '</div>' );
-			html += get_form_table_caption( "The internal Group ID used for API calls.  This cannot be changed." );
+			html += get_form_table_row( (window._t ? _t('admin_servers.group_id') : 'Group ID'), '<div style="font-size:14px;">' + group.id + '</div>' );
+			html += get_form_table_caption( (window._t ? _t('admin_servers.the_internal_group_id_used_for_api_calls') : "The internal Group ID used for API calls.  This cannot be changed.") );
 			html += get_form_table_spacer();
 		}
 		
 		html += 
-			get_form_table_row('Group Title:', '<input type="text" id="fe_eg_title" size="25" value="'+escape_text_field_value(group.title)+'"/>') + 
-			get_form_table_caption("Enter a title for the server group, short and sweet.") + 
+			get_form_table_row((window._t ? _t('admin_servers.group_title') : 'Group Title:'), '<input type="text" id="fe_eg_title" size="25" value="'+escape_text_field_value(group.title)+'"/>') + 
+			get_form_table_caption((window._t ? _t('admin_servers.enter_a_title_for_the_server_group_short') : "Enter a title for the server group, short and sweet.")) + 
 			get_form_table_spacer() + 
-			get_form_table_row('Hostname Match:', '<input type="text" id="fe_eg_regexp" size="30" style="font-family:monospace; font-size:13px;" value="'+escape_text_field_value(group.regexp)+'" spellcheck="false"/>') + 
+			get_form_table_row((window._t ? _t('admin_servers.hostname_match') : 'Hostname Match:'), '<input type="text" id="fe_eg_regexp" size="30" style="font-family:monospace; font-size:13px;" value="'+escape_text_field_value(group.regexp)+'" spellcheck="false"/>') + 
 			get_form_table_caption("Enter a regular expression to auto-assign servers to this group by their hostnames, e.g. \"^mtx\\d+\\.\".") + 
 			get_form_table_spacer() + 
-			get_form_table_row('Server Class:', '<select id="fe_eg_manager">' + render_menu_options([ [1,'manager Eligible'], [0,'worker Only'] ], group.manager, false) + '</select>') + 
-			get_form_table_caption("Select whether servers in the group are eligible to become the manager server, or run as workers only.") + 
+			get_form_table_row((window._t ? _t('admin_servers.server_class') : 'Server Class:'), '<select id="fe_eg_manager">' + render_menu_options([ [1,'manager Eligible'], [0,'worker Only'] ], group.manager, false) + '</select>') + 
+			get_form_table_caption((window._t ? _t('admin_servers.select_whether_servers_in_the_group_are_') : "Select whether servers in the group are eligible to become the manager server, or run as workers only.")) + 
 		'</table>';
 		
 		app.confirm( '<i class="mdi mdi-server-network">&nbsp;&nbsp;</i>' + (edit ? "Edit Server Group" : "Add Server Group"), html, edit ? "Save Changes" : "Add Group", function(result) {
@@ -294,13 +294,13 @@ Class.add( Page.Admin, {
 			
 			if (result) {
 				group.title = $('#fe_eg_title').val();
-				if (!group.title) return app.badField('fe_eg_title', "Please enter a title for the server group.");
+				if (!group.title) return app.badField('fe_eg_title', (window._t ? _t('admin_servers.please_enter_a_title_for_the_server_grou') : "Please enter a title for the server group."));
 				group.regexp = $('#fe_eg_regexp').val().replace(/^\/(.+)\/$/, '$1');
-				if (!group.regexp) return app.badField('fe_eg_regexp', "Please enter a regular expression for the server group.");
+				if (!group.regexp) return app.badField('fe_eg_regexp', (window._t ? _t('admin_servers.please_enter_a_regular_expression_for_th') : "Please enter a regular expression for the server group."));
 				
 				try { new RegExp(group.regexp); }
 				catch(err) {
-					return app.badField('fe_eg_regexp', "Invalid regular expression: " + err);
+					return app.badField('fe_eg_regexp', (window._t ? _t('admin_servers.invalid_regular_expression') : "Invalid regular expression: ") + err);
 				}
 				
 				group.manager = parseInt( $('#fe_eg_manager').val() );
@@ -315,7 +315,7 @@ Class.add( Page.Admin, {
 				app.showProgress( 1.0, edit ? "Saving group..." : "Adding group..." );
 				app.api.post( edit ? 'app/update_server_group' : 'app/create_server_group', group, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server group was " + (edit ? "saved" : "added") + " successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_group_was') : "Server group was ") + (edit ? "saved" : "added") + " successfully.");
 					// self['gosub_servers'](self.args);
 				} ); // api.post
 			} // user clicked add
@@ -337,23 +337,23 @@ Class.add( Page.Admin, {
 				if (this.server_groups[idx].manager) num_managers++;
 			}
 			if (num_managers == 1) {
-				return app.doError("Sorry, you cannot delete the last manager Eligible server group.");
+				return app.doError((window._t ? _t('admin_servers.sorry_you_cannot_delete_the_last_manager') : "Sorry, you cannot delete the last manager Eligible server group."));
 			}
 		}
 		
 		// check for events first
 		var group_events = find_objects( app.schedule, { target: group.id } );
 		var num_events = group_events.length;
-		if (num_events) return app.doError("Sorry, you cannot delete a group that has events assigned to it.");
+		if (num_events) return app.doError((window._t ? _t('admin_servers.sorry_you_cannot_delete_a_group_that_has') : "Sorry, you cannot delete a group that has events assigned to it."));
 		
 		// proceed with delete
 		var self = this;
 		app.confirm( '<span style="color:red">Delete Server Group</span>', "Are you sure you want to delete the server group <b>"+group.title+"</b>?  There is no way to undo this action.", "Delete", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting group..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.deleting_group') : "Deleting group...") );
 				app.api.post( 'app/delete_server_group', group, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server group was deleted successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_group_was_deleted_successfully') : "Server group was deleted successfully."));
 					// self.gosub_servers(self.args);
 				} );
 			}
@@ -367,10 +367,10 @@ Class.add( Page.Admin, {
 		
 		app.confirm( '<span style="color:red">Restart Server</span>', "Are you sure you want to restart the server <b>"+server.hostname+"</b>?  All server jobs will be aborted.", "Restart", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Restarting server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.restarting_server') : "Restarting server...") );
 				app.api.post( 'app/restart_server', server, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server is being restarted in the background.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_is_being_restarted_in_the_backgro') : "Server is being restarted in the background."));
 					// self.gosub_servers(self.args);
 				} );
 			}
@@ -384,10 +384,10 @@ Class.add( Page.Admin, {
 		
 		app.confirm( '<span style="color:red">Shutdown Server</span>', "Are you sure you want to shutdown the server <b>"+server.hostname+"</b>?  All server jobs will be aborted.", "Shutdown", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Shutting down server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.shutting_down_server') : "Shutting down server...") );
 				app.api.post( 'app/shutdown_server', server, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server is being shut down in the background.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_is_being_shut_down_in_the_backgro') : "Server is being shut down in the background."));
 					// self.gosub_servers(self.args);
 				} );
 			}

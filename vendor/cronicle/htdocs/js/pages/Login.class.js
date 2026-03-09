@@ -26,23 +26,23 @@ Class.subclass( Page.Base, "Page.Login", {
 			return true;
 		}
 		
-		app.setWindowTitle('Login');
+		app.setWindowTitle((window._t ? _t('login.btn_login') : 'Login'));
 		app.showTabBar(false);
 		
 		this.div.css({ 'padding-top':'75px', 'padding-bottom':'75px' });
 		var html = '';
 		
 		html += '<div class="inline_dialog_container">';
-			html += '<div class="dialog_title shade-light">User Login</div>';
+			html += '<div class="dialog_title shade-light">' + (window._t ? _t('login.title') : 'User Login') + '</div>';
 			html += '<div class="dialog_content">';
 				html += '<center><table style="margin:0px;">';
 					html += '<tr>';
-						html += '<td align="right" class="table_label">Username:</td>';
+						html += '<td align="right" class="table_label">' + (window._t ? _t('login.username') : 'Username:') + '</td>';
 						html += '<td align="left" class="table_value"><div><input type="text" name="username" id="fe_login_username" size="30" spellcheck="false" value="'+(app.getPref('username') || '')+'"/></div></td>';
 					html += '</tr>';
 					html += '<tr><td colspan="2"><div class="table_spacer"></div></td></tr>';
 					html += '<tr>';
-						html += '<td align="right" class="table_label">Password:</td>';
+						html += '<td align="right" class="table_label">' + (window._t ? _t('login.password') : 'Password:') + '</td>';
 						html += '<td align="left" class="table_value"><div><input type="' + app.get_password_type() + '" name="password" id="fe_login_password" size="30" spellcheck="false" value=""/>' + app.get_password_toggle_html() + '</div></td>';
 					html += '</tr>';
 					html += '<tr><td colspan="2"><div class="table_spacer"></div></td></tr>';
@@ -54,12 +54,12 @@ Class.subclass( Page.Base, "Page.Login", {
 					html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().navCreateAccount()">Create Account...</div></td>';
 					html += '<td width="20">&nbsp;</td>';
 				}
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().navPasswordRecovery()">Forgot Password...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().navPasswordRecovery()">' + (window._t ? _t('login.forgot') : 'Forgot Password...') + '</div></td>';
 				html += '<td width="20">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doLogin()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>Login</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doLogin()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>' + (window._t ? _t('login.button') : 'Login') + '</div></td>';
 				if (config.oauth) {
 					html += '<td width="20">&nbsp;</td>';
-					html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doOauth()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>SSO</div></td>';
+					html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doOauth()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>' + (window._t ? _t('login.btn_sso') : 'SSO') + '</div></td>';
 				}
 			html += '</tr></table></center></div>';
 		html += '</div>';
@@ -104,7 +104,7 @@ Class.subclass( Page.Base, "Page.Login", {
 		var password = $('#fe_login_password').val();
 		
 		if (username && password) {
-			app.showProgress(1.0, "Logging in...");
+			app.showProgress(1.0, (window._t ? _t('login.logging_in') : "Logging in..."));
 			
 			app.api.post( 'user/login', {
 				username: username,
@@ -124,7 +124,7 @@ Class.subclass( Page.Base, "Page.Login", {
 	cancel: function() {
 		// return to login page
 		app.clearError();
-		Nav.go('Login', true);
+		Nav.go((window._t ? _t('login.btn_login') : 'Login'), true);
 	},
 	
 	navCreateAccount: function() {
@@ -142,35 +142,35 @@ Class.subclass( Page.Base, "Page.Login", {
 		var html = '';
 		
 		html += '<div class="inline_dialog_container">';
-			html += '<div class="dialog_title shade-light">Create Account</div>';
+			html += '<div class="dialog_title shade-light">' + (window._t ? _t('login.create_account') : 'Create Account...') + '</div>';
 			html += '<div class="dialog_content">';
 				html += '<center><table style="margin:0px;">';
 				
-				html += get_form_table_row( 'Username:', 
-					'<table cellspacing="0" cellpadding="0"><tr>' + 
-						'<td><input type="text" id="fe_ca_username" size="20" style="font-size:14px;" value="" spellcheck="false" onChange="$P().checkUserExists(\'ca\')"/></td>' + 
-						'<td><div id="d_ca_valid" style="margin-left:5px; font-weight:bold;"></div></td>' + 
+				html += get_form_table_row( (window._t ? _t('login.username') : 'Username:'),
+					'<table cellspacing="0" cellpadding="0"><tr>' +
+						'<td><input type="text" id="fe_ca_username" size="20" style="font-size:14px;" value="" spellcheck="false" onChange="$P().checkUserExists(\'ca\')"/></td>' +
+						'<td><div id="d_ca_valid" style="margin-left:5px; font-weight:bold;"></div></td>' +
 					'</tr></table>'
 				);
 				
-				html += get_form_table_caption('Choose a unique alphanumeric username for your account.') + 
-				get_form_table_spacer() + 
-				get_form_table_row('Password:', '<input type="' + app.get_password_type() + '" id="fe_ca_password" size="30" value="" spellcheck="false"/>' + app.get_password_toggle_html()) + 
-				get_form_table_caption('Enter a secure password that you will not forget.') + 
-				get_form_table_spacer() + 
-				get_form_table_row('Full Name:', '<input type="text" id="fe_ca_fullname" size="30" value="" spellcheck="false"/>') + 
-				get_form_table_caption('This is used for display purposes only.') + 
-				get_form_table_spacer() + 
-				get_form_table_row('Email Address:', '<input type="text" id="fe_ca_email" size="30" value="" spellcheck="false"/>') + 
-				get_form_table_caption('This is used only to recover your password should you lose it.');
+				html += get_form_table_caption((window._t ? _t('login.choose_a_unique_alphanumeric_username_fo') : 'Choose a unique alphanumeric username for your account.')) +
+				get_form_table_spacer() +
+				get_form_table_row((window._t ? _t('login.password') : 'Password:'), '<input type="' + app.get_password_type() + '" id="fe_ca_password" size="30" value="" spellcheck="false"/>' + app.get_password_toggle_html()) +
+				get_form_table_caption((window._t ? _t('login.enter_a_secure_password_that_you_will_no') : 'Enter a secure password that you will not forget.')) +
+				get_form_table_spacer() +
+				get_form_table_row((window._t ? _t('login.full_name') : 'Full Name:'), '<input type="text" id="fe_ca_fullname" size="30" value="" spellcheck="false"/>') +
+				get_form_table_caption((window._t ? _t('login.this_is_used_for_display_purposes_only') : 'This is used for display purposes only.')) +
+				get_form_table_spacer() +
+				get_form_table_row((window._t ? _t('login.email_address') : 'Email Address:'), '<input type="text" id="fe_ca_email" size="30" value="" spellcheck="false"/>') +
+				get_form_table_caption((window._t ? _t('login.this_is_used_only_to_recover_your_passwo') : 'This is used only to recover your password should you lose it.'));
 					
 				html += '</table></center>';
 			html += '</div>';
 			
 			html += '<div class="dialog_buttons"><center><table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">' + (window._t ? _t('login.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doCreateAccount()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>Create</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doCreateAccount()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>' + (window._t ? _t('login.create') : 'Create') + '</div></td>';
 			html += '</tr></table></center></div>';
 		html += '</div>';
 		
@@ -192,22 +192,22 @@ Class.subclass( Page.Base, "Page.Login", {
 		var password = trim($('#fe_ca_password').val());
 		
 		if (!username.length) {
-			return app.badField('#fe_ca_username', "Please enter a username for your account.");
+			return app.badField('#fe_ca_username', (window._t ? _t('login.please_enter_a_username_for_your_account') : "Please enter a username for your account."));
 		}
 		if (!username.match(/^[\w\.\-]+@?[\w\.\-]+$/)) {
-			return app.badField('#fe_ca_username', "Please make sure your username contains only alphanumerics, dashes and periods.");
+			return app.badField('#fe_ca_username', (window._t ? _t('login.please_make_sure_your_username_contains_') : "Please make sure your username contains only alphanumerics, dashes and periods."));
 		}
 		if (!email.length) {
-			return app.badField('#fe_ca_email', "Please enter an e-mail address where you can be reached.");
+			return app.badField('#fe_ca_email', (window._t ? _t('login.please_enter_an_email_address_where_you_') : "Please enter an e-mail address where you can be reached."));
 		}
 		if (!email.match(/^\S+\@\S+$/)) {
-			return app.badField('#fe_ca_email', "The e-mail address you entered does not appear to be correct.");
+			return app.badField('#fe_ca_email', (window._t ? _t('login.the_email_address_you_entered_does_not_a') : "The e-mail address you entered does not appear to be correct."));
 		}
 		if (!full_name.length) {
-			return app.badField('#fe_ca_fullname', "Please enter your first and last names. These are used only for display purposes.");
+			return app.badField('#fe_ca_fullname', (window._t ? _t('login.please_enter_your_first_and_last_names_t') : "Please enter your first and last names. These are used only for display purposes."));
 		}
 		if (!password.length) {
-			return app.badField('#fe_ca_password', "Please enter a secure password to protect your account.");
+			return app.badField('#fe_ca_password', (window._t ? _t('login.please_enter_a_secure_password_to_protec') : "Please enter a secure password to protect your account."));
 		}
 		if (!force && (app.last_password_strength.score < 3)) {
 			app.confirm( '<span style="color:red">Insecure Password Warning</span>', app.get_password_warning(), "Proceed", function(result) {
@@ -217,7 +217,7 @@ Class.subclass( Page.Base, "Page.Login", {
 		} // insecure password
 		
 		Dialog.hide();
-		app.showProgress( 1.0, "Creating account..." );
+		app.showProgress( 1.0, (window._t ? _t('login.creating_account') : "Creating account...") );
 		
 		app.api.post( 'user/create', {
 			username: username,
@@ -227,10 +227,10 @@ Class.subclass( Page.Base, "Page.Login", {
 		}, 
 		function(resp, tx) {
 			app.hideProgress();
-			app.showMessage('success', "Account created successfully.");
+			app.showMessage('success', (window._t ? _t('login.account_created_successfully') : "Account created successfully."));
 			
 			app.setPref('username', username);
-			Nav.go( 'Login', true );
+			Nav.go( (window._t ? _t('login.btn_login') : 'Login'), true );
 		} ); // api.post
 	},
 	
@@ -264,9 +264,9 @@ Class.subclass( Page.Base, "Page.Login", {
 			html += '</div>';
 			
 			html += '<div class="dialog_buttons"><center><table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">' + (window._t ? _t('login.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doSendRecoveryEmail()"><i class="fa fa-envelope-o">&nbsp;&nbsp;</i>Send Email</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doSendRecoveryEmail()"><i class="fa fa-envelope-o">&nbsp;&nbsp;</i>' + (window._t ? _t('login.send_email') : 'Send Email') + '</div></td>';
 			html += '</tr></table></center></div>';
 		html += '</div>';
 		
@@ -293,20 +293,20 @@ Class.subclass( Page.Base, "Page.Login", {
 		if (username.match(/^[\w.-]+$/)) {
 			if (email.match(/.+\@.+/)) {
 				Dialog.hide();
-				app.showProgress( 1.0, "Sending e-mail..." );
+				app.showProgress( 1.0, (window._t ? _t('login.sending_email') : "Sending e-mail...") );
 				app.api.post( 'user/forgot_password', {
 					username: username,
 					email: email
 				}, 
 				function(resp, tx) {
 					app.hideProgress();
-					app.showMessage('success', "Password reset instructions sent successfully.");
-					Nav.go('Login', true);
+					app.showMessage('success', (window._t ? _t('login.password_reset_instructions_sent_success') : "Password reset instructions sent successfully."));
+					Nav.go((window._t ? _t('login.btn_login') : 'Login'), true);
 				} ); // api.post
 			} // good address
-			else app.badField('#fe_pr_email', "The e-mail address you entered does not appear to be correct.");
+			else app.badField('#fe_pr_email', (window._t ? _t('login.the_email_address_you_entered_does_not_a') : "The e-mail address you entered does not appear to be correct."));
 		} // good username
-		else app.badField('#fe_pr_username', "The username you entered does not appear to be correct.");
+		else app.badField('#fe_pr_username', (window._t ? _t('login.the_username_you_entered_does_not_appear') : "The username you entered does not appear to be correct."));
 	},
 	
 	showPasswordResetForm: function(args) {
@@ -320,7 +320,7 @@ Class.subclass( Page.Base, "Page.Login", {
 		var html = '';
 		
 		html += '<div class="inline_dialog_container">';
-			html += '<div class="dialog_title shade-light">Reset Password</div>';
+			html += '<div class="dialog_title shade-light">' + (window._t ? _t('login.reset_password') : 'Reset Password') + '</div>';
 			html += '<div class="dialog_content">';
 				html += '<center><table style="margin:0px;">';
 					html += '<tr>';
@@ -337,7 +337,7 @@ Class.subclass( Page.Base, "Page.Login", {
 			html += '</div>';
 			
 			html += '<div class="dialog_buttons"><center><table><tr>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().doResetPassword()"><i class="fa fa-key">&nbsp;&nbsp;</i>Reset Password</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().doResetPassword()"><i class="fa fa-key">&nbsp;&nbsp;</i>' + (window._t ? _t('login.reset_password') : 'Reset Password') + '</div></td>';
 			html += '</tr></table></center></div>';
 		html += '</div>';
 		
@@ -369,7 +369,7 @@ Class.subclass( Page.Base, "Page.Login", {
 				return;
 			} // insecure password
 			
-			app.showProgress(1.0, "Resetting password...");
+			app.showProgress(1.0, (window._t ? _t('login.resetting_password') : "Resetting password..."));
 			
 			app.api.post( 'user/reset_password', {
 				username: username,
@@ -382,10 +382,10 @@ Class.subclass( Page.Base, "Page.Login", {
 				app.hideProgress();
 				app.setPref('username', username);
 				
-				Nav.go( 'Login', true );
+				Nav.go( (window._t ? _t('login.btn_login') : 'Login'), true );
 				
 				setTimeout( function() {
-					app.showMessage('success', "Your password was reset successfully.");
+					app.showMessage('success', (window._t ? _t('login.your_password_was_reset_successfully') : "Your password was reset successfully."));
 				}, 100 );
 			} ); // post
 		}

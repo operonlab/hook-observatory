@@ -1,4 +1,3 @@
-/* Copyright (c) PixlCore.com, MIT License. https://github.com/jhuckaby/Cronicle */
 /*
  * A JavaScript implementation of the RSA Data Security, Inc. MD5 Message
  * Digest Algorithm, as defined in RFC 1321.
@@ -378,7 +377,6 @@ function bit_rol(num, cnt)
 {
   return (num << cnt) | (num >>> (32 - cnt));
 }
-
 /**
  * JavaScript Object Oriented Programming Framework
  * Author: Joseph Huckaby
@@ -493,7 +491,6 @@ if (!window.assert) window.assert = function(fact, msg) {
 	}
 	return fact;
 }
-
 /*
 	JavaScript XML Library
 	Plus a bunch of object utility functions
@@ -1248,7 +1245,6 @@ function find_in_array(arr, elem) {
 	}
 	return false;
 }
-
 ////
 // Joe's Misc JavaScript Tools
 // Copyright (c) 2004 - 2015 Joseph Huckaby
@@ -1789,7 +1785,6 @@ function substitute(text, args, fatal) {
 	if (!result && fatal) return null;
 	else return text;
 };
-
 // Joe's Date/Time Tools
 // Copyright (c) 2004 - 2015 Joseph Huckaby
 // Released under the MIT License
@@ -1979,7 +1974,6 @@ function check_valid_date(str) {
 	catch (e) { epoch = 0; }
 	return (epoch >= 86400);
 };
-
 /**
  * WebApp 1.0 Page Manager
  * Author: Joseph Huckaby
@@ -2178,28 +2172,45 @@ Class.create( 'Page', {
 	getSidebarTabs: function(current, tabs) {
 		// get html for sidebar tabs
 		var html = '';
-		
-		html += '<div style="margin-left:151px; position:relative; min-height:400px;">';
+
+		// auto-translate common sidebar labels
+		var _sidebar_keys = {
+			"Activity Log": "admin_sidebar.activity_log",
+			"Configs": "admin_sidebar.configs",
+			"Secrets": "admin_sidebar.secrets",
+			"API Keys": "admin_sidebar.api_keys",
+			"Categories": "admin_sidebar.categories",
+			"Plugins": "admin_sidebar.plugins",
+			"Servers": "admin_sidebar.servers",
+			"Users": "admin_sidebar.users",
+			"All Completed": "history.all_completed",
+			"Event History": "history.event_history_label",
+			"Event Stats": "history.event_stats_label"
+		};
+
+		html += '<div class="sidebar_content_wrapper" style="margin-left:151px; position:relative; min-height:400px;">';
 		html += '<div class="side_tab_bar" style="position:absolute; left:-161px;">';
-		html += '<div style="height:50px;"></div>';
-		
+		html += '<div class="sidebar_spacer" style="height:50px;"></div>';
+
 		for (var idx = 0, len = tabs.length; idx < len; idx++) {
 			var tab = tabs[idx];
 			if (typeof(tab) == 'string') html += tab;
 			else {
 				var class_name = 'inactive';
 				var link = 'Nav.go(\''+this.ID+'?sub='+tab[0]+'\')';
-				
+
 				if (tab[0] == current) {
 					class_name = 'active';
 					link = '';
 				}
-				html += '<div class="tab side '+class_name+'" onMouseUp="'+link+'"><span class="content">'+tab[1]+'</span></div>';
+				var label = tab[1];
+				if (window._t && _sidebar_keys[label]) label = _t(_sidebar_keys[label]);
+				html += '<div class="tab side '+class_name+'" onMouseUp="'+link+'"><span class="content">'+label+'</span></div>';
 			}
 		}
-		
+
 		html += '</div>';
-		
+
 		return html;
 	},
 	
@@ -2328,6 +2339,7 @@ Class.create( 'Page', {
 		html += '</div>';
 		
 		html += '<div style="margin-top:5px;">';
+		html += '<div class="data_table_scroll_wrapper">';
 		html += '<table class="data_table" width="100%">';
 		html += '<tr><th>' + cols.join('</th><th>').replace(/\s+/g, '&nbsp;') + '</th></tr>';
 		
@@ -2348,6 +2360,7 @@ Class.create( 'Page', {
 		}
 		
 		html += '</table>';
+		html += '</div>';
 		html += '</div>';
 		
 		return html;
@@ -2514,7 +2527,6 @@ Class.create( 'PageManager', {
 	
 } ); // class PageManager
 
-
 // Dialog Tools
 // Author: Joseph Huckaby
 // Released under the MIT License.
@@ -2631,7 +2643,6 @@ var Dialog = {
 	}
 	
 };
-
 // Base App Framework
 
 var app = {
@@ -3034,7 +3045,7 @@ var app = {
 		
 		var buttons_html = "";
 		buttons_html += '<center><table><tr>';
-			buttons_html += '<td><div class="button" style="width:100px; font-weight:normal;" onMouseUp="app.confirm_click(false)">Cancel</div></td>';
+			buttons_html += '<td><div class="button" style="width:100px; font-weight:normal;" onMouseUp="app.confirm_click(false)">' + (window._t ? _t('common.btn_cancel') : 'Cancel') + '</div></td>';
 			buttons_html += '<td width="60">&nbsp;</td>';
 			buttons_html += '<td><div class="button" style="width:100px;" onMouseUp="app.confirm_click(true)">'+ok_btn_label+'</div></td>';
 		buttons_html += '</tr></table></center>';
@@ -3228,7 +3239,6 @@ window.addEventListener( "resize", function() {
 window.addEventListener("beforeunload", function (e) {
 	return app.handleUnload();
 }, false );
-
 // Cronicle Web App
 // Author: Joseph Huckaby
 // Copyright (c) 2015 Joseph Huckaby and PixlCore.com
@@ -3255,7 +3265,7 @@ app.extend({
 	receiveConfig: function(resp) {
 		// receive config from server
 		if (resp.code) {
-			app.showProgress( 1.0, "Waiting for manager server..." );
+			app.showProgress( 1.0, (window._t ? _t('app.waiting_for_manager_server') : "Waiting for manager server...") );
 			setTimeout( function() { load_script( 'api/app/config' ); }, 1000 );
 			return;
 		}
@@ -3365,11 +3375,11 @@ app.extend({
 		let avatarUrl = this.getUserAvatarURL( this.retina ? 64 : 32 )
 		let html = `
 		<div id="d_header_divider" class="right" style="margin-right:0;"></div>
-		<div class="header_option logout right" onMouseUp="app.doUserLogout()"><i class="fa fa-power-off fa-lg">&nbsp;&nbsp;</i>Logout</div>
+		<div class="header_option logout right" onMouseUp="app.doUserLogout()"><i class="fa fa-power-off fa-lg">&nbsp;&nbsp;</i>${window._t ? _t('header.logout') : 'Logout'}</div>
 		<div id="d_header_divider" class="right"></div>
 		<div id="d_theme_ctrl" class="header_option right" onmouseup="app.toggleTheme()"></div>
 		<div id="d_header_divider" class="right"></div>
-		<div id="d_lang_ctrl" class="header_option right" onmouseup="app.toggleLang()" title="Language: ${window.I18n ? I18n.languages[I18n.getLang()] || I18n.getLang() : 'en'}"><i class="mdi mdi-translate mdi-lg"></i></div>
+		<div id="d_lang_ctrl" class="header_option right" onmouseup="app.toggleLang()" title="${window.I18n ? I18n.languages[I18n.getLang()] || '' : ''}" style="cursor:pointer"><i class="mdi mdi-translate mdi-lg"></i>&nbsp;${window.I18n ? (I18n.getLang() === 'en' ? 'EN' : '中') : 'EN'}</div>
 		<div id="d_header_divider" class="right"></div>
 		<div id="d_header_user_bar" class="right" style="background-image:url(${avatarUrl})" onMouseUp="app.doMyAccount()">${userName}</div>
 		`
@@ -3446,7 +3456,7 @@ app.extend({
 		
 		if (!bad_cookie) {
 			// user explicitly logging out
-			this.showProgress(1.0, "Logging out...");
+			this.showProgress(1.0, (window._t ? _t('app.logging_out') : "Logging out..."));
 			this.setPref('username', '');
 		}
 		
@@ -3487,10 +3497,10 @@ app.extend({
 			setTimeout( function() {
 				if (!app.config.external_users) {
 					if (bad_cookie) {
-						self.showMessage('error', "Your session has expired.  Please log in again.");
+						self.showMessage('error', (window._t ? _t('app.your_session_has_expired_please_log_in_a') : "Your session has expired.  Please log in again."));
 						console.log('bad cookieee', bad_cookie)
 					}
-					else self.showMessage('success', "You were logged out successfully.");
+					else self.showMessage('success', (window._t ? _t('app.you_were_logged_out_successfully') : "You were logged out successfully."));
 				}
 				
 				self.activeJobs = {};
@@ -3520,7 +3530,7 @@ app.extend({
 			}
 			else if (resp.location) {
 				Debug.trace("External User API requires redirect");
-				app.showProgress(1.0, "Logging in...");
+				app.showProgress(1.0, (window._t ? _t('app.logging_in') : "Logging in..."));
 				setTimeout( function() { window.location = resp.location; }, 250 );
 			}
 			else app.doError(resp.description || "Unknown login error.");
@@ -3533,7 +3543,7 @@ app.extend({
 		url += (url.match(/\?/) ? '&' : '?') + 'logout=1';
 		
 		Debug.trace("External User API requires redirect");
-		app.showProgress(1.0, "Logging out...");
+		app.showProgress(1.0, (window._t ? _t('app.logging_out') : "Logging out..."));
 		setTimeout( function() { window.location = url; }, 250 );
 	},
 
@@ -3612,7 +3622,7 @@ app.extend({
 		
 		socket.on('reconnecting', function() {
 			Debug.trace("socket.io reconnecting...");
-			// self.showProgress( 0.5, "Reconnecting to server..." );
+			// self.showProgress( 0.5, (window._t ? _t('app.reconnecting_to_server') : "Reconnecting to server...") );
 		} );
 		
 		socket.on('reconnect', function() {
@@ -3815,7 +3825,7 @@ app.extend({
 		// Oops, we're connected to a worker!  manager must have been restarted.
 		// If worker knows who is manager, switch now, otherwise go into wait loop
 		var self = this;
-		this.showProgress( 1.0, "Waiting for manager server..." );
+		this.showProgress( 1.0, (window._t ? _t('app.waiting_for_manager_server') : "Waiting for manager server...") );
 		this.waitingFormanager = true;
 		
 		if (data.manager_hostname) {
@@ -3917,7 +3927,7 @@ app.extend({
 		// $('#d_tab_manager > i').removeClass().addClass('fa fa-spin fa-spinner');
 		
 		app.api.post( 'app/update_manager_state', { enabled: enabled }, function(resp) {
-			app.showMessage('success', "Scheduler has been " + (enabled ? 'enabled' : 'disabled') + ".");
+			app.showMessage('success', (window._t ? _t('app.scheduler_has_been') : "Scheduler has been ") + (enabled ? 'enabled' : 'disabled') + ".");
 			self.state.enabled = enabled;
 			self.updatemanagerSwitch();
 		} );
@@ -4540,7 +4550,6 @@ function get_text_from_seconds_round_custom(sec, abbrev) {
 	
 	return(neg + text);
 };
-
 Class.subclass(Page, "Page.Base", {
 
 	graph_colors: ["0,0,255", "138,43,226", "0,128,0", "255,20,147", "0,191,255", "210,105,30", "100,149,237", "220,20,60", "0,139,139", "128,128,128"],
@@ -4590,14 +4599,14 @@ Class.subclass(Page, "Page.Base", {
 	},
 
 	getNiceJob: function (id) {
-		if (!id) return '(None)';
+		if (!id) return (window._t ? _t('common.none') : '(None)');
 		if (typeof (id) == 'object') id = id.id;
 		return '<div style="white-space:nowrap;"><i class="fa fa-pie-chart">&nbsp;</i>' + id + '</div>';
 	},
 
 	getNiceEvent: function (title, width, style, extra, extraTooltip) {
 		if (!width) width = 500;
-		if (!title) return '(None)';
+		if (!title) return (window._t ? _t('common.none') : '(None)');
 		if (!style) style = '';
 		if (!extra) extra = '';
 		
@@ -4632,21 +4641,21 @@ Class.subclass(Page, "Page.Base", {
 
 	getNiceCategory: function (cat, width, collapse) {
 
-		if (!cat) return '(None)';
+		if (!cat) return (window._t ? _t('common.none') : '(None)');
 
 		if (!width) width = 500;
 		let icon = 'fa fa-folder-open-o'
 		let iconClosed = 'fa fa-folder'
 
 		let title = cat.title;
-		if (!cat.enabled) title += ' (Disabled)';
+		if (!cat.enabled) title += ' ' + (window._t ? _t('common.disabled') : '(Disabled)');
 		let onClick = arguments.length > 2 ? `onclick="this.className = this.className == '${icon}' ? '${iconClosed}' : '${icon}' ;$('.event_group_${cat.id}').toggle()"` : ''
 		return `<div class="ellip" style="max-width:${width}px;"><i class="${collapse ? iconClosed : icon}" ${onClick}>&nbsp;</i>${title}</div>`;
 	},
 
 	getNiceGroup: function (group, target, width, collapse) {
 		
-		if (!group && !target) return '(None)';
+		if (!group && !target) return (window._t ? _t('common.none') : '(None)');
 
         if (!width) width = 500;
 
@@ -4658,7 +4667,7 @@ Class.subclass(Page, "Page.Base", {
 			let onClick = arguments.length > 3 ? `onclick="this.className = this.className == '${icon}' ? '${iconClosed}' : '${icon}' ;$('.event_group_${group.id}').toggle()"` : ''
 
 			var title = group.title;
-			if (group.multiplex) title += '&nbsp;(<i class="fa fa-bolt" title="Multiplexed"></i>)';
+			if (group.multiplex) title += '&nbsp;(<i class="fa fa-bolt" title="' + (window._t ? _t('common.multiplexed') : 'Multiplexed') + '"></i>)';
 			return `<div class="ellip" style="max-width:${width}px;"><i class="${collapse ? iconClosed : icon}" ${onClick}>&nbsp;</i>${title}</div>`;
 		}
 		else {
@@ -4668,13 +4677,13 @@ Class.subclass(Page, "Page.Base", {
 
 	getNicePlugin: function (plugin, width, collapse) {
 
-		if (!plugin) return '(None)';
+		if (!plugin) return (window._t ? _t('common.none') : '(None)');
 		if (!width) width = 500;
 		let icon = 'fa fa fa-plug'
 		let iconClosed = 'fa fa-plus-square'
 
 		var title = plugin.title;
-		if (!plugin.enabled) title += ' (Disabled)';
+		if (!plugin.enabled) title += ' ' + (window._t ? _t('common.disabled') : '(Disabled)');
 		let onClick = arguments.length > 2 ? `onclick="this.className = this.className == '${icon}' ? '${iconClosed}' : '${icon}' ;$('.event_group_${plugin.id}').toggle()"` : ''
 		return `<div class="ellip" style="max-width:${width}px;"><i class="${collapse ? iconClosed : icon}" ${onClick}>&nbsp;</i>${title}</div>`;
 	},
@@ -4753,17 +4762,17 @@ Class.subclass(Page, "Page.Base", {
 			app.api.post('app/check_user_exists', { username: username }, function (resp) {
 				if (resp.user_exists) {
 					// username taken
-					$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>Username Taken');
+					$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>' + (window._t ? _t('common.username_taken') : 'Username Taken'));
 				}
 				else {
 					// username is valid and available!
-					$elem.css('color', 'green').html('<span class="fa fa-check-circle fa-lg">&nbsp;</span>Available');
+					$elem.css('color', 'green').html('<span class="fa fa-check-circle fa-lg">&nbsp;</span>' + (window._t ? _t('common.available') : 'Available'));
 				}
 			});
 		}
 		else if (username.length) {
 			// bad username
-			$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>Bad Username');
+			$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>' + (window._t ? _t('common.bad_username') : 'Bad Username'));
 		}
 		else {
 			// empty
@@ -4787,8 +4796,8 @@ Class.subclass(Page, "Page.Base", {
 			var $elem = $(this);
 			var $span = $elem.next();
 
-			if (self.check_add_remove_me($elem)) $span.html('&raquo; Remove me');
-			else $span.html('&laquo; Add me');
+			if (self.check_add_remove_me($elem)) $span.html('&raquo; ' + (window._t ? _t('common.remove_me') : 'Remove me'));
+			else $span.html('&laquo; ' + (window._t ? _t('common.add_me') : 'Add me'));
 		});
 	},
 
@@ -4844,8 +4853,8 @@ Class.subclass(Page, "Page.Base", {
 	get_relative_time_combo_box: function (id, value, class_name, inc_seconds) {
 		// get HTML for combo textfield/menu for a relative time based input
 		// provides Minutes, Hours and Days units
-		var unit_items = [[60, 'Minutes'], [3600, 'Hours'], [86400, 'Days']];
-		if (inc_seconds) unit_items.unshift([1, 'Seconds']);
+		var unit_items = [[60, (window._t ? _t('common.minutes') : 'Minutes')], [3600, (window._t ? _t('common.hours') : 'Hours')], [86400, (window._t ? _t('common.days') : 'Days')]];
+		if (inc_seconds) unit_items.unshift([1, (window._t ? _t('common.seconds') : 'Seconds')]);
 
 		return this.get_custom_combo_unit_box(id, value, unit_items, class_name);
 	},
@@ -4858,7 +4867,7 @@ Class.subclass(Page, "Page.Base", {
 		var MB = 1024 * 1024;
 		var KB = 1024;
 
-		return this.get_custom_combo_unit_box(id, value, [[KB, 'KB'], [MB, 'MB'], [GB, 'GB'], [TB, 'TB']], class_name);
+		return this.get_custom_combo_unit_box(id, value, [[KB, (window._t ? _t('common.kb') : 'KB')], [MB, (window._t ? _t('common.mb') : 'MB')], [GB, (window._t ? _t('common.gb') : 'GB')], [TB, (window._t ? _t('common.tb') : 'TB')]], class_name);
 	},
 
 	expand_fieldset: function ($span) {
@@ -4892,8 +4901,8 @@ Class.subclass(Page, "Page.Base", {
 
 		if (!args.when) args.when = time_now();
 		if (!args.timezone) args.timezone = app.tz;
-		if (!args.title) args.title = "Select Date/Time";
-		if (!args.button) args.button = "Select";
+		if (!args.title) args.title = (window._t ? _t('common.select_date_time') : "Select Date/Time");
+		if (!args.button) args.button = (window._t ? _t('common.select') : "Select");
 
 		if (args.description) {
 			html += '<div style="font-size:12px; color:#777; margin-bottom:20px;">' + args.description + '</div>';
@@ -4909,17 +4918,17 @@ Class.subclass(Page, "Page.Base", {
 		for (var idx = margs.year() - 10; idx <= margs.year() + 10; idx++) {
 			year_items.push(idx);
 		}
-		html += '<td align="left"><fieldset class="dt_fs"><legend>Year</legend>';
+		html += '<td align="left"><fieldset class="dt_fs"><legend>' + (window._t ? _t('common.year') : 'Year') + '</legend>';
 		html += '<select id="fe_dt_year">' + render_menu_options(year_items, margs.year()) + '</select>';
 		html += '</fieldset></td>';
 
 		// months
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Month</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.month') : 'Month') + '</legend>';
 		html += '<select id="fe_dt_month">' + render_menu_options(_months, margs.month() + 1) + '</select>';
 		html += '</fieldset></td>';
 
 		// days
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Day</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.day') : 'Day') + '</legend>';
 		html += '<select id="fe_dt_day">' + render_menu_options(_days, margs.date()) + '</select>';
 		html += '</fieldset></td>';
 
@@ -4927,7 +4936,7 @@ Class.subclass(Page, "Page.Base", {
 		var hour_items = _hour_names.map(function (value, idx) {
 			return [idx, value.toUpperCase().replace(/^(\d+)(\w+)$/, '$1 $2')];
 		});
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Hour</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.hour') : 'Hour') + '</legend>';
 		html += '<select id="fe_dt_hour">' + render_menu_options(hour_items, margs.hour()) + '</select>';
 		html += '</fieldset></td>';
 
@@ -4936,13 +4945,13 @@ Class.subclass(Page, "Page.Base", {
 		for (var idx = 0; idx < 60; idx++) {
 			min_items.push([idx, (idx < 10) ? ('0' + idx) : ('' + idx)]);
 		}
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Minute</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.minute') : 'Minute') + '</legend>';
 		html += '<select id="fe_dt_minute">' + render_menu_options(min_items, margs.minute()) + '</select>';
 		html += '</fieldset></td>';
 
 		html += '</tr>';
 		html += '<tr><td align="left" colspan="5">';
-		html += '<div class="caption">Timezone: ' + args.timezone + '</div>';
+		html += '<div class="caption">' + (window._t ? _t('common.timezone_prefix') : 'Timezone: ') + args.timezone + '</div>';
 		html += '</td></tr>';
 		html += '</table></center>';
 
@@ -4978,7 +4987,7 @@ Class.subclass(Page, "Page.Base", {
 				return app.hasPrivilege('grp_' + group.id);
 			});
 
-		html += '<optgroup label="Groups:">' + render_menu_options(server_groups, value, false) + '</optgroup>';
+		html += '<optgroup label="' + (window._t ? _t('common.groups_label') : 'Groups:') + '">' + render_menu_options(server_groups, value, false) + '</optgroup>';
 
 		if (find_object(server_groups, { id: value })) value = '';
 
@@ -5008,12 +5017,11 @@ Class.subclass(Page, "Page.Base", {
 			short_hostnames.push([hostnames[idx], hostnames[idx].replace(/\.[\w\-]+\.\w+$/, '')]);
 		}
 
-		html += '<optgroup label="Servers:">' + render_menu_options(short_hostnames, value, false) + '</optgroup>';
+		html += '<optgroup label="' + (window._t ? _t('common.servers_label') : 'Servers:') + '">' + render_menu_options(short_hostnames, value, false) + '</optgroup>';
 		return html;
 	}
 
 });
-
 Class.subclass( Page.Base, "Page.Home", {	
 	
 	bar_width: 100,
@@ -5035,24 +5043,24 @@ Class.subclass( Page.Base, "Page.Home", {
 		<!-- Event Flow -->
 
 		<div class="subtitle">
-		  Event Flow
+		  ${(window._t ? _t('home.subtitle_event_flow') : 'Event Flow')}
 		  <div class="subtitle_widget"><i class="fa fa-refresh" onClick="$P().refresh_completed_job_chart();$P().refresh_header_stats();$P().refresh_upcoming_events()">&nbsp;</i></div>
 		  <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i>
 			<select id="fe_cmp_job_chart_scale" class="subtitle_menu" onChange="$P().refresh_completed_job_chart();app.setPref('job_chart_scale', this.value)">
-			<option value="linear">linear</option><option value="logarithmic">logarithmic</option></select>
+			<option value="linear">${(window._t ? _t('home.linear') : 'linear')}</option><option value="logarithmic">${(window._t ? _t('home.logarithmic') : 'logarithmic')}</option></select>
 		  </div>
 		  <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i>
 			  <select id="fe_cmp_job_chart_limit" class="subtitle_menu" style="width:75px;" onChange="$P().refresh_completed_job_chart();app.setPref('job_chart_limit', this.value)">
-			  <option value="1">hide</option> 
-			  <option value="50">Last 50</option>
-			  <option value="10">Last 10</option>
-			  <option value="25">Last 25</option>
-			  <option value="35">Last 35</option>
-			  <option value="100">Last 100</option>
-			  <option value="120">Last 120</option>
-			  <option value="150">Last 150</option>
-			  <option value="250">Last 250</option>
-			  <option value="500">Last 500</option>
+			  <option value="1">${(window._t ? _t('home.hide') : 'hide')}</option>
+			  <option value="50">${(window._t ? _t('home.last_prefix') : 'Last')} 50</option>
+			  <option value="10">${(window._t ? _t('home.last_prefix') : 'Last')} 10</option>
+			  <option value="25">${(window._t ? _t('home.last_prefix') : 'Last')} 25</option>
+			  <option value="35">${(window._t ? _t('home.last_prefix') : 'Last')} 35</option>
+			  <option value="100">${(window._t ? _t('home.last_prefix') : 'Last')} 100</option>
+			  <option value="120">${(window._t ? _t('home.last_prefix') : 'Last')} 120</option>
+			  <option value="150">${(window._t ? _t('home.last_prefix') : 'Last')} 150</option>
+			  <option value="250">${(window._t ? _t('home.last_prefix') : 'Last')} 250</option>
+			  <option value="500">${(window._t ? _t('home.last_prefix') : 'Last')} 500</option>
 			  </select>	  
 		  </div>
 		  <div class="subtitle_widget"><span id="chart_times" ></span></div>
@@ -5065,7 +5073,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		<!-- Active jobs -->
 
         <div class="subtitle">
-            Active Jobs
+            ${(window._t ? _t('home.subtitle_active_jobs') : 'Active Jobs')}
             <div class="clear"></div>
         </div>
         <div id="d_home_active_jobs"></div>
@@ -5075,7 +5083,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		<!-- Queued jobs -->
 		<div id="d_home_queue_container" style="display:none">
         <div class="subtitle">
-            Event Queues
+            ${(window._t ? _t('home.subtitle_event_queues') : 'Event Queues')}
             <div class="clear"></div>
         </div>
         <div id="d_home_queued_jobs"></div>
@@ -5107,7 +5115,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		document.getElementById('fe_cmp_job_chart_limit').value = lmtActual;
 
 		
-		app.setWindowTitle('Home');
+		app.setWindowTitle((window._t ? _t('home.home') : 'Home'));
 		app.showTabBar(true);
 		
 		this.upcoming_offset = 0;
@@ -5124,21 +5132,21 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		// render upcoming event filters
 		var html = '';
-		html += 'Upcoming Events';
-		
-		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_home_keywords" size="10" placeholder="Find events..." style="border:0px;border-radius:5px" value="' + escape_text_field_value( args.keywords ) + '"/></div>';
-		
+		html += (window._t ? _t('home.subtitle_upcoming') : 'Upcoming Events');
+
+		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_home_keywords" size="10" placeholder="' + (window._t ? _t('home.search_placeholder') : 'Find events...') + '" style="border:0px;border-radius:5px" value="' + escape_text_field_value( args.keywords ) + '"/></div>';
+
 		let ue_options = [
-			{title: "Grid View", id: "grid"},
-			{title: "Compact View", id: "compact"},
-			{title: "Show All", id: "all"}
+			{title: (window._t ? _t('home.grid_view') : "Grid View"), id: "grid"},
+			{title: (window._t ? _t('home.compact_view') : "Compact View"), id: "compact"},
+			{title: (window._t ? _t('home.show_all') : "Show All"), id: "all"}
 		]
 		let up_event_select = render_menu_options( ue_options , app.getPref('fe_up_eventlimit') || 'grid', false ) + '</select>'
 
 		html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_up_eventlimit" class="subtitle_menu" onChange="$P().nav_upcoming($P().upcoming_offset);">${up_event_select}</div>`;
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_target" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">All Servers</option>' + this.render_target_menu_options( args.target ) + '</select></div>';
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_plugin" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">All Plugins</option>' + render_menu_options( app.plugins, args.plugin, false ) + '</select></div>';
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_cat" class="subtitle_menu" style="width:95px;" onChange="$P().set_search_filters()"><option value="">All Categories</option>' + render_menu_options( app.categories, args.category, false ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_target" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">' + (window._t ? _t('home.filter_all_servers') : 'All Servers') + '</option>' + this.render_target_menu_options( args.target ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_plugin" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">' + (window._t ? _t('home.filter_all_plugins') : 'All Plugins') + '</option>' + render_menu_options( app.plugins, args.plugin, false ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_cat" class="subtitle_menu" style="width:95px;" onChange="$P().set_search_filters()"><option value="">' + (window._t ? _t('home.filter_all_categories') : 'All Categories') + '</option>' + render_menu_options( app.categories, args.category, false ) + '</select></div>';
 		
 		html += '<div class="clear"></div>';
 		
@@ -5211,17 +5219,17 @@ Class.subclass( Page.Base, "Page.Home", {
 	let failed_badge = `<span style="cursor:pointer;" onclick='Nav.go("History?sub=error_history&error=1&max=${stats.jobs_failed || 0}")' title="${errTitle}" class="color_label ${errBg}">${stats.jobs_failed || 0}</span>&nbsp;`
 	
 	status_bar = [
-		{name: "EVENTS", value:  active_events.length},
-		{name: "CATS", value:  app.categories.length},
+		{name: (window._t ? _t('home.events_label') : "EVENTS"), value:  active_events.length},
+		{name: (window._t ? _t('home.cats_label') : "CATS"), value:  app.categories.length},
 		// {name: "PLUGINS", value:  app.plugins.length},
-		{name: "JOBS", value:  stats.jobs_completed || 0},
-		{name: "FAILED", value: failed_badge},
-		{name: "SUCCESS", value:  pct( (stats.jobs_completed || 0) - (stats.jobs_failed || 0), stats.jobs_completed || 1 )},
-		{name: "LOG SIZE", value: get_text_from_bytes((stats.jobs_log_size || 0) / (stats.jobs_completed || 1))},
-		{name: "UPTIME", value:  get_text_from_seconds( mserver.uptime || 0, false, true )},
-		{name: "CPU", value:  `${short_float(total_cpu)}%`},
-		{name: "MEMORY", value:  get_text_from_bytes(total_mem)},
-		{name: "SERVERS", value:  num_keys(servers)}
+		{name: (window._t ? _t('home.jobs_label') : "JOBS"), value:  stats.jobs_completed || 0},
+		{name: (window._t ? _t('home.failed_label') : "FAILED"), value: failed_badge},
+		{name: (window._t ? _t('home.success_label') : "SUCCESS"), value:  pct( (stats.jobs_completed || 0) - (stats.jobs_failed || 0), stats.jobs_completed || 1 )},
+		{name: (window._t ? _t('home.log_size_label') : "LOG SIZE"), value: get_text_from_bytes((stats.jobs_log_size || 0) / (stats.jobs_completed || 1))},
+		{name: (window._t ? _t('home.uptime_label') : "UPTIME"), value:  get_text_from_seconds( mserver.uptime || 0, false, true )},
+		{name: (window._t ? _t('home.cpu_label') : "CPU"), value:  `${short_float(total_cpu)}%`},
+		{name: (window._t ? _t('home.memory_label') : "MEMORY"), value:  get_text_from_bytes(total_mem)},
+		{name: (window._t ? _t('home.servers_label') : "SERVERS"), value:  num_keys(servers)}
 	]
 
 	html = '<div class="stats grid-container">'
@@ -5494,7 +5502,10 @@ Class.subclass( Page.Base, "Page.Home", {
 			let statusMap = { 0: green, 255: orange }
 
 			let labels = jobs.map(e => '')
-			if(jobLimit <= 100) labels = jobs.map((j, i) => i == 0 ? j.event_title.substring(0, 4) : j.event_title);
+			if(jobLimit <= 100) labels = jobs.map((j, i) => {
+				let t = j.event_title || '';
+				return i == 0 ? t.substring(0, 4) : (t.length > 18 ? t.substring(0, 16) + '…' : t);
+			});
 
 			let ctx = document.getElementById('d_home_completed_jobs');
 			// var gradient = ctx.createLinearGradient(0, 0, 0, 400);
@@ -5562,6 +5573,13 @@ Class.subclass( Page.Base, "Page.Home", {
 					, scales: {
 						xAxes: [{
 							gridLines: { color: 'rgb(170, 170, 170)', lineWidth: 0.3 },
+							ticks: {
+								maxRotation: 45,
+								minRotation: 25,
+								autoSkip: true,
+								maxTicksLimit: 30,
+								fontSize: 10
+							}
 						}],
 						yAxes: [{
 							type: scaleType,
@@ -5602,7 +5620,7 @@ Class.subclass( Page.Base, "Page.Home", {
 			jobs.push( app.activeJobs[id] );
 		}
 
-		if(jobs.length === 0) return '<div style="display:flex;justify-content: center;font-weight:bold;">No active jobs found<div>'
+		if(jobs.length === 0) return '<div style="display:flex;justify-content: center;font-weight:bold;">' + (window._t ? _t('home.no_active_jobs') : 'No active jobs at this time.') + '<div>'
 		
 		// sort events by time_start descending
 		this.jobs = jobs.sort( function(a, b) {
@@ -5810,7 +5828,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		app.confirm( '<span style="color:red">Abort Job</span>', "Are you sure you want to abort the job &ldquo;<b>"+job.id+"</b>&rdquo;?</br>(Event: "+job.event_title+")", "Abort", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Aborting job..." );
+				app.showProgress( 1.0, (window._t ? _t('home.aborting_job') : "Aborting job...") );
 				app.api.post( 'app/abort_job', job, function(resp) {
 					app.hideProgress();
 					app.showMessage('success', "Job '"+job.event_title+"' was aborted successfully.");
@@ -5822,14 +5840,14 @@ Class.subclass( Page.Base, "Page.Home", {
 	suspend_job: function(idx) {
 		// add "suspended" property to runnig repeat job, so it will exit upon current cycle completion
 		let job = this.jobs[idx];
-		if(!job.repeat) return app.showMessage('error', "Only repeat job can be suspended");
-		if(job.suspended) return app.showMessage('error', "Job is already suspended");
+		if(!job.repeat) return app.showMessage('error', (window._t ? _t('home.only_repeat_job_can_be_suspended') : "Only repeat job can be suspended"));
+		if(job.suspended) return app.showMessage('error', (window._t ? _t('home.job_is_already_suspended') : "Job is already suspended"));
 		app.confirm( '<span style="color:red">Abort Job</span>', `This will prevent job &ldquo;<b> ${job.id}</b>&rdquo; (${job.event_title}) to get into the next cycle. Do you want to continue?</br>`, "Suspend", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Suspending job..." );
+				app.showProgress( 1.0, (window._t ? _t('home.suspending_job') : "Suspending job...") );
 				app.api.post( 'app/update_job', { suspended: true, id: job.id, hostname: job.hostname }, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Job suspended successfully.");
+					app.showMessage('success', (window._t ? _t('home.job_suspended_successfully') : "Job suspended successfully."));
 				} );
 			}
 		} );
@@ -5841,7 +5859,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		app.confirm( '<span style="color:red">Flush Event Queue</span>', "Are you sure you want to flush the queue for event &ldquo;<b>"+stub.title+"</b>&rdquo;?", "Flush", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Flushing event queue..." );
+				app.showProgress( 1.0, (window._t ? _t('home.flushing_event_queue') : "Flushing event queue...") );
 				app.api.post( 'app/flush_event_queue', stub, function(resp) {
 					app.hideProgress();
 					app.showMessage('success', "Event queue for '"+stub.title+"' was flushed successfully.");
@@ -6009,7 +6027,6 @@ Class.subclass( Page.Base, "Page.Home", {
 	}
 	
 } );
-
 Class.subclass( Page.Base, "Page.Login", {	
 	
 	onInit: function() {
@@ -6038,23 +6055,23 @@ Class.subclass( Page.Base, "Page.Login", {
 			return true;
 		}
 		
-		app.setWindowTitle('Login');
+		app.setWindowTitle((window._t ? _t('login.btn_login') : 'Login'));
 		app.showTabBar(false);
 		
 		this.div.css({ 'padding-top':'75px', 'padding-bottom':'75px' });
 		var html = '';
 		
 		html += '<div class="inline_dialog_container">';
-			html += '<div class="dialog_title shade-light">User Login</div>';
+			html += '<div class="dialog_title shade-light">' + (window._t ? _t('login.title') : 'User Login') + '</div>';
 			html += '<div class="dialog_content">';
 				html += '<center><table style="margin:0px;">';
 					html += '<tr>';
-						html += '<td align="right" class="table_label">Username:</td>';
+						html += '<td align="right" class="table_label">' + (window._t ? _t('login.username') : 'Username:') + '</td>';
 						html += '<td align="left" class="table_value"><div><input type="text" name="username" id="fe_login_username" size="30" spellcheck="false" value="'+(app.getPref('username') || '')+'"/></div></td>';
 					html += '</tr>';
 					html += '<tr><td colspan="2"><div class="table_spacer"></div></td></tr>';
 					html += '<tr>';
-						html += '<td align="right" class="table_label">Password:</td>';
+						html += '<td align="right" class="table_label">' + (window._t ? _t('login.password') : 'Password:') + '</td>';
 						html += '<td align="left" class="table_value"><div><input type="' + app.get_password_type() + '" name="password" id="fe_login_password" size="30" spellcheck="false" value=""/>' + app.get_password_toggle_html() + '</div></td>';
 					html += '</tr>';
 					html += '<tr><td colspan="2"><div class="table_spacer"></div></td></tr>';
@@ -6066,12 +6083,12 @@ Class.subclass( Page.Base, "Page.Login", {
 					html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().navCreateAccount()">Create Account...</div></td>';
 					html += '<td width="20">&nbsp;</td>';
 				}
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().navPasswordRecovery()">Forgot Password...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().navPasswordRecovery()">' + (window._t ? _t('login.forgot') : 'Forgot Password...') + '</div></td>';
 				html += '<td width="20">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doLogin()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>Login</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doLogin()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>' + (window._t ? _t('login.button') : 'Login') + '</div></td>';
 				if (config.oauth) {
 					html += '<td width="20">&nbsp;</td>';
-					html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doOauth()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>SSO</div></td>';
+					html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doOauth()"><i class="fa fa-sign-in">&nbsp;&nbsp;</i>' + (window._t ? _t('login.btn_sso') : 'SSO') + '</div></td>';
 				}
 			html += '</tr></table></center></div>';
 		html += '</div>';
@@ -6116,7 +6133,7 @@ Class.subclass( Page.Base, "Page.Login", {
 		var password = $('#fe_login_password').val();
 		
 		if (username && password) {
-			app.showProgress(1.0, "Logging in...");
+			app.showProgress(1.0, (window._t ? _t('login.logging_in') : "Logging in..."));
 			
 			app.api.post( 'user/login', {
 				username: username,
@@ -6136,7 +6153,7 @@ Class.subclass( Page.Base, "Page.Login", {
 	cancel: function() {
 		// return to login page
 		app.clearError();
-		Nav.go('Login', true);
+		Nav.go((window._t ? _t('login.btn_login') : 'Login'), true);
 	},
 	
 	navCreateAccount: function() {
@@ -6154,35 +6171,35 @@ Class.subclass( Page.Base, "Page.Login", {
 		var html = '';
 		
 		html += '<div class="inline_dialog_container">';
-			html += '<div class="dialog_title shade-light">Create Account</div>';
+			html += '<div class="dialog_title shade-light">' + (window._t ? _t('login.create_account') : 'Create Account...') + '</div>';
 			html += '<div class="dialog_content">';
 				html += '<center><table style="margin:0px;">';
 				
-				html += get_form_table_row( 'Username:', 
-					'<table cellspacing="0" cellpadding="0"><tr>' + 
-						'<td><input type="text" id="fe_ca_username" size="20" style="font-size:14px;" value="" spellcheck="false" onChange="$P().checkUserExists(\'ca\')"/></td>' + 
-						'<td><div id="d_ca_valid" style="margin-left:5px; font-weight:bold;"></div></td>' + 
+				html += get_form_table_row( (window._t ? _t('login.username') : 'Username:'),
+					'<table cellspacing="0" cellpadding="0"><tr>' +
+						'<td><input type="text" id="fe_ca_username" size="20" style="font-size:14px;" value="" spellcheck="false" onChange="$P().checkUserExists(\'ca\')"/></td>' +
+						'<td><div id="d_ca_valid" style="margin-left:5px; font-weight:bold;"></div></td>' +
 					'</tr></table>'
 				);
 				
-				html += get_form_table_caption('Choose a unique alphanumeric username for your account.') + 
-				get_form_table_spacer() + 
-				get_form_table_row('Password:', '<input type="' + app.get_password_type() + '" id="fe_ca_password" size="30" value="" spellcheck="false"/>' + app.get_password_toggle_html()) + 
-				get_form_table_caption('Enter a secure password that you will not forget.') + 
-				get_form_table_spacer() + 
-				get_form_table_row('Full Name:', '<input type="text" id="fe_ca_fullname" size="30" value="" spellcheck="false"/>') + 
-				get_form_table_caption('This is used for display purposes only.') + 
-				get_form_table_spacer() + 
-				get_form_table_row('Email Address:', '<input type="text" id="fe_ca_email" size="30" value="" spellcheck="false"/>') + 
-				get_form_table_caption('This is used only to recover your password should you lose it.');
+				html += get_form_table_caption((window._t ? _t('login.choose_a_unique_alphanumeric_username_fo') : 'Choose a unique alphanumeric username for your account.')) +
+				get_form_table_spacer() +
+				get_form_table_row((window._t ? _t('login.password') : 'Password:'), '<input type="' + app.get_password_type() + '" id="fe_ca_password" size="30" value="" spellcheck="false"/>' + app.get_password_toggle_html()) +
+				get_form_table_caption((window._t ? _t('login.enter_a_secure_password_that_you_will_no') : 'Enter a secure password that you will not forget.')) +
+				get_form_table_spacer() +
+				get_form_table_row((window._t ? _t('login.full_name') : 'Full Name:'), '<input type="text" id="fe_ca_fullname" size="30" value="" spellcheck="false"/>') +
+				get_form_table_caption((window._t ? _t('login.this_is_used_for_display_purposes_only') : 'This is used for display purposes only.')) +
+				get_form_table_spacer() +
+				get_form_table_row((window._t ? _t('login.email_address') : 'Email Address:'), '<input type="text" id="fe_ca_email" size="30" value="" spellcheck="false"/>') +
+				get_form_table_caption((window._t ? _t('login.this_is_used_only_to_recover_your_passwo') : 'This is used only to recover your password should you lose it.'));
 					
 				html += '</table></center>';
 			html += '</div>';
 			
 			html += '<div class="dialog_buttons"><center><table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">' + (window._t ? _t('login.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doCreateAccount()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>Create</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doCreateAccount()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>' + (window._t ? _t('login.create') : 'Create') + '</div></td>';
 			html += '</tr></table></center></div>';
 		html += '</div>';
 		
@@ -6204,22 +6221,22 @@ Class.subclass( Page.Base, "Page.Login", {
 		var password = trim($('#fe_ca_password').val());
 		
 		if (!username.length) {
-			return app.badField('#fe_ca_username', "Please enter a username for your account.");
+			return app.badField('#fe_ca_username', (window._t ? _t('login.please_enter_a_username_for_your_account') : "Please enter a username for your account."));
 		}
 		if (!username.match(/^[\w\.\-]+@?[\w\.\-]+$/)) {
-			return app.badField('#fe_ca_username', "Please make sure your username contains only alphanumerics, dashes and periods.");
+			return app.badField('#fe_ca_username', (window._t ? _t('login.please_make_sure_your_username_contains_') : "Please make sure your username contains only alphanumerics, dashes and periods."));
 		}
 		if (!email.length) {
-			return app.badField('#fe_ca_email', "Please enter an e-mail address where you can be reached.");
+			return app.badField('#fe_ca_email', (window._t ? _t('login.please_enter_an_email_address_where_you_') : "Please enter an e-mail address where you can be reached."));
 		}
 		if (!email.match(/^\S+\@\S+$/)) {
-			return app.badField('#fe_ca_email', "The e-mail address you entered does not appear to be correct.");
+			return app.badField('#fe_ca_email', (window._t ? _t('login.the_email_address_you_entered_does_not_a') : "The e-mail address you entered does not appear to be correct."));
 		}
 		if (!full_name.length) {
-			return app.badField('#fe_ca_fullname', "Please enter your first and last names. These are used only for display purposes.");
+			return app.badField('#fe_ca_fullname', (window._t ? _t('login.please_enter_your_first_and_last_names_t') : "Please enter your first and last names. These are used only for display purposes."));
 		}
 		if (!password.length) {
-			return app.badField('#fe_ca_password', "Please enter a secure password to protect your account.");
+			return app.badField('#fe_ca_password', (window._t ? _t('login.please_enter_a_secure_password_to_protec') : "Please enter a secure password to protect your account."));
 		}
 		if (!force && (app.last_password_strength.score < 3)) {
 			app.confirm( '<span style="color:red">Insecure Password Warning</span>', app.get_password_warning(), "Proceed", function(result) {
@@ -6229,7 +6246,7 @@ Class.subclass( Page.Base, "Page.Login", {
 		} // insecure password
 		
 		Dialog.hide();
-		app.showProgress( 1.0, "Creating account..." );
+		app.showProgress( 1.0, (window._t ? _t('login.creating_account') : "Creating account...") );
 		
 		app.api.post( 'user/create', {
 			username: username,
@@ -6239,10 +6256,10 @@ Class.subclass( Page.Base, "Page.Login", {
 		}, 
 		function(resp, tx) {
 			app.hideProgress();
-			app.showMessage('success', "Account created successfully.");
+			app.showMessage('success', (window._t ? _t('login.account_created_successfully') : "Account created successfully."));
 			
 			app.setPref('username', username);
-			Nav.go( 'Login', true );
+			Nav.go( (window._t ? _t('login.btn_login') : 'Login'), true );
 		} ); // api.post
 	},
 	
@@ -6276,9 +6293,9 @@ Class.subclass( Page.Base, "Page.Login", {
 			html += '</div>';
 			
 			html += '<div class="dialog_buttons"><center><table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel()">' + (window._t ? _t('login.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doSendRecoveryEmail()"><i class="fa fa-envelope-o">&nbsp;&nbsp;</i>Send Email</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().doSendRecoveryEmail()"><i class="fa fa-envelope-o">&nbsp;&nbsp;</i>' + (window._t ? _t('login.send_email') : 'Send Email') + '</div></td>';
 			html += '</tr></table></center></div>';
 		html += '</div>';
 		
@@ -6305,20 +6322,20 @@ Class.subclass( Page.Base, "Page.Login", {
 		if (username.match(/^[\w.-]+$/)) {
 			if (email.match(/.+\@.+/)) {
 				Dialog.hide();
-				app.showProgress( 1.0, "Sending e-mail..." );
+				app.showProgress( 1.0, (window._t ? _t('login.sending_email') : "Sending e-mail...") );
 				app.api.post( 'user/forgot_password', {
 					username: username,
 					email: email
 				}, 
 				function(resp, tx) {
 					app.hideProgress();
-					app.showMessage('success', "Password reset instructions sent successfully.");
-					Nav.go('Login', true);
+					app.showMessage('success', (window._t ? _t('login.password_reset_instructions_sent_success') : "Password reset instructions sent successfully."));
+					Nav.go((window._t ? _t('login.btn_login') : 'Login'), true);
 				} ); // api.post
 			} // good address
-			else app.badField('#fe_pr_email', "The e-mail address you entered does not appear to be correct.");
+			else app.badField('#fe_pr_email', (window._t ? _t('login.the_email_address_you_entered_does_not_a') : "The e-mail address you entered does not appear to be correct."));
 		} // good username
-		else app.badField('#fe_pr_username', "The username you entered does not appear to be correct.");
+		else app.badField('#fe_pr_username', (window._t ? _t('login.the_username_you_entered_does_not_appear') : "The username you entered does not appear to be correct."));
 	},
 	
 	showPasswordResetForm: function(args) {
@@ -6332,7 +6349,7 @@ Class.subclass( Page.Base, "Page.Login", {
 		var html = '';
 		
 		html += '<div class="inline_dialog_container">';
-			html += '<div class="dialog_title shade-light">Reset Password</div>';
+			html += '<div class="dialog_title shade-light">' + (window._t ? _t('login.reset_password') : 'Reset Password') + '</div>';
 			html += '<div class="dialog_content">';
 				html += '<center><table style="margin:0px;">';
 					html += '<tr>';
@@ -6349,7 +6366,7 @@ Class.subclass( Page.Base, "Page.Login", {
 			html += '</div>';
 			
 			html += '<div class="dialog_buttons"><center><table><tr>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().doResetPassword()"><i class="fa fa-key">&nbsp;&nbsp;</i>Reset Password</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().doResetPassword()"><i class="fa fa-key">&nbsp;&nbsp;</i>' + (window._t ? _t('login.reset_password') : 'Reset Password') + '</div></td>';
 			html += '</tr></table></center></div>';
 		html += '</div>';
 		
@@ -6381,7 +6398,7 @@ Class.subclass( Page.Base, "Page.Login", {
 				return;
 			} // insecure password
 			
-			app.showProgress(1.0, "Resetting password...");
+			app.showProgress(1.0, (window._t ? _t('login.resetting_password') : "Resetting password..."));
 			
 			app.api.post( 'user/reset_password', {
 				username: username,
@@ -6394,10 +6411,10 @@ Class.subclass( Page.Base, "Page.Login", {
 				app.hideProgress();
 				app.setPref('username', username);
 				
-				Nav.go( 'Login', true );
+				Nav.go( (window._t ? _t('login.btn_login') : 'Login'), true );
 				
 				setTimeout( function() {
-					app.showMessage('success', "Your password was reset successfully.");
+					app.showMessage('success', (window._t ? _t('login.your_password_was_reset_successfully') : "Your password was reset successfully."));
 				}, 100 );
 			} ); // post
 		}
@@ -6410,7 +6427,6 @@ Class.subclass( Page.Base, "Page.Login", {
 	}
 	
 } );
-
 Class.subclass(Page.Base, "Page.Schedule", {
 
 	default_sub: 'events',
@@ -6472,7 +6488,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		`, '', "Import", function (result) {
 			if (result) {
 				var importData = document.getElementById('conf_import').value;
-				app.showProgress(1.0, "Importing...");
+				app.showProgress(1.0, (window._t ? _t('schedule.importing') : "Importing..."));
 				app.api.post('app/import', { txt: importData }, function (resp) {
 					app.hideProgress();
 					var resultList = resp.result || []
@@ -6590,9 +6606,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// FILE EDITOR ON SHELLPLUG'
 		let html = '<table>' +
-			get_form_table_row('Name', `<input type="text" id="fe_ee_pp_file_name" size="40" value="" spellcheck="false"/>`) +
+			get_form_table_row((window._t ? _t('schedule.name') : 'Name'), `<input type="text" id="fe_ee_pp_file_name" size="40" value="" spellcheck="false"/>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Content', `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110"></textarea>`)
+			get_form_table_row((window._t ? _t('schedule.content') : 'Content'), `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110"></textarea>`)
 		html += `</table>`
 
 		setTimeout(() => self.setFileEditor('.text'), 30) // editor needs to wait for a bit for modal window to render
@@ -6606,7 +6622,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 				let name = $("#fe_ee_pp_file_name").val()
 
 				if (!name || files.map(e => e.name).indexOf(name) > -1) {
-					app.showMessage('error', "Invalid Name")
+					app.showMessage('error', (window._t ? _t('schedule.invalid_name') : "Invalid Name"))
 				}
 				else {
 					let content = $("#fe_ee_pp_file_content").val()
@@ -6634,9 +6650,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		if (!file) return // sanity check
 
 		let html = '<table>' +
-			get_form_table_row('Name', `<input type="text" id="fe_ee_pp_file_name" size="40" value="${file.name}" spellcheck="false">`) +
+			get_form_table_row((window._t ? _t('schedule.name') : 'Name'), `<input type="text" id="fe_ee_pp_file_name" size="40" value="${file.name}" spellcheck="false">`) +
 			get_form_table_spacer() +
-			get_form_table_row('Content', `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110">${file.content}</textarea>`)
+			get_form_table_row((window._t ? _t('schedule.content') : 'Content'), `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110">${file.content}</textarea>`)
 		html += '</table>'
 
 		setTimeout(() => self.setFileEditor(file.name), 30) // editor needs to wait for a bit for modal window to render
@@ -6649,7 +6665,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 				let name = $("#fe_ee_pp_file_name").val()
 
 				if (!name.trim()) {
-					app.showMessage('error', "Invalid Name")
+					app.showMessage('error', (window._t ? _t('schedule.invalid_name') : "Invalid Name"))
 				}
 				else {
 					file.name = name
@@ -6683,13 +6699,13 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	 */
 
 	render_wf_event_list: function () {
-		let cols = ['#', "Run", '@', 'Id', 'Title', 'Argument', ' '];
+		let cols = ['#', "Run", '@', 'Id', 'Title', (window._t ? _t('schedule.argument') : 'Argument'), ' '];
 		let wf_events = this.event.workflow || []
 
 		let table = '<table id="wf_event_list_table" class="data_table"><tr><th>' + cols.join('</th><th>').replace(/\s+/g, '&nbsp;') + '</th></tr>';
 
 		if (wf_events.length === 0) {
-			table += '<tr><td></td><td></td><td></td><td></td><td><b>No event found</b></td><td></td></tr>'
+			table += '<tr><td></td><td></td><td></td><td></td><td><b>' + (window._t ? _t('schedule.no_event_found') : 'No event found') + '</b></td><td></td></tr>'
 		}
 		// '<input type="checkbox" style="cursor:pointer" onChange="$P().change_event_enabled(' + idx + ')" ' + (item.enabled ? 'checked="checked"' : '') + '/>',
 		let schedTitles = {};
@@ -6807,11 +6823,11 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		let el_style = 'width: 240px; font-size:16px;'
 		let html = '<table>' +  //<option value="">(Select Event)</option>
-			get_form_table_row('Event', `<select id="fe_ee_pp_wf_select_event" style="${el_style}">${event_menu}</select>`) +
+			get_form_table_row((window._t ? _t('schedule.event') : 'Event'), `<select id="fe_ee_pp_wf_select_event" style="${el_style}">${event_menu}</select>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Job Argument', `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="" spellcheck="false"/>`) +
+			get_form_table_row((window._t ? _t('schedule.job_argument') : 'Job Argument'), `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="" spellcheck="false"/>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Skip', `<input type="checkbox" style="cursor:pointer" id="fe_ee_pp_wf_evt_skip" />`) +
+			get_form_table_row((window._t ? _t('schedule.skip') : 'Skip'), `<input type="checkbox" style="cursor:pointer" id="fe_ee_pp_wf_evt_skip" />`) +
 			'</table>'
 
 		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i> Add Event', html, "Add", function (result) {
@@ -6820,7 +6836,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (result) {
 
 				let evt = find_object(all_events, { id: $('#fe_ee_pp_wf_select_event').find(":selected").val() })
-				if (!evt) { app.showMessage('error', "Please select valid event") }
+				if (!evt) { app.showMessage('error', (window._t ? _t('schedule.please_select_valid_event') : "Please select valid event")) }
 				else {
 					evt.arg = $('#fe_ee_pp_wf_evt_arg').val()
 					self.event.workflow.push(evt)
@@ -6844,9 +6860,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let event_list = render_menu_options([evt], evt.id)
 		let el_style = 'width: 240px;  font-size:16px;'
 		let html = '<table>' +
-			get_form_table_row('Event', `<select id="fe_ee_pp_wf_select_event" style="${el_style}" disabled>${event_list}</select>`) +
+			get_form_table_row((window._t ? _t('schedule.event') : 'Event'), `<select id="fe_ee_pp_wf_select_event" style="${el_style}" disabled>${event_list}</select>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Job Argument', `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="${evt.arg}" spellcheck="false"/>`) +
+			get_form_table_row((window._t ? _t('schedule.job_argument') : 'Job Argument'), `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="${evt.arg}" spellcheck="false"/>`) +
 			'</table>'
 
 		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i>Edit Event Options', html, "OK", function (result) {
@@ -6922,6 +6938,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += '</div>';
 
 		html += '<div style="margin-top:5px;">';
+		html += '<div class="data_table_scroll_wrapper">';
 		html += '<table class="data_table" width="100%">';
 		html += '<tr><th style="white-space:nowrap;">' + cols.join('</th><th style="white-space:nowrap;">') + '</th></tr>';
 
@@ -6943,6 +6960,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		}
 
 		html += '</table>';
+		html += '</div>'; // data_table_scroll_wrapper
 		html += '</div>';
 
 		return html;
@@ -7058,7 +7076,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	gosub_events: function (args) {
 		// render table of events with filters and search
 		this.div.removeClass('loading');
-		app.setWindowTitle("Scheduled Events");
+		app.setWindowTitle((window._t ? _t('schedule.scheduled_events') : "Scheduled Events"));
 		const self = this
 
 		var size = get_inner_window_size();
@@ -7079,14 +7097,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// render table
 		var cols = [
 			'<i class="fa fa-check-square-o"></i>',
-			'Event Name',
-			'Category',
-			'Plugin',
-			'Target',
-			'Timing',
-			'Status',
-			'Modified',
-			'Actions'
+			(window._t ? _t('schedule.event_name') : 'Event Name'),
+			(window._t ? _t('schedule.category') : 'Category'),
+			(window._t ? _t('schedule.plugin') : 'Plugin'),
+			(window._t ? _t('schedule.target') : 'Target'),
+			(window._t ? _t('schedule.timing') : 'Timing'),
+			(window._t ? _t('schedule.status') : 'Status'),
+			(window._t ? _t('schedule.modified') : 'Modified'),
+			(window._t ? _t('schedule.actions') : 'Actions')
 		];
 
 		// apply filters
@@ -7202,17 +7220,17 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let isGrid = eventView === 'grid' || eventView === 'gridall'
 
 		html += `
-		 <div class="subtitle flex-container" style="height:auto;padding:8px">
-		 <div style="width: calc(45%)">Scheduled Events ${cycleWarning}</div>
-		 <div class="flex-container" style="width:calc(10%)">${miniButtons}</div>
-		 <div style="width: calc(45%);padding-right:10px">
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_target" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Servers</option>${this.render_target_menu_options(args.target)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_plugin" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Plugins</option>${render_menu_options(app.plugins, args.plugin, false)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_cat" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Cats</option>${render_menu_options(app.categories, args.category, false)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_enabled" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Events</option>${render_menu_options([[1, 'Enabled'], [-1, 'Disabled'], ['success', "Last Run Success"], ['error', "Last Run Error"], ["chained", "Chained"]], args.enabled, false)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_event_view" class="subtitle_menu" style="width:70px;" onChange="$P().change_event_view(this.value)"><option value="">Details</option>${render_menu_options([['grid', 'Grid'], ['gridall', "Grid-All"]], eventView, false)}</select></div>
-		 </div>          
-		 
+		 <div class="subtitle flex-container" style="height:auto;padding:8px;flex-wrap:nowrap">
+		 <div style="flex:0 0 auto;white-space:nowrap">${(window._t ? _t('schedule.scheduled_events_subtitle') : 'Scheduled Events')} ${cycleWarning}</div>
+		 <div class="flex-container" style="flex:0 0 auto">${miniButtons}</div>
+		 <div style="flex:1 1 auto;display:flex;flex-wrap:nowrap;justify-content:flex-end;align-items:center;gap:2px;overflow-x:auto">
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_target" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_servers') : 'All Servers')}</option>${this.render_target_menu_options(args.target)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_plugin" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_plugins') : 'All Plugins')}</option>${render_menu_options(app.plugins, args.plugin, false)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_cat" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_cats') : 'All Cats')}</option>${render_menu_options(app.categories, args.category, false)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_enabled" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_events') : 'All Events')}</option>${render_menu_options([[1, (window._t ? _t('schedule.enabled') : 'Enabled')], [-1, (window._t ? _t('schedule.disabled') : 'Disabled')], ['success', (window._t ? _t('schedule.last_run_success') : "Last Run Success")], ['error', (window._t ? _t('schedule.last_run_error') : "Last Run Error")], ["chained", (window._t ? _t('schedule.chained') : "Chained")]], args.enabled, false)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_event_view" class="subtitle_menu" style="width:70px;" onChange="$P().change_event_view(this.value)"><option value="">${(window._t ? _t('schedule.details') : 'Details')}</option>${render_menu_options([['grid', (window._t ? _t('schedule.grid') : 'Grid')], ['gridall', (window._t ? _t('schedule.grid_all') : "Grid-All")]], eventView, false)}</select></div>
+		 </div>
+
 		</div>
 		<div class="clear"></div>
 		`
@@ -7257,7 +7275,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		</div>
 		`
 		// searchBar
-		cols.headerCenter = `<div style="padding-bottom:8px;padding-right:12px"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_sch_keywords" size="25" onfocus="this.placeholder=''" placeholder="Find events..." class="event-search" autocomplete="one-time-code" value="${escape_text_field_value(args.keywords)}"/></div>`
+		cols.headerCenter = `<div style="padding-bottom:8px;padding-right:12px"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_sch_keywords" size="25" onfocus="this.placeholder=''" placeholder="${(window._t ? _t('schedule.find_events') : 'Find events...')}" class="event-search" autocomplete="one-time-code" value="${escape_text_field_value(args.keywords)}"/></div>`
 
 		// render table
 		let last_group = '';
@@ -7511,23 +7529,23 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += ` <center><table><tr><div style="height:30px;"></div>`
 
 		if (app.hasPrivilege('create_events')) {
-			html += `<td><div class="button" style="width:130px;" onMouseUp="$P().edit_event(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Event...</div></td>
+			html += `<td><div class="button" style="width:130px;" onMouseUp="$P().edit_event(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>${window._t ? _t('schedule.add_event') : 'Add Event...'}</div></td>
 			<td width="40">&nbsp;</td>
-			<td><div class="button" style="width:130px;" onMouseUp="$P().do_random_event()"><i class="fa fa-bolt">&nbsp;&nbsp;</i>Generate</div></td>
+			<td><div class="button" style="width:130px;" onMouseUp="$P().do_random_event()"><i class="fa fa-bolt">&nbsp;&nbsp;</i>${window._t ? _t('schedule.generate') : 'Generate'}</div></td>
 			<td width="40">&nbsp;</td>
 			`
 		}
 
 		// backup/restore buttons - admin only
 		if (app.isAdmin()) {
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().export_schedule()"><i class="fa fa-download">&nbsp;&nbsp;</i>Backup</div></td><td width="40">&nbsp;</td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().export_schedule()"><i class="fa fa-download">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.backup') : 'Backup') + '</div></td><td width="40">&nbsp;</td>';
 
 			if (app.schedule.length === 0) {  // only show import button if there are no scheduled jobs yet
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().import_schedule()"><i class="fa fa-upload">&nbsp;&nbsp;</i>Import</div></td><td width="40">&nbsp;</td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().import_schedule()"><i class="fa fa-upload">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.import') : 'Import') + '</div></td><td width="40">&nbsp;</td>';
 			}
 		}
 
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_graph()"><i class="fa fa-pie-chart">&nbsp;&nbsp;</i>Show Graph</div></td><td width="40">&nbsp;</td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_graph()"><i class="fa fa-pie-chart">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.show_graph') : 'Show Graph') + '</div></td><td width="40">&nbsp;</td>';
 		this.div.html(html);
 		this.update_job_last_runs();
 
@@ -7683,7 +7701,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 						catch_up: event.catch_up || 0
 					};
 
-					app.showProgress(1.0, "Updating Event...");
+					app.showProgress(1.0, (window._t ? _t('schedule.updating_event') : "Updating Event..."));
 
 					app.api.post('app/toggle_event', stub, function (resp) {
 						app.hideProgress();
@@ -7769,7 +7787,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// check for active jobs first
 		var jobs = find_objects(app.activeJobs, { event: event.id });
-		if (jobs.length) return app.doError("Sorry, you cannot delete an event that has active jobs running.");
+		if (jobs.length) return app.doError((window._t ? _t('schedule.sorry_you_cannot_delete_an_event_that_ha') : "Sorry, you cannot delete an event that has active jobs running."));
 
 		var msg = "Are you sure you want to delete the event <b>" + event.title + "</b>?";
 
@@ -7783,7 +7801,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// proceed with delete
 		app.confirm('<span style="color:red">Delete Event</span>', msg, "Delete", function (result) {
 			if (result) {
-				app.showProgress(1.0, "Deleting Event...");
+				app.showProgress(1.0, (window._t ? _t('schedule.deleting_event') : "Deleting Event..."));
 				app.api.post('app/delete_event', event, function (resp) {
 					app.hideProgress();
 					app.showMessage('success', "Event '" + event.title + "' was deleted successfully.");
@@ -7833,12 +7851,12 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		html += this.getSidebarTabs('new_event',
 			[
-				['events', "Schedule"],
+				['events', (window._t ? _t('schedule.schedule') : "Schedule")],
 				['new_event', "Add New Event"]
 			]
 		);
 
-		html += '<div style="padding:20px;"><div class="subtitle">Add New Event</div></div><div style="padding:0px 20px 50px 20px"><center><table style="margin:0;">';
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('schedule.add_new_event') : 'Add New Event') + '</div></div><div style="padding:0px 20px 50px 20px"><center><table style="margin:0;">';
 
 		if (this.event_copy) {
 			// copied from existing event
@@ -7870,9 +7888,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		<tr><td colspan="2" align="center">
 		<div style="height:30px;"></div>
 		<table><tr>
-		<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">Cancel</div></td>
+		<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">' + (window._t ? _t('schedule.cancel') : 'Cancel') + '</div></td>
 		<td width="50">&nbsp;</td>
-		<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_event()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Event</div></td>
+		<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_event()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.create_event') : 'Create Event') + '</div></td>
 		</tr></table>
 		</td></tr>
 		</table></center>
@@ -7901,7 +7919,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Creating event...");
+		app.showProgress(1.0, (window._t ? _t('schedule.creating_event') : "Creating event..."));
 		app.api.post('app/create_event', event, this.new_event_finish.bind(this));
 	},
 
@@ -7919,7 +7937,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Creating event...");
+		app.showProgress(1.0, (window._t ? _t('schedule.creating_event') : "Creating event..."));
 		app.api.post('app/create_event', event, this.new_event_finish.bind(this));
 	},
 
@@ -7948,7 +7966,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	gosub_edit_event: function (args) {
 		// edit event subpage
 		var event = find_object(app.schedule, { id: args.id });
-		if (!event) return app.doError("Could not locate Event with ID: " + args.id);
+		if (!event) return app.doError((window._t ? _t('schedule.could_not_locate_event_with_id') : "Could not locate Event with ID: ") + args.id);
 
 		// this.wf = event.workflow || []
 		// this.files = event.files || []
@@ -7972,9 +7990,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		this.div.removeClass('loading');
 
 		var side_tabs = [];
-		side_tabs.push(['events', "Schedule"]);
+		side_tabs.push(['events', (window._t ? _t('schedule.schedule') : "Schedule")]);
 		if (app.hasPrivilege('create_events')) side_tabs.push(['new_event', "Add New Event"]);
-		side_tabs.push(['edit_event', "Edit Event"]);
+		side_tabs.push(['edit_event', (window._t ? _t('schedule.edit_event') : "Edit Event")]);
 
 		html += this.getSidebarTabs('edit_event', side_tabs);
 
@@ -7997,8 +8015,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// Internal ID
 		if (this.isAdmin()) {
-			html += get_form_table_row('Event ID', '<div style="font-size:14px;">' + event.id + '</div>');
-			html += get_form_table_caption("The internal event ID used for API calls.  This cannot be changed.");
+			html += get_form_table_row((window._t ? _t('schedule.event_id') : 'Event ID'), '<div style="font-size:14px;">' + event.id + '</div>');
+			html += get_form_table_caption((window._t ? _t('schedule.the_internal_event_id_used_for_api_calls') : "The internal event ID used for API calls.  This cannot be changed."));
 			html += '<br>'
 			html += get_form_table_spacer();
 		}
@@ -8008,27 +8026,27 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += '<tr><td colspan="2" align="center"><div style="height:30px;"></div><table><tr>';
 
 		// cancel
-		html += '<td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">Cancel</div></td>';
+		html += '<td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">' + (window._t ? _t('schedule.cancel') : 'Cancel') + '</div></td>';
 
 		// delete
 		if (app.hasPrivilege('delete_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().delete_event(\'edit\')">Delete Event...</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().delete_event(\'edit\')">' + (window._t ? _t('schedule.delete_event') : 'Delete Event...') + '</div></td>';
 		}
 
 		// copy
 		if (app.hasPrivilege('create_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_event()">Copy Event...</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_event()">' + (window._t ? _t('schedule.copy_event') : 'Copy Event...') + '</div></td>';
 		}
 
 		// run
 		if (app.hasPrivilege('run_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().run_event_from_edit(event)">Run Now</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().run_event_from_edit(event)">' + (window._t ? _t('schedule.run_now') : 'Run Now') + '</div></td>';
 		}
 
 		// save
 		html += `
 		<td width="30">&nbsp;</td>
-		<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_event()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>
+		<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_event()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>${(window._t ? _t('schedule.save_changes') : 'Save Changes')}</div></td>
 		</tr></table>
 		</td></tr>
 		</table>
@@ -8102,7 +8120,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Saving event...");
+		app.showProgress(1.0, (window._t ? _t('schedule.saving_event') : "Saving event..."));
 		app.api.post('app/update_event', event, this.save_event_finish.bind(this));
 	},
 
@@ -8112,7 +8130,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		var event = this.event;
 
 		app.hideProgress();
-		app.showMessage('success', "The event was saved successfully.");
+		app.showMessage('success', (window._t ? _t('schedule.the_event_was_saved_successfully') : "The event was saved successfully."));
 		window.scrollTo(0, 0);
 
 		// copy active jobs to array
@@ -8126,14 +8144,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		if (this.old_event.enabled && !event.enabled && jobs.length && !parseInt(event.repeat)) {
 			app.confirm('<span style="color:red">Abort Jobs</span>', "There " + ((jobs.length != 1) ? 'are' : 'is') + " currently still " + jobs.length + " active " + pluralize('job', jobs.length) + " using the disabled event <b>" + event.title + "</b>.  Do you want to abort " + ((jobs.length != 1) ? 'these' : 'it') + " now?", "Abort", function (result) {
 				if (result) {
-					app.showProgress(1.0, "Aborting " + pluralize('Job', jobs.length) + "...");
+					app.showProgress(1.0, (window._t ? _t('schedule.aborting') : "Aborting ") + pluralize('Job', jobs.length) + "...");
 					app.api.post('app/abort_jobs', { event: event.id }, function (resp) {
 						app.hideProgress();
 						if (resp.count > 0) {
 							app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " aborted successfully.");
 						}
 						else {
-							app.showMessage('warning', "No jobs were aborted.  It is likely they completed while the dialog was up.");
+							app.showMessage('warning', (window._t ? _t('schedule.no_jobs_were_aborted_it_is_likely_they_c') : "No jobs were aborted.  It is likely they completed while the dialog was up."));
 						}
 					});
 				} // clicked Abort
@@ -8163,14 +8181,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (need_update && jobs.length) {
 				app.confirm('Update Jobs', "This event currently has " + jobs.length + " active " + pluralize('job', jobs.length) + ".  Do you want to update " + ((jobs.length != 1) ? 'these' : 'it') + " as well?", "Update", function (result) {
 					if (result) {
-						app.showProgress(1.0, "Updating " + pluralize('Job', jobs.length) + "...");
+						app.showProgress(1.0, (window._t ? _t('schedule.updating') : "Updating ") + pluralize('Job', jobs.length) + "...");
 						app.api.post('app/update_jobs', { event: event.id, updates: updates }, function (resp) {
 							app.hideProgress();
 							if (resp.count > 0) {
 								app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " updated successfully.");
 							}
 							else {
-								app.showMessage('warning', "No jobs were updated.  It is likely they completed while the dialog was up.");
+								app.showMessage('warning', (window._t ? _t('schedule.no_jobs_were_updated_it_is_likely_they_c') : "No jobs were updated.  It is likely they completed while the dialog was up."));
 							}
 						});
 					} // clicked Update
@@ -8198,13 +8216,13 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// event title
 		//let evt_tip = event.id ? "" : "pro-tip: embed id in title as bracketed prefix, e.g. [event_id] event_title"
-		html += get_form_table_row('Event Name', `<input type="text" id="fe_ee_title" size="35" value="` + escape_text_field_value(event.title) + '" spellcheck="false"/>');
-		html += get_form_table_caption("Enter a title for the event, which will be displayed on the main schedule.");
+		html += get_form_table_row((window._t ? _t('schedule.event_name') : 'Event Name'), `<input type="text" id="fe_ee_title" size="35" value="` + escape_text_field_value(event.title) + '" spellcheck="false"/>');
+		html += get_form_table_caption((window._t ? _t('schedule.enter_a_title_for_the_event_which_will_b') : "Enter a title for the event, which will be displayed on the main schedule."));
 		html += get_form_table_spacer();
 
 		// event enabled
 		html += get_form_table_row('Schedule', '<input type="checkbox" id="fe_ee_enabled" value="1" ' + (event.enabled ? 'checked="checked"' : '') + '/><label for="fe_ee_enabled">Event Enabled</label>');
-		html += get_form_table_caption("Select whether the event should be enabled or disabled in the schedule.");
+		html += get_form_table_caption((window._t ? _t('schedule.select_whether_the_event_should_be_enabl') : "Select whether the event should be enabled or disabled in the schedule."));
 		html += get_form_table_spacer();
 
 		// category
@@ -8213,28 +8231,28 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
 		});
 
-		html += get_form_table_row('Category',
+		html += get_form_table_row((window._t ? _t('schedule.category') : 'Category'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><select id="fe_ee_cat" onMouseDown="this.options[0].disabled=true"><option value="">Select Category</option>' + render_menu_options(app.categories, event.category, false) + '</select></td>' +
 			(app.isAdmin() ? '<td><span class="link addme" style="padding-left:5px; font-size:13px;" title="Add New Category" onMouseUp="$P().show_quick_add_cat_dialog()">&laquo; Add New...</span></td>' : '') +
 			'</tr></table>'
 		);
-		html += get_form_table_caption("Select a category for the event (this may limit the max concurrent jobs, etc.)");
+		html += get_form_table_caption((window._t ? _t('schedule.select_a_category_for_the_event_this_may') : "Select a category for the event (this may limit the max concurrent jobs, etc.)"));
 		html += get_form_table_spacer();
 
 		// target (server group or individual server)
-		html += get_form_table_row('Target',
+		html += get_form_table_row((window._t ? _t('schedule.target') : 'Target'),
 			'<select id="fe_ee_target" onChange="$P().set_event_target(this.options[this.selectedIndex].value)">' + this.render_target_menu_options(event.target) + '</select>'
 		);
 
-		/*html += get_form_table_row( 'Target', 
+		/*html += get_form_table_row( (window._t ? _t('schedule.target') : 'Target'), 
 			'<table cellspacing="0" cellpadding="0"><tr>' + 
 				'<td><select id="fe_ee_target">' + this.render_target_menu_options( event.target ) + '</select></td>' + 
 				'<td style="padding-left:15px;"><input type="checkbox" id="fe_ee_multiplex" value="1" ' + (event.multiplex ? 'checked="checked"' : '') + ' onChange="$P().setGroupVisible(\'mp\',this.checked).setGroupVisible(\'algo\',!this.checked)"/><label for="fe_ee_multiplex">Multiplex</label></td>' + 
 			'</tr></table>' 
 		);*/
 		html += get_form_table_caption(
-			"Select a target server group or individual server to run the event on."
+			(window._t ? _t('schedule.select_a_target_server_group_or_individu') : "Select a target server group or individual server to run the event on.")
 			// "Multiplex means that the event will run on <b>all</b> matched servers simultaneously." 
 		);
 		html += get_form_table_spacer();
@@ -8294,7 +8312,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
 		});
 
-		html += get_form_table_row('Plugin', '<select id="fe_ee_plugin" onMouseDown="this.options[0].disabled=true" onChange="$P().change_edit_plugin()"><option value="">Select Plugin</option>' + render_menu_options(app.plugins, event.plugin, false) + '</select>');
+		html += get_form_table_row((window._t ? _t('schedule.plugin') : 'Plugin'), '<select id="fe_ee_plugin" onMouseDown="this.options[0].disabled=true" onChange="$P().change_edit_plugin()"><option value="">Select Plugin</option>' + render_menu_options(app.plugins, event.plugin, false) + '</select>');
 
 		// plugin params
 		html += get_form_table_row('', '<div id="d_ee_plugin_params">' + this.get_plugin_params_html() + '</div>');
@@ -8302,8 +8320,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// arguments
 		let arg_title = "Argument values are available as ARG[1-9] env variable or parameter on shellplug (e.g. $ARG1 or [/ARG1])\nOn httpplug use [/params/ARG1], on event workflow JOB_ARG env variable. ARGS env variable will store entire string";
-		html += get_form_table_row('Arguments', `<input title="${arg_title}" type="text" id="fe_ee_args" size="50" value="${event.args || ''}" autocomplete="one-time-code" spellcheck="false"/>`);
-		html += get_form_table_caption("List of comma separated arguments. Use alphanumeric/email characters only");
+		html += get_form_table_row((window._t ? _t('schedule.arguments') : 'Arguments'), `<input title="${arg_title}" type="text" id="fe_ee_args" size="50" value="${event.args || ''}" autocomplete="one-time-code" spellcheck="false"/>`);
+		html += get_form_table_caption((window._t ? _t('schedule.list_of_comma_separated_arguments_use_al') : "List of comma separated arguments. Use alphanumeric/email characters only"));
 		html += get_form_table_spacer();
 
 		// timing
@@ -8335,7 +8353,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			['repeat', 'Repeat']
 		];
 
-		html += get_form_table_row('Timing',
+		html += get_form_table_row((window._t ? _t('schedule.timing') : 'Timing'),
 			'<div class="right">' +
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><span class="label" style="font-size:12px;">Timezone:&nbsp;</span></td>' +
@@ -8384,54 +8402,54 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// show token (admin only) 
 		if (app.user.privileges.admin && event.id) {
-			html += get_form_table_row('Allow Token', `
+			html += get_form_table_row((window._t ? _t('schedule.allow_token') : 'Allow Token'), `
 							<input type="checkbox" id="fe_ee_token" value="1" ${(event.salt ? 'checked="checked"' : '')} onclick="$P().toggle_token()"/>
 							  <label id="fe_ee_token_label" for="fe_ee_token">generate event webhook</label><span style="font-size: 1em" id="fe_ee_token_val"></span>
 							</input><script>$P().toggle_token()</script>
 							`);
-			html += get_form_table_caption("Allow invoking this event via token");
+			html += get_form_table_caption((window._t ? _t('schedule.allow_invoking_this_event_via_token') : "Allow invoking this event via token"));
 			html += get_form_table_spacer();
 		}
 
 		// Secret
 		let sph = event.secret_preview ? '[' + event.secret_preview + ']' : '';
-		html += get_form_table_row('Secret', `<textarea  style="width:620px; height:45px;resize:vertical;" id="fe_ee_secret" oninput="$P().set_event_secret(this.value)" placeholder="${sph}" spellcheck="false"></textarea>`);
-		html += get_form_table_caption("Specify KEY=VALUE pairs to set ENV variables. Some plugins require KEY prefix (e.g. DOCKER_ or SSH_ ) to pass it to job runtime.");
+		html += get_form_table_row((window._t ? _t('schedule.secret') : 'Secret'), `<textarea  style="width:620px; height:45px;resize:vertical;" id="fe_ee_secret" oninput="$P().set_event_secret(this.value)" placeholder="${sph}" spellcheck="false"></textarea>`);
+		html += get_form_table_caption((window._t ? _t('schedule.specify_keyvalue_pairs_to_set_env_variab') : "Specify KEY=VALUE pairs to set ENV variables. Some plugins require KEY prefix (e.g. DOCKER_ or SSH_ ) to pass it to job runtime."));
 		html += get_form_table_spacer();
 
 		// max children
-		html += get_form_table_row('Concurrency', '<select id="fe_ee_max_children">' + render_menu_options([[1, "1 (Singleton)"], 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], event.max_children, false) + '</select>');
-		html += get_form_table_caption("Select the maximum number of jobs that can run simultaneously.");
+		html += get_form_table_row((window._t ? _t('schedule.concurrency') : 'Concurrency'), '<select id="fe_ee_max_children">' + render_menu_options([[1, "1 (Singleton)"], 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], event.max_children, false) + '</select>');
+		html += get_form_table_caption((window._t ? _t('schedule.select_the_maximum_number_of_jobs_that_c') : "Select the maximum number of jobs that can run simultaneously."));
 		html += get_form_table_spacer();
 
 		// timeout
-		html += get_form_table_row('Timeout', this.get_relative_time_combo_box('fe_ee_timeout', event.timeout));
-		html += get_form_table_caption("Enter the maximum time allowed for jobs to complete, 0 to disable.");
+		html += get_form_table_row((window._t ? _t('schedule.timeout') : 'Timeout'), this.get_relative_time_combo_box('fe_ee_timeout', event.timeout));
+		html += get_form_table_caption((window._t ? _t('schedule.enter_the_maximum_time_allowed_for_jobs_') : "Enter the maximum time allowed for jobs to complete, 0 to disable."));
 		html += get_form_table_spacer();
 
 		// retries
-		html += get_form_table_row('Retries',
+		html += get_form_table_row((window._t ? _t('schedule.retries') : 'Retries'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><select id="fe_ee_retries" onChange="$P().change_retry_amount()">' + render_menu_options([[0, 'None'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], event.retries, false) + '</select></td>' +
 			'<td id="td_ee_retry1" ' + (event.retries ? '' : 'style="display:none"') + '><span style="padding-left:15px; font-size:13px; color:#777;"><b>Delay:</b>&nbsp;</span></td>' +
 			'<td id="td_ee_retry2" ' + (event.retries ? '' : 'style="display:none"') + '>' + this.get_relative_time_combo_box('fe_ee_retry_delay', event.retry_delay, '', true) + '</td>' +
 			'</tr></table>'
 		);
-		html += get_form_table_caption("Select the number of retries to be attempted before an error is reported.");
+		html += get_form_table_caption((window._t ? _t('schedule.select_the_number_of_retries_to_be_attem') : "Select the number of retries to be attempted before an error is reported."));
 		html += get_form_table_spacer();
 
 		// log expiration
-		html += get_form_table_row('Log Expires',
+		html += get_form_table_row((window._t ? _t('schedule.log_expires') : 'Log Expires'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><select id="fe_ee_expire_days" onChange="">' + render_menu_options([[0, 'Default'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], event.log_expire_days, false) + '</select></td>' +
 			'</tr></table>'
 		);
-		html += get_form_table_caption("Number of days to keep job logs in storage (alters job_data_expire_days config)");
+		html += get_form_table_caption((window._t ? _t('schedule.number_of_days_to_keep_job_logs_in_stora') : "Number of days to keep job logs in storage (alters job_data_expire_days config)"));
 		html += get_form_table_spacer();
 
 		// catch-up mode (run all)
 		// method (interruptable, non-interruptable)
-		html += get_form_table_row('Misc. Options',
+		html += get_form_table_row((window._t ? _t('schedule.misc_options') : 'Misc. Options'),
 			'<div><input type="checkbox" id="fe_ee_catch_up" value="1" ' + (event.catch_up ? 'checked="checked"' : '') + ' ' + (event.id ? 'onChange="$P().setGroupVisible(\'rc\',this.checked)"' : '') + ' /><label for="fe_ee_catch_up">Catch-Up (Run All)</label></div>' +
 			'<div class="caption">Automatically run all missed events after server downtime or scheduler/event disabled.</div>' +
 
@@ -8492,7 +8510,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		});
 
 		var chain_expanded = !!(event.chain || event.chain_error);
-		html += get_form_table_row('Chain Reaction',
+		html += get_form_table_row((window._t ? _t('schedule.chain_reaction') : 'Chain Reaction'),
 			'<div style="font-size:13px;' + (chain_expanded ? 'display:none;' : '') + '"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Chain Options</span></div>' +
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;' + (chain_expanded ? '' : 'display:none;') + '"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Chain Options</legend>' +
 			'<div class="plugin_params_label">Run Event on Success:</div>' +
@@ -8503,12 +8521,12 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			'</fieldset>'
 		);
-		html += get_form_table_caption("Select events to run automatically after this event completes.");
+		html += get_form_table_caption((window._t ? _t('schedule.select_events_to_run_automatically_after') : "Select events to run automatically after this event completes."));
 		html += get_form_table_spacer();
 
 		// notification
 		var notif_expanded = !!(event.notify_success || event.notify_fail || event.web_hook || event.web_hook_start);
-		html += get_form_table_row('Notification',
+		html += get_form_table_row((window._t ? _t('schedule.notification') : 'Notification'),
 			'<div style="font-size:13px;' + (notif_expanded ? 'display:none;' : '') + '"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Notification Options</span></div>' +
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;' + (notif_expanded ? '' : 'display:none;') + '"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Notification Options</legend>' +
 			'<div class="plugin_params_label">Email on Success:</div>' +
@@ -8526,12 +8544,12 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			'</fieldset>'
 		);
-		html += get_form_table_caption("Enter one or more e-mail addresses for notification (comma-separated), and optionally a web hook URL.");
+		html += get_form_table_caption((window._t ? _t('schedule.enter_one_or_more_email_addresses_for_no') : "Enter one or more e-mail addresses for notification (comma-separated), and optionally a web hook URL."));
 		html += get_form_table_spacer();
 
 		// resource limits
 		var res_expanded = !!(event.memory_limit || event.memory_sustain || event.cpu_limit || event.cpu_sustain || event.log_max_size);
-		html += get_form_table_row('Limits',
+		html += get_form_table_row((window._t ? _t('schedule.limits') : 'Limits'),
 			'<div style="font-size:13px;' + (res_expanded ? 'display:none;' : '') + '"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Resource Limits</span></div>' +
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;' + (res_expanded ? '' : 'display:none;') + '"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Resource Limits</legend>' +
 
@@ -8563,34 +8581,34 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			'</fieldset>'
 		);
 		html += get_form_table_caption(
-			"Optionally set CPU load, memory usage and log size limits for the event."
+			(window._t ? _t('schedule.optionally_set_cpu_load_memory_usage_and') : "Optionally set CPU load, memory usage and log size limits for the event.")
 		);
 		html += get_form_table_spacer();
 
 		// graph icon
 		let giTitle = "Specify the hex code of fontAwsome or Unicode character. The default value is F111 (FA circle)"
 		let giLabel = `<label for="fe_ee_graph_icon"><i style="font-family: FontAwesome; font-style: normal;  font-weight: 900; vertical-align: middle" onclick="$P().show_graph()" id="fe_ee_graph_icon_label"/></label>`
-		html += get_form_table_row('Graph Icon', `<input id="fe_ee_graph_icon" oninput="$P().update_graph_icon_label()" size=5 title="${giTitle}" value="${event.graph_icon || ''}"/>${giLabel}`);
-		html += get_form_table_caption("hex code");
+		html += get_form_table_row((window._t ? _t('schedule.graph_icon') : 'Graph Icon'), `<input id="fe_ee_graph_icon" oninput="$P().update_graph_icon_label()" size=5 title="${giTitle}" value="${event.graph_icon || ''}"/>${giLabel}`);
+		html += get_form_table_caption((window._t ? _t('schedule.hex_code') : "hex code"));
 		html += '<script>$P().update_graph_icon_label()</script>'
 		html += get_form_table_spacer();
 
 		// notes
-		html += get_form_table_row('Notes', '<textarea id="fe_ee_notes" style="width:600px; height:80px; resize:vertical;">' + escape_text_field_value(event.notes) + '</textarea>');
-		html += get_form_table_caption("Optionally enter notes for the event, which will be included in all e-mail notifications.");
+		html += get_form_table_row((window._t ? _t('schedule.notes') : 'Notes'), '<textarea id="fe_ee_notes" style="width:600px; height:80px; resize:vertical;">' + escape_text_field_value(event.notes) + '</textarea>');
+		html += get_form_table_caption((window._t ? _t('schedule.optionally_enter_notes_for_the_event_whi') : "Optionally enter notes for the event, which will be included in all e-mail notifications."));
 		html += get_form_table_spacer();
 
 		// debugging options (avoid emails/webhooks/history), existing events only
 		if (event.id) {
 			let sudo = app.isAdmin() ? '<input type="checkbox" id="fe_ee_debug_sudo" class="debug_options" value="1"><label for="fe_ee_debug_sudo" title="This will ignore plugin UID setting and run the job using main process UID"> Sudo </label><br>' : "";
 			// let ttyTitle = "This option let you capture colorized terminal output using /usr/bin/script tool (typically in the box, on alpine install util-linux). Please note - it will supress stdin/stderr sent to/from job and will also hang on interactive prompts"
-			html += get_form_table_row('Debug Opts', `				
+			html += get_form_table_row((window._t ? _t('schedule.debug_opts') : 'Debug Opts'), `				
 				  <input type="checkbox" id="fe_ee_debug_chain"  value="1"><label for="fe_ee_debug_chain"> Omit chaining</label><br>
 				  <input type="checkbox" id="fe_ee_debug_notify"  value="1"><label for="fe_ee_debug_notify"> Omit notification </label><br>
 				 ${sudo}
 				  `);
 			//   <input type="checkbox" id="fe_ee_debug_tty" value="1"><label for="fe_ee_debug_tty" title="${ttyTitle}"> Use terminal emulator</label><br>
-			html += get_form_table_caption("Debugging options. Applies only to manual execution (not stored with event)");
+			html += get_form_table_caption((window._t ? _t('schedule.debugging_options_applies_only_to_manual') : "Debugging options. Applies only to manual execution (not stored with event)"));
 			html += get_form_table_spacer();
 		} //
 
@@ -8645,8 +8663,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		html += '<center><table>' +
 			// get_form_table_spacer() + 
-			get_form_table_row('Crontab:', '<input type="text" id="fe_ee_crontab" style="width:330px;" value="" spellcheck="false"/>') +
-			get_form_table_caption("Enter your crontab date/time expression here.") +
+			get_form_table_row((window._t ? _t('schedule.crontab') : 'Crontab:'), '<input type="text" id="fe_ee_crontab" style="width:330px;" value="" spellcheck="false"/>') +
+			get_form_table_caption((window._t ? _t('schedule.enter_your_crontab_datetime_expression_h') : "Enter your crontab date/time expression here.")) +
 			'</table></center>';
 
 		app.confirm('<i class="fa fa-clock-o">&nbsp;</i>Import from Crontab', html, "Import", function (result) {
@@ -8654,7 +8672,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			if (result) {
 				var cron_exp = $('#fe_ee_crontab').val().toLowerCase();
-				if (!cron_exp) return app.badField('fe_ee_crontab', "Please enter a crontab date/time expression.");
+				if (!cron_exp) return app.badField('fe_ee_crontab', (window._t ? _t('schedule.please_enter_a_crontab_datetime_expressi') : "Please enter a crontab date/time expression."));
 
 				// validate, convert to timing object
 				var timing = null;
@@ -8689,7 +8707,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 				$('#d_ee_timing_params').html(self.get_timing_params_html(tmode));
 
 				// and we're done
-				app.showMessage('success', "Crontab date/time expression was imported successfully.");
+				app.showMessage('success', (window._t ? _t('schedule.crontab_datetime_expression_was_imported') : "Crontab date/time expression was imported successfully."));
 
 			} // user clicked add
 		}); // app.confirm
@@ -8708,8 +8726,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		html += '<center><table>' +
 			// get_form_table_spacer() + 
-			get_form_table_row('Category Title:', '<input type="text" id="fe_ee_cat_title" style="width:315px" value=""/>') +
-			get_form_table_caption("Enter a title for your category here.") +
+			get_form_table_row((window._t ? _t('schedule.category_title') : 'Category Title:'), '<input type="text" id="fe_ee_cat_title" style="width:315px" value=""/>') +
+			get_form_table_caption((window._t ? _t('schedule.enter_a_title_for_your_category_here') : "Enter a title for your category here.")) +
 			'</table></center>';
 
 		app.confirm('<i class="fa fa-folder-open-o">&nbsp;</i>Quick Add Category', html, "Add", function (result) {
@@ -8717,7 +8735,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			if (result) {
 				var cat_title = $('#fe_ee_cat_title').val();
-				if (!cat_title) return app.badField('fe_ee_cat_title', "Please enter a title for the category.");
+				if (!cat_title) return app.badField('fe_ee_cat_title', (window._t ? _t('schedule.please_enter_a_title_for_the_category') : "Please enter a title for the category."));
 				Dialog.hide();
 
 				var category = {};
@@ -8732,10 +8750,10 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 				category.gcolor = baseColors[(app.categories || []).length % 7];
 
-				app.showProgress(1.0, "Adding category...");
+				app.showProgress(1.0, (window._t ? _t('schedule.adding_category') : "Adding category..."));
 				app.api.post('app/create_category', category, function (resp) {
 					app.hideProgress();
-					app.showMessage('success', "Category was added successfully.");
+					app.showMessage('success', (window._t ? _t('schedule.category_was_added_successfully') : "Category was added successfully."));
 
 					// set event to new category
 					category.id = resp.id;
@@ -9440,8 +9458,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 					      </div>
 					      <div id="fe_ee_pp_evt_list"></div>
 					      <script>$P().render_wf_event_list()</script>
-					      <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 0px" onMouseUp="$P().wf_event_add()">Add Event</div>
-						  <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 8px" onMouseUp="$P().wf_event_add_cat()">Add Category</div><br>
+					      <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 0px" onMouseUp="$P().wf_event_add()">' + (window._t ? _t('schedule.add_event') : 'Add Event') + '</div>
+						  <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 8px" onMouseUp="$P().wf_event_add_cat()">' + (window._t ? _t('schedule.add_category') : 'Add Category') + '</div><br>
 					      `
 							break;
 
@@ -9449,7 +9467,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 							html += `
 							  <div id="fe_ee_pp_file_list"></div>
 							  <script>$P().render_file_list()</script>
-							  <div class="button mini" style="width:90px; margin:10px 10px 10px 0px" onMouseUp="$P().file_add()">Attach File</div>
+							  <div class="button mini" style="width:90px; margin:10px 10px 10px 0px" onMouseUp="$P().file_add()">' + (window._t ? _t('schedule.attach_file') : 'Attach File') + '</div>
 							  <div class="caption" >Access files via env vars: FILE_NAME_EXT or files/name.ext</div>
 							<br>
 	 					    `
@@ -9538,7 +9556,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// event title
 		event.title = trim($('#fe_ee_title').val());
-		if (!event.title) return quiet ? false : app.badField('fe_ee_title', "Please enter a title for the event.");
+		if (!event.title) return quiet ? false : app.badField('fe_ee_title', (window._t ? _t('schedule.please_enter_a_title_for_the_event') : "Please enter a title for the event."));
 
 		// event enabled
 		event.enabled = $('#fe_ee_enabled').is(':checked') ? 1 : 0;
@@ -9560,7 +9578,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// category
 		event.category = $('#fe_ee_cat').val();
-		if (!event.category) return quiet ? false : app.badField('fe_ee_cat', "Please select a Category for the event.");
+		if (!event.category) return quiet ? false : app.badField('fe_ee_cat', (window._t ? _t('schedule.please_select_a_category_for_the_event') : "Please select a Category for the event."));
 
 		// target (server group or individual server)
 		event.target = $('#fe_ee_target').val();
@@ -9570,7 +9588,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		event.multiplex = (event.algo == 'multiplex') ? 1 : 0;
 		if (event.multiplex) {
 			event.stagger = parseInt($('#fe_ee_stagger').val()) * parseInt($('#fe_ee_stagger_units').val());
-			if (isNaN(event.stagger)) return quiet ? false : app.badField('fe_ee_stagger', "Please enter a number of seconds to stagger by.");
+			if (isNaN(event.stagger)) return quiet ? false : app.badField('fe_ee_stagger', (window._t ? _t('schedule.please_enter_a_number_of_seconds_to_stag') : "Please enter a number of seconds to stagger by."));
 		}
 		else {
 			event.stagger = 0;
@@ -9581,7 +9599,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// plugin
 		event.plugin = $('#fe_ee_plugin').val();
-		if (!event.plugin) return quiet ? false : app.badField('fe_ee_plugin', "Please select a Plugin for the event.");
+		if (!event.plugin) return quiet ? false : app.badField('fe_ee_plugin', (window._t ? _t('schedule.please_select_a_plugin_for_the_event') : "Please select a Plugin for the event."));
 
 		// workflow
 		// if (event.plugin == 'workflow' && Array.isArray(event.workflow)) {
@@ -9628,14 +9646,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let repeatInterval = $('#fe_ee_repeat').val()
          
 		if(repeatInterval) {
-			if ((parseInt(repeatInterval) || 0) < 1) return app.badField('fe_ee_repeat', "Invalid repeat value (must be positive integer)");
+			if ((parseInt(repeatInterval) || 0) < 1) return app.badField('fe_ee_repeat', (window._t ? _t('schedule.invalid_repeat_value_must_be_positive_in') : "Invalid repeat value (must be positive integer)"));
 			event.repeat = (parseInt($('#fe_ee_repeat').val()) * parseInt($('#fe_ee_repeat_units').val()));
 			event.timing = false
 			event.interval = false
 			event.interval_start = false 
 		}
 		else if (eventInterval) {
-			if ((parseInt(eventInterval) || 0) < 1) return app.badField('fe_ee_interval', "Invalid interval value (must be positive integer)");
+			if ((parseInt(eventInterval) || 0) < 1) return app.badField('fe_ee_interval', (window._t ? _t('schedule.invalid_interval_value_must_be_positive_') : "Invalid interval value (must be positive integer)"));
 			event.interval = (parseInt($('#fe_ee_interval').val()) * parseInt($('#fe_ee_interval_units').val()));
 			event.interval_start = parseInt(event.interval_start) || 0
 			event.timing = false
@@ -9674,7 +9692,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// event queue
 		event.queue = $('#fe_ee_queue').is(':checked') ? 1 : 0;
 		event.queue_max = parseInt($('#fe_ee_queue_max').val() || "0");
-		if (isNaN(event.queue_max)) return quiet ? false : app.badField('fe_ee_queue_max', "Please enter an integer value for the event queue max.");
+		if (isNaN(event.queue_max)) return quiet ? false : app.badField('fe_ee_queue_max', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_ev') : "Please enter an integer value for the event queue max."));
 		if (event.queue_max < 0) return quiet ? false : app.badField('fe_ee_queue_max', "Please enter a positive integer for the event queue max.");
 
 		// chain reaction
@@ -9684,7 +9702,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// cursor reset
 		if (event.id && event.catch_up && $('#fe_ee_rc_enabled').is(':checked')) {
 			var new_cursor = parseInt($('#fe_ee_rc_time').data('epoch'));
-			if (!new_cursor || isNaN(new_cursor)) return quiet ? false : app.badField('fe_ee_rc_time', "Please enter a valid date/time for the new event time.");
+			if (!new_cursor || isNaN(new_cursor)) return quiet ? false : app.badField('fe_ee_rc_time', (window._t ? _t('schedule.please_enter_a_valid_datetime_for_the_ne') : "Please enter a valid date/time for the new event time."));
 			event['reset_cursor'] = normalize_time(new_cursor, { sec: 0 });
 		}
 		else delete event['reset_cursor'];
@@ -9703,7 +9721,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (event.cpu_limit < 0) return quiet ? false : app.badField('fe_ee_cpu_limit', "Please enter a positive integer for the CPU limit.");
 
 			event.cpu_sustain = parseInt($('#fe_ee_cpu_sustain').val()) * parseInt($('#fe_ee_cpu_sustain_units').val());
-			if (isNaN(event.cpu_sustain)) return quiet ? false : app.badField('fe_ee_cpu_sustain', "Please enter an integer value for the CPU sustain period.");
+			if (isNaN(event.cpu_sustain)) return quiet ? false : app.badField('fe_ee_cpu_sustain', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_cp') : "Please enter an integer value for the CPU sustain period."));
 			if (event.cpu_sustain < 0) return quiet ? false : app.badField('fe_ee_cpu_sustain', "Please enter a positive integer for the CPU sustain period.");
 		}
 		else {
@@ -9718,7 +9736,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (event.memory_limit < 0) return quiet ? false : app.badField('fe_ee_memory_limit', "Please enter a positive integer for the memory limit.");
 
 			event.memory_sustain = parseInt($('#fe_ee_memory_sustain').val()) * parseInt($('#fe_ee_memory_sustain_units').val());
-			if (isNaN(event.memory_sustain)) return quiet ? false : app.badField('fe_ee_memory_sustain', "Please enter an integer value for the memory sustain period.");
+			if (isNaN(event.memory_sustain)) return quiet ? false : app.badField('fe_ee_memory_sustain', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_me') : "Please enter an integer value for the memory sustain period."));
 			if (event.memory_sustain < 0) return quiet ? false : app.badField('fe_ee_memory_sustain', "Please enter a positive integer for the memory sustain period.");
 		}
 		else {
@@ -9729,8 +9747,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// log file size limit
 		if ($('#fe_ee_log_enabled').is(':checked')) {
 			event.log_max_size = parseInt($('#fe_ee_log_limit').val()) * parseInt($('#fe_ee_log_limit_units').val());
-			if (isNaN(event.log_max_size)) return quiet ? false : app.badField('fe_ee_log_limit', "Please enter an integer value for the log size limit.");
-			if (event.log_max_size < 0) return quiet ? false : app.badField('fe_ee_log_limit', "Please enter a positive integer for the log size limit.");
+			if (isNaN(event.log_max_size)) return quiet ? false : app.badField('fe_ee_log_limit', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_lo') : "Please enter an integer value for the log size limit."));
+			if (event.log_max_size < 0) return quiet ? false : app.badField('fe_ee_log_limit', (window._t ? _t('schedule.please_enter_a_positive_integer_for_the_') : "Please enter a positive integer for the log size limit."));
 		}
 		else {
 			event.log_max_size = 0;
@@ -9799,7 +9817,6 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	}
 
 });
-
 // Cronicle History Page
 
 Class.subclass( Page.Base, "Page.History", {	
@@ -9832,22 +9849,22 @@ Class.subclass( Page.Base, "Page.History", {
 	
 	gosub_history: function(args) {
 		// show history
-		app.setWindowTitle( "History" );
+		app.setWindowTitle( (window._t ? _t('history.history') : "History") );
 		
 		var html = '';
 		// html += '<div style="padding:5px 15px 15px 15px;">';
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
 		html += '<div class="subtitle">';
-			html += 'All Completed Jobs';
+			html += (window._t ? _t('history.all_completed_jobs') : 'All Completed Jobs');
 			// html += '<div class="subtitle_widget"><span class="link" onMouseUp="$P().refresh_user_list()"><b>Refresh</b></span></div>';
 			// html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_ul_search" size="15" placeholder="Find username..." style="border:0px;"/></div>';
 			var sorted_events = app.schedule.sort( function(a, b) {
 				return a.title.toLowerCase().localeCompare( b.title.toLowerCase() );
 			} );
-			html += `<div class="subtitle_widget"><a href="./db" ><b>Event Dashboard</b></a></div>`
-			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_eventlimit" class="subtitle_menu" onChange="$('#d_history_table').empty();$P().get_history()"  title="Show only last N occurences per event"><option value="">Last occurences (all)</option><option>1</option><option>2</option><option>3</option><option>5</option><option>10</option></select></div>`;
-			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_event" class="subtitle_menu" onChange="$P().jump_to_event_history()"><option value="">Filter by Event</option>${render_menu_options(sorted_events, "", false)}</select></div>`
+			html += `<div class="subtitle_widget"><a href="./db" ><b>${(window._t ? _t('history.event_dashboard') : 'Event Dashboard')}</b></a></div>`
+			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_eventlimit" class="subtitle_menu" onChange="$('#d_history_table').empty();$P().get_history()"  title="Show only last N occurences per event"><option value="">${(window._t ? _t('history.last_occurrences_all') : 'Last occurences (all)')}</option><option>1</option><option>2</option><option>3</option><option>5</option><option>10</option></select></div>`;
+			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_event" class="subtitle_menu" onChange="$P().jump_to_event_history()"><option value="">${(window._t ? _t('history.filter_by_event') : 'Filter by Event')}</option>${render_menu_options(sorted_events, "", false)}</select></div>`
 			html += '<div class="clear"></div>';
 		html += '</div>';
 		
@@ -9894,7 +9911,7 @@ Class.subclass( Page.Base, "Page.History", {
 			resp.rows = newRows
 		} //
 		
-		var cols = ['Job ID', 'Event Name', 'Argument', 'Category', 'Plugin', 'Hostname',  'Result', 'Start Date/Time', 'Elapsed Time'];
+		var cols = [(window._t ? _t('history.job_id') : 'Job ID'), (window._t ? _t('history.event_name') : 'Event Name'), (window._t ? _t('history.argument') : 'Argument'), (window._t ? _t('history.category') : 'Category'), (window._t ? _t('history.plugin') : 'Plugin'), (window._t ? _t('history.hostname') : 'Hostname'),  (window._t ? _t('history.result') : 'Result'), (window._t ? _t('history.start_date_time') : 'Start Date/Time'), (window._t ? _t('history.elapsed_time') : 'Elapsed Time')];
 		
 		var self = this;
 		var num_visible_items = 0;
@@ -9972,7 +9989,7 @@ Class.subclass( Page.Base, "Page.History", {
 	
 	gosub_error_history: function(args) {
 		// show history
-		app.setWindowTitle( "Query History" );
+		app.setWindowTitle( (window._t ? _t('history.query_history') : "Query History") );
 		
 		var html = '';
 		// html += '<div style="padding:5px 15px 15px 15px;">';
@@ -10006,10 +10023,10 @@ Class.subclass( Page.Base, "Page.History", {
 
 		html += this.getSidebarTabs( 'error_history',
 		[
-			['history', "All Completed"],
+			['history', (window._t ? _t('history.all_completed') : "All Completed")],
 			// ['event_history', "Event History"],
 			// ['event_stats', "Event Stats"],
-			['error_history', "Query History"],
+			['error_history', (window._t ? _t('history.query_history') : "Query History")],
 		]
 	    );
 		
@@ -10019,7 +10036,7 @@ Class.subclass( Page.Base, "Page.History", {
 		this.events = [];
 		if (resp.rows) this.events = resp.rows;
 
-		var cols = ['Job ID', 'Event Name', 'Argument', 'Category', 'Plugin', 'Hostname', 'Code', 'Description', 'Start Date/Time', 'Elapsed Time'];
+		var cols = [(window._t ? _t('history.job_id') : 'Job ID'), (window._t ? _t('history.event_name') : 'Event Name'), (window._t ? _t('history.argument') : 'Argument'), (window._t ? _t('history.category') : 'Category'), (window._t ? _t('history.plugin') : 'Plugin'), (window._t ? _t('history.hostname') : 'Hostname'), (window._t ? _t('history.code') : 'Code'), (window._t ? _t('history.description') : 'Description'), (window._t ? _t('history.start_date_time') : 'Start Date/Time'), (window._t ? _t('history.elapsed_time') : 'Elapsed Time')];
 		
 		var self = this;
 		var num_visible_items = 0;
@@ -10125,7 +10142,7 @@ Class.subclass( Page.Base, "Page.History", {
 		var col_width = Math.floor( ((size.width * 0.9) - 300) / 4 );
 		
 		var event = find_object( app.schedule, { id: args.id } ) || null;
-		if (!event) return app.doError("Could not locate event in schedule: " + args.id);
+		if (!event) return app.doError((window._t ? _t('history.could_not_locate_event_in_schedule') : "Could not locate event in schedule: ") + args.id);
 		
 		var cat = event.category ? find_object( app.categories, { id: event.category } ) : null;
 		var group = event.target ? find_object( app.server_groups, { id: event.target } ) : null;
@@ -10136,15 +10153,15 @@ Class.subclass( Page.Base, "Page.History", {
 			group.multiplex = 1;
 		}
 		
-		app.setWindowTitle( "Event Stats: " + event.title );
+		app.setWindowTitle( (window._t ? _t('history.event_stats') : "Event Stats: ") + event.title );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'event_stats',
 			[
-				['history', "All Completed"],				
-				['event_history&id=' + args.id, "Event History"],
-				['event_stats', "Event Stats"],
-				['error_history', "Query History"],
+				['history', (window._t ? _t('history.all_completed') : "All Completed")],
+				['event_history&id=' + args.id, (window._t ? _t('history.event_history_label') : "Event History")],
+				['event_stats', (window._t ? _t('history.event_stats_label') : "Event Stats")],
+				['error_history', (window._t ? _t('history.query_history') : "Query History")],
 			]
 		);
 		// html += '<div style="padding:20px 20px 30px 20px">';
@@ -10620,9 +10637,9 @@ Class.subclass( Page.Base, "Page.History", {
 		var col_width = Math.floor( ((size.width * 0.9) - 300) / 7 );
 		
 		var event = find_object( app.schedule, { id: args.id } ) || null;
-		if (!event) return app.doError("Could not locate event in schedule: " + args.id);
+		if (!event) return app.doError((window._t ? _t('history.could_not_locate_event_in_schedule') : "Could not locate event in schedule: ") + args.id);
 		
-		app.setWindowTitle( "Event History: " + event.title );
+		app.setWindowTitle( (window._t ? _t('history.event_history') : "Event History: ") + event.title );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'event_history',
@@ -10630,12 +10647,12 @@ Class.subclass( Page.Base, "Page.History", {
 				['history', "All Completed"],
 				['event_history', "Event History"],
 				['event_stats&id=' + args.id, "Event Stats"],
-				['error_history', "Query History"],
+				['error_history', (window._t ? _t('history.query_history') : "Query History")],
 			]
 		);
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
-		var cols = ['Job ID', 'Argument', 'Hostname', 'Result', 'Memo', 'Start Date/Time', 'Elapsed Time', 'Avg CPU', 'Avg Mem'];
+		var cols = ['Job ID', 'Argument', (window._t ? _t('history.hostname') : 'Hostname'), (window._t ? _t('history.result') : 'Result'), 'Memo', 'Start Date/Time', 'Elapsed Time', 'Avg CPU', 'Avg Mem'];
 		
 		html += '<div class="subtitle">';
 			html += 'Event History: ' + event.title;
@@ -10739,7 +10756,6 @@ Class.subclass( Page.Base, "Page.History", {
 	}
 	
 });
-
 // Cronicle JobDetails Page
 
 
@@ -10770,11 +10786,11 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 		this.args = args;
 
 		if (!args.id) {
-			app.doError("The Job Details page requires a Job ID.");
+			app.doError((window._t ? _t('job_details.the_job_details_page_requires_a_job_id') : "The Job Details page requires a Job ID."));
 			return true;
 		}
 
-		app.setWindowTitle("Job Details: #" + args.id);
+		app.setWindowTitle((window._t ? _t('job_details.job_details') : "Job Details: #") + args.id);
 		app.showTabBar(true);
 
 		this.tab.show();
@@ -10819,7 +10835,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 			}
 			else {
 				// show error
-				app.doError("Error: " + resp.description);
+				app.doError((window._t ? _t('job_details.error') : "Error: ") + resp.description);
 				self.div.removeClass('loading');
 			}
 		});
@@ -10883,7 +10899,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 
 		app.confirm('<span style="color:red">Delete Job</span>', "Are you sure you want to delete the current job log and history?", "Delete", function (result) {
 			if (result) {
-				app.showProgress(1.0, "Deleting job...");
+				app.showProgress(1.0, (window._t ? _t('job_details.deleting_job') : "Deleting job..."));
 				app.api.post('app/delete_job', job, function (resp) {
 					app.hideProgress();
 					app.showMessage('success', "Job ID '" + job.id + "' was deleted successfully.");
@@ -10898,13 +10914,13 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 		// run job again
 		var self = this;
 		var event = find_object(app.schedule, { id: this.job.event }) || null;
-		if (!event) return app.doError("Could not locate event in schedule: " + this.job.event_title + " (" + this.job.event + ")");
+		if (!event) return app.doError((window._t ? _t('job_details.could_not_locate_event_in_schedule') : "Could not locate event in schedule: ") + this.job.event_title + " (" + this.job.event + ")");
 
 		var job = deep_copy_object(event);
 		job.now = this.job.now;
 		job.params = this.job.params;
 
-		app.showProgress(1.0, "Starting job...");
+		app.showProgress(1.0, (window._t ? _t('job_details.starting_job') : "Starting job..."));
 
 		app.api.post('app/run_event', job, function (resp) {
 			// app.showMessage('success', "Event '"+event.title+"' has been started.");
@@ -11121,8 +11137,8 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 			html += '<div id="d_job_log_warning">';
 			html += '<table class="data_table" width="100%"><tr><td style="padding-top:50px; padding-bottom:50px; text-align:center">';
 			html += '<div style="margin-bottom:15px;"><b>Warning: Job event log file is ' + get_text_from_bytes(job.log_file_size, 1) + '.  Please consider downloading instead of viewing in browser.</b></div>';
-			html += '<div style="width:50%; float:left;"><div class="button right" style="width:110px; margin-right:20px;" onMouseUp="$P().do_download_log()">Download Log</div></div>';
-			html += '<div style="width:50%; float:left;"><div class="button left" style="width:110px; margin-left:20px;" onMouseUp="$P().do_view_inline_log()">View Log</div></div>';
+			html += '<div style="width:50%; float:left;"><div class="button right" style="width:110px; margin-right:20px;" onMouseUp="$P().do_download_log()">' + (window._t ? _t('job_details.download_log') : 'Download Log') + '</div></div>';
+			html += '<div style="width:50%; float:left;"><div class="button left" style="width:110px; margin-left:20px;" onMouseUp="$P().do_view_inline_log()">' + (window._t ? _t('job_details.view_log') : 'View Log') + '</div></div>';
 			html += '<div class="clear"></div>';
 			html += '</td></tr></table>';
 			html += '</div>';
@@ -11517,7 +11533,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 
 		app.confirm('<span style="color:red">Abort Job</span>', "Are you sure you want to abort the current job?", "Abort", function (result) {
 			if (result) {
-				app.showProgress(1.0, "Aborting job...");
+				app.showProgress(1.0, (window._t ? _t('job_details.aborting_job') : "Aborting job..."));
 				app.api.post('app/abort_job', job, function (resp) {
 					app.hideProgress();
 					app.showMessage('success', "Job '" + job.event_title + "' was aborted successfully.");
@@ -11579,12 +11595,12 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 		app.api.post('app/update_job', { id: job.id, notify_success: job.notify_success, notify_fail: job.notify_fail }, function (resp) {
 			watch_enabled = !watch_enabled;
 			if (watch_enabled) {
-				app.showMessage('success', "You will now be notified via e-mail when the job completes (success or fail).");
+				app.showMessage('success', (window._t ? _t('job_details.you_will_now_be_notified_via_email_when_') : "You will now be notified via e-mail when the job completes (success or fail)."));
 				$('#s_watch_job').css('color', '#3f7ed5');
 				$('#s_watch_job > i').removeClass().addClass('fa fa-check-square-o');
 			}
 			else {
-				app.showMessage('success', "You will no longer be notified about this job.");
+				app.showMessage('success', (window._t ? _t('job_details.you_will_no_longer_be_notified_about_thi') : "You will no longer be notified about this job."));
 				$('#s_watch_job').css('color', '#777');
 				$('#s_watch_job > i').removeClass().addClass('fa fa-square-o');
 			}
@@ -12072,7 +12088,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 
 	update_live_progress: function (job) {
 		// update job progress, elapsed time, time remaining, cpu pie, mem pie
-		if (job.complete && !app.progress) app.showProgress(1.0, "Job is finishing...");
+		if (job.complete && !app.progress) app.showProgress(1.0, (window._t ? _t('job_details.job_is_finishing') : "Job is finishing..."));
 
 		// pid may have changed (retry)
 		$('#d_live_pid').html(job.pid || 'n/a');
@@ -12215,7 +12231,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 			},
 			function (err) {
 				// job not complete yet
-				if (!app.progress) app.showProgress(1.0, "Job is finishing...");
+				if (!app.progress) app.showProgress(1.0, (window._t ? _t('job_details.job_is_finishing') : "Job is finishing..."));
 				// self.jump_timer = setTimeout( self.jump_to_archive_when_ready.bind(self), 1000 );
 			}
 		);
@@ -12320,7 +12336,6 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 	}
 
 });
-
 Class.subclass( Page.Base, "Page.MyAccount", {	
 		
 	onInit: function() {
@@ -12336,7 +12351,7 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		if (!args) args = {};
 		this.args = args;
 		
-		app.setWindowTitle('My Account');
+		app.setWindowTitle((window._t ? _t('my_account.my_account') : 'My Account'));
 		app.showTabBar(true);
 		
 		this.receive_user({ user: app.user });
@@ -12352,25 +12367,25 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		html += '<div style="padding:50px 20px 50px 20px">';
 		html += '<center>';
 		
-		html += '<table><tr>';
-			html += '<td valign="top" style="vertical-align:top">';
+		html += '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:20px;align-items:flex-start">';
+			html += '<div style="flex:1 1 350px;max-width:600px">';
 			
 		html += '<table style="margin:0;">';
 
 		let isExternal = user.ext_auth ? ' [External]' : ''
 		
 		// user id
-		html += get_form_table_row( 'Username', '<div style="font-size: 14px;"><b>' + app.username + `${isExternal}</b></div>` );
-		html += get_form_table_caption( "Your username cannot be changed." );
+		html += get_form_table_row( (window._t ? _t('my_account.username') : 'Username'), '<div style="font-size: 14px;"><b>' + app.username + `${isExternal}</b></div>` );
+		html += get_form_table_caption( (window._t ? _t('my_account.your_username_cannot_be_changed') : "Your username cannot be changed.") );
 		html += get_form_table_spacer();
 		
 		// full name
-		html += get_form_table_row( 'Full Name', '<input type="text" id="fe_ma_fullname" size="30" value="'+escape_text_field_value(user.full_name)+'"/>' );
-		html += get_form_table_caption( "Your first and last names, used for display purposes only.");
+		html += get_form_table_row( (window._t ? _t('my_account.full_name') : 'Full Name'), '<input type="text" id="fe_ma_fullname" size="30" value="'+escape_text_field_value(user.full_name)+'"/>' );
+		html += get_form_table_caption( (window._t ? _t('my_account.your_first_and_last_names_used_for_displ') : "Your first and last names, used for display purposes only."));
 		html += get_form_table_spacer();
 		
 		// email
-		html += get_form_table_row( 'Email Address', '<input type="text" id="fe_ma_email" size="30" value="'+escape_text_field_value(user.email)+'"/>' );
+		html += get_form_table_row( (window._t ? _t('my_account.email_address') : 'Email Address'), '<input type="text" id="fe_ma_email" size="30" value="'+escape_text_field_value(user.email)+'"/>' );
 		html += get_form_table_caption( "This is used to generate your profile pic, and to<br/>recover your password if you forget it." );
 		html += get_form_table_spacer();
 
@@ -12392,13 +12407,13 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		if(!user.ext_auth) {
 
 		// current password
-		html += get_form_table_row('Current Password', `<input type="${app.get_password_type()}" id="fe_ma_old_password" size="30" value="" spellcheck="false" ${disableIfExternal}/>` + app.get_password_toggle_html());
-		html += get_form_table_caption( "Enter your current account password to make changes." );
+		html += get_form_table_row((window._t ? _t('my_account.current_password') : 'Current Password'), `<input type="${app.get_password_type()}" id="fe_ma_old_password" size="30" value="" spellcheck="false" ${disableIfExternal}/>` + app.get_password_toggle_html());
+		html += get_form_table_caption( (window._t ? _t('my_account.enter_your_current_account_password_to_m') : "Enter your current account password to make changes.") );
 		html += get_form_table_spacer();
 		
 		// reset password
-		html += get_form_table_row('New Password', `<input type="${app.get_password_type()}" id="fe_ma_new_password" size="30" value="" spellcheck="false" ${disableIfExternal}/>` + app.get_password_toggle_html());
-		html += get_form_table_caption( "If you need to change your password, enter the new one here." );
+		html += get_form_table_row((window._t ? _t('my_account.new_password') : 'New Password'), `<input type="${app.get_password_type()}" id="fe_ma_new_password" size="30" value="" spellcheck="false" ${disableIfExternal}/>` + app.get_password_toggle_html());
+		html += get_form_table_caption( (window._t ? _t('my_account.if_you_need_to_change_your_password_ente') : "If you need to change your password, enter the new one here.") );
 		html += get_form_table_spacer();
 
 		}
@@ -12407,9 +12422,9 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_account_dialog()">Delete Account...</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_account_dialog()">' + (window._t ? _t('my_account.delete_account') : 'Delete Account...') + '</div></td>';
 				html += '<td width="80">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().save_changes()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().save_changes()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('my_account.save_changes') : 'Save Changes') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -12417,23 +12432,23 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		html += '</table>';
 		html += '</center>';
 		
-		html += '</td>';
-			html += '<td valign="top" align="left" style="vertical-align:top; text-align:left;">';
+		html += '</div>';
+			html += '<div style="flex:0 0 auto;text-align:center">';
 
 				// gravar profile image and edit button
-				html += '<fieldset style="width:150px; margin-left:40px; border:1px solid #ddd; box-shadow:none;"><legend>Profile Picture</legend>';
+				html += '<fieldset style="width:150px; border:1px solid #ddd; box-shadow:none;"><legend>' + (window._t ? _t('my_account.profile_picture') : 'Profile Picture') + '</legend>';
 
 				if (app.config.external_users) {
 					html += '<div id="d_ma_image" style="width:128px; height:128px; margin:5px auto 0 auto;background-size:cover; background-image:url(\'' + app.getUserAvatarURL(128) + '\'); cursor:default;"></div>';
 				}
 				else {
 					html += '<div id="d_ma_image" style="width:128px; height:128px; margin:5px auto 0 auto; background-size:cover; background-image:url(\'' + app.getUserAvatarURL(128) + '\'); cursor:pointer;" onMouseUp="$P().edit_gravatar()"></div>';
-					html += '<div class="button mini" style="margin:10px auto 5px auto;" onMouseUp="$P().edit_gravatar()">Edit Image...</div>';
+					html += '<div class="button mini" style="margin:10px auto 5px auto;" onMouseUp="$P().edit_gravatar()">' + (window._t ? _t('my_account.edit_image') : 'Edit Image...') + '</div>';
 					html += '<div style="font-size:11px; color:#888; text-align:center; margin-bottom:5px;">Image services provided by <a href="https://en.gravatar.com/connect/" target="_blank">Gravatar.com</a>.</div>';
 				}
 				html += '</fieldset>';
-			html += '</td>';
-		html += '</tr></table>';
+			html += '</div>';
+		html += '</div>';
 		
 		html += '</div>'; // table wrapper div
 				
@@ -12443,7 +12458,7 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 			app.password_strengthify( '#fe_ma_new_password' );
 			
 			if (app.config.external_users) {
-				app.showMessage('warning', "Users are managed by an external system, so you cannot make changes here.");
+				app.showMessage('warning', (window._t ? _t('my_account.users_are_managed_by_an_external_system_') : "Users are managed by an external system, so you cannot make changes here."));
 				self.div.find('input').prop('disabled', true);
 			}
 		}, 1 );
@@ -12466,7 +12481,7 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		let user = app.user || {}
 		app.clearError();
 		if (app.config.external_users || user.ext_auth) {
-			return app.doError("Users are managed by an external system, so you cannot make changes here.");
+			return app.doError((window._t ? _t('my_account.users_are_managed_by_an_external_system_') : "Users are managed by an external system, so you cannot make changes here."));
 		}
 		if (!$('#fe_ma_old_password').val()) return app.badField('#fe_ma_old_password', "Please enter your current account password to make changes.");
 		
@@ -12477,7 +12492,7 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 			return;
 		} // insecure password
 		
-		app.showProgress( 1.0, "Saving account..." );
+		app.showProgress( 1.0, (window._t ? _t('my_account.saving_account') : "Saving account...") );
 		
 		app.api.post( 'user/update', {
 			username: app.username,
@@ -12489,7 +12504,7 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		function(resp) {
 			// save complete
 			app.hideProgress();
-			app.showMessage('success', "Your account settings were updated successfully.");
+			app.showMessage('success', (window._t ? _t('my_account.your_account_settings_were_updated_succe') : "Your account settings were updated successfully."));
 			
 			$('#fe_ma_old_password').val('');
 			$('#fe_ma_new_password').val('');
@@ -12507,13 +12522,13 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		
 		app.clearError();
 		if (app.config.external_users) {
-			return app.doError("Users are managed by an external system, so you cannot make changes here.");
+			return app.doError((window._t ? _t('my_account.users_are_managed_by_an_external_system_') : "Users are managed by an external system, so you cannot make changes here."));
 		}
-		if (!$('#fe_ma_old_password').val()) return app.badField('#fe_ma_old_password', "Please enter your current account password.");
+		if (!$('#fe_ma_old_password').val()) return app.badField('#fe_ma_old_password', (window._t ? _t('my_account.please_enter_your_current_account_passwo') : "Please enter your current account password."));
 		
-		app.confirm( "Delete My Account", "Are you sure you want to <b>permanently delete</b> your user account?  There is no way to undo this action, and no way to recover your data.", "Delete", function(result) {
+		app.confirm( (window._t ? _t('my_account.delete_my_account_title') : "Delete My Account"), (window._t ? _t('my_account.are_you_sure_you_want_to_permanently_del_body') : "Are you sure you want to <b>permanently delete</b> your user account?  There is no way to undo this action, and no way to recover your data."), (window._t ? _t('my_account.delete_btn') : "Delete"), function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting Account..." );
+				app.showProgress( 1.0, (window._t ? _t('my_account.deleting_account') : "Deleting Account...") );
 				app.api.post( 'user/delete', {
 					username: app.username,
 					password: $('#fe_ma_old_password').val()
@@ -12533,7 +12548,6 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 	}
 	
 } );
-
 Class.subclass( Page.Base, "Page.Admin", {	
 	
 	usernames: null,
@@ -12664,7 +12678,6 @@ Class.subclass( Page.Base, "Page.Admin", {
 	}
 	
 } );
-
 // Cronicle Admin Page -- Categories
 
 Class.add( Page.Admin, {
@@ -12672,7 +12685,7 @@ Class.add( Page.Admin, {
 	gosub_categories: function(args) {
 		// show category list
 		this.div.removeClass('loading');
-		app.setWindowTitle( "Categories" );
+		app.setWindowTitle( (window._t ? _t('admin_categories.categories') : "Categories") );
 		
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) + 200) / 5 );
@@ -12685,7 +12698,7 @@ Class.add( Page.Admin, {
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
-				['categories', "Categories"],
+				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
 				['plugins', "Plugins"],
 				['servers', "Servers"],
 				['users', "Users"]
@@ -12765,7 +12778,7 @@ Class.add( Page.Admin, {
 	gosub_new_category: function(args) {
 		// create new Category
 		var html = '';
-		app.setWindowTitle( "New Category" );
+		app.setWindowTitle( (window._t ? _t('admin_categories.new_category') : "New Category") );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'new_category',
@@ -12774,8 +12787,8 @@ Class.add( Page.Admin, {
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['new_category', "New Category"],
+				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
+				['new_category', (window._t ? _t('admin_categories.new_category') : "New Category")],
 				['plugins', "Plugins"],
 				['servers', "Servers"],
 				['users', "Users"]
@@ -12801,10 +12814,10 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">' + (window._t ? _t('admin_categories.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
 				
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_category()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Category</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_category()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_categories.add_category') : 'Add Category') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -12840,7 +12853,7 @@ Class.add( Page.Admin, {
 		
 		this.category = category;
 		
-		app.showProgress( 1.0, "Creating category..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_categories.creating_category') : "Creating category...") );
 		app.api.post( 'app/create_category', category, this.new_category_finish.bind(this) );
 	},
 	
@@ -12853,7 +12866,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=categories');
 		
 		setTimeout( function() {
-			app.showMessage('success', "The new category was created successfully.");
+			app.showMessage('success', (window._t ? _t('admin_categories.the_new_category_was_created_successfull') : "The new category was created successfully."));
 		}, 150 );
 	},
 	
@@ -12861,7 +12874,7 @@ Class.add( Page.Admin, {
 		// edit existing Category
 		var html = '';
 		let category = find_object( app.categories, { id: args.id } );
-		if(!category) return app.doError("Could not locate Category with ID: " + args.id);
+		if(!category) return app.doError((window._t ? _t('admin_categories.could_not_locate_category_with_id') : "Could not locate Category with ID: ") + args.id);
 		let secret = find_object( app.secrets, { id: args.id } ) || {};
 
 		this.category = deep_copy_object( category )
@@ -12875,7 +12888,7 @@ Class.add( Page.Admin, {
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
-				['categories', "Categories"],
+				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
 				['edit_category', "Edit Category"],
 				['plugins', "Plugins"],
 				['servers', "Servers"],
@@ -12897,11 +12910,11 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">' + (window._t ? _t('admin_categories.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_category_dialog()">Delete Category...</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_category_dialog()">' + (window._t ? _t('admin_categories.delete_category') : 'Delete Category...') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_category()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_category()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_categories.save_changes') : 'Save Changes') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -12923,7 +12936,7 @@ Class.add( Page.Admin, {
 		
 		this.category = category;
 		
-		app.showProgress( 1.0, "Saving category..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_categories.saving_category') : "Saving category...") );
 		app.api.post( 'app/update_category', category, this.save_category_finish.bind(this) );
 	},
 	
@@ -12933,7 +12946,7 @@ Class.add( Page.Admin, {
 		var category = this.category;
 		
 		app.hideProgress();
-		app.showMessage('success', "The category was saved successfully.");
+		app.showMessage('success', (window._t ? _t('admin_categories.the_category_was_saved_successfully') : "The category was saved successfully."));
 		window.scrollTo( 0, 0 );
 		
 		// copy active jobs to array
@@ -12947,14 +12960,14 @@ Class.add( Page.Admin, {
 		if (!category.enabled && jobs.length) {
 			app.confirm( '<span style="color:red">Abort Jobs</span>', "There " + ((jobs.length != 1) ? 'are' : 'is') + " currently still " + jobs.length + " active " + pluralize('job', jobs.length) + " using the disabled category <b>"+category.title+"</b>.  Do you want to abort " + ((jobs.length != 1) ? 'these' : 'it') + " now?", "Abort", function(result) {
 				if (result) {
-					app.showProgress( 1.0, "Aborting " + pluralize('Job', jobs.length) + "..." );
+					app.showProgress( 1.0, (window._t ? _t('admin_categories.aborting') : "Aborting ") + pluralize('Job', jobs.length) + "..." );
 					app.api.post( 'app/abort_jobs', { category: category.id }, function(resp) {
 						app.hideProgress();
 						if (resp.count > 0) {
 							app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " aborted successfully.");
 						}
 						else {
-							app.showMessage('warning', "No jobs were aborted.  It is likely they completed while the dialog was up.");
+							app.showMessage('warning', (window._t ? _t('admin_categories.no_jobs_were_aborted_it_is_likely_they_c') : "No jobs were aborted.  It is likely they completed while the dialog was up."));
 						}
 					} );
 				} // clicked Abort
@@ -12971,13 +12984,13 @@ Class.add( Page.Admin, {
 		// check for events first
 		var cat_events = find_objects( app.schedule, { category: cat.id } );
 		var num_events = cat_events.length;
-		if (num_events) return app.doError("Sorry, you cannot delete a category that has events assigned to it.");
+		if (num_events) return app.doError((window._t ? _t('admin_categories.sorry_you_cannot_delete_a_category_that_') : "Sorry, you cannot delete a category that has events assigned to it."));
 		
 		// proceed with delete
 		var self = this;
 		app.confirm( '<span style="color:red">Delete Category</span>', "Are you sure you want to delete the category <b>"+cat.title+"</b>?  There is no way to undo this action.", "Delete", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting Category..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_categories.deleting_category') : "Deleting Category...") );
 				app.api.post( 'app/delete_category', cat, self.delete_category_finish.bind(self) );
 			}
 		} );
@@ -13003,29 +13016,29 @@ Class.add( Page.Admin, {
 		
 		// Internal ID
 		if (cat.id && this.isAdmin()) {
-			html += get_form_table_row( 'Category ID', '<div style="font-size:14px;">' + cat.id + '</div>' );
-			html += get_form_table_caption( "The internal Category ID used for API calls.  This cannot be changed." );
+			html += get_form_table_row( (window._t ? _t('admin_categories.category_id') : 'Category ID'), '<div style="font-size:14px;">' + cat.id + '</div>' );
+			html += get_form_table_caption( (window._t ? _t('admin_categories.the_internal_category_id_used_for_api_ca') : "The internal Category ID used for API calls.  This cannot be changed.") );
 			html += get_form_table_spacer();
 		}
 		
 		// title
-		html += get_form_table_row('Category Title:', '<input type="text" id="fe_ec_title" size="25" value="'+escape_text_field_value(cat.title)+'"/>') + 
-			get_form_table_caption("Enter a title for the category, short and sweet.") + 
+		html += get_form_table_row((window._t ? _t('admin_categories.category_title') : 'Category Title:'), '<input type="text" id="fe_ec_title" size="25" value="'+escape_text_field_value(cat.title)+'"/>') + 
+			get_form_table_caption((window._t ? _t('admin_categories.enter_a_title_for_the_category_short_and') : "Enter a title for the category, short and sweet.")) + 
 			get_form_table_spacer();
 		
 		// cat enabled
-		html += get_form_table_row( 'Active', '<input type="checkbox" id="fe_ec_enabled" value="1" ' + (cat.enabled ? 'checked="checked"' : '') + '/><label for="fe_ec_enabled">Category Enabled</label>' );
-		html += get_form_table_caption( "Select whether events in this category should be enabled or disabled in the schedule." );
+		html += get_form_table_row( (window._t ? _t('admin_categories.active') : 'Active'), '<input type="checkbox" id="fe_ec_enabled" value="1" ' + (cat.enabled ? 'checked="checked"' : '') + '/><label for="fe_ec_enabled">Category Enabled</label>' );
+		html += get_form_table_caption( (window._t ? _t('admin_categories.select_whether_events_in_this_category_s') : "Select whether events in this category should be enabled or disabled in the schedule.") );
 		html += get_form_table_spacer();
 		
 		// description
-		html += get_form_table_row('Description:', '<textarea id="fe_ec_desc" style="width:500px; height:50px; resize:vertical;">'+escape_text_field_value(cat.description)+'</textarea>') + 
-			get_form_table_caption("Optionally enter a description for the category.") + 
+		html += get_form_table_row((window._t ? _t('admin_categories.description') : 'Description:'), '<textarea id="fe_ec_desc" style="width:500px; height:50px; resize:vertical;">'+escape_text_field_value(cat.description)+'</textarea>') + 
+			get_form_table_caption((window._t ? _t('admin_categories.optionally_enter_a_description_for_the_c') : "Optionally enter a description for the category.")) + 
 			get_form_table_spacer();
 		
 		// max concurrent
-		html += get_form_table_row('Max Concurrent:', '<select id="fe_ec_max_children">' + render_menu_options([ [0,'No Limit'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 ], cat.max_children, true) + '</select>') + 
-			get_form_table_caption("Select the maximum number of jobs allowed to run concurrently in this category.");
+		html += get_form_table_row((window._t ? _t('admin_categories.max_concurrent') : 'Max Concurrent:'), '<select id="fe_ec_max_children">' + render_menu_options([ [0,'No Limit'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 ], cat.max_children, true) + '</select>') + 
+			get_form_table_caption((window._t ? _t('admin_categories.select_the_maximum_number_of_jobs_allowe') : "Select the maximum number of jobs allowed to run concurrently in this category."));
 		html += get_form_table_spacer();
 		
 		// color
@@ -13038,13 +13051,13 @@ Class.add( Page.Admin, {
 		}
 		swatch_html += '<div class="clear"></div>';
 		
-		html += get_form_table_row( 'Highlight Color', swatch_html );
-		html += get_form_table_caption( "Optionally select a highlight color for the category, which will show on the schedule." );
+		html += get_form_table_row( (window._t ? _t('admin_categories.highlight_color') : 'Highlight Color'), swatch_html );
+		html += get_form_table_caption( (window._t ? _t('admin_categories.optionally_select_a_highlight_color_for_') : "Optionally select a highlight color for the category, which will show on the schedule.") );
 		html += get_form_table_spacer();
 		
 		// default notification options
 		var notif_expanded = !!(cat.notify_success || cat.notify_fail || cat.web_hook);
-		html += get_form_table_row( 'Notification', 
+		html += get_form_table_row( (window._t ? _t('admin_categories.notification') : 'Notification'), 
 			'<div style="font-size:13px;'+(notif_expanded ? 'display:none;' : '')+'"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Default Notification Options</span></div>' + 
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;'+(notif_expanded ? '' : 'display:none;')+'"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Default Notification Options</legend>' + 
 				'<div class="plugin_params_label">Default Email on Success:</div>' + 
@@ -13062,7 +13075,7 @@ Class.add( Page.Admin, {
 		
 		// default resource limits
 		var res_expanded = !!(cat.memory_limit || cat.memory_sustain || cat.cpu_limit || cat.cpu_sustain || cat.log_max_size);
-		html += get_form_table_row( 'Limits', 
+		html += get_form_table_row( (window._t ? _t('admin_categories.limits') : 'Limits'), 
 			'<div style="font-size:13px;'+(res_expanded ? 'display:none;' : '')+'"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Default Resource Limits</span></div>' + 
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;'+(res_expanded ? '' : 'display:none;')+'"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Default Resource Limits</legend>' + 
 				
@@ -13098,7 +13111,7 @@ Class.add( Page.Admin, {
 		);
 		html += get_form_table_spacer();
 
-		html += get_form_table_row('Graph',`<div>
+		html += get_form_table_row((window._t ? _t('admin_categories.graph') : 'Graph'),`<div>
 		<input type="color" id="fe_ec_gcolor" name="body"
 				value="${category.gcolor || '#3f7ed5'}">
 		 <label for="body">Group Color</label>
@@ -13125,7 +13138,7 @@ Class.add( Page.Admin, {
 		
 		category.title = $('#fe_ec_title').val();
 		if (!category.title.length) {
-			return app.badField('#fe_ec_title', "Please enter a title for the category.");
+			return app.badField('#fe_ec_title', (window._t ? _t('admin_categories.please_enter_a_title_for_the_category') : "Please enter a title for the category."));
 		}
 		
 		category.gcolor = $("#fe_ec_gcolor").val();
@@ -13143,7 +13156,7 @@ Class.add( Page.Admin, {
 			if (category.cpu_limit < 0) return app.badField('fe_ec_cpu_limit', "Please enter a positive integer for the CPU limit.");
 			
 			category.cpu_sustain = parseInt( $('#fe_ec_cpu_sustain').val() ) * parseInt( $('#fe_ec_cpu_sustain_units').val() );
-			if (isNaN(category.cpu_sustain)) return app.badField('fe_ec_cpu_sustain', "Please enter an integer value for the CPU sustain period.");
+			if (isNaN(category.cpu_sustain)) return app.badField('fe_ec_cpu_sustain', (window._t ? _t('admin_categories.please_enter_an_integer_value_for_the_cp') : "Please enter an integer value for the CPU sustain period."));
 			if (category.cpu_sustain < 0) return app.badField('fe_ec_cpu_sustain', "Please enter a positive integer for the CPU sustain period.");
 		}
 		else {
@@ -13158,7 +13171,7 @@ Class.add( Page.Admin, {
 			if (category.memory_limit < 0) return app.badField('fe_ec_memory_limit', "Please enter a positive integer for the memory limit.");
 			
 			category.memory_sustain = parseInt( $('#fe_ec_memory_sustain').val() ) * parseInt( $('#fe_ec_memory_sustain_units').val() );
-			if (isNaN(category.memory_sustain)) return app.badField('fe_ec_memory_sustain', "Please enter an integer value for the memory sustain period.");
+			if (isNaN(category.memory_sustain)) return app.badField('fe_ec_memory_sustain', (window._t ? _t('admin_categories.please_enter_an_integer_value_for_the_me') : "Please enter an integer value for the memory sustain period."));
 			if (category.memory_sustain < 0) return app.badField('fe_ec_memory_sustain', "Please enter a positive integer for the memory sustain period.");
 		}
 		else {
@@ -13169,8 +13182,8 @@ Class.add( Page.Admin, {
 		// job log file size limit
 		if ($('#fe_ec_log_enabled').is(':checked')) {
 			category.log_max_size = parseInt( $('#fe_ec_log_limit').val() ) * parseInt( $('#fe_ec_log_limit_units').val() );
-			if (isNaN(category.log_max_size)) return app.badField('fe_ec_log_limit', "Please enter an integer value for the log size limit.");
-			if (category.log_max_size < 0) return app.badField('fe_ec_log_limit', "Please enter a positive integer for the log size limit.");
+			if (isNaN(category.log_max_size)) return app.badField('fe_ec_log_limit', (window._t ? _t('admin_categories.please_enter_an_integer_value_for_the_lo') : "Please enter an integer value for the log size limit."));
+			if (category.log_max_size < 0) return app.badField('fe_ec_log_limit', (window._t ? _t('admin_categories.please_enter_a_positive_integer_for_the_') : "Please enter a positive integer for the log size limit."));
 		}
 		else {
 			category.log_max_size = 0;
@@ -13179,15 +13192,14 @@ Class.add( Page.Admin, {
 		return category;
 	}
 	
-});
-// Cronicle Admin Page -- Servers
+});// Cronicle Admin Page -- Servers
 
 Class.add( Page.Admin, {
 	
 	gosub_servers: function(args) {
 		// show server list, server groups
 		this.div.removeClass('loading');
-		app.setWindowTitle( "Servers" );
+		app.setWindowTitle( (window._t ? _t('admin_servers.servers') : "Servers") );
 		
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) + 400) / 9 );
@@ -13202,7 +13214,7 @@ Class.add( Page.Admin, {
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
-				['servers', "Servers"],
+				['servers', (window._t ? _t('admin_servers.servers') : "Servers")],
 				['users', "Users"]
 			]
 		);
@@ -13308,7 +13320,7 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:25px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().add_server()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Server...</div></td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().add_server()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_servers.add_server') : 'Add Server...') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '<div style="height:30px;"></div>';
@@ -13360,7 +13372,7 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:25px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_group(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Group...</div></td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_group(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_servers.add_group') : 'Add Group...') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '</div>'; // padding
@@ -13373,10 +13385,10 @@ Class.add( Page.Admin, {
 		// add a server right away, from the nearby list
 		var server = this.servers[idx];
 		
-		app.showProgress( 1.0, "Adding server..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_servers.adding_server') : "Adding server...") );
 		app.api.post( 'app/add_server', { hostname: server.ip || server.hostname }, function(resp) {
 			app.hideProgress();
-			app.showMessage('success', "Server was added successfully.");
+			app.showMessage('success', (window._t ? _t('admin_servers.server_was_added_successfully') : "Server was added successfully."));
 			// self['gosub_servers'](self.args);
 		} ); // api.post
 	},
@@ -13391,8 +13403,8 @@ Class.add( Page.Admin, {
 		
 		html += '<center><table>' + 
 			// get_form_table_spacer() + 
-			get_form_table_row('Hostname or IP:', '<input type="text" id="fe_as_hostname" style="width:280px" value="" spellcheck="false"/>') + 
-			get_form_table_caption("Enter the hostname or IP of the server you want to add.") + 
+			get_form_table_row((window._t ? _t('admin_servers.hostname_or_ip') : 'Hostname or IP:'), '<input type="text" id="fe_as_hostname" style="width:280px" value="" spellcheck="false"/>') + 
+			get_form_table_caption((window._t ? _t('admin_servers.enter_the_hostname_or_ip_of_the_server_y') : "Enter the hostname or IP of the server you want to add.")) + 
 		'</table></center>';
 		
 		app.confirm( '<i class="mdi mdi-desktop-tower mdi-lg">&nbsp;&nbsp;</i>Add Server', html, "Add Server", function(result) {
@@ -13400,15 +13412,15 @@ Class.add( Page.Admin, {
 			
 			if (result) {
 				var hostname = $('#fe_as_hostname').val().toLowerCase();
-				if (!hostname) return app.badField('fe_as_hostname', "Please enter a server hostname or IP address.");
-				if (!hostname.match(/^[\w\-\.]+$/)) return app.badField('fe_as_hostname', "Please enter a valid server hostname or IP address.");
-				if (app.servers[hostname]) return app.badField('fe_as_hostname', "That server is already in the cluster.");
+				if (!hostname) return app.badField('fe_as_hostname', (window._t ? _t('admin_servers.please_enter_a_server_hostname_or_ip_add') : "Please enter a server hostname or IP address."));
+				if (!hostname.match(/^[\w\-\.]+$/)) return app.badField('fe_as_hostname', (window._t ? _t('admin_servers.please_enter_a_valid_server_hostname_or_') : "Please enter a valid server hostname or IP address."));
+				if (app.servers[hostname]) return app.badField('fe_as_hostname', (window._t ? _t('admin_servers.that_server_is_already_in_the_cluster') : "That server is already in the cluster."));
 				Dialog.hide();
 				
-				app.showProgress( 1.0, "Adding server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.adding_server') : "Adding server...") );
 				app.api.post( 'app/add_server', { hostname: hostname }, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server was added successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_was_added_successfully') : "Server was added successfully."));
 					// self['gosub_servers'](self.args);
 				} ); // api.post
 			} // user clicked add
@@ -13424,16 +13436,16 @@ Class.add( Page.Admin, {
 		var server = this.servers[idx];
 		
 		var jobs = find_objects( app.activeJobs, { hostname: server.hostname } );
-		if (jobs.length) return app.doError("Sorry, you cannot remove a server that has active jobs running on it.");
+		if (jobs.length) return app.doError((window._t ? _t('admin_servers.sorry_you_cannot_remove_a_server_that_ha') : "Sorry, you cannot remove a server that has active jobs running on it."));
 		
 		// proceed with remove
 		var self = this;
 		app.confirm( '<span style="color:red">Remove Server</span>', "Are you sure you want to remove the server <b>"+server.hostname+"</b>?", "Remove", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Removing server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.removing_server') : "Removing server...") );
 				app.api.post( 'app/remove_server', server, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server was removed successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_was_removed_successfully') : "Server was removed successfully."));
 					// self.gosub_servers(self.args);
 				} );
 			}
@@ -13455,20 +13467,20 @@ Class.add( Page.Admin, {
 		
 		// Internal ID
 		if (edit && this.isAdmin()) {
-			html += get_form_table_row( 'Group ID', '<div style="font-size:14px;">' + group.id + '</div>' );
-			html += get_form_table_caption( "The internal Group ID used for API calls.  This cannot be changed." );
+			html += get_form_table_row( (window._t ? _t('admin_servers.group_id') : 'Group ID'), '<div style="font-size:14px;">' + group.id + '</div>' );
+			html += get_form_table_caption( (window._t ? _t('admin_servers.the_internal_group_id_used_for_api_calls') : "The internal Group ID used for API calls.  This cannot be changed.") );
 			html += get_form_table_spacer();
 		}
 		
 		html += 
-			get_form_table_row('Group Title:', '<input type="text" id="fe_eg_title" size="25" value="'+escape_text_field_value(group.title)+'"/>') + 
-			get_form_table_caption("Enter a title for the server group, short and sweet.") + 
+			get_form_table_row((window._t ? _t('admin_servers.group_title') : 'Group Title:'), '<input type="text" id="fe_eg_title" size="25" value="'+escape_text_field_value(group.title)+'"/>') + 
+			get_form_table_caption((window._t ? _t('admin_servers.enter_a_title_for_the_server_group_short') : "Enter a title for the server group, short and sweet.")) + 
 			get_form_table_spacer() + 
-			get_form_table_row('Hostname Match:', '<input type="text" id="fe_eg_regexp" size="30" style="font-family:monospace; font-size:13px;" value="'+escape_text_field_value(group.regexp)+'" spellcheck="false"/>') + 
+			get_form_table_row((window._t ? _t('admin_servers.hostname_match') : 'Hostname Match:'), '<input type="text" id="fe_eg_regexp" size="30" style="font-family:monospace; font-size:13px;" value="'+escape_text_field_value(group.regexp)+'" spellcheck="false"/>') + 
 			get_form_table_caption("Enter a regular expression to auto-assign servers to this group by their hostnames, e.g. \"^mtx\\d+\\.\".") + 
 			get_form_table_spacer() + 
-			get_form_table_row('Server Class:', '<select id="fe_eg_manager">' + render_menu_options([ [1,'manager Eligible'], [0,'worker Only'] ], group.manager, false) + '</select>') + 
-			get_form_table_caption("Select whether servers in the group are eligible to become the manager server, or run as workers only.") + 
+			get_form_table_row((window._t ? _t('admin_servers.server_class') : 'Server Class:'), '<select id="fe_eg_manager">' + render_menu_options([ [1,'manager Eligible'], [0,'worker Only'] ], group.manager, false) + '</select>') + 
+			get_form_table_caption((window._t ? _t('admin_servers.select_whether_servers_in_the_group_are_') : "Select whether servers in the group are eligible to become the manager server, or run as workers only.")) + 
 		'</table>';
 		
 		app.confirm( '<i class="mdi mdi-server-network">&nbsp;&nbsp;</i>' + (edit ? "Edit Server Group" : "Add Server Group"), html, edit ? "Save Changes" : "Add Group", function(result) {
@@ -13476,13 +13488,13 @@ Class.add( Page.Admin, {
 			
 			if (result) {
 				group.title = $('#fe_eg_title').val();
-				if (!group.title) return app.badField('fe_eg_title', "Please enter a title for the server group.");
+				if (!group.title) return app.badField('fe_eg_title', (window._t ? _t('admin_servers.please_enter_a_title_for_the_server_grou') : "Please enter a title for the server group."));
 				group.regexp = $('#fe_eg_regexp').val().replace(/^\/(.+)\/$/, '$1');
-				if (!group.regexp) return app.badField('fe_eg_regexp', "Please enter a regular expression for the server group.");
+				if (!group.regexp) return app.badField('fe_eg_regexp', (window._t ? _t('admin_servers.please_enter_a_regular_expression_for_th') : "Please enter a regular expression for the server group."));
 				
 				try { new RegExp(group.regexp); }
 				catch(err) {
-					return app.badField('fe_eg_regexp', "Invalid regular expression: " + err);
+					return app.badField('fe_eg_regexp', (window._t ? _t('admin_servers.invalid_regular_expression') : "Invalid regular expression: ") + err);
 				}
 				
 				group.manager = parseInt( $('#fe_eg_manager').val() );
@@ -13497,7 +13509,7 @@ Class.add( Page.Admin, {
 				app.showProgress( 1.0, edit ? "Saving group..." : "Adding group..." );
 				app.api.post( edit ? 'app/update_server_group' : 'app/create_server_group', group, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server group was " + (edit ? "saved" : "added") + " successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_group_was') : "Server group was ") + (edit ? "saved" : "added") + " successfully.");
 					// self['gosub_servers'](self.args);
 				} ); // api.post
 			} // user clicked add
@@ -13519,23 +13531,23 @@ Class.add( Page.Admin, {
 				if (this.server_groups[idx].manager) num_managers++;
 			}
 			if (num_managers == 1) {
-				return app.doError("Sorry, you cannot delete the last manager Eligible server group.");
+				return app.doError((window._t ? _t('admin_servers.sorry_you_cannot_delete_the_last_manager') : "Sorry, you cannot delete the last manager Eligible server group."));
 			}
 		}
 		
 		// check for events first
 		var group_events = find_objects( app.schedule, { target: group.id } );
 		var num_events = group_events.length;
-		if (num_events) return app.doError("Sorry, you cannot delete a group that has events assigned to it.");
+		if (num_events) return app.doError((window._t ? _t('admin_servers.sorry_you_cannot_delete_a_group_that_has') : "Sorry, you cannot delete a group that has events assigned to it."));
 		
 		// proceed with delete
 		var self = this;
 		app.confirm( '<span style="color:red">Delete Server Group</span>', "Are you sure you want to delete the server group <b>"+group.title+"</b>?  There is no way to undo this action.", "Delete", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting group..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.deleting_group') : "Deleting group...") );
 				app.api.post( 'app/delete_server_group', group, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server group was deleted successfully.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_group_was_deleted_successfully') : "Server group was deleted successfully."));
 					// self.gosub_servers(self.args);
 				} );
 			}
@@ -13549,10 +13561,10 @@ Class.add( Page.Admin, {
 		
 		app.confirm( '<span style="color:red">Restart Server</span>', "Are you sure you want to restart the server <b>"+server.hostname+"</b>?  All server jobs will be aborted.", "Restart", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Restarting server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.restarting_server') : "Restarting server...") );
 				app.api.post( 'app/restart_server', server, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server is being restarted in the background.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_is_being_restarted_in_the_backgro') : "Server is being restarted in the background."));
 					// self.gosub_servers(self.args);
 				} );
 			}
@@ -13566,24 +13578,23 @@ Class.add( Page.Admin, {
 		
 		app.confirm( '<span style="color:red">Shutdown Server</span>', "Are you sure you want to shutdown the server <b>"+server.hostname+"</b>?  All server jobs will be aborted.", "Shutdown", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Shutting down server..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_servers.shutting_down_server') : "Shutting down server...") );
 				app.api.post( 'app/shutdown_server', server, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Server is being shut down in the background.");
+					app.showMessage('success', (window._t ? _t('admin_servers.server_is_being_shut_down_in_the_backgro') : "Server is being shut down in the background."));
 					// self.gosub_servers(self.args);
 				} );
 			}
 		} );
 	}
 	
-});
-// Cronicle Admin Page -- Users
+});// Cronicle Admin Page -- Users
 
 Class.add(Page.Admin, {
 
 	gosub_users: function (args) {
 		// show user list
-		app.setWindowTitle("User List");
+		app.setWindowTitle((window._t ? _t('admin_users.user_list') : "User List"));
 		this.div.addClass('loading');
 		if (!args.offset) args.offset = 0;
 		if (!args.limit) args.limit = 25;
@@ -13616,13 +13627,13 @@ Class.add(Page.Admin, {
 			]
 		);
 
-		var cols = ['Username', 'Full Name', 'Email Address', 'Status', 'Type', 'Created', 'Actions'];
+		var cols = [(window._t ? _t('admin_users.username') : 'Username'), (window._t ? _t('admin_users.full_name') : 'Full Name'), (window._t ? _t('admin_users.email_address') : 'Email Address'), 'Status', 'Type', 'Created', 'Actions'];
 
 		// html += '<div style="padding:5px 15px 15px 15px;">';
 		html += '<div style="padding:20px 20px 30px 20px">';
 
 		html += '<div class="subtitle">';
-		html += 'User Accounts';
+		html += (window._t ? _t('admin_users.user_list') : 'User Accounts');
 		// html += '<div class="subtitle_widget"><span class="link" onMouseUp="$P().refresh_user_list()"><b>Refresh</b></span></div>';
 		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_ul_search" size="15" placeholder="Find username..." style="border:0px;"/></div>';
 		html += '<div class="clear"></div>';
@@ -13651,7 +13662,7 @@ Class.add(Page.Admin, {
 
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_user(-1)"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>Add User...</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_user(-1)"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_users.add_user') : 'Add User...') + '</div></td>';
 		html += '</tr></table></center>';
 
 		html += '</div>'; // padding
@@ -13678,7 +13689,7 @@ Class.add(Page.Admin, {
 				Nav.go('Admin?sub=edit_user&username=' + username);
 			},
 			function (resp) {
-				app.doError("User not found: " + username, 10);
+				app.doError((window._t ? _t('admin_users.user_not_found') : "User not found: ") + username, 10);
 			}
 		);
 	},
@@ -13687,7 +13698,7 @@ Class.add(Page.Admin, {
 		// jump to edit sub
 		if (idx > -1) Nav.go('#Admin?sub=edit_user&username=' + this.users[idx].username);
 		else if (app.config.external_users) {
-			app.doError("Users are managed by an external system, so you cannot add users from here.");
+			app.doError((window._t ? _t('admin_users.users_are_managed_by_an_external_system_') : "Users are managed by an external system, so you cannot add users from here."));
 		}
 		else Nav.go('#Admin?sub=new_user');
 	},
@@ -13701,7 +13712,7 @@ Class.add(Page.Admin, {
 	gosub_new_user: function (args) {
 		// create new user
 		var html = '';
-		app.setWindowTitle("Add New User");
+		app.setWindowTitle((window._t ? _t('admin_users.add_new_user') : "Add New User"));
 		this.div.removeClass('loading');
 
 		html += this.getSidebarTabs('new_user',
@@ -13718,7 +13729,7 @@ Class.add(Page.Admin, {
 			]
 		);
 
-		html += '<div style="padding:20px;"><div class="subtitle">Add New User</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('admin_users.add_new_user') : 'Add New User') + '</div></div>';
 
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -13730,8 +13741,8 @@ Class.add(Page.Admin, {
 		html += this.get_user_edit_html();
 
 		// notify user
-		html += get_form_table_row('Notify', '<input type="checkbox" id="fe_eu_send_email" value="1" checked="checked"/><label for="fe_eu_send_email">Send Welcome Email</label>');
-		html += get_form_table_caption("Select notification options for the new user.");
+		html += get_form_table_row((window._t ? _t('admin_users.notify') : 'Notify'), '<input type="checkbox" id="fe_eu_send_email" value="1" checked="checked"/><label for="fe_eu_send_email">Send Welcome Email</label>');
+		html += get_form_table_caption((window._t ? _t('admin_users.select_notification_options_for_the_new_') : "Select notification options for the new user."));
 		html += get_form_table_spacer();
 
 		// buttons at bottom
@@ -13739,13 +13750,13 @@ Class.add(Page.Admin, {
 		html += '<div style="height:30px;"></div>';
 
 		html += '<table><tr>';
-		html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_user_edit()">Cancel</div></td>';
+		html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_user_edit()">' + (window._t ? _t('admin_users.cancel') : 'Cancel') + '</div></td>';
 		html += '<td width="50">&nbsp;</td>';
 		if (config.debug) {
-			html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().populate_random_user()">Randomize...</div></td>';
+			html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().populate_random_user()">' + (window._t ? _t('admin_users.randomize') : 'Randomize...') + '</div></td>';
 			html += '<td width="50">&nbsp;</td>';
 		}
-		html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_user()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>Create User</div></td>';
+		html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_user()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_users.create_user') : 'Create User') + '</div></td>';
 		html += '</tr></table>';
 
 		html += '</td></tr>';
@@ -13803,30 +13814,30 @@ Class.add(Page.Admin, {
 		}
 
 		if (!user.username.length) {
-			return app.badField('#fe_eu_username', "Please enter a username for the new account.");
+			return app.badField('#fe_eu_username', (window._t ? _t('admin_users.please_enter_a_username_for_the_new_acco') : "Please enter a username for the new account."));
 		}
 		// username should be alphanumeric or email-like (for External Auth)
 		if (!user.username.match(/^[\w\.\-]+@?[\w\.\-]+$/)) {
-			return app.badField('#fe_eu_username', "Please make sure the username contains only alphanumerics, periods and dashes.");
+			return app.badField('#fe_eu_username', (window._t ? _t('admin_users.please_make_sure_the_username_contains_o') : "Please make sure the username contains only alphanumerics, periods and dashes."));
 		}
 		if (!user.email.length) {
-			return app.badField('#fe_eu_email', "Please enter an e-mail address where the user can be reached.");
+			return app.badField('#fe_eu_email', (window._t ? _t('admin_users.please_enter_an_email_address_where_the_') : "Please enter an e-mail address where the user can be reached."));
 		}
 		if (!user.email.match(/^\S+\@\S+$/)) {
-			return app.badField('#fe_eu_email', "The e-mail address you entered does not appear to be correct.");
+			return app.badField('#fe_eu_email', (window._t ? _t('admin_users.the_email_address_you_entered_does_not_a') : "The e-mail address you entered does not appear to be correct."));
 		}
 		if (!user.full_name.length) {
-			return app.badField('#fe_eu_fullname', "Please enter the user's first and last names.");
+			return app.badField('#fe_eu_fullname', (window._t ? _t('admin_users.please_enter_the_user') : "Please enter the user") + "'s first and last names.");
 		}
 		if (!user.password.length) {
-			return app.badField('#fe_eu_password', "Please enter a secure password to protect the account.");
+			return app.badField('#fe_eu_password', (window._t ? _t('admin_users.please_enter_a_secure_password_to_protec') : "Please enter a secure password to protect the account."));
 		}
 
 		user.send_email = $('#fe_eu_send_email').is(':checked') ? 1 : 0;
 
 		this.user = user;
 
-		app.showProgress(1.0, "Creating user...");
+		app.showProgress(1.0, (window._t ? _t('admin_users.creating_user') : "Creating user..."));
 		app.api.post('user/admin_create', user, this.new_user_finish.bind(this));
 	},
 
@@ -13837,7 +13848,7 @@ Class.add(Page.Admin, {
 		Nav.go('Admin?sub=edit_user&username=' + this.user.username);
 
 		setTimeout(function () {
-			app.showMessage('success', "The new user account was created successfully.");
+			app.showMessage('success', (window._t ? _t('admin_users.the_new_user_account_was_created_success') : "The new user account was created successfully."));
 		}, 150);
 	},
 
@@ -13850,7 +13861,7 @@ Class.add(Page.Admin, {
 	receive_user: function (resp) {
 		// edit existing user
 		var html = '';
-		app.setWindowTitle("Editing User \"" + (this.args.username) + "\"");
+		app.setWindowTitle((window._t ? _t('admin_users.editing_user') : "Editing User \"") + (this.args.username) + "\"");
 		this.div.removeClass('loading');
 
 		html += this.getSidebarTabs('edit_user',
@@ -13883,9 +13894,9 @@ Class.add(Page.Admin, {
 		html += '<table><tr>';
 		html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_user_edit()">Cancel</div></td>';
 		html += '<td width="50">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_account_dialog()">Delete Account...</div></td>';
+		html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_account_dialog()">' + (window._t ? _t('admin_users.delete_account') : 'Delete Account...') + '</div></td>';
 		html += '<td width="50">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_user()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_user()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_users.save_changes') : 'Save Changes') + '</div></td>';
 		html += '</tr></table>';
 
 		html += '</td></tr>';
@@ -13925,14 +13936,14 @@ Class.add(Page.Admin, {
 
 		this.user = user;
 
-		app.showProgress(1.0, "Saving user account...");
+		app.showProgress(1.0, (window._t ? _t('admin_users.saving_user_account') : "Saving user account..."));
 		app.api.post('user/admin_update', user, this.save_user_finish.bind(this));
 	},
 
 	save_user_finish: function (resp, tx) {
 		// new user created successfully
 		app.hideProgress();
-		app.showMessage('success', "The user was saved successfully.");
+		app.showMessage('success', (window._t ? _t('admin_users.the_user_was_saved_successfully') : "The user was saved successfully."));
 		window.scrollTo(0, 0);
 
 		// if we edited ourself, update header
@@ -13957,7 +13968,7 @@ Class.add(Page.Admin, {
 
 		app.confirm('<span style="color:red">Delete Account</span>', msg, 'Delete', function (result) {
 			if (result) {
-				app.showProgress(1.0, "Deleting Account...");
+				app.showProgress(1.0, (window._t ? _t('admin_users.deleting_account') : "Deleting Account..."));
 				app.api.post('user/admin_delete', {
 					username: self.user.username
 				}, self.delete_user_finish.bind(self));
@@ -13983,7 +13994,7 @@ Class.add(Page.Admin, {
 		var user = this.user;
 
 		// user id
-		html += get_form_table_row('Username',
+		html += get_form_table_row((window._t ? _t('admin_users.username') : 'Username'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><input type="text" id="fe_eu_username" size="20" style="font-size:14px;" value="' + escape_text_field_value(user.username) + '" spellcheck="false" onChange="$P().checkUserExists(\'eu\')"/></td>' +
 			'<td><div id="d_eu_valid" style="margin-left:5px; font-weight:bold;"></div></td>' +
@@ -13993,18 +14004,18 @@ Class.add(Page.Admin, {
 		html += get_form_table_spacer();
 
 		// account status
-		html += get_form_table_row( 'Account Status', '<select id="fe_eu_status">' + render_menu_options([['1','Active'], ['0','Suspended']], user.active) + '</select>' );
+		html += get_form_table_row( (window._t ? _t('admin_users.account_status') : 'Account Status'), '<select id="fe_eu_status">' + render_menu_options([['1','Active'], ['0','Suspended']], user.active) + '</select>' );
 		html += get_form_table_caption("'Suspended' means that the account remains in the system, but the user cannot log in.");
 		html += get_form_table_spacer();
 
 		// full name
-		html += get_form_table_row('Full Name', '<input type="text" id="fe_eu_fullname" size="30" value="' + escape_text_field_value(user.full_name) + '" spellcheck="false"/>');
+		html += get_form_table_row((window._t ? _t('admin_users.full_name') : 'Full Name'), '<input type="text" id="fe_eu_fullname" size="30" value="' + escape_text_field_value(user.full_name) + '" spellcheck="false"/>');
 		html += get_form_table_caption("User's first and last name.  They will not be shared with anyone outside the server.");
 		html += get_form_table_spacer();
 
 		// email
-		html += get_form_table_row('Email Address', '<input type="text" id="fe_eu_email" size="30" value="' + escape_text_field_value(user.email) + '" spellcheck="false"/>');
-		html += get_form_table_caption("This can be used to recover the password if the user forgets.  It will not be shared with anyone outside the server.");
+		html += get_form_table_row((window._t ? _t('admin_users.email_address') : 'Email Address'), '<input type="text" id="fe_eu_email" size="30" value="' + escape_text_field_value(user.email) + '" spellcheck="false"/>');
+		html += get_form_table_caption((window._t ? _t('admin_users.this_can_be_used_to_recover_the_password') : "This can be used to recover the password if the user forgets.  It will not be shared with anyone outside the server."));
 		html += get_form_table_spacer();
 
 		// password with ext_auth checkbox
@@ -14015,7 +14026,7 @@ Class.add(Page.Admin, {
 		html += get_form_table_row(user.password ? 'Change Password' : 'Password', `<input type="text" id="fe_eu_password" size="20" value="" spellcheck="false" ${pwdDisabledIfExtAuth}/>&nbsp;<span class="link addme" id="generate_pwd" onMouseUp="$P().generate_password()">&laquo; Generate Random</span>`);
 		html += get_form_table_caption(user.password ? "Optionally enter a new password here to reset it.  Please make it secure." : "Enter a password for the account.  Please make it secure.");
 		html += get_form_table_row('', `<input type="checkbox" ${userExtAuthChecked} id="fe_eu_extauth" onclick="$P().setExternalAuth()" />`);
-		html += get_form_table_caption("use external authentication (it cannot be changed once user is created)");
+		html += get_form_table_caption((window._t ? _t('admin_users.use_external_authentication_it_cannot_be') : "use external authentication (it cannot be changed once user is created)"));
 		html += get_form_table_spacer();
 
 		// privilege list
@@ -14104,8 +14115,8 @@ Class.add(Page.Admin, {
 
 		priv_html += '</div>';
 
-		html += get_form_table_row('Privileges', priv_html);
-		html += get_form_table_caption("Select which privileges the user account should have. Administrators have all privileges.");
+		html += get_form_table_row((window._t ? _t('admin_users.privileges') : 'Privileges'), priv_html);
+		html += get_form_table_caption((window._t ? _t('admin_users.select_which_privileges_the_user_account') : "Select which privileges the user account should have. Administrators have all privileges."));
 		html += get_form_table_spacer();
 
 		return html;
@@ -14166,7 +14177,7 @@ Class.add(Page.Admin, {
 					}
 				}
 
-				if (!num_cat_privs) return app.doError("Please select at least one category privilege.");
+				if (!num_cat_privs) return app.doError((window._t ? _t('admin_users.please_select_at_least_one_category_priv') : "Please select at least one category privilege."));
 			} // cat limit
 
 			// server group limit privs
@@ -14183,7 +14194,7 @@ Class.add(Page.Admin, {
 					}
 				}
 
-				if (!num_grp_privs) return app.doError("Please select at least one server group privilege.");
+				if (!num_grp_privs) return app.doError((window._t ? _t('admin_users.please_select_at_least_one_server_group_') : "Please select at least one server group privilege."));
 			} // grp limit
 		} // not admin
 
@@ -14211,7 +14222,6 @@ Class.add(Page.Admin, {
 	}
 
 });
-
 // Cronicle Admin Page -- Plugins
 
 Class.add( Page.Admin, {
@@ -14229,34 +14239,34 @@ Class.add( Page.Admin, {
 	gosub_plugins: function(args) {
 		// show plugin list
 		this.div.removeClass('loading');
-		app.setWindowTitle( "Plugins" );
-		
+		app.setWindowTitle( (window._t ? _t('admin_plugins.plugins') : "Plugins") );
+
 		if(this.observer) this.observer.disconnect() // kill old observer if set by editor
-		
+
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) + 500) / 6 );
-		
+
 		var html = '';
-		
+
 		this.plugins = app.plugins;
-		
+
 		html += this.getSidebarTabs( 'plugins',
 			[
-				['activity', "Activity Log"],
+				['activity', (window._t ? _t('admin_activity.activity_log') : "Activity Log")],
 				['conf_keys', "Configs"],
-				['secrets', "Secrets"],
+				['secrets', (window._t ? _t('admin_secrets.secrets') : "Secrets")],
 				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
+				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
+				['plugins', (window._t ? _t('admin_plugins.plugins') : "Plugins")],
 				['servers', "Servers"],
 				['users', "Users"]
 			]
 		);
-		
-		var cols = ['Plugin Name', 'Author', '# of Events', 'Created', 'Modified', 'Actions'];
-		
+
+		var cols = [(window._t ? _t('admin_plugins.plugin_name') : 'Plugin Name'), 'Author', '# of Events', 'Created', 'Modified', 'Actions'];
+
 		// html += '<div style="padding:5px 15px 15px 15px;">';
-		html += `<div style="padding:20px 20px 30px 20px"><div class="subtitle">Plugins</div>`
+		html += `<div style="padding:20px 20px 30px 20px"><div class="subtitle">` + (window._t ? _t('admin_plugins.plugins') : 'Plugins') + `</div>`
 		
 		// sort by title ascending
 		this.plugins = app.plugins.sort( function(a, b) {
@@ -14294,9 +14304,9 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:140px;" onMouseUp="$P().edit_plugin(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add New Plugin...</div></td>';
+			html += '<td><div class="button" style="width:140px;" onMouseUp="$P().edit_plugin(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_plugins.add_new_plugin') : 'Add New Plugin...') + '</div></td>';
 			html += '<td width="50">&nbsp;</td>'
-			html += '<td><div class="button" style="width:140px;" onMouseUp="$P().import_plugin()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i> From JSON</div></td>';
+			html += '<td><div class="button" style="width:140px;" onMouseUp="$P().import_plugin()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i> ' + (window._t ? _t('admin_plugins.from_json') : 'From JSON') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '</div>'; // padding
@@ -14376,14 +14386,14 @@ Class.add( Page.Admin, {
 				let plugin;
 				try {	plugin = JSON.parse(importData)
 				} catch (e) {
-					return app.doError("Invalid JSON: " + e.message)					
+					return app.doError((window._t ? _t('admin_plugins.invalid_json') : "Invalid JSON: ") + e.message)
 				}
 
 				let newPlugin = {}
 
-				if(!plugin.title) return app.doError("Plugin is missing Title")
+				if(!plugin.title) return app.doError((window._t ? _t('admin_plugins.plugin_is_missing_title') : "Plugin is missing Title"))
 				if(find_object(self.plugins, {title: plugin.title})) return app.doError(`Plugin with title [${plugin.title}] already exist`)
-				if(!plugin.command) return app.doError("Plugin is missing Command")
+				if(!plugin.command) return app.doError((window._t ? _t('admin_plugins.plugin_is_missing_command') : "Plugin is missing Command"))
 
 				if(Array.isArray(plugin.params)) {
 					newPlugin.params = plugin.params
@@ -14391,7 +14401,7 @@ Class.add( Page.Admin, {
 						let e = plugin.params[i]
 						if(!e.id) return app.doError("One of the plugin parameters is missing [id] property")
 						if(!e.type) return app.doError("One of the plugin parameters is missing [type] property")
-						// if(!e.title) return app.doError("One of the plugin parameters is missing [title] property")
+						// if(!e.title) return app.doError((window._t ? _t('admin_plugins.one_of_the_plugin_parameters_is_missing_') : "One of the plugin parameters is missing [title] property"))
 					}
 				}				
 				
@@ -14406,7 +14416,7 @@ Class.add( Page.Admin, {
 				if(typeof plugin.cwd === 'string') newPlugin.cwd = plugin.cwd
 				if(typeof plugin.script === 'string') newPlugin.script = plugin.script 
 
-				app.showProgress(1.0, "Importing...");
+				app.showProgress(1.0, (window._t ? _t('admin_plugins.importing') : "Importing..."));
 				app.api.post('app/create_plugin', newPlugin, function (resp) {
 					app.hideProgress();
 
@@ -14431,16 +14441,16 @@ Class.add( Page.Admin, {
 		// check for events first
 		var plugin_events = find_objects( app.schedule, { plugin: plugin.id } );
 		var num_events = plugin_events.length;
-		if (num_events) return app.doError("Sorry, you cannot delete a plugin that has events assigned to it.");
+		if (num_events) return app.doError((window._t ? _t('admin_plugins.sorry_you_cannot_delete_a_plugin_that_ha') : "Sorry, you cannot delete a plugin that has events assigned to it."));
 		
 		// proceed with delete
 		var self = this;
 		app.confirm( '<span style="color:red">Delete Plugin</span>', "Are you sure you want to delete the plugin <b>"+plugin.title+"</b>?  There is no way to undo this action.", "Delete", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting Plugin..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_plugins.deleting_plugin') : "Deleting Plugin...") );
 				app.api.post( 'app/delete_plugin', plugin, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "The Plugin '"+self.plugin.title+"' was deleted successfully.");
+					app.showMessage('success', (window._t ? _t('admin_plugins.the_plugin') : "The Plugin '") + self.plugin.title + "' was deleted successfully.");
 					// self.gosub_plugins(self.args);
 					
 					Nav.go('Admin?sub=plugins', 'force');
@@ -14452,24 +14462,24 @@ Class.add( Page.Admin, {
 	gosub_new_plugin: function(args) {
 		// create new plugin
 		var html = '';
-		app.setWindowTitle( "Add New Plugin" );
+		app.setWindowTitle( (window._t ? _t('admin_plugins.add_new_plugin') : "Add New Plugin...") );
 		this.div.removeClass('loading');
-		
+
 		html += this.getSidebarTabs( 'new_plugin',
 			[
-				['activity', "Activity Log"],
+				['activity', (window._t ? _t('admin_activity.activity_log') : "Activity Log")],
 				['conf_keys', "Configs"],
-				['secrets', "Secrets"],
+				['secrets', (window._t ? _t('admin_secrets.secrets') : "Secrets")],
 				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['new_plugin', "Add New Plugin"],
+				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
+				['plugins', (window._t ? _t('admin_plugins.plugins') : "Plugins")],
+				['new_plugin', (window._t ? _t('admin_plugins.add_new_plugin') : "Add New Plugin...")],
 				['servers', "Servers"],
 				['users', "Users"]
 			]
 		);
-		
-		html += '<div style="padding:20px;"><div class="subtitle">Add New Plugin</div></div>';
+
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('admin_plugins.add_new_plugin') : 'Add New Plugin...') + '</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -14489,9 +14499,9 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">' + (window._t ? _t('admin_plugins.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_plugin()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Plugin</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_plugin()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_plugins.create_plugin') : 'Create Plugin') + '</div></td>';
 				html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -14526,7 +14536,7 @@ Class.add( Page.Admin, {
 		
 		this.plugin = plugin;
 		
-		app.showProgress( 1.0, "Creating plugin..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_plugins.creating_plugin') : "Creating plugin...") );
 		app.api.post( 'app/create_plugin', plugin, this.new_plugin_finish.bind(this) );
 	},
 	
@@ -14537,21 +14547,21 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=plugins');
 		
 		setTimeout( function() {
-			app.showMessage('success', "The new plugin was created successfully.");
+			app.showMessage('success', (window._t ? _t('admin_plugins.the_new_plugin_was_created_successfully') : "The new plugin was created successfully."));
 		}, 150 );
 	},
 	
 	gosub_edit_plugin: function(args) {
 		// edit plugin subpage
 		let plugin = find_object( app.plugins, { id: args.id } );
-		if (!plugin) return app.doError("Could not locate Plugin with ID: " + args.id);
+		if (!plugin) return app.doError((window._t ? _t('admin_plugins.could_not_locate_plugin_with_id') : "Could not locate Plugin with ID: ") + args.id);
 		let secret = find_object( app.secrets, { id: args.id } ) || {};
 		
 		// make local copy so edits don't affect main app list until save
 		this.plugin = deep_copy_object( plugin );
 		
 		let html = '';
-		app.setWindowTitle( "Editing Plugin \"" + plugin.title + "\"" );
+		app.setWindowTitle( (window._t ? _t('admin_plugins.editing_plugin') : "Editing Plugin \"") + plugin.title + "\"" );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'edit_plugin',
@@ -14582,13 +14592,13 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_plugin_edit()">' + (window._t ? _t('admin_plugins.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_plugin_dialog()">Delete Plugin...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_plugin_dialog()">' + (window._t ? _t('admin_plugins.delete_plugin') : 'Delete Plugin...') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_plugin()">Copy Plugin...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_plugin()">' + (window._t ? _t('admin_plugins.copy_plugin') : 'Copy Plugin...') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_plugin()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_plugin()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_plugins.save_changes') : 'Save Changes') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -14630,7 +14640,7 @@ Class.add( Page.Admin, {
 		
 		this.plugin = plugin;
 		
-		app.showProgress( 1.0, "Saving plugin..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_plugins.saving_plugin') : "Saving plugin...") );
 		app.api.post( 'app/update_plugin', plugin, this.save_plugin_finish.bind(this) );
 	},
 	
@@ -14640,7 +14650,7 @@ Class.add( Page.Admin, {
 		var plugin = this.plugin;
 		
 		app.hideProgress();
-		app.showMessage('success', "The plugin was saved successfully.");
+		app.showMessage('success', (window._t ? _t('admin_plugins.the_plugin_was_saved_successfully') : "The plugin was saved successfully."));
 		window.scrollTo( 0, 0 );
 		
 		// copy active jobs to array
@@ -14654,14 +14664,14 @@ Class.add( Page.Admin, {
 		if (!plugin.enabled && jobs.length) {
 			app.confirm( '<span style="color:red">Abort Jobs</span>', "There " + ((jobs.length != 1) ? 'are' : 'is') + " currently still " + jobs.length + " active " + pluralize('job', jobs.length) + " using the disabled plugin <b>"+plugin.title+"</b>.  Do you want to abort " + ((jobs.length != 1) ? 'these' : 'it') + " now?", "Abort", function(result) {
 				if (result) {
-					app.showProgress( 1.0, "Aborting " + pluralize('Job', jobs.length) + "..." );
+					app.showProgress( 1.0, (window._t ? _t('admin_plugins.aborting') : "Aborting ") + pluralize('Job', jobs.length) + "..." );
 					app.api.post( 'app/abort_jobs', { plugin: plugin.id }, function(resp) {
 						app.hideProgress();
 						if (resp.count > 0) {
 							app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " aborted successfully.");
 						}
 						else {
-							app.showMessage('warning', "No jobs were aborted.  It is likely they completed while the dialog was up.");
+							app.showMessage('warning', (window._t ? _t('admin_plugins.no_jobs_were_aborted_it_is_likely_they_c') : "No jobs were aborted.  It is likely they completed while the dialog was up."));
 						}
 					} );
 				} // clicked Abort
@@ -14722,35 +14732,35 @@ Class.add( Page.Admin, {
 		
 		// Internal ID
 		if (plugin.id && this.isAdmin()) {
-			html += get_form_table_row( 'Plugin ID', '<div style="font-size:14px;">' + plugin.id + '</div>' );
-			html += get_form_table_caption( "The internal Plugin ID used for API calls.  This cannot be changed." );
+			html += get_form_table_row( (window._t ? _t('admin_plugins.plugin_id') : 'Plugin ID'), '<div style="font-size:14px;">' + plugin.id + '</div>' );
+			html += get_form_table_caption( (window._t ? _t('admin_plugins.the_internal_plugin_id_used_for_api_call') : "The internal Plugin ID used for API calls.  This cannot be changed.") );
 			html += get_form_table_spacer();
 		}
 		
 		// plugin title
 		html += get_form_table_row( 'Plugin Name', '<input type="text" id="fe_ep_title" size="35" value="'+escape_text_field_value(plugin.title)+'" spellcheck="false"/>' );
-		html += get_form_table_caption( "Enter a name for the Plugin.  Ideally it should be somewhat short, and Title Case." );
+		html += get_form_table_caption( (window._t ? _t('admin_plugins.enter_a_name_for_the_plugin_ideally_it_s') : "Enter a name for the Plugin.  Ideally it should be somewhat short, and Title Case.") );
 		html += get_form_table_spacer();
 		
 		// plugin enabled
-		html += get_form_table_row( 'Active', '<input type="checkbox" id="fe_ep_enabled" value="1" ' + (plugin.enabled ? 'checked="checked"' : '') + '/><label for="fe_ep_enabled">Plugin Enabled</label>' );
-		html += get_form_table_caption( "Select whether events using this Plugin should be enabled or disabled in the schedule." );
+		html += get_form_table_row( (window._t ? _t('admin_plugins.active') : 'Active'), '<input type="checkbox" id="fe_ep_enabled" value="1" ' + (plugin.enabled ? 'checked="checked"' : '') + '/><label for="fe_ep_enabled">Plugin Enabled</label>' );
+		html += get_form_table_caption( (window._t ? _t('admin_plugins.select_whether_events_using_this_plugin_') : "Select whether events using this Plugin should be enabled or disabled in the schedule.") );
 		html += get_form_table_spacer();
 
 		// allow workflow
-		html += get_form_table_row( 'Workflow', '<input type="checkbox" id="fe_wf_enabled" value="1" ' + (plugin.wf ? 'checked="checked"' : '') + '/><label for="fe_wf_enabled">Workflow Enabled</label>' );
-		html += get_form_table_caption( "Generate WF_SIGNATURE variable as a temp api key to run/abort jobs" );
+		html += get_form_table_row( (window._t ? _t('admin_plugins.workflow') : 'Workflow'), '<input type="checkbox" id="fe_wf_enabled" value="1" ' + (plugin.wf ? 'checked="checked"' : '') + '/><label for="fe_wf_enabled">Workflow Enabled</label>' );
+		html += get_form_table_caption( (window._t ? _t('admin_plugins.generate_wfsignature_variable_as_a_temp_') : "Generate WF_SIGNATURE variable as a temp api key to run/abort jobs") );
 		html += get_form_table_spacer();
 
 		// ipc
-		html += get_form_table_row( 'IPC', '<input type="checkbox" id="fe_ep_ipc" value="1" ' + (plugin.ipc ? 'checked="checked"' : '') + '/><label for="fe_ep_ipc">Connect process with ipc</label>' );
-		html += get_form_table_caption( "Create ipc channel between cronicle engine and job (to use disconnect vs SIGTERM)" );
+		html += get_form_table_row( (window._t ? _t('admin_plugins.ipc') : 'IPC'), '<input type="checkbox" id="fe_ep_ipc" value="1" ' + (plugin.ipc ? 'checked="checked"' : '') + '/><label for="fe_ep_ipc">Connect process with ipc</label>' );
+		html += get_form_table_caption( (window._t ? _t('admin_plugins.create_ipc_channel_between_cronicle_engi') : "Create ipc channel between cronicle engine and job (to use disconnect vs SIGTERM)") );
 		html += get_form_table_spacer();
 
 
 	
 		// Command
-		html += get_form_table_row('Executable:', `<input type="text" size="50" id="fe_ep_command" spellcheck="false" value="${escape_text_field_value(plugin.command)}" />`)
+		html += get_form_table_row((window._t ? _t('admin_plugins.executable') : 'Executable:'), `<input type="text" size="50" id="fe_ep_command" spellcheck="false" value="${escape_text_field_value(plugin.command)}" />`)
 		html += get_form_table_caption(
 			'Enter the filesystem path to your executable, including any command-line arguments.<br/>' + 
 			'Do not include any pipes or redirects -- for those, please use the <b>Shell Plugin</b><br>'			
@@ -14758,19 +14768,19 @@ Class.add( Page.Admin, {
 		html += get_form_table_spacer();
 
 		// stdin
-		html += get_form_table_row('stdin', '<input type="checkbox" id="fe_ep_stdin" value="1" ' + (plugin.stdin ? 'checked="checked"' : '') + '/><label for="fe_ep_stdin">Pipe a script</label>');
-		html += get_form_table_caption("Pipe below script to plugin child process stdin");
+		html += get_form_table_row((window._t ? _t('admin_plugins.stdin') : 'stdin'), '<input type="checkbox" id="fe_ep_stdin" value="1" ' + (plugin.stdin ? 'checked="checked"' : '') + '/><label for="fe_ep_stdin">Pipe a script</label>');
+		html += get_form_table_caption((window._t ? _t('admin_plugins.pipe_below_script_to_plugin_child_proces') : "Pipe below script to plugin child process stdin"));
 		html += get_form_table_spacer();
 
 		// Script 
-		html += get_form_table_row('Script:', `
+		html += get_form_table_row((window._t ? _t('admin_plugins.script') : 'Script:'), `
 		  <textarea id="fe_ep_script" spellcheck="false">${plugin.script || ''}</textarea>
 		  <script>$P().setScriptEditor('fe_ep_script')</script>`);
 		html += get_form_table_caption(`You can pipe this script to bash/node/python/pwsh stdin instead of storing a script on the filesystem`);
 		html += get_form_table_spacer();
 
 		// params editor
-		html += get_form_table_row( 'Parameters:', '<div id="d_ep_params">' + this.get_plugin_params_html() + '</div>' );
+		html += get_form_table_row( (window._t ? _t('admin_plugins.parameters') : 'Parameters:'), '<div id="d_ep_params">' + this.get_plugin_params_html() + '</div>' );
 		html += get_form_table_caption( 
 			'<div style="margin-top:5px;">Parameters are passed to your Plugin via JSON, and as environment variables.<br/>' + 
 			'For example, you can use this to customize the PATH variable, if your Plugin requires it.</div>' 
@@ -14779,7 +14789,7 @@ Class.add( Page.Admin, {
 		
 		// advanced options
 		var adv_expanded = !!(plugin.cwd || plugin.uid);
-		html += get_form_table_row( 'Advanced', 
+		html += get_form_table_row( (window._t ? _t('admin_plugins.advanced') : 'Advanced'), 
 		`<div autocomplete="off" style="font-size:13px;${adv_expanded ? 'display:none;' : ''}"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Advanced Options</span></div>
 		<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;${adv_expanded ? '' : 'display:none;'}"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Advanced Options</legend>
 			<div class="plugin_params_label">Working Directory (CWD):</div>
@@ -14881,7 +14891,7 @@ Class.add( Page.Admin, {
 		}
 		html += '</table>';
 		
-		html += '<div class="button mini" style="width:110px; margin:10px 0 0 0" onMouseUp="$P().edit_plugin_param(-1)">Add Parameter...</div>';
+		html += '<div class="button mini" style="width:110px; margin:10px 0 0 0" onMouseUp="$P().edit_plugin_param(-1)">' + (window._t ? _t('admin_plugins.add_parameter') : 'Add Parameter...') + '</div>';
 		
 		return html;
 	},
@@ -14913,14 +14923,14 @@ Class.add( Page.Admin, {
 		];
 		
 		html += '<table>' + 
-			get_form_table_row('Parameter ID:', '<input type="text" id="fe_epp_id" size="20" value="'+escape_text_field_value(param.id)+'"/>') + 
-			get_form_table_caption("Enter an ID for the parameter, which will be the JSON key.") + 
+			get_form_table_row((window._t ? _t('admin_plugins.parameter_id') : 'Parameter ID:'), '<input type="text" id="fe_epp_id" size="20" value="'+escape_text_field_value(param.id)+'"/>') + 
+			get_form_table_caption((window._t ? _t('admin_plugins.enter_an_id_for_the_parameter_which_will') : "Enter an ID for the parameter, which will be the JSON key.")) + 
 			get_form_table_spacer() + 
-			get_form_table_row('Label:', '<input type="text" id="fe_epp_title" size="35" value="'+escape_text_field_value(param.title)+'"/>') + 
-			get_form_table_caption("Enter a label, which will be displayed next to the control.") + 
+			get_form_table_row((window._t ? _t('admin_plugins.label') : 'Label:'), '<input type="text" id="fe_epp_title" size="35" value="'+escape_text_field_value(param.title)+'"/>') + 
+			get_form_table_caption((window._t ? _t('admin_plugins.enter_a_label_which_will_be_displayed_ne') : "Enter a label, which will be displayed next to the control.")) + 
 			// get_form_table_spacer() + 
-			// get_form_table_row('Control Type:', '<select id="fe_epp_ctype" onChange="$P().change_plugin_control_type()">' + render_menu_options(ctype_options, param.type, false) + '</select>') + 
-			// get_form_table_caption("Select the type of control you want to display.") + 
+			// get_form_table_row((window._t ? _t('admin_plugins.control_type') : 'Control Type:'), '<select id="fe_epp_ctype" onChange="$P().change_plugin_control_type()">' + render_menu_options(ctype_options, param.type, false) + '</select>') + 
+			// get_form_table_caption((window._t ? _t('admin_plugins.select_the_type_of_control_you_want_to_d') : "Select the type of control you want to display.")) + 
 		'</table>';
 		
 		html += '<fieldset style="margin-top:20px;">';
@@ -14942,7 +14952,7 @@ Class.add( Page.Admin, {
 				else {
 					// add new, check for unique id
 					if (find_object(self.plugin.params, { id: param.id })) {
-						return add.badField('fe_epp_id', "That parameter ID is already taken.  Please enter a unique value.");
+						return add.badField('fe_epp_id', (window._t ? _t('admin_plugins.that_parameter_id_is_already_taken_pleas') : "That parameter ID is already taken.  Please enter a unique value."));
 					}
 					
 					self.plugin.params.push( param );
@@ -14968,42 +14978,42 @@ Class.add( Page.Admin, {
 		
 		switch (param.type) {
 			case 'text':
-				html += get_form_table_row('Size:', '<input type="text" id="fe_epp_text_size" size="5" value="'+escape_text_field_value(param.size)+'"/>');
-				html += get_form_table_caption("Enter the size of the text field, in characters.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.size') : 'Size:'), '<input type="text" id="fe_epp_text_size" size="5" value="'+escape_text_field_value(param.size)+'"/>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.enter_the_size_of_the_text_field_in_char') : "Enter the size of the text field, in characters."));
 				html += get_form_table_spacer('short transparent');
-				html += get_form_table_row('Default Value:', '<input type="text" id="fe_epp_text_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
-				html += get_form_table_caption("Enter the default value for the text field.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.default_value') : 'Default Value:'), '<input type="text" id="fe_epp_text_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.enter_the_default_value_for_the_text_fie') : "Enter the default value for the text field."));
 			break;
 			
 			case 'textarea':
-				html += get_form_table_row('Rows:', '<input type="text" id="fe_epp_textarea_rows" size="5" value="'+escape_text_field_value(param.rows || 5)+'"/>');
-				html += get_form_table_caption("Enter the number of visible rows to allocate for the text box.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.rows') : 'Rows:'), '<input type="text" id="fe_epp_textarea_rows" size="5" value="'+escape_text_field_value(param.rows || 5)+'"/>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.enter_the_number_of_visible_rows_to_allo') : "Enter the number of visible rows to allocate for the text box."));
 				html += get_form_table_spacer('short transparent');
-				html += get_form_table_row('Default Text:', '<textarea id="fe_epp_textarea_value" style="width:99%; height:60px; resize:none;" spellcheck="false">'+escape_text_field_value(param.value)+'</textarea>');
-				html += get_form_table_caption("Optionally enter default text for the text box.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.default_text') : 'Default Text:'), '<textarea id="fe_epp_textarea_value" style="width:99%; height:60px; resize:none;" spellcheck="false">'+escape_text_field_value(param.value)+'</textarea>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.optionally_enter_default_text_for_the_te') : "Optionally enter default text for the text box."));
 			break;
 			
 			case 'checkbox':
-				html += get_form_table_row('Default State:', '<select id="fe_epp_checkbox_value">' + render_menu_options([[0,'Unchecked'], [1,'Checked']], param.value, false) + '</select>');
-				html += get_form_table_caption("Select whether the checkbox should be initially checked or unchecked.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.default_state') : 'Default State:'), '<select id="fe_epp_checkbox_value">' + render_menu_options([[0,'Unchecked'], [1,'Checked']], param.value, false) + '</select>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.select_whether_the_checkbox_should_be_in') : "Select whether the checkbox should be initially checked or unchecked."));
 			break;
 			
 			case 'hidden':
-				html += get_form_table_row('Value:', '<input type="text" id="fe_epp_hidden_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
-				html += get_form_table_caption("Enter the value for the hidden field.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.value') : 'Value:'), '<input type="text" id="fe_epp_hidden_value" size="35" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.enter_the_value_for_the_hidden_field') : "Enter the value for the hidden field."));
 			break;
 			
 			case 'select':
-				html += get_form_table_row('Menu Items:', '<input type="text" id="fe_epp_select_items" size="35" value="'+escape_text_field_value(param.items ? param.items.join(', ') : '')+'" spellcheck="false"/>');
-				html += get_form_table_caption("Enter a comma-separated list of items for the menu.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.menu_items') : 'Menu Items:'), '<input type="text" id="fe_epp_select_items" size="35" value="'+escape_text_field_value(param.items ? param.items.join(', ') : '')+'" spellcheck="false"/>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.enter_a_commaseparated_list_of_items_for') : "Enter a comma-separated list of items for the menu."));
 				html += get_form_table_spacer('short transparent');
-				html += get_form_table_row('Selected Item:', '<input type="text" id="fe_epp_select_value" size="20" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
-				html += get_form_table_caption("Optionally enter an item to be selected by default.");
+				html += get_form_table_row((window._t ? _t('admin_plugins.selected_item') : 'Selected Item:'), '<input type="text" id="fe_epp_select_value" size="20" value="'+escape_text_field_value(param.value)+'" spellcheck="false"/>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.optionally_enter_an_item_to_be_selected_') : "Optionally enter an item to be selected by default."));
 			break;
 
 			case 'filelist':
-				html += get_form_table_row('Theme:', '<select id="fe_epp_filelist_theme">' + render_menu_options(['default','darcula','gruvbox-dark', 'solarized light', 'solarized dark'], param.value, false) + '</select>');
-				html += get_form_table_caption("File editor theme");
+				html += get_form_table_row((window._t ? _t('admin_plugins.theme') : 'Theme:'), '<select id="fe_epp_filelist_theme">' + render_menu_options(['default','darcula','gruvbox-dark', 'solarized light', 'solarized dark'], param.value, false) + '</select>');
+				html += get_form_table_caption((window._t ? _t('admin_plugins.file_editor_theme') : "File editor theme"));
 			break;
 		} // switch type
 		
@@ -15016,28 +15026,28 @@ Class.add( Page.Admin, {
 		var param = { type: this.plugin_param.type };
 		
 		param.id = trim( $('#fe_epp_id').val() );
-		if (!param.id) return app.badField('fe_epp_id', "Please enter an ID for the plugin parameter.");
-		if (!param.id.match(/^\w+$/)) return app.badField('fe_epp_id', "The parameter ID needs to be alphanumeric.");
+		if (!param.id) return app.badField('fe_epp_id', (window._t ? _t('admin_plugins.please_enter_an_id_for_the_plugin_parame') : "Please enter an ID for the plugin parameter."));
+		if (!param.id.match(/^\w+$/)) return app.badField('fe_epp_id', (window._t ? _t('admin_plugins.the_parameter_id_needs_to_be_alphanumeri') : "The parameter ID needs to be alphanumeric."));
 		
 		param.title = trim( $('#fe_epp_title').val() );
-		if ((param.type != 'hidden') && !param.title) return app.badField('fe_epp_title', "Please enter a label for the plugin parameter.");
+		if ((param.type != 'hidden') && !param.title) return app.badField('fe_epp_title', (window._t ? _t('admin_plugins.please_enter_a_label_for_the_plugin_para') : "Please enter a label for the plugin parameter."));
 		
 		switch (param.type) {
 			case 'text':
 				param.size = trim( $('#fe_epp_text_size').val() );
-				if (!param.size.match(/^\d+$/)) return app.badField('fe_epp_text_size', "Please enter a size for the text field.");
+				if (!param.size.match(/^\d+$/)) return app.badField('fe_epp_text_size', (window._t ? _t('admin_plugins.please_enter_a_size_for_the_text_field') : "Please enter a size for the text field."));
 				param.size = parseInt( param.size );
-				if (!param.size) return app.badField('fe_epp_text_size', "Please enter a size for the text field.");
-				if (param.size > 40) return app.badField('fe_epp_text_size', "The text field size needs to be between 1 and 40 characters.");
+				if (!param.size) return app.badField('fe_epp_text_size', (window._t ? _t('admin_plugins.please_enter_a_size_for_the_text_field') : "Please enter a size for the text field."));
+				if (param.size > 40) return app.badField('fe_epp_text_size', (window._t ? _t('admin_plugins.the_text_field_size_needs_to_be_between_') : "The text field size needs to be between 1 and 40 characters."));
 				param.value = trim( $('#fe_epp_text_value').val() );
 			break;
 			
 			case 'textarea':
 				param.rows = trim( $('#fe_epp_textarea_rows').val() );
-				if (!param.rows.match(/^\d+$/)) return app.badField('fe_epp_textarea_rows', "Please enter a number of rows for the text box.");
+				if (!param.rows.match(/^\d+$/)) return app.badField('fe_epp_textarea_rows', (window._t ? _t('admin_plugins.please_enter_a_number_of_rows_for_the_te') : "Please enter a number of rows for the text box."));
 				param.rows = parseInt( param.rows );
-				if (!param.rows) return app.badField('fe_epp_textarea_rows', "Please enter a number of rows for the text box.");
-				if (param.rows > 50) return app.badField('fe_epp_textarea_rows', "The text box rows needs to be between 1 and 50.");
+				if (!param.rows) return app.badField('fe_epp_textarea_rows', (window._t ? _t('admin_plugins.please_enter_a_number_of_rows_for_the_te') : "Please enter a number of rows for the text box."));
+				if (param.rows > 50) return app.badField('fe_epp_textarea_rows', (window._t ? _t('admin_plugins.the_text_box_rows_needs_to_be_between_1_') : "The text box rows needs to be between 1 and 50."));
 				param.value = trim( $('#fe_epp_textarea_value').val() );
 			break;
 			
@@ -15050,10 +15060,10 @@ Class.add( Page.Admin, {
 			break;
 			
 			case 'select':
-				if (!$('#fe_epp_select_items').val().match(/\S/)) return app.badField('fe_epp_select_items', "Please enter a comma-separated list of items for the menu.");
+				if (!$('#fe_epp_select_items').val().match(/\S/)) return app.badField('fe_epp_select_items', (window._t ? _t('admin_plugins.please_enter_a_commaseparated_list_of_it') : "Please enter a comma-separated list of items for the menu."));
 				param.items = trim( $('#fe_epp_select_items').val() ).split(/\,\s*/);
 				param.value = trim( $('#fe_epp_select_value').val() );
-				if (param.value && !find_in_array(param.items, param.value)) return app.badField('fe_epp_select_value', "The default value you entered was not found in the list of menu items.");
+				if (param.value && !find_in_array(param.items, param.value)) return app.badField('fe_epp_select_value', (window._t ? _t('admin_plugins.the_default_value_you_entered_was_not_fo') : "The default value you entered was not found in the list of menu items."));
 			break;
 
 			case 'filelist':
@@ -15112,7 +15122,7 @@ Class.add( Page.Admin, {
 		var plugin = this.plugin;
 		
 		plugin.title = trim( $('#fe_ep_title').val() );
-		if (!plugin.title) return app.badField('fe_ep_title', "Please enter a title for the Plugin.");
+		if (!plugin.title) return app.badField('fe_ep_title', (window._t ? _t('admin_plugins.please_enter_a_title_for_the_plugin') : "Please enter a title for the Plugin."));
 		
 		plugin.enabled = $('#fe_ep_enabled').is(':checked') ? 1 : 0;
 		plugin.ipc = $('#fe_ep_ipc').is(':checked') ? 1 : 0;
@@ -15122,8 +15132,8 @@ Class.add( Page.Admin, {
 		// script value is set directly in editor
 		
 		plugin.command = trim( $('#fe_ep_command').val() );
-		if (!plugin.command) return app.badField('fe_ep_command', "Please enter a filesystem path to the executable command for the Plugin.");
-		if (plugin.command.match(/[\n\r]/)) return app.badField('fe_ep_command', "You must not include any newlines (EOLs) in your command.  Please consider using the built-in Shell Plugin.");
+		if (!plugin.command) return app.badField('fe_ep_command', (window._t ? _t('admin_plugins.please_enter_a_filesystem_path_to_the_ex') : "Please enter a filesystem path to the executable command for the Plugin."));
+		if (plugin.command.match(/[\n\r]/)) return app.badField('fe_ep_command', (window._t ? _t('admin_plugins.you_must_not_include_any_newlines_eols_i') : "You must not include any newlines (EOLs) in your command.  Please consider using the built-in Shell Plugin."));
 		
 		plugin.cwd = trim( $('#fe_ep_cwd').val() );
 		plugin.uid = trim( $('#fe_ep_uid').val() );
@@ -15136,7 +15146,6 @@ Class.add( Page.Admin, {
 	}
 	
 });
-
 // Cronicle Admin Page -- Activity Log
 
 Class.add( Page.Admin, {
@@ -15162,7 +15171,7 @@ Class.add( Page.Admin, {
 	
 	gosub_activity: function(args) {
 		// show activity log
-		app.setWindowTitle( "Activity Log" );
+		app.setWindowTitle( (window._t ? _t('admin_activity.activity_log') : "Activity Log") );
 		
 		if (!args.offset) args.offset = 0;
 		if (!args.limit) args.limit = 25;
@@ -15180,7 +15189,7 @@ Class.add( Page.Admin, {
 		
 		html += this.getSidebarTabs( 'activity',
 			[
-				['activity', "Activity Log"],
+				['activity', (window._t ? _t('admin_activity.activity_log') : "Activity Log")],
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
@@ -15194,12 +15203,12 @@ Class.add( Page.Admin, {
 		this.events = [];
 		if (resp.rows) this.events = resp.rows;
 		
-		var cols = ['Date/Time', 'Type', 'Description', 'Username', 'IP Address', 'Actions'];
+		var cols = [(window._t ? _t('admin_activity.date_time') : 'Date/Time'), (window._t ? _t('admin_activity.type') : 'Type'), (window._t ? _t('admin_activity.description') : 'Description'), (window._t ? _t('admin_activity.username') : 'Username'), (window._t ? _t('admin_activity.ip_address') : 'IP Address'), (window._t ? _t('admin_activity.actions') : 'Actions')];
 		
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
 		html += '<div class="subtitle">';
-			html += 'Activity Log';
+			html += (window._t ? _t('admin_activity.activity_log') : 'Activity Log');
 			// html += '<div class="clear"></div>';
 		html += '</div>';
 		
@@ -15451,14 +15460,13 @@ Class.add( Page.Admin, {
 		this.div.html( html );
 	}
 	
-});
-// Cronicle Admin Page -- API Keys
+});// Cronicle Admin Page -- API Keys
 
 Class.add( Page.Admin, {
 	
 	gosub_api_keys: function(args) {
 		// show API Key list
-		app.setWindowTitle( "API Keys" );
+		app.setWindowTitle( (window._t ? _t('admin_api_keys.api_keys') : "API Keys") );
 		this.div.addClass('loading');
 		app.api.post( 'app/get_api_keys', copy_object(args), this.receive_keys.bind(this) );
 	},
@@ -15485,7 +15493,7 @@ Class.add( Page.Admin, {
 				['activity', "Activity Log"],
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
-				['api_keys', "API Keys"],
+				['api_keys', (window._t ? _t('admin_api_keys.api_keys') : "API Keys")],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
 				['servers', "Servers"],
@@ -15493,7 +15501,7 @@ Class.add( Page.Admin, {
 			]
 		);
 		
-		var cols = ['App Title', 'API Key', 'Status', 'Author', 'Created', 'Actions'];
+		var cols = [(window._t ? _t('admin_api_keys.app_title') : 'App Title'), (window._t ? _t('admin_api_keys.api_key') : 'API Key'), (window._t ? _t('admin_api_keys.status') : 'Status'), 'Author', 'Created', 'Actions'];
 		
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
@@ -15520,7 +15528,7 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_api_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add API Key...</div></td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_api_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_api_keys.add_api_key') : 'Add API Key...') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '</div>'; // padding
@@ -15552,7 +15560,7 @@ Class.add( Page.Admin, {
 				['activity', "Activity Log"],
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
-				['api_keys', "API Keys"],
+				['api_keys', (window._t ? _t('admin_api_keys.api_keys') : "API Keys")],
 				['new_api_key', "New API Key"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
@@ -15561,7 +15569,7 @@ Class.add( Page.Admin, {
 			]
 		);
 		
-		html += '<div style="padding:20px;"><div class="subtitle">New API Key</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('admin_api_keys.new_api_key') : 'New API Key') + '</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -15575,10 +15583,10 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">' + (window._t ? _t('admin_api_keys.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
 				
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_api_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Key</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_api_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_api_keys.create_key') : 'Create Key') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -15607,12 +15615,12 @@ Class.add( Page.Admin, {
 		if (!api_key) return; // error
 		
 		if (!api_key.title.length) {
-			return app.badField('#fe_ak_title', "Please enter an app title for the new API Key.");
+			return app.badField('#fe_ak_title', (window._t ? _t('admin_api_keys.please_enter_an_app_title_for_the_new_ap') : "Please enter an app title for the new API Key."));
 		}
 		
 		this.api_key = api_key;
 		
-		app.showProgress( 1.0, "Creating API Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_api_keys.creating_api_key') : "Creating API Key...") );
 		app.api.post( 'app/create_api_key', api_key, this.new_api_key_finish.bind(this) );
 	},
 	
@@ -15623,7 +15631,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=edit_api_key&id=' + resp.id);
 		
 		setTimeout( function() {
-			app.showMessage('success', "The new API Key was created successfully.");
+			app.showMessage('success', (window._t ? _t('admin_api_keys.the_new_api_key_was_created_successfully') : "The new API Key was created successfully."));
 		}, 150 );
 	},
 	
@@ -15646,7 +15654,7 @@ Class.add( Page.Admin, {
 				['activity', "Activity Log"],
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
-				['api_keys', "API Keys"],
+				['api_keys', (window._t ? _t('admin_api_keys.api_keys') : "API Keys")],
 				['edit_api_key', "Edit API Key"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
@@ -15667,11 +15675,11 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_api_key_edit()">' + (window._t ? _t('admin_api_keys.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_api_key_dialog()">Delete Key...</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_api_key_dialog()">' + (window._t ? _t('admin_api_keys.delete_key') : 'Delete Key...') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_api_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_api_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_api_keys.save_changes') : 'Save Changes') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -15693,14 +15701,14 @@ Class.add( Page.Admin, {
 		
 		this.api_key = api_key;
 		
-		app.showProgress( 1.0, "Saving API Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_api_keys.saving_api_key') : "Saving API Key...") );
 		app.api.post( 'app/update_api_key', api_key, this.save_api_key_finish.bind(this) );
 	},
 	
 	save_api_key_finish: function(resp, tx) {
 		// new API Key saved successfully
 		app.hideProgress();
-		app.showMessage('success', "The API Key was saved successfully.");
+		app.showMessage('success', (window._t ? _t('admin_api_keys.the_api_key_was_saved_successfully') : "The API Key was saved successfully."));
 		window.scrollTo( 0, 0 );
 	},
 	
@@ -15709,7 +15717,7 @@ Class.add( Page.Admin, {
 		var self = this;
 		app.confirm( '<span style="color:red">Delete API Key</span>', "Are you sure you want to <b>permanently delete</b> the API Key \""+this.api_key.title+"\"?  There is no way to undo this action.", 'Delete', function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting API Key..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_api_keys.deleting_api_key') : "Deleting API Key...") );
 				app.api.post( 'app/delete_api_key', self.api_key, self.delete_api_key_finish.bind(self) );
 			}
 		} );
@@ -15733,23 +15741,23 @@ Class.add( Page.Admin, {
 		var api_key = this.api_key;
 		
 		// API Key
-		html += get_form_table_row( 'API Key', '<input type="text" id="fe_ak_key" size="35" value="'+escape_text_field_value(api_key.key)+'" spellcheck="false"/>&nbsp;<span class="link addme" onMouseUp="$P().generate_key()">&laquo; Generate Random</span>' );
-		html += get_form_table_caption( "The API Key string is used to authenticate API calls." );
+		html += get_form_table_row( (window._t ? _t('admin_api_keys.api_key') : 'API Key'), '<input type="text" id="fe_ak_key" size="35" value="'+escape_text_field_value(api_key.key)+'" spellcheck="false"/>&nbsp;<span class="link addme" onMouseUp="$P().generate_key()">&laquo; Generate Random</span>' );
+		html += get_form_table_caption( (window._t ? _t('admin_api_keys.the_api_key_string_is_used_to_authentica') : "The API Key string is used to authenticate API calls.") );
 		html += get_form_table_spacer();
 		
 		// status
-		html += get_form_table_row( 'Status', '<select id="fe_ak_status">' + render_menu_options([[1,'Active'], [0,'Disabled']], api_key.active) + '</select>' );
+		html += get_form_table_row( (window._t ? _t('admin_api_keys.status') : 'Status'), '<select id="fe_ak_status">' + render_menu_options([[1,'Active'], [0,'Disabled']], api_key.active) + '</select>' );
 		html += get_form_table_caption( "'Disabled' means that the API Key remains in the system, but it cannot be used for any API calls." );
 		html += get_form_table_spacer();
 		
 		// title
-		html += get_form_table_row( 'App Title', '<input type="text" id="fe_ak_title" size="30" value="'+escape_text_field_value(api_key.title)+'" spellcheck="false"/>' );
-		html += get_form_table_caption( "Enter the title of the application that will be using the API Key.");
+		html += get_form_table_row( (window._t ? _t('admin_api_keys.app_title') : 'App Title'), '<input type="text" id="fe_ak_title" size="30" value="'+escape_text_field_value(api_key.title)+'" spellcheck="false"/>' );
+		html += get_form_table_caption( (window._t ? _t('admin_api_keys.enter_the_title_of_the_application_that_') : "Enter the title of the application that will be using the API Key."));
 		html += get_form_table_spacer();
 		
 		// description
-		html += get_form_table_row('App Description', '<textarea id="fe_ak_desc" style="width:550px; height:50px; resize:vertical;">'+escape_text_field_value(api_key.description)+'</textarea>');
-		html += get_form_table_caption( "Optionally enter a more detailed description of the application." );
+		html += get_form_table_row((window._t ? _t('admin_api_keys.app_description') : 'App Description'), '<textarea id="fe_ak_desc" style="width:550px; height:50px; resize:vertical;">'+escape_text_field_value(api_key.description)+'</textarea>');
+		html += get_form_table_caption( (window._t ? _t('admin_api_keys.optionally_enter_a_more_detailed_descrip') : "Optionally enter a more detailed description of the application.") );
 		html += get_form_table_spacer();
 		
 		// privilege list
@@ -15764,8 +15772,8 @@ Class.add( Page.Admin, {
 				priv_html += '</div>';
 			}
 		}
-		html += get_form_table_row( 'Privileges', priv_html );
-		html += get_form_table_caption( "Select which privileges the API Key should have." );
+		html += get_form_table_row( (window._t ? _t('admin_api_keys.privileges') : 'Privileges'), priv_html );
+		html += get_form_table_caption( (window._t ? _t('admin_api_keys.select_which_privileges_the_api_key_shou') : "Select which privileges the API Key should have.") );
 		html += get_form_table_spacer();
 		
 		return html;
@@ -15781,7 +15789,7 @@ Class.add( Page.Admin, {
 		api_key.description = $('#fe_ak_desc').val();
 		
 		if (!api_key.key.length) {
-			return app.badField('#fe_ak_key', "Please enter an API Key string, or generate a random one.");
+			return app.badField('#fe_ak_key', (window._t ? _t('admin_api_keys.please_enter_an_api_key_string_or_genera') : "Please enter an API Key string, or generate a random one."));
 		}
 		
 		for (var idx = 0, len = config.privilege_list.length; idx < len; idx++) {
@@ -15798,14 +15806,13 @@ Class.add( Page.Admin, {
 	}
 	
 });
-
 // Cronicle Admin Page -- Configs
 
 Class.add( Page.Admin, {
 	
 	gosub_conf_keys: function (args) {
 		// show Config Key list
-		app.setWindowTitle("Configs");
+		app.setWindowTitle((window._t ? _t('admin_config_keys.configs') : "Configs"));
 		var self = this;
 		self.div.addClass('loading');
 		self.secret = {};
@@ -15832,7 +15839,7 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'conf_keys',
 			[
 				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
+				['conf_keys', (window._t ? _t('admin_config_keys.configs') : "Configs")],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
@@ -15842,7 +15849,7 @@ Class.add( Page.Admin, {
 			]
 		);
 		
-		var cols = ['Config Key', 'Value', 'Action'];
+		var cols = ['Config Key', (window._t ? _t('admin_config_keys.value') : 'Value'), 'Action'];
 		
 		html += '<div style="padding:20px 20px 30px 20px"><div class="subtitle">Configs &nbsp;&nbsp;<div class="clear"></div></div>';
 		
@@ -15872,11 +15879,11 @@ Class.add( Page.Admin, {
 
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_conf_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Config Key...</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_conf_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.add_config_key') : 'Add Config Key...') + '</div></td>';
 		html += '<td width="40">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_reload_conf_key()"><i class="fa fa-refresh">&nbsp;&nbsp;</i>Reload</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_reload_conf_key()"><i class="fa fa-refresh">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.reload') : 'Reload') + '</div></td>';
 		html += '<td width="40">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_conf()"><i class="fa fa-cog">&nbsp;&nbsp;</i>Config Viewer</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_conf()"><i class="fa fa-cog">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.config_viewer') : 'Config Viewer') + '</div></td>';
 		html += '</tr></table></center>';
 
 		html += '</div>'; // padding
@@ -15906,7 +15913,7 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'new_conf_key',
 			[
 				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
+				['conf_keys', (window._t ? _t('admin_config_keys.configs') : "Configs")],
 				['secrets', "Secrets"],
 				['new_conf_key', "New Config Key"],
 				['api_keys', "API Keys"],
@@ -15917,7 +15924,7 @@ Class.add( Page.Admin, {
 			]
 		);
 		
-		html += '<div style="padding:20px;"><div class="subtitle">New Config Key</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('admin_config_keys.new_config_key') : 'New Config Key') + '</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -15931,10 +15938,10 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">' + (window._t ? _t('admin_config_keys.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
 				
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_conf_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Key</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_conf_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.create_key') : 'Create Key') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -15963,12 +15970,12 @@ Class.add( Page.Admin, {
 		if (!conf_key) return; // error
 		
 		if (!conf_key.title.length) {
-			return app.badField('#fe_ck_title', "Please enter Config Name");
+			return app.badField('#fe_ck_title', (window._t ? _t('admin_config_keys.please_enter_config_name') : "Please enter Config Name"));
 		}
 		
 		this.conf_key = conf_key;
 		
-		app.showProgress( 1.0, "Creating Config Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_config_keys.creating_config_key') : "Creating Config Key...") );
 		app.api.post( 'app/create_conf_key', conf_key, this.new_conf_key_finish.bind(this) );
 	},
 	
@@ -15979,7 +15986,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=edit_conf_key&id=' + resp.id);
 		
 		setTimeout( function() {
-			app.showMessage('success', "The new Config Key was created successfully.");
+			app.showMessage('success', (window._t ? _t('admin_config_keys.the_new_config_key_was_created_successfu') : "The new Config Key was created successfully."));
 		}, 150 );
 	},
 	
@@ -16000,7 +16007,7 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'edit_conf_key',
 			[
 				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
+				['conf_keys', (window._t ? _t('admin_config_keys.configs') : "Configs")],
 				['secrets', "Secrets"],
 				['edit_conf_key', "Edit Config Key"],
 				['api_keys', "API Keys"],
@@ -16023,11 +16030,11 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">' + (window._t ? _t('admin_config_keys.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="40">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_conf_key_dialog()">Delete Key...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_conf_key_dialog()">' + (window._t ? _t('admin_config_keys.delete_key') : 'Delete Key...') + '</div></td>';
 				html += '<td width="40">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_save_conf_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_save_conf_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.save_changes') : 'Save Changes') + '</div></td>';
 				html += '<td width="40">&nbsp;</td>';
 				html +=  '<td><div class="button" style="width:120px;" onMouseUp="$P().edit_conf_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i> New </div></td>';
 			html += '</tr></table>';
@@ -16051,7 +16058,7 @@ Class.add( Page.Admin, {
 		
 		this.conf_key = conf_key;
 		
-		app.showProgress( 1.0, "Saving Config Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_config_keys.saving_config_key') : "Saving Config Key...") );
 		app.api.post( 'app/update_conf_key', conf_key, this.save_conf_key_finish.bind(this) );
 	},
 
@@ -16097,21 +16104,21 @@ Class.add( Page.Admin, {
 	save_conf_key_finish: function(resp, tx) {
 		// new Config Key saved successfully
 		app.hideProgress();
-		app.showMessage('success', "The Config Key was saved successfully.");
+		app.showMessage('success', (window._t ? _t('admin_config_keys.the_config_key_was_saved_successfully') : "The Config Key was saved successfully."));
 		window.scrollTo( 0, 0 );
 	},
 
 	do_reload_conf_key: function(args) {
 		// save changes to Config Key
 		app.clearError();
-		app.showProgress( 1.0, "Reloading Config Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_config_keys.reloading_config_key') : "Reloading Config Key...") );
 		app.api.post( 'app/reload_conf_key', args, this.reload_conf_key_finish.bind(this) );
 	},
 	
 	reload_conf_key_finish: function(resp, tx) {
 		// new Config Key saved successfully
 		app.hideProgress();
-		app.showMessage('success', "Configs were reloaded successfully.");
+		app.showMessage('success', (window._t ? _t('admin_config_keys.configs_were_reloaded_successfully') : "Configs were reloaded successfully."));
 		window.scrollTo( 0, 0 );
 	},
 
@@ -16121,7 +16128,7 @@ Class.add( Page.Admin, {
 		var self = this;
 		app.confirm( '<span style="color:red">Delete Config Key</span>', "Are you sure you want to <b>permanently delete</b> the Config Key \""+this.conf_key.title+"\"?  There is no way to undo this action.", 'Delete', function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting Config Key..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_config_keys.deleting_config_key') : "Deleting Config Key...") );
 				app.api.post( 'app/delete_conf_key', self.conf_key, self.delete_conf_key_finish.bind(self) );
 			}
 		} );
@@ -16148,12 +16155,12 @@ Class.add( Page.Admin, {
         // title
         var disableConfTitle = ''
         if(conf_key.title) disableConfTitle = 'disabled' // let edit only if new
-        html += get_form_table_row( 'Config Title', `<input type="text" id="fe_ck_title" size="86" value="${escape_text_field_value(conf_key.title)}" spellcheck="false" ${disableConfTitle}/>` );
-        html += get_form_table_caption( "For nested properties use . (e.g. servers.worker1)");
+        html += get_form_table_row( (window._t ? _t('admin_config_keys.config_title') : 'Config Title'), `<input type="text" id="fe_ck_title" size="86" value="${escape_text_field_value(conf_key.title)}" spellcheck="false" ${disableConfTitle}/>` );
+        html += get_form_table_caption( (window._t ? _t('admin_config_keys.for_nested_properties_use_eg_serverswork') : "For nested properties use . (e.g. servers.worker1)"));
         html += get_form_table_spacer();
 
         // Config  Value
-        html += get_form_table_row( 'Type', `
+        html += get_form_table_row( (window._t ? _t('admin_config_keys.type') : 'Type'), `
         <select name="ck_type" id="fe_ck_type" onchange="toggleCkType();">
           <option value="string">String</option>
 		  <option value="bool">Boolean</option>
@@ -16190,7 +16197,7 @@ Class.add( Page.Admin, {
         </script>
         ` );
 
-        html += get_form_table_caption( "Choose value type" );
+        html += get_form_table_caption( (window._t ? _t('admin_config_keys.choose_value_type') : "Choose value type") );
         html += get_form_table_spacer();
 
                 // Config  Type
@@ -16199,7 +16206,7 @@ Class.add( Page.Admin, {
 		let isBool = conf_key.type == 'bool'
 		let isText = !isString && !isBool
 
-		html += get_form_table_row( 'Value', `
+		html += get_form_table_row( (window._t ? _t('admin_config_keys.value') : 'Value'), `
 		<input type="text" style="${isString ? '' : 'display: none'}" id="fe_ck_key" size="73" value="${escape_text_field_value(conf_key.key)}" spellcheck="false"/>
 		<input type="checkbox" style="${isBool ? '' : 'display: none'}" id="fe_ck_key_bool" ${conf_key.key ? 'checked' : ''}></input>
 		<div id="conf_editor_div" style="width: 40rem;${isText? '' : 'display: none' }" ><textarea id="fe_ee_conf_editor" ></textarea></div>
@@ -16230,13 +16237,13 @@ Class.add( Page.Admin, {
 
 		` );
 
-        // html += get_form_table_caption( "For boolean use 0/1 or true/false" );
+        // html += get_form_table_caption( (window._t ? _t('admin_config_keys.for_boolean_use_01_or_truefalse') : "For boolean use 0/1 or true/false") );
         html += get_form_table_spacer();
 
 
         // description
-        html += get_form_table_row('Description', '<textarea id="fe_ck_desc" style="width:40rem; height:100px; resize:vertical;">'+escape_text_field_value(conf_key.description)+'</textarea>');
-        html += get_form_table_caption( "Config purpose (optional)" );
+        html += get_form_table_row((window._t ? _t('admin_config_keys.description') : 'Description'), '<textarea id="fe_ck_desc" style="width:40rem; height:100px; resize:vertical;">'+escape_text_field_value(conf_key.description)+'</textarea>');
+        html += get_form_table_caption( (window._t ? _t('admin_config_keys.config_purpose_optional') : "Config purpose (optional)") );
         html += get_form_table_spacer();
 
         return html;
@@ -16258,7 +16265,7 @@ Class.add( Page.Admin, {
         conf_key.description = $('#fe_ck_desc').val();
 
         if (conf_key.key === "") {
-            return app.badField('#fe_ck_key', "Please enter an Config Key string");
+            return app.badField('#fe_ck_key', (window._t ? _t('admin_config_keys.please_enter_an_config_key_string') : "Please enter an Config Key string"));
         }
 
         return conf_key;
@@ -16266,7 +16273,6 @@ Class.add( Page.Admin, {
 	
 	
 });
-
 // Cronicle Admin Page -- Secrets
 
 Class.add( Page.Admin, {
@@ -16275,7 +16281,7 @@ Class.add( Page.Admin, {
 		// show Config Key list
 		const self = this
 		let secret = this.secret
-		app.setWindowTitle("Secrets");		
+		app.setWindowTitle((window._t ? _t('admin_secrets.secrets') : "Secrets"));		
 		self.div.addClass('loading');
 		self.secret = {};
 		self.secretId = args.id		
@@ -16333,7 +16339,7 @@ Class.add( Page.Admin, {
 			[
 				['activity', "Activity Log"],
 				['conf_keys', "Configs"],
-				['secrets', "Secrets"],
+				['secrets', (window._t ? _t('admin_secrets.secrets') : "Secrets")],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
@@ -16368,7 +16374,7 @@ Class.add( Page.Admin, {
 		  <center><table><tr>
 		  <td><div id="env_enc_button" class="button" style="width:130px;" onMouseUp="$P().toggle_env_encryption()">${this.secret.encrypted ? 'Decrypt' : 'Encrypt'}</div></td>
 		  <td width="40">&nbsp;</td>
-		  <td><div class="button" style="width:130px;" onMouseUp="$P().update_secret()"><i class="fa fa-save">&nbsp;&nbsp;</i>Save</div></td>
+		  <td><div class="button" style="width:130px;" onMouseUp="$P().update_secret()"><i class="fa fa-save">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_secrets.save') : 'Save') + '</div></td>
 		  </tr></table></center>		  
 		</div>
 		<script>$P().setSecretEditor("fe_ee_env_editor")</script>
@@ -16388,14 +16394,14 @@ Class.add( Page.Admin, {
 		let secret = this.secret
 		// secret.data = env_editor.getValue();
 		self.args = {id: secret.id}
-		app.showProgress(1.0, "Updating Secret Data...");
+		app.showProgress(1.0, (window._t ? _t('admin_secrets.updating_secret_data') : "Updating Secret Data..."));
 
 		let apiUrl = secret.virtual ? 'app/create_secret' : 'app/update_secret'
 		delete secret.virtual
 
 		app.api.post(apiUrl, secret, function (resp) {
 			app.hideProgress();
-			if (resp.code == 0) app.showMessage('success', "Secret Data has been updated successfully.");
+			if (resp.code == 0) app.showMessage('success', (window._t ? _t('admin_secrets.secret_data_has_been_updated_successfull') : "Secret Data has been updated successfully."));
 			
 		});
 		// self.gosub_secrets({id: secret.id})
@@ -16410,4 +16416,3 @@ Class.add( Page.Admin, {
 	}	
 	
 });
-

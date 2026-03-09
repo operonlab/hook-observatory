@@ -47,14 +47,14 @@ Class.subclass(Page, "Page.Base", {
 	},
 
 	getNiceJob: function (id) {
-		if (!id) return '(None)';
+		if (!id) return (window._t ? _t('common.none') : '(None)');
 		if (typeof (id) == 'object') id = id.id;
 		return '<div style="white-space:nowrap;"><i class="fa fa-pie-chart">&nbsp;</i>' + id + '</div>';
 	},
 
 	getNiceEvent: function (title, width, style, extra, extraTooltip) {
 		if (!width) width = 500;
-		if (!title) return '(None)';
+		if (!title) return (window._t ? _t('common.none') : '(None)');
 		if (!style) style = '';
 		if (!extra) extra = '';
 		
@@ -89,21 +89,21 @@ Class.subclass(Page, "Page.Base", {
 
 	getNiceCategory: function (cat, width, collapse) {
 
-		if (!cat) return '(None)';
+		if (!cat) return (window._t ? _t('common.none') : '(None)');
 
 		if (!width) width = 500;
 		let icon = 'fa fa-folder-open-o'
 		let iconClosed = 'fa fa-folder'
 
 		let title = cat.title;
-		if (!cat.enabled) title += ' (Disabled)';
+		if (!cat.enabled) title += ' ' + (window._t ? _t('common.disabled') : '(Disabled)');
 		let onClick = arguments.length > 2 ? `onclick="this.className = this.className == '${icon}' ? '${iconClosed}' : '${icon}' ;$('.event_group_${cat.id}').toggle()"` : ''
 		return `<div class="ellip" style="max-width:${width}px;"><i class="${collapse ? iconClosed : icon}" ${onClick}>&nbsp;</i>${title}</div>`;
 	},
 
 	getNiceGroup: function (group, target, width, collapse) {
 		
-		if (!group && !target) return '(None)';
+		if (!group && !target) return (window._t ? _t('common.none') : '(None)');
 
         if (!width) width = 500;
 
@@ -115,7 +115,7 @@ Class.subclass(Page, "Page.Base", {
 			let onClick = arguments.length > 3 ? `onclick="this.className = this.className == '${icon}' ? '${iconClosed}' : '${icon}' ;$('.event_group_${group.id}').toggle()"` : ''
 
 			var title = group.title;
-			if (group.multiplex) title += '&nbsp;(<i class="fa fa-bolt" title="Multiplexed"></i>)';
+			if (group.multiplex) title += '&nbsp;(<i class="fa fa-bolt" title="' + (window._t ? _t('common.multiplexed') : 'Multiplexed') + '"></i>)';
 			return `<div class="ellip" style="max-width:${width}px;"><i class="${collapse ? iconClosed : icon}" ${onClick}>&nbsp;</i>${title}</div>`;
 		}
 		else {
@@ -125,13 +125,13 @@ Class.subclass(Page, "Page.Base", {
 
 	getNicePlugin: function (plugin, width, collapse) {
 
-		if (!plugin) return '(None)';
+		if (!plugin) return (window._t ? _t('common.none') : '(None)');
 		if (!width) width = 500;
 		let icon = 'fa fa fa-plug'
 		let iconClosed = 'fa fa-plus-square'
 
 		var title = plugin.title;
-		if (!plugin.enabled) title += ' (Disabled)';
+		if (!plugin.enabled) title += ' ' + (window._t ? _t('common.disabled') : '(Disabled)');
 		let onClick = arguments.length > 2 ? `onclick="this.className = this.className == '${icon}' ? '${iconClosed}' : '${icon}' ;$('.event_group_${plugin.id}').toggle()"` : ''
 		return `<div class="ellip" style="max-width:${width}px;"><i class="${collapse ? iconClosed : icon}" ${onClick}>&nbsp;</i>${title}</div>`;
 	},
@@ -210,17 +210,17 @@ Class.subclass(Page, "Page.Base", {
 			app.api.post('app/check_user_exists', { username: username }, function (resp) {
 				if (resp.user_exists) {
 					// username taken
-					$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>Username Taken');
+					$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>' + (window._t ? _t('common.username_taken') : 'Username Taken'));
 				}
 				else {
 					// username is valid and available!
-					$elem.css('color', 'green').html('<span class="fa fa-check-circle fa-lg">&nbsp;</span>Available');
+					$elem.css('color', 'green').html('<span class="fa fa-check-circle fa-lg">&nbsp;</span>' + (window._t ? _t('common.available') : 'Available'));
 				}
 			});
 		}
 		else if (username.length) {
 			// bad username
-			$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>Bad Username');
+			$elem.css('color', 'red').html('<span class="fa fa-exclamation-triangle fa-lg">&nbsp;</span>' + (window._t ? _t('common.bad_username') : 'Bad Username'));
 		}
 		else {
 			// empty
@@ -244,8 +244,8 @@ Class.subclass(Page, "Page.Base", {
 			var $elem = $(this);
 			var $span = $elem.next();
 
-			if (self.check_add_remove_me($elem)) $span.html('&raquo; Remove me');
-			else $span.html('&laquo; Add me');
+			if (self.check_add_remove_me($elem)) $span.html('&raquo; ' + (window._t ? _t('common.remove_me') : 'Remove me'));
+			else $span.html('&laquo; ' + (window._t ? _t('common.add_me') : 'Add me'));
 		});
 	},
 
@@ -301,8 +301,8 @@ Class.subclass(Page, "Page.Base", {
 	get_relative_time_combo_box: function (id, value, class_name, inc_seconds) {
 		// get HTML for combo textfield/menu for a relative time based input
 		// provides Minutes, Hours and Days units
-		var unit_items = [[60, 'Minutes'], [3600, 'Hours'], [86400, 'Days']];
-		if (inc_seconds) unit_items.unshift([1, 'Seconds']);
+		var unit_items = [[60, (window._t ? _t('common.minutes') : 'Minutes')], [3600, (window._t ? _t('common.hours') : 'Hours')], [86400, (window._t ? _t('common.days') : 'Days')]];
+		if (inc_seconds) unit_items.unshift([1, (window._t ? _t('common.seconds') : 'Seconds')]);
 
 		return this.get_custom_combo_unit_box(id, value, unit_items, class_name);
 	},
@@ -315,7 +315,7 @@ Class.subclass(Page, "Page.Base", {
 		var MB = 1024 * 1024;
 		var KB = 1024;
 
-		return this.get_custom_combo_unit_box(id, value, [[KB, 'KB'], [MB, 'MB'], [GB, 'GB'], [TB, 'TB']], class_name);
+		return this.get_custom_combo_unit_box(id, value, [[KB, (window._t ? _t('common.kb') : 'KB')], [MB, (window._t ? _t('common.mb') : 'MB')], [GB, (window._t ? _t('common.gb') : 'GB')], [TB, (window._t ? _t('common.tb') : 'TB')]], class_name);
 	},
 
 	expand_fieldset: function ($span) {
@@ -349,8 +349,8 @@ Class.subclass(Page, "Page.Base", {
 
 		if (!args.when) args.when = time_now();
 		if (!args.timezone) args.timezone = app.tz;
-		if (!args.title) args.title = "Select Date/Time";
-		if (!args.button) args.button = "Select";
+		if (!args.title) args.title = (window._t ? _t('common.select_date_time') : "Select Date/Time");
+		if (!args.button) args.button = (window._t ? _t('common.select') : "Select");
 
 		if (args.description) {
 			html += '<div style="font-size:12px; color:#777; margin-bottom:20px;">' + args.description + '</div>';
@@ -366,17 +366,17 @@ Class.subclass(Page, "Page.Base", {
 		for (var idx = margs.year() - 10; idx <= margs.year() + 10; idx++) {
 			year_items.push(idx);
 		}
-		html += '<td align="left"><fieldset class="dt_fs"><legend>Year</legend>';
+		html += '<td align="left"><fieldset class="dt_fs"><legend>' + (window._t ? _t('common.year') : 'Year') + '</legend>';
 		html += '<select id="fe_dt_year">' + render_menu_options(year_items, margs.year()) + '</select>';
 		html += '</fieldset></td>';
 
 		// months
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Month</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.month') : 'Month') + '</legend>';
 		html += '<select id="fe_dt_month">' + render_menu_options(_months, margs.month() + 1) + '</select>';
 		html += '</fieldset></td>';
 
 		// days
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Day</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.day') : 'Day') + '</legend>';
 		html += '<select id="fe_dt_day">' + render_menu_options(_days, margs.date()) + '</select>';
 		html += '</fieldset></td>';
 
@@ -384,7 +384,7 @@ Class.subclass(Page, "Page.Base", {
 		var hour_items = _hour_names.map(function (value, idx) {
 			return [idx, value.toUpperCase().replace(/^(\d+)(\w+)$/, '$1 $2')];
 		});
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Hour</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.hour') : 'Hour') + '</legend>';
 		html += '<select id="fe_dt_hour">' + render_menu_options(hour_items, margs.hour()) + '</select>';
 		html += '</fieldset></td>';
 
@@ -393,13 +393,13 @@ Class.subclass(Page, "Page.Base", {
 		for (var idx = 0; idx < 60; idx++) {
 			min_items.push([idx, (idx < 10) ? ('0' + idx) : ('' + idx)]);
 		}
-		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>Minute</legend>';
+		html += '<td align="left"><fieldset class="dt_fs" style="margin-left:5px;"><legend>' + (window._t ? _t('common.minute') : 'Minute') + '</legend>';
 		html += '<select id="fe_dt_minute">' + render_menu_options(min_items, margs.minute()) + '</select>';
 		html += '</fieldset></td>';
 
 		html += '</tr>';
 		html += '<tr><td align="left" colspan="5">';
-		html += '<div class="caption">Timezone: ' + args.timezone + '</div>';
+		html += '<div class="caption">' + (window._t ? _t('common.timezone_prefix') : 'Timezone: ') + args.timezone + '</div>';
 		html += '</td></tr>';
 		html += '</table></center>';
 
@@ -435,7 +435,7 @@ Class.subclass(Page, "Page.Base", {
 				return app.hasPrivilege('grp_' + group.id);
 			});
 
-		html += '<optgroup label="Groups:">' + render_menu_options(server_groups, value, false) + '</optgroup>';
+		html += '<optgroup label="' + (window._t ? _t('common.groups_label') : 'Groups:') + '">' + render_menu_options(server_groups, value, false) + '</optgroup>';
 
 		if (find_object(server_groups, { id: value })) value = '';
 
@@ -465,7 +465,7 @@ Class.subclass(Page, "Page.Base", {
 			short_hostnames.push([hostnames[idx], hostnames[idx].replace(/\.[\w\-]+\.\w+$/, '')]);
 		}
 
-		html += '<optgroup label="Servers:">' + render_menu_options(short_hostnames, value, false) + '</optgroup>';
+		html += '<optgroup label="' + (window._t ? _t('common.servers_label') : 'Servers:') + '">' + render_menu_options(short_hostnames, value, false) + '</optgroup>';
 		return html;
 	}
 
