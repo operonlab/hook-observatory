@@ -19,6 +19,8 @@ from collections.abc import Callable
 
 import structlog
 
+from src.events.backends.base import _current_trace_id
+
 from .base import EventBackend, Handler
 from .memory import InMemoryBackend
 
@@ -161,6 +163,7 @@ class RedisStreamsBackend(EventBackend):
         handlers = self._handlers.get(event.type, [])
         wildcard = self._handlers.get("*", [])
         for handler in handlers + wildcard:
+            token = _current_trace_id.set(event.trace_id)
             try:
                 await handler(event)
             except Exception as e:
@@ -170,6 +173,8 @@ class RedisStreamsBackend(EventBackend):
                     handler=handler.__name__,
                     error=str(e),
                 )
+            finally:
+                _current_trace_id.reset(token)
 
     # ------------------------------------------------------------------ consumer loop
 
@@ -255,23 +260,26 @@ class RedisStreamsBackend(EventBackend):
         for handler in handlers + wildcard:
             last_error: str = ""
             succeeded = False
-
-            for attempt in range(1, self._max_retries + 1):
-                try:
-                    await handler(event)
-                    succeeded = True
-                    break
-                except Exception as e:
-                    last_error = str(e)
-                    logger.warning(
-                        "event_handler_retry",
-                        event_type=event_type,
-                        handler=handler.__name__,
-                        attempt=attempt,
-                        error=last_error,
-                    )
-                    if attempt < self._max_retries:
-                        await asyncio.sleep(0.5 * attempt)
+            token = _current_trace_id.set(event.trace_id)
+            try:
+                for attempt in range(1, self._max_retries + 1):
+                    try:
+                        await handler(event)
+                        succeeded = True
+                        break
+                    except Exception as e:
+                        last_error = str(e)
+                        logger.warning(
+                            "event_handler_retry",
+                            event_type=event_type,
+                            handler=handler.__name__,
+                            attempt=attempt,
+                            error=last_error,
+                        )
+                        if attempt < self._max_retries:
+                            await asyncio.sleep(0.5 * attempt)
+            finally:
+                _current_trace_id.reset(token)
 
             if not succeeded:
                 logger.error(

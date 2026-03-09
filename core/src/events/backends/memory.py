@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import structlog
 
-from .base import EventBackend, Handler
+from .base import EventBackend, Handler, _current_trace_id
 
 
 class InMemoryBackend(EventBackend):
@@ -48,6 +48,7 @@ class InMemoryBackend(EventBackend):
         wildcard = self._handlers.get("*", [])
 
         for handler in handlers + wildcard:
+            token = _current_trace_id.set(event.trace_id)
             try:
                 await handler(event)
             except Exception as e:
@@ -57,3 +58,5 @@ class InMemoryBackend(EventBackend):
                     handler=handler.__name__,
                     error=str(e),
                 )
+            finally:
+                _current_trace_id.reset(token)

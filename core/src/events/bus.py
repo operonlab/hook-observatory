@@ -5,10 +5,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from src.events.backends.base import EventBackend, Handler
+from src.events.backends.base import EventBackend, Handler, _current_trace_id, current_trace_id
 
 # Re-export Handler so callers can import it from here if needed
-__all__ = ["Event", "EventBus", "event_bus"]
+__all__ = ["Event", "EventBus", "current_trace_id", "event_bus"]
 
 
 class Event:
@@ -28,7 +28,7 @@ class Event:
         self.timestamp = datetime.now(UTC)
         self.source = source
         self.user_id = user_id
-        self.trace_id = trace_id or uuid.uuid4().hex
+        self.trace_id = trace_id or _current_trace_id.get(None) or uuid.uuid4().hex
 
     def to_dict(self) -> dict:
         return {
