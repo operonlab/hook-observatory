@@ -82,6 +82,22 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/anvil/src",
     },
     {
+        "name": "tmux-webui",
+        "type": "uvicorn",
+        "cmd": "/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",
+        "port": 8765,
+        "health": "http://127.0.0.1:8765",
+        "workdir": "/Users/joneshong/workshop/stations/tmux-webui",
+    },
+    {
+        "name": "capture-console",
+        "type": "uvicorn",
+        "cmd": "/Users/joneshong/workshop/stations/capture-console/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port 4104",
+        "port": 4104,
+        "health": "http://127.0.0.1:4104/docs",
+        "workdir": "/Users/joneshong/workshop/stations/capture-console",
+    },
+    {
         "name": "cronicle",
         "type": "binary",
         "cmd": "node /Users/joneshong/workshop/vendor/cronicle/lib/main.js",
@@ -119,7 +135,19 @@ DOCKER_CONTAINERS = [
         "health_url": "http://127.0.0.1:9000/",
     },
     {
-        "name": "bark-server",
+        "name": "ws-infra-filebrowser-1",
+        "port": 8850,
+        "health_cmd": None,
+        "health_url": "http://127.0.0.1:8850/apps/files/health",
+    },
+    {
+        "name": "ws-infra-lgtm-1",
+        "port": 3100,
+        "health_cmd": None,
+        "health_url": "http://127.0.0.1:3100/api/health",
+    },
+    {
+        "name": "ws-infra-bark-1",
         "port": 8090,
         "health_cmd": None,
         "health_url": "http://127.0.0.1:8090/ping",

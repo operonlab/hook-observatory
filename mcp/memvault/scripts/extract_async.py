@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""extract_v2_async.py — Async wrapper for memvault V2 extraction.
+"""extract_async.py — Async wrapper for memvault extraction.
 Triggered by Claude Code SessionEnd hook.
-Captures hook input, backgrounds extract_v2.py + extract_triples.py, exits immediately.
+Captures hook input, backgrounds extract.py + extract_triples.py, exits immediately.
 
 Pipeline:
-  1. extract_v2.py     — Memory block extraction (LLM + refinement → Core API)
+  1. extract.py         — Memory block extraction (LLM + refinement → Core API)
   2. extract_triples.py — KG triple extraction (Gemini → Core API /kg/triples/batch)
 
 Usage in ~/.claude/settings.json:
   "hooks": { "SessionEnd": [{ "type": "command",
-    "command": "~/workshop/mcp/memvault/scripts/extract_v2_async.py",
+    "command": "~/workshop/mcp/memvault/scripts/extract_async.py",
     "timeout": 5 }] }
 """
 
@@ -23,7 +23,7 @@ from pathlib import Path
 # Configuration
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = Path(__file__).parent
-EXTRACT_SCRIPT = SCRIPT_DIR / "extract_v2.py"
+EXTRACT_SCRIPT = SCRIPT_DIR / "extract.py"
 TRIPLES_SCRIPT = SCRIPT_DIR / "extract_triples.py"
 LOG_DIR = Path.home() / "Claude" / "memvault" / "logs"
 PYTHON = str(Path.home() / ".local" / "bin" / "python3")

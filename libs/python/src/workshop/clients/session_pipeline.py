@@ -2,7 +2,7 @@
 
 Stages (in order):
     1. redact  — clean sensitive data from transcript
-    2. extract — memvault knowledge extraction (via extract_v2_async.py)
+    2. extract — memvault knowledge extraction (via extract_async.py)
     3. archive — session-archiver scan + score
     4. log     — observatory event logging
 
@@ -154,7 +154,7 @@ class SessionPipelineClient:
             "projects_dir": self.projects_dir,
             "scripts_dir": self.scripts_dir,
             "observatory_url": self.observatory_url,
-            "extract_script": str(Path(self.scripts_dir) / "extract_v2_async.py"),
+            "extract_script": str(Path(self.scripts_dir) / "extract_async.py"),
         }
 
     def list_stages(self) -> list[dict]:
@@ -260,14 +260,14 @@ class SessionPipelineClient:
     ) -> StageResult:
         """Stage 2: Extract knowledge via memvault (background process).
 
-        Spawns extract_v2_async.py as a detached subprocess. The script
+        Spawns extract_async.py as a detached subprocess. The script
         uses LLM internally for semantic extraction — this SDK method is
         purely a launcher and does not perform any LLM reasoning itself.
         """
         t0 = time.monotonic()
         stage = StageResult(name="extract")
         try:
-            script = Path(self.scripts_dir) / "extract_v2_async.py"
+            script = Path(self.scripts_dir) / "extract_async.py"
             if not script.exists():
                 stage.success = False
                 stage.error = f"extract script not found: {script}"
