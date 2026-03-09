@@ -23,7 +23,7 @@ Class.add( Page.Admin, {
 	
 	gosub_activity: function(args) {
 		// show activity log
-		app.setWindowTitle( "Activity Log" );
+		app.setWindowTitle( (window._t ? _t('admin_activity.activity_log') : "Activity Log") );
 		
 		if (!args.offset) args.offset = 0;
 		if (!args.limit) args.limit = 25;
@@ -41,7 +41,7 @@ Class.add( Page.Admin, {
 		
 		html += this.getSidebarTabs( 'activity',
 			[
-				['activity', "Activity Log"],
+				['activity', (window._t ? _t('admin_activity.activity_log') : "Activity Log")],
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
@@ -55,12 +55,12 @@ Class.add( Page.Admin, {
 		this.events = [];
 		if (resp.rows) this.events = resp.rows;
 		
-		var cols = ['Date/Time', 'Type', 'Description', 'Username', 'IP Address', 'Actions'];
+		var cols = [(window._t ? _t('admin_activity.date_time') : 'Date/Time'), (window._t ? _t('admin_activity.type') : 'Type'), (window._t ? _t('admin_activity.description') : 'Description'), (window._t ? _t('admin_activity.username') : 'Username'), (window._t ? _t('admin_activity.ip_address') : 'IP Address'), (window._t ? _t('admin_activity.actions') : 'Actions')];
 		
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
 		html += '<div class="subtitle">';
-			html += 'Activity Log';
+			html += (window._t ? _t('admin_activity.activity_log') : 'Activity Log');
 			// html += '<div class="clear"></div>';
 		html += '</div>';
 		

@@ -1226,4 +1226,412 @@ td.table_label {
 			font-size: 1.2em;
 		}
 
+/* ========================================
+   RWD — Responsive Web Design
+   Desktop-first. Breakpoints:
+     1024px  laptop
+      768px  tablet
+      480px  mobile
+      375px  small mobile
+   ======================================== */
+
+/* ------------------------------------------------------------------
+   Global responsive custom properties (desktop defaults)
+   ------------------------------------------------------------------ */
+:root {
+	--rwd-gutter:    20px;
+	--rwd-font-scale: 1;
+	--rwd-touch-min: 27px;
+}
+
+/* ------------------------------------------------------------------
+   Transition smoothness for layout-shifting elements
+   ------------------------------------------------------------------ */
+.stats.grid-container,
+.job-details.grid-container,
+.upcoming.grid-container {
+	transition: grid-template-columns 0.3s ease;
+}
+
+.side_tab_bar,
+.sidebar_content_wrapper,
+.tab.side {
+	transition: all 0.3s ease;
+}
+
+/* Tab bar: ensure relative positioning for RWD scroll */
+.tab_bar {
+	position: relative;
+}
+
+/* ------------------------------------------------------------------
+   Laptop (≤ 1024px)
+   ------------------------------------------------------------------ */
+@media only screen and (max-width: 1024px) {
+
+	/* Stats grid: cap at 5 columns */
+	.stats.grid-container {
+		grid-template-columns: repeat(5, 1fr);
+	}
+
+}
+
+/* ------------------------------------------------------------------
+   Tablet & below (≤ 768px)
+   ------------------------------------------------------------------ */
+@media only screen and (max-width: 768px) {
+
+	/* --- Responsive custom properties override --- */
+	:root {
+		--rwd-gutter:    12px;
+		--rwd-font-scale: 1.05;
+		--rwd-touch-min: 44px;
+	}
+
+	/* --- Container --- */
+	div.container {
+		min-width: 0;
+		width: 100%;
+		padding-left:  var(--rwd-gutter);
+		padding-right: var(--rwd-gutter);
+		box-sizing: border-box;
+	}
+
+	/* --- Header --- */
+	#d_header {
+		height: auto !important;
+	}
+	#d_header > .container {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+	}
+	#d_header_user_container {
+		width: 100%;
+		text-align: right;
+	}
+
+	/* --- Tab bar: auto height + horizontal scroll --- */
+	.tab_bar {
+		height: auto;
+		min-height: 36px;
+		overflow-x: auto;
+		overflow-y: visible;
+		white-space: nowrap;
+		-webkit-overflow-scrolling: touch;
+	}
+	.tab_bar .tab {
+		float: none !important;
+		display: inline-block;
+	}
+	.tab_bar .tab_widget {
+		float: none !important;
+		display: inline-block;
+	}
+
+	/* --- Touch targets --- */
+	.tab .content {
+		min-height: var(--rwd-touch-min);
+		line-height: var(--rwd-touch-min);
+	}
+	.button {
+		min-height: var(--rwd-touch-min);
+	}
+	.pagination a,
+	.pagination span {
+		min-height: 44px;
+		min-width:  44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	/* --- Admin sidebar → horizontal pill bar above content --- */
+	/* JS sets: side_tab_bar style="position:absolute; left:-161px;"
+	             sidebar_content_wrapper style="margin-left:151px;"
+	             sidebar_spacer style="height:50px;"
+	   All three need !important to override JS inline styles.        */
+	.side_tab_bar {
+		position: static !important;
+		left: auto !important;
+		width: 100% !important;
+		height: auto !important;
+		border-right: none;
+		border-bottom: 1px solid var(--border-color);
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		padding: 10px 4px;
+		overflow-x: auto;
+	}
+	.sidebar_content_wrapper {
+		margin-left: 0 !important;
+	}
+	.sidebar_spacer {
+		display: none !important;
+	}
+	.tab.side {
+		float: none !important;
+		clear: none !important;
+		display: inline-flex;
+		align-items: center;
+		border: 1px solid var(--border-color) !important;
+		border-radius: 20px !important;
+		margin: 2px 3px;
+		transition: all 0.2s ease;
+	}
+	.tab.side .content {
+		font-size: 12px;
+		margin: 0 8px;
+		height: 32px;
+		line-height: 32px;
+		min-height: unset;
+	}
+	.tab.side.active {
+		background: var(--highlight-color);
+	}
+	.tab.side.active .content {
+		color: #fff;
+	}
+	body.dark .tab.side.active {
+		background: var(--highlight-color);
+	}
+
+	/* --- Stats grid: 5 columns on tablet --- */
+	.stats.grid-container {
+		grid-template-columns: repeat(5, 1fr);
+	}
+	.stats.grid-container .grid-item {
+		padding: 8px;
+	}
+
+	/* --- Data tables: scroll wrapper handles overflow --- */
+	.data_table_scroll_wrapper {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		background:
+			linear-gradient(to right, var(--background-color) 30%, transparent),
+			linear-gradient(to left,  var(--background-color) 30%, transparent),
+			linear-gradient(to right, rgba(0,0,0,0.08), transparent 15px),
+			linear-gradient(to left,  rgba(0,0,0,0.08), transparent 15px);
+		background-position:
+			left center,
+			right center,
+			left center,
+			right center;
+		background-size:
+			40px 100%,
+			40px 100%,
+			15px 100%,
+			15px 100%;
+		background-repeat: no-repeat;
+		background-attachment: local, local, scroll, scroll;
+	}
+	.data_table {
+		min-width: 600px;
+	}
+
+	/* --- Activity log: truncate long descriptions --- */
+	.activity_desc {
+		max-width: 300px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* --- Job details grid: 3 columns on tablet --- */
+	.job-details.grid-container,
+	.job-details.grid-container.running {
+		grid-template-columns: repeat(3, auto);
+	}
+
+	/* --- Upcoming events: keep auto-fill (minmax already set) --- */
+	/* .upcoming.grid-container already uses minmax(290px,1fr) — no override needed */
+
+	/* --- Pie charts: single-column stack --- */
+	div.pie-column,
+	div.pie-column.column-left,
+	div.pie-column.column-center,
+	div.pie-column.column-right {
+		position: relative !important;
+		left: auto !important;
+		margin: 0 auto 20px auto !important;
+	}
+
+	/* --- Dialogs --- */
+	div.confirm_container {
+		width: calc(100vw - 40px) !important;
+		max-width: 450px;
+		box-sizing: border-box;
+	}
+	.inline_dialog_container {
+		width: calc(100vw - 40px) !important;
+		max-width: 500px;
+		box-sizing: border-box;
+	}
+
+	/* --- Subtitle & widgets --- */
+	div.subtitle {
+		height: auto;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px;
+	}
+	div.subtitle_widget {
+		float: none;
+		flex-shrink: 0;
+	}
+
+	/* --- Schedule grid --- */
+	.upcoming.schedule.grid-container {
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	}
+
+	/* --- Workflow grid: single column --- */
+	.wflog.grid-container {
+		grid-template-columns: 1fr;
+	}
+
+	/* --- Search input: full width --- */
+	.event-search {
+		width: 100%;
+		box-sizing: border-box;
+	}
+
+	/* --- Tab bar: boost contrast in dark mode --- */
+	body.dark .tab.inactive .content {
+		color: rgba(255, 255, 255, 0.6);
+	}
+	body.dark .tab.inactive:hover .content {
+		color: var(--highlight-color);
+	}
+
+	/* --- My Account: stack form + avatar vertically --- */
+	#page_MyAccount > div > center > table,
+	#page_MyAccount > div > center > table > tbody,
+	#page_MyAccount > div > center > table > tbody > tr {
+		display: block !important;
+		width: 100% !important;
+	}
+	#page_MyAccount > div > center > table > tbody > tr > td {
+		display: block !important;
+		width: 100% !important;
+		text-align: center !important;
+	}
+	#page_MyAccount fieldset {
+		margin: 20px auto 0 auto !important;
+		width: auto !important;
+		max-width: 200px;
+	}
+
+	/* --- Footer: stack & center --- */
+	#d_footer .left,
+	#d_footer .right {
+		float: none !important;
+		text-align: center;
+	}
+
+}
+
+/* ------------------------------------------------------------------
+   Mobile (≤ 480px)
+   ------------------------------------------------------------------ */
+@media only screen and (max-width: 480px) {
+
+	/* --- Responsive custom properties override --- */
+	:root {
+		--rwd-gutter:    8px;
+		--rwd-font-scale: 1.1;
+	}
+
+	/* --- Stats grid: 2 columns on mobile --- */
+	.stats.grid-container {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	/* --- Job details: 2 columns on mobile --- */
+	.job-details.grid-container,
+	.job-details.grid-container.running {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	/* --- Upcoming events: single column --- */
+	.upcoming.grid-container {
+		grid-template-columns: 1fr;
+	}
+	.upcoming.schedule.grid-container {
+		grid-template-columns: 1fr;
+	}
+
+	/* --- Header title: smaller --- */
+	#d_header_title {
+		font-size: 18px;
+	}
+
+	/* --- Subtitle: compact --- */
+	div.subtitle {
+		font-size: 14px;
+	}
+	.subtitle_menu {
+		max-width: 80px;
+	}
+
+	/* --- Admin sidebar tabs: compact on mobile --- */
+	.tab.side .content {
+		font-size: 11px;
+		margin: 0 6px;
+	}
+
+	/* --- Main content: reduce padding --- */
+	.main {
+		padding: 6px;
+	}
+
+	/* --- Pie columns: scale down on mobile --- */
+	div.pie-column {
+		transform: scale(0.85);
+		transform-origin: top center;
+	}
+
+}
+
+/* ------------------------------------------------------------------
+   Small mobile (≤ 375px)
+   ------------------------------------------------------------------ */
+@media only screen and (max-width: 375px) {
+
+	/* Stats: 2 columns, tighter */
+	.stats.grid-container {
+		grid-template-columns: repeat(2, 1fr);
+		gap: 4px;
+	}
+
+	/* Tab bar font */
+	.tab_bar .tab .content {
+		font-size: 11px;
+		margin-left: 6px;
+		margin-right: 6px;
+	}
+
+	/* Sidebar pills: full-width single column */
+	.tab.side {
+		flex: 1 1 100%;
+		justify-content: center;
+	}
+
+}
+
+/* ------------------------------------------------------------------
+   prefers-reduced-motion
+   ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration:       0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration:      0.01ms !important;
+	}
+}
 

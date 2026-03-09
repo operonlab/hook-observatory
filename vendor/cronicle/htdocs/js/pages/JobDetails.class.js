@@ -28,11 +28,11 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 		this.args = args;
 
 		if (!args.id) {
-			app.doError("The Job Details page requires a Job ID.");
+			app.doError((window._t ? _t('job_details.the_job_details_page_requires_a_job_id') : "The Job Details page requires a Job ID."));
 			return true;
 		}
 
-		app.setWindowTitle("Job Details: #" + args.id);
+		app.setWindowTitle((window._t ? _t('job_details.job_details') : "Job Details: #") + args.id);
 		app.showTabBar(true);
 
 		this.tab.show();
@@ -77,7 +77,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 			}
 			else {
 				// show error
-				app.doError("Error: " + resp.description);
+				app.doError((window._t ? _t('job_details.error') : "Error: ") + resp.description);
 				self.div.removeClass('loading');
 			}
 		});
@@ -141,7 +141,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 
 		app.confirm('<span style="color:red">Delete Job</span>', "Are you sure you want to delete the current job log and history?", "Delete", function (result) {
 			if (result) {
-				app.showProgress(1.0, "Deleting job...");
+				app.showProgress(1.0, (window._t ? _t('job_details.deleting_job') : "Deleting job..."));
 				app.api.post('app/delete_job', job, function (resp) {
 					app.hideProgress();
 					app.showMessage('success', "Job ID '" + job.id + "' was deleted successfully.");
@@ -156,13 +156,13 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 		// run job again
 		var self = this;
 		var event = find_object(app.schedule, { id: this.job.event }) || null;
-		if (!event) return app.doError("Could not locate event in schedule: " + this.job.event_title + " (" + this.job.event + ")");
+		if (!event) return app.doError((window._t ? _t('job_details.could_not_locate_event_in_schedule') : "Could not locate event in schedule: ") + this.job.event_title + " (" + this.job.event + ")");
 
 		var job = deep_copy_object(event);
 		job.now = this.job.now;
 		job.params = this.job.params;
 
-		app.showProgress(1.0, "Starting job...");
+		app.showProgress(1.0, (window._t ? _t('job_details.starting_job') : "Starting job..."));
 
 		app.api.post('app/run_event', job, function (resp) {
 			// app.showMessage('success', "Event '"+event.title+"' has been started.");
@@ -379,8 +379,8 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 			html += '<div id="d_job_log_warning">';
 			html += '<table class="data_table" width="100%"><tr><td style="padding-top:50px; padding-bottom:50px; text-align:center">';
 			html += '<div style="margin-bottom:15px;"><b>Warning: Job event log file is ' + get_text_from_bytes(job.log_file_size, 1) + '.  Please consider downloading instead of viewing in browser.</b></div>';
-			html += '<div style="width:50%; float:left;"><div class="button right" style="width:110px; margin-right:20px;" onMouseUp="$P().do_download_log()">Download Log</div></div>';
-			html += '<div style="width:50%; float:left;"><div class="button left" style="width:110px; margin-left:20px;" onMouseUp="$P().do_view_inline_log()">View Log</div></div>';
+			html += '<div style="width:50%; float:left;"><div class="button right" style="width:110px; margin-right:20px;" onMouseUp="$P().do_download_log()">' + (window._t ? _t('job_details.download_log') : 'Download Log') + '</div></div>';
+			html += '<div style="width:50%; float:left;"><div class="button left" style="width:110px; margin-left:20px;" onMouseUp="$P().do_view_inline_log()">' + (window._t ? _t('job_details.view_log') : 'View Log') + '</div></div>';
 			html += '<div class="clear"></div>';
 			html += '</td></tr></table>';
 			html += '</div>';
@@ -775,7 +775,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 
 		app.confirm('<span style="color:red">Abort Job</span>', "Are you sure you want to abort the current job?", "Abort", function (result) {
 			if (result) {
-				app.showProgress(1.0, "Aborting job...");
+				app.showProgress(1.0, (window._t ? _t('job_details.aborting_job') : "Aborting job..."));
 				app.api.post('app/abort_job', job, function (resp) {
 					app.hideProgress();
 					app.showMessage('success', "Job '" + job.event_title + "' was aborted successfully.");
@@ -837,12 +837,12 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 		app.api.post('app/update_job', { id: job.id, notify_success: job.notify_success, notify_fail: job.notify_fail }, function (resp) {
 			watch_enabled = !watch_enabled;
 			if (watch_enabled) {
-				app.showMessage('success', "You will now be notified via e-mail when the job completes (success or fail).");
+				app.showMessage('success', (window._t ? _t('job_details.you_will_now_be_notified_via_email_when_') : "You will now be notified via e-mail when the job completes (success or fail)."));
 				$('#s_watch_job').css('color', '#3f7ed5');
 				$('#s_watch_job > i').removeClass().addClass('fa fa-check-square-o');
 			}
 			else {
-				app.showMessage('success', "You will no longer be notified about this job.");
+				app.showMessage('success', (window._t ? _t('job_details.you_will_no_longer_be_notified_about_thi') : "You will no longer be notified about this job."));
 				$('#s_watch_job').css('color', '#777');
 				$('#s_watch_job > i').removeClass().addClass('fa fa-square-o');
 			}
@@ -1330,7 +1330,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 
 	update_live_progress: function (job) {
 		// update job progress, elapsed time, time remaining, cpu pie, mem pie
-		if (job.complete && !app.progress) app.showProgress(1.0, "Job is finishing...");
+		if (job.complete && !app.progress) app.showProgress(1.0, (window._t ? _t('job_details.job_is_finishing') : "Job is finishing..."));
 
 		// pid may have changed (retry)
 		$('#d_live_pid').html(job.pid || 'n/a');
@@ -1473,7 +1473,7 @@ Class.subclass(Page.Base, "Page.JobDetails", {
 			},
 			function (err) {
 				// job not complete yet
-				if (!app.progress) app.showProgress(1.0, "Job is finishing...");
+				if (!app.progress) app.showProgress(1.0, (window._t ? _t('job_details.job_is_finishing') : "Job is finishing..."));
 				// self.jump_timer = setTimeout( self.jump_to_archive_when_ready.bind(self), 1000 );
 			}
 		);

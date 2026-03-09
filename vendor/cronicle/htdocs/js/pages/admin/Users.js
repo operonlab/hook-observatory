@@ -4,7 +4,7 @@ Class.add(Page.Admin, {
 
 	gosub_users: function (args) {
 		// show user list
-		app.setWindowTitle("User List");
+		app.setWindowTitle((window._t ? _t('admin_users.user_list') : "User List"));
 		this.div.addClass('loading');
 		if (!args.offset) args.offset = 0;
 		if (!args.limit) args.limit = 25;
@@ -37,13 +37,13 @@ Class.add(Page.Admin, {
 			]
 		);
 
-		var cols = ['Username', 'Full Name', 'Email Address', 'Status', 'Type', 'Created', 'Actions'];
+		var cols = [(window._t ? _t('admin_users.username') : 'Username'), (window._t ? _t('admin_users.full_name') : 'Full Name'), (window._t ? _t('admin_users.email_address') : 'Email Address'), 'Status', 'Type', 'Created', 'Actions'];
 
 		// html += '<div style="padding:5px 15px 15px 15px;">';
 		html += '<div style="padding:20px 20px 30px 20px">';
 
 		html += '<div class="subtitle">';
-		html += 'User Accounts';
+		html += (window._t ? _t('admin_users.user_list') : 'User Accounts');
 		// html += '<div class="subtitle_widget"><span class="link" onMouseUp="$P().refresh_user_list()"><b>Refresh</b></span></div>';
 		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_ul_search" size="15" placeholder="Find username..." style="border:0px;"/></div>';
 		html += '<div class="clear"></div>';
@@ -72,7 +72,7 @@ Class.add(Page.Admin, {
 
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_user(-1)"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>Add User...</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_user(-1)"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_users.add_user') : 'Add User...') + '</div></td>';
 		html += '</tr></table></center>';
 
 		html += '</div>'; // padding
@@ -99,7 +99,7 @@ Class.add(Page.Admin, {
 				Nav.go('Admin?sub=edit_user&username=' + username);
 			},
 			function (resp) {
-				app.doError("User not found: " + username, 10);
+				app.doError((window._t ? _t('admin_users.user_not_found') : "User not found: ") + username, 10);
 			}
 		);
 	},
@@ -108,7 +108,7 @@ Class.add(Page.Admin, {
 		// jump to edit sub
 		if (idx > -1) Nav.go('#Admin?sub=edit_user&username=' + this.users[idx].username);
 		else if (app.config.external_users) {
-			app.doError("Users are managed by an external system, so you cannot add users from here.");
+			app.doError((window._t ? _t('admin_users.users_are_managed_by_an_external_system_') : "Users are managed by an external system, so you cannot add users from here."));
 		}
 		else Nav.go('#Admin?sub=new_user');
 	},
@@ -122,7 +122,7 @@ Class.add(Page.Admin, {
 	gosub_new_user: function (args) {
 		// create new user
 		var html = '';
-		app.setWindowTitle("Add New User");
+		app.setWindowTitle((window._t ? _t('admin_users.add_new_user') : "Add New User"));
 		this.div.removeClass('loading');
 
 		html += this.getSidebarTabs('new_user',
@@ -139,7 +139,7 @@ Class.add(Page.Admin, {
 			]
 		);
 
-		html += '<div style="padding:20px;"><div class="subtitle">Add New User</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('admin_users.add_new_user') : 'Add New User') + '</div></div>';
 
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -151,8 +151,8 @@ Class.add(Page.Admin, {
 		html += this.get_user_edit_html();
 
 		// notify user
-		html += get_form_table_row('Notify', '<input type="checkbox" id="fe_eu_send_email" value="1" checked="checked"/><label for="fe_eu_send_email">Send Welcome Email</label>');
-		html += get_form_table_caption("Select notification options for the new user.");
+		html += get_form_table_row((window._t ? _t('admin_users.notify') : 'Notify'), '<input type="checkbox" id="fe_eu_send_email" value="1" checked="checked"/><label for="fe_eu_send_email">Send Welcome Email</label>');
+		html += get_form_table_caption((window._t ? _t('admin_users.select_notification_options_for_the_new_') : "Select notification options for the new user."));
 		html += get_form_table_spacer();
 
 		// buttons at bottom
@@ -160,13 +160,13 @@ Class.add(Page.Admin, {
 		html += '<div style="height:30px;"></div>';
 
 		html += '<table><tr>';
-		html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_user_edit()">Cancel</div></td>';
+		html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_user_edit()">' + (window._t ? _t('admin_users.cancel') : 'Cancel') + '</div></td>';
 		html += '<td width="50">&nbsp;</td>';
 		if (config.debug) {
-			html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().populate_random_user()">Randomize...</div></td>';
+			html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().populate_random_user()">' + (window._t ? _t('admin_users.randomize') : 'Randomize...') + '</div></td>';
 			html += '<td width="50">&nbsp;</td>';
 		}
-		html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_user()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>Create User</div></td>';
+		html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_user()"><i class="fa fa-user-plus">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_users.create_user') : 'Create User') + '</div></td>';
 		html += '</tr></table>';
 
 		html += '</td></tr>';
@@ -224,30 +224,30 @@ Class.add(Page.Admin, {
 		}
 
 		if (!user.username.length) {
-			return app.badField('#fe_eu_username', "Please enter a username for the new account.");
+			return app.badField('#fe_eu_username', (window._t ? _t('admin_users.please_enter_a_username_for_the_new_acco') : "Please enter a username for the new account."));
 		}
 		// username should be alphanumeric or email-like (for External Auth)
 		if (!user.username.match(/^[\w\.\-]+@?[\w\.\-]+$/)) {
-			return app.badField('#fe_eu_username', "Please make sure the username contains only alphanumerics, periods and dashes.");
+			return app.badField('#fe_eu_username', (window._t ? _t('admin_users.please_make_sure_the_username_contains_o') : "Please make sure the username contains only alphanumerics, periods and dashes."));
 		}
 		if (!user.email.length) {
-			return app.badField('#fe_eu_email', "Please enter an e-mail address where the user can be reached.");
+			return app.badField('#fe_eu_email', (window._t ? _t('admin_users.please_enter_an_email_address_where_the_') : "Please enter an e-mail address where the user can be reached."));
 		}
 		if (!user.email.match(/^\S+\@\S+$/)) {
-			return app.badField('#fe_eu_email', "The e-mail address you entered does not appear to be correct.");
+			return app.badField('#fe_eu_email', (window._t ? _t('admin_users.the_email_address_you_entered_does_not_a') : "The e-mail address you entered does not appear to be correct."));
 		}
 		if (!user.full_name.length) {
-			return app.badField('#fe_eu_fullname', "Please enter the user's first and last names.");
+			return app.badField('#fe_eu_fullname', (window._t ? _t('admin_users.please_enter_the_user') : "Please enter the user") + "'s first and last names.");
 		}
 		if (!user.password.length) {
-			return app.badField('#fe_eu_password', "Please enter a secure password to protect the account.");
+			return app.badField('#fe_eu_password', (window._t ? _t('admin_users.please_enter_a_secure_password_to_protec') : "Please enter a secure password to protect the account."));
 		}
 
 		user.send_email = $('#fe_eu_send_email').is(':checked') ? 1 : 0;
 
 		this.user = user;
 
-		app.showProgress(1.0, "Creating user...");
+		app.showProgress(1.0, (window._t ? _t('admin_users.creating_user') : "Creating user..."));
 		app.api.post('user/admin_create', user, this.new_user_finish.bind(this));
 	},
 
@@ -258,7 +258,7 @@ Class.add(Page.Admin, {
 		Nav.go('Admin?sub=edit_user&username=' + this.user.username);
 
 		setTimeout(function () {
-			app.showMessage('success', "The new user account was created successfully.");
+			app.showMessage('success', (window._t ? _t('admin_users.the_new_user_account_was_created_success') : "The new user account was created successfully."));
 		}, 150);
 	},
 
@@ -271,7 +271,7 @@ Class.add(Page.Admin, {
 	receive_user: function (resp) {
 		// edit existing user
 		var html = '';
-		app.setWindowTitle("Editing User \"" + (this.args.username) + "\"");
+		app.setWindowTitle((window._t ? _t('admin_users.editing_user') : "Editing User \"") + (this.args.username) + "\"");
 		this.div.removeClass('loading');
 
 		html += this.getSidebarTabs('edit_user',
@@ -304,9 +304,9 @@ Class.add(Page.Admin, {
 		html += '<table><tr>';
 		html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_user_edit()">Cancel</div></td>';
 		html += '<td width="50">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_account_dialog()">Delete Account...</div></td>';
+		html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_account_dialog()">' + (window._t ? _t('admin_users.delete_account') : 'Delete Account...') + '</div></td>';
 		html += '<td width="50">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_user()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_user()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_users.save_changes') : 'Save Changes') + '</div></td>';
 		html += '</tr></table>';
 
 		html += '</td></tr>';
@@ -346,14 +346,14 @@ Class.add(Page.Admin, {
 
 		this.user = user;
 
-		app.showProgress(1.0, "Saving user account...");
+		app.showProgress(1.0, (window._t ? _t('admin_users.saving_user_account') : "Saving user account..."));
 		app.api.post('user/admin_update', user, this.save_user_finish.bind(this));
 	},
 
 	save_user_finish: function (resp, tx) {
 		// new user created successfully
 		app.hideProgress();
-		app.showMessage('success', "The user was saved successfully.");
+		app.showMessage('success', (window._t ? _t('admin_users.the_user_was_saved_successfully') : "The user was saved successfully."));
 		window.scrollTo(0, 0);
 
 		// if we edited ourself, update header
@@ -378,7 +378,7 @@ Class.add(Page.Admin, {
 
 		app.confirm('<span style="color:red">Delete Account</span>', msg, 'Delete', function (result) {
 			if (result) {
-				app.showProgress(1.0, "Deleting Account...");
+				app.showProgress(1.0, (window._t ? _t('admin_users.deleting_account') : "Deleting Account..."));
 				app.api.post('user/admin_delete', {
 					username: self.user.username
 				}, self.delete_user_finish.bind(self));
@@ -404,7 +404,7 @@ Class.add(Page.Admin, {
 		var user = this.user;
 
 		// user id
-		html += get_form_table_row('Username',
+		html += get_form_table_row((window._t ? _t('admin_users.username') : 'Username'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><input type="text" id="fe_eu_username" size="20" style="font-size:14px;" value="' + escape_text_field_value(user.username) + '" spellcheck="false" onChange="$P().checkUserExists(\'eu\')"/></td>' +
 			'<td><div id="d_eu_valid" style="margin-left:5px; font-weight:bold;"></div></td>' +
@@ -414,18 +414,18 @@ Class.add(Page.Admin, {
 		html += get_form_table_spacer();
 
 		// account status
-		html += get_form_table_row( 'Account Status', '<select id="fe_eu_status">' + render_menu_options([['1','Active'], ['0','Suspended']], user.active) + '</select>' );
+		html += get_form_table_row( (window._t ? _t('admin_users.account_status') : 'Account Status'), '<select id="fe_eu_status">' + render_menu_options([['1','Active'], ['0','Suspended']], user.active) + '</select>' );
 		html += get_form_table_caption("'Suspended' means that the account remains in the system, but the user cannot log in.");
 		html += get_form_table_spacer();
 
 		// full name
-		html += get_form_table_row('Full Name', '<input type="text" id="fe_eu_fullname" size="30" value="' + escape_text_field_value(user.full_name) + '" spellcheck="false"/>');
+		html += get_form_table_row((window._t ? _t('admin_users.full_name') : 'Full Name'), '<input type="text" id="fe_eu_fullname" size="30" value="' + escape_text_field_value(user.full_name) + '" spellcheck="false"/>');
 		html += get_form_table_caption("User's first and last name.  They will not be shared with anyone outside the server.");
 		html += get_form_table_spacer();
 
 		// email
-		html += get_form_table_row('Email Address', '<input type="text" id="fe_eu_email" size="30" value="' + escape_text_field_value(user.email) + '" spellcheck="false"/>');
-		html += get_form_table_caption("This can be used to recover the password if the user forgets.  It will not be shared with anyone outside the server.");
+		html += get_form_table_row((window._t ? _t('admin_users.email_address') : 'Email Address'), '<input type="text" id="fe_eu_email" size="30" value="' + escape_text_field_value(user.email) + '" spellcheck="false"/>');
+		html += get_form_table_caption((window._t ? _t('admin_users.this_can_be_used_to_recover_the_password') : "This can be used to recover the password if the user forgets.  It will not be shared with anyone outside the server."));
 		html += get_form_table_spacer();
 
 		// password with ext_auth checkbox
@@ -436,7 +436,7 @@ Class.add(Page.Admin, {
 		html += get_form_table_row(user.password ? 'Change Password' : 'Password', `<input type="text" id="fe_eu_password" size="20" value="" spellcheck="false" ${pwdDisabledIfExtAuth}/>&nbsp;<span class="link addme" id="generate_pwd" onMouseUp="$P().generate_password()">&laquo; Generate Random</span>`);
 		html += get_form_table_caption(user.password ? "Optionally enter a new password here to reset it.  Please make it secure." : "Enter a password for the account.  Please make it secure.");
 		html += get_form_table_row('', `<input type="checkbox" ${userExtAuthChecked} id="fe_eu_extauth" onclick="$P().setExternalAuth()" />`);
-		html += get_form_table_caption("use external authentication (it cannot be changed once user is created)");
+		html += get_form_table_caption((window._t ? _t('admin_users.use_external_authentication_it_cannot_be') : "use external authentication (it cannot be changed once user is created)"));
 		html += get_form_table_spacer();
 
 		// privilege list
@@ -525,8 +525,8 @@ Class.add(Page.Admin, {
 
 		priv_html += '</div>';
 
-		html += get_form_table_row('Privileges', priv_html);
-		html += get_form_table_caption("Select which privileges the user account should have. Administrators have all privileges.");
+		html += get_form_table_row((window._t ? _t('admin_users.privileges') : 'Privileges'), priv_html);
+		html += get_form_table_caption((window._t ? _t('admin_users.select_which_privileges_the_user_account') : "Select which privileges the user account should have. Administrators have all privileges."));
 		html += get_form_table_spacer();
 
 		return html;
@@ -587,7 +587,7 @@ Class.add(Page.Admin, {
 					}
 				}
 
-				if (!num_cat_privs) return app.doError("Please select at least one category privilege.");
+				if (!num_cat_privs) return app.doError((window._t ? _t('admin_users.please_select_at_least_one_category_priv') : "Please select at least one category privilege."));
 			} // cat limit
 
 			// server group limit privs
@@ -604,7 +604,7 @@ Class.add(Page.Admin, {
 					}
 				}
 
-				if (!num_grp_privs) return app.doError("Please select at least one server group privilege.");
+				if (!num_grp_privs) return app.doError((window._t ? _t('admin_users.please_select_at_least_one_server_group_') : "Please select at least one server group privilege."));
 			} // grp limit
 		} // not admin
 

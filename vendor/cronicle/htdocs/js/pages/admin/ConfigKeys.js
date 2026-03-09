@@ -4,7 +4,7 @@ Class.add( Page.Admin, {
 	
 	gosub_conf_keys: function (args) {
 		// show Config Key list
-		app.setWindowTitle("Configs");
+		app.setWindowTitle((window._t ? _t('admin_config_keys.configs') : "Configs"));
 		var self = this;
 		self.div.addClass('loading');
 		self.secret = {};
@@ -31,7 +31,7 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'conf_keys',
 			[
 				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
+				['conf_keys', (window._t ? _t('admin_config_keys.configs') : "Configs")],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
@@ -41,7 +41,7 @@ Class.add( Page.Admin, {
 			]
 		);
 		
-		var cols = ['Config Key', 'Value', 'Action'];
+		var cols = ['Config Key', (window._t ? _t('admin_config_keys.value') : 'Value'), 'Action'];
 		
 		html += '<div style="padding:20px 20px 30px 20px"><div class="subtitle">Configs &nbsp;&nbsp;<div class="clear"></div></div>';
 		
@@ -71,11 +71,11 @@ Class.add( Page.Admin, {
 
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_conf_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Config Key...</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_conf_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.add_config_key') : 'Add Config Key...') + '</div></td>';
 		html += '<td width="40">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_reload_conf_key()"><i class="fa fa-refresh">&nbsp;&nbsp;</i>Reload</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_reload_conf_key()"><i class="fa fa-refresh">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.reload') : 'Reload') + '</div></td>';
 		html += '<td width="40">&nbsp;</td>';
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_conf()"><i class="fa fa-cog">&nbsp;&nbsp;</i>Config Viewer</div></td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_conf()"><i class="fa fa-cog">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.config_viewer') : 'Config Viewer') + '</div></td>';
 		html += '</tr></table></center>';
 
 		html += '</div>'; // padding
@@ -105,7 +105,7 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'new_conf_key',
 			[
 				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
+				['conf_keys', (window._t ? _t('admin_config_keys.configs') : "Configs")],
 				['secrets', "Secrets"],
 				['new_conf_key', "New Config Key"],
 				['api_keys', "API Keys"],
@@ -116,7 +116,7 @@ Class.add( Page.Admin, {
 			]
 		);
 		
-		html += '<div style="padding:20px;"><div class="subtitle">New Config Key</div></div>';
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('admin_config_keys.new_config_key') : 'New Config Key') + '</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -130,10 +130,10 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">' + (window._t ? _t('admin_config_keys.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
 				
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_conf_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Key</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_conf_key()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.create_key') : 'Create Key') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -162,12 +162,12 @@ Class.add( Page.Admin, {
 		if (!conf_key) return; // error
 		
 		if (!conf_key.title.length) {
-			return app.badField('#fe_ck_title', "Please enter Config Name");
+			return app.badField('#fe_ck_title', (window._t ? _t('admin_config_keys.please_enter_config_name') : "Please enter Config Name"));
 		}
 		
 		this.conf_key = conf_key;
 		
-		app.showProgress( 1.0, "Creating Config Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_config_keys.creating_config_key') : "Creating Config Key...") );
 		app.api.post( 'app/create_conf_key', conf_key, this.new_conf_key_finish.bind(this) );
 	},
 	
@@ -178,7 +178,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=edit_conf_key&id=' + resp.id);
 		
 		setTimeout( function() {
-			app.showMessage('success', "The new Config Key was created successfully.");
+			app.showMessage('success', (window._t ? _t('admin_config_keys.the_new_config_key_was_created_successfu') : "The new Config Key was created successfully."));
 		}, 150 );
 	},
 	
@@ -199,7 +199,7 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'edit_conf_key',
 			[
 				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
+				['conf_keys', (window._t ? _t('admin_config_keys.configs') : "Configs")],
 				['secrets', "Secrets"],
 				['edit_conf_key', "Edit Config Key"],
 				['api_keys', "API Keys"],
@@ -222,11 +222,11 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">Cancel</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_conf_key_edit()">' + (window._t ? _t('admin_config_keys.cancel') : 'Cancel') + '</div></td>';
 				html += '<td width="40">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_conf_key_dialog()">Delete Key...</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().show_delete_conf_key_dialog()">' + (window._t ? _t('admin_config_keys.delete_key') : 'Delete Key...') + '</div></td>';
 				html += '<td width="40">&nbsp;</td>';
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_save_conf_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>';
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_save_conf_key()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_config_keys.save_changes') : 'Save Changes') + '</div></td>';
 				html += '<td width="40">&nbsp;</td>';
 				html +=  '<td><div class="button" style="width:120px;" onMouseUp="$P().edit_conf_key(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i> New </div></td>';
 			html += '</tr></table>';
@@ -250,7 +250,7 @@ Class.add( Page.Admin, {
 		
 		this.conf_key = conf_key;
 		
-		app.showProgress( 1.0, "Saving Config Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_config_keys.saving_config_key') : "Saving Config Key...") );
 		app.api.post( 'app/update_conf_key', conf_key, this.save_conf_key_finish.bind(this) );
 	},
 
@@ -296,21 +296,21 @@ Class.add( Page.Admin, {
 	save_conf_key_finish: function(resp, tx) {
 		// new Config Key saved successfully
 		app.hideProgress();
-		app.showMessage('success', "The Config Key was saved successfully.");
+		app.showMessage('success', (window._t ? _t('admin_config_keys.the_config_key_was_saved_successfully') : "The Config Key was saved successfully."));
 		window.scrollTo( 0, 0 );
 	},
 
 	do_reload_conf_key: function(args) {
 		// save changes to Config Key
 		app.clearError();
-		app.showProgress( 1.0, "Reloading Config Key..." );
+		app.showProgress( 1.0, (window._t ? _t('admin_config_keys.reloading_config_key') : "Reloading Config Key...") );
 		app.api.post( 'app/reload_conf_key', args, this.reload_conf_key_finish.bind(this) );
 	},
 	
 	reload_conf_key_finish: function(resp, tx) {
 		// new Config Key saved successfully
 		app.hideProgress();
-		app.showMessage('success', "Configs were reloaded successfully.");
+		app.showMessage('success', (window._t ? _t('admin_config_keys.configs_were_reloaded_successfully') : "Configs were reloaded successfully."));
 		window.scrollTo( 0, 0 );
 	},
 
@@ -320,7 +320,7 @@ Class.add( Page.Admin, {
 		var self = this;
 		app.confirm( '<span style="color:red">Delete Config Key</span>', "Are you sure you want to <b>permanently delete</b> the Config Key \""+this.conf_key.title+"\"?  There is no way to undo this action.", 'Delete', function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Deleting Config Key..." );
+				app.showProgress( 1.0, (window._t ? _t('admin_config_keys.deleting_config_key') : "Deleting Config Key...") );
 				app.api.post( 'app/delete_conf_key', self.conf_key, self.delete_conf_key_finish.bind(self) );
 			}
 		} );
@@ -347,12 +347,12 @@ Class.add( Page.Admin, {
         // title
         var disableConfTitle = ''
         if(conf_key.title) disableConfTitle = 'disabled' // let edit only if new
-        html += get_form_table_row( 'Config Title', `<input type="text" id="fe_ck_title" size="86" value="${escape_text_field_value(conf_key.title)}" spellcheck="false" ${disableConfTitle}/>` );
-        html += get_form_table_caption( "For nested properties use . (e.g. servers.worker1)");
+        html += get_form_table_row( (window._t ? _t('admin_config_keys.config_title') : 'Config Title'), `<input type="text" id="fe_ck_title" size="86" value="${escape_text_field_value(conf_key.title)}" spellcheck="false" ${disableConfTitle}/>` );
+        html += get_form_table_caption( (window._t ? _t('admin_config_keys.for_nested_properties_use_eg_serverswork') : "For nested properties use . (e.g. servers.worker1)"));
         html += get_form_table_spacer();
 
         // Config  Value
-        html += get_form_table_row( 'Type', `
+        html += get_form_table_row( (window._t ? _t('admin_config_keys.type') : 'Type'), `
         <select name="ck_type" id="fe_ck_type" onchange="toggleCkType();">
           <option value="string">String</option>
 		  <option value="bool">Boolean</option>
@@ -389,7 +389,7 @@ Class.add( Page.Admin, {
         </script>
         ` );
 
-        html += get_form_table_caption( "Choose value type" );
+        html += get_form_table_caption( (window._t ? _t('admin_config_keys.choose_value_type') : "Choose value type") );
         html += get_form_table_spacer();
 
                 // Config  Type
@@ -398,7 +398,7 @@ Class.add( Page.Admin, {
 		let isBool = conf_key.type == 'bool'
 		let isText = !isString && !isBool
 
-		html += get_form_table_row( 'Value', `
+		html += get_form_table_row( (window._t ? _t('admin_config_keys.value') : 'Value'), `
 		<input type="text" style="${isString ? '' : 'display: none'}" id="fe_ck_key" size="73" value="${escape_text_field_value(conf_key.key)}" spellcheck="false"/>
 		<input type="checkbox" style="${isBool ? '' : 'display: none'}" id="fe_ck_key_bool" ${conf_key.key ? 'checked' : ''}></input>
 		<div id="conf_editor_div" style="width: 40rem;${isText? '' : 'display: none' }" ><textarea id="fe_ee_conf_editor" ></textarea></div>
@@ -429,13 +429,13 @@ Class.add( Page.Admin, {
 
 		` );
 
-        // html += get_form_table_caption( "For boolean use 0/1 or true/false" );
+        // html += get_form_table_caption( (window._t ? _t('admin_config_keys.for_boolean_use_01_or_truefalse') : "For boolean use 0/1 or true/false") );
         html += get_form_table_spacer();
 
 
         // description
-        html += get_form_table_row('Description', '<textarea id="fe_ck_desc" style="width:40rem; height:100px; resize:vertical;">'+escape_text_field_value(conf_key.description)+'</textarea>');
-        html += get_form_table_caption( "Config purpose (optional)" );
+        html += get_form_table_row((window._t ? _t('admin_config_keys.description') : 'Description'), '<textarea id="fe_ck_desc" style="width:40rem; height:100px; resize:vertical;">'+escape_text_field_value(conf_key.description)+'</textarea>');
+        html += get_form_table_caption( (window._t ? _t('admin_config_keys.config_purpose_optional') : "Config purpose (optional)") );
         html += get_form_table_spacer();
 
         return html;
@@ -457,7 +457,7 @@ Class.add( Page.Admin, {
         conf_key.description = $('#fe_ck_desc').val();
 
         if (conf_key.key === "") {
-            return app.badField('#fe_ck_key', "Please enter an Config Key string");
+            return app.badField('#fe_ck_key', (window._t ? _t('admin_config_keys.please_enter_an_config_key_string') : "Please enter an Config Key string"));
         }
 
         return conf_key;

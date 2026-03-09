@@ -24,7 +24,7 @@ app.extend({
 	receiveConfig: function(resp) {
 		// receive config from server
 		if (resp.code) {
-			app.showProgress( 1.0, "Waiting for manager server..." );
+			app.showProgress( 1.0, (window._t ? _t('app.waiting_for_manager_server') : "Waiting for manager server...") );
 			setTimeout( function() { load_script( 'api/app/config' ); }, 1000 );
 			return;
 		}
@@ -134,11 +134,11 @@ app.extend({
 		let avatarUrl = this.getUserAvatarURL( this.retina ? 64 : 32 )
 		let html = `
 		<div id="d_header_divider" class="right" style="margin-right:0;"></div>
-		<div class="header_option logout right" onMouseUp="app.doUserLogout()"><i class="fa fa-power-off fa-lg">&nbsp;&nbsp;</i>Logout</div>
+		<div class="header_option logout right" onMouseUp="app.doUserLogout()"><i class="fa fa-power-off fa-lg">&nbsp;&nbsp;</i>${window._t ? _t('header.logout') : 'Logout'}</div>
 		<div id="d_header_divider" class="right"></div>
 		<div id="d_theme_ctrl" class="header_option right" onmouseup="app.toggleTheme()"></div>
 		<div id="d_header_divider" class="right"></div>
-		<div id="d_lang_ctrl" class="header_option right" onmouseup="app.toggleLang()" title="Language: ${window.I18n ? I18n.languages[I18n.getLang()] || I18n.getLang() : 'en'}"><i class="mdi mdi-translate mdi-lg"></i></div>
+		<div id="d_lang_ctrl" class="header_option right" onmouseup="app.toggleLang()" title="${window.I18n ? I18n.languages[I18n.getLang()] || '' : ''}" style="cursor:pointer"><i class="mdi mdi-translate mdi-lg"></i>&nbsp;${window.I18n ? (I18n.getLang() === 'en' ? 'EN' : '中') : 'EN'}</div>
 		<div id="d_header_divider" class="right"></div>
 		<div id="d_header_user_bar" class="right" style="background-image:url(${avatarUrl})" onMouseUp="app.doMyAccount()">${userName}</div>
 		`
@@ -215,7 +215,7 @@ app.extend({
 		
 		if (!bad_cookie) {
 			// user explicitly logging out
-			this.showProgress(1.0, "Logging out...");
+			this.showProgress(1.0, (window._t ? _t('app.logging_out') : "Logging out..."));
 			this.setPref('username', '');
 		}
 		
@@ -256,10 +256,10 @@ app.extend({
 			setTimeout( function() {
 				if (!app.config.external_users) {
 					if (bad_cookie) {
-						self.showMessage('error', "Your session has expired.  Please log in again.");
+						self.showMessage('error', (window._t ? _t('app.your_session_has_expired_please_log_in_a') : "Your session has expired.  Please log in again."));
 						console.log('bad cookieee', bad_cookie)
 					}
-					else self.showMessage('success', "You were logged out successfully.");
+					else self.showMessage('success', (window._t ? _t('app.you_were_logged_out_successfully') : "You were logged out successfully."));
 				}
 				
 				self.activeJobs = {};
@@ -289,7 +289,7 @@ app.extend({
 			}
 			else if (resp.location) {
 				Debug.trace("External User API requires redirect");
-				app.showProgress(1.0, "Logging in...");
+				app.showProgress(1.0, (window._t ? _t('app.logging_in') : "Logging in..."));
 				setTimeout( function() { window.location = resp.location; }, 250 );
 			}
 			else app.doError(resp.description || "Unknown login error.");
@@ -302,7 +302,7 @@ app.extend({
 		url += (url.match(/\?/) ? '&' : '?') + 'logout=1';
 		
 		Debug.trace("External User API requires redirect");
-		app.showProgress(1.0, "Logging out...");
+		app.showProgress(1.0, (window._t ? _t('app.logging_out') : "Logging out..."));
 		setTimeout( function() { window.location = url; }, 250 );
 	},
 
@@ -381,7 +381,7 @@ app.extend({
 		
 		socket.on('reconnecting', function() {
 			Debug.trace("socket.io reconnecting...");
-			// self.showProgress( 0.5, "Reconnecting to server..." );
+			// self.showProgress( 0.5, (window._t ? _t('app.reconnecting_to_server') : "Reconnecting to server...") );
 		} );
 		
 		socket.on('reconnect', function() {
@@ -584,7 +584,7 @@ app.extend({
 		// Oops, we're connected to a worker!  manager must have been restarted.
 		// If worker knows who is manager, switch now, otherwise go into wait loop
 		var self = this;
-		this.showProgress( 1.0, "Waiting for manager server..." );
+		this.showProgress( 1.0, (window._t ? _t('app.waiting_for_manager_server') : "Waiting for manager server...") );
 		this.waitingFormanager = true;
 		
 		if (data.manager_hostname) {
@@ -686,7 +686,7 @@ app.extend({
 		// $('#d_tab_manager > i').removeClass().addClass('fa fa-spin fa-spinner');
 		
 		app.api.post( 'app/update_manager_state', { enabled: enabled }, function(resp) {
-			app.showMessage('success', "Scheduler has been " + (enabled ? 'enabled' : 'disabled') + ".");
+			app.showMessage('success', (window._t ? _t('app.scheduler_has_been') : "Scheduler has been ") + (enabled ? 'enabled' : 'disabled') + ".");
 			self.state.enabled = enabled;
 			self.updatemanagerSwitch();
 		} );

@@ -59,7 +59,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		`, '', "Import", function (result) {
 			if (result) {
 				var importData = document.getElementById('conf_import').value;
-				app.showProgress(1.0, "Importing...");
+				app.showProgress(1.0, (window._t ? _t('schedule.importing') : "Importing..."));
 				app.api.post('app/import', { txt: importData }, function (resp) {
 					app.hideProgress();
 					var resultList = resp.result || []
@@ -177,9 +177,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// FILE EDITOR ON SHELLPLUG'
 		let html = '<table>' +
-			get_form_table_row('Name', `<input type="text" id="fe_ee_pp_file_name" size="40" value="" spellcheck="false"/>`) +
+			get_form_table_row((window._t ? _t('schedule.name') : 'Name'), `<input type="text" id="fe_ee_pp_file_name" size="40" value="" spellcheck="false"/>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Content', `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110"></textarea>`)
+			get_form_table_row((window._t ? _t('schedule.content') : 'Content'), `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110"></textarea>`)
 		html += `</table>`
 
 		setTimeout(() => self.setFileEditor('.text'), 30) // editor needs to wait for a bit for modal window to render
@@ -193,7 +193,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 				let name = $("#fe_ee_pp_file_name").val()
 
 				if (!name || files.map(e => e.name).indexOf(name) > -1) {
-					app.showMessage('error', "Invalid Name")
+					app.showMessage('error', (window._t ? _t('schedule.invalid_name') : "Invalid Name"))
 				}
 				else {
 					let content = $("#fe_ee_pp_file_content").val()
@@ -221,9 +221,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		if (!file) return // sanity check
 
 		let html = '<table>' +
-			get_form_table_row('Name', `<input type="text" id="fe_ee_pp_file_name" size="40" value="${file.name}" spellcheck="false">`) +
+			get_form_table_row((window._t ? _t('schedule.name') : 'Name'), `<input type="text" id="fe_ee_pp_file_name" size="40" value="${file.name}" spellcheck="false">`) +
 			get_form_table_spacer() +
-			get_form_table_row('Content', `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110">${file.content}</textarea>`)
+			get_form_table_row((window._t ? _t('schedule.content') : 'Content'), `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110">${file.content}</textarea>`)
 		html += '</table>'
 
 		setTimeout(() => self.setFileEditor(file.name), 30) // editor needs to wait for a bit for modal window to render
@@ -236,7 +236,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 				let name = $("#fe_ee_pp_file_name").val()
 
 				if (!name.trim()) {
-					app.showMessage('error', "Invalid Name")
+					app.showMessage('error', (window._t ? _t('schedule.invalid_name') : "Invalid Name"))
 				}
 				else {
 					file.name = name
@@ -270,13 +270,13 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	 */
 
 	render_wf_event_list: function () {
-		let cols = ['#', "Run", '@', 'Id', 'Title', 'Argument', ' '];
+		let cols = ['#', "Run", '@', 'Id', 'Title', (window._t ? _t('schedule.argument') : 'Argument'), ' '];
 		let wf_events = this.event.workflow || []
 
 		let table = '<table id="wf_event_list_table" class="data_table"><tr><th>' + cols.join('</th><th>').replace(/\s+/g, '&nbsp;') + '</th></tr>';
 
 		if (wf_events.length === 0) {
-			table += '<tr><td></td><td></td><td></td><td></td><td><b>No event found</b></td><td></td></tr>'
+			table += '<tr><td></td><td></td><td></td><td></td><td><b>' + (window._t ? _t('schedule.no_event_found') : 'No event found') + '</b></td><td></td></tr>'
 		}
 		// '<input type="checkbox" style="cursor:pointer" onChange="$P().change_event_enabled(' + idx + ')" ' + (item.enabled ? 'checked="checked"' : '') + '/>',
 		let schedTitles = {};
@@ -394,11 +394,11 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		let el_style = 'width: 240px; font-size:16px;'
 		let html = '<table>' +  //<option value="">(Select Event)</option>
-			get_form_table_row('Event', `<select id="fe_ee_pp_wf_select_event" style="${el_style}">${event_menu}</select>`) +
+			get_form_table_row((window._t ? _t('schedule.event') : 'Event'), `<select id="fe_ee_pp_wf_select_event" style="${el_style}">${event_menu}</select>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Job Argument', `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="" spellcheck="false"/>`) +
+			get_form_table_row((window._t ? _t('schedule.job_argument') : 'Job Argument'), `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="" spellcheck="false"/>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Skip', `<input type="checkbox" style="cursor:pointer" id="fe_ee_pp_wf_evt_skip" />`) +
+			get_form_table_row((window._t ? _t('schedule.skip') : 'Skip'), `<input type="checkbox" style="cursor:pointer" id="fe_ee_pp_wf_evt_skip" />`) +
 			'</table>'
 
 		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i> Add Event', html, "Add", function (result) {
@@ -407,7 +407,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (result) {
 
 				let evt = find_object(all_events, { id: $('#fe_ee_pp_wf_select_event').find(":selected").val() })
-				if (!evt) { app.showMessage('error', "Please select valid event") }
+				if (!evt) { app.showMessage('error', (window._t ? _t('schedule.please_select_valid_event') : "Please select valid event")) }
 				else {
 					evt.arg = $('#fe_ee_pp_wf_evt_arg').val()
 					self.event.workflow.push(evt)
@@ -431,9 +431,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let event_list = render_menu_options([evt], evt.id)
 		let el_style = 'width: 240px;  font-size:16px;'
 		let html = '<table>' +
-			get_form_table_row('Event', `<select id="fe_ee_pp_wf_select_event" style="${el_style}" disabled>${event_list}</select>`) +
+			get_form_table_row((window._t ? _t('schedule.event') : 'Event'), `<select id="fe_ee_pp_wf_select_event" style="${el_style}" disabled>${event_list}</select>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Job Argument', `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="${evt.arg}" spellcheck="false"/>`) +
+			get_form_table_row((window._t ? _t('schedule.job_argument') : 'Job Argument'), `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="${evt.arg}" spellcheck="false"/>`) +
 			'</table>'
 
 		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i>Edit Event Options', html, "OK", function (result) {
@@ -509,6 +509,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += '</div>';
 
 		html += '<div style="margin-top:5px;">';
+		html += '<div class="data_table_scroll_wrapper">';
 		html += '<table class="data_table" width="100%">';
 		html += '<tr><th style="white-space:nowrap;">' + cols.join('</th><th style="white-space:nowrap;">') + '</th></tr>';
 
@@ -530,6 +531,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		}
 
 		html += '</table>';
+		html += '</div>'; // data_table_scroll_wrapper
 		html += '</div>';
 
 		return html;
@@ -645,7 +647,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	gosub_events: function (args) {
 		// render table of events with filters and search
 		this.div.removeClass('loading');
-		app.setWindowTitle("Scheduled Events");
+		app.setWindowTitle((window._t ? _t('schedule.scheduled_events') : "Scheduled Events"));
 		const self = this
 
 		var size = get_inner_window_size();
@@ -666,14 +668,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// render table
 		var cols = [
 			'<i class="fa fa-check-square-o"></i>',
-			'Event Name',
-			'Category',
-			'Plugin',
-			'Target',
-			'Timing',
-			'Status',
-			'Modified',
-			'Actions'
+			(window._t ? _t('schedule.event_name') : 'Event Name'),
+			(window._t ? _t('schedule.category') : 'Category'),
+			(window._t ? _t('schedule.plugin') : 'Plugin'),
+			(window._t ? _t('schedule.target') : 'Target'),
+			(window._t ? _t('schedule.timing') : 'Timing'),
+			(window._t ? _t('schedule.status') : 'Status'),
+			(window._t ? _t('schedule.modified') : 'Modified'),
+			(window._t ? _t('schedule.actions') : 'Actions')
 		];
 
 		// apply filters
@@ -789,17 +791,17 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let isGrid = eventView === 'grid' || eventView === 'gridall'
 
 		html += `
-		 <div class="subtitle flex-container" style="height:auto;padding:8px">
-		 <div style="width: calc(45%)">Scheduled Events ${cycleWarning}</div>
-		 <div class="flex-container" style="width:calc(10%)">${miniButtons}</div>
-		 <div style="width: calc(45%);padding-right:10px">
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_target" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Servers</option>${this.render_target_menu_options(args.target)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_plugin" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Plugins</option>${render_menu_options(app.plugins, args.plugin, false)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_cat" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Cats</option>${render_menu_options(app.categories, args.category, false)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_enabled" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Events</option>${render_menu_options([[1, 'Enabled'], [-1, 'Disabled'], ['success', "Last Run Success"], ['error', "Last Run Error"], ["chained", "Chained"]], args.enabled, false)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_event_view" class="subtitle_menu" style="width:70px;" onChange="$P().change_event_view(this.value)"><option value="">Details</option>${render_menu_options([['grid', 'Grid'], ['gridall', "Grid-All"]], eventView, false)}</select></div>
-		 </div>          
-		 
+		 <div class="subtitle flex-container" style="height:auto;padding:8px;flex-wrap:nowrap">
+		 <div style="flex:0 0 auto;white-space:nowrap">${(window._t ? _t('schedule.scheduled_events_subtitle') : 'Scheduled Events')} ${cycleWarning}</div>
+		 <div class="flex-container" style="flex:0 0 auto">${miniButtons}</div>
+		 <div style="flex:1 1 auto;display:flex;flex-wrap:nowrap;justify-content:flex-end;align-items:center;gap:2px;overflow-x:auto">
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_target" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_servers') : 'All Servers')}</option>${this.render_target_menu_options(args.target)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_plugin" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_plugins') : 'All Plugins')}</option>${render_menu_options(app.plugins, args.plugin, false)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_cat" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_cats') : 'All Cats')}</option>${render_menu_options(app.categories, args.category, false)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_enabled" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">${(window._t ? _t('schedule.all_events') : 'All Events')}</option>${render_menu_options([[1, (window._t ? _t('schedule.enabled') : 'Enabled')], [-1, (window._t ? _t('schedule.disabled') : 'Disabled')], ['success', (window._t ? _t('schedule.last_run_success') : "Last Run Success")], ['error', (window._t ? _t('schedule.last_run_error') : "Last Run Error")], ["chained", (window._t ? _t('schedule.chained') : "Chained")]], args.enabled, false)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_event_view" class="subtitle_menu" style="width:70px;" onChange="$P().change_event_view(this.value)"><option value="">${(window._t ? _t('schedule.details') : 'Details')}</option>${render_menu_options([['grid', (window._t ? _t('schedule.grid') : 'Grid')], ['gridall', (window._t ? _t('schedule.grid_all') : "Grid-All")]], eventView, false)}</select></div>
+		 </div>
+
 		</div>
 		<div class="clear"></div>
 		`
@@ -844,7 +846,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		</div>
 		`
 		// searchBar
-		cols.headerCenter = `<div style="padding-bottom:8px;padding-right:12px"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_sch_keywords" size="25" onfocus="this.placeholder=''" placeholder="Find events..." class="event-search" autocomplete="one-time-code" value="${escape_text_field_value(args.keywords)}"/></div>`
+		cols.headerCenter = `<div style="padding-bottom:8px;padding-right:12px"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_sch_keywords" size="25" onfocus="this.placeholder=''" placeholder="${(window._t ? _t('schedule.find_events') : 'Find events...')}" class="event-search" autocomplete="one-time-code" value="${escape_text_field_value(args.keywords)}"/></div>`
 
 		// render table
 		let last_group = '';
@@ -1098,23 +1100,23 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += ` <center><table><tr><div style="height:30px;"></div>`
 
 		if (app.hasPrivilege('create_events')) {
-			html += `<td><div class="button" style="width:130px;" onMouseUp="$P().edit_event(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Event...</div></td>
+			html += `<td><div class="button" style="width:130px;" onMouseUp="$P().edit_event(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>${window._t ? _t('schedule.add_event') : 'Add Event...'}</div></td>
 			<td width="40">&nbsp;</td>
-			<td><div class="button" style="width:130px;" onMouseUp="$P().do_random_event()"><i class="fa fa-bolt">&nbsp;&nbsp;</i>Generate</div></td>
+			<td><div class="button" style="width:130px;" onMouseUp="$P().do_random_event()"><i class="fa fa-bolt">&nbsp;&nbsp;</i>${window._t ? _t('schedule.generate') : 'Generate'}</div></td>
 			<td width="40">&nbsp;</td>
 			`
 		}
 
 		// backup/restore buttons - admin only
 		if (app.isAdmin()) {
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().export_schedule()"><i class="fa fa-download">&nbsp;&nbsp;</i>Backup</div></td><td width="40">&nbsp;</td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().export_schedule()"><i class="fa fa-download">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.backup') : 'Backup') + '</div></td><td width="40">&nbsp;</td>';
 
 			if (app.schedule.length === 0) {  // only show import button if there are no scheduled jobs yet
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().import_schedule()"><i class="fa fa-upload">&nbsp;&nbsp;</i>Import</div></td><td width="40">&nbsp;</td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().import_schedule()"><i class="fa fa-upload">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.import') : 'Import') + '</div></td><td width="40">&nbsp;</td>';
 			}
 		}
 
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_graph()"><i class="fa fa-pie-chart">&nbsp;&nbsp;</i>Show Graph</div></td><td width="40">&nbsp;</td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_graph()"><i class="fa fa-pie-chart">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.show_graph') : 'Show Graph') + '</div></td><td width="40">&nbsp;</td>';
 		this.div.html(html);
 		this.update_job_last_runs();
 
@@ -1270,7 +1272,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 						catch_up: event.catch_up || 0
 					};
 
-					app.showProgress(1.0, "Updating Event...");
+					app.showProgress(1.0, (window._t ? _t('schedule.updating_event') : "Updating Event..."));
 
 					app.api.post('app/toggle_event', stub, function (resp) {
 						app.hideProgress();
@@ -1356,7 +1358,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// check for active jobs first
 		var jobs = find_objects(app.activeJobs, { event: event.id });
-		if (jobs.length) return app.doError("Sorry, you cannot delete an event that has active jobs running.");
+		if (jobs.length) return app.doError((window._t ? _t('schedule.sorry_you_cannot_delete_an_event_that_ha') : "Sorry, you cannot delete an event that has active jobs running."));
 
 		var msg = "Are you sure you want to delete the event <b>" + event.title + "</b>?";
 
@@ -1370,7 +1372,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// proceed with delete
 		app.confirm('<span style="color:red">Delete Event</span>', msg, "Delete", function (result) {
 			if (result) {
-				app.showProgress(1.0, "Deleting Event...");
+				app.showProgress(1.0, (window._t ? _t('schedule.deleting_event') : "Deleting Event..."));
 				app.api.post('app/delete_event', event, function (resp) {
 					app.hideProgress();
 					app.showMessage('success', "Event '" + event.title + "' was deleted successfully.");
@@ -1420,12 +1422,12 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		html += this.getSidebarTabs('new_event',
 			[
-				['events', "Schedule"],
+				['events', (window._t ? _t('schedule.schedule') : "Schedule")],
 				['new_event', "Add New Event"]
 			]
 		);
 
-		html += '<div style="padding:20px;"><div class="subtitle">Add New Event</div></div><div style="padding:0px 20px 50px 20px"><center><table style="margin:0;">';
+		html += '<div style="padding:20px;"><div class="subtitle">' + (window._t ? _t('schedule.add_new_event') : 'Add New Event') + '</div></div><div style="padding:0px 20px 50px 20px"><center><table style="margin:0;">';
 
 		if (this.event_copy) {
 			// copied from existing event
@@ -1457,9 +1459,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		<tr><td colspan="2" align="center">
 		<div style="height:30px;"></div>
 		<table><tr>
-		<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">Cancel</div></td>
+		<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">' + (window._t ? _t('schedule.cancel') : 'Cancel') + '</div></td>
 		<td width="50">&nbsp;</td>
-		<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_event()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Event</div></td>
+		<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_event()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('schedule.create_event') : 'Create Event') + '</div></td>
 		</tr></table>
 		</td></tr>
 		</table></center>
@@ -1488,7 +1490,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Creating event...");
+		app.showProgress(1.0, (window._t ? _t('schedule.creating_event') : "Creating event..."));
 		app.api.post('app/create_event', event, this.new_event_finish.bind(this));
 	},
 
@@ -1506,7 +1508,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Creating event...");
+		app.showProgress(1.0, (window._t ? _t('schedule.creating_event') : "Creating event..."));
 		app.api.post('app/create_event', event, this.new_event_finish.bind(this));
 	},
 
@@ -1535,7 +1537,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	gosub_edit_event: function (args) {
 		// edit event subpage
 		var event = find_object(app.schedule, { id: args.id });
-		if (!event) return app.doError("Could not locate Event with ID: " + args.id);
+		if (!event) return app.doError((window._t ? _t('schedule.could_not_locate_event_with_id') : "Could not locate Event with ID: ") + args.id);
 
 		// this.wf = event.workflow || []
 		// this.files = event.files || []
@@ -1559,9 +1561,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		this.div.removeClass('loading');
 
 		var side_tabs = [];
-		side_tabs.push(['events', "Schedule"]);
+		side_tabs.push(['events', (window._t ? _t('schedule.schedule') : "Schedule")]);
 		if (app.hasPrivilege('create_events')) side_tabs.push(['new_event', "Add New Event"]);
-		side_tabs.push(['edit_event', "Edit Event"]);
+		side_tabs.push(['edit_event', (window._t ? _t('schedule.edit_event') : "Edit Event")]);
 
 		html += this.getSidebarTabs('edit_event', side_tabs);
 
@@ -1584,8 +1586,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// Internal ID
 		if (this.isAdmin()) {
-			html += get_form_table_row('Event ID', '<div style="font-size:14px;">' + event.id + '</div>');
-			html += get_form_table_caption("The internal event ID used for API calls.  This cannot be changed.");
+			html += get_form_table_row((window._t ? _t('schedule.event_id') : 'Event ID'), '<div style="font-size:14px;">' + event.id + '</div>');
+			html += get_form_table_caption((window._t ? _t('schedule.the_internal_event_id_used_for_api_calls') : "The internal event ID used for API calls.  This cannot be changed."));
 			html += '<br>'
 			html += get_form_table_spacer();
 		}
@@ -1595,27 +1597,27 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += '<tr><td colspan="2" align="center"><div style="height:30px;"></div><table><tr>';
 
 		// cancel
-		html += '<td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">Cancel</div></td>';
+		html += '<td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">' + (window._t ? _t('schedule.cancel') : 'Cancel') + '</div></td>';
 
 		// delete
 		if (app.hasPrivilege('delete_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().delete_event(\'edit\')">Delete Event...</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().delete_event(\'edit\')">' + (window._t ? _t('schedule.delete_event') : 'Delete Event...') + '</div></td>';
 		}
 
 		// copy
 		if (app.hasPrivilege('create_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_event()">Copy Event...</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_event()">' + (window._t ? _t('schedule.copy_event') : 'Copy Event...') + '</div></td>';
 		}
 
 		// run
 		if (app.hasPrivilege('run_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().run_event_from_edit(event)">Run Now</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().run_event_from_edit(event)">' + (window._t ? _t('schedule.run_now') : 'Run Now') + '</div></td>';
 		}
 
 		// save
 		html += `
 		<td width="30">&nbsp;</td>
-		<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_event()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>
+		<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_event()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>${(window._t ? _t('schedule.save_changes') : 'Save Changes')}</div></td>
 		</tr></table>
 		</td></tr>
 		</table>
@@ -1689,7 +1691,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Saving event...");
+		app.showProgress(1.0, (window._t ? _t('schedule.saving_event') : "Saving event..."));
 		app.api.post('app/update_event', event, this.save_event_finish.bind(this));
 	},
 
@@ -1699,7 +1701,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		var event = this.event;
 
 		app.hideProgress();
-		app.showMessage('success', "The event was saved successfully.");
+		app.showMessage('success', (window._t ? _t('schedule.the_event_was_saved_successfully') : "The event was saved successfully."));
 		window.scrollTo(0, 0);
 
 		// copy active jobs to array
@@ -1713,14 +1715,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		if (this.old_event.enabled && !event.enabled && jobs.length && !parseInt(event.repeat)) {
 			app.confirm('<span style="color:red">Abort Jobs</span>', "There " + ((jobs.length != 1) ? 'are' : 'is') + " currently still " + jobs.length + " active " + pluralize('job', jobs.length) + " using the disabled event <b>" + event.title + "</b>.  Do you want to abort " + ((jobs.length != 1) ? 'these' : 'it') + " now?", "Abort", function (result) {
 				if (result) {
-					app.showProgress(1.0, "Aborting " + pluralize('Job', jobs.length) + "...");
+					app.showProgress(1.0, (window._t ? _t('schedule.aborting') : "Aborting ") + pluralize('Job', jobs.length) + "...");
 					app.api.post('app/abort_jobs', { event: event.id }, function (resp) {
 						app.hideProgress();
 						if (resp.count > 0) {
 							app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " aborted successfully.");
 						}
 						else {
-							app.showMessage('warning', "No jobs were aborted.  It is likely they completed while the dialog was up.");
+							app.showMessage('warning', (window._t ? _t('schedule.no_jobs_were_aborted_it_is_likely_they_c') : "No jobs were aborted.  It is likely they completed while the dialog was up."));
 						}
 					});
 				} // clicked Abort
@@ -1750,14 +1752,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (need_update && jobs.length) {
 				app.confirm('Update Jobs', "This event currently has " + jobs.length + " active " + pluralize('job', jobs.length) + ".  Do you want to update " + ((jobs.length != 1) ? 'these' : 'it') + " as well?", "Update", function (result) {
 					if (result) {
-						app.showProgress(1.0, "Updating " + pluralize('Job', jobs.length) + "...");
+						app.showProgress(1.0, (window._t ? _t('schedule.updating') : "Updating ") + pluralize('Job', jobs.length) + "...");
 						app.api.post('app/update_jobs', { event: event.id, updates: updates }, function (resp) {
 							app.hideProgress();
 							if (resp.count > 0) {
 								app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " updated successfully.");
 							}
 							else {
-								app.showMessage('warning', "No jobs were updated.  It is likely they completed while the dialog was up.");
+								app.showMessage('warning', (window._t ? _t('schedule.no_jobs_were_updated_it_is_likely_they_c') : "No jobs were updated.  It is likely they completed while the dialog was up."));
 							}
 						});
 					} // clicked Update
@@ -1785,13 +1787,13 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// event title
 		//let evt_tip = event.id ? "" : "pro-tip: embed id in title as bracketed prefix, e.g. [event_id] event_title"
-		html += get_form_table_row('Event Name', `<input type="text" id="fe_ee_title" size="35" value="` + escape_text_field_value(event.title) + '" spellcheck="false"/>');
-		html += get_form_table_caption("Enter a title for the event, which will be displayed on the main schedule.");
+		html += get_form_table_row((window._t ? _t('schedule.event_name') : 'Event Name'), `<input type="text" id="fe_ee_title" size="35" value="` + escape_text_field_value(event.title) + '" spellcheck="false"/>');
+		html += get_form_table_caption((window._t ? _t('schedule.enter_a_title_for_the_event_which_will_b') : "Enter a title for the event, which will be displayed on the main schedule."));
 		html += get_form_table_spacer();
 
 		// event enabled
 		html += get_form_table_row('Schedule', '<input type="checkbox" id="fe_ee_enabled" value="1" ' + (event.enabled ? 'checked="checked"' : '') + '/><label for="fe_ee_enabled">Event Enabled</label>');
-		html += get_form_table_caption("Select whether the event should be enabled or disabled in the schedule.");
+		html += get_form_table_caption((window._t ? _t('schedule.select_whether_the_event_should_be_enabl') : "Select whether the event should be enabled or disabled in the schedule."));
 		html += get_form_table_spacer();
 
 		// category
@@ -1800,28 +1802,28 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
 		});
 
-		html += get_form_table_row('Category',
+		html += get_form_table_row((window._t ? _t('schedule.category') : 'Category'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><select id="fe_ee_cat" onMouseDown="this.options[0].disabled=true"><option value="">Select Category</option>' + render_menu_options(app.categories, event.category, false) + '</select></td>' +
 			(app.isAdmin() ? '<td><span class="link addme" style="padding-left:5px; font-size:13px;" title="Add New Category" onMouseUp="$P().show_quick_add_cat_dialog()">&laquo; Add New...</span></td>' : '') +
 			'</tr></table>'
 		);
-		html += get_form_table_caption("Select a category for the event (this may limit the max concurrent jobs, etc.)");
+		html += get_form_table_caption((window._t ? _t('schedule.select_a_category_for_the_event_this_may') : "Select a category for the event (this may limit the max concurrent jobs, etc.)"));
 		html += get_form_table_spacer();
 
 		// target (server group or individual server)
-		html += get_form_table_row('Target',
+		html += get_form_table_row((window._t ? _t('schedule.target') : 'Target'),
 			'<select id="fe_ee_target" onChange="$P().set_event_target(this.options[this.selectedIndex].value)">' + this.render_target_menu_options(event.target) + '</select>'
 		);
 
-		/*html += get_form_table_row( 'Target', 
+		/*html += get_form_table_row( (window._t ? _t('schedule.target') : 'Target'), 
 			'<table cellspacing="0" cellpadding="0"><tr>' + 
 				'<td><select id="fe_ee_target">' + this.render_target_menu_options( event.target ) + '</select></td>' + 
 				'<td style="padding-left:15px;"><input type="checkbox" id="fe_ee_multiplex" value="1" ' + (event.multiplex ? 'checked="checked"' : '') + ' onChange="$P().setGroupVisible(\'mp\',this.checked).setGroupVisible(\'algo\',!this.checked)"/><label for="fe_ee_multiplex">Multiplex</label></td>' + 
 			'</tr></table>' 
 		);*/
 		html += get_form_table_caption(
-			"Select a target server group or individual server to run the event on."
+			(window._t ? _t('schedule.select_a_target_server_group_or_individu') : "Select a target server group or individual server to run the event on.")
 			// "Multiplex means that the event will run on <b>all</b> matched servers simultaneously." 
 		);
 		html += get_form_table_spacer();
@@ -1881,7 +1883,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
 		});
 
-		html += get_form_table_row('Plugin', '<select id="fe_ee_plugin" onMouseDown="this.options[0].disabled=true" onChange="$P().change_edit_plugin()"><option value="">Select Plugin</option>' + render_menu_options(app.plugins, event.plugin, false) + '</select>');
+		html += get_form_table_row((window._t ? _t('schedule.plugin') : 'Plugin'), '<select id="fe_ee_plugin" onMouseDown="this.options[0].disabled=true" onChange="$P().change_edit_plugin()"><option value="">Select Plugin</option>' + render_menu_options(app.plugins, event.plugin, false) + '</select>');
 
 		// plugin params
 		html += get_form_table_row('', '<div id="d_ee_plugin_params">' + this.get_plugin_params_html() + '</div>');
@@ -1889,8 +1891,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// arguments
 		let arg_title = "Argument values are available as ARG[1-9] env variable or parameter on shellplug (e.g. $ARG1 or [/ARG1])\nOn httpplug use [/params/ARG1], on event workflow JOB_ARG env variable. ARGS env variable will store entire string";
-		html += get_form_table_row('Arguments', `<input title="${arg_title}" type="text" id="fe_ee_args" size="50" value="${event.args || ''}" autocomplete="one-time-code" spellcheck="false"/>`);
-		html += get_form_table_caption("List of comma separated arguments. Use alphanumeric/email characters only");
+		html += get_form_table_row((window._t ? _t('schedule.arguments') : 'Arguments'), `<input title="${arg_title}" type="text" id="fe_ee_args" size="50" value="${event.args || ''}" autocomplete="one-time-code" spellcheck="false"/>`);
+		html += get_form_table_caption((window._t ? _t('schedule.list_of_comma_separated_arguments_use_al') : "List of comma separated arguments. Use alphanumeric/email characters only"));
 		html += get_form_table_spacer();
 
 		// timing
@@ -1922,7 +1924,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			['repeat', 'Repeat']
 		];
 
-		html += get_form_table_row('Timing',
+		html += get_form_table_row((window._t ? _t('schedule.timing') : 'Timing'),
 			'<div class="right">' +
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><span class="label" style="font-size:12px;">Timezone:&nbsp;</span></td>' +
@@ -1971,54 +1973,54 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// show token (admin only) 
 		if (app.user.privileges.admin && event.id) {
-			html += get_form_table_row('Allow Token', `
+			html += get_form_table_row((window._t ? _t('schedule.allow_token') : 'Allow Token'), `
 							<input type="checkbox" id="fe_ee_token" value="1" ${(event.salt ? 'checked="checked"' : '')} onclick="$P().toggle_token()"/>
 							  <label id="fe_ee_token_label" for="fe_ee_token">generate event webhook</label><span style="font-size: 1em" id="fe_ee_token_val"></span>
 							</input><script>$P().toggle_token()</script>
 							`);
-			html += get_form_table_caption("Allow invoking this event via token");
+			html += get_form_table_caption((window._t ? _t('schedule.allow_invoking_this_event_via_token') : "Allow invoking this event via token"));
 			html += get_form_table_spacer();
 		}
 
 		// Secret
 		let sph = event.secret_preview ? '[' + event.secret_preview + ']' : '';
-		html += get_form_table_row('Secret', `<textarea  style="width:620px; height:45px;resize:vertical;" id="fe_ee_secret" oninput="$P().set_event_secret(this.value)" placeholder="${sph}" spellcheck="false"></textarea>`);
-		html += get_form_table_caption("Specify KEY=VALUE pairs to set ENV variables. Some plugins require KEY prefix (e.g. DOCKER_ or SSH_ ) to pass it to job runtime.");
+		html += get_form_table_row((window._t ? _t('schedule.secret') : 'Secret'), `<textarea  style="width:620px; height:45px;resize:vertical;" id="fe_ee_secret" oninput="$P().set_event_secret(this.value)" placeholder="${sph}" spellcheck="false"></textarea>`);
+		html += get_form_table_caption((window._t ? _t('schedule.specify_keyvalue_pairs_to_set_env_variab') : "Specify KEY=VALUE pairs to set ENV variables. Some plugins require KEY prefix (e.g. DOCKER_ or SSH_ ) to pass it to job runtime."));
 		html += get_form_table_spacer();
 
 		// max children
-		html += get_form_table_row('Concurrency', '<select id="fe_ee_max_children">' + render_menu_options([[1, "1 (Singleton)"], 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], event.max_children, false) + '</select>');
-		html += get_form_table_caption("Select the maximum number of jobs that can run simultaneously.");
+		html += get_form_table_row((window._t ? _t('schedule.concurrency') : 'Concurrency'), '<select id="fe_ee_max_children">' + render_menu_options([[1, "1 (Singleton)"], 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], event.max_children, false) + '</select>');
+		html += get_form_table_caption((window._t ? _t('schedule.select_the_maximum_number_of_jobs_that_c') : "Select the maximum number of jobs that can run simultaneously."));
 		html += get_form_table_spacer();
 
 		// timeout
-		html += get_form_table_row('Timeout', this.get_relative_time_combo_box('fe_ee_timeout', event.timeout));
-		html += get_form_table_caption("Enter the maximum time allowed for jobs to complete, 0 to disable.");
+		html += get_form_table_row((window._t ? _t('schedule.timeout') : 'Timeout'), this.get_relative_time_combo_box('fe_ee_timeout', event.timeout));
+		html += get_form_table_caption((window._t ? _t('schedule.enter_the_maximum_time_allowed_for_jobs_') : "Enter the maximum time allowed for jobs to complete, 0 to disable."));
 		html += get_form_table_spacer();
 
 		// retries
-		html += get_form_table_row('Retries',
+		html += get_form_table_row((window._t ? _t('schedule.retries') : 'Retries'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><select id="fe_ee_retries" onChange="$P().change_retry_amount()">' + render_menu_options([[0, 'None'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], event.retries, false) + '</select></td>' +
 			'<td id="td_ee_retry1" ' + (event.retries ? '' : 'style="display:none"') + '><span style="padding-left:15px; font-size:13px; color:#777;"><b>Delay:</b>&nbsp;</span></td>' +
 			'<td id="td_ee_retry2" ' + (event.retries ? '' : 'style="display:none"') + '>' + this.get_relative_time_combo_box('fe_ee_retry_delay', event.retry_delay, '', true) + '</td>' +
 			'</tr></table>'
 		);
-		html += get_form_table_caption("Select the number of retries to be attempted before an error is reported.");
+		html += get_form_table_caption((window._t ? _t('schedule.select_the_number_of_retries_to_be_attem') : "Select the number of retries to be attempted before an error is reported."));
 		html += get_form_table_spacer();
 
 		// log expiration
-		html += get_form_table_row('Log Expires',
+		html += get_form_table_row((window._t ? _t('schedule.log_expires') : 'Log Expires'),
 			'<table cellspacing="0" cellpadding="0"><tr>' +
 			'<td><select id="fe_ee_expire_days" onChange="">' + render_menu_options([[0, 'Default'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], event.log_expire_days, false) + '</select></td>' +
 			'</tr></table>'
 		);
-		html += get_form_table_caption("Number of days to keep job logs in storage (alters job_data_expire_days config)");
+		html += get_form_table_caption((window._t ? _t('schedule.number_of_days_to_keep_job_logs_in_stora') : "Number of days to keep job logs in storage (alters job_data_expire_days config)"));
 		html += get_form_table_spacer();
 
 		// catch-up mode (run all)
 		// method (interruptable, non-interruptable)
-		html += get_form_table_row('Misc. Options',
+		html += get_form_table_row((window._t ? _t('schedule.misc_options') : 'Misc. Options'),
 			'<div><input type="checkbox" id="fe_ee_catch_up" value="1" ' + (event.catch_up ? 'checked="checked"' : '') + ' ' + (event.id ? 'onChange="$P().setGroupVisible(\'rc\',this.checked)"' : '') + ' /><label for="fe_ee_catch_up">Catch-Up (Run All)</label></div>' +
 			'<div class="caption">Automatically run all missed events after server downtime or scheduler/event disabled.</div>' +
 
@@ -2079,7 +2081,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		});
 
 		var chain_expanded = !!(event.chain || event.chain_error);
-		html += get_form_table_row('Chain Reaction',
+		html += get_form_table_row((window._t ? _t('schedule.chain_reaction') : 'Chain Reaction'),
 			'<div style="font-size:13px;' + (chain_expanded ? 'display:none;' : '') + '"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Chain Options</span></div>' +
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;' + (chain_expanded ? '' : 'display:none;') + '"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Chain Options</legend>' +
 			'<div class="plugin_params_label">Run Event on Success:</div>' +
@@ -2090,12 +2092,12 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			'</fieldset>'
 		);
-		html += get_form_table_caption("Select events to run automatically after this event completes.");
+		html += get_form_table_caption((window._t ? _t('schedule.select_events_to_run_automatically_after') : "Select events to run automatically after this event completes."));
 		html += get_form_table_spacer();
 
 		// notification
 		var notif_expanded = !!(event.notify_success || event.notify_fail || event.web_hook || event.web_hook_start);
-		html += get_form_table_row('Notification',
+		html += get_form_table_row((window._t ? _t('schedule.notification') : 'Notification'),
 			'<div style="font-size:13px;' + (notif_expanded ? 'display:none;' : '') + '"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Notification Options</span></div>' +
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;' + (notif_expanded ? '' : 'display:none;') + '"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Notification Options</legend>' +
 			'<div class="plugin_params_label">Email on Success:</div>' +
@@ -2113,12 +2115,12 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			'</fieldset>'
 		);
-		html += get_form_table_caption("Enter one or more e-mail addresses for notification (comma-separated), and optionally a web hook URL.");
+		html += get_form_table_caption((window._t ? _t('schedule.enter_one_or_more_email_addresses_for_no') : "Enter one or more e-mail addresses for notification (comma-separated), and optionally a web hook URL."));
 		html += get_form_table_spacer();
 
 		// resource limits
 		var res_expanded = !!(event.memory_limit || event.memory_sustain || event.cpu_limit || event.cpu_sustain || event.log_max_size);
-		html += get_form_table_row('Limits',
+		html += get_form_table_row((window._t ? _t('schedule.limits') : 'Limits'),
 			'<div style="font-size:13px;' + (res_expanded ? 'display:none;' : '') + '"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Resource Limits</span></div>' +
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;' + (res_expanded ? '' : 'display:none;') + '"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Resource Limits</legend>' +
 
@@ -2150,34 +2152,34 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			'</fieldset>'
 		);
 		html += get_form_table_caption(
-			"Optionally set CPU load, memory usage and log size limits for the event."
+			(window._t ? _t('schedule.optionally_set_cpu_load_memory_usage_and') : "Optionally set CPU load, memory usage and log size limits for the event.")
 		);
 		html += get_form_table_spacer();
 
 		// graph icon
 		let giTitle = "Specify the hex code of fontAwsome or Unicode character. The default value is F111 (FA circle)"
 		let giLabel = `<label for="fe_ee_graph_icon"><i style="font-family: FontAwesome; font-style: normal;  font-weight: 900; vertical-align: middle" onclick="$P().show_graph()" id="fe_ee_graph_icon_label"/></label>`
-		html += get_form_table_row('Graph Icon', `<input id="fe_ee_graph_icon" oninput="$P().update_graph_icon_label()" size=5 title="${giTitle}" value="${event.graph_icon || ''}"/>${giLabel}`);
-		html += get_form_table_caption("hex code");
+		html += get_form_table_row((window._t ? _t('schedule.graph_icon') : 'Graph Icon'), `<input id="fe_ee_graph_icon" oninput="$P().update_graph_icon_label()" size=5 title="${giTitle}" value="${event.graph_icon || ''}"/>${giLabel}`);
+		html += get_form_table_caption((window._t ? _t('schedule.hex_code') : "hex code"));
 		html += '<script>$P().update_graph_icon_label()</script>'
 		html += get_form_table_spacer();
 
 		// notes
-		html += get_form_table_row('Notes', '<textarea id="fe_ee_notes" style="width:600px; height:80px; resize:vertical;">' + escape_text_field_value(event.notes) + '</textarea>');
-		html += get_form_table_caption("Optionally enter notes for the event, which will be included in all e-mail notifications.");
+		html += get_form_table_row((window._t ? _t('schedule.notes') : 'Notes'), '<textarea id="fe_ee_notes" style="width:600px; height:80px; resize:vertical;">' + escape_text_field_value(event.notes) + '</textarea>');
+		html += get_form_table_caption((window._t ? _t('schedule.optionally_enter_notes_for_the_event_whi') : "Optionally enter notes for the event, which will be included in all e-mail notifications."));
 		html += get_form_table_spacer();
 
 		// debugging options (avoid emails/webhooks/history), existing events only
 		if (event.id) {
 			let sudo = app.isAdmin() ? '<input type="checkbox" id="fe_ee_debug_sudo" class="debug_options" value="1"><label for="fe_ee_debug_sudo" title="This will ignore plugin UID setting and run the job using main process UID"> Sudo </label><br>' : "";
 			// let ttyTitle = "This option let you capture colorized terminal output using /usr/bin/script tool (typically in the box, on alpine install util-linux). Please note - it will supress stdin/stderr sent to/from job and will also hang on interactive prompts"
-			html += get_form_table_row('Debug Opts', `				
+			html += get_form_table_row((window._t ? _t('schedule.debug_opts') : 'Debug Opts'), `				
 				  <input type="checkbox" id="fe_ee_debug_chain"  value="1"><label for="fe_ee_debug_chain"> Omit chaining</label><br>
 				  <input type="checkbox" id="fe_ee_debug_notify"  value="1"><label for="fe_ee_debug_notify"> Omit notification </label><br>
 				 ${sudo}
 				  `);
 			//   <input type="checkbox" id="fe_ee_debug_tty" value="1"><label for="fe_ee_debug_tty" title="${ttyTitle}"> Use terminal emulator</label><br>
-			html += get_form_table_caption("Debugging options. Applies only to manual execution (not stored with event)");
+			html += get_form_table_caption((window._t ? _t('schedule.debugging_options_applies_only_to_manual') : "Debugging options. Applies only to manual execution (not stored with event)"));
 			html += get_form_table_spacer();
 		} //
 
@@ -2232,8 +2234,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		html += '<center><table>' +
 			// get_form_table_spacer() + 
-			get_form_table_row('Crontab:', '<input type="text" id="fe_ee_crontab" style="width:330px;" value="" spellcheck="false"/>') +
-			get_form_table_caption("Enter your crontab date/time expression here.") +
+			get_form_table_row((window._t ? _t('schedule.crontab') : 'Crontab:'), '<input type="text" id="fe_ee_crontab" style="width:330px;" value="" spellcheck="false"/>') +
+			get_form_table_caption((window._t ? _t('schedule.enter_your_crontab_datetime_expression_h') : "Enter your crontab date/time expression here.")) +
 			'</table></center>';
 
 		app.confirm('<i class="fa fa-clock-o">&nbsp;</i>Import from Crontab', html, "Import", function (result) {
@@ -2241,7 +2243,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			if (result) {
 				var cron_exp = $('#fe_ee_crontab').val().toLowerCase();
-				if (!cron_exp) return app.badField('fe_ee_crontab', "Please enter a crontab date/time expression.");
+				if (!cron_exp) return app.badField('fe_ee_crontab', (window._t ? _t('schedule.please_enter_a_crontab_datetime_expressi') : "Please enter a crontab date/time expression."));
 
 				// validate, convert to timing object
 				var timing = null;
@@ -2276,7 +2278,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 				$('#d_ee_timing_params').html(self.get_timing_params_html(tmode));
 
 				// and we're done
-				app.showMessage('success', "Crontab date/time expression was imported successfully.");
+				app.showMessage('success', (window._t ? _t('schedule.crontab_datetime_expression_was_imported') : "Crontab date/time expression was imported successfully."));
 
 			} // user clicked add
 		}); // app.confirm
@@ -2295,8 +2297,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		html += '<center><table>' +
 			// get_form_table_spacer() + 
-			get_form_table_row('Category Title:', '<input type="text" id="fe_ee_cat_title" style="width:315px" value=""/>') +
-			get_form_table_caption("Enter a title for your category here.") +
+			get_form_table_row((window._t ? _t('schedule.category_title') : 'Category Title:'), '<input type="text" id="fe_ee_cat_title" style="width:315px" value=""/>') +
+			get_form_table_caption((window._t ? _t('schedule.enter_a_title_for_your_category_here') : "Enter a title for your category here.")) +
 			'</table></center>';
 
 		app.confirm('<i class="fa fa-folder-open-o">&nbsp;</i>Quick Add Category', html, "Add", function (result) {
@@ -2304,7 +2306,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 			if (result) {
 				var cat_title = $('#fe_ee_cat_title').val();
-				if (!cat_title) return app.badField('fe_ee_cat_title', "Please enter a title for the category.");
+				if (!cat_title) return app.badField('fe_ee_cat_title', (window._t ? _t('schedule.please_enter_a_title_for_the_category') : "Please enter a title for the category."));
 				Dialog.hide();
 
 				var category = {};
@@ -2319,10 +2321,10 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 				category.gcolor = baseColors[(app.categories || []).length % 7];
 
-				app.showProgress(1.0, "Adding category...");
+				app.showProgress(1.0, (window._t ? _t('schedule.adding_category') : "Adding category..."));
 				app.api.post('app/create_category', category, function (resp) {
 					app.hideProgress();
-					app.showMessage('success', "Category was added successfully.");
+					app.showMessage('success', (window._t ? _t('schedule.category_was_added_successfully') : "Category was added successfully."));
 
 					// set event to new category
 					category.id = resp.id;
@@ -3027,8 +3029,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 					      </div>
 					      <div id="fe_ee_pp_evt_list"></div>
 					      <script>$P().render_wf_event_list()</script>
-					      <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 0px" onMouseUp="$P().wf_event_add()">Add Event</div>
-						  <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 8px" onMouseUp="$P().wf_event_add_cat()">Add Category</div><br>
+					      <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 0px" onMouseUp="$P().wf_event_add()">' + (window._t ? _t('schedule.add_event') : 'Add Event') + '</div>
+						  <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 8px" onMouseUp="$P().wf_event_add_cat()">' + (window._t ? _t('schedule.add_category') : 'Add Category') + '</div><br>
 					      `
 							break;
 
@@ -3036,7 +3038,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 							html += `
 							  <div id="fe_ee_pp_file_list"></div>
 							  <script>$P().render_file_list()</script>
-							  <div class="button mini" style="width:90px; margin:10px 10px 10px 0px" onMouseUp="$P().file_add()">Attach File</div>
+							  <div class="button mini" style="width:90px; margin:10px 10px 10px 0px" onMouseUp="$P().file_add()">' + (window._t ? _t('schedule.attach_file') : 'Attach File') + '</div>
 							  <div class="caption" >Access files via env vars: FILE_NAME_EXT or files/name.ext</div>
 							<br>
 	 					    `
@@ -3125,7 +3127,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// event title
 		event.title = trim($('#fe_ee_title').val());
-		if (!event.title) return quiet ? false : app.badField('fe_ee_title', "Please enter a title for the event.");
+		if (!event.title) return quiet ? false : app.badField('fe_ee_title', (window._t ? _t('schedule.please_enter_a_title_for_the_event') : "Please enter a title for the event."));
 
 		// event enabled
 		event.enabled = $('#fe_ee_enabled').is(':checked') ? 1 : 0;
@@ -3147,7 +3149,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// category
 		event.category = $('#fe_ee_cat').val();
-		if (!event.category) return quiet ? false : app.badField('fe_ee_cat', "Please select a Category for the event.");
+		if (!event.category) return quiet ? false : app.badField('fe_ee_cat', (window._t ? _t('schedule.please_select_a_category_for_the_event') : "Please select a Category for the event."));
 
 		// target (server group or individual server)
 		event.target = $('#fe_ee_target').val();
@@ -3157,7 +3159,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		event.multiplex = (event.algo == 'multiplex') ? 1 : 0;
 		if (event.multiplex) {
 			event.stagger = parseInt($('#fe_ee_stagger').val()) * parseInt($('#fe_ee_stagger_units').val());
-			if (isNaN(event.stagger)) return quiet ? false : app.badField('fe_ee_stagger', "Please enter a number of seconds to stagger by.");
+			if (isNaN(event.stagger)) return quiet ? false : app.badField('fe_ee_stagger', (window._t ? _t('schedule.please_enter_a_number_of_seconds_to_stag') : "Please enter a number of seconds to stagger by."));
 		}
 		else {
 			event.stagger = 0;
@@ -3168,7 +3170,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// plugin
 		event.plugin = $('#fe_ee_plugin').val();
-		if (!event.plugin) return quiet ? false : app.badField('fe_ee_plugin', "Please select a Plugin for the event.");
+		if (!event.plugin) return quiet ? false : app.badField('fe_ee_plugin', (window._t ? _t('schedule.please_select_a_plugin_for_the_event') : "Please select a Plugin for the event."));
 
 		// workflow
 		// if (event.plugin == 'workflow' && Array.isArray(event.workflow)) {
@@ -3215,14 +3217,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let repeatInterval = $('#fe_ee_repeat').val()
          
 		if(repeatInterval) {
-			if ((parseInt(repeatInterval) || 0) < 1) return app.badField('fe_ee_repeat', "Invalid repeat value (must be positive integer)");
+			if ((parseInt(repeatInterval) || 0) < 1) return app.badField('fe_ee_repeat', (window._t ? _t('schedule.invalid_repeat_value_must_be_positive_in') : "Invalid repeat value (must be positive integer)"));
 			event.repeat = (parseInt($('#fe_ee_repeat').val()) * parseInt($('#fe_ee_repeat_units').val()));
 			event.timing = false
 			event.interval = false
 			event.interval_start = false 
 		}
 		else if (eventInterval) {
-			if ((parseInt(eventInterval) || 0) < 1) return app.badField('fe_ee_interval', "Invalid interval value (must be positive integer)");
+			if ((parseInt(eventInterval) || 0) < 1) return app.badField('fe_ee_interval', (window._t ? _t('schedule.invalid_interval_value_must_be_positive_') : "Invalid interval value (must be positive integer)"));
 			event.interval = (parseInt($('#fe_ee_interval').val()) * parseInt($('#fe_ee_interval_units').val()));
 			event.interval_start = parseInt(event.interval_start) || 0
 			event.timing = false
@@ -3261,7 +3263,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// event queue
 		event.queue = $('#fe_ee_queue').is(':checked') ? 1 : 0;
 		event.queue_max = parseInt($('#fe_ee_queue_max').val() || "0");
-		if (isNaN(event.queue_max)) return quiet ? false : app.badField('fe_ee_queue_max', "Please enter an integer value for the event queue max.");
+		if (isNaN(event.queue_max)) return quiet ? false : app.badField('fe_ee_queue_max', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_ev') : "Please enter an integer value for the event queue max."));
 		if (event.queue_max < 0) return quiet ? false : app.badField('fe_ee_queue_max', "Please enter a positive integer for the event queue max.");
 
 		// chain reaction
@@ -3271,7 +3273,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// cursor reset
 		if (event.id && event.catch_up && $('#fe_ee_rc_enabled').is(':checked')) {
 			var new_cursor = parseInt($('#fe_ee_rc_time').data('epoch'));
-			if (!new_cursor || isNaN(new_cursor)) return quiet ? false : app.badField('fe_ee_rc_time', "Please enter a valid date/time for the new event time.");
+			if (!new_cursor || isNaN(new_cursor)) return quiet ? false : app.badField('fe_ee_rc_time', (window._t ? _t('schedule.please_enter_a_valid_datetime_for_the_ne') : "Please enter a valid date/time for the new event time."));
 			event['reset_cursor'] = normalize_time(new_cursor, { sec: 0 });
 		}
 		else delete event['reset_cursor'];
@@ -3290,7 +3292,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (event.cpu_limit < 0) return quiet ? false : app.badField('fe_ee_cpu_limit', "Please enter a positive integer for the CPU limit.");
 
 			event.cpu_sustain = parseInt($('#fe_ee_cpu_sustain').val()) * parseInt($('#fe_ee_cpu_sustain_units').val());
-			if (isNaN(event.cpu_sustain)) return quiet ? false : app.badField('fe_ee_cpu_sustain', "Please enter an integer value for the CPU sustain period.");
+			if (isNaN(event.cpu_sustain)) return quiet ? false : app.badField('fe_ee_cpu_sustain', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_cp') : "Please enter an integer value for the CPU sustain period."));
 			if (event.cpu_sustain < 0) return quiet ? false : app.badField('fe_ee_cpu_sustain', "Please enter a positive integer for the CPU sustain period.");
 		}
 		else {
@@ -3305,7 +3307,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			if (event.memory_limit < 0) return quiet ? false : app.badField('fe_ee_memory_limit', "Please enter a positive integer for the memory limit.");
 
 			event.memory_sustain = parseInt($('#fe_ee_memory_sustain').val()) * parseInt($('#fe_ee_memory_sustain_units').val());
-			if (isNaN(event.memory_sustain)) return quiet ? false : app.badField('fe_ee_memory_sustain', "Please enter an integer value for the memory sustain period.");
+			if (isNaN(event.memory_sustain)) return quiet ? false : app.badField('fe_ee_memory_sustain', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_me') : "Please enter an integer value for the memory sustain period."));
 			if (event.memory_sustain < 0) return quiet ? false : app.badField('fe_ee_memory_sustain', "Please enter a positive integer for the memory sustain period.");
 		}
 		else {
@@ -3316,8 +3318,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		// log file size limit
 		if ($('#fe_ee_log_enabled').is(':checked')) {
 			event.log_max_size = parseInt($('#fe_ee_log_limit').val()) * parseInt($('#fe_ee_log_limit_units').val());
-			if (isNaN(event.log_max_size)) return quiet ? false : app.badField('fe_ee_log_limit', "Please enter an integer value for the log size limit.");
-			if (event.log_max_size < 0) return quiet ? false : app.badField('fe_ee_log_limit', "Please enter a positive integer for the log size limit.");
+			if (isNaN(event.log_max_size)) return quiet ? false : app.badField('fe_ee_log_limit', (window._t ? _t('schedule.please_enter_an_integer_value_for_the_lo') : "Please enter an integer value for the log size limit."));
+			if (event.log_max_size < 0) return quiet ? false : app.badField('fe_ee_log_limit', (window._t ? _t('schedule.please_enter_a_positive_integer_for_the_') : "Please enter a positive integer for the log size limit."));
 		}
 		else {
 			event.log_max_size = 0;

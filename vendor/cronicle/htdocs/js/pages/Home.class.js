@@ -19,24 +19,24 @@ Class.subclass( Page.Base, "Page.Home", {
 		<!-- Event Flow -->
 
 		<div class="subtitle">
-		  Event Flow
+		  ${(window._t ? _t('home.subtitle_event_flow') : 'Event Flow')}
 		  <div class="subtitle_widget"><i class="fa fa-refresh" onClick="$P().refresh_completed_job_chart();$P().refresh_header_stats();$P().refresh_upcoming_events()">&nbsp;</i></div>
 		  <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i>
 			<select id="fe_cmp_job_chart_scale" class="subtitle_menu" onChange="$P().refresh_completed_job_chart();app.setPref('job_chart_scale', this.value)">
-			<option value="linear">linear</option><option value="logarithmic">logarithmic</option></select>
+			<option value="linear">${(window._t ? _t('home.linear') : 'linear')}</option><option value="logarithmic">${(window._t ? _t('home.logarithmic') : 'logarithmic')}</option></select>
 		  </div>
 		  <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i>
 			  <select id="fe_cmp_job_chart_limit" class="subtitle_menu" style="width:75px;" onChange="$P().refresh_completed_job_chart();app.setPref('job_chart_limit', this.value)">
-			  <option value="1">hide</option> 
-			  <option value="50">Last 50</option>
-			  <option value="10">Last 10</option>
-			  <option value="25">Last 25</option>
-			  <option value="35">Last 35</option>
-			  <option value="100">Last 100</option>
-			  <option value="120">Last 120</option>
-			  <option value="150">Last 150</option>
-			  <option value="250">Last 250</option>
-			  <option value="500">Last 500</option>
+			  <option value="1">${(window._t ? _t('home.hide') : 'hide')}</option>
+			  <option value="50">${(window._t ? _t('home.last_prefix') : 'Last')} 50</option>
+			  <option value="10">${(window._t ? _t('home.last_prefix') : 'Last')} 10</option>
+			  <option value="25">${(window._t ? _t('home.last_prefix') : 'Last')} 25</option>
+			  <option value="35">${(window._t ? _t('home.last_prefix') : 'Last')} 35</option>
+			  <option value="100">${(window._t ? _t('home.last_prefix') : 'Last')} 100</option>
+			  <option value="120">${(window._t ? _t('home.last_prefix') : 'Last')} 120</option>
+			  <option value="150">${(window._t ? _t('home.last_prefix') : 'Last')} 150</option>
+			  <option value="250">${(window._t ? _t('home.last_prefix') : 'Last')} 250</option>
+			  <option value="500">${(window._t ? _t('home.last_prefix') : 'Last')} 500</option>
 			  </select>	  
 		  </div>
 		  <div class="subtitle_widget"><span id="chart_times" ></span></div>
@@ -49,7 +49,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		<!-- Active jobs -->
 
         <div class="subtitle">
-            Active Jobs
+            ${(window._t ? _t('home.subtitle_active_jobs') : 'Active Jobs')}
             <div class="clear"></div>
         </div>
         <div id="d_home_active_jobs"></div>
@@ -59,7 +59,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		<!-- Queued jobs -->
 		<div id="d_home_queue_container" style="display:none">
         <div class="subtitle">
-            Event Queues
+            ${(window._t ? _t('home.subtitle_event_queues') : 'Event Queues')}
             <div class="clear"></div>
         </div>
         <div id="d_home_queued_jobs"></div>
@@ -91,7 +91,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		document.getElementById('fe_cmp_job_chart_limit').value = lmtActual;
 
 		
-		app.setWindowTitle('Home');
+		app.setWindowTitle((window._t ? _t('home.home') : 'Home'));
 		app.showTabBar(true);
 		
 		this.upcoming_offset = 0;
@@ -108,21 +108,21 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		// render upcoming event filters
 		var html = '';
-		html += 'Upcoming Events';
-		
-		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_home_keywords" size="10" placeholder="Find events..." style="border:0px;border-radius:5px" value="' + escape_text_field_value( args.keywords ) + '"/></div>';
-		
+		html += (window._t ? _t('home.subtitle_upcoming') : 'Upcoming Events');
+
+		html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_home_keywords" size="10" placeholder="' + (window._t ? _t('home.search_placeholder') : 'Find events...') + '" style="border:0px;border-radius:5px" value="' + escape_text_field_value( args.keywords ) + '"/></div>';
+
 		let ue_options = [
-			{title: "Grid View", id: "grid"},
-			{title: "Compact View", id: "compact"},
-			{title: "Show All", id: "all"}
+			{title: (window._t ? _t('home.grid_view') : "Grid View"), id: "grid"},
+			{title: (window._t ? _t('home.compact_view') : "Compact View"), id: "compact"},
+			{title: (window._t ? _t('home.show_all') : "Show All"), id: "all"}
 		]
 		let up_event_select = render_menu_options( ue_options , app.getPref('fe_up_eventlimit') || 'grid', false ) + '</select>'
 
 		html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_up_eventlimit" class="subtitle_menu" onChange="$P().nav_upcoming($P().upcoming_offset);">${up_event_select}</div>`;
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_target" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">All Servers</option>' + this.render_target_menu_options( args.target ) + '</select></div>';
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_plugin" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">All Plugins</option>' + render_menu_options( app.plugins, args.plugin, false ) + '</select></div>';
-		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_cat" class="subtitle_menu" style="width:95px;" onChange="$P().set_search_filters()"><option value="">All Categories</option>' + render_menu_options( app.categories, args.category, false ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_target" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">' + (window._t ? _t('home.filter_all_servers') : 'All Servers') + '</option>' + this.render_target_menu_options( args.target ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_plugin" class="subtitle_menu" style="width:75px;" onChange="$P().set_search_filters()"><option value="">' + (window._t ? _t('home.filter_all_plugins') : 'All Plugins') + '</option>' + render_menu_options( app.plugins, args.plugin, false ) + '</select></div>';
+		html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_home_cat" class="subtitle_menu" style="width:95px;" onChange="$P().set_search_filters()"><option value="">' + (window._t ? _t('home.filter_all_categories') : 'All Categories') + '</option>' + render_menu_options( app.categories, args.category, false ) + '</select></div>';
 		
 		html += '<div class="clear"></div>';
 		
@@ -195,17 +195,17 @@ Class.subclass( Page.Base, "Page.Home", {
 	let failed_badge = `<span style="cursor:pointer;" onclick='Nav.go("History?sub=error_history&error=1&max=${stats.jobs_failed || 0}")' title="${errTitle}" class="color_label ${errBg}">${stats.jobs_failed || 0}</span>&nbsp;`
 	
 	status_bar = [
-		{name: "EVENTS", value:  active_events.length},
-		{name: "CATS", value:  app.categories.length},
+		{name: (window._t ? _t('home.events_label') : "EVENTS"), value:  active_events.length},
+		{name: (window._t ? _t('home.cats_label') : "CATS"), value:  app.categories.length},
 		// {name: "PLUGINS", value:  app.plugins.length},
-		{name: "JOBS", value:  stats.jobs_completed || 0},
-		{name: "FAILED", value: failed_badge},
-		{name: "SUCCESS", value:  pct( (stats.jobs_completed || 0) - (stats.jobs_failed || 0), stats.jobs_completed || 1 )},
-		{name: "LOG SIZE", value: get_text_from_bytes((stats.jobs_log_size || 0) / (stats.jobs_completed || 1))},
-		{name: "UPTIME", value:  get_text_from_seconds( mserver.uptime || 0, false, true )},
-		{name: "CPU", value:  `${short_float(total_cpu)}%`},
-		{name: "MEMORY", value:  get_text_from_bytes(total_mem)},
-		{name: "SERVERS", value:  num_keys(servers)}
+		{name: (window._t ? _t('home.jobs_label') : "JOBS"), value:  stats.jobs_completed || 0},
+		{name: (window._t ? _t('home.failed_label') : "FAILED"), value: failed_badge},
+		{name: (window._t ? _t('home.success_label') : "SUCCESS"), value:  pct( (stats.jobs_completed || 0) - (stats.jobs_failed || 0), stats.jobs_completed || 1 )},
+		{name: (window._t ? _t('home.log_size_label') : "LOG SIZE"), value: get_text_from_bytes((stats.jobs_log_size || 0) / (stats.jobs_completed || 1))},
+		{name: (window._t ? _t('home.uptime_label') : "UPTIME"), value:  get_text_from_seconds( mserver.uptime || 0, false, true )},
+		{name: (window._t ? _t('home.cpu_label') : "CPU"), value:  `${short_float(total_cpu)}%`},
+		{name: (window._t ? _t('home.memory_label') : "MEMORY"), value:  get_text_from_bytes(total_mem)},
+		{name: (window._t ? _t('home.servers_label') : "SERVERS"), value:  num_keys(servers)}
 	]
 
 	html = '<div class="stats grid-container">'
@@ -478,7 +478,10 @@ Class.subclass( Page.Base, "Page.Home", {
 			let statusMap = { 0: green, 255: orange }
 
 			let labels = jobs.map(e => '')
-			if(jobLimit <= 100) labels = jobs.map((j, i) => i == 0 ? j.event_title.substring(0, 4) : j.event_title);
+			if(jobLimit <= 100) labels = jobs.map((j, i) => {
+				let t = j.event_title || '';
+				return i == 0 ? t.substring(0, 4) : (t.length > 18 ? t.substring(0, 16) + '…' : t);
+			});
 
 			let ctx = document.getElementById('d_home_completed_jobs');
 			// var gradient = ctx.createLinearGradient(0, 0, 0, 400);
@@ -546,6 +549,13 @@ Class.subclass( Page.Base, "Page.Home", {
 					, scales: {
 						xAxes: [{
 							gridLines: { color: 'rgb(170, 170, 170)', lineWidth: 0.3 },
+							ticks: {
+								maxRotation: 45,
+								minRotation: 25,
+								autoSkip: true,
+								maxTicksLimit: 30,
+								fontSize: 10
+							}
 						}],
 						yAxes: [{
 							type: scaleType,
@@ -586,7 +596,7 @@ Class.subclass( Page.Base, "Page.Home", {
 			jobs.push( app.activeJobs[id] );
 		}
 
-		if(jobs.length === 0) return '<div style="display:flex;justify-content: center;font-weight:bold;">No active jobs found<div>'
+		if(jobs.length === 0) return '<div style="display:flex;justify-content: center;font-weight:bold;">' + (window._t ? _t('home.no_active_jobs') : 'No active jobs at this time.') + '<div>'
 		
 		// sort events by time_start descending
 		this.jobs = jobs.sort( function(a, b) {
@@ -794,7 +804,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		app.confirm( '<span style="color:red">Abort Job</span>', "Are you sure you want to abort the job &ldquo;<b>"+job.id+"</b>&rdquo;?</br>(Event: "+job.event_title+")", "Abort", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Aborting job..." );
+				app.showProgress( 1.0, (window._t ? _t('home.aborting_job') : "Aborting job...") );
 				app.api.post( 'app/abort_job', job, function(resp) {
 					app.hideProgress();
 					app.showMessage('success', "Job '"+job.event_title+"' was aborted successfully.");
@@ -806,14 +816,14 @@ Class.subclass( Page.Base, "Page.Home", {
 	suspend_job: function(idx) {
 		// add "suspended" property to runnig repeat job, so it will exit upon current cycle completion
 		let job = this.jobs[idx];
-		if(!job.repeat) return app.showMessage('error', "Only repeat job can be suspended");
-		if(job.suspended) return app.showMessage('error', "Job is already suspended");
+		if(!job.repeat) return app.showMessage('error', (window._t ? _t('home.only_repeat_job_can_be_suspended') : "Only repeat job can be suspended"));
+		if(job.suspended) return app.showMessage('error', (window._t ? _t('home.job_is_already_suspended') : "Job is already suspended"));
 		app.confirm( '<span style="color:red">Abort Job</span>', `This will prevent job &ldquo;<b> ${job.id}</b>&rdquo; (${job.event_title}) to get into the next cycle. Do you want to continue?</br>`, "Suspend", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Suspending job..." );
+				app.showProgress( 1.0, (window._t ? _t('home.suspending_job') : "Suspending job...") );
 				app.api.post( 'app/update_job', { suspended: true, id: job.id, hostname: job.hostname }, function(resp) {
 					app.hideProgress();
-					app.showMessage('success', "Job suspended successfully.");
+					app.showMessage('success', (window._t ? _t('home.job_suspended_successfully') : "Job suspended successfully."));
 				} );
 			}
 		} );
@@ -825,7 +835,7 @@ Class.subclass( Page.Base, "Page.Home", {
 		
 		app.confirm( '<span style="color:red">Flush Event Queue</span>', "Are you sure you want to flush the queue for event &ldquo;<b>"+stub.title+"</b>&rdquo;?", "Flush", function(result) {
 			if (result) {
-				app.showProgress( 1.0, "Flushing event queue..." );
+				app.showProgress( 1.0, (window._t ? _t('home.flushing_event_queue') : "Flushing event queue...") );
 				app.api.post( 'app/flush_event_queue', stub, function(resp) {
 					app.hideProgress();
 					app.showMessage('success', "Event queue for '"+stub.title+"' was flushed successfully.");
