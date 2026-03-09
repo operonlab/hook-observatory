@@ -294,6 +294,9 @@ def cmd_alerts(args):
 
 
 def cmd_guardian(args):
+    if hasattr(args, "guardian_cmd") and args.guardian_cmd == "run":
+        return cmd_guardian_run(args)
+
     client = SystemMonitorClient()
     try:
         result = client.get_guardian_log()
@@ -309,9 +312,34 @@ def cmd_guardian(args):
         print(f"Memory Guardian Log ({result.get('total', len(entries))} entries)")
         for e in entries:
             ts = (e.get("timestamp", "?"))[:19] if e.get("timestamp") else "?"
-            action = e.get("action", "?")
-            detail = e.get("detail", e.get("message", ""))
-            print(f"  {ts}  {action}: {detail}")
+            level = e.get("level", "?")
+            pressure = e.get("pressure_level", "?")
+            killed = e.get("total_killed", 0)
+            freed = e.get("freed_mb", 0)
+            kills = e.get("kills", [])
+            detail = ", ".join(f"{k['process']} ({k['mem_mb']}MB)" for k in kills) if kills else "—"
+            print(f"  {ts}  [{level}] pressure={pressure} killed={killed} freed={freed}MB")
+            if kills:
+                print(f"         {detail}")
+    except SystemMonitorError as e:
+        _err(e)
+
+
+def cmd_guardian_run(args):
+    client = SystemMonitorClient()
+    try:
+        result = client.run_guardian()
+        if args.json:
+            _json_out(result, True)
+            return
+
+        status = result.get("status", "?")
+        level = result.get("mem_level", "?")
+        killed = result.get("total_killed", 0)
+        freed = result.get("p1_freed_mb", 0)
+        print(f"Guardian: status={status} level={level} killed={killed} freed≈{freed}MB")
+        for k in result.get("kills", []):
+            print(f"  [{k['phase']}] {k['process']} PID {k['pid']} ({k['mem_mb']}MB)")
     except SystemMonitorError as e:
         _err(e)
 
@@ -408,9 +436,12 @@ def main():
     p_alerts = sub.add_parser("alerts", help="Pressure alerts")
     p_alerts.set_defaults(func=cmd_alerts)
 
-    # guardian
-    p_guardian = sub.add_parser("guardian", help="Memory guardian log")
+    # guardian (with subcommands)
+    p_guardian = sub.add_parser("guardian", help="Memory guardian log / actions")
     p_guardian.set_defaults(func=cmd_guardian)
+    g_sub = p_guardian.add_subparsers(dest="guardian_cmd")
+    p_g_run = g_sub.add_parser("run", help="Trigger guardian check now")
+    p_g_run.set_defaults(func=cmd_guardian, guardian_cmd="run")
 
     # reports (subparser group)
     p_reports = sub.add_parser("reports", help="Report management")

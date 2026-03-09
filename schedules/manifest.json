@@ -193,6 +193,16 @@
       "enabled": true,
       "catch_up": false,
       "timeout": 300
+    },
+    {
+      "name": "ws-memory-guardian",
+      "label": "com.joneshong.scheduler.ws-memory-guardian",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memory_guardian.py",
+      "schedule": { "interval": 60 },
+      "description": "每 60 秒: 記憶體壓力防護 — P1 殺可犧牲 app, P2/P3 殺 Claude Code",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }
