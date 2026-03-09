@@ -1,0 +1,212 @@
+{
+  "$schema": "workshop-cannibalization-v1",
+  "description": "蠶食追蹤清單 — 記錄所有被內化到 Workshop 的外部來源（代碼、論文、文章、概念）",
+  "updated_at": "2026-03-09",
+  "sources": [
+    {
+      "id": "crawl4ai",
+      "type": "repo",
+      "name": "Crawl4AI",
+      "origin_url": "https://github.com/unclecode/crawl4ai",
+      "upstream_ref": "unclecode/crawl4ai",
+      "pinned_at": {
+        "version": "v0.8.0",
+        "commit": null,
+        "date": "2026-03-09"
+      },
+      "cannibalized_on": "2026-03-09",
+      "status": "active",
+      "notes": "蠶食設計模式（rate limiting, chunking, enrichment pipeline），保留核心引擎（browser automation + JS rendering）於隔離 venv ~/.venvs/crawl4ai/",
+      "extractions": [
+        {
+          "pattern": "Per-domain rate limiting + exponential backoff",
+          "source_path": "crawl4ai/async_dispatcher.py",
+          "target_path": "core/src/shared/rate_limiter.py",
+          "adaptation": "改為 asyncio.Lock per domain + jitter，接入 intelflow/webcrawl.py"
+        },
+        {
+          "pattern": "Composable chunking strategies",
+          "source_path": "crawl4ai/chunking_strategy.py",
+          "target_path": "core/src/shared/chunking.py",
+          "adaptation": "4 strategies (Regex/Fixed/Sliding/Sentence)，接入 shared/embedding.py get_embeddings_chunked()"
+        },
+        {
+          "pattern": "Enrichment pipeline (composable strategy chain)",
+          "source_path": "crawl4ai/extraction_strategy.py",
+          "target_path": "core/src/modules/capture/strategies.py",
+          "adaptation": "EnrichmentPipeline + PatternMatchStrategy + DefaultsStrategy，接入 capture promote() 流程"
+        },
+        {
+          "pattern": "URL filtering chain",
+          "source_path": "crawl4ai/content_filter_strategy.py",
+          "target_path": "core/src/shared/url_filter.py",
+          "adaptation": "FilterChain + 5 filters (domain/path/extension/robots/duplicate)"
+        },
+        {
+          "pattern": "URL quality scoring",
+          "source_path": "crawl4ai/content_filter_strategy.py",
+          "target_path": "core/src/shared/url_scorer.py",
+          "adaptation": "CompositeScorer + 4 scorers (freshness/depth/domain-authority/keyword)"
+        },
+        {
+          "pattern": "HTML-to-Markdown conversion",
+          "source_path": "crawl4ai/markdown_generation_strategy.py",
+          "target_path": "core/src/shared/markdown_gen.py",
+          "adaptation": "stdlib html.parser 零依賴重寫，支援 links_as_citations mode"
+        },
+        {
+          "pattern": "Memory-adaptive execution runner",
+          "source_path": "crawl4ai/async_configs.py + CrawlerMonitor",
+          "target_path": "core/src/shared/adaptive.py",
+          "adaptation": "3-threshold water level (low/medium/high)，generic asyncio runner"
+        },
+        {
+          "pattern": "Adapter manifest (CrawlerRunConfig as composition root)",
+          "source_path": "crawl4ai/crawler_strategy.py",
+          "target_path": "core/src/modules/capture/adapters.py",
+          "adaptation": "AdapterManifest dataclass + BaseCaptureAdapter，AD-12 架構決策"
+        }
+      ],
+      "drift": {
+        "check_method": "github_tags",
+        "latest_checked": "2026-03-09",
+        "latest_upstream": "v0.8.0",
+        "drift_level": "none"
+      }
+    },
+    {
+      "id": "perplexica",
+      "type": "repo",
+      "name": "Perplexica",
+      "origin_url": "https://github.com/ItzCraworzyy/Perplexica",
+      "upstream_ref": "ItzCrazyKns/Perplexica",
+      "pinned_at": {
+        "version": null,
+        "commit": "423e517",
+        "date": "2026-03-08"
+      },
+      "cannibalized_on": "2026-03-08",
+      "status": "active",
+      "notes": "蠶食事件驅動架構的設計模式，非整體框架",
+      "extractions": [
+        {
+          "pattern": "EventBus Strategy Pattern",
+          "source_path": "src/lib/providers/ (focus agent pattern)",
+          "target_path": "core/src/events/bus.py",
+          "adaptation": "強化 Workshop EventBus — typed events + subscriber discovery"
+        },
+        {
+          "pattern": "SSE streaming protocol",
+          "source_path": "src/routes/api/search.ts",
+          "target_path": "core/src/shared/sse.py",
+          "adaptation": "統一 SSE 格式，用於 briefing debate + intelflow streaming"
+        },
+        {
+          "pattern": "Auto-discovery for search agents",
+          "source_path": "src/agents/ (agent registry pattern)",
+          "target_path": "core/src/events/types.py",
+          "adaptation": "Event type auto-registration pattern"
+        }
+      ],
+      "drift": {
+        "check_method": "github_commits",
+        "latest_checked": "2026-03-09",
+        "latest_upstream": null,
+        "drift_level": "unknown"
+      }
+    },
+    {
+      "id": "impeccable",
+      "type": "repo",
+      "name": "Impeccable",
+      "origin_url": "https://github.com/9-5-pursuit/Impeccable",
+      "upstream_ref": null,
+      "pinned_at": {
+        "version": null,
+        "commit": null,
+        "date": "2026-03-08"
+      },
+      "cannibalized_on": "2026-03-08",
+      "status": "active",
+      "notes": "蠶食 AI Slop Detection 概念 + Multi-Target Transformer Pipeline 設計",
+      "extractions": [
+        {
+          "pattern": "AI Slop Detection (anti-pattern as first-class citizen)",
+          "source_path": "concept: treating AI anti-patterns as explicit detection targets",
+          "target_path": "~/.claude/skills/frontend-design/references/ai-slop-detection.md",
+          "adaptation": "整合到 frontend-design skill v2.3.0，不只告訴 AI 該做什麼，同等重視不該做什麼"
+        },
+        {
+          "pattern": "Multi-Target Transformer Pipeline",
+          "source_path": "concept: source/*.md → transformer per provider → dist/{provider}/",
+          "target_path": "memory (pattern reference)",
+          "adaptation": "備用模式 — 當需要跨 AI 工具分發 skill 時參考"
+        }
+      ],
+      "drift": {
+        "check_method": "manual",
+        "latest_checked": "2026-03-09",
+        "latest_upstream": null,
+        "drift_level": "unknown"
+      }
+    },
+    {
+      "id": "cmu-star-inflation",
+      "type": "paper",
+      "name": "StarSift: GitHub Star Inflation Detection (CMU)",
+      "origin_url": "https://arxiv.org/abs/2412.13459",
+      "upstream_ref": "arXiv:2412.13459",
+      "pinned_at": {
+        "version": "v1",
+        "commit": null,
+        "date": "2024-12-18"
+      },
+      "cannibalized_on": "2026-03-09",
+      "status": "active",
+      "notes": "蠶食 star inflation 偵測方法論，強化我們評估 OSS 信譽的判斷力",
+      "extractions": [
+        {
+          "pattern": "Star inflation signals methodology",
+          "source_path": "Section 3: Temporal + contributor diversity + correlation analysis",
+          "target_path": "memory (evaluation methodology)",
+          "adaptation": "內化為蠶食適用性判斷的「源碼品質可信」標準的具體方法"
+        }
+      ],
+      "drift": {
+        "check_method": "manual",
+        "latest_checked": "2026-03-09",
+        "latest_upstream": "v1",
+        "drift_level": "none"
+      }
+    },
+    {
+      "id": "peonping-silent-window",
+      "type": "repo",
+      "name": "PeonPing (Silent Window Pattern)",
+      "origin_url": "https://github.com/nicoooo972/PeonPing",
+      "upstream_ref": "nicoooo972/PeonPing",
+      "pinned_at": {
+        "version": null,
+        "commit": null,
+        "date": "2026-03-01"
+      },
+      "cannibalized_on": "2026-03-01",
+      "status": "active",
+      "notes": "蠶食 silent browser window 模式用於自動化場景",
+      "extractions": [
+        {
+          "pattern": "Silent window / background browser pattern",
+          "source_path": "concept: headless browser keep-alive without focus stealing",
+          "target_path": "~/.claude/rules/mcp.md (Layer 1-3 anti-focus-stealing)",
+          "adaptation": "融入三層防禦策略的 Layer 1 (headless) 與 Layer 2 (螢幕外)"
+        }
+      ],
+      "drift": {
+        "check_method": "manual",
+        "latest_checked": "2026-03-09",
+        "latest_upstream": null,
+        "drift_level": "unknown"
+      }
+    }
+  ]
+}
