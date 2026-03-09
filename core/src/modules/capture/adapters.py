@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@dataclass
+class AdapterManifest:
+    """Self-describing adapter metadata — single source of truth.
+
+    Inspired by Crawl4AI's CrawlerRunConfig as composition root.
+    See AD-12 in docs/architecture/architecture-decisions.md.
+    """
+
+    module: str
+    entity_type: str
+    permission: str  # e.g. "finance.write"
+    default_ttl_days: int = 30
+    description: str = ""
 
 
 class CaptureAdapter(Protocol):
@@ -79,3 +95,14 @@ class BaseCaptureAdapter:
             for f, w in self.field_weights.items()
             if w > 0 and (payload.get(f) is None or payload.get(f) == "")
         ]
+
+    @classmethod
+    def manifest(cls) -> AdapterManifest:
+        """Return self-describing manifest. Override in subclass if needed."""
+        return AdapterManifest(
+            module=cls.module,
+            entity_type=cls.entity_type,
+            permission=f"{cls.module}.write",
+            default_ttl_days=cls.default_ttl_days,
+            description=cls.__doc__ or "",
+        )

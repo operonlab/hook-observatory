@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.deps import get_db, require_permission
 from src.shared.errors import ForbiddenError
 
+from .registry import get_permissions
 from .schemas import (
     BatchFillRequest,
     CaptureCreate,
@@ -34,16 +35,6 @@ def _check_owner(capture, user: dict) -> None:
     """Ensure the current user owns this capture."""
     if capture.created_by and capture.created_by != user.get("id"):
         raise ForbiddenError("Not the owner of this capture", code="capture.forbidden")
-
-
-# Permission mapping: promote checks target module's write permission
-_MODULE_WRITE_PERMS = {
-    "finance": "finance.write",
-    "invest": "invest.write",
-    "taskflow": "taskflow.write",
-    "ideagraph": "ideagraph.write",
-    "intelflow": "intelflow.write",
-}
 
 
 @router.post("", response_model=CaptureResponse, status_code=201)
@@ -212,8 +203,8 @@ async def promote_capture(
 
         raise NotFoundError("capture", capture_id)
     _check_owner(capture, user)
-    # Verify user has write permission on target module
-    target_perm = _MODULE_WRITE_PERMS.get(capture.module)
+    # Verify user has write permission on target module (manifest-driven)
+    target_perm = get_permissions().get(capture.module)
     if target_perm:
         from src.modules.auth.permissions import has_permission
 
