@@ -22,6 +22,7 @@ import argparse
 import json
 import sys
 
+from cli.exit_codes import EXIT_VALIDATION, exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.capture import CaptureClient
 
@@ -33,9 +34,9 @@ def _json_out(data, args):
     return False
 
 
-def _err(msg):
-    print(f"Error: {msg}", file=sys.stderr)
-    sys.exit(1)
+def _err(exc):
+    print(f"Error: {exc}", file=sys.stderr)
+    sys.exit(exit_code_for(exc))
 
 
 def _client():
@@ -342,7 +343,7 @@ def main():
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
-        sys.exit(1)
+        sys.exit(EXIT_VALIDATION)
     args.func(args)
 
 
