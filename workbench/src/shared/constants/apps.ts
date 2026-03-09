@@ -26,7 +26,7 @@ export const APP_LIST: AppInfo[] = [
     icon: '\uD83D\uDCA1',
     path: '/ideagraph',
     color: '#f9e2af',
-    status: 'available',
+    status: 'coming-soon',
   },
   {
     id: 'admin',

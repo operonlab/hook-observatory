@@ -202,7 +202,7 @@ export default function Home() {
       </div>
 
       {/* Internal apps — same React project */}
-      <div className="mx-auto w-full max-w-4xl px-6 pb-8">
+      <div className="mx-auto w-full max-w-6xl px-6 pb-8">
         <p
           className="mb-4 text-xs tracking-wider uppercase"
           style={{ color: 'rgba(255, 255, 255, 0.2)', letterSpacing: '0.15em' }}
@@ -219,7 +219,7 @@ export default function Home() {
 
       {/* External apps — standalone stations */}
       {sortedExternal.length > 0 && (
-        <div className="mx-auto w-full max-w-4xl px-6 pb-8">
+        <div className="mx-auto w-full max-w-6xl px-6 pb-8">
           <p
             className="mb-4 text-xs tracking-wider uppercase"
             style={{ color: 'rgba(255, 255, 255, 0.2)', letterSpacing: '0.15em' }}
@@ -237,7 +237,7 @@ export default function Home() {
 
       {/* Coming soon section */}
       {comingSoon.length > 0 && (
-        <div className="mx-auto w-full max-w-4xl px-6 pb-16">
+        <div className="mx-auto w-full max-w-6xl px-6 pb-16">
           <p
             className="mb-4 text-xs tracking-wider uppercase"
             style={{
