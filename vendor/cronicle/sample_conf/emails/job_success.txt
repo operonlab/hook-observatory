@@ -1,6 +1,6 @@
 To: [/notify_success]
 From: [/config/email_from]
-Subject: ✅ Cronicle Job Completed Successfully: [/event_title]
+Subject: ✅ [OK] [/event_title]
 
 Date/Time: [/nice_date_time]
 Event Title: [/event_title]
@@ -18,6 +18,9 @@ Avg. CPU Usage: [/nice_cpu]
 
 Job Details:
 [/job_details_url]
+
+Job Debug Log ([/nice_log_size]):
+[/job_log_url]
 
 Edit Event:
 [/edit_event_url]

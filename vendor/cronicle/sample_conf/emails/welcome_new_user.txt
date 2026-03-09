@@ -6,7 +6,7 @@ Hey [/user/full_name],
 
 Welcome to Cronicle!  Your new account username is "[/user/username]".  You can login to your new account by clicking the following link, or copying & pasting it into your browser:
 
-[/self_url]
+[/config/base_app_url]
 
 Regards,
 The Cronicle Team

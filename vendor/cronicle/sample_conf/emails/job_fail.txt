@@ -1,6 +1,6 @@
 To: [/notify_fail]
 From: [/config/email_from]
-Subject: ⚠️ Cronicle Job Failed: [/event_title]
+Subject: ⚠️ [/status]: [/event_title] 
 
 Date/Time: [/nice_date_time]
 Event Title: [/event_title]

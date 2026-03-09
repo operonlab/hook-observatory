@@ -43,7 +43,9 @@ Class.subclass( Page.Base, "Page.History", {
 			var sorted_events = app.schedule.sort( function(a, b) {
 				return a.title.toLowerCase().localeCompare( b.title.toLowerCase() );
 			} );
-			html += '<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_event" class="subtitle_menu" onChange="$P().jump_to_event_history()"><option value="">Filter by Event</option>' + render_menu_options( sorted_events, '', false ) + '</select></div>';
+			html += `<div class="subtitle_widget"><a href="./db" ><b>Event Dashboard</b></a></div>`
+			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_eventlimit" class="subtitle_menu" onChange="$('#d_history_table').empty();$P().get_history()"  title="Show only last N occurences per event"><option value="">Last occurences (all)</option><option>1</option><option>2</option><option>3</option><option>5</option><option>10</option></select></div>`;
+			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_event" class="subtitle_menu" onChange="$P().jump_to_event_history()"><option value="">Filter by Event</option>${render_menu_options(sorted_events, "", false)}</select></div>`
 			html += '<div class="clear"></div>';
 		html += '</div>';
 		
@@ -56,8 +58,10 @@ Class.subclass( Page.Base, "Page.History", {
 	
 	get_history: function() {
 		var args = this.args;
+		var evtLimit = parseInt($("#fe_hist_eventlimit").val())
 		if (!args.offset) args.offset = 0;
-		if (!args.limit) args.limit = config.default_job_history_limit || 25;
+		if (!evtLimit) args.limit = 25;
+		if(evtLimit)  args.limit = parseInt(evtLimit*100);
 		app.api.post( 'app/get_history', copy_object(args), this.receive_history.bind(this) );
 	},
 	
@@ -73,8 +77,22 @@ Class.subclass( Page.Base, "Page.History", {
 		
 		this.events = [];
 		if (resp.rows) this.events = resp.rows;
+
+		// show only last N occurences of each job if set by fe_hist_eventlimit
+		var rowLimitDict = {};
+		var rowLimit = $("#fe_hist_eventlimit").val();
+		if (rowLimit > 0) {
+			var newRows = []
+			for (var idx = 0, len = resp.rows.length; idx < len; idx++) {
+				var row = resp.rows[idx];
+				rowLimitDict[row.event] = rowLimitDict[row.event] ? rowLimitDict[row.event] + 1 : 1;
+				if (rowLimitDict[row.event] > rowLimit) {continue;}
+				newRows.push(row)
+			}
+			resp.rows = newRows
+		} //
 		
-		var cols = ['Job ID', 'Event Name', 'Category', 'Plugin', 'Hostname', 'Result', 'Start Date/Time', 'Elapsed Time'];
+		var cols = ['Job ID', 'Event Name', 'Argument', 'Category', 'Plugin', 'Hostname',  'Result', 'Start Date/Time', 'Elapsed Time'];
 		
 		var self = this;
 		var num_visible_items = 0;
@@ -92,7 +110,7 @@ Class.subclass( Page.Base, "Page.History", {
 			var event = find_object( app.schedule, { id: job.event } );
 			var event_link = '(None)';
 			if (event && job.id) {
-				event_link = '<div class="td_big"><a href="#History?sub=event_history&id='+job.event+'">' + self.getNiceEvent('<b>' + (event.title || job.event) + '</b>', col_width + 40) + '</a></div>';
+				event_link = '<div class="td_big"><a href="#History?sub=event_history&id='+job.event+'">' + self.getNiceEvent((event.title || job.event), col_width + 40) + '</a></div>';
 			}
 			else if (job.event_title) {
 				event_link = self.getNiceEvent(job.event_title, col_width + 40);
@@ -104,22 +122,34 @@ Class.subclass( Page.Base, "Page.History", {
 			var plugin = job.plugin ? find_object( app.plugins, { id: job.plugin } ) : null;
 			if (!plugin && job.plugin_title) plugin = { id: job.plugin, title: job.plugin_title };
 			
+			let job_expired = time_now() > job.expires_at
+			let href = job_expired ? '' : '<a href="#JobDetails?id='+job.id+'">'
+
 			var job_link = '<div class="td_big">--</div>';
-			if (job.id) job_link = '<div class="td_big"><a href="#JobDetails?id='+job.id+'"><b>' + self.getNiceJob(job) + '</b></a></div>';
+			if (job.id) job_link = `<div class="td_big">${href}` + self.getNiceJob('<b>' + job.id + '</b>') + '</a></div>';
+			
+			// error title - clear from escape characters and tags
+			var errorTitle = typeof job.description === 'string' ? job.description.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "").replace(/"/g, "&quot;") : " " 
+			if(errorTitle.indexOf('<') > -1) errorTitle = encode_entities(errorTitle) // sometime error message contains <>
+
+			var jobStatus = (job.code == 0) ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Success</span>' : `<span class="color_label red" title="${errorTitle}"><i class="fa fa-warning">&nbsp;</i>Error</span>`
+			if(job.code == 255) {jobStatus = `<span class="color_label yellow" title="${errorTitle}"><i class="fa fa-warning">&nbsp;</i>Warning</span>`}
 			
 			var tds = [
-				job_link,
-				event_link,
+				job_link,				
+				event_link ,
+				self.getNiceArgument(job.arg, 40, self.args),				
 				self.getNiceCategory( cat, col_width ),
 				self.getNicePlugin( plugin, col_width ),
-				self.getNiceGroup( null, job.hostname, col_width ),
-				(job.code == 0) ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Success</span>' : '<span class="color_label red"><i class="fa fa-warning">&nbsp;</i>Error</span>',
+				self.getNiceGroup( null, job.hostname, col_width ),				
+				jobStatus,
+				// job.arg ? `<div class="ellip" style="max-width:40">${String(job.arg).substring(0,40)}</div>`  : '', // argument
 				get_nice_date_time( job.time_start, false, true ),
 				get_text_from_seconds( job.elapsed, true, false )
 				// actions.join(' | ')
 			];
 			
-			if (!job.id) tds.className = 'disabled';
+			if (!job.id || job_expired) tds.className = 'disabled';
 			
 			if (cat && cat.color) {
 				if (tds.className) tds.className += ' '; else tds.className = '';
@@ -138,6 +168,129 @@ Class.subclass( Page.Base, "Page.History", {
 		this.div.find('#d_history_table').html( html );
 	},
 	
+	gosub_error_history: function(args) {
+		// show history
+		app.setWindowTitle( "Query History" );
+		
+		var html = '';
+		// html += '<div style="padding:5px 15px 15px 15px;">';
+		html += '<div style="padding:20px 20px 30px 20px">';
+		
+		html += '<div class="subtitle">';
+			html += 'Query History';
+
+			html += '<div class="clear"></div>';
+		html += '</div>';
+		
+		html += '<div id="d_error_history_table"></div>';
+		html += '</div>'; // padding
+		this.div.html( html );
+
+		var args = this.args;
+		// var evtLimit = parseInt($("#fe_hist_eventlimit").val())
+		if (!args.offset) args.offset = 0;
+		if (!args.limit) args.limit = 25;
+		// if(evtLimit)  args.limit = parseInt(evtLimit*100);
+		app.api.post( 'app/get_errors', copy_object(args), this.receive_error_history.bind(this) );
+		
+	},
+
+	receive_error_history: function(resp) {
+		// receive page of history from server, render it
+		this.lastErrorHistoryResp = resp;
+		
+		var html = '';
+		this.div.removeClass('loading');
+
+		html += this.getSidebarTabs( 'error_history',
+		[
+			['history', "All Completed"],
+			// ['event_history', "Event History"],
+			// ['event_stats', "Event Stats"],
+			['error_history', "Query History"],
+		]
+	    );
+		
+		var size = get_inner_window_size();
+		var col_width = Math.floor( ((size.width * 0.9) - 50) / 8 );
+		
+		this.events = [];
+		if (resp.rows) this.events = resp.rows;
+
+		var cols = ['Job ID', 'Event Name', 'Argument', 'Category', 'Plugin', 'Hostname', 'Code', 'Description', 'Start Date/Time', 'Elapsed Time'];
+		
+		var self = this;
+		var num_visible_items = 0;
+		
+		html += this.getPaginatedTable( resp, cols, 'event', function(job, idx) {
+			/*var actions = [
+				'<a href="#JobDetails?id='+job.id+'"><b>Job&nbsp;Details</b></a>',
+				'<a href="#History?sub=event_history&id='+job.event+'"><b>Event&nbsp;History</b></a>'
+			];*/
+			
+			// suppress row view if job was deleted
+			if (job.action != 'job_complete') return null;
+			num_visible_items++;
+			
+			var event = find_object( app.schedule, { id: job.event } );
+			var event_link = '(None)';
+
+			if (event && job.id) {
+				let niceEvent = self.getNiceEvent((event.title || job.event), col_width + 40) 
+				if(self.args.id) event_link = `<div class="td_big"> ${niceEvent}</div>` // no hyperlink if already filtered by id
+				else { event_link = `<div class="td_big"><a href="#History?sub=error_history&error=1&id=${job.event}">${niceEvent}</a></div>` }
+			}
+			else if (job.event_title) {
+				event_link = self.getNiceEvent(job.event_title, col_width + 40);
+			}
+			
+			var cat = job.category ? find_object( app.categories, { id: job.category } ) : null;
+			if (!cat && job.category_title) cat = { id: job.category, title: job.category_title };
+			
+			var plugin = job.plugin ? find_object( app.plugins, { id: job.plugin } ) : null;
+			if (!plugin && job.plugin_title) plugin = { id: job.plugin, title: job.plugin_title };
+			
+			let job_expired = time_now() > job.expires_at
+			let href = job_expired ? '' : '<a href="#JobDetails?id='+job.id+'">'
+
+			var job_link = '<div class="td_big">--</div>';
+			if (job.id) job_link = `<div class="td_big">${href}` + self.getNiceJob('<b>' + job.id + '</b>') + '</a></div>';
+		
+
+			var tds = [
+				job_link,				
+				event_link ,
+				self.getNiceArgument(job.arg, 40, self.args),				
+				self.getNiceCategory( cat, col_width ),
+				self.getNicePlugin( plugin, col_width ),
+				self.getNiceGroup( null, job.hostname, col_width ),				
+				job.code,
+				encode_entities(job.description || job.memo),
+				// job.arg ? `<div class="ellip" style="max-width:40">${String(job.arg).substring(0,40)}</div>`  : '', // argument
+				get_nice_date_time( job.time_start, false, true ),
+				get_text_from_seconds( job.elapsed, true, false )
+				// actions.join(' | ')
+			];
+			
+			if (!job.id || job_expired) tds.className = 'disabled';
+			
+			if (cat && cat.color) {
+				if (tds.className) tds.className += ' '; else tds.className = '';
+				tds.className += cat.color;
+			}
+			
+			return tds;
+		} );
+		
+		if (resp.rows && resp.rows.length && !num_visible_items) {
+			html += '<tr><td colspan="'+cols.length+'" align="center" style="padding-top:10px; padding-bottom:10px; font-weight:bold;">';
+			html += 'All items were deleted on this page.';
+			html += '</td></tr>';
+		}
+		
+		this.div.find('#d_error_history_table').html( html );
+	},
+
 	jump_to_event_history: function() {
 		// make a selection from the event filter menu
 		var id = $('#fe_hist_event').val();
@@ -147,8 +300,15 @@ Class.subclass( Page.Base, "Page.History", {
 	gosub_event_stats: function(args) {
 		// request event stats
 		if (!args.offset) args.offset = 0;
-		if (!args.limit) args.limit = config.default_job_stats_limit || 50;
+		if (!args.limit) args.limit = 50;
 		app.api.post( 'app/get_event_history', copy_object(args), this.receive_event_stats.bind(this) );
+	},
+
+	togglePerfLegend: function() {
+		let chart = this.charts.perf
+		if(!chart) return;
+		chart.options.legend.display = !chart.options.legend.display
+		chart.update()
 	},
 	
 	receive_event_stats: function(resp) {
@@ -179,37 +339,17 @@ Class.subclass( Page.Base, "Page.History", {
 		
 		html += this.getSidebarTabs( 'event_stats',
 			[
-				['history', "All Completed"],
+				['history', "All Completed"],				
+				['event_history&id=' + args.id, "Event History"],
 				['event_stats', "Event Stats"],
-				['event_history&id=' + args.id, "Event History"]
+				['error_history', "Query History"],
 			]
 		);
-		html += '<div style="padding:20px 20px 30px 20px">';
+		// html += '<div style="padding:20px 20px 30px 20px">';
+
+		let eventTitle = `<a href="#Schedule?sub=edit_event&id=${event.id}">${this.getNiceEvent(event.title, col_width)}</a>`
 		
-		html += '<fieldset style="margin-top:0px; margin-right:0px; padding-top:10px;"><legend>Event Stats</legend>';
-			
-			html += '<div style="float:left; width:25%;">';
-				html += '<div class="info_label">EVENT NAME</div>';
-				html += '<div class="info_value"><a href="#Schedule?sub=edit_event&id='+event.id+'">' + this.getNiceEvent(event.title, col_width) + '</a></div>';
-				
-				html += '<div class="info_label">CATEGORY NAME</div>';
-				html += '<div class="info_value">' + this.getNiceCategory(cat, col_width) + '</div>';
-				
-				html += '<div class="info_label">EVENT TIMING</div>';
-				html += '<div class="info_value">' + (event.enabled ? summarize_event_timing(event.timing, event.timezone) : '(Disabled)') + '</div>';
-			html += '</div>';
-			
-			html += '<div style="float:left; width:25%;">';
-				html += '<div class="info_label">USERNAME</div>';
-				html += '<div class="info_value">' + this.getNiceUsername(event, false, col_width) + '</div>';
-				
-				html += '<div class="info_label">PLUGIN NAME</div>';
-				html += '<div class="info_value">' + this.getNicePlugin(plugin, col_width) + '</div>';
-				
-				html += '<div class="info_label">EVENT TARGET</div>';
-				html += '<div class="info_value">' + this.getNiceGroup(group, event.target, col_width) + '</div>';
-			html += '</div>';
-			
+	
 			var total_elapsed = 0;
 			var total_cpu = 0;
 			var total_mem = 0;
@@ -233,38 +373,36 @@ Class.subclass( Page.Base, "Page.History", {
 			var nice_last_result = 'n/a';
 			if (rows.length > 0) {
 				var job = find_object( rows, { action: 'job_complete' } );
-				if (job) nice_last_result = (job.code == 0) ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Success</span>' : '<span class="color_label red"><i class="fa fa-warning">&nbsp;</i>Error</span>';
+				//if (job) nice_last_result = (job.code == 0) ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Success</span>' : '<span class="color_label red"><i class="fa fa-warning">&nbsp;</i>Error</span>';
+				if (job) {
+					nice_last_result = (job.code == 0) ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Success</span>' : '<span class="color_label red"><i class="fa fa-warning">&nbsp;</i>Error</span>'
+					if(job.code == 255) {nice_last_result = '<span class="color_label yellow"><i class="fa fa-warning">&nbsp;</i>Warning</span>'}
+				} 
 			}
 			
-			html += '<div style="float:left; width:25%;">';
-				html += '<div class="info_label">AVG. ELAPSED</div>';
-				html += '<div class="info_value">' + get_text_from_seconds(total_elapsed / count, true, false) + '</div>';
-				
-				html += '<div class="info_label">AVG. CPU</div>';
-				html += '<div class="info_value">' + short_float(total_cpu / count) + '%</div>';
-				
-				html += '<div class="info_label">AVG. MEMORY</div>';
-				html += '<div class="info_value">' + get_text_from_bytes( total_mem / count ) + '</div>';
-			html += '</div>';
-			
-			html += '<div style="float:left; width:25%;">';
-				html += '<div class="info_label">SUCCESS RATE</div>';
-				html += '<div class="info_value">' + pct(total_success, count) + '</div>';
-				
-				html += '<div class="info_label">LAST RESULT</div>';
-				html += '<div class="info_value" style="position:relative; top:1px;">' + nice_last_result + '</div>';
-				
-				html += '<div class="info_label">AVG. LOG SIZE</div>';
-				html += '<div class="info_value">' + get_text_from_bytes( total_log_size / count ) + '</div>';
-			html += '</div>';
-			
-			html += '<div class="clear"></div>';
-		html += '</fieldset>';
+		html += `
+		<div class="job-details grid-container running" style="margin:8px">
+		  <div class="job-details  grid-item"><div class="info_label">EVENT NAME:</div><div class="info_value">${eventTitle}</div></div>
+		  <div class="job-details  grid-item"><div class="info_label">CATEGORY:</div><div class="info_value">${this.getNiceCategory(cat, col_width) }</div></div>
+		  <div class="job-details  grid-item"><div class="info_label">PLUGIN:</div><div class="info_value">${this.getNicePlugin(plugin, col_width)}</div></div>
+		  <div class="job-details  grid-item"><div class="info_label">EVENT TARGET:</div><div class="info_value">${this.getNiceGroup(group, event.target, col_width)}</div></div>
+		  <div class="job-details  grid-item"><div class="info_label">USERNAME:</div><div id="d_live_pid" class="info_value">${this.getNiceUsername(event, false, col_width)}</div></div>
+		  <div class="job-details  grid-item"><div class="info_label">EVENT TIMING:</div><div class="info_value">${event.enabled ? summarize_event_timing(event.timing, event.timezone) : '(Disabled)'}</div></div>
+ 	  
+		  <div class="job-details  grid-item"><div class="info_label">AVG CPU:</div><div class="info_value">${short_float(total_cpu / count)}%</div></div>		  
+		  <div class="job-details  grid-item"><div class="info_label">AVG MEMORY:</div><div id="d_live_elapsed" class="info_value">${get_text_from_bytes( total_mem / count )}</div></div>   				    			
+		  <div class="job-details  grid-item"><div class="info_label">AVG LOG SIZE:</div><div id="d_live_remain" class="info_value"> ${get_text_from_bytes( total_log_size / count )}</div></div>
+		  <div class="job-details  grid-item"><div class="info_label">AVG ELAPSED:</div><div class="info_value">${get_text_from_seconds(total_elapsed / count, true, false)}</div></div>
+		  <div class="job-details  grid-item"><div class="info_label">SUCCESS RATE:</div><div class="info_value">${pct(total_success, count)}</div></div> 
+		  <div class="job-details  grid-item"><div class="info_label">LAST RESULT:</div><div class="info_value">${nice_last_result}</div></div>
+		</div>
+		<div class="clear"></div>
+	  `
 		
 		// graph containers
 		html += '<div style="margin-top:15px;">';
-			html += '<div class="graph-title">Performance History</div>';
-			html += '<div id="d_graph_hist_perf" style="position:relative; width:100%; height:300px; overflow:hidden;"><canvas id="c_graph_hist_perf"></canvas></div>';
+			html += '<div class="graph-title" onclick="$P().togglePerfLegend()"><span title="click to toggle legend on History">Performance History<span></div>';
+			html += `<div id="d_graph_hist_perf" style="position:relative; width:100%; height:100%; overflow:hidden;"><canvas height=${Math.round(window.innerHeight/3)} id="c_graph_hist_perf" ></canvas></div>`; // $P().togglePerfLegend()`
 		html += '</div>';
 		
 		html += '<div style="margin-top:10px; margin-bottom:20px; height:1px; background:#ddd;"></div>';
@@ -395,11 +533,14 @@ Class.subclass( Page.Base, "Page.History", {
 					labels: {
 						fontStyle: 'bold',
 						padding: 15
-					}
+					},
+
 				},
+
+
 				title:{
 					display: false,
-					text: ""
+					text: "toggle legend"
 				},
 				scales: {
 					xAxes: [{
@@ -421,13 +562,16 @@ Class.subclass( Page.Base, "Page.History", {
 							callback: function(value, index, values) {
 								if (value < 0) return '';
 								return '' + get_text_from_seconds_round_custom(value, true);
-							}
+							},
+							onClick: function(e,i) {$P().togglePerfLegend()}
 						},
 						scaleLabel: {
 							display: true,
+							onClick: $P().togglePerfLegend
 							// labelString: 'value'
 						}
-					}]
+					}],
+
 				},
 				tooltips: {
 					mode: 'nearest',
@@ -658,7 +802,7 @@ Class.subclass( Page.Base, "Page.History", {
 	gosub_event_history: function(args) {
 		// show table of all history for a single event
 		if (!args.offset) args.offset = 0;
-		if (!args.limit) args.limit = 25;
+		if (!args.limit) args.limit = 40;
 		app.api.post( 'app/get_event_history', copy_object(args), this.receive_event_history.bind(this) );
 	},
 	
@@ -682,13 +826,14 @@ Class.subclass( Page.Base, "Page.History", {
 		html += this.getSidebarTabs( 'event_history',
 			[
 				['history', "All Completed"],
+				['event_history', "Event History"],
 				['event_stats&id=' + args.id, "Event Stats"],
-				['event_history', "Event History"]
+				['error_history', "Query History"],
 			]
 		);
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
-		var cols = ['Job ID', 'Hostname', 'Result', 'Start Date/Time', 'Elapsed Time', 'Avg CPU', 'Avg Mem'];
+		var cols = ['Job ID', 'Argument', 'Hostname', 'Result', 'Memo', 'Start Date/Time', 'Elapsed Time', 'Avg CPU', 'Avg Mem'];
 		
 		html += '<div class="subtitle">';
 			html += 'Event History: ' + event.title;
@@ -707,16 +852,27 @@ Class.subclass( Page.Base, "Page.History", {
 			if (job.cpu) cpu_avg = short_float( (job.cpu.total || 0) / (job.cpu.count || 1) );
 			if (job.mem) mem_avg = short_float( (job.mem.total || 0) / (job.mem.count || 1) );
 			
+			var errorTitle = job.description ? job.description.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "") : " " 
+			var jobStatusHist = (job.code == 0) ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Success</span>' : `<span title="${errorTitle}" class="color_label red"><i class="fa fa-warning">&nbsp;</i>Error</span>`
+			if(job.code == 255) {jobStatusHist = `<span title="${errorTitle}" class="color_label yellow"><i class="fa fa-warning">&nbsp;</i>Warning</span>`}
+
+			let job_expired = time_now() > job.expires_at
+			let href = job_expired ? '' : '<a href="#JobDetails?id='+job.id+'">'
+
 			var tds = [
-				'<div class="td_big"><a href="#JobDetails?id=' + job.id + '"><b>' + self.getNiceJob(job) + '</b></a></div>',
+				`<div class="td_big" style="white-space:nowrap;">${href}<i class="fa fa-pie-chart">&nbsp;</i><b>${job.id.substring(0, 11)}</b></span></div>`,
+				self.getNiceArgument(job.arg, 40, self.args),
 				self.getNiceGroup( null, job.hostname, col_width ),
-				(job.code == 0) ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Success</span>' : '<span class="color_label red"><i class="fa fa-warning">&nbsp;</i>Error</span>',
+				jobStatusHist,
+				encode_entities(job.memo),
 				get_nice_date_time( job.time_start, false, true ),
 				get_text_from_seconds( job.elapsed, true, false ),
 				'' + cpu_avg + '%',
 				get_text_from_bytes(mem_avg)
 				// actions.join(' | ')
 			];
+
+			if(job_expired) tds.className = 'disabled';
 			
 			return tds;
 		} );
@@ -745,6 +901,12 @@ Class.subclass( Page.Base, "Page.History", {
 			case 'history':
 				if (this.lastHistoryResp) {
 					this.receive_history( this.lastHistoryResp );
+				}
+			break;
+
+			case 'error_history':
+				if (this.lastErrorHistoryResp) {
+					this.receive_history( this.lastErrorHistoryResp );
 				}
 			break;
 			

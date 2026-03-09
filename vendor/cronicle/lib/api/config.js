@@ -14,16 +14,23 @@ module.exports = Class.create({
 	api_config: function(args, callback) {
 		// send config to client
 		var self = this;
-		
+
+
 		// do not cache this API response
 		this.forceNoCacheResponse(args);
 		
-		// if there is no master server, this has to fail (will be polled for retries)
-		if (!this.multi.masterHostname) {
-			var resp = { code: 'master', description: "No master server found" };
+		// if there is no manager server, this has to fail (will be polled for retries)
+		if (!this.multi.managerHostname) {
+			// return callback({ code: 'manager', description: "No manager server found" }); 
+			var resp = { code: 'manager', description: "No manager server found" };
 			var payload = 'app.receiveConfig(' + JSON.stringify(resp) + ');' + "\n";
 			return callback( "200 OK", { 'Content-Type': 'text/javascript' }, payload );
 		}
+
+		let base_path = String(this.server.config.get('base_path') || '').trim()
+		if (!(/^\/\w+$/i).test(base_path)) base_path = "/"
+
+		let oauth = this.server.config.get('oauth') || {}
 		
 		var resp = {
 			code: 0,
@@ -38,15 +45,19 @@ module.exports = Class.create({
 				external_user_api: this.usermgr.config.get('external_user_api') || '',
 				web_socket_use_hostnames: this.server.config.get('web_socket_use_hostnames') || 0,
 				web_direct_connect: this.server.config.get('web_direct_connect') || 0,
+				custom_live_log_socket_url: this.server.config.get('custom_live_log_socket_url'),
+				ui: this.server.config.get('ui') || {},
 				socket_io_transports: this.server.config.get('socket_io_transports') || 0,
-				custom_live_log_socket_url: this.server.config.get('custom_live_log_socket_url') || false,
+				base_path: base_path,
+				oauth: oauth.enabled || 0,
+				live_log_page_size: this.server.config.get('live_log_page_size') || 8192
 			} ),
 			port: args.request.headers.ssl ? this.web.config.get('https_port') : this.web.config.get('http_port'),
-			master_hostname: this.multi.masterHostname
+			manager_hostname: this.multi.managerHostname
 		};
 		
-		// if we're master, then return our ip for websocket connect
-		if (this.multi.master) {
+		// if we're manager, then return our ip for websocket connect
+		if (this.multi.manager) {
 			resp.servers = {};
 			resp.servers[ this.server.hostname ] = {
 				hostname: this.server.hostname,
