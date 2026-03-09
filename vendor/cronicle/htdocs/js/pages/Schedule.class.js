@@ -177,9 +177,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// FILE EDITOR ON SHELLPLUG'
 		let html = '<table>' +
-			get_form_table_row('Name', `<input type="text" id="fe_ee_pp_file_name" size="40" value="" spellcheck="false"/>`) +
+			get_form_table_row(_t('schedule.name'), `<input type="text" id="fe_ee_pp_file_name" size="40" value="" spellcheck="false"/>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Content', `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110"></textarea>`)
+			get_form_table_row(_t('schedule.content'), `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110"></textarea>`)
 		html += `</table>`
 
 		setTimeout(() => self.setFileEditor('.text'), 30) // editor needs to wait for a bit for modal window to render
@@ -221,9 +221,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		if (!file) return // sanity check
 
 		let html = '<table>' +
-			get_form_table_row('Name', `<input type="text" id="fe_ee_pp_file_name" size="40" value="${file.name}" spellcheck="false">`) +
+			get_form_table_row(_t('schedule.name'), `<input type="text" id="fe_ee_pp_file_name" size="40" value="${file.name}" spellcheck="false">`) +
 			get_form_table_spacer() +
-			get_form_table_row('Content', `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110">${file.content}</textarea>`)
+			get_form_table_row(_t('schedule.content'), `<textarea style="padding-right:20px"  id="fe_ee_pp_file_content" rows="36" cols="110">${file.content}</textarea>`)
 		html += '</table>'
 
 		setTimeout(() => self.setFileEditor(file.name), 30) // editor needs to wait for a bit for modal window to render
@@ -394,14 +394,14 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		let el_style = 'width: 240px; font-size:16px;'
 		let html = '<table>' +  //<option value="">(Select Event)</option>
-			get_form_table_row('Event', `<select id="fe_ee_pp_wf_select_event" style="${el_style}">${event_menu}</select>`) +
+			get_form_table_row(_t('schedule.event'), `<select id="fe_ee_pp_wf_select_event" style="${el_style}">${event_menu}</select>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Job Argument', `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="" spellcheck="false"/>`) +
+			get_form_table_row(_t('schedule.job_argument'), `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="" spellcheck="false"/>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Skip', `<input type="checkbox" style="cursor:pointer" id="fe_ee_pp_wf_evt_skip" />`) +
+			get_form_table_row(_t('schedule.skip'), `<input type="checkbox" style="cursor:pointer" id="fe_ee_pp_wf_evt_skip" />`) +
 			'</table>'
 
-		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i> Add Event', html, "Add", function (result) {
+		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i> ' + _t('schedule.add_event'), html, _t('schedule.add_event'), function (result) {
 			app.clearError();
 
 			if (result) {
@@ -431,12 +431,12 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let event_list = render_menu_options([evt], evt.id)
 		let el_style = 'width: 240px;  font-size:16px;'
 		let html = '<table>' +
-			get_form_table_row('Event', `<select id="fe_ee_pp_wf_select_event" style="${el_style}" disabled>${event_list}</select>`) +
+			get_form_table_row(_t('schedule.event'), `<select id="fe_ee_pp_wf_select_event" style="${el_style}" disabled>${event_list}</select>`) +
 			get_form_table_spacer() +
-			get_form_table_row('Job Argument', `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="${evt.arg}" spellcheck="false"/>`) +
+			get_form_table_row(_t('schedule.job_argument'), `<input type="text" id="fe_ee_pp_wf_evt_arg" size="30" value="${evt.arg}" spellcheck="false"/>`) +
 			'</table>'
 
-		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i>Edit Event Options', html, "OK", function (result) {
+		app.confirm('<i class="fa fa-clock-o">&nbsp;&nbsp;</i>' + _t('schedule.edit_event'), html, "OK", function (result) {
 			app.clearError();
 
 			if (result) {
@@ -774,8 +774,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		let miniButtons = ''
 
 		if (app.hasPrivilege('create_events')) {
-			miniButtons += '<div class="subtitle_widget"><i style="width:20px;cursor:pointer;" class="fa fa fa-plus-circle" title="Add Event" onMouseUp="$P().edit_event(-1)"></i></div>'
-			miniButtons += '<div class="subtitle_widget"><i style="width:20px;cursor:pointer;" class="fa fa-bolt" title="Generate Event" onMouseUp="$P().do_random_event()"></i></div>'
+			miniButtons += '<div class="subtitle_widget"><i style="width:20px;cursor:pointer;" class="fa fa fa-plus-circle" title="' + _t('schedule.add_event') + '" onMouseUp="$P().edit_event(-1)"></i></div>'
+			miniButtons += '<div class="subtitle_widget"><i style="width:20px;cursor:pointer;" class="fa fa-bolt" title="' + _t('schedule.generate') + '" onMouseUp="$P().do_random_event()"></i></div>'
 		}
 
 		// if (app.isAdmin()) {}
@@ -790,13 +790,13 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		html += `
 		 <div class="subtitle flex-container" style="height:auto;padding:8px">
-		 <div style="width: calc(45%)">Scheduled Events ${cycleWarning}</div>
+		 <div style="width: calc(45%)">${_t('schedule.scheduled_events')} ${cycleWarning}</div>
 		 <div class="flex-container" style="width:calc(10%)">${miniButtons}</div>
 		 <div style="width: calc(45%);padding-right:10px">
 		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_target" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Servers</option>${this.render_target_menu_options(args.target)}</select></div>
 		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_plugin" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Plugins</option>${render_menu_options(app.plugins, args.plugin, false)}</select></div>
 		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_cat" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Cats</option>${render_menu_options(app.categories, args.category, false)}</select></div>
-		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_enabled" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Events</option>${render_menu_options([[1, 'Enabled'], [-1, 'Disabled'], ['success', "Last Run Success"], ['error', "Last Run Error"], ["chained", "Chained"]], args.enabled, false)}</select></div>
+		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_sch_enabled" class="subtitle_menu" style="width:70px;" onChange="$P().set_search_filters()"><option value="">All Events</option>${render_menu_options([[1, _t('schedule.enabled')], [-1, _t('schedule.disabled')], ['success', "Last Run Success"], ['error', "Last Run Error"], ["chained", "Chained"]], args.enabled, false)}</select></div>
 		   <div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_event_view" class="subtitle_menu" style="width:70px;" onChange="$P().change_event_view(this.value)"><option value="">Details</option>${render_menu_options([['grid', 'Grid'], ['gridall', "Grid-All"]], eventView, false)}</select></div>
 		 </div>          
 		 
@@ -1098,23 +1098,23 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += ` <center><table><tr><div style="height:30px;"></div>`
 
 		if (app.hasPrivilege('create_events')) {
-			html += `<td><div class="button" style="width:130px;" onMouseUp="$P().edit_event(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Event...</div></td>
+			html += `<td><div class="button" style="width:130px;" onMouseUp="$P().edit_event(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>${_t('schedule.add_event')}...</div></td>
 			<td width="40">&nbsp;</td>
-			<td><div class="button" style="width:130px;" onMouseUp="$P().do_random_event()"><i class="fa fa-bolt">&nbsp;&nbsp;</i>Generate</div></td>
+			<td><div class="button" style="width:130px;" onMouseUp="$P().do_random_event()"><i class="fa fa-bolt">&nbsp;&nbsp;</i>${_t('schedule.generate')}</div></td>
 			<td width="40">&nbsp;</td>
 			`
 		}
 
 		// backup/restore buttons - admin only
 		if (app.isAdmin()) {
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().export_schedule()"><i class="fa fa-download">&nbsp;&nbsp;</i>Backup</div></td><td width="40">&nbsp;</td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().export_schedule()"><i class="fa fa-download">&nbsp;&nbsp;</i>' + _t('schedule.backup') + '</div></td><td width="40">&nbsp;</td>';
 
 			if (app.schedule.length === 0) {  // only show import button if there are no scheduled jobs yet
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().import_schedule()"><i class="fa fa-upload">&nbsp;&nbsp;</i>Import</div></td><td width="40">&nbsp;</td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().import_schedule()"><i class="fa fa-upload">&nbsp;&nbsp;</i>' + _t('schedule.import') + '</div></td><td width="40">&nbsp;</td>';
 			}
 		}
 
-		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_graph()"><i class="fa fa-pie-chart">&nbsp;&nbsp;</i>Show Graph</div></td><td width="40">&nbsp;</td>';
+		html += '<td><div class="button" style="width:130px;" onMouseUp="$P().show_graph()"><i class="fa fa-pie-chart">&nbsp;&nbsp;</i>' + _t('schedule.show_graph') + '</div></td><td width="40">&nbsp;</td>';
 		this.div.html(html);
 		this.update_job_last_runs();
 
@@ -1300,7 +1300,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 				when: time_now(),
 				title: "Set Current Event Date/Time",
 				description: "Configure the internal date/time for the event to run immediately.  This is the timestamp which the Plugin will see as the current time.",
-				button: "Run Now",
+				button: _t('schedule.run_now'),
 				timezone: event.timezone || app.tz,
 
 				callback: function (new_epoch) {
@@ -1356,7 +1356,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// check for active jobs first
 		var jobs = find_objects(app.activeJobs, { event: event.id });
-		if (jobs.length) return app.doError("Sorry, you cannot delete an event that has active jobs running.");
+		if (jobs.length) return app.doError(_t('schedule.sorry_you_cannot_delete_an_event_that_ha'));
 
 		var msg = "Are you sure you want to delete the event <b>" + event.title + "</b>?";
 
@@ -1368,9 +1368,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		}
 
 		// proceed with delete
-		app.confirm('<span style="color:red">Delete Event</span>', msg, "Delete", function (result) {
+		app.confirm('<span style="color:red">' + _t('schedule.delete_event') + '</span>', msg, _t('common.btn_delete'), function (result) {
 			if (result) {
-				app.showProgress(1.0, "Deleting Event...");
+				app.showProgress(1.0, _t('schedule.deleting_event'));
 				app.api.post('app/delete_event', event, function (resp) {
 					app.hideProgress();
 					app.showMessage('success', "Event '" + event.title + "' was deleted successfully.");
@@ -1457,9 +1457,9 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		<tr><td colspan="2" align="center">
 		<div style="height:30px;"></div>
 		<table><tr>
-		<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">Cancel</div></td>
+		<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">${_t('schedule.cancel')}</div></td>
 		<td width="50">&nbsp;</td>
-		<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_event()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Create Event</div></td>
+		<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_event()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>${_t('schedule.create_event')}</div></td>
 		</tr></table>
 		</td></tr>
 		</table></center>
@@ -1488,7 +1488,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Creating event...");
+		app.showProgress(1.0, _t('schedule.creating_event'));
 		app.api.post('app/create_event', event, this.new_event_finish.bind(this));
 	},
 
@@ -1506,7 +1506,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Creating event...");
+		app.showProgress(1.0, _t('schedule.creating_event'));
 		app.api.post('app/create_event', event, this.new_event_finish.bind(this));
 	},
 
@@ -1535,7 +1535,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 	gosub_edit_event: function (args) {
 		// edit event subpage
 		var event = find_object(app.schedule, { id: args.id });
-		if (!event) return app.doError("Could not locate Event with ID: " + args.id);
+		if (!event) return app.doError(_t('schedule.could_not_locate_event_with_id') + args.id);
 
 		// this.wf = event.workflow || []
 		// this.files = event.files || []
@@ -1561,7 +1561,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		var side_tabs = [];
 		side_tabs.push(['events', "Schedule"]);
 		if (app.hasPrivilege('create_events')) side_tabs.push(['new_event', "Add New Event"]);
-		side_tabs.push(['edit_event', "Edit Event"]);
+		side_tabs.push(['edit_event', _t('schedule.edit_event')]);
 
 		html += this.getSidebarTabs('edit_event', side_tabs);
 
@@ -1584,8 +1584,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		// Internal ID
 		if (this.isAdmin()) {
-			html += get_form_table_row('Event ID', '<div style="font-size:14px;">' + event.id + '</div>');
-			html += get_form_table_caption("The internal event ID used for API calls.  This cannot be changed.");
+			html += get_form_table_row(_t('schedule.event_id'), '<div style="font-size:14px;">' + event.id + '</div>');
+			html += get_form_table_caption(_t('schedule.the_internal_event_id_used_for_api_calls'));
 			html += '<br>'
 			html += get_form_table_spacer();
 		}
@@ -1595,27 +1595,27 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += '<tr><td colspan="2" align="center"><div style="height:30px;"></div><table><tr>';
 
 		// cancel
-		html += '<td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">Cancel</div></td>';
+		html += '<td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().cancel_event_edit()">' + _t('schedule.cancel') + '</div></td>';
 
 		// delete
 		if (app.hasPrivilege('delete_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().delete_event(\'edit\')">Delete Event...</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().delete_event(\'edit\')">' + _t('schedule.delete_event') + '...</div></td>';
 		}
 
 		// copy
 		if (app.hasPrivilege('create_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_event()">Copy Event...</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().do_copy_event()">' + _t('schedule.copy_event') + '</div></td>';
 		}
 
 		// run
 		if (app.hasPrivilege('run_events')) {
-			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().run_event_from_edit(event)">Run Now</div></td>';
+			html += '<td width="30">&nbsp;</td><td><div class="button" style="width:110px; font-weight:normal;" onMouseUp="$P().run_event_from_edit(event)">' + _t('schedule.run_now') + '</div></td>';
 		}
 
 		// save
 		html += `
 		<td width="30">&nbsp;</td>
-		<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_event()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>Save Changes</div></td>
+		<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_event()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>${_t('schedule.save_changes')}</div></td>
 		</tr></table>
 		</td></tr>
 		</table>
@@ -1689,7 +1689,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 
 		this.event = event;
 
-		app.showProgress(1.0, "Saving event...");
+		app.showProgress(1.0, _t('schedule.saving_event'));
 		app.api.post('app/update_event', event, this.save_event_finish.bind(this));
 	},
 
@@ -1790,7 +1790,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 		html += get_form_table_spacer();
 
 		// event enabled
-		html += get_form_table_row(_t('schedule.schedule'), '<input type="checkbox" id="fe_ee_enabled" value="1" ' + (event.enabled ? 'checked="checked"' : '') + '/><label for="fe_ee_enabled">Event Enabled</label>');
+		html += get_form_table_row(_t('schedule.schedule'), '<input type="checkbox" id="fe_ee_enabled" value="1" ' + (event.enabled ? 'checked="checked"' : '') + '/><label for="fe_ee_enabled">' + _t('schedule.enabled') + '</label>');
 		html += get_form_table_caption(_t('schedule.select_whether_the_event_should_be_enabl'));
 		html += get_form_table_spacer();
 
@@ -2236,7 +2236,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 			get_form_table_caption(_t('schedule.enter_your_crontab_datetime_expression_h')) +
 			'</table></center>';
 
-		app.confirm('<i class="fa fa-clock-o">&nbsp;</i>Import from Crontab', html, "Import", function (result) {
+		app.confirm('<i class="fa fa-clock-o">&nbsp;</i>' + _t('schedule.import'), html, _t('schedule.import'), function (result) {
 			app.clearError();
 
 			if (result) {
@@ -3027,8 +3027,8 @@ Class.subclass(Page.Base, "Page.Schedule", {
 					      </div>
 					      <div id="fe_ee_pp_evt_list"></div>
 					      <script>$P().render_wf_event_list()</script>
-					      <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 0px" onMouseUp="$P().wf_event_add()">Add Event</div>
-						  <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 8px" onMouseUp="$P().wf_event_add_cat()">Add Category</div><br>
+					      <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 0px" onMouseUp="$P().wf_event_add()">${_t('schedule.add_event')}</div>
+						  <div class="button mini" style="width:90px;float:left; margin:10px 10px 10px 8px" onMouseUp="$P().wf_event_add_cat()">${_t('schedule.add_category')}</div><br>
 					      `
 							break;
 
@@ -3036,7 +3036,7 @@ Class.subclass(Page.Base, "Page.Schedule", {
 							html += `
 							  <div id="fe_ee_pp_file_list"></div>
 							  <script>$P().render_file_list()</script>
-							  <div class="button mini" style="width:90px; margin:10px 10px 10px 0px" onMouseUp="$P().file_add()">Attach File</div>
+							  <div class="button mini" style="width:90px; margin:10px 10px 10px 0px" onMouseUp="$P().file_add()">${_t('schedule.attach_file')}</div>
 							  <div class="caption" >Access files via env vars: FILE_NAME_EXT or files/name.ext</div>
 							<br>
 	 					    `
