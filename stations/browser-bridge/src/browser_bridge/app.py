@@ -18,7 +18,6 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core import BridgeCore
-from .store import ConversationStore
 from .models import (
     BridgeConfig,
     BridgeResponse,
@@ -27,7 +26,8 @@ from .models import (
     NewConversationRequest,
     ProviderInfo,
 )
-from .providers import get_provider, list_providers, PROVIDERS
+from .providers import PROVIDERS, get_provider, list_providers
+from .store import ConversationStore
 
 logger = logging.getLogger(__name__)
 
