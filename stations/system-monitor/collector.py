@@ -1046,7 +1046,11 @@ def get_service_logs(label: str, lines: int = 50) -> dict:
 
 def collect_guardian_log(max_entries: int = 50) -> list[dict]:
     """Parse memory-guardian log into structured entries."""
-    log_path = Path.home() / ".tmux" / "logs" / "memory-guardian.log"
+    # Primary: new location managed by system-monitor
+    log_path = Path.home() / ".claude" / "data" / "system-monitor" / "memory-guardian.log"
+    # Fallback: legacy location
+    if not log_path.exists():
+        log_path = Path.home() / ".tmux" / "logs" / "memory-guardian.log"
     if not log_path.exists():
         return []
 
