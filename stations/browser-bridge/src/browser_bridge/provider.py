@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .playwright_backend import PlaywrightBackend
 from .safari import SafariBackend
 
 if TYPE_CHECKING:
     from .models import BridgeResponse
+
+# Environment variable to select backend: "safari" (default) or "playwright"
+_BACKEND_TYPE = os.environ.get("BRIDGE_BACKEND", "safari")
 
 
 @dataclass
@@ -37,7 +42,17 @@ class BrowserProvider(ABC):
     """
 
     meta: ProviderMeta
-    _backend: SafariBackend = SafariBackend()
+    _safari: SafariBackend = SafariBackend()
+
+    def _backend(self, session_id: str, pw_profile: str) -> SafariBackend | PlaywrightBackend:
+        """Return the configured backend.
+
+        Playwright backend needs session params; Safari ignores them.
+        A new PlaywrightBackend instance is created per call (lightweight dataclass).
+        """
+        if _BACKEND_TYPE == "playwright":
+            return PlaywrightBackend(session_id=session_id, profile_path=pw_profile)
+        return self._safari
 
     @abstractmethod
     async def ensure_ready(self, session_id: str, pw_profile: str) -> bool:
@@ -65,7 +80,7 @@ class BrowserProvider(ABC):
         session_id: str,
         pw_profile: str,
         prompt: str,
-        timeout: int = 120,
+        timeout: int = 120,  # noqa: ASYNC109
     ) -> BridgeResponse:
         """Wait for response completion and extract result.
 
@@ -77,26 +92,23 @@ class BrowserProvider(ABC):
         """Start a new conversation. Default: navigate to base_url."""
         await self._navigate(session_id, pw_profile, self.meta.base_url)
 
-    async def cleanup(self, session_id: str, pw_profile: str) -> None:
+    async def cleanup(self, session_id: str, pw_profile: str) -> None:  # noqa: B027
         """Provider-specific cleanup. Override if needed."""
 
     # --- Helpers for subclasses ---
 
     async def _run_js(self, session_id: str, pw_profile: str, js_code: str) -> str:
-        """Execute JavaScript in Safari's current tab and return result as string.
-
-        session_id and pw_profile are kept for interface compatibility but unused.
-        Safari's do JavaScript returns raw strings — no JSON parsing needed.
-        """
-        return await self._backend.run_js(js_code)
+        """Execute JavaScript via the configured backend and return result as string."""
+        return await self._backend(session_id, pw_profile).run_js(js_code)
 
     async def _navigate(self, session_id: str, pw_profile: str, url: str) -> None:
-        """Navigate Safari's current tab to URL.
-
-        session_id, pw_profile, and meta.headed are unused — Safari is always headed.
-        """
-        await self._backend.navigate(url)
+        """Navigate to URL via the configured backend."""
+        await self._backend(session_id, pw_profile).navigate(url)
 
     async def _snapshot(self, session_id: str, pw_profile: str) -> str:
         """Return page body text as a simple snapshot alternative."""
-        return await self._backend.run_js("return document.body.innerText.substring(0, 2000)")
+        js = "return document.body.innerText.substring(0, 2000)"
+        if _BACKEND_TYPE != "playwright":
+            # Safari: `return` keyword is not required
+            js = "document.body.innerText.substring(0, 2000)"
+        return await self._backend(session_id, pw_profile).run_js(js)
