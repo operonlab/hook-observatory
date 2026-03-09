@@ -194,6 +194,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4105/api/app/ping",
         expect_json={"code": 0},
     ),
+    LightCheck(
+        name="browser-bridge",
+        group="external",
+        url="http://127.0.0.1:4106/health",
+    ),
 ]
 
 
@@ -295,6 +300,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="cronicle-render",
         group="external",
         url="http://127.0.0.1:8080/apps/scheduler/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="browser-bridge-render",
+        group="external",
+        url="http://127.0.0.1:8080/apps/bridge/",
         playwright_code=_PW_BODY_CHECK,
     ),
 ]
@@ -424,6 +435,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "anvil-render": "anvl",
         "capture-console-render": "cap",
         "cronicle-render": "cron",
+        "browser-bridge-render": "bbrg",
     }
     session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
     start = time.monotonic()

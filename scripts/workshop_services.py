@@ -105,6 +105,14 @@ SERVICES = [
         "health": "http://127.0.0.1:4105/api/app/ping",
         "workdir": "/Users/joneshong/workshop/vendor/cronicle",
     },
+    {
+        "name": "browser-bridge",
+        "type": "uvicorn",
+        "cmd": "/Users/joneshong/workshop/stations/browser-bridge/.venv/bin/python3 -m uvicorn browser_bridge.app:app --host 127.0.0.1 --port 4106",
+        "port": 4106,
+        "health": "http://127.0.0.1:4106/health",
+        "workdir": "/Users/joneshong/workshop/stations/browser-bridge",
+    },
     # ── Infrastructure Tools ──
     {
         "name": "litellm",
