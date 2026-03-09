@@ -1,13 +1,14 @@
 """In-process async event bus. Swappable to Redis Streams."""
 
 import uuid
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-import structlog
+from src.events.backends.base import EventBackend, Handler
 
-Handler = Callable[["Event"], Coroutine[Any, Any, None]]
+# Re-export Handler so callers can import it from here if needed
+__all__ = ["Event", "EventBus", "event_bus"]
 
 
 class Event:
@@ -42,16 +43,41 @@ class Event:
 
 
 class EventBus:
-    def __init__(self):
-        self._handlers: dict[str, list[Handler]] = {}
-        self._middleware: list[Callable] = []
-        self._running = False
+    """Thin facade that delegates all operations to the active EventBackend.
 
-    def subscribe(self, event_type: str, handler: Handler):
-        self._handlers.setdefault(event_type, []).append(handler)
+    The public API is identical to the original in-process EventBus so all
+    existing ``event_bus.on()``, ``event_bus.publish()``, and
+    ``event_bus.subscribe()`` call-sites require zero changes.
+    """
+
+    def __init__(self, backend: EventBackend | None = None) -> None:
+        # Lazy import to avoid circular imports at module load time
+        if backend is None:
+            from src.events.backends.memory import InMemoryBackend
+
+            backend = InMemoryBackend()
+        self._backend: EventBackend = backend
+
+    # ------------------------------------------------------------------ configuration
+
+    def set_backend(self, backend: EventBackend) -> None:
+        """Switch the active backend.
+
+        Must be called **before** ``start()``.  Any handlers already registered
+        via ``subscribe()`` or ``on()`` will have been mirrored onto the new
+        backend if the previous backend forwarded them (which :class:`RedisStreamsBackend`
+        does automatically).  If you swap from a plain :class:`InMemoryBackend` use
+        ``_copy_handlers`` to replicate existing subscriptions.
+        """
+        self._backend = backend
+
+    # ------------------------------------------------------------------ registration
+
+    def subscribe(self, event_type: str, handler: Handler) -> None:
+        self._backend.subscribe(event_type, handler)
 
     def on(self, event_type: str):
-        """Decorator: @event_bus.on("auth.user.registered")"""
+        """Decorator: ``@event_bus.on("auth.user.registered")``"""
 
         def decorator(fn: Handler):
             self.subscribe(event_type, fn)
@@ -59,32 +85,23 @@ class EventBus:
 
         return decorator
 
-    async def publish(self, event: Event):
-        logger = structlog.get_logger()
-        for mw in self._middleware:
-            await mw(event)
-        handlers = self._handlers.get(event.type, [])
-        # Also dispatch to wildcard subscribers
-        wildcard = self._handlers.get("*", [])
-        for handler in handlers + wildcard:
-            try:
-                await handler(event)
-            except Exception as e:
-                logger.error(
-                    "event_handler_error",
-                    event_type=event.type,
-                    handler=handler.__name__,
-                    error=str(e),
-                )
+    def use(self, middleware: Callable) -> None:
+        self._backend.use_middleware(middleware)
 
-    def use(self, middleware: Callable):
-        self._middleware.append(middleware)
+    # ------------------------------------------------------------------ dispatch
 
-    async def start(self):
-        self._running = True
+    async def publish(self, event: Event) -> None:
+        await self._backend.publish(event)
 
-    async def stop(self):
-        self._running = False
+    # ------------------------------------------------------------------ lifecycle
+
+    async def start(self) -> None:
+        await self._backend.start()
+
+    async def stop(self) -> None:
+        await self._backend.stop()
 
 
+# Default singleton — InMemoryBackend by default, switched in lifespan if
+# settings.event_backend == "redis"
 event_bus = EventBus()

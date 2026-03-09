@@ -4,8 +4,9 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sse_starlette.sse import EventSourceResponse
 
-from src.shared.deps import get_db
+from src.shared.deps import get_current_user, get_db
 from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
@@ -30,8 +31,45 @@ from .schemas import (
     FollowUpResponse,
 )
 from .services import analyst_service, briefing_service, briefing_topic_service, follow_up_service
+from .streaming import briefing_stream_generator
 
 router = APIRouter()
+
+
+# ======================== Streaming ========================
+
+
+@router.get("/entries/{entry_id}/stream")
+async def stream_entry_generation(
+    entry_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventSourceResponse:
+    """SSE stream for a single entry's generation progress.
+
+    Subscribes to ``briefing:stream:{entry_id}`` and relays blocks to the
+    client as Server-Sent Events.  The stream terminates when a ``done``
+    block is published or after 5 minutes of inactivity.
+    """
+    return EventSourceResponse(briefing_stream_generator(entry_id))
+
+
+@router.get("/daily/{date}/stream")
+async def stream_daily_briefing(
+    date: str,
+    space_id: str = Query("default"),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventSourceResponse:
+    """SSE stream for an entire daily briefing generation.
+
+    The ``date`` path parameter is treated as a logical stream identifier so
+    callers can subscribe before the briefing generator starts.  Publishers
+    should use a ``briefing_id`` equal to ``{space_id}:{date}`` or any agreed
+    key; clients must ensure they use the same value when constructing the URL.
+    """
+    stream_id = f"{space_id}:{date}"
+    return EventSourceResponse(briefing_stream_generator(stream_id))
 
 
 # ======================== Topics ========================
