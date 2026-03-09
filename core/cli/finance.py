@@ -25,6 +25,7 @@ import json
 import sys
 from datetime import datetime
 
+from cli.exit_codes import exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.finance import FinanceClient
 
@@ -51,9 +52,9 @@ def fmt_date(iso):
     return str(iso)[:10]
 
 
-def _err(msg):
-    print(f"Error: {msg}", file=sys.stderr)
-    sys.exit(1)
+def _err(exc):
+    print(f"Error: {exc}", file=sys.stderr)
+    sys.exit(exit_code_for(exc))
 
 
 def _client():

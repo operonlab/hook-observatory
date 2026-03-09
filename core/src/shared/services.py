@@ -159,6 +159,47 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
         q = q.limit(1)
         return (await db.execute(q)).scalars().first()
 
+    async def ensure(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        lookup: dict[str, Any],
+        defaults: CreateT | None = None,
+        user_id: str | None = None,
+    ) -> tuple[ModelT, bool]:
+        """Idempotent get-or-create. Returns (instance, created).
+
+        Looks up by `lookup` fields within the space. If found, returns (existing, False).
+        If not found and `defaults` provided, creates and returns (new, True).
+        If not found and no defaults, raises NotFoundError.
+
+        Inspired by acpx's idempotent 'sessions ensure' pattern.
+        """
+        from src.shared.errors import NotFoundError
+
+        q = select(self.model).where(
+            self.model.space_id == space_id,  # type: ignore[attr-defined]
+        )
+        for field, value in lookup.items():
+            q = q.where(getattr(self.model, field) == value)
+        if self._has_soft_delete():
+            q = q.where(self.model.deleted_at == None)  # noqa: E711
+        q = q.limit(1)
+
+        existing = (await db.execute(q)).scalars().first()
+        if existing is not None:
+            return existing, False
+
+        if defaults is None:
+            entity_desc = ", ".join(f"{k}={v}" for k, v in lookup.items())
+            raise NotFoundError(
+                f"{self.model.__name__} not found: {entity_desc}",
+                code="system.not_found",
+            )
+
+        created = await self.create(db, space_id, defaults, user_id=user_id)
+        return created, True
+
     # --- CRUD operations ---
 
     async def list(
