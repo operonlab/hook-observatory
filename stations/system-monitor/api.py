@@ -300,6 +300,16 @@ async def guardian_log():
     return {"entries": entries, "total": len(entries)}
 
 
+@app.post("/guardian/run")
+async def guardian_run():
+    """Manually trigger memory guardian check."""
+    from memory_guardian import MemoryGuardian
+
+    guardian = MemoryGuardian(CONFIG.get("guardian", {}))
+    result = guardian.run()
+    return result
+
+
 @app.get("/history")
 async def history():
     """Historical data from saved JSON snapshots."""

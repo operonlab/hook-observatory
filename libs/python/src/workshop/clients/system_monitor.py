@@ -164,6 +164,10 @@ class SystemMonitorClient:
         """Get memory guardian operation logs. GET /guardian"""
         return self._get("/guardian")
 
+    def run_guardian(self) -> dict:
+        """Trigger memory guardian check. POST /guardian/run"""
+        return self._post("/guardian/run")
+
     # ======================== Reports ========================
 
     def list_reports(self, type: str | None = None, limit: int = 50, offset: int = 0) -> dict:

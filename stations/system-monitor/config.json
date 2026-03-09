@@ -39,6 +39,23 @@
     "enabled": true,
     "methods": ["file", "macos"]
   },
+  "guardian": {
+    "warn_threshold": 40,
+    "crit_threshold": 15,
+    "idle_cpu": 1.0,
+    "min_age_seconds": 300,
+    "grace_seconds": 30,
+    "log_dir": "~/.claude/data/system-monitor",
+    "expendables": [
+      { "pattern": "Google Chrome Helper (Renderer)", "label": "Chrome 分頁" },
+      { "pattern": "LINE", "label": "LINE" },
+      { "pattern": "LineCall", "label": "LINE Call" },
+      { "pattern": "Visual Studio Code", "label": "VS Code" },
+      { "pattern": "Antigravity", "label": "Antigravity" },
+      { "pattern": "openclaw-gateway", "label": "OpenClaw" },
+      { "pattern": "AltServer", "label": "AltServer" }
+    ]
+  },
   "disk_management": {
     "scan_cache_ttl": 300,
     "protected_prefixes": ["/System", "/Library", "/usr", "/bin", "/sbin", "/var", "/private", "/etc", "/tmp"],
