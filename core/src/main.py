@@ -30,6 +30,18 @@ async def lifespan(app: FastAPI):
     import src.modules.notification.events
     import src.modules.taskflow.events  # noqa: F401
 
+    # Backend selection: switch to Redis Streams if configured
+    if settings.event_backend == "redis":
+        from src.events.backends.memory import InMemoryBackend
+        from src.events.backends.redis_streams import RedisStreamsBackend
+
+        fallback = InMemoryBackend()
+        redis_backend = RedisStreamsBackend(
+            redis_url=str(settings.redis_url),
+            fallback=fallback,
+        )
+        event_bus.set_backend(redis_backend)
+
     # Startup: init event bus, load plugins, register nodeflow
     event_bus.use(logging_middleware)
     await event_bus.start()
