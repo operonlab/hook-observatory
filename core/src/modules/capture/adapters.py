@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from .strategies import EnrichmentStrategy
 
 
 @dataclass
@@ -73,6 +76,11 @@ class BaseCaptureAdapter:
     # Mapping: field_name → resolver_key (e.g. {"wallet_id": "finance.wallet"})
     # Resolved automatically before promote() via resolve_references()
     reference_fields: dict[str, str] = {}
+
+    # Optional enrichment strategies to run before promote().
+    # Each strategy must be an EnrichmentStrategy instance.
+    # If None or empty, the enrichment pipeline step is skipped.
+    enrichment_strategies: list[EnrichmentStrategy] | None = None
 
     def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}

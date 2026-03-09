@@ -115,11 +115,39 @@ async def crawl_batch(
     *,
     max_concurrent: int = 3,
     timeout: float = 60.0,  # noqa: ASYNC109
+    domain_delay: float = 0.5,
 ) -> list[CrawlResult]:
-    """Crawl multiple URLs with concurrency control."""
+    """Crawl multiple URLs with concurrency control.
+
+    Args:
+        urls: List of URLs to crawl.
+        max_concurrent: Maximum number of simultaneous crawls.
+        timeout: Per-URL process timeout in seconds.
+        domain_delay: Minimum seconds to wait between consecutive requests
+            to the same domain. Applied before each crawl to reduce the risk
+            of triggering per-domain rate limits.
+    """
+    from urllib.parse import urlparse
+
     sem = asyncio.Semaphore(max_concurrent)
+    # Track the last request time per domain for simple intra-batch throttling.
+    domain_last: dict[str, float] = {}
+    domain_locks: dict[str, asyncio.Lock] = {}
+
+    def _get_domain(url: str) -> str:
+        return urlparse(url).netloc or url
 
     async def _crawl(url: str) -> CrawlResult:
+        domain = _get_domain(url)
+        if domain not in domain_locks:
+            domain_locks[domain] = asyncio.Lock()
+        async with domain_locks[domain]:
+            last = domain_last.get(domain, 0.0)
+            elapsed = asyncio.get_event_loop().time() - last
+            wait = max(0.0, domain_delay - elapsed)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            domain_last[domain] = asyncio.get_event_loop().time()
         async with sem:
             return await crawl_url(url, timeout=timeout)
 

@@ -10,6 +10,8 @@ import logging
 
 import httpx
 
+from .chunking import ChunkingStrategy, FixedLengthChunking
+
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = "http://localhost:11434"
@@ -120,3 +122,29 @@ async def get_embeddings_batch(
     except (httpx.HTTPError, KeyError, IndexError) as e:
         logger.warning("Batch embedding failed: %s", e)
         return [None] * len(texts)
+
+
+async def get_embeddings_chunked(
+    text: str,
+    *,
+    max_chunk_chars: int = 2000,
+    overlap: int = 200,
+    strategy: ChunkingStrategy | None = None,
+) -> list[dict]:
+    """Chunk text and embed each chunk separately.
+
+    Returns list of {chunk: str, embedding: list[float], index: int}.
+    For short texts (< max_chunk_chars), returns a single chunk.
+    """
+    if len(text) < max_chunk_chars:
+        chunks = [text]
+    else:
+        chunker = strategy or FixedLengthChunking(chunk_size=max_chunk_chars, overlap=overlap)
+        chunks = chunker.chunk(text)
+
+    embeddings = await get_embeddings_batch(chunks)
+    return [
+        {"chunk": chunk, "embedding": emb, "index": i}
+        for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=True))
+        if emb is not None
+    ]

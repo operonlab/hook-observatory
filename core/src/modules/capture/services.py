@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -21,6 +22,8 @@ from .schemas import (
     CaptureStats,
     CaptureUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_PAYLOAD_BYTES = 16 * 1024  # 16KB
 
@@ -205,6 +208,7 @@ class CaptureService:
         db: AsyncSession,
         capture_id: str,
         user_id: str | None = None,
+        user_prefs: dict[str, Any] | None = None,
     ) -> CapturePromoteResult:
         capture = await self.get(db, capture_id)
         if not capture:
@@ -218,9 +222,40 @@ class CaptureService:
 
         missing = adapter.missing_fields(capture.payload)
 
+        # ── Enrichment pipeline (optional, runs before reference resolution) ──
+        adapter_strategies = getattr(adapter, "enrichment_strategies", None)
+        if adapter_strategies:
+            from .strategies import DefaultsStrategy, EnrichmentPipeline
+
+            pipeline = EnrichmentPipeline()
+            pipeline.add(
+                DefaultsStrategy(
+                    adapter_defaults=adapter.default_values,
+                    user_prefs=user_prefs or {},
+                )
+            )
+            for strategy in adapter_strategies:
+                pipeline.add(strategy)
+
+            enrichment_result = await pipeline.run(
+                capture.payload,
+                module=capture.module,
+                entity_type=capture.entity_type,
+            )
+            logger.info(
+                "capture.enrich module=%s entity=%s confidence=%.2f source=%r",
+                capture.module,
+                capture.entity_type,
+                enrichment_result.confidence,
+                enrichment_result.source,
+            )
+            enriched_payload = enrichment_result.payload
+        else:
+            enriched_payload = dict(capture.payload)
+
         # Resolve reference fields (name → UUID, auto-create if missing)
         try:
-            payload = dict(capture.payload)
+            payload = enriched_payload
             if adapter.reference_fields:
                 from .resolvers import resolve_references
 
