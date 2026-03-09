@@ -10,6 +10,7 @@ Core modules (BaseClient, port 8801):
     from workshop.clients.admin import AdminClient
 
 Stations (standalone):
+    from workshop.clients.browser_bridge import BrowserBridgeClient
     from workshop.clients.sentinel import SentinelClient
     from workshop.clients.system_monitor import SystemMonitorClient
     from workshop.clients.tmux_relay import TmuxRelayClient
