@@ -107,8 +107,8 @@ class BrowserProvider(ABC):
 
     async def _snapshot(self, session_id: str, pw_profile: str) -> str:
         """Return page body text as a simple snapshot alternative."""
-        js = "return document.body.innerText.substring(0, 2000)"
-        if _BACKEND_TYPE != "playwright":
-            # Safari: `return` keyword is not required
-            js = "document.body.innerText.substring(0, 2000)"
-        return await self._backend(session_id, pw_profile).run_js(js)
+        # Both backends handle `return` correctly:
+        # SafariBackend strips it, PlaywrightBackend keeps it.
+        return await self._run_js(
+            session_id, pw_profile, "return document.body.innerText.substring(0, 2000)"
+        )
