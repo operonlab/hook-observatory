@@ -650,6 +650,23 @@ async def serve_icon(filename: str):
     return FileResponse(path)
 
 
+# ======================== Billing Cron ========================
+
+
+@router.post("/billing/process")
+async def process_billing(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("admin.write"),
+):
+    """Run subscription + installment billing for due items."""
+    from .cron import run_all_cron
+
+    result = await run_all_cron(db, space_id)
+    await db.commit()
+    return result
+
+
 # ======================== Tag Styles ========================
 
 

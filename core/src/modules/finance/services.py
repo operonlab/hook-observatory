@@ -93,7 +93,21 @@ def _balance_delta(txn_type: str, amount: Decimal) -> Decimal:
 
 
 async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decimal) -> None:
-    """Atomic delta update on wallet current_balance."""
+    """Atomic delta update on wallet current_balance.
+
+    Cash wallets enforce a hard floor of 0 — cannot go negative.
+    """
+    if delta < 0:
+        wallet = await db.get(Wallet, wallet_id)
+        if wallet and wallet.type == "cash":
+            projected = wallet.current_balance + delta
+            if projected < 0:
+                raise BadRequestError(
+                    f"現金錢包「{wallet.name}」餘額不足："
+                    f"目前 ${wallet.current_balance:,.0f}，"
+                    f"需要 ${abs(delta):,.0f}",
+                    code="finance.cash_insufficient",
+                )
     await db.execute(
         update(Wallet)
         .where(Wallet.id == wallet_id)
