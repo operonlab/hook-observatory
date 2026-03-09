@@ -1,14 +1,15 @@
 """NotebookLM provider — automates Google NotebookLM web interface."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 
-from ..provider import BrowserProvider, ProviderMeta
-from ..poller import StabilityPoller
-from ..selectors import InputResolver, SubmitResolver
 from ..extractor import ResultExtractor
 from ..models import BridgeResponse
+from ..poller import StabilityPoller
+from ..provider import BrowserProvider, ProviderMeta
+from ..selectors import InputResolver, SubmitResolver
 
 logger = logging.getLogger(__name__)
 
@@ -45,21 +46,16 @@ class NotebookLMProvider(BrowserProvider):
             self.meta.submit_selectors,
             text_fallback=["send", "submit", "ask"],
         )
-        self._poller = StabilityPoller(interval=2.5, threshold=3, min_change=80)
+        self._poller = StabilityPoller(interval=2.5, threshold=3)
         self._extractor = ResultExtractor(provider="notebooklm")
 
     async def ensure_ready(self, session_id: str, pw_profile: str) -> bool:
         """Check that NotebookLM is loaded and a notebook is open."""
         try:
-            current_url = await self._run_js(
-                session_id, pw_profile,
-                "return window.location.href"
-            )
+            current_url = await self._run_js(session_id, pw_profile, "return window.location.href")
 
             if "notebooklm.google.com" not in current_url:
-                await self._navigate(
-                    session_id, pw_profile, self.meta.base_url
-                )
+                await self._navigate(session_id, pw_profile, self.meta.base_url)
                 await asyncio.sleep(5)
 
             # Wait for input to appear (indicates notebook is open)
@@ -70,8 +66,7 @@ class NotebookLMProvider(BrowserProvider):
 
             if not resolved:
                 logger.warning(
-                    "NotebookLM input not found — "
-                    "user may need to open a notebook first"
+                    "NotebookLM input not found — user may need to open a notebook first"
                 )
                 return False
 
@@ -81,9 +76,7 @@ class NotebookLMProvider(BrowserProvider):
             logger.error(f"NotebookLM ensure_ready failed: {e}")
             return False
 
-    async def send_prompt(
-        self, session_id: str, pw_profile: str, prompt: str
-    ) -> None:
+    async def send_prompt(self, session_id: str, pw_profile: str, prompt: str) -> None:
         """Type prompt and submit in NotebookLM chat."""
         run_js = lambda js: self._run_js(session_id, pw_profile, js)
 
@@ -97,9 +90,7 @@ class NotebookLMProvider(BrowserProvider):
 
         await asyncio.sleep(0.5)
 
-        clicked = await self._submit_resolver.click(
-            run_js, input_selector=resolved.selector
-        )
+        clicked = await self._submit_resolver.click(run_js, input_selector=resolved.selector)
         if not clicked:
             logger.warning("Submit click may have failed")
 

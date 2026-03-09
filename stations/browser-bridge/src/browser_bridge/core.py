@@ -14,10 +14,9 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from .session import SessionManager, PlaywrightSession
-from .poller import StabilityPoller
 from .extractor import ResultExtractor
-from .models import BridgeResponse, BridgeConfig
+from .models import BridgeConfig, BridgeResponse
+from .session import PlaywrightSession, SessionManager
 
 if TYPE_CHECKING:
     from .provider import BrowserProvider

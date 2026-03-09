@@ -9,20 +9,19 @@ import json
 import os
 import sqlite3
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 
 from .models import (
-    SessionInfo,
-    SessionStatus,
     ConversationInfo,
     MessageInfo,
     MessageRole,
+    SessionInfo,
+    SessionStatus,
 )
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _gen_id(prefix: str = "brg") -> str:

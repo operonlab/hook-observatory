@@ -5,7 +5,6 @@ from ..provider import BrowserProvider
 from .grok import GrokProvider
 from .notebooklm import NotebookLMProvider
 
-
 # All available providers
 PROVIDERS: dict[str, type[BrowserProvider]] = {
     "grok": GrokProvider,

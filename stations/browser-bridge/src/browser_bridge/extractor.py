@@ -9,6 +9,7 @@ Handles two concerns:
 
 Patterns learned from grok-bridge analysis.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,6 +19,7 @@ from dataclasses import dataclass, field
 @dataclass
 class CleaningRule:
     """A rule for removing UI artifacts from extracted text."""
+
     # Truncate text at this marker (rfind, keep everything before)
     truncate_markers: list[str] = field(default_factory=list)
     # Remove lines matching these regexes
@@ -30,17 +32,18 @@ class CleaningRule:
 DEFAULT_CLEANING_RULES = CleaningRule(
     truncate_markers=[],
     line_filters=[
-        r"^[0-9]+(\.[0-9]+)?s$",       # timing markers like "1.3s"
-        r"^[0-9]+ sources$",            # "5 sources"
+        r"^[0-9]+(\.[0-9]+)?s$",  # timing markers like "1.3s"
+        r"^[0-9]+ sources$",  # "5 sources"
     ],
     substring_filters=[
-        r"\n{3,}",                        # collapse 3+ newlines to 2
+        r"\n{3,}",  # collapse 3+ newlines to 2
     ],
 )
 
 # Grok-specific cleaning rules
 GROK_CLEANING_RULES = CleaningRule(
     truncate_markers=[
+        # English UI
         "\nAsk anything",
         "\nDeepSearch",
         "\nThink Harder",
@@ -50,13 +53,25 @@ GROK_CLEANING_RULES = CleaningRule(
         "\nFast\n",
         "\nAuto\n",
         "\nUpgrade to",
+        # Chinese UI (zh-TW)
+        "\n深度思考",
+        "\n快速\n",
+        "\n自動\n",
+        "\n升級至",
+        "\n解鎖進階功能",
+        "\n免費試用",
+        "\n提交\n",
+        "\n附加\n",
+        "\n選擇模型",
     ],
     line_filters=[
-        r"^[0-9]+(\.[0-9]+)?s$",
+        r"^[0-9]+(\.[0-9]+)?秒$",  # "1.1秒"
+        r"^[0-9]+(\.[0-9]+)?s$",  # "1.3s"
         r"^[0-9]+ sources$",
         r"^(Share|Compare|Make it|Explain|Toggle|Like|Dislike)",
         r"^(Are you satisfied|Get notified|Expert|Quick Answer)",
         r"^(Submit|Model select|Start dictation|Enter voice mode|Private|Imagine)$",
+        r"^(Explain .+|.+ basics)$",  # suggested follow-up prompts
     ],
     substring_filters=[
         r"\n{3,}",
@@ -118,9 +133,7 @@ class ResultExtractor:
 
         return cleaned.strip()
 
-    def _extract_after_prompt(
-        self, body: str, prompt: str, marker_length: int
-    ) -> str:
+    def _extract_after_prompt(self, body: str, prompt: str, marker_length: int) -> str:
         """Split body text at prompt marker, return everything after."""
         if not prompt:
             return body

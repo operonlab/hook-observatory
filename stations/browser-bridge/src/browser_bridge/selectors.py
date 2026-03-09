@@ -9,6 +9,7 @@ Fallback chain:
 2. Fallback: match by text content
 3. Last resort: dispatch keyboard event
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,9 +22,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ResolvedElement:
     """A successfully resolved DOM element."""
-    selector: str          # The CSS selector that matched
-    method: str            # "css" | "text" | "keyboard"
-    tag_name: str = ""     # Element tag (if known)
+
+    selector: str  # The CSS selector that matched
+    method: str  # "css" | "text" | "keyboard"
+    tag_name: str = ""  # Element tag (if known)
 
 
 class SelectorResolver:
@@ -56,14 +58,12 @@ class SelectorResolver:
             for sel in self.selectors:
                 try:
                     result = await run_js(
-                        f"(() => {{ const el = document.querySelector('{sel}'); "
+                        f"return (() => {{ const el = document.querySelector('{sel}'); "
                         f"return el ? el.tagName : ''; }})()"
                     )
                     if result and result != "null" and result != "undefined":
                         logger.debug(f"Resolved selector: {sel} -> <{result}>")
-                        return ResolvedElement(
-                            selector=sel, method="css", tag_name=result
-                        )
+                        return ResolvedElement(selector=sel, method="css", tag_name=result)
                 except Exception:
                     continue
 
@@ -89,7 +89,7 @@ class SelectorResolver:
         """
         patterns_js = "|".join(text_patterns)
         js_code = (
-            f"(() => {{ const els = [...document.querySelectorAll('{tag}')]; "
+            f"return (() => {{ const els = [...document.querySelectorAll('{tag}')]; "
             f"const el = els.find(x => /{patterns_js}/i.test("
             f"x.textContent || x.ariaLabel || '')); "
             f"return el ? 'FOUND' : ''; }})()"
@@ -136,14 +136,11 @@ class InputResolver(SelectorResolver):
             return False
 
         safe_text = (
-            text.replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace("\n", "\\n")
-            .replace("\r", "")
+            text.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
         )
 
         js_code = (
-            f"(() => {{ "
+            f"return (() => {{ "
             f"const el = document.querySelector('{resolved.selector}'); "
             f"if (!el) return 'NO'; "
             f"el.focus(); "
@@ -171,7 +168,7 @@ class SubmitResolver(SelectorResolver):
         text_fallback: list[str] | None = None,
     ) -> None:
         super().__init__(selectors)
-        self.text_fallback = text_fallback or ["send", "submit", "發送", "送出"]
+        self.text_fallback = text_fallback or ["send", "submit", "提交", "發送", "送出"]
 
     async def click(
         self,
@@ -195,7 +192,7 @@ class SubmitResolver(SelectorResolver):
         # Layer 1: CSS selector
         for sel in self.selectors:
             js = (
-                f"(() => {{ const b = document.querySelector('{sel}'); "
+                f"return (() => {{ const b = document.querySelector('{sel}'); "
                 f"if (b && !b.disabled) {{ b.click(); return 'OK'; }} "
                 f"return 'NO'; }})()"
             )
@@ -211,7 +208,7 @@ class SubmitResolver(SelectorResolver):
         if resolved:
             patterns_js = "|".join(self.text_fallback)
             js = (
-                f"(() => {{ const els = [...document.querySelectorAll('button')]; "
+                f"return (() => {{ const els = [...document.querySelectorAll('button')]; "
                 f"const b = els.find(x => /{patterns_js}/i.test("
                 f"x.textContent || x.ariaLabel || '')); "
                 f"if (b && !b.disabled) {{ b.click(); return 'OK'; }} "
@@ -227,7 +224,7 @@ class SubmitResolver(SelectorResolver):
         # Layer 3: Enter key on input
         if input_selector:
             js = (
-                f"document.querySelector('{input_selector}')"
+                f"return document.querySelector('{input_selector}')"
                 f"?.dispatchEvent(new KeyboardEvent('keydown', "
                 f"{{key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true}}))"
             )
