@@ -195,6 +195,16 @@
       "timeout": 300
     },
     {
+      "name": "ws-cannibalization-drift",
+      "label": "com.joneshong.scheduler.ws-cannibalization-drift",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_cannibalization_drift.py",
+      "schedule": { "calendar": { "Weekday": 1, "Hour": 6, "Minute": 30 } },
+      "description": "每週一 6:30AM: 蠶食來源上游漂移偵測（GitHub API diff → Bark 通知）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-memory-guardian",
       "label": "com.joneshong.scheduler.ws-memory-guardian",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memory_guardian.py",
