@@ -13,7 +13,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.rate_limiter import RateLimiter
+
 logger = logging.getLogger(__name__)
+
+_limiter = RateLimiter(base_delay=(0.5, 1.5), max_delay=30.0)
 
 
 async def create_report_from_url(
@@ -34,9 +38,13 @@ async def create_report_from_url(
     from .schemas import ReportCreate
     from .services import report_service
 
-    # 1. Crawl
+    # 1. Crawl (rate-limited per domain)
+    await _limiter.acquire(url)
     result = await crawl_url(url, timeout=90.0)
-    if not result.success:
+    if result.success:
+        _limiter.report_success(url)
+    else:
+        _limiter.report_failure(url, 429)  # treat crawl failure as rate-limit signal
         return {"success": False, "error": result.error, "url": url}
 
     # 2. Build report content
