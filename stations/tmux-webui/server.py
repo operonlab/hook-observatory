@@ -91,6 +91,8 @@ RELAY_SH = RELAY_SCRIPTS_DIR / "relay.sh"
 
 _disconnect_timers: dict[str, asyncio.Task] = {}
 _active_connections: dict[str, int] = {}  # session -> connection count
+_ws_clients: set[WebSocket] = set()
+_tts_store: dict = {}  # {"id": str, "data": bytes, "text": str}
 
 
 async def _reset_layout_delayed(session: str, delay: float = 10.0):
@@ -300,6 +302,56 @@ async def api_relay_check(signal_file: str):
     return {"status": "running", "signal_file": signal_file}
 
 
+# ── TTS push (receives audio from voice_notify consumer) ──
+
+
+@app.post("/api/tts/push")
+async def api_tts_push(request: Request):
+    """Receive TTS audio and broadcast to all WebSocket clients."""
+    import base64
+
+    body = await request.json()
+    audio_b64 = body.get("audio", "")
+    text = body.get("text", "")
+    if not audio_b64:
+        raise HTTPException(status_code=400, detail="No audio data")
+
+    audio_data = base64.b64decode(audio_b64)
+    tts_id = str(int(time.time() * 1000))
+    _tts_store.clear()
+    _tts_store.update({"id": tts_id, "data": audio_data, "text": text})
+
+    # Broadcast to all connected WS clients
+    msg = json.dumps({"type": "tts", "id": tts_id, "text": text})
+    dead = set()
+    for client in _ws_clients.copy():
+        try:
+            await client.send_text(msg)
+        except Exception:
+            dead.add(client)
+    _ws_clients.difference_update(dead)
+
+    n = len(_ws_clients)
+    logger.info(
+        "TTS push: %d bytes, text='%s', broadcast to %d clients", len(audio_data), text[:30], n
+    )
+    return {"ok": True, "id": tts_id, "clients": n}
+
+
+@app.get("/api/tts/{tts_id}")
+async def api_tts_audio(tts_id: str):
+    """Serve TTS audio by ID."""
+    if not _tts_store or _tts_store.get("id") != tts_id:
+        raise HTTPException(status_code=404, detail="Audio not found or expired")
+    from fastapi.responses import Response
+
+    return Response(
+        content=_tts_store["data"],
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 # ── PWA assets ──
 
 
@@ -355,6 +407,7 @@ async def pwa_icon_512_png():
 @app.websocket("/ws")
 async def ws_handler(websocket: WebSocket):
     await websocket.accept()
+    _ws_clients.add(websocket)
 
     session = websocket.query_params.get("session", "")
     if not session:
@@ -600,6 +653,7 @@ async def ws_handler(websocket: WebSocket):
         logger.error("WebSocket error: %s", exc)
     finally:
         poll_task.cancel()
+        _ws_clients.discard(websocket)
         _on_ws_disconnect(session)
 
 
