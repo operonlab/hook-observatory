@@ -1,5 +1,6 @@
 """Abstract EventBackend — Strategy interface for EventBus backends."""
 
+import contextvars
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
@@ -8,6 +9,18 @@ if TYPE_CHECKING:
     from src.events.bus import Event
 
 Handler = Callable[["Event"], Coroutine[Any, Any, None]]
+
+# Auto-propagated correlation context — set by backends before calling handlers.
+# Lives here (not in bus.py) to avoid circular imports: memory.py needs it,
+# but bus.py lazy-imports memory.py.
+_current_trace_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_current_trace_id", default=None
+)
+
+
+def current_trace_id() -> str | None:
+    """Return the trace_id of the event currently being dispatched, or None."""
+    return _current_trace_id.get(None)
 
 
 class EventBackend(ABC):
