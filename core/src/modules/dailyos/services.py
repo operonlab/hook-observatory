@@ -15,7 +15,7 @@ from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
-from .models import DailyPlan, Method, MethodSelection
+from .models import DailyPlan, Method, MethodSelection, RecurringItem
 from .schemas import (
     DailyPlanResponse,
     DailyPlanUpdate,
@@ -26,6 +26,7 @@ from .schemas import (
     MethodSelectionResponse,
     MethodSelectionUpdate,
     MethodUpdate,
+    RecurringItemResponse,
 )
 from .strategies.base import MethodStrategy
 
@@ -460,11 +461,7 @@ class DailyPlanService:
                 DailyPlan.plan_date < today,
                 DailyPlan.deleted_at == None,  # noqa: E711
             )
-            .options(
-                selectinload(DailyPlan.method_selection).selectinload(
-                    MethodSelection.method
-                )
-            )
+            .options(selectinload(DailyPlan.method_selection).selectinload(MethodSelection.method))
             .order_by(DailyPlan.plan_date.desc())
             .limit(1)
         )
@@ -513,11 +510,7 @@ class DailyPlanService:
         stmt = (
             select(DailyPlan)
             .where(DailyPlan.id == plan_id)
-            .options(
-                selectinload(DailyPlan.method_selection).selectinload(
-                    MethodSelection.method
-                )
-            )
+            .options(selectinload(DailyPlan.method_selection).selectinload(MethodSelection.method))
         )
         plan = (await db.execute(stmt)).scalar_one_or_none()
         if not plan or plan.deleted_at is not None:
@@ -701,9 +694,7 @@ class DailyPlanService:
                 )
                 overdue_tasks: list = []
                 if auto_include_overdue:
-                    upcoming = await task_service.get_upcoming_tasks(
-                        db, space_id, days=0
-                    )
+                    upcoming = await task_service.get_upcoming_tasks(db, space_id, days=0)
                     # upcoming with days=0 returns tasks with due_date <= now,
                     # which are overdue. Deduplicate against today_tasks.
                     today_ids = {t.id for t in today_tasks}
@@ -913,9 +904,94 @@ class GuideService:
         )
 
 
+# ======================== Recurring Item Service ========================
+
+
+class RecurringItemService:
+    """CRUD + date-based filtering for recurring plan items."""
+
+    async def list_items(self, db: AsyncSession, space_id: str) -> list[RecurringItemResponse]:
+        """List all recurring items for a space."""
+        q = (
+            select(RecurringItem)
+            .where(
+                RecurringItem.space_id == space_id,
+                RecurringItem.deleted_at == None,  # noqa: E711
+            )
+            .order_by(RecurringItem.created_at.desc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [RecurringItemResponse.model_validate(r) for r in rows]
+
+    async def create_item(
+        self, db: AsyncSession, space_id: str, data, user_id: str | None = None
+    ) -> RecurringItemResponse:
+        """Create a new recurring item."""
+        item = RecurringItem(
+            id=_uuid7_hex(),
+            space_id=space_id,
+            created_by=user_id,
+            **data.model_dump(),
+        )
+        db.add(item)
+        await db.flush()
+        await db.refresh(item)
+        return RecurringItemResponse.model_validate(item)
+
+    async def update_item(
+        self, db: AsyncSession, item_id: str, space_id: str, data
+    ) -> RecurringItemResponse:
+        """Update a recurring item (verify ownership by space)."""
+        item = await db.get(RecurringItem, item_id)
+        if not item or item.deleted_at is not None or str(item.space_id) != str(space_id):
+            raise NotFoundError("Recurring item not found", code="dailyos.recurring_not_found")
+
+        update_data = data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(item, key, value)
+
+        await db.flush()
+        await db.refresh(item)
+        return RecurringItemResponse.model_validate(item)
+
+    async def delete_item(self, db: AsyncSession, item_id: str, space_id: str) -> None:
+        """Delete a recurring item (verify ownership by space)."""
+        item = await db.get(RecurringItem, item_id)
+        if not item or item.deleted_at is not None or str(item.space_id) != str(space_id):
+            raise NotFoundError("Recurring item not found", code="dailyos.recurring_not_found")
+
+        await db.delete(item)
+        await db.flush()
+
+    async def get_items_for_date(
+        self, db: AsyncSession, space_id: str, target_date: date
+    ) -> list[RecurringItemResponse]:
+        """Get recurring items applicable for a specific date."""
+        q = select(RecurringItem).where(
+            RecurringItem.space_id == space_id,
+            RecurringItem.is_active == True,  # noqa: E712
+            RecurringItem.deleted_at == None,  # noqa: E711
+        )
+        rows = (await db.execute(q)).scalars().all()
+
+        result = []
+        for item in rows:
+            if item.recurrence_type == "daily":
+                result.append(item)
+            elif item.recurrence_type == "weekly" and item.day_of_week is not None:
+                if target_date.weekday() == item.day_of_week:
+                    result.append(item)
+            elif item.recurrence_type == "monthly" and item.day_of_month is not None:
+                if target_date.day == item.day_of_month:
+                    result.append(item)
+
+        return [RecurringItemResponse.model_validate(r) for r in result]
+
+
 # ======================== Module-level singletons ========================
 
 method_service = MethodService()
 method_selection_service = MethodSelectionService()
 daily_plan_service = DailyPlanService()
 guide_service = GuideService()
+recurring_item_service = RecurringItemService()

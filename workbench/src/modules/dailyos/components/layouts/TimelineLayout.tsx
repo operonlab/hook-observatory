@@ -1,11 +1,27 @@
-import { Clock, CalendarClock } from 'lucide-react'
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  pointerWithin,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CalendarClock, Clock, X } from 'lucide-react'
+import { useState } from 'react'
 import type { MethodConfig, PlanItem } from '../../types'
 import PlanItemRow from '../PlanItemRow'
+import SortableItem from '../SortableItem'
+import TimePicker from '../TimePicker'
 
 interface TimelineLayoutProps {
   items: PlanItem[]
   config: MethodConfig
   onToggle?: (item: PlanItem) => void
+  onSchedule?: (itemId: string, time: string | undefined) => void
 }
 
 function generateTimeSlots(start: string, end: string, slotMinutes: number): string[] {
@@ -24,7 +40,58 @@ function generateTimeSlots(start: string, end: string, slotMinutes: number): str
   return slots
 }
 
-export default function TimelineLayout({ items, config, onToggle }: TimelineLayoutProps) {
+interface DroppableSlotProps {
+  id: string
+  children: React.ReactNode
+}
+
+function DroppableSlot({ id, children }: DroppableSlotProps) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex-1 pb-1 rounded-md transition-colors"
+      style={{
+        backgroundColor: isOver ? 'rgba(137,180,250,0.08)' : 'transparent',
+        outline: isOver ? '1px dashed var(--do-accent)' : 'none',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+interface DroppableUnscheduledProps {
+  children: React.ReactNode
+}
+
+function DroppableUnscheduled({ children }: DroppableUnscheduledProps) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'unscheduled' })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="space-y-1 ml-6 rounded-md p-1 transition-colors"
+      style={{
+        backgroundColor: isOver ? 'rgba(137,180,250,0.08)' : 'transparent',
+        outline: isOver ? '1px dashed var(--do-accent)' : 'none',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+export default function TimelineLayout({
+  items,
+  config,
+  onToggle,
+  onSchedule,
+}: TimelineLayoutProps) {
+  const [activeItem, setActiveItem] = useState<PlanItem | null>(null)
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+
   const timeConfig = config.time_awareness
   const dayStart = timeConfig?.day_start || '09:00'
   const dayEnd = timeConfig?.day_end || '18:00'
@@ -46,6 +113,47 @@ export default function TimelineLayout({ items, config, onToggle }: TimelineLayo
       unscheduled.push(item)
     }
   }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  )
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const draggedItem = items.find((i) => i.id === event.active.id)
+    setActiveItem(draggedItem || null)
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveItem(null)
+
+    const { active, over } = event
+    if (!over || !onSchedule) return
+
+    const itemId = active.id as string
+    const overId = over.id as string
+
+    if (overId === 'unscheduled') {
+      // Dropped on unscheduled zone -- unschedule the item
+      onSchedule(itemId, undefined)
+    } else if (slots.includes(overId)) {
+      // Dropped on a time slot
+      onSchedule(itemId, overId)
+    } else {
+      // Dropped on another item -- find which slot or zone that item belongs to
+      const targetItem = items.find((i) => i.id === overId)
+      if (targetItem) {
+        if (targetItem.scheduled_time) {
+          const slotKey = targetItem.scheduled_time.slice(0, 5)
+          onSchedule(itemId, slotKey)
+        } else {
+          onSchedule(itemId, undefined)
+        }
+      }
+    }
+  }
+
+  const unscheduledIds = unscheduled.map((i) => i.id)
 
   // Empty state when no items exist
   if (items.length === 0) {
@@ -78,69 +186,153 @@ export default function TimelineLayout({ items, config, onToggle }: TimelineLayo
   }
 
   return (
-    <div className="space-y-1">
-      {/* Timeline Slots */}
-      {slots.map((slot) => {
-        const slotItems = itemsBySlot.get(slot) || []
-        const _isBreak =
-          timeConfig?.include_breaks && timeConfig?.break_pattern
-            ? false // Simplified: no break detection in V1
-            : false
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="space-y-1">
+        {/* Timeline Slots */}
+        {slots.map((slot) => {
+          const slotItems = itemsBySlot.get(slot) || []
 
-        return (
-          <div key={slot} className="flex gap-3 min-h-[48px]">
-            {/* Time Label */}
-            <div className="w-14 shrink-0 text-right pt-2">
-              <span className="text-[11px] font-mono" style={{ color: 'var(--do-text-tertiary)' }}>
-                {slot}
+          return (
+            <div key={slot} className="flex gap-3 min-h-[48px]">
+              {/* Time Label */}
+              <div className="w-14 shrink-0 text-right pt-2">
+                <span
+                  className="text-[11px] font-mono"
+                  style={{ color: 'var(--do-text-tertiary)' }}
+                >
+                  {slot}
+                </span>
+              </div>
+
+              {/* Divider */}
+              <div className="flex flex-col items-center shrink-0">
+                <div
+                  className="rounded-full mt-2.5"
+                  style={{
+                    width: slotItems.length > 0 ? 10 : 8,
+                    height: slotItems.length > 0 ? 10 : 8,
+                    backgroundColor: slotItems.length > 0 ? 'var(--do-accent)' : 'var(--do-border)',
+                    transition: 'all 150ms ease',
+                  }}
+                />
+                <div className="w-px flex-1" style={{ backgroundColor: 'var(--do-border)' }} />
+              </div>
+
+              {/* Content -- droppable slot */}
+              <DroppableSlot id={slot}>
+                {slotItems.length > 0 ? (
+                  <div className="space-y-1">
+                    {slotItems.map((item) => (
+                      <div key={item.id} className="group flex items-center">
+                        <div className="flex-1 min-w-0">
+                          <PlanItemRow item={item} onToggle={onToggle} />
+                        </div>
+                        {onSchedule && (
+                          <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 ml-1">
+                            {editingItemId === item.id ? (
+                              <TimePicker
+                                compact
+                                value={item.scheduled_time?.slice(0, 5)}
+                                onChange={(time) => {
+                                  onSchedule(item.id, time)
+                                  setEditingItemId(null)
+                                }}
+                                onCancel={() => setEditingItemId(null)}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEditingItemId(item.id)}
+                                className="p-0.5 rounded transition-colors"
+                                style={{
+                                  color: 'var(--do-text-muted)',
+                                  backgroundColor: 'var(--do-bg-surface)',
+                                }}
+                                title="修改時間"
+                              >
+                                <Clock size={12} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => onSchedule(item.id, undefined)}
+                              className="text-[9px] px-1 py-0.5 rounded"
+                              style={{
+                                color: 'var(--do-text-muted)',
+                                backgroundColor: 'var(--do-bg-surface)',
+                              }}
+                              title="取消排定"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : slotItems.length === 0 && onSchedule && unscheduled.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onSchedule(unscheduled[0].id, slot)}
+                    className="w-full py-2 text-[11px] text-left rounded transition-colors hover:bg-[rgba(137,180,250,0.08)]"
+                    style={{ color: 'var(--do-text-muted)' }}
+                    title={`排入: ${unscheduled[0].title}`}
+                  >
+                    <span style={{ color: 'var(--do-text-muted)' }}>+ 排入項目</span>
+                  </button>
+                ) : (
+                  <div className="py-2 text-[11px]" style={{ color: 'var(--do-text-muted)' }}>
+                    &nbsp;
+                  </div>
+                )}
+              </DroppableSlot>
+            </div>
+          )
+        })}
+
+        {/* Unscheduled Items */}
+        {unscheduled.length > 0 && (
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock size={12} style={{ color: 'var(--do-text-muted)' }} />
+              <span
+                className="text-[12px] font-medium"
+                style={{ color: 'var(--do-text-secondary)' }}
+              >
+                未排定時間 ({unscheduled.length})
               </span>
             </div>
-
-            {/* Divider */}
-            <div className="flex flex-col items-center shrink-0">
-              <div
-                className="w-2 h-2 rounded-full mt-2.5"
-                style={{
-                  backgroundColor: slotItems.length > 0 ? 'var(--do-accent)' : 'var(--do-border)',
-                }}
-              />
-              <div className="w-px flex-1" style={{ backgroundColor: 'var(--do-border)' }} />
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 pb-1">
-              {slotItems.length > 0 ? (
-                <div className="space-y-1">
-                  {slotItems.map((item) => (
-                    <PlanItemRow key={item.id} item={item} onToggle={onToggle} />
-                  ))}
-                </div>
-              ) : (
-                <div className="py-2 text-[11px]" style={{ color: 'var(--do-text-muted)' }}>
-                  &nbsp;
-                </div>
-              )}
-            </div>
+            <SortableContext items={unscheduledIds} strategy={verticalListSortingStrategy}>
+              <DroppableUnscheduled>
+                {unscheduled.map((item) => (
+                  <div key={item.id} className="group">
+                    <SortableItem item={item} onToggle={onToggle} />
+                    {onSchedule && (
+                      <div
+                        className="ml-6 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        <div style={{ pointerEvents: 'auto' }}>
+                          <TimePicker compact onChange={(time) => onSchedule(item.id, time)} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </DroppableUnscheduled>
+            </SortableContext>
           </div>
-        )
-      })}
+        )}
+      </div>
 
-      {/* Unscheduled Items */}
-      {unscheduled.length > 0 && (
-        <div className="mt-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Clock size={12} style={{ color: 'var(--do-text-muted)' }} />
-            <span className="text-[12px] font-medium" style={{ color: 'var(--do-text-secondary)' }}>
-              未排定時間 ({unscheduled.length})
-            </span>
-          </div>
-          <div className="space-y-1 ml-6">
-            {unscheduled.map((item) => (
-              <PlanItemRow key={item.id} item={item} onToggle={onToggle} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+      <DragOverlay dropAnimation={null}>
+        {activeItem && <PlanItemRow item={activeItem} />}
+      </DragOverlay>
+    </DndContext>
   )
 }

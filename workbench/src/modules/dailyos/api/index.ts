@@ -8,6 +8,9 @@ import type {
   MethodSelection,
   MethodUpdate,
   PlanItem,
+  RecurringItem,
+  RecurringItemCreate,
+  RecurringItemUpdate,
 } from '../types'
 
 export const methodApi = {
@@ -91,4 +94,24 @@ export const planApi = {
       method: 'POST',
       body: JSON.stringify({ status }),
     }),
+}
+
+export const recurringApi = {
+  list: () => request<RecurringItem[]>('/dailyos/recurring'),
+
+  create: (data: RecurringItemCreate) =>
+    request<RecurringItem>('/dailyos/recurring', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: RecurringItemUpdate) =>
+    request<RecurringItem>(`/dailyos/recurring/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  remove: (id: string) => request<void>(`/dailyos/recurring/${id}`, { method: 'DELETE' }),
+
+  forDate: (date: string) => request<RecurringItem[]>(`/dailyos/recurring/for-date/${date}`),
 }

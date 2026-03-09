@@ -1,27 +1,32 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useMethodStore } from '../stores/methodStore'
 
 export function useActiveMethod() {
   const {
-    activeMethod,
-    activeSelection,
-    effectiveConfig,
+    activeSelections,
+    primaryMethod,
+    layoutType,
+    compositeConfig,
     loading,
     error,
     fetchActiveMethod,
   } = useMethodStore()
 
+  const fetched = useRef(false)
   useEffect(() => {
-    if (!activeSelection) {
+    if (!fetched.current) {
+      fetched.current = true
       fetchActiveMethod()
     }
-  }, [activeSelection, fetchActiveMethod])
+  }, [fetchActiveMethod])
 
   return {
-    method: activeMethod,
-    selection: activeSelection,
-    config: effectiveConfig,
-    loading: loading && !activeMethod,
+    selections: activeSelections,
+    method: primaryMethod,
+    layoutType,
+    config: compositeConfig,
+    loading,
     error,
+    refresh: fetchActiveMethod,
   }
 }

@@ -130,3 +130,23 @@ class DailyPlan(SpaceScopedModel):
     completion_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     method_selection: Mapped["MethodSelection | None"] = relationship(lazy="selectin")
+
+
+class RecurringItem(SpaceScopedModel):
+    """A recurring plan item — fixed schedule events like daily sleep, weekly church, etc."""
+
+    __tablename__ = "recurring_items"
+    __table_args__ = (
+        Index("idx_ri_space", "space_id"),
+        Index("idx_ri_active", "space_id", "is_active"),
+        {"schema": SCHEMA},
+    )
+
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    recurrence_type: Mapped[str] = mapped_column(Text, nullable=False)  # daily, weekly, monthly
+    day_of_week: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 0=Mon..6=Sun
+    day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-31
+    start_time: Mapped[str | None] = mapped_column(Text, nullable=True)  # HH:MM
+    end_time: Mapped[str | None] = mapped_column(Text, nullable=True)  # HH:MM
+    category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))

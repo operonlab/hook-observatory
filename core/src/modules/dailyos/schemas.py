@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.shared.schemas import SpaceScopedResponse
 
@@ -133,3 +134,43 @@ class MethodPreviewResponse(BaseModel):
     suggested_items: list[dict] = Field(default_factory=list)
     frog_ids: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+# ======================== Recurring Items ========================
+
+
+class RecurringItemCreate(BaseModel):
+    title: str
+    recurrence_type: Literal["daily", "weekly", "monthly"]
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    category: str | None = None
+
+
+class RecurringItemUpdate(BaseModel):
+    title: str | None = None
+    recurrence_type: Literal["daily", "weekly", "monthly"] | None = None
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    category: str | None = None
+    is_active: bool | None = None
+
+
+class RecurringItemResponse(BaseModel):
+    id: str
+    title: str
+    recurrence_type: str
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    category: str | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
