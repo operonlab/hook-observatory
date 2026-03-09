@@ -15,6 +15,8 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'servers',
 			[
 				['activity', "Activity Log"],
+				['conf_keys', "Configs"],
+				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
@@ -27,7 +29,7 @@ Class.add( Page.Admin, {
 		
 		// Active Server Cluster
 		
-		var cols = ['Hostname', 'IP Address', 'Groups', 'Status', 'Active Jobs', 'Uptime', 'CPU', 'Mem', 'Actions'];
+		var cols = ['Hostname', 'IP Address', 'Platform', 'PID', 'Node', 'Engine', 'Groups', 'Status', 'Active Jobs', 'Uptime', 'CPU', 'Mem', 'Actions'];
 		
 		html += '<div class="subtitle">';
 			html += 'Server Cluster';
@@ -61,7 +63,7 @@ Class.add( Page.Admin, {
 				var tds = [
 					'<div class="td_big" style="font-weight:normal"><div class="ellip" style="max-width:'+col_width+'px;"><i class="fa fa-eye">&nbsp;</i>' + server.hostname.replace(/\.[\w\-]+\.\w+$/, '') + '</div></div>',
 					(server.ip || 'n/a').replace(/^\:\:ffff\:(\d+\.\d+\.\d+\.\d+)$/, '$1'),
-					'-', '(Nearby)', '-', '-', '-', '-',
+					'-', '(Nearby)', '-', '-', '-', '-', '-', '-', '-',
 					'<span class="link" onMouseUp="$P().add_server_from_list('+idx+')"><b>Add Server</b></span>'
 				];
 				tds.className = 'blue';
@@ -73,7 +75,7 @@ Class.add( Page.Admin, {
 				'<span class="link" onMouseUp="$P().shutdown_server('+idx+')"><b>Shutdown</b></span>'
 			];
 			if (server.disabled) actions = [];
-			if (!server.master) {
+			if (!server.manager) {
 				actions.push( '<span class="link" onMouseUp="$P().remove_server('+idx+')"><b>Remove</b></span>' );
 			}
 			
@@ -84,7 +86,7 @@ Class.add( Page.Admin, {
 				var regexp = new RegExp( group.regexp, "i" );
 				if (server.hostname.match(regexp)) {
 					group_names.push( group.title );
-					if (group.master) eligible = true;
+					if (group.manager) eligible = true;
 				}
 			}
 			
@@ -104,8 +106,12 @@ Class.add( Page.Admin, {
 			var tds = [
 				'<div class="td_big">' + self.getNiceGroup(null, server.hostname, col_width) + '</div>',
 				(server.ip || 'n/a').replace(/^\:\:ffff\:(\d+\.\d+\.\d+\.\d+)$/, '$1'),
+				`<span title="release: ${encode_entities(server.release)}"> ${server.platform}</span>`,
+				server.pid,
+				server.nodev,
+				server.engine || '',
 				group_names.length ? group_names.join(', ') : '(None)',
-				server.master ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Primary</span>' : (eligible ? '<span class="color_label purple">Backup</span>' : '<span class="color_label blue">Worker</span>'),
+				server.manager ? '<span class="color_label green"><i class="fa fa-check">&nbsp;</i>Manager</span>' : (eligible ? '<span class="color_label purple">Backup</span>' : '<span class="color_label blue">Worker</span>'),
 				num_jobs ? commify( num_jobs ) : '(None)',
 				get_text_from_seconds( server.uptime, true, true ).replace(/\bday\b/, 'days'),
 				short_float(cpu) + '%',
@@ -165,7 +171,7 @@ Class.add( Page.Admin, {
 				// group.description || '(No description)',
 				num_servers ? commify( num_servers) : '(None)',
 				num_events ? commify( num_events ) : '(None)',
-				group.master ? '<b>Primary Eligible</b>' : 'Worker Only',
+				group.manager ? '<b>Manager Eligible</b>' : 'Worker Only',
 				actions.join(' | ')
 			];
 		} );
@@ -199,7 +205,7 @@ Class.add( Page.Admin, {
 		
 		// html += '<div style="font-size:12px; color:#777; margin-bottom:15px;">Typically, servers should automatically add themselves to the cluster, if they are within UDP broadcast range (i.e. on the same LAN).  You should only need to manually add a server in special circumstances, e.g. if it is remotely hosted in another datacenter or network.</div>';
 		
-		// html += '<div style="font-size:12px; color:#777; margin-bottom:20px;">Note that the new server cannot already be a master server, nor part of another '+app.name+' server cluster, and the current master server must be able to reach it.</div>';
+		// html += '<div style="font-size:12px; color:#777; margin-bottom:20px;">Note that the new server cannot already be a manager server, nor part of another '+app.name+' server cluster, and the current manager server must be able to reach it.</div>';
 		
 		html += '<center><table>' + 
 			// get_form_table_spacer() + 
@@ -258,7 +264,7 @@ Class.add( Page.Admin, {
 		var group = (idx > -1) ? this.server_groups[idx] : {
 			title: "",
 			regexp: "",
-			master: 0
+			manager: 0
 		};
 		var edit = (idx > -1) ? true : false;
 		var html = '';
@@ -279,8 +285,8 @@ Class.add( Page.Admin, {
 			get_form_table_row('Hostname Match:', '<input type="text" id="fe_eg_regexp" size="30" style="font-family:monospace; font-size:13px;" value="'+escape_text_field_value(group.regexp)+'" spellcheck="false"/>') + 
 			get_form_table_caption("Enter a regular expression to auto-assign servers to this group by their hostnames, e.g. \"^mtx\\d+\\.\".") + 
 			get_form_table_spacer() + 
-			get_form_table_row('Server Class:', '<select id="fe_eg_master">' + render_menu_options([ [1,'Primary Eligible'], [0,'Worker Only'] ], group.master, false) + '</select>') + 
-			get_form_table_caption("Select whether servers in the group are eligible to become the primary server, or run as workers only.") + 
+			get_form_table_row('Server Class:', '<select id="fe_eg_manager">' + render_menu_options([ [1,'manager Eligible'], [0,'worker Only'] ], group.manager, false) + '</select>') + 
+			get_form_table_caption("Select whether servers in the group are eligible to become the manager server, or run as workers only.") + 
 		'</table>';
 		
 		app.confirm( '<i class="mdi mdi-server-network">&nbsp;&nbsp;</i>' + (edit ? "Edit Server Group" : "Add Server Group"), html, edit ? "Save Changes" : "Add Group", function(result) {
@@ -297,7 +303,7 @@ Class.add( Page.Admin, {
 					return app.badField('fe_eg_regexp', "Invalid regular expression: " + err);
 				}
 				
-				group.master = parseInt( $('#fe_eg_master').val() );
+				group.manager = parseInt( $('#fe_eg_manager').val() );
 				Dialog.hide();
 				
 				// pro-tip: embed id in title as bracketed prefix
@@ -324,14 +330,14 @@ Class.add( Page.Admin, {
 		// delete selected server group
 		var group = this.server_groups[idx];
 		
-		// make sure user isn't deleting final master group
-		if (group.master) {
-			var num_masters = 0;
+		// make sure user isn't deleting final manager group
+		if (group.manager) {
+			var num_managers = 0;
 			for (var idx = 0, len = this.server_groups.length; idx < len; idx++) {
-				if (this.server_groups[idx].master) num_masters++;
+				if (this.server_groups[idx].manager) num_managers++;
 			}
-			if (num_masters == 1) {
-				return app.doError("Sorry, you cannot delete the last Primary Eligible server group.");
+			if (num_managers == 1) {
+				return app.doError("Sorry, you cannot delete the last manager Eligible server group.");
 			}
 		}
 		

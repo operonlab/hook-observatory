@@ -19,7 +19,7 @@ var setup = require('../sample_conf/setup.json');
 config.debug = true;
 config.echo = false;
 config.color = false;
-config.master = false;
+config.manager = false;
 
 config.WebServer.http_port = 4012;
 config.base_app_url = "http://localhost:4012";
@@ -41,6 +41,22 @@ config.queue_dir = 'data/unitqueue';
 
 // chdir to the proper server root dir
 process.chdir( require('path').dirname( __dirname ) );
+
+// Windows compatibility items
+function pingPID(pid) { 
+	return (process.platform == 'win32' ? cp.execSync(`powershell -c "Get-Process -Id ${pid} -ErrorAction SilentlyContinue"`) : process.kill(parseInt(pid), 0))
+}
+function cleanUp() {
+	if( process.platform == 'win32') {
+		cp.execSync('if exist logs\\unit.pid del logs\\unit.pid')
+		cp.execSync('if exist data\\unit* rmdir /s /q data\\unittest data\\unitqueue')
+	}
+	else {
+		cp.execSync('rm -rf logs/unit.pid data/unittest data/unitqueue')
+	}
+}
+
+let testScript = process.platform == 'win32' ? "#!powershell\n\necho \"UNIT TEST STRING\"" : "#!/bin/sh\n\necho \"UNIT TEST STRING\""
 
 // global refs
 var server = null;
@@ -69,7 +85,7 @@ module.exports = {
 		catch (e) {;}
 		if (pid) {
 			var alive = true;
-			try { process.kill(parseInt(pid), 0); }
+			try { pingPID(pid) }
 			catch (e) { alive = false; }
 			if (alive) {
 				console.warn("Another unit test is already running (PID " + pid + "). Exiting.");
@@ -78,7 +94,7 @@ module.exports = {
 		}
 		
 		// clean out data from last time
-		try { cp.execSync('rm -rf logs/unit.pid data/unittest data/unitqueue'); }
+		try { cleanUp()}
 		catch (e) {;}
 		
 		// construct server object
@@ -93,7 +109,7 @@ module.exports = {
 				require('pixl-server-storage'),
 				require('pixl-server-web'),
 				require('pixl-server-api'),
-				require('pixl-server-user'),
+				require('./user.js'),
 				require('./engine.js')
 			]
 			
@@ -173,24 +189,24 @@ module.exports = {
 			} );
 		},
 		
-		function testcheckMasterEligibility(test) {
-			cronicle.checkMasterEligibility( function() {
+		function testcheckmanagerEligibility(test) {
+			cronicle.checkmanagerEligibility( function() {
 				test.ok( cronicle.multi.cluster == true, "Server found in cluster" );
-				test.ok( cronicle.multi.eligible == true, "Server is eligible for master" );
-				test.ok( cronicle.multi.master == false, "Server is not yet master" );
-				test.ok( cronicle.multi.slave == false, "Server is not a slave" );
+				test.ok( cronicle.multi.eligible == true, "Server is eligible for manager" );
+				test.ok( cronicle.multi.manager == false, "Server is not yet manager" );
+				test.ok( cronicle.multi.worker == false, "Server is not a worker" );
 				
 				test.done();
 			} );
 		},
 		
-		function testGoMaster(test) {
-			cronicle.goMaster();
+		function testGomanager(test) {
+			cronicle.gomanager();
 			
-			test.ok( cronicle.multi.master == true, "Server became master" );
-			test.ok( cronicle.multi.slave == false, "Server is not a slave" );
+			test.ok( cronicle.multi.manager == true, "Server became manager" );
+			test.ok( cronicle.multi.worker == false, "Server is not a worker" );
 			test.ok( cronicle.multi.cluster == true, "Server is still found in cluster" );
-			test.ok( cronicle.multi.masterHostname == server.hostname, "Server masterHostname is self" );
+			test.ok( cronicle.multi.managerHostname == server.hostname, "Server managerHostname is self" );
 			test.ok( !!cronicle.multi.lastPingSent, "Server lastPingSent is non-zero" );
 			test.ok( !!cronicle.tz, "Server has a timezone set" );
 			
@@ -451,7 +467,7 @@ module.exports = {
 		function testAPICreateServerGroup(test) {
 			// test app/create_server_group api
 			var self = this;
-			var params = {"title":"del gap","regexp":"dasds","master":0,"session_id":session_id};
+			var params = {"title":"del gap","regexp":"dasds","manager":0,"session_id":session_id};
 			
 			request.json( api_url + '/app/create_server_group', params, function(err, resp, data) {
 				
@@ -795,34 +811,6 @@ module.exports = {
 			} );
 		},
 		
-		function testAPIUpdateEventBadTimezone(test) {
-			// test app/update_event api with a bad tz (should error out)
-			var self = this;
-			var params = {
-				"id": this.event_id,
-				"timezone": "THIS IS BAD",
-				"session_id": session_id
-			};
-			
-			request.json( api_url + '/app/update_event', params, function(err, resp, data) {
-				
-				test.ok( !err, "No error requesting API" );
-				test.ok( "code" in data, "Found code prop in JSON response" );
-				test.ok( data.code == 'api', "Code is api" );
-				
-				// make sure event didn't get saved in storage
-				storage.listFind( 'global/schedule', { id: self.event_id }, function(err, event) {
-					test.ok( !err, "No error fetching data" );
-					test.ok( !!event, "Data record record is non-null" );
-					test.ok( event.username == "admin", "Username is correct" );
-					test.ok( event.created > 0, "Record creation date is non-zero" );
-					test.ok( event.timezone == cronicle.tz, "New timezone is correct (not changed)" );
-					
-					test.done();
-				} );
-			} );
-		},
-		
 		// app/get_schedule
 		
 		function testAPIGetSchedule(test) {
@@ -922,7 +910,7 @@ module.exports = {
 			
 			// try to ping pid
 			var ping = false;
-			try { ping = process.kill( job.pid, 0 ); }
+			try { ping = pingPID(job.pid) }
 			catch (e) {;}
 			test.ok( !!ping, "Job PID was successfully pinged" );
 			
@@ -930,6 +918,24 @@ module.exports = {
 			cronicle.monitorServerResources( function(err) {
 				test.ok( !err, "No error calling monitorServerResources", err );
 				test.done();
+			} );
+		},
+		
+		// app/get_live_job_log
+		
+		function testAPIGetLiveJobLog(test) {
+			// test get_live_job_log API (raw HTTP get, not a JSON API)
+			var self = this;
+			
+			request.get( api_url + '/app/get_live_job_log?id=' + this.job_id, function(err, resp, data) {
+				
+				test.ok( !err, "No error requesting API" );
+				test.ok( resp.statusCode == 200, "HTTP 200 from API" );
+				test.ok( !!data, "Got data buffer" );
+				test.ok( data.length > 0, "Data buffer has length" );
+				
+				test.done();
+				
 			} );
 		},
 		
@@ -1039,7 +1045,7 @@ module.exports = {
 					
 					// job pid should be dead at this point
 					var ping = false;
-					try { ping = process.kill( job.pid, 0 ); }
+					try { ping = pingPID(job.pid) }
 					catch (e) {;}
 					test.ok( !ping, "Job PID is dead" );
 					
@@ -1053,9 +1059,8 @@ module.exports = {
 		function testAPIGetJobLog(test) {
 			// test get_job_log API (raw HTTP get, not a JSON API)
 			var self = this;
-			var token = Tools.digestHex(this.job_id + config.secret_key);
 			
-			request.get( api_url + '/app/get_job_log?id=' + this.job_id + '&t=' + token, function(err, resp, data) {
+			request.get( api_url + '/app/get_job_log?id=' + this.job_id, function(err, resp, data) {
 				
 				test.ok( !err, "No error requesting API" );
 				test.ok( resp.statusCode == 200, "HTTP 200 from API" );
@@ -1250,7 +1255,7 @@ module.exports = {
 			
 			var params = {
 				"params": {
-					"script": "#!/bin/sh\n\necho \"UNIT TEST STRING\""
+					"script": testScript
 				},
 				"timing": {
 					"minutes": [25] // hourly on the 25th minute
@@ -1491,10 +1496,10 @@ module.exports = {
 		
 		
 		
-		// app/update_master_state
+		// app/update_manager_state
 		
-		function testAPIUpdateMasterState(test) {
-			// test app/update_master_state api
+		function testAPIUpdatemanagerState(test) {
+			// test app/update_manager_state api
 			var self = this;
 			var params = {
 				"session_id": session_id,
@@ -1505,7 +1510,7 @@ module.exports = {
 			test.ok( !!cronicle.state.enabled, "Scheduler state is currently enabled" );
 			
 			// disable it via API
-			request.json( api_url + '/app/update_master_state', params, function(err, resp, data) {
+			request.json( api_url + '/app/update_manager_state', params, function(err, resp, data) {
 				
 				test.ok( !err, "No error requesting API" );
 				test.ok( resp.statusCode == 200, "HTTP 200 from API" );
@@ -1557,7 +1562,7 @@ module.exports = {
 			server.shutdown( function() {
 				// delete our mess after a short rest (just so no errors are logged)
 				setTimeout( function() {
-					try { cp.execSync('rm -rf data/unittest data/unitqueue'); }
+					try { cleanUp() }
 					catch (e) {;}
 					
 					callback();

@@ -7,14 +7,18 @@ Class.add( Page.Admin, {
 		'^group': '<i class="mdi mdi-server-network">&nbsp;</i>Group',
 		'^plugin': '<i class="fa fa-plug">&nbsp;</i>Plugin',
 		// '^apikey': '<i class="fa fa-key">&nbsp;</i>API Key',	
-		'^apikey': '<i class="mdi mdi-key-variant">&nbsp;</i>API Key',	
+		'^apikey': '<i class="mdi mdi-key-variant">&nbsp;</i>API Key',
+		'^confkey': '<i class="fa fa-wrench">&nbsp;</i>Config',
+		'^secret': '<i class="fa fa-lock">&nbsp;</i>Secret',	
 		'^event': '<i class="fa fa-clock-o">&nbsp;</i>Event',
 		'^user': '<i class="fa fa-user">&nbsp;&nbsp;</i>User',
 		'server': '<i class="mdi mdi-desktop-tower mdi-lg">&nbsp;</i>Server',
 		'^job': '<i class="fa fa-pie-chart">&nbsp;</i>Job',
 		'^state': '<i class="mdi mdi-calendar-clock">&nbsp;</i>Scheduler', // mdi-lg
 		'^error': '<i class="fa fa-exclamation-triangle">&nbsp;</i>Error',
-		'^warning': '<i class="fa fa-exclamation-circle">&nbsp;</i>Warning'
+		'^warning': '<i class="fa fa-exclamation-circle">&nbsp;</i>Warning',
+		'^restore' : '<i class="fa fa-upload">&nbsp;</i>Restore',
+		'^backup' : '<i class="fa fa-download">&nbsp;</i>Backup',
 	},
 	
 	gosub_activity: function(args) {
@@ -29,6 +33,8 @@ Class.add( Page.Admin, {
 	receive_activity: function(resp) {
 		// receive page of activity from server, render it
 		this.lastActivityResp = resp;
+        // hide warnings and debug runs
+		if(resp.rows) {resp.rows = resp.rows.filter(item => item.action != 'job_complete_debug' && item.code != 255) }
 		
 		var html = '';
 		this.div.removeClass('loading');
@@ -36,6 +42,8 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'activity',
 			[
 				['activity', "Activity Log"],
+				['conf_keys', "Configs"],
+				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
@@ -74,6 +82,14 @@ Class.add( Page.Admin, {
 			var desc = '';
 			var actions = [];
 			var color = '';
+
+			let kt_map = {
+                'application/json': '[JSON]',
+                'text/xml': '[XML]',
+                'text/x-sql': '[SQL]',
+                'text/plain': '[TEXT]'
+            }
+			let conf_key_val = item.conf_key ? (kt_map[item.conf_key.type] || item.conf_key.key) : ''
 			
 			switch (item.action) {
 				
@@ -123,6 +139,30 @@ Class.add( Page.Admin, {
 					desc = 'API Key deleted: <b>' + item.api_key.title + '</b> (Key: ' + item.api_key.key + ')';
 				break;
 				
+				// secrets
+				case 'secret_create':
+					desc = 'New Secret created: <b>' + item.secret + '</b> (encrypted: ' + item.encrypted + ')';
+					break;
+				case 'secret_update':
+					desc = 'Secret updated: <b>' + item.secret + '</b> (encrypted: ' + item.encrypted + ')';
+					break;
+				case 'secret_delete':
+					desc = 'Secret deleted: <b>' + item.secret + '</b> (encrypted: ' + item.encrypted + ')';
+					break;				
+
+				// Configs
+				case 'confkey_create':
+					desc = 'Config created: <b>' + item.conf_key.title + '</b> : ' + conf_key_val;
+					actions.push( '<a href="#Admin?sub=edit_config_key&id='+item.conf_key.id+'">Edit Config</a>' );
+				break;
+				case 'confkey_update':
+					desc = 'Config updated: <b>' + item.conf_key.title + '</b> : ' + conf_key_val;
+					actions.push( '<a href="#Admin?sub=edit_conf_key&id='+item.conf_key.id+'">Edit Config</a>' );
+				break;
+				case 'confkey_delete':
+					desc = 'Config deleted: <b>' + item.conf_key.title + '</b> : ' + conf_key_val;
+				break;
+				
 				// events
 				case 'event_create':
 					desc = 'New event added: <b>' + item.event.title + '</b>';
@@ -131,6 +171,14 @@ Class.add( Page.Admin, {
 				break;
 				case 'event_update':
 					desc = 'Event updated: <b>' + item.event.title + '</b>';
+					actions.push( '<a href="#Schedule?sub=edit_event&id='+item.event.id+'">Edit Event</a>' );
+				break;
+				case 'event_enabled':
+					desc = 'Event enabled: <b>' + item.event.title + '</b>';
+					actions.push( '<a href="#Schedule?sub=edit_event&id='+item.event.id+'">Edit Event</a>' );
+				break;
+				case 'event_disabled':
+					desc = 'Event disabled: <b>' + item.event.title + '</b>';
 					actions.push( '<a href="#Schedule?sub=edit_event&id='+item.event.id+'">Edit Event</a>' );
 				break;
 				case 'event_delete':
@@ -162,9 +210,9 @@ Class.add( Page.Admin, {
 				case 'server_remove': // current
 					desc = 'Server '+(item.manual ? 'manually ' : '')+'removed from cluster: <b>' + item.hostname + '</b>';
 				break;
-				case 'master_server': // legacy
-				case 'server_master': // current
-					desc = 'Server has become primary: <b>' + item.hostname + '</b>';
+				case 'manager_server': // legacy
+				case 'server_manager': // current
+					desc = 'Server has become manager: <b>' + item.hostname + '</b>';
 				break;
 				
 				case 'server_restart': 
@@ -173,6 +221,10 @@ Class.add( Page.Admin, {
 				case 'server_shutdown': 
 					desc = 'Server shut down: <b>' + item.hostname + '</b>';
 				break;
+
+				case 'server_sigterm': 
+				    desc = 'Server shut down (sigterm): <b>' + item.hostname + '</b>';
+			    break;
 				
 				case 'server_disable': 
 					desc = 'Lost connectivity to server: <b>' + item.hostname + '</b>';
@@ -194,11 +246,18 @@ Class.add( Page.Admin, {
 						desc = 'Job <b>#'+item.id+'</b> ('+event.title+') on server <b>'+item.hostname.replace(/\.[\w\-]+\.\w+$/, '')+'</b> completed successfully';
 					}
 					else {
-						desc = 'Job <b>#'+item.id+'</b> ('+event.title+') on server <b>'+item.hostname.replace(/\.[\w\-]+\.\w+$/, '')+'</b> failed with error: ' + encode_entities(item.description || 'Unknown Error');
+						desc = 'Job <b>#'+item.id+'</b> ('+event.title+') on server <b>'+item.hostname.replace(/\.[\w\-]+\.\w+$/, '')+'</b> failed with error: ' + encode_entities(item.description || 'Unknown Error').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 						if (desc.match(/\n/)) desc = desc.split(/\n/).shift() + "...";
 						color = 'red';
 					}
 					actions.push( '<a href="#JobDetails?id='+item.id+'">Job Details</a>' );
+				break;
+				case 'job_failure':
+						desc = 'Job <b>#'+item.job.id+'</b> ('+item.job.event_title+') on server <b>'+item.job.hostname.replace(/\.[\w\-]+\.\w+$/, '')+'</b> failed with error: ' + encode_entities(item.job.description || 'Unknown Error').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+						if (desc.match(/\n/)) desc = desc.split(/\n/).shift() + "...";
+						color = 'red';
+					
+					actions.push( '<a href="#JobDetails?id=' + item.job.id + '">Job Details</a>' );
 				break;
 				case 'job_delete':
 					var event = find_object( app.schedule, { id: item.event } ) || { title: 'Unknown Event' };
@@ -207,7 +266,7 @@ Class.add( Page.Admin, {
 				
 				// scheduler
 				case 'state_update':
-					desc = 'Scheduler was <b>' + (item.enabled ? 'enabled' : 'disabled') + '</b>';
+					desc = 'Scheduler manager switch was <b>' + (item.enabled ? 'enabled' : 'disabled') + '</b>';
 				break;
 				
 				// errors
@@ -222,12 +281,22 @@ Class.add( Page.Admin, {
 					color = 'yellow';
 				break;
 				
+				// restore (Import)
+				case 'restore':
+					desc = JSON.stringify(item.info, null, 2).replaceAll('"', "");
+				break;
+				
+				// backup (Export)
+				case 'backup':
+					desc = ''
+				break;
+				
 			} // action
 			
 			var tds = [
 				'<div style="white-space:nowrap;">' + get_nice_date_time( item.epoch || 0, false, true ) + '</div>',
 				'<div class="td_big" style="white-space:nowrap; font-size:12px; font-weight:normal;">' + item_type + '</div>',
-				'<div class="activity_desc">' + desc + '</div>',
+				'<div class="activity_desc">' + filterXSS(desc) + '</div>',
 				'<div style="white-space:nowrap;">' + self.getNiceUsername(item, true) + '</div>',
 				(item.ip || 'n/a').replace(/^\:\:ffff\:(\d+\.\d+\.\d+\.\d+)$/, '$1'),
 				'<div style="white-space:nowrap;">' + actions.join(' | ') + '</div>'

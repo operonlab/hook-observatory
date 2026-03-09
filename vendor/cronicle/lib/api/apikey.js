@@ -2,12 +2,9 @@
 // Copyright (c) 2015 Joseph Huckaby
 // Released under the MIT License
 
-var fs = require('fs');
-var assert = require("assert");
-var async = require('async');
-
-var Class = require("pixl-class");
-var Tools = require("pixl-tools");
+const Class = require("pixl-class");
+const Tools = require("pixl-tools");
+const crypto = require('crypto');
 
 module.exports = Class.create({
 	
@@ -15,7 +12,7 @@ module.exports = Class.create({
 		// get list of all api_keys
 		var self = this;
 		var params = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		this.loadSession(args, function(err, session, user) {
 			if (err) return self.doError('session', err.message, callback);
@@ -37,7 +34,7 @@ module.exports = Class.create({
 		// get single API Key for editing
 		var self = this;
 		var params = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		if (!this.requireParams(params, {
 			id: /^\w+$/
@@ -57,23 +54,48 @@ module.exports = Class.create({
 			} ); // got api_key
 		} ); // loaded session
 	},
+
+	api_get_event_token: function (args, callback) {
+		// get event specific token
+		let self = this;
+		let params = args.params;
+		if (!this.requiremanager(args, callback)) return;
+
+		if (!this.requireParams(params, {
+			id: /^\w+$/,
+			salt: /^\w+$/
+		}, callback)) return;
+
+		this.loadSession(args, function (err, session, user) {
+			if (err) return self.doError('session', err.message, callback);
+			if (!self.requireAdmin(session, user, callback)) return;
+
+			let token = crypto.createHmac("sha1", `${self.server.config.get("secret_key")}`)
+				.update(`${params.id + params.salt}`)
+				.digest("hex");
+			callback({ code: 0, token: token });
+
+		}); // loaded session
+	},
+
 	
 	api_create_api_key: function(args, callback) {
 		// add new API Key
 		var self = this;
 		var params = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		if (!this.requireParams(params, {
 			title: /\S/,
 			key: /^\w+$/,
 			active: /^[1|0]$/
 		}, callback)) return;
-		
-		// make sure text params don't contain HTML metacharacters
+
+		// make sure title doesn't contain HTML metacharacters
 		if (params.title && params.title.match(/[<>]/)) {
 			return this.doError('api', "Malformed title parameter: Cannot contain HTML metacharacters", callback);
 		}
+
 		if (params.description && params.description.match(/[<>]/)) {
 			return this.doError('api', "Malformed description parameter: Cannot contain HTML metacharacters", callback);
 		}
@@ -116,24 +138,27 @@ module.exports = Class.create({
 		// update existing API Key
 		var self = this;
 		var params = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		if (!this.requireParams(params, {
 			id: /^\w+$/
 		}, callback)) return;
-		
-		if (!this.validateOptionalParams(params, {
+
+	    if (!this.validateOptionalParams(params, {
 			key: [ 'string', /^\w+$/ ],
 			active: [ 'number', /^[1|0]$/ ]
 		}, callback)) return;
 		
 		// make sure text params don't contain HTML metacharacters
-		if (params.title && params.title.match(/[<>]/)) {
-			return this.doError('api', "Malformed title parameter: Cannot contain HTML metacharacters", callback);
-		}
+	    if (params.title && params.title.match(/[<>]/)) {
+		  return this.doError('api', "Malformed title parameter: Cannot contain HTML metacharacters", callback);
+	    }
+
 		if (params.description && params.description.match(/[<>]/)) {
 			return this.doError('api', "Malformed description parameter: Cannot contain HTML metacharacters", callback);
 		}
+
+
 		
 		this.loadSession(args, function(err, session, user) {
 			if (err) return self.doError('session', err.message, callback);
@@ -167,7 +192,7 @@ module.exports = Class.create({
 		// delete existing API Key
 		var self = this;
 		var params = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		if (!this.requireParams(params, {
 			id: /^\w+$/

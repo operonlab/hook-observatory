@@ -55,7 +55,7 @@ module.exports = Class.create({
 		if (!this.discoveryListener) return;
 		var now = Tools.timeNow(true);
 		
-		if (now - this.lastDiscoveryBroadcast >= this.server.config.get('master_ping_freq')) {
+		if (now - this.lastDiscoveryBroadcast >= this.server.config.get('manager_ping_freq')) {
 			this.lastDiscoveryBroadcast = now;
 			
 			// only broadcast if not part of a cluster
@@ -69,9 +69,9 @@ module.exports = Class.create({
 			// prune servers who have stopped broadcasting
 			for (var hostname in this.nearbyServers) {
 				var server = this.nearbyServers[hostname];
-				if (now - server.now >= this.server.config.get('master_ping_timeout')) {
+				if (now - server.now >= this.server.config.get('manager_ping_timeout')) {
 					delete this.nearbyServers[hostname];
-					if (this.multi.master) {
+					if (this.multi.manager) {
 						this.authSocketEmit( 'update', { nearby: this.nearbyServers } );
 					}
 				}
@@ -121,7 +121,7 @@ module.exports = Class.create({
 							if (!this.nearbyServers[ json.hostname ]) {
 								// first time we've seen this server
 								this.nearbyServers[ json.hostname ] = json;
-								if (this.multi.master) {
+								if (this.multi.manager) {
 									this.logDebug(6, "Discovered nearby server: " + json.hostname, json);
 									this.authSocketEmit( 'update', { nearby: this.nearbyServers } );
 								}

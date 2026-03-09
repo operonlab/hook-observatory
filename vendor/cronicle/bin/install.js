@@ -1,9 +1,9 @@
 // Cronicle Auto Installer
-// Copyright (c) 2015 - 2023 Joseph Huckaby, MIT License.
+// Copyright (c) 2015 - 2019 Joseph Huckaby, MIT License.
 // https://github.com/jhuckaby/Cronicle
 
 // To install, issue this command as root:
-// curl -s "https://raw.githubusercontent.com/jhuckaby/Cronicle/master/bin/install.js" | node
+// curl -s "https://raw.githubusercontent.com/jhuckaby/Cronicle/manager/bin/install.js" | node
 
 var path = require('path');
 var fs = require('fs');
@@ -15,30 +15,17 @@ var installer_version = '1.5';
 var base_dir = '/opt/cronicle';
 var log_dir = base_dir + '/logs';
 var log_file = '';
-var gh_repo_url = 'http://github.com/jhuckaby/Cronicle';
-var gh_releases_url = 'https://api.github.com/repos/jhuckaby/Cronicle/releases';
-var gh_head_tarball_url = 'https://github.com/jhuckaby/Cronicle/archive/master.tar.gz';
+var gh_repo_url = 'http://github.com/cronicle-edge/cronicle-edge';
+var gh_releases_url = 'https://api.github.com/repos/cronicle-edge/cronicle-edge/releases';
+var gh_head_tarball_url = 'https://github.com/cronicle-edge/cronicle-edge/archive/main.tar.gz';
 
 // don't allow npm to delete these (ugh)
-var packages_to_check = ['couchbase', 'redis', 'ioredis', 'ioredis-timeout', 'sqlite3'];
+var packages_to_check = ['couchbase', 'aws-sdk', 'redis'];
 var packages_to_rescue = {};
 
 // Error out if Node.js version is old
 if (process.version.match(/^v?(\d+)/) && (parseInt(RegExp.$1) < 16) && !process.env['CRONICLE_OLD']) {
 	console.error("\nERROR: You are using an incompatible version of Node.js (" + process.version + ").  Please upgrade to v16 or later.  Instructions: https://nodejs.org/en/download/package-manager\n\nTo ignore this error and run unsafely, set a CRONICLE_OLD environment variable.  Do this at your own risk.\n");
-	process.exit(1);
-}
-
-// Error out if we have low memory
-if ((os.totalmem() < 64 * 1024 * 1024) && !process.env['CRONICLE_DANGER']) {
-	console.error("\nERROR: The current machine has less than 64 MB of total RAM.  Cronicle will likely fail to install successfully under such low memory conditions.\n\nTo ignore this error and attempt the install anyway, set a CRONICLE_DANGER environment variable.  Do this at your own risk.\n");
-	process.exit(1);
-}
-
-// make sure we have NPM available
-try { cp.execSync('which npm'); }
-catch (err) {
-	console.error("\nERROR: NPM cannot be found.  Cronicle requires both Node.js and NPM to be preinstalled.  Instructions: https://nodejs.org/en/download/\n");
 	process.exit(1);
 }
 
@@ -91,7 +78,7 @@ logonly( "\nStarting install run: " + (new Date()).toString() + "\n" );
 
 print( 
 	"\nCronicle Installer v" + installer_version + "\n" + 
-	"Copyright (c) 2015 - 2022 PixlCore.com. MIT Licensed.\n" + 
+	"Copyright (c) 2015 - 2025 PixlCore.com. MIT Licensed.\n" + 
 	"Log File: " + log_file + "\n\n" 
 );
 

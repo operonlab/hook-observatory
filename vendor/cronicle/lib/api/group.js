@@ -19,17 +19,17 @@ module.exports = Class.create({
 		// add new server group
 		var self = this;
 		var group = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		if (!this.requireParams(group, {
 			title: /\S/,
 			regexp: /\S/
 		}, callback)) return;
-		
+	    
 		// make sure title doesn't contain HTML metacharacters
-		if (group.title && group.title.match(/[<>]/)) {
-			return this.doError('api', "Malformed title parameter: Cannot contain HTML metacharacters", callback);
-		}
+	    if (group.title && group.title.match(/[<>]/)) {
+		   return this.doError('api', "Malformed title parameter: Cannot contain HTML metacharacters", callback);
+	    }		
 		
 		this.loadSession(args, function(err, session, user) {
 			if (err) return self.doError('session', err.message, callback);
@@ -57,9 +57,9 @@ module.exports = Class.create({
 				// broadcast update to all websocket clients
 				self.updateClientData( 'server_groups' );
 				
-				// notify all slave servers about the change as well
-				// this may have changed their master server eligibility
-				self.slaveNotifyGroupChange();
+				// notify all worker servers about the change as well
+				// this may have changed their manager server eligibility
+				self.workerNotifyGroupChange();
 			} ); // list insert
 		} ); // load session
 	},
@@ -68,16 +68,18 @@ module.exports = Class.create({
 		// update existing server group
 		var self = this;
 		var params = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		if (!this.requireParams(params, {
 			id: /^\w+$/
 		}, callback)) return;
-		
+
+
 		// make sure title doesn't contain HTML metacharacters
 		if (params.title && params.title.match(/[<>]/)) {
 			return this.doError('api', "Malformed title parameter: Cannot contain HTML metacharacters", callback);
 		}
+
 		
 		this.loadSession(args, function(err, session, user) {
 			if (err) return self.doError('session', err.message, callback);
@@ -102,9 +104,9 @@ module.exports = Class.create({
 				// broadcast update to all websocket clients
 				self.updateClientData( 'server_groups' );
 				
-				// notify all slave servers about the change as well
-				// this may have changed their master server eligibility
-				self.slaveNotifyGroupChange();
+				// notify all worker servers about the change as well
+				// this may have changed their manager server eligibility
+				self.workerNotifyGroupChange();
 			} );
 		} );
 	},
@@ -113,7 +115,7 @@ module.exports = Class.create({
 		// delete existing server group
 		var self = this;
 		var params = args.params;
-		if (!this.requireMaster(args, callback)) return;
+		if (!this.requiremanager(args, callback)) return;
 		
 		if (!this.requireParams(params, {
 			id: /^\w+$/
@@ -148,9 +150,9 @@ module.exports = Class.create({
 					// broadcast update to all websocket clients
 					self.updateClientData( 'server_groups' );
 					
-					// notify all slave servers about the change as well
-					// this may have changed their master server eligibility
-					self.slaveNotifyGroupChange();
+					// notify all worker servers about the change as well
+					// this may have changed their manager server eligibility
+					self.workerNotifyGroupChange();
 					
 				} ); // listFindDelete (group)
 			} ); // listFind (schedule)

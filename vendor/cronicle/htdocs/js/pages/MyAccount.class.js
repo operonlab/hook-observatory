@@ -33,9 +33,11 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 			html += '<td valign="top" style="vertical-align:top">';
 			
 		html += '<table style="margin:0;">';
+
+		let isExternal = user.ext_auth ? ' [External]' : ''
 		
 		// user id
-		html += get_form_table_row( 'Username', '<div style="font-size: 14px;"><b>' + app.username + '</b></div>' );
+		html += get_form_table_row( 'Username', '<div style="font-size: 14px;"><b>' + app.username + `${isExternal}</b></div>` );
 		html += get_form_table_caption( "Your username cannot be changed." );
 		html += get_form_table_spacer();
 		
@@ -48,16 +50,35 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		html += get_form_table_row( 'Email Address', '<input type="text" id="fe_ma_email" size="30" value="'+escape_text_field_value(user.email)+'"/>' );
 		html += get_form_table_caption( "This is used to generate your profile pic, and to<br/>recover your password if you forget it." );
 		html += get_form_table_spacer();
-		
+
+		// language selector
+		if (window.I18n) {
+			var langOptions = '';
+			var currentLang = I18n.getLang();
+			var langs = I18n.languages || { 'en': 'English' };
+			for (var code in langs) {
+				langOptions += '<option value="' + code + '"' + (code === currentLang ? ' selected' : '') + '>' + langs[code] + '</option>';
+			}
+			html += get_form_table_row( 'Language', '<select id="fe_ma_language" onChange="$P().change_language(this.value)">' + langOptions + '</select>' );
+			html += get_form_table_caption( "Interface language. Changes apply immediately." );
+			html += get_form_table_spacer();
+		}
+
+		var disableIfExternal = user.ext_auth ? "disabled" : " ";
+
+		if(!user.ext_auth) {
+
 		// current password
-		html += get_form_table_row( 'Current Password', '<input type="' + app.get_password_type() + '" id="fe_ma_old_password" size="30" value="" spellcheck="false"/>' + app.get_password_toggle_html() );
+		html += get_form_table_row('Current Password', `<input type="${app.get_password_type()}" id="fe_ma_old_password" size="30" value="" spellcheck="false" ${disableIfExternal}/>` + app.get_password_toggle_html());
 		html += get_form_table_caption( "Enter your current account password to make changes." );
 		html += get_form_table_spacer();
 		
 		// reset password
-		html += get_form_table_row( 'New Password', '<input type="' + app.get_password_type() + '" id="fe_ma_new_password" size="30" value="" spellcheck="false"/>' + app.get_password_toggle_html() );
+		html += get_form_table_row('New Password', `<input type="${app.get_password_type()}" id="fe_ma_new_password" size="30" value="" spellcheck="false" ${disableIfExternal}/>` + app.get_password_toggle_html());
 		html += get_form_table_caption( "If you need to change your password, enter the new one here." );
 		html += get_form_table_spacer();
+
+		}
 		
 		html += '<tr><td colspan="2" align="center">';
 			html += '<div style="height:30px;"></div>';
@@ -75,13 +96,15 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		
 		html += '</td>';
 			html += '<td valign="top" align="left" style="vertical-align:top; text-align:left;">';
+
 				// gravar profile image and edit button
-				html += '<fieldset style="width:150px; margin-left:40px; background:white; border:1px solid #ddd; box-shadow:none;"><legend>Profile Picture</legend>';
+				html += '<fieldset style="width:150px; margin-left:40px; border:1px solid #ddd; box-shadow:none;"><legend>Profile Picture</legend>';
+
 				if (app.config.external_users) {
-					html += '<div id="d_ma_image" style="width:128px; height:128px; margin:5px auto 0 auto; background-image:url('+app.getUserAvatarURL(128)+'); cursor:default;"></div>';
+					html += '<div id="d_ma_image" style="width:128px; height:128px; margin:5px auto 0 auto;background-size:cover; background-image:url(\'' + app.getUserAvatarURL(128) + '\'); cursor:default;"></div>';
 				}
 				else {
-					html += '<div id="d_ma_image" style="width:128px; height:128px; margin:5px auto 0 auto; background-image:url('+app.getUserAvatarURL(128)+'); cursor:pointer;" onMouseUp="$P().edit_gravatar()"></div>';
+					html += '<div id="d_ma_image" style="width:128px; height:128px; margin:5px auto 0 auto; background-size:cover; background-image:url(\'' + app.getUserAvatarURL(128) + '\'); cursor:pointer;" onMouseUp="$P().edit_gravatar()"></div>';
 					html += '<div class="button mini" style="margin:10px auto 5px auto;" onMouseUp="$P().edit_gravatar()">Edit Image...</div>';
 					html += '<div style="font-size:11px; color:#888; text-align:center; margin-bottom:5px;">Image services provided by <a href="https://en.gravatar.com/connect/" target="_blank">Gravatar.com</a>.</div>';
 				}
@@ -108,10 +131,18 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 		window.open( 'https://en.gravatar.com/connect/' );
 	},
 	
+	change_language: function(lang) {
+		// switch UI language via i18n
+		if (window.I18n && I18n.setLang) {
+			I18n.setLang(lang);
+		}
+	},
+
 	save_changes: function(force) {
 		// save changes to user info
+		let user = app.user || {}
 		app.clearError();
-		if (app.config.external_users) {
+		if (app.config.external_users || user.ext_auth) {
 			return app.doError("Users are managed by an external system, so you cannot make changes here.");
 		}
 		if (!$('#fe_ma_old_password').val()) return app.badField('#fe_ma_old_password', "Please enter your current account password to make changes.");
@@ -143,7 +174,7 @@ Class.subclass( Page.Base, "Page.MyAccount", {
 			app.user = resp.user;
 			app.updateHeaderInfo();
 			
-			$('#d_ma_image').css( 'background-image', 'url('+app.getUserAvatarURL(128)+')' );
+			$('#d_ma_image').css( 'background-image', 'url(' + app.getUserAvatarURL(128) + ')' );
 		} );
 	},
 	

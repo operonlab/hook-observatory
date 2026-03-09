@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Control script designed to allow an easy command line interface
 # to controlling any binary.  Written by Marc Slemko, 1997/08/23
@@ -18,21 +18,32 @@
 # |||||||||||||||||||| START CONFIGURATION SECTION  ||||||||||||||||||||
 # --------------------                              --------------------
 # 
-# add some common paths
-PATH=$PATH:/usr/bin:/bin:/usr/local/bin:/usr/sbin:/sbin:/usr/local/sbin
-#
 # the name of your binary
 NAME="Cronicle Server"
+CURRENT_VERSION="1.12.1"
+
 #
 # home directory
-HOMEDIR="$(dirname "$(cd -- "$(dirname "$0")" && (pwd -P 2>/dev/null || pwd))")"
+#HOMEDIR="$(dirname "$(cd -- "$(dirname "$0")" && (pwd -P 2>/dev/null || pwd))")"
+HOMEDIR="$(dirname "$(cd -- "$(dirname "$(readlink -f "$0")")" && (pwd -P 2>/dev/null || pwd))")"
 cd $HOMEDIR
 #
 # the path to your binary, including options if necessary
 BINARY="node $HOMEDIR/lib/main.js"
+
+# check if bundle exist
+if [ -f "$HOMEDIR/bin/cronicle.js" ]; then
+    BINARY="$HOMEDIR/bin/cronicle.js"
+fi
+
+# check for custom nodejs binary
+if [ -f $HOMEDIR/nodejs/bin/node ]; then
+      export PATH="$HOMEDIR/nodejs/bin:$PATH"
+fi
+
 #
 # the path to your PID file
-PIDFILE=$HOMEDIR/logs/cronicled.pid
+PIDFILE=${CRONICLE_pid_file:-$(node -e "console.log(JSON.parse(fs.readFileSync('$HOMEDIR/conf/config.json')).pid_file || 'logs/cronicled.pid')")}
 #
 # --------------------                              --------------------
 # ||||||||||||||||||||   END CONFIGURATION SECTION  ||||||||||||||||||||
@@ -43,7 +54,7 @@ PIDFILE=$HOMEDIR/logs/cronicled.pid
 ERROR=0
 ARGV="$@"
 if [ "x$ARGV" = "x" ] ; then 
-	ARGS="help"
+    ARGS="help"
 fi
 
 for ARG in $@ $ARGS
@@ -72,47 +83,47 @@ do
 		RUNNING=0
 	fi
 
-	case $ARG in
-	start)
+    case $ARG in
+    start)
 		if [ $RUNNING -eq 1 ]; then
-			echo "$ARG: $NAME already running (pid $PID)"
-			continue
+		    echo "$ARG: $NAME already running (pid $PID)"
+		    continue
 		fi
 		echo "$0 $ARG: Starting up $NAME..."
 		if $BINARY ; then
-			echo "$0 $ARG: $NAME started"
+		    echo "$0 $ARG: $NAME started"
 		else
-			echo "$0 $ARG: $NAME could not be started"
-			ERROR=3
+		    echo "$0 $ARG: $NAME could not be started"
+		    ERROR=3
 		fi
 	;;
-	stop)
+    stop)
 		if [ $RUNNING -eq 0 ]; then
-			echo "$ARG: $STATUS"
-			continue
+		    echo "$ARG: $STATUS"
+		    continue
 		fi
 		if kill $PID ; then
-			while [ "x$PID" != "x" ] && kill -0 $PID 2>/dev/null ; do
-				sleep 1;
-			done
-			echo "$0 $ARG: $NAME stopped"
+	            while [ "x$PID" != "x" ] && kill -0 $PID 2>/dev/null ; do
+	                sleep 1;
+	            done
+		    echo "$0 $ARG: $NAME stopped"
 		else
-			echo "$0 $ARG: $NAME could not be stopped"
-			ERROR=4
+		    echo "$0 $ARG: $NAME could not be stopped"
+		    ERROR=4
 		fi
 	;;
-	restart)
-		$0 stop start
+    restart)
+        $0 stop start
 	;;
-	cycle)
-		$0 stop start
+    cycle)
+        $0 stop start
 	;;
 	status)
 		echo "$ARG: $STATUS"
 	;;
 	setup)
 		node $HOMEDIR/bin/storage-cli.js setup
-		exit
+		#exit # do not exit to run setup and start in one shot
 	;;
 	maint)
 		node $HOMEDIR/bin/storage-cli.js maint $2
@@ -128,7 +139,7 @@ do
 	;;
 	import)
 		if [ $RUNNING -eq 1 ]; then
-			$0 stop
+		    $0 stop
 		fi
 		node $HOMEDIR/bin/storage-cli.js import $2 $3 $4
 		exit
@@ -146,7 +157,7 @@ do
 		echo "$PACKAGE_VERSION"
 		exit
 	;;
-	*)
+    *)
 	echo "usage: $0 (start|stop|cycle|status|setup|maint|admin|export|import|upgrade|help)"
 	cat <<EOF
 

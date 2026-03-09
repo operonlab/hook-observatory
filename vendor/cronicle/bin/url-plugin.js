@@ -47,13 +47,25 @@ stream.on('json', function(job) {
 	if (params.headers) {
 		// allow headers to be substituted using [placeholders]
 		params.headers = Tools.sub( params.headers, job );
-		
-		print("\nRequest Headers:\n" + params.headers.trim() + "\n");
+		print("\nRequest Headers:\n");
 		params.headers.replace(/\r\n/g, "\n").trim().split(/\n/).forEach( function(pair) {
+			if (pair.match(/^([^\:]+)\:\s*(.+)$/)) {
+				const headerKey = RegExp.$1;
+				const headerValue = RegExp.$2;
+				request.setHeader( headerKey, headerValue );
+				const maskedValue = (headerKey.toLowerCase() === 'authorization' && headerValue.trim().includes(' ')) ? headerValue.replace(headerValue.trim().split(' ')[1], '*'.repeat(headerValue.trim().split(' ')[1].length)) : headerValue;
+				print(`${headerKey}: ${maskedValue.trim()}\n` );
+			}
+		} );
+	}
+
+	// set athentication header if set via secrets
+	if(params.parse_auth && process.env['AUTH'])  {
+		process.env['AUTH'].replace(/\r\n/g, "\n").trim().split(/\n/).forEach( function(pair) {
 			if (pair.match(/^([^\:]+)\:\s*(.+)$/)) {
 				request.setHeader( RegExp.$1, RegExp.$2 );
 			}
-		} );
+		})
 	}
 	
 	// follow redirects
@@ -62,7 +74,7 @@ stream.on('json', function(job) {
 	var opts = {
 		method: params.method
 	};
-	
+
 	// ssl cert bypass
 	if (params.ssl_cert_bypass) {
 		opts.rejectUnauthorized = false;
@@ -70,9 +82,9 @@ stream.on('json', function(job) {
 	
 	// post data
 	if (opts.method == 'POST') {
-		// SPECIAL CASE: create json-string-escaped version of chain_description, for GH Issue #942
+		// SPECIAL CASE: create json-string-escaped version of chain_description
 		if (job.chain_description) job.escape_chain_description = JSON.stringify(job.chain_description).replace(/^\"/, '').replace(/\"$/, '');
-		
+
 		// allow POST data to be substituted using [placeholders]
 		params.data = Tools.sub( params.data, job );
 		
@@ -135,17 +147,17 @@ stream.on('json', function(job) {
 					return a[0].localeCompare(b[0]);
 				} )
 			};
-			
-			// add response headers to chain_data if applicable
-			if (job.chain) {
-				update.chain_data = {
-					headers: resp.headers
-				};
-			}
+		}
+		
+		// add response headers to chain_data if applicable
+		if (job.chain) {
+			update.chain_data = {
+				headers: resp.headers
+			};
 		}
 		
 		// add raw response content, if text (and not too long)
-		if (text && resp && resp.headers['content-type'] && resp.headers['content-type'].match(/(text|javascript|json|css|html)/i)) {
+		if (text && resp.headers['content-type'] && resp.headers['content-type'].match(/(text|javascript|json|css|html)/i)) {
 			print("\nRaw Response Content:\n" + text.trim() + "\n");
 			
 			if (text.length < 32768) {

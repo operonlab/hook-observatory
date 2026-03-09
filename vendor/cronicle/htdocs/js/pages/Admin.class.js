@@ -12,7 +12,7 @@ Class.subclass( Page.Base, "Page.Admin", {
 	onActivate: function(args) {
 		// page activation
 		if (!this.requireLogin(args)) return true;
-		if (!app.isAdmin()) {
+		if (!app.isAdmin()) { // admin only can be here
 			setTimeout( function() { Nav.go('Home'); }, 1 );
 			return true;
 		}
@@ -59,6 +59,14 @@ Class.subclass( Page.Base, "Page.Admin", {
 			case 'api_keys':
 				if (this.args.sub == 'api_keys') this.gosub_api_keys(this.args);
 			break;
+
+			case 'conf_keys':
+				if (this.args.sub == 'conf_keys') this.gosub_conf_keys(this.args);
+			break;
+
+			case 'secrets':
+				if (this.args.sub == 'secrets') this.gosub_secrets(this.args);
+			break;
 		}
 	},
 	
@@ -91,6 +99,19 @@ Class.subclass( Page.Base, "Page.Admin", {
 					this.receive_keys( this.lastAPIKeysResp );
 				}
 			break;
+			
+			case 'conf_keys':
+				if (this.lastConfigKeysResp) {
+					this.receive_confkeys( this.lastConfigKeysResp );
+				}
+			break;
+
+			case 'secrets':
+				if (this.lastSecretsResp) {
+					this.receive_secrets( this.lastSecretsResp );
+				}
+			break;
+
 			case 'activity':
 				if (this.lastActivityResp) {
 					this.receive_activity( this.lastActivityResp );
@@ -102,6 +123,7 @@ Class.subclass( Page.Base, "Page.Admin", {
 	onDeactivate: function() {
 		// called when page is deactivated
 		// this.div.html( '' );
+		if(this.observer) this.observer.disconnect() 
 		return true;
 	}
 	

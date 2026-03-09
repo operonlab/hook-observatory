@@ -2,7 +2,7 @@
 
 # Start Cronicle in debug mode
 # No daemon fork, and all logs emitted to stdout
-# Add --master to force instant master on startup
+# Add --manager to force instant manager on startup
 
 HOMEDIR="$(dirname "$(cd -- "$(dirname "$0")" && (pwd -P 2>/dev/null || pwd))")"
 

@@ -9,7 +9,6 @@
 //		--dryrun: Do not write any changes
 
 var Path = require('path');
-var os = require('os');
 var fs = require('fs');
 var async = require('async');
 var Logger = require('pixl-logger');
@@ -24,6 +23,12 @@ process.chdir( Path.dirname( __dirname ) );
 
 // load app's config file
 var config = require('../conf/config.json');
+
+// check for storage config file
+var storage_config = Path.resolve(process.env['CRONICLE_storage_config'] || 'conf/storage.json');
+if(fs.existsSync(storage_config)) {                                                                 
+        config.Storage = require(storage_config)                                                    
+}
 
 // CLI arg aliases
 args.dry = args.dry || args.dryrun || args.dry_run || false;
@@ -130,7 +135,9 @@ var StorageDoctor = {
 			'global/server_groups',
 			'global/schedule',
 			'global/servers',
-			'global/api_keys'
+			'global/api_keys',
+            'global/conf_keys',
+            'global/secrets'
 		];
 		lists.forEach( function(key) { self.enqueueList(key); } );
 		

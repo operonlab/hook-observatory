@@ -15,6 +15,8 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'categories',
 			[
 				['activity', "Activity Log"],
+				['conf_keys', "Configs"],
+				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['plugins', "Plugins"],
@@ -102,6 +104,8 @@ Class.add( Page.Admin, {
 		html += this.getSidebarTabs( 'new_category',
 			[
 				['activity', "Activity Log"],
+				['conf_keys', "Configs"],
+				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['new_category', "New Category"],
@@ -189,14 +193,20 @@ Class.add( Page.Admin, {
 	gosub_edit_category: function(args) {
 		// edit existing Category
 		var html = '';
-		this.category = find_object( app.categories, { id: args.id } );
+		let category = find_object( app.categories, { id: args.id } );
+		if(!category) return app.doError("Could not locate Category with ID: " + args.id);
+		let secret = find_object( app.secrets, { id: args.id } ) || {};
+
+		this.category = deep_copy_object( category )
 		
-		app.setWindowTitle( "Editing Category \"" + (this.category.title) + "\"" );
+		app.setWindowTitle( "Editing Category \"" + (category.title) + "\"" );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'edit_category',
 			[
 				['activity', "Activity Log"],
+				['conf_keys', "Configs"],
+				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
 				['categories', "Categories"],
 				['edit_category', "Edit Category"],
@@ -205,12 +215,14 @@ Class.add( Page.Admin, {
 				['users', "Users"]
 			]
 		);
+
+		let secretInfo = secret.size > 0 ? `Edit Secrets (${secret.size})` : 'Attach Secrets'
 		
-		html += '<div style="padding:20px;"><div class="subtitle">Editing Category &ldquo;' + (this.category.title) + '&rdquo;</div></div>';
-		
-		html += '<div style="padding:0px 20px 50px 20px">';
-		html += '<center>';
-		html += '<table style="margin:0;">';
+		html += `<div style="padding:20px;"><div class="subtitle">Editing Category &ldquo;${category.title}&rdquo;
+		<div class="subtitle_widget"><a href="#Admin?sub=secrets&id=${category.id}" ><b>${secretInfo}</b></a></div>
+		</div></div><div style="padding:0px 20px 50px 20px"><center>
+		<table style="margin:0;">
+		`
 		
 		html += this.get_category_edit_html();
 		
@@ -418,6 +430,13 @@ Class.add( Page.Admin, {
 			"Optionally set default CPU load, memory usage and log size limits for the category.<br/>Note that events can override any of these limits."
 		);
 		html += get_form_table_spacer();
+
+		html += get_form_table_row('Graph',`<div>
+		<input type="color" id="fe_ec_gcolor" name="body"
+				value="${category.gcolor || '#3f7ed5'}">
+		 <label for="body">Group Color</label>
+		 </div>`
+		);		
 		
 		setTimeout( function() {
 			$P().update_add_remove_me( $('#fe_ec_notify_success, #fe_ec_notify_fail') );
@@ -442,6 +461,7 @@ Class.add( Page.Admin, {
 			return app.badField('#fe_ec_title', "Please enter a title for the category.");
 		}
 		
+		category.gcolor = $("#fe_ec_gcolor").val();
 		category.enabled = $('#fe_ec_enabled').is(':checked') ? 1 : 0;
 		category.description = $('#fe_ec_desc').val();
 		category.max_children = parseInt( $('#fe_ec_max_children').val() );

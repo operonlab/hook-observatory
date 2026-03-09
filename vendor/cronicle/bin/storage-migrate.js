@@ -17,13 +17,43 @@
 // After completion, delete `Storage`, and rename `NewStorage` to `Storage`, and you're migrated.
 
 var Path = require('path');
-var os = require('os');
 var fs = require('fs');
 var async = require('async');
 var Logger = require('pixl-logger');
 var cli = require('pixl-cli');
 var args = cli.args;
 cli.global();
+
+
+// check if --from/--to args
+
+if(args.help) {
+	console.log('Usage: ./storage-migrate ')
+	console.log(' [ --from /path/to/storage.json] # alter source storage config (default is "Storage" property from config.json)')
+	console.log(' [ --to /path/to/storage.json] # alter destincation storage config (default is "NewStorage" property from config.json)')
+	console.log(' [ --notrx # disable transaction on destination storage (only applicable to SQL and Lmdb)')
+	console.log(' [ --sqlite /path/to/file.db  # dump source storage into local sqlite DB (sqlite engine is required')
+	console.log(' [ --full ] # include job log files')
+	console.log(' [ --help ] # see this message again')
+	process.exit(1)
+}
+
+let oldConfPath;
+let newConfPath;
+let sqlitePath;
+
+if(args.from) {
+	if(fs.existsSync(Path.resolve(args.from))) oldConfPath = Path.resolve(args.from)
+	else { console.log("config file does not exist:", Path.resolve(args.from)); process.exit(1)}
+}
+if(args.sqlite) {
+	if(fs.existsSync(Path.dirname(Path.resolve(args.sqlite)))) sqlitePath = Path.resolve(args.sqlite)
+	else { console.log("sqlite file location does not exist:", Path.resolve(args.sqlite)); process.exit(1)}	
+}
+if(args.to) {
+	if(fs.existsSync(Path.resolve(args.to))) newConfPath = Path.resolve(args.to)
+	else { console.log("config file does not exist:", Path.resolve(args.to)); process.exit(1)}
+}
 
 var StandaloneStorage = require('pixl-server-storage/standalone');
 
@@ -32,6 +62,12 @@ process.chdir( Path.dirname( __dirname ) );
 
 // load app's config file
 var config = require('../conf/config.json');
+
+// check for storage config file
+var storage_config = Path.resolve(process.env['CRONICLE_storage_config'] || 'conf/storage.json');
+if(fs.existsSync(storage_config)) {                                                                 
+        config.Storage = require(storage_config)                                                    
+}
 
 var StorageMigrator = {
 	
@@ -54,7 +90,26 @@ var StorageMigrator = {
 		this.logPrint(1, "Cronicle Storage Migration Script v" + this.version + " starting up");
 		this.logPrint(2, "Starting storage engines");
 		
+		if(oldConfPath) config.Storage = require(oldConfPath) // custom storage config file
 		if (!config.Storage) this.fatal("Your Cronicle configuration lacks a 'Storage' property");
+		if(sqlitePath) {
+			config.NewStorage = {
+				"engine": "SQL",
+				"list_page_size": 50,
+				"concurrency": 4,
+				"log_event_types": { "get": 1, "put": 1, "head": 1,	"delete": 1, "expire_set": 1 },
+				"SQL": {
+					"client": "sqlite3",
+					"table": "cronicle",
+					"useNullAsDefault": true,
+					"connection": {
+						"filename": sqlitePath
+					}
+				}
+			}
+		}
+
+		if (newConfPath) config.NewStorage = require(newConfPath)
 		if (!config.NewStorage) this.fatal("Your Cronicle configuration lacks a 'NewStorage' property.");
 		
 		if (config.uid && (process.getuid() != 0)) {
@@ -71,10 +126,13 @@ var StorageMigrator = {
 		// massage config, override logger
 		config.Storage.logger = self.logger;
 		config.Storage.log_event_types = { all: 1 };
-		
+				
 		config.NewStorage.logger = self.logger;
 		config.NewStorage.log_event_types = { all: 1 };
-		
+		// if engine supports (sql and lmdb) begin transaction
+		config.NewStorage.trans = true
+		if(args.notrx) config.NewStorage.trans = false
+
 		// start both standalone storage instances
 		async.series(
 			[
@@ -94,9 +152,9 @@ var StorageMigrator = {
 				if (config.uid && (process.getuid() == 0)) {
 					self.logPrint( 3, "Switching to user: " + config.uid );
 					process.setuid( config.uid );
-				}
-				
-				self.testStorage();
+				}				
+				self.testStorage();		
+
 			}
 		); // series
 	},
@@ -105,7 +163,7 @@ var StorageMigrator = {
 		// test both old and new storage
 		var self = this;
 		this.logDebug(3, "Testing storage engines");
-		
+	
 		async.series(
 			[
 				function(callback) {
@@ -114,8 +172,11 @@ var StorageMigrator = {
 				function(callback) {
 					self.newStorage.put('test/test1', { "foo1": "bar1" }, function(err) {
 						if (err) return callback(err);
+
+						// throw new Error('before del')
 						
-						self.newStorage.delete('test/test1', function(err) {
+						self.newStorage.delete('test/test1', function(err) {						
+
 							if (err) return callback(err);
 							
 							callback();
@@ -137,7 +198,7 @@ var StorageMigrator = {
 		var self = this;
 		this.logPrint(3, "Starting migration");
 		
-		this.timeStart = Tools.timeNow(true);
+		this.timeStart = Date.now()
 		this.numRecords = 0;
 		
 		this.copyKey( 'global/state', { ignore: true } );
@@ -149,7 +210,9 @@ var StorageMigrator = {
 			'global/server_groups',
 			'global/schedule',
 			'global/servers',
-			'global/api_keys'
+			'global/api_keys',
+			'global/conf_keys',
+			'global/secrets'
 		];
 		lists.forEach( function(key) { self.copyList(key); } );
 		
@@ -227,7 +290,7 @@ var StorageMigrator = {
 					self.copyList( key, { ignore: true } );
 				}
 				
-				// Note: we are deliberately skipping the cleanup master hash, e.g. _cleanup/expires
+				// Note: we are deliberately skipping the cleanup manager hash, e.g. _cleanup/expires
 				// This is only needed for records that CHANGE their expiration after the fact,
 				// which never happens with Cronicle.
 				
@@ -254,13 +317,14 @@ var StorageMigrator = {
 	finish: function() {
 		// all done
 		var self = this;
-		var elapsed = Tools.timeNow(true) - this.timeStart;
+		var elapsed = Date.now() - this.timeStart;
+		var dur = elapsed < 2000 ? `${elapsed} ms` : Tools.getTextFromSeconds(elapsed/1000, false, true) 
 		
 		cli.progress.end();
 		
 		print("\n");
 		this.logPrint(1, "Storage migration complete!");
-		this.logPrint(2, Tools.commify(this.numRecords) + " total records copied in " + Tools.getTextFromSeconds(elapsed, false, true) + ".");
+		this.logPrint(2, Tools.commify(this.numRecords) + " total records copied in " + dur + ".");
 		this.logPrint(4, "You should now overwrite 'Storage' with 'NewStorage' in your config.json.");
 		this.logPrint(3, "Shutting down");
 		
