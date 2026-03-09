@@ -27,7 +27,7 @@ def recall(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 def extract(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """SessionEnd: async memory extraction pipeline."""
     return call_external_script(
-        os.path.join(MEMVAULT_SCRIPTS, "extract_v2_async.py"),
+        os.path.join(MEMVAULT_SCRIPTS, "extract_async.py"),
         input_data=raw_input,
         timeout=5,
     )

@@ -10,6 +10,11 @@ Queue guarantees:
   - Sequential playback (one sound at a time, queued)
   - Self-cleaning consumer (exits after 3s idle)
 
+Debounce:
+  - Redis TTL-based: same pane won't announce twice within DEBOUNCE_TTL seconds
+  - Key: tts:debounce:{pane_id}:{event_type}
+  - Configurable via CLAUDE_VOICE_DEBOUNCE (default 10s, 0=disable)
+
 TTS fallback chain: Workshop TTS service → edge-tts CLI → macOS say
 Disable: CLAUDE_VOICE=0
 """
@@ -34,6 +39,8 @@ PYTHON_BIN = os.path.join(HOME, ".local", "bin", "python3")
 
 QUEUE_FILE = "/tmp/claude-tts-queue.jsonl"
 PID_FILE = "/tmp/claude-tts-consumer.pid"
+DEBOUNCE_TTL = int(os.environ.get("CLAUDE_VOICE_DEBOUNCE", "10"))  # seconds, 0=disable
+WEBUI_URL = os.environ.get("TMUX_WEBUI_URL", "http://127.0.0.1:8765")
 
 _ASK_PHRASES = [
     "少爺，維恩有問題想請示您",
@@ -47,6 +54,55 @@ _NUM_CN = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
 
 
 # ---------------------------------------------------------------------------
+# Redis debounce — same pane won't announce twice within TTL
+# ---------------------------------------------------------------------------
+
+_redis_client = None
+
+
+def _get_redis():
+    """Lazy-init Redis client (fail-open: returns None on error)."""
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    try:
+        import redis
+
+        _redis_client = redis.Redis(host="127.0.0.1", port=6379, socket_timeout=0.5)
+        _redis_client.ping()
+        return _redis_client
+    except Exception:
+        _redis_client = False  # sentinel: don't retry
+        return None
+
+
+def _debounce_ok(event_type: str) -> bool:
+    """Return True if this pane+event is allowed (not debounced).
+
+    Uses Redis SET NX EX: first call sets key and returns True,
+    subsequent calls within TTL return False (suppressed).
+    """
+    if DEBOUNCE_TTL <= 0:
+        return True
+
+    pane_id = os.environ.get("TMUX_PANE", "")
+    if not pane_id:
+        # Non-tmux: debounce by session (PID of parent shell)
+        pane_id = f"pid-{os.getppid()}"
+
+    r = _get_redis()
+    if not r:
+        return True  # fail-open: Redis down → allow
+
+    key = f"tts:debounce:{pane_id}:{event_type}"
+    try:
+        # SET key 1 NX EX ttl — returns True if set (first call), None if exists
+        return bool(r.set(key, 1, nx=True, ex=DEBOUNCE_TTL))
+    except Exception:
+        return True  # fail-open
+
+
+# ---------------------------------------------------------------------------
 # Main handler (dispatcher entry point)
 # ---------------------------------------------------------------------------
 
@@ -56,9 +112,11 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         return ALLOW
 
     if event_type == "PreToolUse" and tool_name == "AskUserQuestion":
-        _enqueue_tts(random.choice(_ASK_PHRASES))
+        if _debounce_ok("ask"):
+            _enqueue_tts(random.choice(_ASK_PHRASES))
     elif event_type == "Stop":
-        _handle_stop()
+        if _debounce_ok("stop"):
+            _handle_stop()
     return ALLOW
 
 
@@ -208,16 +266,29 @@ def _ensure_consumer() -> None:
 def _build_consumer_script() -> str:
     """Build self-contained consumer script with current config baked in."""
     return f"""\
-import fcntl, json, os, shutil, subprocess, sys, time
+import base64, fcntl, json, os, shutil, subprocess, sys, time
 from urllib.request import Request, urlopen
 
 QUEUE = {QUEUE_FILE!r}
 PID   = {PID_FILE!r}
 URL   = {TTS_URL!r}
+WEBUI = {WEBUI_URL!r}
 
 # Register PID
 with open(PID, "w") as f:
     f.write(str(os.getpid()))
+
+
+def push_to_webui(path, text):
+    try:
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        payload = json.dumps({{"audio": b64, "text": text}})
+        req = Request(WEBUI + "/api/tts/push", data=payload.encode(),
+                      headers={{"Content-Type": "application/json"}})
+        urlopen(req, timeout=3)
+    except Exception:
+        pass
 
 
 def play(e):
@@ -236,6 +307,7 @@ def play(e):
                       headers={{"Content-Type": "application/json"}})
         resp = urlopen(req, timeout=30)
         if resp.status == 200 and "json" in (resp.headers.get("Content-Type") or ""):
+            push_to_webui("/tmp/claude-tts-play.mp3", text)
             return
     except Exception:
         pass
@@ -250,6 +322,7 @@ def play(e):
         )
         subprocess.run(["afplay", "-v", vol, tmp],
                        capture_output=True, timeout=30)
+        push_to_webui(tmp, text)
         return
 
     # 3) macOS say → afplay
@@ -261,6 +334,7 @@ def play(e):
         )
         subprocess.run(["afplay", "-v", vol, tmp],
                        capture_output=True, timeout=30)
+        push_to_webui(tmp, text)
 
 
 def drain():
