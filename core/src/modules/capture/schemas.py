@@ -62,6 +62,11 @@ class BatchFillRequest(BaseModel):
     payload: dict[str, Any]
 
 
+class CaptureSearchResult(BaseModel):
+    capture: CaptureResponse
+    score: float
+
+
 class CaptureEnrichmentResponse(BaseModel):
     id: str
     capture_id: str

@@ -37,7 +37,11 @@ async def backfill_module(module_name: str, space_id: str | None = None) -> dict
         logger.warning("No mapping found for module: %s", module_name)
         return {"module": module_name, "status": "skipped", "reason": "no mapping"}
 
-    engine = create_async_engine(str(settings.database_url))
+    # Convert sync URL to async (postgresql:// → postgresql+psycopg://)
+    db_url = settings.db_url
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    engine = create_async_engine(db_url)
     stats = {"module": module_name, "entities": {}}
 
     async with AsyncSession(engine) as session:
@@ -48,7 +52,7 @@ async def backfill_module(module_name: str, space_id: str | None = None) -> dict
                 ("intelflow", "report"): "intelflow.reports",
                 ("intelflow", "topic"): "intelflow.topics",
                 ("taskflow", "task"): "taskflow.tasks",
-                ("capture", "capture"): "capture.captures",
+                ("capture", "capture"): "shared.captures",
                 ("finance", "transaction"): "finance.transactions",
                 ("finance", "subscription"): "finance.subscriptions",
                 ("dailyos", "plan"): "dailyos.daily_plans",
