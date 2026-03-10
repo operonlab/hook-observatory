@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.events.types import MemvaultEvents
+from src.shared.cache import cached
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -864,6 +865,7 @@ class MemoryBlockService(
 class TagService:
     """Lightweight tag aggregation — no BaseCRUD needed."""
 
+    @cached("memvault", "list_tags", ttl=1800, key_params=("space_id",))
     async def list_tags(self, db: AsyncSession, space_id: str) -> list[TagResponse]:
         """List all tags for a space, ordered by usage count."""
         q = select(Tag).where(Tag.space_id == space_id).order_by(Tag.usage_count.desc())
@@ -929,6 +931,7 @@ class KnowledgeDomainService(
 class ProfileScoreService:
     """Single profile score per space — K/A/S aggregate scores."""
 
+    @cached("memvault", "profile_score", ttl=1800, key_params=("space_id",))
     async def get_by_space(self, db: AsyncSession, space_id: str) -> ProfileScoreResponse | None:
         q = select(ProfileScore).where(ProfileScore.space_id == space_id)
         instance = (await db.execute(q)).scalar_one_or_none()
