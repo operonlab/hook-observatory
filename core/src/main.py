@@ -54,6 +54,11 @@ async def lifespan(app: FastAPI):
     register_module_actions()
     event_bus.subscribe("*", on_any_event)
 
+    # Initialize Qdrant search index and register indexing handlers
+    from src.events.handlers.qdrant_indexer import startup as qdrant_startup
+
+    await qdrant_startup()
+
     # Start Redis push listener for station-originated notifications
     import asyncio
 

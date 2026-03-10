@@ -469,13 +469,24 @@ class TransactionService(
 
         await db.flush()
 
+        # Collect tags for the payload (loaded synchronously after create+flush)
+        _tags = [t.tag for t in instance.tags] if "tags" in instance.__dict__ and instance.tags else []
         await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_CREATED,
                 data={
                     "transaction_id": instance.id,
+                    "id": instance.id,
+                    "space_id": instance.space_id,
                     "type": instance.type,
                     "amount": str(instance.amount),
+                    "currency": instance.currency,
+                    "description": instance.description,
+                    "merchant": instance.merchant,
+                    "payment_method": instance.payment_method,
+                    "tags": _tags,
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
                 },
                 source="finance",
                 user_id=user_id,
@@ -552,13 +563,23 @@ class TransactionService(
                 changes=changes,
             )
 
+        _tags_upd = [t.tag for t in instance.tags] if "tags" in instance.__dict__ and instance.tags else []
         await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_UPDATED,
                 data={
                     "transaction_id": entity_id,
+                    "id": entity_id,
+                    "space_id": instance.space_id,
                     "type": instance.type,
                     "amount": str(instance.amount),
+                    "currency": instance.currency,
+                    "description": instance.description,
+                    "merchant": instance.merchant,
+                    "payment_method": instance.payment_method,
+                    "tags": _tags_upd,
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
                 },
                 source="finance",
                 user_id=user_id or instance.created_by,
@@ -598,7 +619,11 @@ class TransactionService(
         await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_DELETED,
-                data={"transaction_id": txn_id},
+                data={
+                    "transaction_id": txn_id,
+                    "id": txn_id,
+                    "space_id": instance.space_id,
+                },
                 source="finance",
                 user_id=txn_user_id,
             )

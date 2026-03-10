@@ -177,6 +177,18 @@ async def search(
             metadata=meta if include_metadata else None,
         )
 
+    # Try Qdrant hybrid search first, fall back to pgvector
+    qdrant_result = await memory_block_service.qdrant_search(
+        db, space_id, q, query_embedding,
+        top_k=top_k, scope=scope,
+    )
+    if qdrant_result is not None:
+        results, meta = qdrant_result
+        return EnhancedSearchResult(
+            results=results,
+            metadata=meta if include_metadata else None,
+        )
+
     results, meta = await memory_block_service.semantic_search(
         db,
         space_id,

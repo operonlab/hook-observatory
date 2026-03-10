@@ -10,6 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.embedding import get_embedding
+from src.shared.qdrant_client import is_available as qdrant_available
+from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+from src.shared.search_types import SearchConfig as QdrantSearchConfig
 from src.shared.tier_config import get_threshold
 
 from .models import Report, ReportArchive, ReportEmbedding
@@ -21,6 +24,63 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def qdrant_search(
+    db: AsyncSession,
+    space_id: str,
+    query: str,
+    limit: int = 10,
+    threshold: float = 0.3,
+    include_archived: bool = False,
+    include_warm: bool = True,
+) -> list[SemanticSearchResult]:
+    """Search using Qdrant hybrid (dense + sparse) with pgvector fallback.
+
+    Falls back to semantic_search() when:
+    - Qdrant is unavailable (not running / connection error)
+    - Qdrant returns empty results (no indexed data yet)
+    """
+    if not qdrant_available():
+        return await semantic_search(
+            db, space_id, query, limit, threshold,
+            include_archived, include_warm,
+        )
+
+    config = QdrantSearchConfig(
+        top_k=limit,
+        score_threshold=threshold,
+        service_ids=["intelflow"],
+    )
+    results, _meta = await qdrant_hybrid_search(query, space_id, config)
+
+    if not results:
+        # Qdrant returned nothing — fall back to pgvector
+        logger.debug(
+            "Qdrant returned 0 results for space=%s query=%r — falling back to pgvector",
+            space_id, query,
+        )
+        return await semantic_search(
+            db, space_id, query, limit, threshold,
+            include_archived, include_warm,
+        )
+
+    # Convert Qdrant SearchResult → intelflow SemanticSearchResult
+    # title and query are stored in Qdrant payload via metadata_fields (index_registry)
+    return [
+        SemanticSearchResult(
+            report=ReportBrief(
+                id=r.entity_id,
+                title=r.metadata.get("title", ""),
+                query=r.metadata.get("query", ""),
+                tags=r.tags,
+                skill_name=r.metadata.get("skill_name", ""),
+                created_at=None,
+            ),
+            score=r.score,
+        )
+        for r in results
+    ]
 
 
 async def semantic_search(
