@@ -174,6 +174,16 @@ class DailyosEvents:
     REVIEW_SUBMITTED = "dailyos.review.submitted"
 
 
+class SearchIndexEvents:
+    """Events for Qdrant search index lifecycle."""
+
+    INDEX_STARTED = "search.index.started"
+    INDEX_COMPLETED = "search.index.completed"
+    INDEX_FAILED = "search.index.failed"
+    BACKFILL_STARTED = "search.backfill.started"
+    BACKFILL_COMPLETED = "search.backfill.completed"
+
+
 class SystemEvents:
     HEALTH_CHECKED = "system.health.checked"
     CONFIG_CHANGED = "system.config.changed"
