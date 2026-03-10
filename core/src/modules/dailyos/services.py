@@ -10,6 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.events.bus import Event, event_bus
+from src.events.types import DailyosEvents
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
@@ -317,6 +319,33 @@ class MethodSelectionService(
         )
 
 
+# ======================== Daily Plan Helpers ========================
+
+
+def _build_completion_payload(plan) -> dict:
+    """Build lean event payload for plan completion."""
+    items = plan.items or []
+    frog_items = [i for i in items if i.get("is_frog")]
+    completed_items = [i for i in items if i.get("status") == "completed"]
+    carry_items = [i for i in items if i.get("status") in ("carry", "incomplete")]
+
+    return {
+        "plan_id": plan.id,
+        "plan_date": str(plan.plan_date),
+        "space_id": plan.space_id,
+        "completion_score": plan.completion_score,
+        "total_items": len(items),
+        "completed_count": len(completed_items),
+        "carry_count": len(carry_items),
+        "frog_completed": any(
+            i.get("status") == "completed" for i in frog_items
+        ),
+        "frog_title": frog_items[0].get("title") if frog_items else None,
+        "reflection": plan.reflection,
+        "method_state": plan.method_state,
+    }
+
+
 # ======================== Daily Plan Service ========================
 
 
@@ -539,6 +568,12 @@ class DailyPlanService:
             plan.completion_score = score
             if is_complete and plan.status == "planning":
                 plan.status = "completed"
+                await event_bus.publish(Event(
+                    type=DailyosEvents.PLAN_COMPLETED,
+                    data=_build_completion_payload(plan),
+                    source="dailyos",
+                    user_id=user_id,
+                ))
 
         await db.flush()
         await db.refresh(plan)
@@ -647,6 +682,13 @@ class DailyPlanService:
         plan.status = new_status
         if comment and new_status == "completed":
             plan.reflection = comment
+        if new_status == "completed":
+            await event_bus.publish(Event(
+                type=DailyosEvents.PLAN_COMPLETED,
+                data=_build_completion_payload(plan),
+                source="dailyos",
+                user_id=user_id,
+            ))
         await db.flush()
         await db.refresh(plan)
         return plan
