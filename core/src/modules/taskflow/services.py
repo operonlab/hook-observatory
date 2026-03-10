@@ -67,13 +67,63 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
 
         data = {
             "task_id": instance.id,
+            "id": instance.id,
+            "space_id": instance.space_id,
             "title": instance.title,
+            "description": instance.description,
             "status": instance.status,
+            "priority": instance.priority,
+            "project": instance.project,
+            "tags": instance.tags or [],
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
         }
         coro = event_bus.publish(
             Event(
                 type=TaskflowEvents.TASK_CREATED,
                 data=data,
+                source="taskflow",
+                user_id=instance.created_by,
+            )
+        )
+        _task = asyncio.ensure_future(coro)  # noqa: RUF006
+
+    def after_update(self, instance: Task, changes: dict) -> None:
+        import asyncio
+
+        coro = event_bus.publish(
+            Event(
+                type=TaskflowEvents.TASK_UPDATED,
+                data={
+                    "task_id": instance.id,
+                    "id": instance.id,
+                    "space_id": instance.space_id,
+                    "title": instance.title,
+                    "description": instance.description,
+                    "status": instance.status,
+                    "priority": instance.priority,
+                    "project": instance.project,
+                    "tags": instance.tags or [],
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+                },
+                source="taskflow",
+                user_id=instance.created_by,
+            )
+        )
+        _task = asyncio.ensure_future(coro)  # noqa: RUF006
+
+    def after_delete(self, instance: Task) -> None:
+        import asyncio
+
+        coro = event_bus.publish(
+            Event(
+                type=TaskflowEvents.TASK_DELETED,
+                data={
+                    "task_id": instance.id,
+                    "id": instance.id,
+                    "space_id": instance.space_id,
+                },
                 source="taskflow",
                 user_id=instance.created_by,
             )
