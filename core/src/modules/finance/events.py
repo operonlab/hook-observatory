@@ -5,10 +5,34 @@ from decimal import Decimal
 import structlog
 
 from src.events.bus import Event, event_bus
-from src.events.types import FinanceEvents, InvestEvents  # noqa: F401
+from src.events.types import FinanceEvents, InvestEvents
+from src.shared.cache import register_invalidation
 from src.shared.database import async_session_factory
 
 logger = structlog.get_logger()
+
+# --- Cache invalidation wiring ---
+
+register_invalidation(
+    module="finance",
+    operations=["list_categories"],
+    events=[
+        FinanceEvents.CATEGORY_CREATED,
+        FinanceEvents.CATEGORY_UPDATED,
+        FinanceEvents.CATEGORY_DELETED,
+    ],
+)
+
+register_invalidation(
+    module="finance",
+    operations=["list_wallets"],
+    events=[
+        FinanceEvents.WALLET_CREATED,
+        FinanceEvents.WALLET_UPDATED,
+        FinanceEvents.WALLET_DELETED,
+        FinanceEvents.WALLET_SYNCED,
+    ],
+)
 
 
 @event_bus.on(InvestEvents.VALUATION_UPDATED)

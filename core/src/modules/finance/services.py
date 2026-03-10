@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.events.types import FinanceEvents
 from src.modules.finance.lifecycle import TransactionLifecycle
+from src.shared.cache import cached
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.fsm import emit_state_changed, validate_transition
 from src.shared.models import _uuid7_hex
@@ -128,6 +129,34 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         d["current_balance"] = d["initial_balance"]
         return d
 
+    def after_create(self, instance: Wallet) -> None:
+        event_bus.publish(
+            Event(
+                type=FinanceEvents.WALLET_CREATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+                user_id=instance.created_by,
+            )
+        )
+
+    def after_update(self, instance: Wallet, changes: dict) -> None:
+        event_bus.publish(
+            Event(
+                type=FinanceEvents.WALLET_UPDATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+            )
+        )
+
+    def after_delete(self, instance: Wallet) -> None:
+        event_bus.publish(
+            Event(
+                type=FinanceEvents.WALLET_DELETED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+            )
+        )
+
     def to_response(self, instance: Wallet) -> WalletResponse:
         return WalletResponse(
             id=instance.id,
@@ -151,6 +180,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             deleted_at=instance.deleted_at,
         )
 
+    @cached("finance", "list_wallets", ttl=300, key_params=("space_id",))
     async def list(
         self,
         db: AsyncSession,
@@ -331,6 +361,34 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
     audit_module = "finance"
     audit_entity_type = "categories"
 
+    def after_create(self, instance: Category) -> None:
+        event_bus.publish(
+            Event(
+                type=FinanceEvents.CATEGORY_CREATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+                user_id=instance.created_by,
+            )
+        )
+
+    def after_update(self, instance: Category, changes: dict) -> None:
+        event_bus.publish(
+            Event(
+                type=FinanceEvents.CATEGORY_UPDATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+            )
+        )
+
+    def after_delete(self, instance: Category) -> None:
+        event_bus.publish(
+            Event(
+                type=FinanceEvents.CATEGORY_DELETED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+            )
+        )
+
     def to_response(self, instance: Category) -> CategoryResponse:
         children = []
         # Check __dict__ to avoid triggering async-incompatible lazy load
@@ -352,6 +410,7 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
             children=children,
         )
 
+    @cached("finance", "list_categories", ttl=3600, key_params=("space_id",))
     async def list_tree(
         self,
         db: AsyncSession,

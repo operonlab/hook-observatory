@@ -21,7 +21,15 @@ class FinanceEvents:
     # 預算
     BUDGET_EXCEEDED = "finance.budget.exceeded"
 
+    # 分類
+    CATEGORY_CREATED = "finance.category.created"
+    CATEGORY_UPDATED = "finance.category.updated"
+    CATEGORY_DELETED = "finance.category.deleted"
+
     # 錢包
+    WALLET_CREATED = "finance.wallet.created"
+    WALLET_UPDATED = "finance.wallet.updated"
+    WALLET_DELETED = "finance.wallet.deleted"
     WALLET_SYNCED = "finance.wallet.synced"
     WALLET_RECONCILED = "finance.wallet.reconciled"
 
@@ -127,6 +135,8 @@ class InvestEvents:
     VALUATION_UPDATED = "invest.valuation.updated"
     POSITION_OPENED = "invest.position.opened"
     POSITION_CLOSED = "invest.position.closed"
+    ACCOUNT_CREATED = "invest.account.created"
+    ACCOUNT_UPDATED = "invest.account.updated"
 
 
 class NodeflowEvents:
