@@ -15,6 +15,7 @@ from .schemas import (
     TaskCreate,
     TaskProgressStats,
     TaskResponse,
+    TaskSearchResult,
     TaskUpdate,
     TaskUpdateCreate,
     TaskUpdateResponse,
@@ -22,6 +23,88 @@ from .schemas import (
 from .services import task_service
 
 router = APIRouter(tags=["taskflow"])
+
+
+# ======================== Search ========================
+
+
+@router.get("/search", response_model=list[TaskSearchResult])
+async def search_tasks(
+    q: str = Query(..., description="Search query string"),
+    space_id: str = Query("default"),
+    status: str | None = Query(None, description="Filter by status"),
+    priority: str | None = Query(None, description="Filter by priority"),
+    top_k: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("taskflow.read"),
+):
+    """Search tasks using Qdrant hybrid search with ILIKE fallback."""
+    import logging
+
+    from sqlalchemy import select
+
+    from src.shared.qdrant_client import is_available as qdrant_available
+    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+    from src.shared.search_types import SearchConfig
+
+    from .models import Task
+
+    logger = logging.getLogger(__name__)
+
+    # --- Qdrant path ---
+    if qdrant_available():
+        config = SearchConfig(
+            top_k=top_k,
+            service_ids=["taskflow"],
+        )
+        results, _meta = await qdrant_hybrid_search(q, space_id, config)
+
+        if results:
+            entity_ids = [r.entity_id for r in results]
+            score_map = {r.entity_id: r.score for r in results}
+
+            stmt = select(Task).where(
+                Task.id.in_(entity_ids),
+                Task.space_id == space_id,
+                Task.deleted_at.is_(None),
+            )
+            if status is not None:
+                stmt = stmt.where(Task.status == status)
+            if priority is not None:
+                stmt = stmt.where(Task.priority == priority)
+
+            rows = (await db.execute(stmt)).scalars().all()
+            id_to_task = {t.id: t for t in rows}
+            return [
+                TaskSearchResult(
+                    task=task_service.to_response(id_to_task[eid]),
+                    score=score_map[eid],
+                )
+                for eid in entity_ids
+                if eid in id_to_task
+            ]
+
+        logger.debug(
+            "Qdrant returned 0 results for taskflow space=%s query=%r — falling back to ILIKE",
+            space_id,
+            q,
+        )
+
+    # --- ILIKE fallback ---
+    pattern = f"%{q}%"
+    stmt = select(Task).where(
+        Task.space_id == space_id,
+        Task.title.ilike(pattern),
+        Task.deleted_at.is_(None),
+    )
+    if status is not None:
+        stmt = stmt.where(Task.status == status)
+    if priority is not None:
+        stmt = stmt.where(Task.priority == priority)
+
+    stmt = stmt.order_by(Task.updated_at.desc()).limit(top_k)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [TaskSearchResult(task=task_service.to_response(t), score=1.0) for t in rows]
 
 
 # ======================== Tasks CRUD ========================

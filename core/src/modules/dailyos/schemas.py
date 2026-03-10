@@ -136,6 +136,17 @@ class MethodPreviewResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+# ======================== Search ========================
+
+
+class DailyOSSearchResult(BaseModel):
+    entity_type: str  # "plan" or "method"
+    entity_id: str
+    score: float
+    content_preview: str
+    metadata: dict = Field(default_factory=dict)
+
+
 # ======================== Recurring Items ========================
 
 

@@ -24,6 +24,7 @@ from .schemas import (
     CategoryResponse,
     CategoryUpdate,
     ExchangeRateResponse,
+    FinanceSearchResult,
     InstallmentPlanCreate,
     InstallmentPlanResponse,
     InstallmentPlanUpdate,
@@ -58,6 +59,142 @@ from .services import (
 )
 
 router = APIRouter(tags=["finance"])
+
+
+# ======================== Search ========================
+
+
+VALID_ENTITY_TYPES = {"transaction", "subscription"}
+
+
+@router.get("/search", response_model=list[FinanceSearchResult])
+async def search_finance(
+    q: str = Query(..., description="Search query string"),
+    space_id: str = Query("default"),
+    entity_type: str | None = Query(
+        None, description="Filter by entity type: transaction or subscription"
+    ),
+    top_k: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    """Search finance records using Qdrant hybrid search with ILIKE fallback."""
+    import logging
+
+    from sqlalchemy import or_, select
+
+    from src.shared.qdrant_client import is_available as qdrant_available
+    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+    from src.shared.search_types import SearchConfig
+
+    from .models import Subscription, Transaction
+
+    logger = logging.getLogger(__name__)
+
+    if entity_type is not None and entity_type not in VALID_ENTITY_TYPES:
+        raise BadRequestError(
+            f"Invalid entity_type '{entity_type}'. "
+            f"Must be one of: {', '.join(sorted(VALID_ENTITY_TYPES))}",
+            code="finance.invalid_entity_type",
+        )
+
+    # --- Qdrant path ---
+    if qdrant_available():
+        config = SearchConfig(
+            top_k=top_k,
+            service_ids=["finance"],
+        )
+        results, _meta = await qdrant_hybrid_search(q, space_id, config)
+
+        if results:
+            # Filter by entity_type if requested
+            if entity_type:
+                results = [r for r in results if r.entity_type == entity_type]
+
+            return [
+                FinanceSearchResult(
+                    entity_type=r.entity_type,
+                    entity_id=r.entity_id,
+                    score=r.score,
+                    content_preview=r.content_preview,
+                    metadata=r.metadata,
+                )
+                for r in results
+            ]
+
+        logger.debug(
+            "Qdrant returned 0 results for finance space=%s query=%r — falling back to ILIKE",
+            space_id,
+            q,
+        )
+
+    # --- ILIKE fallback ---
+    pattern = f"%{q}%"
+    out: list[FinanceSearchResult] = []
+
+    if entity_type is None or entity_type == "transaction":
+        txn_stmt = (
+            select(Transaction)
+            .where(
+                Transaction.space_id == space_id,
+                Transaction.deleted_at.is_(None),
+                Transaction.description.ilike(pattern),
+            )
+            .order_by(Transaction.updated_at.desc())
+            .limit(top_k)
+        )
+        txn_rows = (await db.execute(txn_stmt)).scalars().all()
+        for t in txn_rows:
+            out.append(
+                FinanceSearchResult(
+                    entity_type="transaction",
+                    entity_id=t.id,
+                    score=1.0,
+                    content_preview=(t.description or "")[:200],
+                    metadata={
+                        "amount": str(t.amount),
+                        "type": t.type,
+                        "wallet_id": t.wallet_id,
+                    },
+                )
+            )
+
+    if entity_type is None or entity_type == "subscription":
+        sub_stmt = (
+            select(Subscription)
+            .where(
+                Subscription.space_id == space_id,
+                Subscription.deleted_at.is_(None),
+                or_(
+                    Subscription.name.ilike(pattern),
+                    Subscription.notes.ilike(pattern),
+                ),
+            )
+            .order_by(Subscription.updated_at.desc())
+            .limit(top_k)
+        )
+        sub_rows = (await db.execute(sub_stmt)).scalars().all()
+        for s in sub_rows:
+            preview = s.name
+            if s.notes:
+                preview = f"{s.name} — {s.notes}"
+            out.append(
+                FinanceSearchResult(
+                    entity_type="subscription",
+                    entity_id=s.id,
+                    score=1.0,
+                    content_preview=preview[:200],
+                    metadata={
+                        "amount": str(s.amount),
+                        "billing_cycle": s.billing_cycle,
+                        "provider": s.name,
+                    },
+                )
+            )
+
+    # Sort combined results by score desc, then trim to top_k
+    out.sort(key=lambda r: r.score, reverse=True)
+    return out[:top_k]
 
 
 # ======================== Wallets ========================

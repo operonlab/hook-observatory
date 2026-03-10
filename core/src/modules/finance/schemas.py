@@ -419,6 +419,17 @@ class NetWorthPointResponse(BaseModel):
     credit_card: Decimal = Decimal("0")
 
 
+# ======================== Search ========================
+
+
+class FinanceSearchResult(BaseModel):
+    entity_type: str  # "transaction" or "subscription"
+    entity_id: str
+    score: float
+    content_preview: str
+    metadata: dict = Field(default_factory=dict)
+
+
 # ======================== Tag Styles ========================
 
 

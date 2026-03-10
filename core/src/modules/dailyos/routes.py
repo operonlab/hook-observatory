@@ -13,6 +13,7 @@ from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .schemas import (
+    DailyOSSearchResult,
     DailyPlanResponse,
     DailyPlanUpdate,
     MethodActivateRequest,
@@ -35,6 +36,122 @@ from .services import (
 )
 
 router = APIRouter(tags=["dailyos"])
+
+
+# ======================== Search ========================
+
+
+@router.get("/search", response_model=list[DailyOSSearchResult])
+async def search_dailyos(
+    q: str = Query(..., description="Search query string"),
+    space_id: str = Query("default"),
+    entity_type: str | None = Query(None, description="Filter by entity type: 'plan' or 'method'"),
+    top_k: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    """Search Daily OS plans and methods using Qdrant hybrid search with ILIKE fallback."""
+    import logging
+
+    from sqlalchemy import or_, select
+
+    from src.shared.qdrant_client import is_available as qdrant_available
+    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+    from src.shared.search_types import SearchConfig
+
+    from .models import DailyPlan, Method
+
+    logger = logging.getLogger(__name__)
+
+    # --- Qdrant path ---
+    if qdrant_available():
+        config = SearchConfig(
+            top_k=top_k,
+            service_ids=["dailyos"],
+        )
+        results, _meta = await qdrant_hybrid_search(q, space_id, config)
+
+        if results:
+            filtered = [r for r in results if entity_type is None or r.entity_type == entity_type]
+            if filtered:
+                return [
+                    DailyOSSearchResult(
+                        entity_type=r.entity_type,
+                        entity_id=r.entity_id,
+                        score=r.score,
+                        content_preview=r.content_preview,
+                        metadata=r.metadata,
+                    )
+                    for r in filtered
+                ]
+
+        logger.debug(
+            "Qdrant returned 0 results for dailyos space=%s query=%r — falling back to ILIKE",
+            space_id,
+            q,
+        )
+
+    # --- ILIKE fallback ---
+    pattern = f"%{q}%"
+    output: list[DailyOSSearchResult] = []
+
+    if entity_type is None or entity_type == "plan":
+        stmt = (
+            select(DailyPlan)
+            .where(
+                DailyPlan.space_id == space_id,
+                DailyPlan.deleted_at.is_(None),
+                DailyPlan.reflection.ilike(pattern),
+            )
+            .order_by(DailyPlan.updated_at.desc())
+            .limit(top_k)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        for plan in rows:
+            output.append(
+                DailyOSSearchResult(
+                    entity_type="plan",
+                    entity_id=plan.id,
+                    score=1.0,
+                    content_preview=(plan.reflection or "")[:200],
+                    metadata={
+                        "date": str(plan.plan_date),
+                        "score": plan.completion_score,
+                    },
+                )
+            )
+
+    if entity_type is None or entity_type == "method":
+        stmt_m = (
+            select(Method)
+            .where(
+                Method.space_id == space_id,
+                Method.deleted_at.is_(None),
+                or_(
+                    Method.name.ilike(pattern),
+                    Method.description.ilike(pattern),
+                ),
+            )
+            .order_by(Method.updated_at.desc())
+            .limit(top_k)
+        )
+        rows_m = (await db.execute(stmt_m)).scalars().all()
+        for method in rows_m:
+            preview = " ".join(filter(None, [method.name, method.description]))[:200]
+            output.append(
+                DailyOSSearchResult(
+                    entity_type="method",
+                    entity_id=method.id,
+                    score=1.0,
+                    content_preview=preview,
+                    metadata={
+                        "category": method.tags[0] if method.tags else None,
+                        "origin": "preset" if method.is_preset else "custom",
+                    },
+                )
+            )
+
+    return output[:top_k]
 
 
 # ======================== Methods CRUD ========================
