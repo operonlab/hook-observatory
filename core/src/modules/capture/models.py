@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,7 +15,20 @@ class Capture(TimestampMixin, SoftDeleteMixin, Base):
     """A captured intent fragment awaiting enrichment and promotion."""
 
     __tablename__ = "captures"
-    __table_args__ = ({"schema": SCHEMA},)
+    __table_args__ = (
+        Index(
+            "ix_captures_space_status",
+            "space_id",
+            "status",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_captures_expires_at",
+            "expires_at",
+            postgresql_where=text("status = 'pending' AND deleted_at IS NULL"),
+        ),
+        {"schema": SCHEMA},
+    )
 
     space_id: Mapped[str] = mapped_column(String(32), index=True)
     created_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
