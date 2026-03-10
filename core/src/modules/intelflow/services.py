@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.events.types import IntelflowEvents
+from src.shared.cache import cached
 from src.shared.embedding import get_embedding
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -189,6 +190,7 @@ class ReportService(BaseCRUDService[Report, ReportCreate, ReportUpdate, ReportRe
 class TopicService:
     """Topic CRUD + graph operations."""
 
+    @cached("intelflow", "list_topics", ttl=1800, key_params=("space_id",))
     async def list_topics(
         self,
         db: AsyncSession,

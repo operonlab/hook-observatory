@@ -1,9 +1,24 @@
-"""Memvault event handlers — subscribe to relevant events."""
+"""Memvault event handlers — cache invalidation + event subscribers."""
 
-from src.events.types import MemvaultEvents  # noqa: F401
+from src.events.types import MemvaultEvents
+from src.shared.cache import register_invalidation
 
-# Event handlers will be registered here as needed.
-# Example:
-#   @event_bus.on(MemvaultEvents.MEMORY_STORED)
-#   async def on_memory_stored(event: Event):
-#       ...
+# --- Cache invalidation wiring ---
+
+register_invalidation(
+    module="memvault",
+    operations=["list_tags"],
+    events=[
+        MemvaultEvents.MEMORY_STORED,
+        MemvaultEvents.MEMORY_UPDATED,
+        MemvaultEvents.MEMORY_DELETED,
+    ],
+)
+
+register_invalidation(
+    module="memvault",
+    operations=["profile_score"],
+    events=[
+        MemvaultEvents.PROFILE_UPDATED,
+    ],
+)
