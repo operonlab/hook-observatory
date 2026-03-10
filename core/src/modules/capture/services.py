@@ -7,7 +7,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
@@ -16,6 +16,8 @@ from src.shared.errors import BadRequestError, NotFoundError
 from .models import Capture, CaptureEnrichment
 from .registry import get_adapter
 from .schemas import (
+    BATCH_LIMIT,
+    MAX_PAYLOAD_BYTES,
     CaptureCreate,
     CapturePromoteResult,
     CaptureResponse,
@@ -24,8 +26,6 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-MAX_PAYLOAD_BYTES = 16 * 1024  # 16KB
 
 
 class CaptureService:
@@ -85,14 +85,11 @@ class CaptureService:
                 type="capture.created",
                 data={
                     "capture_id": capture.id,
-                    "id": capture.id,
                     "space_id": capture.space_id,
                     "module": capture.module,
                     "entity_type": capture.entity_type,
                     "raw_input": capture.raw_input,
                     "completeness": capture.completeness,
-                    "created_at": capture.created_at.isoformat() if capture.created_at else None,
-                    "updated_at": capture.updated_at.isoformat() if capture.updated_at else None,
                 },
                 source="capture",
                 user_id=user_id,
@@ -185,16 +182,12 @@ class CaptureService:
                         type="capture.enriched",
                         data={
                             "capture_id": capture_id,
-                            "id": capture_id,
                             "space_id": capture.space_id,
                             "module": capture.module,
                             "entity_type": capture.entity_type,
-                            "raw_input": capture.raw_input,
                             "agent_id": agent_id or "user",
                             "delta_fields": list(delta.keys()),
                             "completeness": capture.completeness,
-                            "created_at": capture.created_at.isoformat() if capture.created_at else None,
-                            "updated_at": capture.updated_at.isoformat() if capture.updated_at else None,
                         },
                         source="capture",
                     )
@@ -222,7 +215,12 @@ class CaptureService:
         user_id: str | None = None,
         user_prefs: dict[str, Any] | None = None,
     ) -> CapturePromoteResult:
-        capture = await self.get(db, capture_id)
+        # Row-level lock to prevent concurrent promote on same capture
+        stmt = select(Capture).where(
+            Capture.id == capture_id, Capture.deleted_at.is_(None)
+        ).with_for_update()
+        result = await db.execute(stmt)
+        capture = result.scalar_one_or_none()
         if not capture:
             raise NotFoundError("capture", capture_id)
         if capture.status != "pending":
@@ -291,13 +289,14 @@ class CaptureService:
                 capture.space_id,
                 user_id or capture.created_by,
             )
-        except Exception as e:
+        except Exception:
+            logger.exception("capture.promote failed id=%s", capture_id)
             await db.rollback()
             return CapturePromoteResult(
                 success=False,
                 capture_id=capture_id,
                 missing_fields=missing,
-                error=str(e),
+                error=f"Promotion failed for {capture.module}.{capture.entity_type}",
             )
 
         capture.status = "promoted"
@@ -374,17 +373,20 @@ class CaptureService:
         capture_ids: list[str],
         user_id: str | None = None,
     ) -> list[CapturePromoteResult]:
+        if len(capture_ids) > BATCH_LIMIT:
+            raise BadRequestError(f"Batch size {len(capture_ids)} exceeds limit {BATCH_LIMIT}")
         results = []
         for cid in capture_ids:
             try:
                 result = await self.promote(db, cid, user_id=user_id)
                 results.append(result)
-            except Exception as e:
+            except Exception:
+                logger.exception("capture.batch_promote failed id=%s", cid)
                 results.append(
                     CapturePromoteResult(
                         success=False,
                         capture_id=cid,
-                        error=str(e),
+                        error="Promotion failed",
                     )
                 )
         return results
@@ -401,18 +403,18 @@ class CaptureService:
     async def expire_stale(self, db: AsyncSession) -> int:
         """Expire captures past their TTL. Returns count of expired records."""
         now = datetime.now(UTC)
-        stmt = select(Capture).where(
-            Capture.status == "pending",
-            Capture.expires_at.isnot(None),
-            Capture.expires_at <= now,
-            Capture.deleted_at.is_(None),
+        stmt = (
+            update(Capture)
+            .where(
+                Capture.status == "pending",
+                Capture.expires_at.isnot(None),
+                Capture.expires_at <= now,
+                Capture.deleted_at.is_(None),
+            )
+            .values(status="expired")
         )
         result = await db.execute(stmt)
-        captures = list(result.scalars().all())
-        for c in captures:
-            c.status = "expired"
-        await db.flush()
-        return len(captures)
+        return result.rowcount
 
 
 capture_service = CaptureService()

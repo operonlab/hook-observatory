@@ -1,17 +1,21 @@
 """Capture schemas — request/response models."""
 
+import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Modules that support capture (whitelist)
 CAPTURABLE_MODULES = {"finance", "invest", "taskflow", "ideagraph", "intelflow", "dailyos"}
 
+MAX_PAYLOAD_BYTES = 16 * 1024  # 16KB
+BATCH_LIMIT = 50
+
 
 class CaptureCreate(BaseModel):
-    module: str  # 'finance', 'invest', 'taskflow'
-    entity_type: str  # 'transaction', 'subscription', 'trade', 'task'
+    module: str = Field(max_length=64)
+    entity_type: str = Field(max_length=64)
     payload: dict[str, Any] = Field(default_factory=dict)
     raw_input: str | None = None
     group_id: str | None = None
@@ -20,6 +24,13 @@ class CaptureCreate(BaseModel):
 class CaptureUpdate(BaseModel):
     payload: dict[str, Any] | None = None
     raw_input: str | None = None
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_size(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v)) > MAX_PAYLOAD_BYTES:
+            raise ValueError(f"Payload exceeds {MAX_PAYLOAD_BYTES} byte limit")
+        return v
 
 
 class CaptureResponse(BaseModel):
@@ -58,8 +69,15 @@ class CaptureStats(BaseModel):
 
 
 class BatchFillRequest(BaseModel):
-    capture_ids: list[str]
+    capture_ids: list[str] = Field(max_length=BATCH_LIMIT)
     payload: dict[str, Any]
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_size(cls, v: dict[str, Any]) -> dict[str, Any]:
+        if len(json.dumps(v)) > MAX_PAYLOAD_BYTES:
+            raise ValueError(f"Payload exceeds {MAX_PAYLOAD_BYTES} byte limit")
+        return v
 
 
 class CaptureSearchResult(BaseModel):
