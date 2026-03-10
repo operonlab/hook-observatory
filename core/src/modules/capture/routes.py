@@ -13,6 +13,7 @@ from .schemas import (
     CaptureEnrichmentResponse,
     CapturePromoteResult,
     CaptureResponse,
+    CaptureSearchResult,
     CaptureStats,
     CaptureUpdate,
 )
@@ -83,6 +84,99 @@ async def capture_stats(
     user: dict = require_permission("capture.read"),
 ):
     return await capture_service.stats(db, space_id, user_id=user.get("id"))
+
+
+@router.get("/search", response_model=list[CaptureSearchResult])
+async def search_captures(
+    q: str = Query(..., description="Search query string"),
+    space_id: str = Query("default"),
+    module: str | None = None,
+    entity_type: str | None = None,
+    status: str | None = None,
+    top_k: int = Query(20, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("capture.read"),
+):
+    """Search captures using Qdrant hybrid search with ILIKE fallback."""
+    import logging
+
+    from sqlalchemy import select
+
+    from src.shared.qdrant_client import is_available as qdrant_available
+    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+    from src.shared.search_types import SearchConfig
+
+    from .models import Capture
+
+    logger = logging.getLogger(__name__)
+    user_id = user.get("id")
+
+    # --- Qdrant path ---
+    if qdrant_available():
+        config = SearchConfig(
+            top_k=top_k,
+            service_ids=["capture"],
+        )
+        results, _meta = await qdrant_hybrid_search(q, space_id, config)
+
+        if results:
+            # Fetch full Capture records by entity_id
+            entity_ids = [r.entity_id for r in results]
+            score_map = {r.entity_id: r.score for r in results}
+
+            stmt = select(Capture).where(
+                Capture.id.in_(entity_ids),
+                Capture.space_id == space_id,
+                Capture.deleted_at.is_(None),
+            )
+            if user_id:
+                stmt = stmt.where(Capture.created_by == user_id)
+            if module:
+                stmt = stmt.where(Capture.module == module)
+            if entity_type:
+                stmt = stmt.where(Capture.entity_type == entity_type)
+            if status is not None:
+                stmt = stmt.where(Capture.status == status)
+
+            rows = (await db.execute(stmt)).scalars().all()
+            # Preserve Qdrant score order
+            id_to_capture = {c.id: c for c in rows}
+            return [
+                CaptureSearchResult(
+                    capture=capture_service.to_response(id_to_capture[eid]),
+                    score=score_map[eid],
+                )
+                for eid in entity_ids
+                if eid in id_to_capture
+            ]
+
+        logger.debug(
+            "Qdrant returned 0 results for capture space=%s query=%r — falling back to ILIKE",
+            space_id, q,
+        )
+
+    # --- ILIKE fallback ---
+    pattern = f"%{q}%"
+    stmt = select(Capture).where(
+        Capture.space_id == space_id,
+        Capture.raw_input.ilike(pattern),
+        Capture.deleted_at.is_(None),
+    )
+    if user_id:
+        stmt = stmt.where(Capture.created_by == user_id)
+    if module:
+        stmt = stmt.where(Capture.module == module)
+    if entity_type:
+        stmt = stmt.where(Capture.entity_type == entity_type)
+    if status is not None:
+        stmt = stmt.where(Capture.status == status)
+
+    stmt = stmt.order_by(Capture.updated_at.desc()).limit(top_k)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        CaptureSearchResult(capture=capture_service.to_response(c), score=1.0)
+        for c in rows
+    ]
 
 
 @router.post("/batch/promote", response_model=list[CapturePromoteResult])
