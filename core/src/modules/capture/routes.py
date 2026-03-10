@@ -3,14 +3,12 @@
 import logging
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db, require_permission
 from src.shared.errors import ForbiddenError, NotFoundError
 from src.shared.schemas import PaginatedResponse
 
-from .models import Capture
 from .registry import get_permissions
 from .schemas import (
     BATCH_LIMIT,
@@ -114,77 +112,17 @@ async def search_captures(
     user: dict = require_permission("capture.read"),
 ):
     """Search captures using Qdrant hybrid search with ILIKE fallback."""
-    from src.shared.qdrant_client import is_available as qdrant_available
-    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
-    from src.shared.search_types import SearchConfig
-
-    user_id = user.get("id")
-
-    # --- Qdrant path ---
-    if qdrant_available():
-        config = SearchConfig(
-            top_k=top_k,
-            service_ids=["capture"],
-        )
-        results, _meta = await qdrant_hybrid_search(q, space_id, config)
-
-        if results:
-            # Fetch full Capture records by entity_id
-            entity_ids = [r.entity_id for r in results]
-            score_map = {r.entity_id: r.score for r in results}
-
-            stmt = select(Capture).where(
-                Capture.id.in_(entity_ids),
-                Capture.space_id == space_id,
-                Capture.deleted_at.is_(None),
-            )
-            if user_id:
-                stmt = stmt.where(Capture.created_by == user_id)
-            if module:
-                stmt = stmt.where(Capture.module == module)
-            if entity_type:
-                stmt = stmt.where(Capture.entity_type == entity_type)
-            if status is not None:
-                stmt = stmt.where(Capture.status == status)
-
-            rows = (await db.execute(stmt)).scalars().all()
-            # Preserve Qdrant score order
-            id_to_capture = {c.id: c for c in rows}
-            return [
-                CaptureSearchResult(
-                    capture=capture_service.to_response(id_to_capture[eid]),
-                    score=score_map[eid],
-                )
-                for eid in entity_ids
-                if eid in id_to_capture
-            ]
-
-        logger.debug(
-            "Qdrant returned 0 results for capture space=%s query=%r — falling back to ILIKE",
-            space_id, q,
-        )
-
-    # --- ILIKE fallback ---
-    pattern = f"%{q}%"
-    stmt = select(Capture).where(
-        Capture.space_id == space_id,
-        Capture.raw_input.ilike(pattern),
-        Capture.deleted_at.is_(None),
+    results = await capture_service.search(
+        db, q, space_id,
+        module=module,
+        entity_type=entity_type,
+        status=status,
+        top_k=top_k,
+        user_id=user.get("id"),
     )
-    if user_id:
-        stmt = stmt.where(Capture.created_by == user_id)
-    if module:
-        stmt = stmt.where(Capture.module == module)
-    if entity_type:
-        stmt = stmt.where(Capture.entity_type == entity_type)
-    if status is not None:
-        stmt = stmt.where(Capture.status == status)
-
-    stmt = stmt.order_by(Capture.updated_at.desc()).limit(top_k)
-    rows = (await db.execute(stmt)).scalars().all()
     return [
-        CaptureSearchResult(capture=capture_service.to_response(c), score=1.0)
-        for c in rows
+        CaptureSearchResult(capture=capture_service.to_response(c), score=score)
+        for c, score in results
     ]
 
 
@@ -207,16 +145,20 @@ async def batch_fill(
 ):
     user_prefs = await _get_user_prefs(db, user["id"])
     responses = []
-    for cid in data.capture_ids:
-        capture = await capture_service.get(db, cid)
-        if not capture:
-            raise NotFoundError("capture", cid)
-        _check_owner(capture, user)
-        capture = await capture_service.update(
-            db, cid, CaptureUpdate(payload=data.payload), user_prefs=user_prefs
-        )
-        responses.append(capture_service.to_response(capture))
-    await db.commit()
+    try:
+        for cid in data.capture_ids:
+            capture = await capture_service.get(db, cid)
+            if not capture:
+                raise NotFoundError("capture", cid)
+            _check_owner(capture, user)
+            capture = await capture_service.update(
+                db, cid, CaptureUpdate(payload=data.payload), user_prefs=user_prefs
+            )
+            responses.append(capture_service.to_response(capture))
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     return responses
 
 
@@ -229,31 +171,9 @@ async def fill_options(
     user: dict = require_permission("capture.read"),
 ):
     """Return selectable options for reference fields (wallet_id, category_id, etc.)."""
-    from .registry import get_adapter
-
-    adapter = get_adapter(module, entity_type)
-    if not adapter or not getattr(adapter, "reference_fields", None):
-        return {}
-
-    options: dict[str, list[dict[str, str]]] = {}
-    for field, resolver_key in adapter.reference_fields.items():
-        parts = resolver_key.split(".")
-        if parts[0] == "finance" and parts[1] == "wallet":
-            from src.modules.finance.services import wallet_service
-
-            result = await wallet_service.list(db, space_id, user_id=user.get("id"))
-            options[field] = [{"id": w.id, "name": w.name} for w in result.items]
-        elif parts[0] == "finance" and parts[1] == "category":
-            from src.modules.finance.services import category_service
-
-            result = await category_service.list(db, space_id, user_id=user.get("id"))
-            options[field] = [{"id": c.id, "name": c.name} for c in result.items]
-        elif parts[0] == "invest" and parts[1] == "account":
-            from src.modules.invest.services import account_service
-
-            result = await account_service.list(db, space_id)
-            options[field] = [{"id": a.id, "name": a.name} for a in result.items]
-    return options
+    return await capture_service.resolve_fill_options(
+        db, module, entity_type, space_id, user_id=user.get("id")
+    )
 
 
 @router.get("/{capture_id}", response_model=CaptureResponse)

@@ -37,13 +37,16 @@ class CaptureService:
         user_id: str | None = None,
         user_prefs: dict[str, Any] | None = None,
     ) -> Capture:
+        from .registry import list_adapters
         from .schemas import CAPTURABLE_MODULES
 
-        # Module whitelist
-        if data.module not in CAPTURABLE_MODULES:
+        # Module whitelist: static set + dynamically registered adapters
+        registered_modules = {m for m, _et in list_adapters()}
+        allowed = CAPTURABLE_MODULES | registered_modules
+        if data.module not in allowed:
             raise BadRequestError(
                 f"Module '{data.module}' does not support capture. "
-                f"Supported: {', '.join(sorted(CAPTURABLE_MODULES))}"
+                f"Supported: {', '.join(sorted(allowed))}"
             )
 
         # Validate payload size
@@ -291,7 +294,6 @@ class CaptureService:
             )
         except Exception:
             logger.exception("capture.promote failed id=%s", capture_id)
-            await db.rollback()
             return CapturePromoteResult(
                 success=False,
                 capture_id=capture_id,
@@ -390,6 +392,120 @@ class CaptureService:
                     )
                 )
         return results
+
+    async def search(
+        self,
+        db: AsyncSession,
+        query: str,
+        space_id: str,
+        module: str | None = None,
+        entity_type: str | None = None,
+        status: str | None = None,
+        top_k: int = 20,
+        user_id: str | None = None,
+    ) -> list[tuple[Capture, float]]:
+        """Search captures via Qdrant hybrid search with ILIKE fallback."""
+        from src.shared.qdrant_client import is_available as qdrant_available
+
+        # --- Qdrant path ---
+        try:
+            if qdrant_available():
+                from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+                from src.shared.search_types import SearchConfig
+
+                config = SearchConfig(top_k=top_k, service_ids=["capture"])
+                results, _meta = await qdrant_hybrid_search(query, space_id, config)
+
+                if results:
+                    entity_ids = [r.entity_id for r in results]
+                    score_map = {r.entity_id: r.score for r in results}
+
+                    stmt = select(Capture).where(
+                        Capture.id.in_(entity_ids),
+                        Capture.space_id == space_id,
+                        Capture.deleted_at.is_(None),
+                    )
+                    if user_id:
+                        stmt = stmt.where(Capture.created_by == user_id)
+                    if module:
+                        stmt = stmt.where(Capture.module == module)
+                    if entity_type:
+                        stmt = stmt.where(Capture.entity_type == entity_type)
+                    if status is not None:
+                        stmt = stmt.where(Capture.status == status)
+
+                    rows = (await db.execute(stmt)).scalars().all()
+                    id_to_capture = {c.id: c for c in rows}
+                    return [
+                        (id_to_capture[eid], score_map[eid])
+                        for eid in entity_ids
+                        if eid in id_to_capture
+                    ]
+
+                logger.debug(
+                    "Qdrant returned 0 results for capture space=%s query=%r"
+                    " — falling back to ILIKE",
+                    space_id, query,
+                )
+        except Exception:
+            logger.exception("Qdrant search failed, falling back to ILIKE")
+
+        # --- ILIKE fallback (escape special characters) ---
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        stmt = select(Capture).where(
+            Capture.space_id == space_id,
+            Capture.raw_input.ilike(pattern),
+            Capture.deleted_at.is_(None),
+        )
+        if user_id:
+            stmt = stmt.where(Capture.created_by == user_id)
+        if module:
+            stmt = stmt.where(Capture.module == module)
+        if entity_type:
+            stmt = stmt.where(Capture.entity_type == entity_type)
+        if status is not None:
+            stmt = stmt.where(Capture.status == status)
+
+        stmt = stmt.order_by(Capture.updated_at.desc()).limit(top_k)
+        rows = (await db.execute(stmt)).scalars().all()
+        return [(c, 1.0) for c in rows]
+
+    async def resolve_fill_options(
+        self,
+        db: AsyncSession,
+        module: str,
+        entity_type: str,
+        space_id: str,
+        user_id: str | None = None,
+    ) -> dict[str, list[dict[str, str]]]:
+        """Resolve selectable options for adapter reference fields."""
+        adapter = get_adapter(module, entity_type)
+        if not adapter or not getattr(adapter, "reference_fields", None):
+            return {}
+
+        # Registry of resolver_key → (service_import_path, list_method_kwargs)
+        resolvers: dict[str, tuple[str, str, dict]] = {
+            "finance.wallet": ("src.modules.finance.services", "wallet_service", {}),
+            "finance.category": ("src.modules.finance.services", "category_service", {}),
+            "invest.account": ("src.modules.invest.services", "account_service", {}),
+        }
+
+        options: dict[str, list[dict[str, str]]] = {}
+        for field, resolver_key in adapter.reference_fields.items():
+            resolver = resolvers.get(resolver_key)
+            if not resolver:
+                logger.warning("No resolver for reference field %s -> %s", field, resolver_key)
+                continue
+            try:
+                mod = __import__(resolver[0], fromlist=[resolver[1]])
+                service = getattr(mod, resolver[1])
+                result = await service.list(db, space_id, user_id=user_id)
+                options[field] = [{"id": r.id, "name": r.name} for r in result.items]
+            except Exception:
+                logger.exception("Failed to resolve options for %s", resolver_key)
+                options[field] = []
+        return options
 
     async def get_enrichments(self, db: AsyncSession, capture_id: str) -> list[CaptureEnrichment]:
         stmt = (
