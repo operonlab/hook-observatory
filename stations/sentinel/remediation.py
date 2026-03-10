@@ -42,6 +42,7 @@ DOCKER_RESTART_MAP: dict[str, str] = {
     "rustfs": "ws-infra-rustfs-1",
     "bark": "bark-server",
     "ntfy": "ws-infra-ntfy-1",
+    "qdrant": "ws-infra-qdrant-1",
 }
 
 

@@ -80,6 +80,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:3100/",
     ),
     LightCheck(
+        name="qdrant",
+        group="infra",
+        url="http://127.0.0.1:6333/healthz",
+    ),
+    LightCheck(
         name="litellm",
         group="infra",
         url="http://127.0.0.1:4000/health",
