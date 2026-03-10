@@ -709,6 +709,22 @@ class MemoryBlockService(
 
         return results
 
+    async def find_by_source_session(
+        self, db: AsyncSession, space_id: str, source_session: str
+    ) -> "MemoryBlockResponse | None":
+        """Return the first block matching source_session for idempotency checks."""
+        q = (
+            select(MemoryBlock)
+            .where(
+                MemoryBlock.space_id == space_id,
+                MemoryBlock.source_session == source_session,
+                MemoryBlock.deleted_at == None,  # noqa: E711
+            )
+            .limit(1)
+        )
+        row = (await db.execute(q)).scalars().first()
+        return self.to_response(row) if row else None
+
     async def update_embedding(
         self, db: AsyncSession, block_id: str, embedding: list[float]
     ) -> None:
