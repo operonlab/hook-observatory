@@ -99,6 +99,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="infra",
         url="http://127.0.0.1:9080/v1/health",
     ),
+    LightCheck(
+        name="mcpproxy",
+        group="infra",
+        url="http://127.0.0.1:8808/health",
+        expect_json={"status": "ok"},
+    ),
     # ── internal ──
     LightCheck(
         name="core",
