@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "memvault"
-EMBEDDING_DIM = 768  # Ollama nomic-embed-text
+EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B
 
 
 class MemoryBlock(SpaceScopedModel):
@@ -45,12 +45,8 @@ class MemoryBlock(SpaceScopedModel):
     block_type: Mapped[str] = mapped_column(
         String(50), server_default=text("'general'")
     )  # knowledge | skill | attitude | general
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), server_default=text("'{}'::text[]")
-    )
-    embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(EMBEDDING_DIM), nullable=True
-    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
@@ -101,9 +97,7 @@ class BlockArchive(Base):
     source_session: Mapped[str | None] = mapped_column(String(64), nullable=True)
     content: Mapped[str] = mapped_column(Text)  # may be S3 ref for COLD-BLOB
     block_type: Mapped[str] = mapped_column(String(50))
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), server_default=text("'{}'::text[]")
-    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     archived_at: Mapped[str] = mapped_column(Text)
     archive_type: Mapped[str] = mapped_column(
@@ -174,22 +168,14 @@ class BlockFrozen(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     space_id: Mapped[str] = mapped_column(String(32))
-    created_by: Mapped[str | None] = mapped_column(
-        String(32), nullable=True
-    )
+    created_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[str] = mapped_column(Text)
     archived_at: Mapped[str] = mapped_column(Text)
     frozen_at: Mapped[str] = mapped_column(Text)
     block_type: Mapped[str] = mapped_column(String(50))
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), server_default=text("'{}'::text[]")
-    )
-    source_session: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+    source_session: Mapped[str | None] = mapped_column(String(64), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     s3_uri: Mapped[str] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64))
-    content_size: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    content_size: Mapped[int | None] = mapped_column(Integer, nullable=True)

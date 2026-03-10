@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 DATA_DIR = Path.home() / ".claude" / "data" / "session-archiver"
@@ -19,9 +19,8 @@ _DEFAULTS = {
     "score_threshold": 70,
     "archive_min_age_days": 3,
     "compression_level": 9,
-    "ollama_url": "http://localhost:11434",
-    "ollama_model": "nomic-embed-text",
-    "embedding_dim": 768,
+    "omlx_venv": str(Path.home() / ".venvs" / "omlx"),
+    "embedding_dim": 1024,
 }
 
 
@@ -36,8 +35,7 @@ class Config:
     score_threshold: int = _DEFAULTS["score_threshold"]
     archive_min_age_days: int = _DEFAULTS["archive_min_age_days"]
     compression_level: int = _DEFAULTS["compression_level"]
-    ollama_url: str = _DEFAULTS["ollama_url"]
-    ollama_model: str = _DEFAULTS["ollama_model"]
+    omlx_venv: str = _DEFAULTS["omlx_venv"]
     embedding_dim: int = _DEFAULTS["embedding_dim"]
 
 

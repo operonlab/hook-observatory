@@ -22,7 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "briefing"
-EMBEDDING_DIM = 768  # Ollama nomic-embed-text
+EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B
 
 BRIEFING_STATUSES = (
     "searching",
@@ -242,9 +242,7 @@ class BriefingArchive(Base):
     analyses: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     debate: Mapped[str | None] = mapped_column(Text, nullable=True)
     archived_at: Mapped[str] = mapped_column(Text)
-    archive_type: Mapped[str] = mapped_column(
-        String(20), server_default=text("'cold-archive'")
-    )
+    archive_type: Mapped[str] = mapped_column(String(20), server_default=text("'cold-archive'"))
 
 
 # ======================== Frozen Tables ========================
