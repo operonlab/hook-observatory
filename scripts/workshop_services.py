@@ -170,6 +170,12 @@ DOCKER_CONTAINERS = [
         "health_cmd": None,
         "health_url": "http://127.0.0.1:9080/v1/health",
     },
+    {
+        "name": "ws-infra-qdrant-1",
+        "port": 6333,
+        "health_cmd": None,
+        "health_url": "http://127.0.0.1:6333/healthz",
+    },
 ]
 
 # ANSI color codes
