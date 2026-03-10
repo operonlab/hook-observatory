@@ -77,6 +77,52 @@ class MethodService(BaseCRUDService[Method, MethodCreate, MethodUpdate, MethodRe
                 code="dailyos.invalid_config",
             )
 
+    def after_create(self, instance: Method) -> None:
+        import asyncio
+
+        coro = event_bus.publish(
+            Event(
+                type=DailyosEvents.METHOD_CREATED,
+                data={
+                    "method_id": instance.id,
+                    "id": instance.id,
+                    "space_id": instance.space_id,
+                    "name": instance.name,
+                    "name_zh": instance.name_zh,
+                    "description": instance.description,
+                    "tags": instance.tags or [],
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+                },
+                source="dailyos",
+                user_id=instance.created_by,
+            )
+        )
+        asyncio.ensure_future(coro)  # noqa: RUF006
+
+    def after_update(self, instance: Method, changes: dict) -> None:
+        import asyncio
+
+        coro = event_bus.publish(
+            Event(
+                type=DailyosEvents.METHOD_UPDATED,
+                data={
+                    "method_id": instance.id,
+                    "id": instance.id,
+                    "space_id": instance.space_id,
+                    "name": instance.name,
+                    "name_zh": instance.name_zh,
+                    "description": instance.description,
+                    "tags": instance.tags or [],
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+                },
+                source="dailyos",
+                user_id=instance.created_by,
+            )
+        )
+        asyncio.ensure_future(coro)  # noqa: RUF006
+
     def to_response(self, instance: Method) -> MethodResponse:
         return MethodResponse(
             id=instance.id,
@@ -451,6 +497,27 @@ class DailyPlanService:
         db.add(plan)
         await db.flush()
         await db.refresh(plan)
+
+        # Publish PLAN_CREATED for Qdrant indexing
+        _method_name = selection.method.name if selection.method else None
+        await event_bus.publish(
+            Event(
+                type=DailyosEvents.PLAN_CREATED,
+                data={
+                    "plan_id": plan.id,
+                    "id": plan.id,
+                    "space_id": plan.space_id,
+                    "reflection": plan.reflection,
+                    "tags": [],
+                    "method_name": _method_name,
+                    "plan_date": str(plan.plan_date),
+                    "created_at": plan.created_at.isoformat() if plan.created_at else None,
+                    "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
+                },
+                source="dailyos",
+                user_id=user_id,
+            )
+        )
         return plan
 
     async def get_or_create_today(

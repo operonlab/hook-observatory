@@ -4,7 +4,6 @@ This is the PUBLIC API of the memvault module.
 Other modules import from here, never from models.py.
 """
 
-import asyncio
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -136,7 +135,16 @@ class MemoryBlockService(
         event_bus.publish(
             Event(
                 type=MemvaultEvents.MEMORY_STORED,
-                data={"block_id": instance.id, "block_type": instance.block_type},
+                data={
+                    "id": instance.id,
+                    "block_id": instance.id,
+                    "space_id": instance.space_id,
+                    "content": instance.content,
+                    "block_type": instance.block_type,
+                    "tags": instance.tags or [],
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+                },
                 source="memvault",
                 user_id=instance.created_by,
             )
@@ -269,7 +277,7 @@ class MemoryBlockService(
             # RRF Fusion
             results = await self._rrf_fuse(vector_results, keyword_results)
         else:
-            results = await vector_coro
+            results = vector_results
 
         # Warm tier: text-based augmentation for older blocks
         if include_warm and len(results) < top_k:
@@ -326,6 +334,105 @@ class MemoryBlockService(
         ]
 
         return final_results, meta
+
+    async def qdrant_search(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query: str,
+        query_embedding: list[float],
+        top_k: int = 10,
+        tags: list[str] | None = None,
+        block_type: str | None = None,
+        scoring_config: ScoringConfig | None = None,
+        scope: str | None = None,
+    ) -> tuple[list[SemanticSearchResult], SearchMetadata] | None:
+        """Search via Qdrant hybrid (BM25 + dense) with full scoring pipeline.
+
+        Returns None if Qdrant is unavailable (caller should fall back to semantic_search).
+        """
+        from src.shared.qdrant_client import is_available as qdrant_available
+        from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+        from src.shared.search_types import SearchConfig as QdrantSearchConfig
+
+        if not qdrant_available():
+            return None
+
+        meta = SearchMetadata(vector_used=True, scope=scope)
+
+        # Build Qdrant search config
+        config = QdrantSearchConfig(
+            top_k=top_k * 3,  # over-fetch for scoring pipeline
+            score_threshold=0.0,
+            service_ids=["memvault"],
+            tag_filter=tags,
+        )
+        qdrant_results, qdrant_meta = await qdrant_hybrid_search(query, space_id, config)
+
+        if not qdrant_results:
+            return None  # fall back to pgvector
+
+        meta.keyword_used = qdrant_meta.sparse_used
+
+        # Fetch full records from DB by entity_id for scoring pipeline
+        entity_ids = [r.entity_id for r in qdrant_results]
+        q = (
+            select(MemoryBlock)
+            .where(
+                MemoryBlock.id.in_(entity_ids),
+                MemoryBlock.deleted_at == None,  # noqa: E711
+            )
+        )
+        if block_type:
+            q = q.where(MemoryBlock.block_type == block_type)
+
+        rows = (await db.execute(q)).scalars().all()
+        block_map = {str(b.id): b for b in rows}
+
+        # Build score map from Qdrant results
+        score_map = {r.entity_id: r.score for r in qdrant_results}
+
+        # Convert to scoring pipeline format
+        scored_dicts = []
+        for eid in entity_ids:
+            block = block_map.get(eid)
+            if not block:
+                continue
+            scored_dicts.append({
+                "block": self.to_response(block),
+                "score": score_map.get(eid, 0.0),
+                "content": block.content,
+                "created_at": block.created_at,
+                "confidence": block.confidence,
+                "embedding": None,
+            })
+
+        # Apply full scoring pipeline
+        pipeline = ScoringPipeline(scoring_config)
+        scored_dicts, scoring_meta = pipeline.apply(scored_dicts, query_embedding)
+
+        # Optional cross-encoder reranking
+        scored_dicts, reranked = await rerank_results(query, scored_dicts)
+        if reranked:
+            meta.reranker_used = True
+
+        meta.scoring_applied = True
+        meta.stages_applied = scoring_meta.stages_applied
+        meta.stages_skipped = scoring_meta.stages_skipped
+        meta.noise_filtered = scoring_meta.noise_filtered
+        meta.input_count = scoring_meta.input_count
+        meta.output_count = scoring_meta.output_count
+        meta.backend = "qdrant"
+
+        final = [
+            SemanticSearchResult(
+                block=d["block"],
+                score=round(d["score"], 4),
+            )
+            for d in scored_dicts[:top_k]
+        ]
+
+        return final, meta
 
     async def _vector_search_combined(
         self,
