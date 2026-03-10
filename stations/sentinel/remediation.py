@@ -32,6 +32,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "capture-console": "capture-console",
     "anvil": "anvil",
     "cronicle": "cronicle",
+    "mcpproxy": "mcpproxy",
 }
 
 # Docker-managed services: restart via docker

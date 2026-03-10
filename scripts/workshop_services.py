@@ -111,6 +111,14 @@ SERVICES = [
     },
     # ── Infrastructure Tools ──
     {
+        "name": "mcpproxy",
+        "type": "binary",
+        "cmd": "/Users/joneshong/.local/bin/mcpproxy serve --listen 127.0.0.1:8808",
+        "port": 8808,
+        "health": "http://127.0.0.1:8808/health",
+        "workdir": "/Users/joneshong",
+    },
+    {
         "name": "litellm",
         "type": "binary",
         "cmd": "/Users/joneshong/.local/bin/litellm --config /Users/joneshong/.config/litellm/config.yaml --port 4000 --host 127.0.0.1",
