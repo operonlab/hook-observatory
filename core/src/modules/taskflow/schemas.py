@@ -101,6 +101,14 @@ class TaskFilterParams(BaseModel):
     overdue: bool | None = None
 
 
+# ======================== Search ========================
+
+
+class TaskSearchResult(BaseModel):
+    task: TaskResponse
+    score: float
+
+
 # ======================== Progress Stats ========================
 
 
