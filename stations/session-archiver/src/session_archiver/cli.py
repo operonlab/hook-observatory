@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
-from session_archiver.config import Config, load_config
+from session_archiver.config import load_config
 
 logger = structlog.get_logger(__name__)
 
@@ -41,7 +41,7 @@ def cmd_scan(args: list[str]) -> None:
     result = {
         "scanned": len(sessions),
         "upserted": upserted,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     if opts.json:
@@ -85,7 +85,10 @@ def cmd_score(args: list[str]) -> None:
         print(json.dumps(rows, indent=2))
     else:
         # Table format
-        header = f"{'Session ID':>14} {'Size MB':>8} {'Score':>6} {'S':>5} {'A':>5} {'Act':>5} {'C':>5} {'R'}"
+        header = (
+            f"{'Session ID':>14} {'Size MB':>8} {'Score':>6}"
+            f" {'S':>5} {'A':>5} {'Act':>5} {'C':>5} {'R'}"
+        )
         print(header)
         print("-" * len(header))
         for meta, score in scored:
@@ -106,14 +109,16 @@ def cmd_score(args: list[str]) -> None:
 def cmd_archive(args: list[str]) -> None:
     """Archive sessions based on score threshold."""
     parser = argparse.ArgumentParser(description="Archive sessions")
-    parser.add_argument("--execute", action="store_true",
-                        help="Actually archive (default is dry-run)")
-    parser.add_argument("--threshold", type=int, default=None,
-                        help="Score threshold (default from config)")
-    parser.add_argument("--summarize", action="store_true",
-                        help="Generate LLM summaries before archiving")
-    parser.add_argument("--embed", action="store_true",
-                        help="Generate embeddings for summaries")
+    parser.add_argument(
+        "--execute", action="store_true", help="Actually archive (default is dry-run)"
+    )
+    parser.add_argument(
+        "--threshold", type=int, default=None, help="Score threshold (default from config)"
+    )
+    parser.add_argument(
+        "--summarize", action="store_true", help="Generate LLM summaries before archiving"
+    )
+    parser.add_argument("--embed", action="store_true", help="Generate embeddings for summaries")
     parser.add_argument("--json", action="store_true", help="JSON output")
     opts = parser.parse_args(args)
 
@@ -134,7 +139,7 @@ def cmd_archive(args: list[str]) -> None:
 
     # Filter candidates: score > threshold, age > min days, tier == hot
     min_age = config.archive_min_age_days
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     candidates = []
     for meta, score in scored:
         age_days = (now - meta.last_modified).total_seconds() / 86400
@@ -167,8 +172,7 @@ def cmd_archive(args: list[str]) -> None:
 
         for sid, summary in summaries.items():
             if summary:
-                emb = get_embedding(summary, config.ollama_url, config.ollama_model,
-                                    config.embedding_dim)
+                emb = get_embedding(summary, config.omlx_venv, config.embedding_dim)
                 if emb:
                     db.upsert_embedding(config, sid, emb)
                     db.update_summary(config, sid, summary)
@@ -200,7 +204,7 @@ def cmd_archive(args: list[str]) -> None:
             print()
 
         if dry_run:
-            print(f"\nTo execute: session-archiver archive --execute")
+            print("\nTo execute: session-archiver archive --execute")
 
 
 def cmd_thaw(args: list[str]) -> None:
@@ -261,7 +265,9 @@ def cmd_status(args: list[str]) -> None:
             "cold_compressed_mb": round(stats.cold_compressed_size / 1024 / 1024, 1),
             "frozen_count": stats.frozen_count,
             "total_saved_mb": round(stats.total_saved / 1024 / 1024, 1),
-            "compression_ratio": f"{stats.compression_ratio:.1%}" if stats.compression_ratio else "N/A",
+            "compression_ratio": f"{stats.compression_ratio:.1%}"
+            if stats.compression_ratio
+            else "N/A",
             "db_status": "online",
         }
 
@@ -270,15 +276,26 @@ def cmd_status(args: list[str]) -> None:
     else:
         print("Session Archive Status")
         print("=" * 40)
-        print(f"  Hot:    {result.get('hot_count', 0)} sessions ({result.get('hot_size_mb', 0)} MB)")
+        print(
+            f"  Hot:    {result.get('hot_count', 0)} sessions ({result.get('hot_size_mb', 0)} MB)"
+        )
         if "cold_original_mb" in result:
-            print(f"  Cold:   {result.get('cold_count', 0)} sessions "
-                  f"({result.get('cold_original_mb', 0)} MB → {result.get('cold_compressed_mb', 0)} MB)")
+            print(
+                f"  Cold:   {result.get('cold_count', 0)} sessions "
+                f"({result.get('cold_original_mb', 0)} MB "
+                f"→ {result.get('cold_compressed_mb', 0)} MB)"
+            )
         else:
-            print(f"  Cold:   {result.get('cold_count', 0)} archives ({result.get('cold_size_mb', 0)} MB)")
+            print(
+                f"  Cold:   {result.get('cold_count', 0)} archives "
+                f"({result.get('cold_size_mb', 0)} MB)"
+            )
         print(f"  Frozen: {result.get('frozen_count', 0)} sessions")
         if "total_saved_mb" in result:
-            print(f"  Saved:  {result.get('total_saved_mb', 0)} MB ({result.get('compression_ratio', 'N/A')})")
+            print(
+                f"  Saved:  {result.get('total_saved_mb', 0)} MB "
+                f"({result.get('compression_ratio', 'N/A')})"
+            )
         print(f"  DB:     {result.get('db_status', 'unknown')}")
 
 
@@ -297,8 +314,7 @@ def cmd_search(args: list[str]) -> None:
 
     # Try semantic search first
     results = []
-    query_emb = get_embedding(opts.query, config.ollama_url, config.ollama_model,
-                              config.embedding_dim)
+    query_emb = get_embedding(opts.query, config.omlx_venv, config.embedding_dim)
     if query_emb:
         results = db.search_by_embedding(config, query_emb, limit=opts.limit)
 

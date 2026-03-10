@@ -20,7 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "intelflow"
-EMBEDDING_DIM = 768  # Ollama nomic-embed-text
+EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B
 
 
 class ReportEmbedding(Base):
