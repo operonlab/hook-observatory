@@ -109,6 +109,9 @@ class MemvaultEvents:
     WISDOM_REGENERATED = "memvault.wisdom.regenerated"
     ATTITUDE_EVOLVED = "memvault.attitude.evolved"
     SKILL_INVOKED = "memvault.skill.invoked"
+    TRIPLE_INVALIDATED = "memvault.triple.invalidated"
+    ENTITY_RESOLVED = "memvault.entity.resolved"
+    ENTITY_MERGED = "memvault.entity.merged"
 
 
 class SkillpathEvents:
