@@ -10,6 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.embedding import get_embedding
+from src.shared.fallback_search import (
+    SERVICE_AVGDL,
+    build_ilike_conditions,
+    score_text_match,
+)
 from src.shared.qdrant_client import is_available as qdrant_available
 from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
 from src.shared.search_types import SearchConfig as QdrantSearchConfig
@@ -192,22 +197,21 @@ async def _warm_tier_search(
     """Search warm-tier reports (no HNSW, still in main table).
 
     Warm tier: hot_days < age <= warm_days.
-    Uses ILIKE on title + content; score = 0.5 * 0.7 = 0.35.
+    Uses CJK-aware jieba multi-term ILIKE + BM25-lite scoring.
     """
     tier = get_threshold("intelflow")
     now = datetime.now(UTC)
     hot_cutoff = now - timedelta(days=tier.hot_days)
     warm_cutoff = now - timedelta(days=tier.warm_days)
-    pattern = f"%{query}%"
+    avgdl = SERVICE_AVGDL.get("intelflow", SERVICE_AVGDL["default"])
+
+    conditions = build_ilike_conditions(query, Report.title, Report.content)
 
     q = (
         select(Report)
         .where(
             Report.space_id == space_id,
-            (
-                Report.title.ilike(pattern)
-                | Report.content.ilike(pattern)
-            ),
+            *conditions,
             Report.created_at < hot_cutoff,
             Report.created_at >= warm_cutoff,
         )
@@ -219,7 +223,7 @@ async def _warm_tier_search(
     return [
         SemanticSearchResult(
             report=_to_brief(r),
-            score=0.35,  # warm tier: 0.5 * 0.7
+            score=round(score_text_match(query, r.content or r.title, tier="warm", avgdl=avgdl), 4),
         )
         for r in rows
     ]
@@ -270,29 +274,27 @@ async def _text_search_fallback(
     include_archived: bool = False,
     include_warm: bool = True,
 ) -> list[SemanticSearchResult]:
-    """Fallback text search using ILIKE when Ollama unavailable.
+    """Fallback text search using CJK-aware ILIKE + BM25-lite when Ollama unavailable.
 
-    Tier-aware search:
-      Hot  (age <= hot_days): score 0.5
-      Warm (hot_days < age <= warm_days): score 0.35
-      Cold (archive table, include_archived): score 0.3
+    Tier-aware search with per-token matching and BM25-lite scoring:
+      Hot  (age <= hot_days): BM25-lite * hot_base
+      Warm (hot_days < age <= warm_days): BM25-lite * warm_decay
+      Cold (archive table, include_archived): BM25-lite * cold_decay
     """
-    pattern = f"%{query}%"
     tier = get_threshold("intelflow")
     now = datetime.now(UTC)
     hot_cutoff = now - timedelta(days=tier.hot_days)
     warm_cutoff = now - timedelta(days=tier.warm_days)
-    ilike_cond = (
-        Report.title.ilike(pattern)
-        | Report.content.ilike(pattern)
-    )
+    avgdl = SERVICE_AVGDL.get("intelflow", SERVICE_AVGDL["default"])
+
+    conditions = build_ilike_conditions(query, Report.title, Report.content)
 
     # --- Hot tier ---
     hot_q = (
         select(Report)
         .where(
             Report.space_id == space_id,
-            ilike_cond,
+            *conditions,
             Report.created_at >= hot_cutoff,
         )
         .order_by(Report.updated_at.desc())
@@ -301,7 +303,8 @@ async def _text_search_fallback(
     hot_rows = (await db.execute(hot_q)).scalars().all()
     results: list[SemanticSearchResult] = [
         SemanticSearchResult(
-            report=_to_brief(r), score=0.5,
+            report=_to_brief(r),
+            score=round(score_text_match(query, r.content or r.title, tier="hot", avgdl=avgdl), 4),
         )
         for r in hot_rows
     ]
@@ -313,7 +316,7 @@ async def _text_search_fallback(
             select(Report)
             .where(
                 Report.space_id == space_id,
-                ilike_cond,
+                *conditions,
                 Report.created_at < hot_cutoff,
                 Report.created_at >= warm_cutoff,
             )
@@ -326,7 +329,9 @@ async def _text_search_fallback(
         results.extend([
             SemanticSearchResult(
                 report=_to_brief(r),
-                score=0.35,  # warm: 0.5 * 0.7
+                score=round(
+                    score_text_match(query, r.content or r.title, tier="warm", avgdl=avgdl), 4,
+                ),
             )
             for r in warm_rows
         ])
@@ -334,15 +339,14 @@ async def _text_search_fallback(
     # --- Cold tier: archive table ---
     if include_archived and len(results) < limit:
         remaining = limit - len(results)
-        archive_ilike = (
-            ReportArchive.title.ilike(pattern)
-            | ReportArchive.content.ilike(pattern)
+        archive_conditions = build_ilike_conditions(
+            query, ReportArchive.title, ReportArchive.content,
         )
         archive_q = (
             select(ReportArchive)
             .where(
                 ReportArchive.space_id == space_id,
-                archive_ilike,
+                *archive_conditions,
                 ~ReportArchive.content.like("s3://%"),
             )
             .order_by(ReportArchive.created_at.desc())
@@ -361,7 +365,9 @@ async def _text_search_fallback(
                     skill_name=r.skill_name,
                     created_at=r.created_at,
                 ),
-                score=0.3,  # cold: archived result
+                score=round(
+                    score_text_match(query, r.content or r.title, tier="cold", avgdl=avgdl), 4,
+                ),
             )
             for r in archive_rows
         ])
