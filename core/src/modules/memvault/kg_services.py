@@ -86,17 +86,21 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
 
     def after_create(self, instance: Triple) -> None:
         """Publish TRIPLE_INGESTED event (fire-and-forget)."""
-        event_bus.publish(
-            Event(
-                type=MemvaultEvents.TRIPLE_INGESTED,
-                data={
-                    "triple_id": instance.id,
-                    "subject": instance.subject,
-                    "predicate": instance.predicate,
-                    "source_session": instance.source_session,
-                },
-                source="memvault",
-                user_id=instance.created_by,
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=MemvaultEvents.TRIPLE_INGESTED,
+                    data={
+                        "triple_id": instance.id,
+                        "subject": instance.subject,
+                        "predicate": instance.predicate,
+                        "source_session": instance.source_session,
+                    },
+                    source="memvault",
+                    user_id=instance.created_by,
+                )
             )
         )
 
