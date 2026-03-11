@@ -125,21 +125,30 @@ class MemoryBlockService(
         return d
 
     def after_create(self, instance: MemoryBlock) -> None:
-        event_bus.publish(
-            Event(
-                type=MemvaultEvents.MEMORY_STORED,
-                data={
-                    "id": instance.id,
-                    "block_id": instance.id,
-                    "space_id": instance.space_id,
-                    "content": instance.content,
-                    "block_type": instance.block_type,
-                    "tags": instance.tags or [],
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="memvault",
-                user_id=instance.created_by,
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=MemvaultEvents.MEMORY_STORED,
+                    data={
+                        "id": instance.id,
+                        "block_id": instance.id,
+                        "space_id": instance.space_id,
+                        "content": instance.content,
+                        "block_type": instance.block_type,
+                        "tags": instance.tags or [],
+                        "source_session": instance.source_session,
+                        "created_at": (
+                            instance.created_at.isoformat() if instance.created_at else None
+                        ),
+                        "updated_at": (
+                            instance.updated_at.isoformat() if instance.updated_at else None
+                        ),
+                    },
+                    source="memvault",
+                    user_id=instance.created_by,
+                )
             )
         )
 

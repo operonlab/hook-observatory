@@ -197,6 +197,14 @@ class SearchIndexEvents:
     BACKFILL_COMPLETED = "search.backfill.completed"
 
 
+class SessionIntelligenceEvents:
+    """Events from session-intelligence station → Core EventBus."""
+
+    DIGEST_COMPLETED = "intelligence.digest.completed"
+    PATTERN_DISCOVERED = "intelligence.pattern.discovered"
+    TREND_DETECTED = "intelligence.trend.detected"
+
+
 class SystemEvents:
     HEALTH_CHECKED = "system.health.checked"
     CONFIG_CHANGED = "system.config.changed"
