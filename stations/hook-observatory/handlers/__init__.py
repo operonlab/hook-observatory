@@ -80,6 +80,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "SessionStart": [
         (None, external.sync_login),
+        (None, anvil_telemetry.handle),
         (None, claudemd_suggest.handle),
         (None, cleanup_versions.handle),
         (None, pm_autopilot.handle),
