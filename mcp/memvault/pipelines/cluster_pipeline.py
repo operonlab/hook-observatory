@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """cluster_pipeline.py — Memvault V2 Knowledge Graph: GMM Clustering Pipeline
 
-Fetches all triples from Core API, embeds via Ollama nomic-embed-text,
+Fetches all triples from Core API, embeds via oMLX Qwen3-Embedding-0.6B (1024d),
 runs Gaussian Mixture Model clustering with BIC-optimal k,
 and POSTs cluster results back to Core API.
 
@@ -21,11 +21,12 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
-OLLAMA_URL = "http://localhost:11434/api/embed"
-OLLAMA_MODEL = "nomic-embed-text"
+OMLX_PYTHON = Path.home() / ".venvs/omlx/bin/python3"
+OMLX_WORKER = Path.home() / ".venvs/omlx/embed_worker.py"
 EMBED_CHUNK_SIZE = 100
 BIC_RANGE_MIN = 3
 BIC_RANGE_MAX = 25
@@ -36,6 +37,7 @@ MAX_TRIPLES_PER_FETCH = 5000
 def http_get(url: str, params: dict | None = None) -> dict:
     if params:
         from urllib.parse import urlencode
+
         url = f"{url}?{urlencode(params)}"
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     try:
@@ -53,10 +55,12 @@ def http_get(url: str, params: dict | None = None) -> dict:
 def http_post(url: str, body: dict, params: dict | None = None) -> dict:
     if params:
         from urllib.parse import urlencode
+
         url = f"{url}?{urlencode(params)}"
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
-        url, data=payload,
+        url,
+        data=payload,
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
@@ -98,14 +102,18 @@ def fetch_triples(space_id: str) -> list[dict]:
             p = (item.get("p") or item.get("predicate") or "").strip()
             o = (item.get("o") or item.get("object") or "").strip()
             if s and p and o:
-                rows.append({
-                    "id": item.get("id", ""),
-                    "s": s, "p": p, "o": o,
-                    "text": f"{s} {p} {o}",
-                    "session_id": item.get("session_id", ""),
-                    "topic": item.get("topic", ""),
-                    "tags": item.get("tags", []),
-                })
+                rows.append(
+                    {
+                        "id": item.get("id", ""),
+                        "s": s,
+                        "p": p,
+                        "o": o,
+                        "text": f"{s} {p} {o}",
+                        "session_id": item.get("session_id", ""),
+                        "topic": item.get("topic", ""),
+                        "tags": item.get("tags", []),
+                    }
+                )
 
         if len(items) < page_size:
             break
@@ -117,22 +125,79 @@ def fetch_triples(space_id: str) -> list[dict]:
     return rows
 
 
-# ── Phase 2: Embed with Ollama ─────────────────────────────────────────────────
-def ollama_embed_batch(texts: list[str]) -> list[list[float]]:
-    payload = json.dumps({"model": OLLAMA_MODEL, "input": texts}).encode("utf-8")
-    req = urllib.request.Request(
-        OLLAMA_URL, data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+# ── Phase 2: Embed with oMLX (Qwen3-Embedding-0.6B, 1024d) ──────────────────
+_omlx_proc: subprocess.Popen | None = None
+
+
+def _ensure_omlx() -> bool:
+    """Start oMLX worker subprocess if not running."""
+    global _omlx_proc
+    if _omlx_proc is not None and _omlx_proc.poll() is None:
+        return True
+    if not OMLX_PYTHON.exists() or not OMLX_WORKER.exists():
+        print(f"[error] oMLX venv not found at {OMLX_PYTHON}", file=sys.stderr)
+        return False
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("embeddings", [])
-    except urllib.error.URLError as e:
-        print(f"[error] Ollama connection failed: {e}", file=sys.stderr)
-        print("[error] Is Ollama running? Try: ollama serve", file=sys.stderr)
+        _omlx_proc = subprocess.Popen(
+            [str(OMLX_PYTHON), str(OMLX_WORKER)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        line = _omlx_proc.stdout.readline()
+        if not line:
+            _omlx_proc.kill()
+            _omlx_proc = None
+            return False
+        status = json.loads(line.strip())
+        if status.get("status") == "ready":
+            print(f"[Phase 2] oMLX worker ready: {status.get('model')}")
+            return True
+        _omlx_proc.kill()
+        _omlx_proc = None
+        return False
+    except Exception as e:
+        print(f"[error] Failed to start oMLX worker: {e}", file=sys.stderr)
+        if _omlx_proc:
+            try:
+                _omlx_proc.kill()
+            except ProcessLookupError:
+                pass
+        _omlx_proc = None
+        return False
+
+
+def _shutdown_omlx():
+    """Gracefully shutdown the worker."""
+    global _omlx_proc
+    if _omlx_proc and _omlx_proc.poll() is None:
+        try:
+            _omlx_proc.stdin.close()
+            _omlx_proc.wait(timeout=5)
+        except Exception:
+            _omlx_proc.kill()
+    _omlx_proc = None
+
+
+def omlx_embed_batch(texts: list[str]) -> list[list[float]]:
+    """Embed a batch of texts via oMLX bridge."""
+    if not _ensure_omlx():
+        print("[error] oMLX worker not available", file=sys.stderr)
         sys.exit(1)
+    req = {"texts": texts, "task_type": "search_document"}
+    _omlx_proc.stdin.write(json.dumps(req) + "\n")
+    _omlx_proc.stdin.flush()
+    line = _omlx_proc.stdout.readline()
+    if not line:
+        print("[error] oMLX worker returned empty response", file=sys.stderr)
+        sys.exit(1)
+    resp = json.loads(line.strip())
+    if "error" in resp:
+        print(f"[error] oMLX embedding error: {resp['error']}", file=sys.stderr)
+        sys.exit(1)
+    return resp.get("embeddings", [])
 
 
 def embed_triples(rows: list[dict]) -> list[list[float]]:
@@ -141,13 +206,13 @@ def embed_triples(rows: list[dict]) -> list[list[float]]:
 
     if len(texts) <= EMBED_CHUNK_SIZE * 5:
         print(f"[Phase 2] Embedding {len(texts)} triples in one batch...")
-        embeddings = ollama_embed_batch(texts)
+        embeddings = omlx_embed_batch(texts)
     else:
         total_chunks = (len(texts) + EMBED_CHUNK_SIZE - 1) // EMBED_CHUNK_SIZE
         print(f"[Phase 2] Embedding {len(texts)} triples in {total_chunks} chunks...")
         for i in range(0, len(texts), EMBED_CHUNK_SIZE):
-            chunk = texts[i: i + EMBED_CHUNK_SIZE]
-            embeddings.extend(ollama_embed_batch(chunk))
+            chunk = texts[i : i + EMBED_CHUNK_SIZE]
+            embeddings.extend(omlx_embed_batch(chunk))
             print(f"  chunk {i // EMBED_CHUNK_SIZE + 1}/{total_chunks} done", end="\r")
         print()
 
@@ -168,7 +233,8 @@ def ensure_sklearn():
         print("[Phase 3] scikit-learn not found — installing via uv...")
         result = subprocess.run(
             ["/opt/homebrew/bin/uv", "pip", "install", "scikit-learn", "--python", sys.executable],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             print(f"[error] Failed to install scikit-learn:\n{result.stderr}", file=sys.stderr)
@@ -185,12 +251,14 @@ def run_gmm(embeddings: list[list[float]], n_triples: int) -> tuple[int, list[in
     X = np.array(embeddings)
     orig_dim = X.shape[1]
 
-    # PCA: reduce 768-dim to ~50 components (retain ~95% variance)
+    # PCA: reduce 1024-dim to ~50 components (retain ~95% variance)
     n_components_pca = min(50, X.shape[0] // 5, orig_dim)
     pca = PCA(n_components=n_components_pca, random_state=42)
     X_pca = pca.fit_transform(X)
     variance_retained = pca.explained_variance_ratio_.sum()
-    print(f"[Phase 3] PCA: {orig_dim}d → {n_components_pca}d (variance retained: {variance_retained:.1%})")
+    print(
+        f"[Phase 3] PCA: {orig_dim}d → {n_components_pca}d (variance retained: {variance_retained:.1%})"  # noqa: E501
+    )
 
     max_k = min(BIC_RANGE_MAX, n_triples // 10)
     k_range = range(BIC_RANGE_MIN, max(BIC_RANGE_MIN + 1, max_k + 1))
@@ -201,8 +269,9 @@ def run_gmm(embeddings: list[list[float]], n_triples: int) -> tuple[int, list[in
     bic_scores: dict[int, float] = {}
 
     for k in k_range:
-        gmm = GaussianMixture(n_components=k, covariance_type="diag",
-                              random_state=42, max_iter=300, n_init=3)
+        gmm = GaussianMixture(
+            n_components=k, covariance_type="diag", random_state=42, max_iter=300, n_init=3
+        )
         gmm.fit(X_pca)
         bic = gmm.bic(X_pca)
         bic_scores[k] = round(bic, 2)
@@ -213,8 +282,9 @@ def run_gmm(embeddings: list[list[float]], n_triples: int) -> tuple[int, list[in
 
     print(f"[Phase 3] Optimal k={best_k} (BIC={best_bic:.2f})")
 
-    gmm_final = GaussianMixture(n_components=best_k, covariance_type="diag",
-                                random_state=42, max_iter=300, n_init=3)
+    gmm_final = GaussianMixture(
+        n_components=best_k, covariance_type="diag", random_state=42, max_iter=300, n_init=3
+    )
     gmm_final.fit(X_pca)
     labels = gmm_final.predict(X_pca).tolist()
     return best_k, labels
@@ -238,12 +308,15 @@ def summarize_cluster(cluster_triples: list[dict], cluster_id: int) -> dict:
     name_parts = top_subjects[:2] if top_subjects else [f"Cluster {cluster_id}"]
     name = " + ".join(name_parts)
 
-    contexts = [f"{t['s']} {t['p']} {t['o']}"
-                for t in cluster_triples if t["p"] in CONTEXT_PREDICATES]
-    judgments = [f"{t['s']} {t['p']} {t['o']}"
-                 for t in cluster_triples if t["p"] in JUDGMENT_PREDICATES]
-    results = [f"{t['s']} {t['p']} {t['o']}"
-               for t in cluster_triples if t["p"] in RESULT_PREDICATES]
+    contexts = [
+        f"{t['s']} {t['p']} {t['o']}" for t in cluster_triples if t["p"] in CONTEXT_PREDICATES
+    ]
+    judgments = [
+        f"{t['s']} {t['p']} {t['o']}" for t in cluster_triples if t["p"] in JUDGMENT_PREDICATES
+    ]
+    results = [
+        f"{t['s']} {t['p']} {t['o']}" for t in cluster_triples if t["p"] in RESULT_PREDICATES
+    ]
 
     pattern_parts = []
     if contexts:
@@ -252,7 +325,9 @@ def summarize_cluster(cluster_triples: list[dict], cluster_id: int) -> dict:
         pattern_parts.append("判斷: " + "; ".join(judgments[:3]))
     if results:
         pattern_parts.append("結果: " + "; ".join(results[:3]))
-    summary = " → ".join(pattern_parts) if pattern_parts else f"Triples about: {', '.join(top_subjects)}"
+    summary = (
+        " → ".join(pattern_parts) if pattern_parts else f"Triples about: {', '.join(top_subjects)}"
+    )
 
     return {
         "cluster_id": f"C{cluster_id}",
@@ -262,8 +337,13 @@ def summarize_cluster(cluster_triples: list[dict], cluster_id: int) -> dict:
         "top_predicates": top_predicates,
         "top_objects": top_objects,
         "triples": [
-            {"s": t["s"], "p": t["p"], "o": t["o"],
-             "id": t.get("id", ""), "session_id": t.get("session_id", "")}
+            {
+                "s": t["s"],
+                "p": t["p"],
+                "o": t["o"],
+                "id": t.get("id", ""),
+                "session_id": t.get("session_id", ""),
+            }
             for t in cluster_triples
         ],
         "summary": summary,
@@ -325,7 +405,9 @@ def print_report(rows: list[dict], n_clusters: int, clusters: list[dict]) -> Non
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Memvault cluster pipeline — GMM clustering via Core API")
+    parser = argparse.ArgumentParser(
+        description="Memvault cluster pipeline — GMM clustering via Core API"
+    )
     parser.add_argument("--space-id", default=os.environ.get("MEMVAULT_SPACE_ID", "default"))
     parser.add_argument("--dry-run", action="store_true", help="Print results without saving")
     args = parser.parse_args()
@@ -357,6 +439,7 @@ def main() -> None:
         print("\n[warn] Failed to save clusters to Core API", file=sys.stderr)
         sys.exit(1)
 
+    _shutdown_omlx()
     print(f"\nDone. {len(clusters)} clusters saved.")
 
 

@@ -40,15 +40,15 @@ class AnvilError(Exception):
 
 
 class AnvilClient:
-    """HTTP client for Anvil station (port 4102).
+    """HTTP client for Anvil station (port 4103).
 
     Args:
-        base_url: API URL. Defaults to ANVIL_URL env or http://127.0.0.1:4102.
+        base_url: API URL. Defaults to ANVIL_URL env or http://127.0.0.1:4103.
         timeout: Default request timeout in seconds.
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 15):
-        self.base_url = (base_url or os.environ.get("ANVIL_URL", "http://127.0.0.1:4102")).rstrip(
+        self.base_url = (base_url or os.environ.get("ANVIL_URL", "http://127.0.0.1:4103")).rstrip(
             "/"
         )
         self._timeout = timeout
@@ -681,7 +681,7 @@ Private
         for filepath in files_to_scan:
             try:
                 content = filepath.read_text(encoding="utf-8", errors="replace")
-            except Exception:
+            except Exception:  # noqa: S112
                 continue
 
             lines = content.split("\n")
@@ -811,7 +811,7 @@ Private
                     # Nested key under current_key
                     if current_key and isinstance(result.get(current_key), list):
                         # This is a sub-key under a list parent (like io.input)
-                        nested_key = key
+                        nested_key = key  # noqa: F841
                         if not value:
                             nested_list = []
                             # Replace the list with a dict structure
@@ -826,7 +826,6 @@ Private
                             if isinstance(result[current_key], dict):
                                 result[current_key][key] = value.strip('"').strip("'")
                     elif current_key and isinstance(result.get(current_key), dict):
-                        nested_key = key
                         if not value:
                             nested_list = []
                             result[current_key][key] = nested_list

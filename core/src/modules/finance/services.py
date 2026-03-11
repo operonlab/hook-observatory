@@ -104,8 +104,8 @@ async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decima
             projected = wallet.current_balance + delta
             if projected < 0:
                 raise BadRequestError(
-                    f"現金錢包「{wallet.name}」餘額不足："
-                    f"目前 ${wallet.current_balance:,.0f}，"
+                    f"現金錢包「{wallet.name}」餘額不足："  # noqa: RUF001
+                    f"目前 ${wallet.current_balance:,.0f}，"  # noqa: RUF001
                     f"需要 ${abs(delta):,.0f}",
                     code="finance.cash_insufficient",
                 )
@@ -130,30 +130,42 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         return d
 
     def after_create(self, instance: Wallet) -> None:
-        event_bus.publish(
-            Event(
-                type=FinanceEvents.WALLET_CREATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-                user_id=instance.created_by,
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=FinanceEvents.WALLET_CREATED,
+                    data={"id": instance.id, "space_id": instance.space_id},
+                    source="finance",
+                    user_id=instance.created_by,
+                )
             )
         )
 
     def after_update(self, instance: Wallet, changes: dict) -> None:
-        event_bus.publish(
-            Event(
-                type=FinanceEvents.WALLET_UPDATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=FinanceEvents.WALLET_UPDATED,
+                    data={"id": instance.id, "space_id": instance.space_id},
+                    source="finance",
+                )
             )
         )
 
     def after_delete(self, instance: Wallet) -> None:
-        event_bus.publish(
-            Event(
-                type=FinanceEvents.WALLET_DELETED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=FinanceEvents.WALLET_DELETED,
+                    data={"id": instance.id, "space_id": instance.space_id},
+                    source="finance",
+                )
             )
         )
 
@@ -362,30 +374,42 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
     audit_entity_type = "categories"
 
     def after_create(self, instance: Category) -> None:
-        event_bus.publish(
-            Event(
-                type=FinanceEvents.CATEGORY_CREATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-                user_id=instance.created_by,
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=FinanceEvents.CATEGORY_CREATED,
+                    data={"id": instance.id, "space_id": instance.space_id},
+                    source="finance",
+                    user_id=instance.created_by,
+                )
             )
         )
 
     def after_update(self, instance: Category, changes: dict) -> None:
-        event_bus.publish(
-            Event(
-                type=FinanceEvents.CATEGORY_UPDATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=FinanceEvents.CATEGORY_UPDATED,
+                    data={"id": instance.id, "space_id": instance.space_id},
+                    source="finance",
+                )
             )
         )
 
     def after_delete(self, instance: Category) -> None:
-        event_bus.publish(
-            Event(
-                type=FinanceEvents.CATEGORY_DELETED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=FinanceEvents.CATEGORY_DELETED,
+                    data={"id": instance.id, "space_id": instance.space_id},
+                    source="finance",
+                )
             )
         )
 
@@ -529,7 +553,9 @@ class TransactionService(
         await db.flush()
 
         # Collect tags for the payload (loaded synchronously after create+flush)
-        _tags = [t.tag for t in instance.tags] if "tags" in instance.__dict__ and instance.tags else []
+        _tags = (
+            [t.tag for t in instance.tags] if "tags" in instance.__dict__ and instance.tags else []
+        )
         await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_CREATED,
@@ -622,7 +648,9 @@ class TransactionService(
                 changes=changes,
             )
 
-        _tags_upd = [t.tag for t in instance.tags] if "tags" in instance.__dict__ and instance.tags else []
+        _tags_upd = (
+            [t.tag for t in instance.tags] if "tags" in instance.__dict__ and instance.tags else []
+        )
         await event_bus.publish(
             Event(
                 type=FinanceEvents.TRANSACTION_UPDATED,

@@ -90,9 +90,14 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4000/health",
     ),
     LightCheck(
-        name="ollama",
+        name="omlx",
         group="infra",
-        url="http://127.0.0.1:11434/",
+        command=(
+            "test -f ~/.venvs/omlx/bin/python3 && test -f ~/.venvs/omlx/embed_worker.py"
+            " && ~/.venvs/omlx/bin/python3 -c \"import mlx_embeddings; print('ok')\""
+        ),
+        expect_contains="ok",
+        timeout=15.0,
     ),
     LightCheck(
         name="bark",
@@ -122,6 +127,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         name="frontend",
         group="internal",
         url="http://127.0.0.1:8080/",
+        expect_contains='<div id="root">',
+    ),
+    LightCheck(
+        name="frontend-finance",
+        group="internal",
+        url="http://127.0.0.1:8080/finance/",
         expect_contains='<div id="root">',
     ),
     LightCheck(
@@ -215,6 +226,29 @@ _PW_BODY_CHECK = (
     'async (page) => { await page.waitForSelector("body > *", {timeout:10000}); return "ok"; }'
 )
 
+
+def _pw_module_check(css_class: str) -> str:
+    """Generate deep check that verifies: render + no 404 + module content exists.
+
+    Catches two failure modes that _PW_ROOT_CHECK misses:
+    1. Missing route → NotFound page renders (h1 with "404")
+    2. JS runtime error → module layout never mounts (no .{css_class} element)
+    """
+    return (
+        "async (page) => {"
+        '  await page.waitForSelector("#root > *", {timeout:10000});'
+        "  const is404 = await page.evaluate(() => {"
+        '    const h = document.querySelector("h1");'
+        '    return h && h.textContent.trim() === "404";'
+        "  });"
+        '  if (is404) return "NOT_FOUND: route renders 404 page";'
+        f'  const m = await page.$(".{css_class}");'
+        '  if (!m) return "MODULE_MISSING: .' + css_class + ' not found";'
+        '  return "ok";'
+        "}"
+    )
+
+
 DEEP_CHECKS: list[DeepCheck] = [
     # ── internal (React #root) ──
     DeepCheck(
@@ -224,28 +258,34 @@ DEEP_CHECKS: list[DeepCheck] = [
         playwright_code=_PW_ROOT_CHECK,
     ),
     DeepCheck(
+        name="frontend-finance-render",
+        group="internal",
+        url="http://127.0.0.1:8080/finance/",
+        playwright_code=_pw_module_check("finance"),
+    ),
+    DeepCheck(
         name="frontend-memvault-render",
         group="internal",
         url="http://127.0.0.1:8080/memvault/",
-        playwright_code=_PW_ROOT_CHECK,
+        playwright_code=_pw_module_check("memvault"),
     ),
     DeepCheck(
         name="frontend-intelflow-render",
         group="internal",
         url="http://127.0.0.1:8080/intelflow/",
-        playwright_code=_PW_ROOT_CHECK,
+        playwright_code=_pw_module_check("intelflow"),
     ),
     DeepCheck(
         name="frontend-briefing-render",
         group="internal",
         url="http://127.0.0.1:8080/briefing/",
-        playwright_code=_PW_ROOT_CHECK,
+        playwright_code=_pw_module_check("briefing"),
     ),
     DeepCheck(
         name="frontend-dailyos-render",
         group="internal",
         url="http://127.0.0.1:8080/dailyos/",
-        playwright_code=_PW_ROOT_CHECK,
+        playwright_code=_pw_module_check("dailyos"),
     ),
     # ── external (station HTML — body > *) ──
     DeepCheck(
@@ -421,6 +461,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
     # which is ~85 chars base, so session ID must be ≤18 chars.
     _short_names = {
         "frontend-render": "fe",
+        "frontend-finance-render": "fin",
         "frontend-memvault-render": "mv",
         "frontend-intelflow-render": "if",
         "frontend-briefing-render": "bf",
@@ -502,7 +543,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
                 stderr=asyncio.subprocess.PIPE,
             )
             await asyncio.wait_for(close_proc.communicate(), timeout=5)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
 

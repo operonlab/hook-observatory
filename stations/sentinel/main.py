@@ -141,7 +141,7 @@ async def _repair_monitor_loop() -> None:
                                         },
                                     )
                                     await session.commit()
-                            except Exception:
+                            except Exception:  # noqa: S110
                                 pass
 
                         # Push notification for repair result
@@ -162,7 +162,48 @@ async def _repair_monitor_loop() -> None:
 
                 # Dispatch repair if needed
                 elif tracker.state == State.INTERVENING:
-                    detail = f"light={tracker.light_status}, deep={tracker.deep_status}"
+                    # Build detail with deep check info for richer diagnosis
+                    detail_parts = []
+                    if tracker.light_status and tracker.light_status != "healthy":
+                        detail_parts.append(f"light={tracker.light_status}")
+                    if tracker.deep_status and tracker.deep_status != "healthy":
+                        detail_parts.append(f"deep={tracker.deep_status}")
+
+                    # Include deep check detail message if available
+                    from checker import DEEP_CHECKS
+
+                    deep_detail = ""
+                    check_url = ""
+                    for dc in DEEP_CHECKS:
+                        svc_name = dc.name.replace("-render", "")
+                        if svc_name == service or dc.name == service:
+                            check_url = dc.url
+                            break
+
+                    # Get the last deep check detail from persisted results
+                    try:
+                        async with async_session() as session:
+                            row = await session.execute(
+                                text(
+                                    "SELECT detail FROM sentinel.health_checks"
+                                    " WHERE service = :svc AND check_type = 'deep'"
+                                    " AND detail IS NOT NULL AND detail != ''"
+                                    " ORDER BY created_at DESC LIMIT 1"
+                                ),
+                                {
+                                    "svc": service.replace("-render", "")
+                                    if "-render" not in service
+                                    else service
+                                },
+                            )
+                            r = row.first()
+                            if r:
+                                deep_detail = r[0]
+                                detail_parts.append(f"detail={deep_detail}")
+                    except Exception:  # noqa: S110
+                        pass
+
+                    detail = ", ".join(detail_parts) if detail_parts else "unknown failure"
 
                     # Create incident
                     inc_id = uuid.uuid4().hex[:16]
@@ -192,15 +233,14 @@ async def _repair_monitor_loop() -> None:
                         tag=f"sentinel-{service}",
                     )
 
-                    # Layer 1: Try simple restart first (fast, no AI)
-                    from remediation import SimpleRestarter
+                    # ── Layer 1: Simple restart (fast, no code changes) ──
+                    from remediation import FrontendRebuilder, SimpleRestarter
 
                     _simple = SimpleRestarter()
                     if _simple.can_restart(service):
-                        logger.info("Attempting simple restart for %s", service)
+                        logger.info("Layer 1: Attempting simple restart for %s", service)
                         restarted = await _simple.try_restart(service)
                         if restarted:
-                            # Wait for health check to confirm
                             await asyncio.sleep(10)
                             from checker import LIGHT_CHECKS, run_light_check
 
@@ -210,18 +250,57 @@ async def _repair_monitor_loop() -> None:
                                 if result.status == "healthy":
                                     intervention_engine.set_repair_done(service, True)
                                     await publish_push(
-                                        title=f"{service} 已修復（簡單重啟）",
-                                        body="直接重啟成功，無需 AI 介入",
+                                        title=f"{service} 已修復（簡單重啟）",  # noqa: RUF001
+                                        body="Layer 1: 直接重啟成功",
+                                        severity="info",
+                                        tag=f"sentinel-{service}",
+                                    )
+                                    continue
+                        logger.warning("Layer 1 insufficient for %s", service)
+
+                    # ── Layer 2: Frontend rebuild (for stale build issues) ──
+                    _frontend = FrontendRebuilder()
+                    if _frontend.can_rebuild(service):
+                        logger.info("Layer 2: Attempting frontend rebuild for %s", service)
+                        rebuilt = await _frontend.try_rebuild()
+                        if rebuilt:
+                            await asyncio.sleep(5)
+                            # Re-run the deep check to see if rebuild fixed it
+                            from checker import run_deep_check
+
+                            dc = next(
+                                (
+                                    c
+                                    for c in DEEP_CHECKS
+                                    if c.name == service or c.name == f"{service}-render"
+                                ),
+                                None,
+                            )
+                            if dc:
+                                result = await run_deep_check(dc)
+                                if result.status == "healthy":
+                                    intervention_engine.set_repair_done(service, True)
+                                    await publish_push(
+                                        title=f"{service} 已修復（前端重建）",  # noqa: RUF001
+                                        body="Layer 2: pnpm build + nginx reload 成功",
                                         severity="info",
                                         tag=f"sentinel-{service}",
                                     )
                                     continue
                         logger.warning(
-                            "Simple restart insufficient for %s, escalating to AI repair", service
+                            "Layer 2 insufficient for %s, escalating to AI repair", service
                         )
 
-                    # Layer 2: AI repair via tmux-relay (fallback)
-                    pane = await remediator.dispatch(service, detail)
+                    # ── Layer 3: AI repair via tmux-relay (code-level fix) ──
+                    from prompt_templates import classify_failure
+
+                    failure_category = classify_failure(deep_detail or detail)
+                    logger.info(
+                        "Layer 3: Dispatching AI repair for %s (category=%s)",
+                        service,
+                        failure_category,
+                    )
+                    pane = await remediator.dispatch(service, detail, url=check_url)
                     if pane:
                         intervention_engine.set_repairing(service, pane)
 
@@ -249,10 +328,10 @@ async def _repair_monitor_loop() -> None:
                                         "service": service,
                                         "severity": "major",
                                         "status": "repairing",
-                                        "title": f"Auto-repair dispatched: {service}",
+                                        "title": f"AI repair dispatched: {service} ({failure_category})",
                                     },
                                 )
-                        except Exception:
+                        except Exception:  # noqa: S110
                             pass
                     else:
                         # Can't get pane, escalate
