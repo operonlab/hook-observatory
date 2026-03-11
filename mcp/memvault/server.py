@@ -56,6 +56,14 @@ async def list_tools() -> list[Tool]:
                         "default": "default",
                         "description": "cascade = 四層 KG Cascade Recall",
                     },
+                    "since": {
+                        "type": "string",
+                        "description": "Filter: created_at >= date (ISO, e.g. 2026-03-01)",
+                    },
+                    "before": {
+                        "type": "string",
+                        "description": "Filter: created_at <= date (ISO, e.g. 2026-03-11)",
+                    },
                 },
                 "required": ["query"],
             },
@@ -209,7 +217,12 @@ async def handle_recall(args: dict) -> list[TextContent]:
         return await handle_kg_cascade_recall({"query": query, "top_k": max_results})
 
     raw = await to_thread(
-        client.recall, query, top_k=max_results, min_score=args.get("min_score", 0.3)
+        client.recall,
+        query,
+        top_k=max_results,
+        min_score=args.get("min_score", 0.3),
+        date_from=args.get("since"),
+        date_to=args.get("before"),
     )
     results = raw.get("results", []) if isinstance(raw, dict) else raw
 

@@ -76,6 +76,8 @@ class MemvaultClient(BaseClient):
         min_score: float = 0.3,
         include_metadata: bool = False,
         scope: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> dict:
         """Semantic search over memory blocks. GET /search"""
         params: dict = {"q": query, "top_k": top_k, "min_score": min_score}
@@ -83,6 +85,10 @@ class MemvaultClient(BaseClient):
             params["include_metadata"] = "true"
         if scope:
             params["scope"] = scope
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
         return self._get("/search", params)
 
     # ======================== Tags ========================
@@ -279,9 +285,7 @@ class MemvaultClient(BaseClient):
             body["confidence"] = confidence
         return self._post("/kg/attitudes", body)
 
-    def attitude_evolve(
-        self, fact: str, category: str, source_session: str | None = None
-    ) -> dict:
+    def attitude_evolve(self, fact: str, category: str, source_session: str | None = None) -> dict:
         """Evolve an attitude fact (ADD/UPDATE/NOOP). POST /kg/attitudes/evolve"""
         body: dict = {"fact": fact, "category": category}
         if source_session:
