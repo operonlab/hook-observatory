@@ -1274,6 +1274,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Get all blocks + triples + entities for a session",
     )
     p.add_argument("source_session", help="Source session identifier")
+    p.add_argument("--space-id", default="default", help="Space ID (default: default)")
 
     # Intelligence ingest (flywheel bridge)
     p = sub.add_parser(
@@ -1282,6 +1283,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ingest intelligence digest into memvault",
     )
     p.add_argument("content", help="Digest content text")
+    p.add_argument("--space-id", default="default", help="Space ID (default: default)")
     p.add_argument(
         "--digest-type",
         default="weekly",
