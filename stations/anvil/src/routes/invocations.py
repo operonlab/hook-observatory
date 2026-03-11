@@ -73,6 +73,7 @@ async def record_invocation(
 @router.get("/invocations")
 async def list_invocations(
     skill_name: str | None = Query(None),
+    session_id: str | None = Query(None),
     success: bool | None = Query(None),
     since: datetime | None = Query(None, description="Start of date range (ISO 8601)"),
     until: datetime | None = Query(None, description="End of date range (ISO 8601)"),
@@ -87,6 +88,9 @@ async def list_invocations(
     if skill_name:
         query = query.where(Invocation.skill_name == skill_name)
         count_query = count_query.where(Invocation.skill_name == skill_name)
+    if session_id:
+        query = query.where(Invocation.session_id == session_id)
+        count_query = count_query.where(Invocation.session_id == session_id)
     if success is not None:
         query = query.where(Invocation.success == success)
         count_query = count_query.where(Invocation.success == success)
