@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AddItemInput from '../components/AddItemInput'
 import CompositeGuide from '../components/CompositeGuide'
@@ -24,11 +24,16 @@ import TimelineLayout from '../components/layouts/TimelineLayout'
 import MethodInfoPanel from '../components/MethodInfoPanel'
 import MethodSwitcher from '../components/MethodSwitcher'
 import ProgressBar from '../components/ProgressBar'
+import type { ViewMode } from '../components/ViewModeSwitcher'
+import ViewModeSwitcher from '../components/ViewModeSwitcher'
 import { useActiveMethod } from '../hooks/useActiveMethod'
 import { useDatePlan } from '../hooks/useTodayPlan'
 import { useMethodStore } from '../stores/methodStore'
 import type { PlanItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
+
+const WeekViewPage = lazy(() => import('./WeekViewPage'))
+const CalendarPage = lazy(() => import('./CalendarPage'))
 
 const STATUS_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   pencil: Pencil,
@@ -53,6 +58,20 @@ export default function PlannerPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const dateParam = searchParams.get('date') || undefined
+  const viewParam = (searchParams.get('view') || 'day') as ViewMode
+
+  const handleViewChange = useCallback(
+    (mode: ViewMode) => {
+      const next = new URLSearchParams(searchParams)
+      if (mode === 'day') {
+        next.delete('view')
+      } else {
+        next.set('view', mode)
+      }
+      setSearchParams(next, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   const handleDateChange = useCallback(
     (newDate: string) => {
@@ -178,7 +197,10 @@ export default function PlannerPage() {
   if (selections.length === 0 || !method) {
     return (
       <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5">
-        <MethodSwitcher />
+        <div className="flex items-center justify-between">
+          <MethodSwitcher />
+          <ViewModeSwitcher value={viewParam} onChange={handleViewChange} />
+        </div>
         <div
           className="rounded-lg border p-8 text-center"
           style={{ borderColor: 'var(--do-border)', backgroundColor: 'var(--do-bg-elevated)' }}
@@ -208,6 +230,30 @@ export default function PlannerPage() {
     )
   }
 
+  // ─── Week / Month view modes ───
+  if (viewParam === 'week' || viewParam === 'month') {
+    return (
+      <div className="p-4 md:p-6 lg:p-8">
+        <div className="flex items-center justify-between mb-4">
+          <MethodSwitcher />
+          <ViewModeSwitcher value={viewParam} onChange={handleViewChange} />
+        </div>
+        <Suspense
+          fallback={
+            <div className="flex justify-center py-16">
+              <div
+                className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent"
+                style={{ borderColor: 'var(--do-accent)', borderTopColor: 'transparent' }}
+              />
+            </div>
+          }
+        >
+          {viewParam === 'week' ? <WeekViewPage /> : <CalendarPage />}
+        </Suspense>
+      </div>
+    )
+  }
+
   const doneCount = visibleItems.filter((i) => i.status === 'done').length
   const totalCount = visibleItems.length
   const statusConfig = plan ? PLAN_STATUS_CONFIG[plan.status] : null
@@ -217,8 +263,11 @@ export default function PlannerPage() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8">
-      {/* Method quick-switch strip — full width */}
-      <MethodSwitcher />
+      {/* Method quick-switch strip + View mode switcher */}
+      <div className="flex items-center justify-between">
+        <MethodSwitcher />
+        <ViewModeSwitcher value={viewParam} onChange={handleViewChange} />
+      </div>
 
       {/* Date navigator — full width */}
       <div className="mt-4 px-1">

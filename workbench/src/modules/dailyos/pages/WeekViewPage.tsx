@@ -103,7 +103,9 @@ function DayColumn({ date, isToday, plan, dayRecurring, onNavigate }: DayColumnP
   const hiddenGroupIds = useMethodStore((s) => s.hiddenGroupIds)
   const filterItem = (i: PlanItem) => !i.group_id || !hiddenGroupIds.has(i.group_id)
   const visiblePlanItems = plan ? plan.items.filter(filterItem) : []
-  const visibleRecurring = dayRecurring.filter((r) => !r.group_id || !hiddenGroupIds.has(r.group_id))
+  const visibleRecurring = dayRecurring.filter(
+    (r) => !r.group_id || !hiddenGroupIds.has(r.group_id),
+  )
   const statusCfg = plan ? PLAN_STATUS_CONFIG[plan.status] : null
   const doneCount = visiblePlanItems.filter((i) => i.status === 'done').length
   const totalItems = visiblePlanItems.length

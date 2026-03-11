@@ -90,9 +90,10 @@
   background: var(--do-bg-elevated);
   border: 1px solid var(--do-border);
   border-radius: var(--do-radius-md);
-  transition: border-color var(--do-transition-fast),
-              box-shadow var(--do-transition-fast),
-              background-color var(--do-transition-fast);
+  transition:
+    border-color var(--do-transition-fast),
+    box-shadow var(--do-transition-fast),
+    background-color var(--do-transition-fast);
 }
 .do-card:hover {
   border-color: color-mix(in srgb, var(--do-border) 100%, white 15%);
@@ -107,14 +108,16 @@
   background: var(--do-bg-surface);
   border: 1px solid var(--do-border);
   cursor: pointer;
-  transition: background var(--do-transition-fast), border-color var(--do-transition-fast);
+  transition:
+    background var(--do-transition-fast),
+    border-color var(--do-transition-fast);
 }
 .do-toggle.active {
   background: var(--do-accent);
   border-color: var(--do-accent);
 }
 .do-toggle::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -131,8 +134,14 @@
 
 /* Fade-in animation */
 @keyframes do-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .do-fade-in {
   animation: do-fade-in 200ms ease forwards;
@@ -140,8 +149,14 @@
 
 /* Slide-down animation for expandable sections */
 @keyframes do-slide-down {
-  from { opacity: 0; max-height: 0; }
-  to { opacity: 1; max-height: 500px; }
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
 }
 .do-slide-down {
   animation: do-slide-down 250ms ease forwards;
@@ -153,14 +168,30 @@
   animation: do-fade-in 200ms ease forwards;
   opacity: 0;
 }
-.do-stagger > *:nth-child(1) { animation-delay: 0ms; }
-.do-stagger > *:nth-child(2) { animation-delay: 50ms; }
-.do-stagger > *:nth-child(3) { animation-delay: 100ms; }
-.do-stagger > *:nth-child(4) { animation-delay: 150ms; }
-.do-stagger > *:nth-child(5) { animation-delay: 200ms; }
-.do-stagger > *:nth-child(6) { animation-delay: 250ms; }
-.do-stagger > *:nth-child(7) { animation-delay: 300ms; }
-.do-stagger > *:nth-child(8) { animation-delay: 350ms; }
+.do-stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.do-stagger > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.do-stagger > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.do-stagger > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+.do-stagger > *:nth-child(5) {
+  animation-delay: 200ms;
+}
+.do-stagger > *:nth-child(6) {
+  animation-delay: 250ms;
+}
+.do-stagger > *:nth-child(7) {
+  animation-delay: 300ms;
+}
+.do-stagger > *:nth-child(8) {
+  animation-delay: 350ms;
+}
 
 /* Segment button group */
 .do-segment-group {
@@ -178,7 +209,9 @@
   border: none;
   border-right: 1px solid var(--do-border);
   cursor: pointer;
-  transition: background var(--do-transition-fast), color var(--do-transition-fast);
+  transition:
+    background var(--do-transition-fast),
+    color var(--do-transition-fast);
 }
 .do-segment-btn:last-child {
   border-right: none;
@@ -223,15 +256,31 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
-.do-priority-dot.urgent { background: var(--do-urgent); box-shadow: 0 0 4px var(--do-urgent); }
-.do-priority-dot.high { background: var(--do-high); box-shadow: 0 0 4px var(--do-high); }
-.do-priority-dot.medium { background: var(--do-medium); box-shadow: 0 0 3px var(--do-medium); }
-.do-priority-dot.low { background: var(--do-low); }
+.do-priority-dot.urgent {
+  background: var(--do-urgent);
+  box-shadow: 0 0 4px var(--do-urgent);
+}
+.do-priority-dot.high {
+  background: var(--do-high);
+  box-shadow: 0 0 4px var(--do-high);
+}
+.do-priority-dot.medium {
+  background: var(--do-medium);
+  box-shadow: 0 0 3px var(--do-medium);
+}
+.do-priority-dot.low {
+  background: var(--do-low);
+}
 
 /* Pulse animation for 100% completion */
 @keyframes do-pulse-once {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -251,8 +300,12 @@
 
 /* Smooth strikethrough animation for completed items */
 @keyframes strikethrough {
-  from { text-decoration-color: transparent; }
-  to { text-decoration-color: var(--do-text-muted); }
+  from {
+    text-decoration-color: transparent;
+  }
+  to {
+    text-decoration-color: var(--do-text-muted);
+  }
 }
 
 .dailyos .strikethrough-animate {
@@ -263,9 +316,15 @@
 
 /* Pulse animation for 100% progress */
 @keyframes progress-complete-pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.7; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .dailyos .progress-complete {
