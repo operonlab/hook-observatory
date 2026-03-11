@@ -1214,13 +1214,15 @@ class CascadeRecallService:
 
         # --- Blocks: semantic or text search ---
         if query_embedding:
-            block_results = await memory_block_service.semantic_search(
+            search_results, _meta = await memory_block_service.semantic_search(
                 db, space_id, query_embedding, top_k=top_k
             )
-            blocks = [sr.block for sr in block_results]
+            blocks = [sr.block for sr in search_results]
         else:
-            block_results = await memory_block_service.text_search(db, space_id, query, top_k=top_k)
-            blocks = [sr.block for sr in block_results]
+            search_results = await memory_block_service.text_search(
+                db, space_id, query, top_k=top_k
+            )
+            blocks = [sr.block for sr in search_results]
 
         if blocks:
             result.blocks = blocks
