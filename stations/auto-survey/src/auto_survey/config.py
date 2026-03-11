@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     llm_backend: str = "gemini"  # gemini | claude | codex
     llm_model: str = ""  # empty = CLI default
 
-    min_delay: int = 30
-    max_delay: int = 180
+    min_delay: int = 5
+    max_delay: int = 15
     headless: bool = True
 
     playwright_cli: str = "npx @playwright/cli"

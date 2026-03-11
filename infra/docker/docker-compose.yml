@@ -6,7 +6,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_USER: joneshong
       POSTGRES_PASSWORD: REDACTED
@@ -24,7 +24,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    restart: always
     ports:
       - "6379:6379"
     volumes:
@@ -37,7 +37,7 @@ services:
 
   lgtm:
     image: grafana/otel-lgtm:latest
-    restart: unless-stopped
+    restart: always
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
     ports:
@@ -54,7 +54,7 @@ services:
 
   rustfs:
     image: rustfs/rustfs:latest
-    restart: unless-stopped
+    restart: always
     ports:
       - "9000:9000"   # S3 API
       - "9001:9001"   # Web Console
@@ -72,7 +72,7 @@ services:
 
   filebrowser:
     image: filebrowser/filebrowser:v2
-    restart: unless-stopped
+    restart: always
     ports:
       - "8850:80"
     volumes:
@@ -91,7 +91,7 @@ services:
 
   bark:
     image: finab/bark-server:latest
-    restart: unless-stopped
+    restart: always
     ports:
       - "8090:8080"
     volumes:
@@ -106,7 +106,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    restart: unless-stopped
+    restart: always
     ports:
       - "6333:6333"   # REST API
       - "6334:6334"   # gRPC
@@ -135,7 +135,7 @@ services:
       NTFY_BASE_URL: https://ntfy.joneshong.com
       NTFY_UPSTREAM_BASE_URL: https://ntfy.sh
       NTFY_LOG_LEVEL: DEBUG
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/v1/health"]
       interval: 30s

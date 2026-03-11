@@ -116,7 +116,7 @@ translated_at: 2026-02-23
 | **Bounded Context** (DDD) | 每個 Module = 一個擁有自己「語言」和數據模型的界限上下文 |
 | **Event-Driven** | 模組間透過事件通訊。`finance.transaction.created` → taskflow 可以訂閱 |
 | **Idempotency** (冪等性) | 事件處理程序必須是冪等的 —— 兩次接收相同的事件不會產生重複的影響 |
-| **Progressive Disclosure** | MCP 工具按需加載 (ToolSearch)，而不是塞爆系統提示詞 (system prompt) |
+| **Progressive Disclosure** | MCP 工具按需加載 (via mcpproxy)，而不是塞爆系統提示詞 (system prompt) |
 | **12-Factor App** | 配置存放在環境變數 (`.env`)、無狀態服務、埠綁定、開發/生產環境一致性 |
 | **CoC** (約定優於配置) | 模組遵循統一的文件結構：`models.py`, `schemas.py`, `service.py`, `routes.py` |
 | **PoLA** (最小驚訝原則) | API 行為遵循 REST 約定；事件命名 `{module}.{entity}.{action}` 直觀易讀 |
