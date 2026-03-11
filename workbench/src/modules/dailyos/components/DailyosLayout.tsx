@@ -4,6 +4,7 @@ import '../styles/dailyos.css'
 
 const NAV_ITEMS = [
   { id: 'planner', label: '今日規劃', icon: Calendar, path: '/dailyos' },
+  { id: 'calendar', label: '日曆總覽', icon: CalendarDays, path: '/dailyos/calendar' },
   { id: 'methods', label: '方法論', icon: BookOpen, path: '/dailyos/methods' },
   { id: 'history', label: '歷史紀錄', icon: History, path: '/dailyos/history' },
   { id: 'recurring', label: '固定行程', icon: Repeat, path: '/dailyos/recurring' },
