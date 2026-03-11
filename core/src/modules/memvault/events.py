@@ -197,10 +197,14 @@ async def on_intelligence_digest_completed(event: Event) -> None:
             block_data = MemoryBlockCreate(
                 content=digest_content,
                 block_type="knowledge",
-                tags=["intelligence", "digest", digest_type, *(event.data.get("tags", []))],
+                tags=list(
+                    dict.fromkeys(
+                        ["intelligence", "digest", digest_type, *event.data.get("tags", [])]
+                    )
+                ),
                 source_session=f"intelligence:{digest_type}:{period}",
             )
-            await memory_block_service.create(db, block_data, space_id=space_id)
+            await memory_block_service.create(db, space_id, block_data)
             await db.commit()
             logger.info(
                 "flywheel.intelligence_to_memvault",
