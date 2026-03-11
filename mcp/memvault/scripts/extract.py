@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
-"""Memvault — extraction pipeline with Core API backend.
-Same dual-LLM extraction as V1, but writes to PostgreSQL via memvault Core API
-instead of markdown files.
+"""Memvault extraction pipeline v2 — JSON multi-block extraction.
 
-Pipeline: transcript → LLM extraction → refinement → Core API POST
+Pipeline: transcript → enriched input (thinking+tools+errors) → LLM extraction (JSON)
+          → refinement → multi-block POST to Core API
 Fallback: if Core API is unreachable, falls back to JSONL file writing.
+
+V2 changes (2026-03-11):
+- Input: includes thinking blocks, tool_use, tool_result errors (not just text)
+- Truncation: 100K for Gemini (was 30K), 30K for others
+- Output: JSON with multi-block extraction (was markdown single-block)
+- Fields: search_keywords for BM25 boost, bilingual tags for jieba
+- Parsing: reliable JSON parsing (was brittle markdown regex)
 
 stdin: JSON {"session_id", "transcript_path", "cwd"}
 """
 
 import json
 import os
-import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -34,12 +40,12 @@ MEMVAULT_SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 def log(msg: str) -> None:
     """Write timestamped log message to stderr and log file."""
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[memvault] {msg}"
+    line = f"[memvault] {ts} {msg}"
     print(line, file=sys.stderr)
     try:
         with open(LOG_FILE, "a") as f:
             f.write(line + "\n")
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 
@@ -50,7 +56,7 @@ def log_separator() -> None:
     try:
         with open(LOG_FILE, "a") as f:
             f.write(sep + "\n")
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 
@@ -82,9 +88,13 @@ def main() -> None:
     log(f"Processing session {session_id} ...")
 
     # ---------------------------------------------------------------------------
-    # 2. Read JSONL transcript, filter user/assistant messages
+    # 2. Read JSONL transcript — include thinking, text, tool_use, tool_result
     # ---------------------------------------------------------------------------
     conversation_lines = []
+    user_count = 0
+    assistant_count = 0
+    thinking_chars = 0
+
     try:
         with open(transcript, encoding="utf-8") as f:
             for raw_line in f:
@@ -102,19 +112,65 @@ def main() -> None:
 
                 message = entry.get("message", {})
                 content = message.get("content", "")
-                text = ""
+
+                if entry_type == "user":
+                    user_count += 1
+                else:
+                    assistant_count += 1
+
                 if isinstance(content, str):
-                    text = content
+                    if content.strip():
+                        role = "USER" if entry_type == "user" else "ASSISTANT"
+                        conversation_lines.append(f"{role}: {content}")
                 elif isinstance(content, list):
                     parts = []
                     for item in content:
-                        if isinstance(item, dict) and item.get("type") == "text":
-                            parts.append(item.get("text", ""))
-                    text = "\n".join(parts)
+                        if not isinstance(item, dict):
+                            continue
+                        item_type = item.get("type", "")
 
-                if text:
-                    role = "USER" if entry_type == "user" else "ASSISTANT"
-                    conversation_lines.append(f"{role}: {text}")
+                        if item_type == "text":
+                            text = item.get("text", "")
+                            if text.strip():
+                                parts.append(text)
+
+                        elif item_type == "thinking":
+                            # Thinking blocks are the richest source of reasoning
+                            text = item.get("text", "")
+                            if text.strip() and len(text) > 50:
+                                # Truncate very long thinking blocks to key content
+                                if len(text) > 2000:
+                                    text = text[:2000] + " [...]"
+                                parts.append(f"[THINKING] {text}")
+                                thinking_chars += len(text)
+
+                        elif item_type == "tool_use":
+                            # Tool use shows what was actually done
+                            tool_name = item.get("name", "")
+                            tool_input = item.get("input", {})
+                            # Keep only the tool name + key params for context
+                            if tool_name in ("Read", "Write", "Edit", "Grep", "Glob"):
+                                path = tool_input.get("file_path", "") or tool_input.get(
+                                    "pattern", ""
+                                )
+                                if path:
+                                    parts.append(f"[TOOL:{tool_name}] {path}")
+                            elif tool_name == "Bash":
+                                cmd = tool_input.get("command", "")
+                                if cmd and len(cmd) < 200:
+                                    parts.append(f"[TOOL:Bash] {cmd}")
+
+                        elif item_type == "tool_result":
+                            # Only include errors from tool results
+                            is_error = item.get("is_error", False)
+                            if is_error:
+                                text = item.get("content", "")
+                                if isinstance(text, str) and text.strip():
+                                    parts.append(f"[ERROR] {text[:500]}")
+
+                    if parts:
+                        role = "USER" if entry_type == "user" else "ASSISTANT"
+                        conversation_lines.append(f"{role}: " + "\n".join(parts))
     except Exception as e:
         log(f"Error reading transcript: {e}")
         sys.exit(0)
@@ -127,64 +183,163 @@ def main() -> None:
     # ---------------------------------------------------------------------------
     # 3. Count message pairs — skip if fewer than 3 exchanges
     # ---------------------------------------------------------------------------
-    user_count = sum(1 for line in conversation_lines if line.startswith("USER: "))
-    assistant_count = sum(1 for line in conversation_lines if line.startswith("ASSISTANT: "))
-
     if user_count < 3 or assistant_count < 3:
         pair_count = min(user_count, assistant_count)
         log(f"Only {pair_count} exchange(s), skipping (need >= 3).")
         sys.exit(0)
 
-    log(f"Found {user_count} user + {assistant_count} assistant messages.")
+    log(
+        f"Found {user_count} user + {assistant_count} assistant messages "
+        f"(thinking: {thinking_chars:,} chars)."
+    )
 
     # ---------------------------------------------------------------------------
-    # 4. Truncate conversation to last ~30000 chars
+    # 4. Truncate conversation — 100K for Gemini, 30K for others
     # ---------------------------------------------------------------------------
+    memvault_llm = os.environ.get("MEMVAULT_LLM", "gemini")
+    max_chars = 100_000 if memvault_llm == "gemini" else 30_000
+
     conv_len = len(conversation)
-    if conv_len > 30000:
-        conversation = conversation[-30000:]
+    if conv_len > max_chars:
+        conversation = conversation[-max_chars:]
         # Drop potentially partial first line
         newline_pos = conversation.find("\n")
         if newline_pos != -1:
             conversation = conversation[newline_pos + 1 :]
-        log(f"Truncated conversation from {conv_len} to ~30000 chars.")
+        log(f"Truncated conversation from {conv_len:,} to ~{max_chars:,} chars.")
+
+    # ---------------------------------------------------------------------------
+    # 4.5. Load progressive state (from PreCompact mid-session extractions)
+    # ---------------------------------------------------------------------------
+    progressive_dir = Path.home() / "Claude" / "memvault" / "progressive"
+    progressive_file = progressive_dir / f"{session_id}.json"
+    progressive_observations = ""
+    progressive_count = 0
+
+    if progressive_file.is_file():
+        try:
+            prog_state = json.loads(progressive_file.read_text(encoding="utf-8"))
+            obs_list = prog_state.get("observations", [])
+            progressive_count = prog_state.get("compaction_count", 0)
+            if obs_list:
+                progressive_observations = "\n".join(f"- {obs}" for obs in obs_list)
+                log(
+                    f"Loaded {len(obs_list)} progressive observations "
+                    f"from {progressive_count} compaction(s)."
+                )
+        except Exception as e:
+            log(f"Failed to load progressive state: {e}")
 
     # ---------------------------------------------------------------------------
     # 5. Build extraction prompt and call LLM
     # ---------------------------------------------------------------------------
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    prompt = f"""你是對話記憶提煉專家。分析以下 Claude Code 對話 transcript，提取值得長期記住的資訊。
+    # Progressive prior context injection
+    progressive_section = ""
+    if progressive_observations:
+        progressive_section = f"""
+## 先前的中途觀察（來自 {progressive_count} 次壓縮前快照）
+以下是 session 進行中已記錄的觀察點。利用這些作為先驗知識：
+- 已記錄的重要觀察不需要重複提煉（除非有新的補充）
+- 如果某個觀察在後續對話中被推翻或修正，以最新版為準
+- 聚焦在這些觀察之外的新發現
 
-只提取以下類型（按重要性排序）：
-1. 失敗的方法 — 嘗試了什麼但沒成功，為什麼
-2. 使用者修正 — 使用者糾正了 AI 的什麼錯誤
-3. 決策記錄 — 為什麼選了 A 而不是 B
-4. 溝通偏好 — 使用者的語言習慣、偏好
-5. 技術洞察 — workaround、gotcha、best practice
-6. 共同成果 — 一起完成了什麼重要的事
-7. 最近關注 — 使用者最近在研究或關心什麼
-8. CLAUDE.md 候選 — 環境怪癖、反覆 gotcha、必要指令慣例、架構鐵律
-   判斷標準：「如果下次 session 沒有這條資訊，AI 會不會犯同樣的錯誤？」
-   → Yes = 標記 [CLAUDE]（將建議寫入 CLAUDE.md/rules）
-   → No = 標記 [MEMORY]（存入 memvault 按需召喚）
+{progressive_observations}
+"""
 
-忽略：簡單檔案讀寫、常規 git 操作、trivial 問答。
+    prompt = f"""你是對話記憶提煉專家。分析以下 Claude Code 工作 session transcript，提煉值得長期記住的知識。
+{progressive_section}
+## 提煉目標（按重要性排序）
+1. **失敗與修正** — 嘗試了什麼沒成功？使用者糾正了什麼？為什麼？
+2. **架構決策** — 為什麼選 A 不選 B？有什麼 trade-off？
+3. **技術洞察** — workaround、gotcha、best practice、具體的檔案路徑和函數名
+4. **環境怪癖** — 特定環境/版本/設定的坑（下次會重踩的）
+5. **共同成果** — 完成了什麼有意義的功能或修復
+6. **使用者偏好** — 工作流程偏好、工具選擇、命名慣例
 
-如果沒有值得記住的內容，只回傳 "SKIP"（不要加其他文字）。
+## 輸入說明
+- [THINKING] 標記的段落是 AI 的內部推理，包含最深層的技術分析和決策推理
+- [TOOL:*] 標記顯示實際執行的操作和檔案路徑
+- [ERROR] 標記顯示遇到的錯誤
+- 注意：使用者可能混用中文和英文
 
-否則，用以下格式回傳（嚴格遵守，每個欄位一行）：
-## Session: {session_id} ({timestamp})
-**Topic**: [簡短主題，10字以內]
-**Type**: [只選一個最主要的: failed-approach | user-correction | decision | communication | technical | achievement | recent-focus]
-**Tags**: [3-8 個小寫標籤，逗號分隔。包括工具名、技術名、概念名。例如: react, zustand, safari-bug, css-grid。禁止使用過於泛泛的單詞標籤如: ai, technical, design, code, tool, system, project, workflow — 必須用複合標籤如: ai-memory, technical-insight, css-design, cli-tool]
-**Project**: {cwd}
+## 忽略
+- 簡單檔案讀寫、常規 git 操作、trivial 問答
+- 重複的 tool call 結果
+- AI 自己的反思（除非包含具體技術發現）
 
-- [CLAUDE] 或 [MEMORY] 記憶點內容（每條必須以標記開頭）
+## 輸出格式
 
-**Attitudes**: [使用者表達的偏好/信念/原則，格式 category|fact，0-5 條]
-  - category 只限: tool_behavior | config | architecture | workflow | preference | technical | naming | syntax | performance
-  - 只提取有明確證據的態度，不猜測。沒有就留空
+如果沒有值得記住的內容，只回傳 JSON：{{"skip": true}}
+
+否則回傳 JSON（不加 code fence、不加解釋）：
+{{
+  "blocks": [
+    {{
+      "topic": "簡短主題（5-15字）",
+      "block_type": "technical | decision | preference | insight | pattern",
+      "content": "完整的記憶內容。保留具體的：檔案路徑、函數名、版本號、錯誤訊息、指令。每條記憶用換行分隔。不要過度摘要 — 保留足夠的上下文讓未來搜尋能命中。",
+      "tags": ["具體標籤", "工具名", "模組名"],
+      "search_keywords": ["關鍵搜尋詞", "中英文都要", "技術術語原文保留"],
+      "importance": 0.7,
+      "destination": "MEMORY 或 CLAUDE",
+      "attitudes": [
+        {{"category": "architecture", "fact": "使用者表達的具體偏好或原則"}}
+      ]
+    }}
+  ]
+}}
+
+## 欄位說明
+
+### block_type（只選一個）
+- `technical`: 技術 gotcha、workaround、bug fix、實作細節
+- `decision`: 架構決策、技術選型、為什麼選 A 不選 B
+- `preference`: 使用者的工具偏好、命名慣例、工作流程
+- `insight`: 跨領域洞察、模式識別、趨勢觀察
+- `pattern`: 反覆出現的問題或解決模式
+
+### tags（3-8 個）
+- 必須包含：涉及的工具名、模組名、語言名（如 python, react, psycopg3, sentinel）
+- 中英文都可以（如 "排程", "cronicle", "docker"）
+- 禁止泛泛單詞：ai, code, tool, system, project, workflow
+- 允許複合標籤：css-grid, docker-healthcheck, session-end-hook
+
+### search_keywords（5-15 個）
+這是為了讓 BM25 搜尋能精準命中。包括：
+- 涉及的函數名、檔案路徑片段（如 "embedding.py", "omlx_bridge"）
+- 錯誤訊息的關鍵片段（如 "SyntaxError", "cast vector"）
+- 中文關鍵詞（如 "嵌入向量", "混合搜尋", "排程"）
+- 英文技術術語原文（如 "BM25", "hybrid search", "psycopg3"）
+
+### importance（0.0 - 1.0）
+Key Point Analysis 權重 — 這條記憶有多重要？
+- **0.9-1.0**: 架構鐵律、反覆犯的錯、環境怪癖（缺了必踩坑）
+- **0.7-0.8**: 重要決策、技術洞察、有意義的成果
+- **0.5-0.6**: 一般性知識、偏好記錄
+- **0.3-0.4**: 邊緣觀察、可能有用但不確定
+判斷依據：「同一觀點在對話中被提到/強調幾次？」重複出現 = 高權重
+
+### destination
+- `CLAUDE`: 環境怪癖、反覆 gotcha、必要指令慣例 — 缺了 AI 會重複犯錯
+- `MEMORY`: 決策記錄、修正、成就、關注 — 按需回憶即可
+- 每次萃取最多 1-2 個 CLAUDE block
+
+### attitudes（0-5 條，可選）
+- category 限定：tool_behavior | config | architecture | workflow | preference | technical | naming | syntax | performance
+- 只提取有明確證據的態度，不猜測
+
+## 重要原則
+1. **多 block 萃取**：如果 session 涵蓋多個不同主題，拆成多個 block（1-5 個）。每個 block 聚焦一個主題。
+2. **保留具體性**：寧可保留 `embedding.py line 42 的 CAST(:emb AS vector)` 也不要抽象成「修復了 SQL 語法」
+3. **搜尋導向**：content 和 search_keywords 要包含未來搜尋時可能用到的詞彙
+4. **雙語標註**：tags 和 search_keywords 中英文都要有，因為搜尋可能用任一語言
+5. **不要編造**：只提取對話中明確出現的資訊
+
+Session ID: {session_id}
+Project: {cwd}
+Timestamp: {timestamp}
 
 ---
 
@@ -196,7 +351,6 @@ def main() -> None:
     env = os.environ.copy()
     env["MEMVAULT_SKIP_RECALL"] = "1"
 
-    memvault_llm = os.environ.get("MEMVAULT_LLM", "gemini")
     memvault_model = os.environ.get("MEMVAULT_MODEL", "")
 
     if memvault_llm == "gemini":
@@ -209,113 +363,124 @@ def main() -> None:
         pass  # model stays empty unless explicitly set
 
     log(f"Calling {memvault_llm} ({memvault_model or 'default'}) for extraction ...")
+    pipeline_t0 = time.monotonic()
 
-    llm_output = _call_llm(memvault_llm, memvault_model, prompt, env)
+    llm_output, extract_elapsed = _call_llm(memvault_llm, memvault_model, prompt, env)
+    log(f"Extraction LLM took {extract_elapsed:.1f}s (input ~{len(prompt):,} chars).")
     if llm_output is None:
         sys.exit(0)
 
     # ---------------------------------------------------------------------------
-    # 6. Check for SKIP response
+    # 6. Parse JSON response — multi-block extraction
     # ---------------------------------------------------------------------------
     trimmed = llm_output.strip()
-    if trimmed == "SKIP":
-        log("LLM returned SKIP — nothing worth remembering.")
-        sys.exit(0)
-
     if not trimmed:
         log("LLM returned empty response, skipping.")
         sys.exit(0)
 
+    # Strip code fences if present
+    if trimmed.startswith("```"):
+        lines = trimmed.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        trimmed = "\n".join(lines)
+
+    # Try to find JSON object in the response
+    json_start = trimmed.find("{")
+    json_end = trimmed.rfind("}") + 1
+    if json_start == -1 or json_end <= json_start:
+        log("LLM output contains no JSON object, skipping.")
+        sys.exit(0)
+
+    try:
+        extraction = json.loads(trimmed[json_start:json_end])
+    except json.JSONDecodeError as e:
+        log(f"Failed to parse LLM JSON output: {e}")
+        sys.exit(0)
+
+    # Check for skip
+    if extraction.get("skip", False):
+        log("LLM returned skip=true — nothing worth remembering.")
+        sys.exit(0)
+
+    blocks = extraction.get("blocks", [])
+    if not blocks:
+        log("No blocks in extraction output, skipping.")
+        sys.exit(0)
+
+    log(f"Extracted {len(blocks)} block(s) from session.")
+
     # ---------------------------------------------------------------------------
-    # 6.5. Refinement pass
+    # 6.5. Refinement pass (optional — validates and cleans JSON blocks)
     # ---------------------------------------------------------------------------
     memvault_refine = os.environ.get("MEMVAULT_REFINE", "1")
-    memvault_refine_model = os.environ.get("MEMVAULT_REFINE_MODEL", "sonnet")
+    memvault_refine_llm = os.environ.get("MEMVAULT_REFINE_LLM", "claude")
+    # Default model: sonnet for claude, empty for codex/gemini (uses their default)
+    default_refine_model = "sonnet" if memvault_refine_llm == "claude" else ""
+    memvault_refine_model = os.environ.get("MEMVAULT_REFINE_MODEL", default_refine_model)
 
-    if memvault_refine == "1":
-        log(f"Refinement pass: calling Claude ({memvault_refine_model}) ...")
+    if memvault_refine == "1" and len(blocks) > 0:
+        log(f"Refinement pass: calling {memvault_refine_llm} ({memvault_refine_model}) ...")
 
-        refine_prompt = f"""你是記憶品質審查員。以下是從 Claude Code 對話中提煉的記憶草稿。
-請審查並改善品質，然後輸出最終版本。
+        refine_prompt = f"""你是記憶品質審查員。以下是從 Claude Code 對話中提煉的記憶 JSON。
+審查並改善品質，輸出修正後的 JSON（不加 code fence、不加解釋）。
 
 ## 審查規則
+1. **content 具體性** — 刪除空泛的描述（如「使用者偏好繁體中文」若已是已知事實），保留具體的檔案路徑、函數名、錯誤訊息
+2. **去重** — 合併高度相似的 block，但保留不同主題的 block
+3. **tags 品質** — 3-8 個，禁止泛泛（ai, code, tool, system），必須具體（psycopg3, docker-healthcheck）
+4. **search_keywords 品質** — 5-15 個，中英文混合，包含實際搜尋時會用的詞
+5. **attitudes 驗證** — category 必須是：tool_behavior | config | architecture | workflow | preference | technical | naming | syntax | performance
+6. **destination 控制** — CLAUDE 最多 2 個 block，其餘都是 MEMORY
+7. **block 數量** — 1-5 個，寧精不濫
 
-1. **格式驗證** — 確保有且僅有以下欄位：## Session, **Topic**, **Type**, **Tags**, **Project**, bullet points, 以及可選的 **Attitudes**
-2. **Type 正規化** — 只允許一個值：failed-approach | user-correction | decision | communication | technical | achievement | recent-focus
-3. **Tags 品質** — 3-8 個小寫標籤，禁止泛泛單詞（ai, technical, design, code, tool, system, project, workflow），必須用複合標籤（ai-memory, css-design, cli-tool）
-4. **記憶點品質** — 每條必須具體可操作，刪除空泛的（如「偏好使用繁體中文」若已是已知事實）
-5. **去重** — 合併重複或高度相似的記憶點
-6. **精簡** — 總記憶點控制在 3-7 條，寧精不濫
-7. **Attitudes 驗證** — category 必須在以下 9 個枚舉值中：tool_behavior, config, architecture, workflow, preference, technical, naming, syntax, performance。刪除不確定或猜測性態度，刪除 category 不在枚舉中的條目
-8. **目的地分類** — 每條記憶點必須以 [CLAUDE] 或 [MEMORY] 開頭：
-   - [CLAUDE]: 環境怪癖、反覆 gotcha、必要指令、架構鐵律（缺了會重複犯錯）
-   - [MEMORY]: 決策、修正、成就、關注、偏好（按需回憶即可）
-   - 過度標記 [CLAUDE] 會污染 context window — 每次萃取最多 2 條 [CLAUDE]
+如果審查後認為完全不值得保留，回傳：{{"skip": true}}
+否則回傳修正後的 JSON（同格式）：{{"blocks": [...]}}
 
-## 輸出格式
+待審查：
+{json.dumps(extraction, ensure_ascii=False, indent=2)}"""
 
-如果審查後認為記憶完全不值得保留，只回傳 "SKIP"。
+        refined_output, refine_elapsed = _call_llm(
+            memvault_refine_llm, memvault_refine_model, refine_prompt, env
+        )
+        log(f"Refinement LLM took {refine_elapsed:.1f}s.")
 
-否則直接輸出修正後的完整記憶（不要加解釋、不要加 code fence）：
-## Session: ...
-**Topic**: ...
-**Type**: ...
-**Tags**: ...
-**Project**: ...
-
-- ...
-
-**Attitudes**: (可選，0-5 條，格式: category|fact)
-  - category|fact
-
-## 待審查的記憶草稿
-
-{trimmed}"""
-
-        refined_output = _call_llm("claude", memvault_refine_model, refine_prompt, env)
-
-        if refined_output is None:
-            log("Refinement call failed, using raw extraction.")
-        else:
+        if refined_output is not None:
             refined_trimmed = refined_output.strip()
-            refined_first_line = refined_trimmed.split("\n")[0].strip() if refined_trimmed else ""
+            # Strip code fences
+            if refined_trimmed.startswith("```"):
+                r_lines = refined_trimmed.splitlines()
+                if r_lines[0].startswith("```"):
+                    r_lines = r_lines[1:]
+                if r_lines and r_lines[-1].strip() == "```":
+                    r_lines = r_lines[:-1]
+                refined_trimmed = "\n".join(r_lines)
 
-            if refined_first_line == "SKIP":
-                log("Refinement returned SKIP — judged not worth keeping.")
-                sys.exit(0)
-
-            if refined_trimmed and "## Session:" in refined_trimmed:
-                # Extract from ## Session: onwards
-                idx = refined_trimmed.find("## Session:")
-                refined_block = refined_trimmed[idx:] if idx != -1 else ""
-                if refined_block:
-                    log("Refinement accepted — using refined output.")
-                    trimmed = refined_block
-                else:
-                    log("Refinement block extraction failed, using raw extraction.")
+            r_start = refined_trimmed.find("{")
+            r_end = refined_trimmed.rfind("}") + 1
+            if r_start != -1 and r_end > r_start:
+                try:
+                    refined_data = json.loads(refined_trimmed[r_start:r_end])
+                    if refined_data.get("skip", False):
+                        log("Refinement returned skip — judged not worth keeping.")
+                        sys.exit(0)
+                    refined_blocks = refined_data.get("blocks", [])
+                    if refined_blocks:
+                        log(f"Refinement accepted — {len(refined_blocks)} block(s).")
+                        blocks = refined_blocks
+                    else:
+                        log("Refinement returned empty blocks, using raw extraction.")
+                except json.JSONDecodeError:
+                    log("Refinement JSON parse failed, using raw extraction.")
             else:
                 log("Refinement output invalid, using raw extraction.")
+        else:
+            log("Refinement call failed, using raw extraction.")
 
     # ---------------------------------------------------------------------------
-    # 7. Clean output — strip LLM artifacts
-    # ---------------------------------------------------------------------------
-    clean_lines = []
-    for line in trimmed.splitlines():
-        if line.startswith("Created execution plan for "):
-            continue
-        if line.startswith("Expanding hook command:"):
-            continue
-        if line.startswith("Hook execution for "):
-            continue
-        if line.startswith("```"):
-            continue
-        # Clean up Type field: strip pipe-separated suffix
-        line = re.sub(r"^(\*\*Type\*\*: [a-zA-Z-]+) \|.*", r"\1", line)
-        clean_lines.append(line)
-    clean_output = "\n".join(clean_lines)
-
-    # ---------------------------------------------------------------------------
-    # 7.5. Extract attitudes and POST to Core API
+    # 7. Process each block — attitudes, CLAUDE suggestions, POST to API
     # ---------------------------------------------------------------------------
     valid_categories = {
         "tool_behavior",
@@ -328,141 +493,152 @@ def main() -> None:
         "syntax",
         "performance",
     }
+    valid_types = {"technical", "decision", "preference", "insight", "pattern"}
 
-    attitude_lines = _extract_attitudes(clean_output)
-    attitude_count = 0
-    for line in attitude_lines:
-        parts = line.split("|", 1)
-        if len(parts) != 2:
+    total_created = 0
+    total_attitudes = 0
+    total_claude_suggestions = 0
+
+    for i, block in enumerate(blocks):
+        topic = (block.get("topic") or "").strip()
+        content = (block.get("content") or "").strip()
+        block_type = (block.get("block_type") or "technical").strip()
+        tags = block.get("tags", [])
+        search_keywords = block.get("search_keywords", [])
+        importance = block.get("importance", 0.5)
+        destination = (block.get("destination") or "MEMORY").strip().upper()
+        attitudes = block.get("attitudes", [])
+
+        # Clamp importance to [0.0, 1.0]
+        try:
+            importance = max(0.0, min(1.0, float(importance)))
+        except (TypeError, ValueError):
+            importance = 0.5
+
+        if not topic or not content:
+            log(f"Block {i}: missing topic or content, skipping.")
             continue
-        attitude_category = parts[0].strip()
-        attitude_fact = parts[1].strip()
 
-        if attitude_category not in valid_categories:
-            log(f"Attitude skipped — invalid category: {attitude_category}")
-            continue
+        # Validate block_type
+        if block_type not in valid_types:
+            block_type = "technical"
 
-        if not attitude_fact:
-            continue
+        # Ensure tags is a list
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(",") if t.strip()]
 
-        attitude_payload = json.dumps(
+        # Build storage content: topic + content + search_keywords
+        # (Schema has no topic column — prepend to content for embedding/search)
+        storage_content = f"## {topic}\n\n{content}"
+        if search_keywords:
+            kw_line = "搜尋關鍵詞：" + "、".join(search_keywords)
+            storage_content = storage_content + "\n\n" + kw_line
+
+        log(
+            f"Block {i}: topic='{topic}' type={block_type} imp={importance:.1f} dest={destination} tags={tags}"
+        )
+
+        # --- Attitudes ---
+        for att in attitudes:
+            if not isinstance(att, dict):
+                continue
+            att_cat = (att.get("category") or "").strip()
+            att_fact = (att.get("fact") or "").strip()
+            if att_cat not in valid_categories or not att_fact:
+                continue
+
+            att_payload = json.dumps(
+                {
+                    "fact": att_fact,
+                    "category": att_cat,
+                    "source_session": session_id,
+                }
+            ).encode("utf-8")
+
+            try:
+                req = urllib.request.Request(
+                    f"{MEMVAULT_API_URL}/api/memvault/kg/attitudes/evolve?space_id={MEMVAULT_SPACE_ID}",
+                    data=att_payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                urllib.request.urlopen(req, timeout=10)
+                total_attitudes += 1
+                log(f"  Attitude: [{att_cat}] {att_fact}")
+            except Exception:
+                pass
+
+        # --- CLAUDE.md suggestions ---
+        if destination == "CLAUDE":
+            suggestions = [
+                {
+                    "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "session_id": session_id,
+                    "project": cwd,
+                    "suggestion": content,
+                    "source_topic": topic,
+                    "reviewed": False,
+                }
+            ]
+            _write_claude_staging(suggestions)
+            total_claude_suggestions += 1
+
+        # --- POST block to Core API ---
+        # Schema: content, block_type, tags, source_session (no topic/project/source)
+        # Normalize block_type to canonical KAS types
+        type_aliases = {
+            "technical": "knowledge",
+            "decision": "knowledge",
+            "insight": "knowledge",
+            "pattern": "knowledge",
+            "preference": "attitude",
+        }
+        api_block_type = type_aliases.get(block_type, block_type)
+        if api_block_type not in {"knowledge", "skill", "attitude", "general"}:
+            api_block_type = "knowledge"
+
+        payload = json.dumps(
             {
-                "fact": attitude_fact,
-                "category": attitude_category,
+                "content": storage_content,
+                "block_type": api_block_type,
+                "tags": tags,
                 "source_session": session_id,
             }
         ).encode("utf-8")
 
-        try:
-            req = urllib.request.Request(
-                f"{MEMVAULT_API_URL}/api/memvault/kg/attitudes/evolve?space_id={MEMVAULT_SPACE_ID}",
-                data=attitude_payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            urllib.request.urlopen(req, timeout=10)
-        except Exception:
-            pass  # non-critical
+        http_code, response_body = _http_post(
+            f"{MEMVAULT_API_URL}/api/memvault/blocks?space_id={MEMVAULT_SPACE_ID}",
+            payload,
+            timeout=10,
+            connect_timeout=3,
+        )
 
-        attitude_count += 1
-        log(f"Attitude evolve: [{attitude_category}] {attitude_fact}")
+        if http_code == 201:
+            try:
+                resp_data = json.loads(response_body)
+                block_id = resp_data.get("id", "")
+            except Exception:
+                block_id = ""
+            log(f"  Block created (id={block_id}).")
+            total_created += 1
 
-    if attitude_count:
-        log(f"{attitude_count} attitude(s) sent to Core API.")
+            # Set confidence (importance) via PATCH — not in Create schema
+            if block_id and importance != 0.5:
+                conf_payload = json.dumps({"confidence": importance}).encode("utf-8")
+                _http_post(
+                    f"{MEMVAULT_API_URL}/api/memvault/blocks/{block_id}?space_id={MEMVAULT_SPACE_ID}",
+                    conf_payload,
+                    timeout=5,
+                    method="PUT",
+                )
+        else:
+            # Fallback to JSONL
+            log(f"  Core API returned HTTP {http_code}, falling back to JSONL.")
+            _write_fallback_jsonl(session_id, topic, storage_content, api_block_type, cwd, tags)
+            total_created += 1
 
-    # ---------------------------------------------------------------------------
-    # 8. Parse LLM output into structured fields
-    # ---------------------------------------------------------------------------
-    entry_topic = ""
-    entry_type = ""
-    entry_tags = ""
-    entry_project = ""
-
-    for line in clean_output.splitlines():
-        if line.startswith("**Topic**: ") and not entry_topic:
-            entry_topic = line[len("**Topic**: ") :].strip()
-        elif line.startswith("**Type**: ") and not entry_type:
-            entry_type = line[len("**Type**: ") :].strip()
-        elif line.startswith("**Tags**: ") and not entry_tags:
-            entry_tags = line[len("**Tags**: ") :].strip()
-        elif line.startswith("**Project**: ") and not entry_project:
-            entry_project = line[len("**Project**: ") :].strip()
-
-    # Extract content: bullet points before Attitudes block
-    entry_content = _extract_content(clean_output)
-    if not entry_content:
-        # fallback: full block from ## Session:
-        idx = clean_output.find("## Session:")
-        if idx != -1:
-            entry_content = clean_output[idx:]
-
-    if not entry_topic or not entry_content:
-        log("Failed to parse LLM output — missing topic or content, skipping.")
-        sys.exit(0)
-
-    # Map types to V2 block_type enum
-    type_map = {
-        "failed-approach": "technical",
-        "technical": "technical",
-        "user-correction": "preference",
-        "communication": "preference",
-        "decision": "decision",
-        "achievement": "insight",
-        "recent-focus": "insight",
-        "insight": "insight",
-        "pattern": "pattern",
-    }
-    v2_type = type_map.get(entry_type, "technical")
-
-    # Build tags JSON array
-    tags_list = [t.strip() for t in entry_tags.split(",") if t.strip()]
-
-    log(f"Parsed: topic='{entry_topic}' type={entry_type} -> {v2_type} tags={entry_tags}")
-
-    # ---------------------------------------------------------------------------
-    # 8.5. Extract [CLAUDE] suggestions → staging file, strip tags from content
-    # ---------------------------------------------------------------------------
-    claude_suggestions = _extract_claude_suggestions(
-        entry_content, session_id, entry_project or cwd, entry_topic
-    )
-    if claude_suggestions:
-        _write_claude_staging(claude_suggestions)
-        log(f"{len(claude_suggestions)} CLAUDE.md suggestion(s) staged.")
-
-    # Strip [CLAUDE]/[MEMORY] tags from content before storing in memvault
-    entry_content = _strip_destination_tags(entry_content)
-
-    # ---------------------------------------------------------------------------
-    # 9. POST to Core API (with V1 fallback)
-    # ---------------------------------------------------------------------------
-    payload = json.dumps(
-        {
-            "topic": entry_topic,
-            "content": entry_content,
-            "block_type": v2_type,
-            "session_id": session_id,
-            "project": entry_project or cwd,
-            "tags": tags_list,
-            "source": "session_end",
-        }
-    ).encode("utf-8")
-
-    http_code, response_body = _http_post(
-        f"{MEMVAULT_API_URL}/api/memvault/blocks?space_id={MEMVAULT_SPACE_ID}",
-        payload,
-        timeout=10,
-        connect_timeout=3,
-    )
-
-    if http_code == 201:
-        try:
-            resp_data = json.loads(response_body)
-            block_id = resp_data.get("id", "")
-        except Exception:
-            block_id = ""
-        log(f"Block created via Core API (id={block_id}).")
-
-        # Sync tags in background (non-critical)
+    # --- Final sync ---
+    if total_created > 0:
         try:
             req = urllib.request.Request(
                 f"{MEMVAULT_API_URL}/api/memvault/tags/sync?space_id={MEMVAULT_SPACE_ID}",
@@ -474,59 +650,25 @@ def main() -> None:
         except Exception:
             pass
 
-        log("Done (via Core API).")
-        sys.exit(0)
-
-    # ---------------------------------------------------------------------------
-    # 10. Core API failed — fallback to JSONL file
-    # ---------------------------------------------------------------------------
-    log(f"Core API returned HTTP {http_code}, falling back to JSONL.")
-    if response_body:
+    # --- Cleanup progressive state ---
+    if progressive_file.is_file():
         try:
-            err_data = json.loads(response_body)
-            api_error = err_data.get("detail") or err_data.get("message", "")
-            if api_error:
-                log(f"API error: {api_error}")
+            progressive_file.unlink()
+            log(f"Cleaned up progressive state ({progressive_count} snapshots consumed).")
         except Exception:
             pass
 
-    year_month = datetime.now().strftime("%Y-%m")
-    today = datetime.now().strftime("%Y-%m-%d")
-    fallback_file = FALLBACK_DIR / year_month / f"{today}.jsonl"
-    fallback_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Dedup check
-    if fallback_file.is_file():
-        try:
-            content = fallback_file.read_text(encoding="utf-8")
-            if f'"session_id":"{session_id}"' in content:
-                log(f"Session {session_id} already in fallback JSONL, skipping.")
-                sys.exit(0)
-        except Exception:
-            pass
-
-    fallback_entry = json.dumps(
-        {
-            "session_id": session_id,
-            "topic": entry_topic,
-            "content": entry_content,
-            "block_type": v2_type,
-            "project": entry_project or cwd,
-            "tags": tags_list,
-            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "source": "session_end",
-            "ingested": False,
-        }
+    pipeline_elapsed = time.monotonic() - pipeline_t0
+    log(
+        f"Done: {total_created} block(s), "
+        f"{total_attitudes} attitude(s), "
+        f"{total_claude_suggestions} CLAUDE suggestion(s)."
     )
-
-    try:
-        with open(fallback_file, "a", encoding="utf-8") as f:
-            f.write(fallback_entry + "\n")
-        log(f"Fallback: extraction saved to {fallback_file}")
-        log("Done (JSONL fallback).")
-    except Exception as e:
-        log(f"Failed to write fallback JSONL: {e}")
-
+    log(
+        f"Stats: transcript={conv_len:,}ch conversation={len(conversation):,}ch "
+        f"thinking={thinking_chars:,}ch messages={user_count}u+{assistant_count}a "
+        f"progressive={progressive_count} pipeline={pipeline_elapsed:.1f}s"
+    )
     sys.exit(0)
 
 
@@ -535,22 +677,26 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _call_llm(llm: str, model: str, prompt: str, env: dict) -> "str | None":
-    """Call LLM and return output string, or None on failure."""
+def _call_llm(llm: str, model: str, prompt: str, env: dict) -> "tuple[str | None, float]":
+    """Call LLM and return (output_string, elapsed_seconds). Returns (None, elapsed) on failure."""
+    t0 = time.monotonic()
     if llm == "gemini":
         cmd = ["gemini", "-m", model, "-p", "按照以下指示分析對話並提煉記憶："]
-        return _run_cmd(cmd, input_text=prompt, env=env, label="Gemini")
+        result = _run_cmd(cmd, input_text=prompt, env=env, label="Gemini")
     elif llm == "claude":
         cmd = ["claude", "-p", "--model", model]
-        return _run_cmd(cmd, input_text=prompt, env=env, label="Claude")
+        result = _run_cmd(cmd, input_text=prompt, env=env, label="Claude")
     elif llm == "codex":
         codex_args = ["codex", "exec", "--skip-git-repo-check"]
         if model:
             codex_args += ["-m", model]
-        return _run_cmd(codex_args, input_text=prompt, env=env, label="Codex")
+        codex_args.append("-")  # read prompt from stdin
+        result = _run_cmd(codex_args, input_text=prompt, env=env, label="Codex")
     else:
         log(f"Unknown LLM: {llm}, skipping.")
-        return None
+        return None, time.monotonic() - t0
+    elapsed = time.monotonic() - t0
+    return result, elapsed
 
 
 def _run_cmd(cmd: list, input_text: str, env: dict, label: str) -> "str | None":
@@ -579,14 +725,16 @@ def _run_cmd(cmd: list, input_text: str, env: dict, label: str) -> "str | None":
         return None
 
 
-def _http_post(url: str, data: bytes, timeout: int = 10, connect_timeout: int = 3) -> tuple:
-    """POST request, return (http_code, response_body). Returns (0, '') on error."""
+def _http_post(
+    url: str, data: bytes, timeout: int = 10, connect_timeout: int = 3, method: str = "POST"
+) -> tuple:
+    """HTTP request, return (http_code, response_body). Returns (0, '') on error."""
     try:
         req = urllib.request.Request(
             url,
             data=data,
             headers={"Content-Type": "application/json"},
-            method="POST",
+            method=method,
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, resp.read().decode("utf-8", errors="replace")
@@ -599,67 +747,6 @@ def _http_post(url: str, data: bytes, timeout: int = 10, connect_timeout: int = 
         return e.code, body
     except Exception:
         return 0, ""
-
-
-def _extract_attitudes(text: str) -> list:
-    """Extract attitude bullet lines from the Attitudes section."""
-    lines = text.splitlines()
-    in_attitudes = False
-    attitude_lines = []
-    for line in lines:
-        if line.startswith("**Attitudes**:"):
-            in_attitudes = True
-            continue
-        if in_attitudes:
-            # Stop at next field or section marker
-            stripped = line.strip()
-            if stripped.startswith("**") and not stripped.startswith("**Attitudes"):
-                break
-            if stripped.startswith("---") or stripped.startswith("## "):
-                break
-            if stripped.startswith("- "):
-                attitude_lines.append(stripped[2:])
-    return attitude_lines
-
-
-def _extract_content(text: str) -> str:
-    """Extract bullet-point content, excluding Attitudes block and trailing ---."""
-    lines = text.splitlines()
-    content_lines = []
-    in_content = False
-    for line in lines:
-        if line.startswith("- ") and not in_content:
-            in_content = True
-        if in_content:
-            if line.startswith("**Attitudes**:"):
-                break
-            if line.startswith("---"):
-                break
-            content_lines.append(line)
-    return "\n".join(content_lines)
-
-
-def _extract_claude_suggestions(
-    content: str, session_id: str, project: str, topic: str
-) -> list[dict]:
-    """Extract lines starting with [CLAUDE] and return as staging entries."""
-    suggestions = []
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- [CLAUDE]"):
-            suggestion_text = stripped[len("- [CLAUDE]") :].strip()
-            if suggestion_text:
-                suggestions.append(
-                    {
-                        "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "session_id": session_id,
-                        "project": project,
-                        "suggestion": suggestion_text,
-                        "source_topic": topic,
-                        "reviewed": False,
-                    }
-                )
-    return suggestions
 
 
 def _write_claude_staging(suggestions: list[dict]) -> None:
@@ -675,18 +762,40 @@ def _write_claude_staging(suggestions: list[dict]) -> None:
         log(f"Failed to write CLAUDE.md staging: {e}")
 
 
-def _strip_destination_tags(content: str) -> str:
-    """Remove [CLAUDE]/[MEMORY] tags from bullet points for clean memvault storage."""
-    lines = []
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- [CLAUDE] "):
-            lines.append("- " + stripped[len("- [CLAUDE] ") :])
-        elif stripped.startswith("- [MEMORY] "):
-            lines.append("- " + stripped[len("- [MEMORY] ") :])
-        else:
-            lines.append(line)
-    return "\n".join(lines)
+def _write_fallback_jsonl(
+    session_id: str,
+    topic: str,
+    content: str,
+    block_type: str,
+    project: str,
+    tags: list,
+) -> None:
+    """Write extraction to JSONL file when Core API is unavailable."""
+    year_month = datetime.now().strftime("%Y-%m")
+    today = datetime.now().strftime("%Y-%m-%d")
+    fallback_file = FALLBACK_DIR / year_month / f"{today}.jsonl"
+    fallback_file.parent.mkdir(parents=True, exist_ok=True)
+
+    fallback_entry = json.dumps(
+        {
+            "session_id": session_id,
+            "topic": topic,
+            "content": content,
+            "block_type": block_type,
+            "project": project,
+            "tags": tags,
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": "session_end",
+            "ingested": False,
+        }
+    )
+
+    try:
+        with open(fallback_file, "a", encoding="utf-8") as f:
+            f.write(fallback_entry + "\n")
+        log(f"  Fallback: saved to {fallback_file}")
+    except Exception as e:
+        log(f"  Failed to write fallback JSONL: {e}")
 
 
 if __name__ == "__main__":
