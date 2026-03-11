@@ -6,6 +6,7 @@ Prefix: /api/memvault/kg (mounted via __init__.py)
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.events.bus import Event, event_bus
 from src.shared.deps import get_db
 from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
@@ -614,4 +615,146 @@ async def backfill_embeddings(
     return {
         "triples": {"total_missing": len(triples), "updated": triple_updated},
         "attitudes": {"total_missing": len(attitudes), "updated": attitude_updated},
+    }
+
+
+# ======================== Session Context (Gap 2: Block ↔ Triple Bridge) ========================
+
+
+@router.get("/session-context")
+async def get_session_context(
+    source_session: str = Query(..., min_length=1, max_length=200),
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all blocks, triples, and entities for a given source_session.
+
+    Bridges the two parallel outputs (blocks + triples) that share the
+    same source_session, enabling unified session context retrieval.
+    """
+    from sqlalchemy import select
+
+    from .kg_models import EntityCanonical, Triple
+    from .models import MemoryBlock
+
+    # Blocks for this session
+    block_q = (
+        select(MemoryBlock)
+        .where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.source_session == source_session,
+            MemoryBlock.deleted_at.is_(None),
+        )
+        .order_by(MemoryBlock.created_at)
+    )
+    blocks = (await db.execute(block_q)).scalars().all()
+
+    # Triples for this session
+    triple_q = (
+        select(Triple)
+        .where(
+            Triple.space_id == space_id,
+            Triple.source_session == source_session,
+            Triple.deleted_at.is_(None),
+        )
+        .order_by(Triple.created_at)
+    )
+    triples = (await db.execute(triple_q)).scalars().all()
+
+    # Collect canonical entity IDs from triples
+    entity_ids = set()
+    for t in triples:
+        if t.canonical_subject_id:
+            entity_ids.add(t.canonical_subject_id)
+        if t.canonical_object_id:
+            entity_ids.add(t.canonical_object_id)
+
+    entities = []
+    if entity_ids:
+        entity_q = select(EntityCanonical).where(
+            EntityCanonical.id.in_(entity_ids),
+            EntityCanonical.deleted_at.is_(None),
+        )
+        entities = (await db.execute(entity_q)).scalars().all()
+
+    return {
+        "source_session": source_session,
+        "space_id": space_id,
+        "blocks": [
+            {
+                "id": b.id,
+                "content": b.content,
+                "block_type": b.block_type,
+                "tags": b.tags or [],
+                "confidence": b.confidence or 0.0,
+                "created_at": b.created_at.isoformat() if b.created_at else None,
+            }
+            for b in blocks
+        ],
+        "triples": [
+            {
+                "id": t.id,
+                "subject": t.subject,
+                "predicate": t.predicate,
+                "object": t.object,
+                "invalid_at": t.invalid_at.isoformat() if t.invalid_at else None,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in triples
+        ],
+        "entities": [
+            {
+                "id": e.id,
+                "canonical_name": e.canonical_name,
+                "aliases": e.aliases or [],
+                "entity_type": e.entity_type or "concept",
+                "merge_count": e.merge_count or 1,
+            }
+            for e in entities
+        ],
+        "summary": {
+            "total_blocks": len(blocks),
+            "total_triples": len(triples),
+            "total_entities": len(entities),
+        },
+    }
+
+
+# =============== Intelligence Event Publish (Gap 3: Station → Core) ===============
+
+
+@router.post("/intelligence/ingest", status_code=200)
+async def ingest_intelligence_digest(
+    space_id: str = Query("default"),
+    digest_type: str = Query("weekly", pattern="^(daily|weekly)$"),
+    period: str = Query("", description="Period label, e.g., '2026-W11'"),
+    content: str = Query(..., min_length=10),
+    db: AsyncSession = Depends(get_db),
+):
+    """HTTP bridge for session-intelligence station to push digests into Core.
+
+    Publishes a SessionIntelligenceEvents.DIGEST_COMPLETED event, which the
+    memvault event handler stores as a knowledge block + auto-extracts KG triples.
+    """
+    from src.events.types import SessionIntelligenceEvents
+
+    await event_bus.publish(
+        Event(
+            type=SessionIntelligenceEvents.DIGEST_COMPLETED,
+            data={
+                "space_id": space_id,
+                "digest_type": digest_type,
+                "period": period,
+                "content": content,
+                "tags": ["intelligence", "digest", digest_type],
+            },
+            source="session-intelligence",
+        )
+    )
+
+    return {
+        "status": "ingested",
+        "digest_type": digest_type,
+        "period": period,
+        "space_id": space_id,
     }
