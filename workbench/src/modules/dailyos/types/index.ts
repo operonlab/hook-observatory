@@ -182,6 +182,7 @@ export interface PlanItem {
   estimated_hours?: number
   scheduled_time?: string
   carry_count?: number
+  group_id?: string
 }
 
 export interface DailyPlan extends BaseEntity {
@@ -205,6 +206,27 @@ export interface DailyPlanStats {
   completion_score: number
 }
 
+// ─── Task Group ───
+
+export interface TaskGroup {
+  id: string
+  name: string
+  color: string
+  icon: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TaskGroupCreate {
+  name: string
+  color?: string
+  icon?: string
+  sort_order?: number
+}
+
+export type TaskGroupUpdate = Partial<TaskGroupCreate>
+
 // ─── Recurring Item ───
 
 export interface RecurringItem {
@@ -216,6 +238,7 @@ export interface RecurringItem {
   start_time?: string // "HH:MM"
   end_time?: string // "HH:MM"
   category?: string
+  group_id?: string
   is_active: boolean
   created_at?: string
   updated_at?: string
