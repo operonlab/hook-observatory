@@ -1267,6 +1267,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--predicates", default=None, help="Comma-separated predicate filter")
     p.add_argument("--max-results", type=int, default=200, help="Max results (1-500)")
 
+    # Session context (flywheel bridge)
+    p = sub.add_parser(
+        "session-context",
+        parents=[common],
+        help="Get all blocks + triples + entities for a session",
+    )
+    p.add_argument("source_session", help="Source session identifier")
+
+    # Intelligence ingest (flywheel bridge)
+    p = sub.add_parser(
+        "intelligence-ingest",
+        parents=[common],
+        help="Ingest intelligence digest into memvault",
+    )
+    p.add_argument("content", help="Digest content text")
+    p.add_argument(
+        "--digest-type",
+        default="weekly",
+        choices=["daily", "weekly"],
+    )
+    p.add_argument("--period", default="", help="Period label (e.g., 2026-W11)")
+
     return parser
 
 
@@ -1419,6 +1441,49 @@ def cmd_traverse(client: MemvaultClient, args: argparse.Namespace) -> None:
         print(f"  ... and {len(edges) - 50} more edges")
 
 
+def cmd_session_context(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Get all blocks + triples + entities for a source_session."""
+    data = client._get(
+        "/kg/session-context",
+        params={
+            "source_session": args.source_session,
+            "space_id": args.space_id,
+        },
+    )
+    if _json_out(data, args):
+        return
+    s = data.get("summary", {})
+    print(f"  Session: {data.get('source_session', '?')}")
+    print(f"  Blocks: {s.get('total_blocks', 0)}")
+    print(f"  Triples: {s.get('total_triples', 0)}")
+    print(f"  Entities: {s.get('total_entities', 0)}")
+    print()
+    for b in data.get("blocks", []):
+        print(f"  [block] [{b['block_type']}] {b['content'][:80]}...")
+    for t in data.get("triples", []):
+        print(f"  [triple] {t['subject']} --{t['predicate']}--> {t['object']}")
+    for e in data.get("entities", []):
+        print(f"  [entity] {e['canonical_name']} ({e['entity_type']})")
+
+
+def cmd_intelligence_ingest(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Ingest intelligence digest into memvault."""
+    data = client._post(
+        "/kg/intelligence/ingest",
+        params={
+            "space_id": args.space_id,
+            "digest_type": args.digest_type,
+            "period": args.period,
+            "content": args.content,
+        },
+    )
+    if _json_out(data, args):
+        return
+    print(f"  Status: {data.get('status', '?')}")
+    print(f"  Type: {data.get('digest_type', '?')}")
+    print(f"  Period: {data.get('period', '?')}")
+
+
 COMMAND_MAP = {
     # Existing
     "recall": cmd_recall,
@@ -1478,6 +1543,9 @@ COMMAND_MAP = {
     "entity-backfill": cmd_entity_backfill,
     "entity-auto-merge": cmd_entity_auto_merge,
     "traverse": cmd_traverse,
+    # Flywheel bridge
+    "session-context": cmd_session_context,
+    "intelligence-ingest": cmd_intelligence_ingest,
 }
 
 

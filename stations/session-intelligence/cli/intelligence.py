@@ -146,7 +146,8 @@ def _fmt_trends(data: dict) -> str:
         _hr("="),
         "  PRODUCTIVITY TRENDS (by ISO week)",
         _hr("-"),
-        f"  {'WEEK':<12} {'SESSIONS':>9} {'MESSAGES':>10} {'AVG LEN':>8} {'PROJECTS':>9} {'REDACTS':>8}",
+        f"  {'WEEK':<12} {'SESSIONS':>9} {'MESSAGES':>10}"
+        f" {'AVG LEN':>8} {'PROJECTS':>9} {'REDACTS':>8}",
         _hr("-"),
     ]
     for wk in sorted(data.keys()):
@@ -168,11 +169,14 @@ def _fmt_digest(data: dict) -> str:
         f"  WEEKLY DIGEST  {period.get('iso_week', '')}",
         f"  {period.get('start', '')[:10]} to {period.get('end', '')[:10]}",
         _hr("="),
-        f"  Sessions          : {stats.get('total_sessions', 0)}  ({comp.get('sessions_change', 'N/A')} vs prev week)",
-        f"  Messages          : {stats.get('total_messages', 0)}  ({comp.get('messages_change', 'N/A')} vs prev week)",
+        f"  Sessions          : {stats.get('total_sessions', 0)}"
+        f"  ({comp.get('sessions_change', 'N/A')} vs prev week)",
+        f"  Messages          : {stats.get('total_messages', 0)}"
+        f"  ({comp.get('messages_change', 'N/A')} vs prev week)",
         f"  Avg length        : {stats.get('avg_session_length', 0)} msgs",
         f"  Unique projects   : {stats.get('unique_projects', 0)}",
-        f"  Redactions        : {stats.get('total_redactions', 0)}  ({comp.get('redactions_change', 'N/A')} vs prev week)",
+        f"  Redactions        : {stats.get('total_redactions', 0)}"
+        f"  ({comp.get('redactions_change', 'N/A')} vs prev week)",
     ]
 
     top = data.get("top_projects", [])
@@ -289,6 +293,30 @@ def cmd_digest(args: argparse.Namespace, client: SessionIntelligenceClient) -> N
     else:
         print(_fmt_digest(data))
 
+    # Flywheel bridge: push digest to Core memvault (best-effort)
+    if not args.no_publish:
+        _publish_digest_to_memvault(data)
+
+
+def _publish_digest_to_memvault(data: dict) -> None:
+    """Best-effort push digest to Core memvault intelligence/ingest endpoint."""
+    try:
+        from workshop.clients.memvault import MemvaultClient
+
+        period = data.get("period", {})
+        iso_week = period.get("iso_week", "")
+        content = json.dumps(data, ensure_ascii=False, default=str)
+
+        mc = MemvaultClient()
+        result = mc.intelligence_ingest(
+            content=content,
+            digest_type="weekly",
+            period=iso_week,
+        )
+        print(f"  [flywheel] Digest published to memvault: {result.get('status', 'ok')}")
+    except Exception as exc:
+        print(f"  [flywheel] Digest publish skipped: {exc}", file=sys.stderr)
+
 
 def cmd_security(args: argparse.Namespace, client: SessionIntelligenceClient) -> None:
     data = client.security_report(days=args.days)
@@ -358,6 +386,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         help="0=current week, 1=last week, etc. (default: 0)",
+    )
+    p_digest.add_argument(
+        "--no-publish",
+        action="store_true",
+        help="Skip publishing digest to memvault (flywheel bridge)",
     )
     p_digest.set_defaults(func=cmd_digest)
 

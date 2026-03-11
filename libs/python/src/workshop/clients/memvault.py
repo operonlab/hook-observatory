@@ -415,6 +415,35 @@ class MemvaultClient(BaseClient):
         """Backfill missing embeddings for triples and attitudes. POST /kg/embeddings/backfill"""
         return self._post("/kg/embeddings/backfill", params={"batch_size": batch_size}, timeout=120)
 
+    # ======================== KG — Session Context (Flywheel) ========================
+
+    def session_context(self, source_session: str, space_id: str = "default") -> dict:
+        """Get blocks + triples + entities for a session. GET /kg/session-context"""
+        return self._get(
+            "/kg/session-context",
+            {"source_session": source_session, "space_id": space_id},
+        )
+
+    # ======================== KG — Intelligence Ingest (Flywheel) ========================
+
+    def intelligence_ingest(
+        self,
+        content: str,
+        space_id: str = "default",
+        digest_type: str = "weekly",
+        period: str = "",
+    ) -> dict:
+        """Publish intelligence digest into memvault. POST /kg/intelligence/ingest"""
+        return self._post(
+            "/kg/intelligence/ingest",
+            params={
+                "space_id": space_id,
+                "digest_type": digest_type,
+                "period": period,
+                "content": content,
+            },
+        )
+
     # ======================== Convenience ========================
 
     def stats(self) -> dict:

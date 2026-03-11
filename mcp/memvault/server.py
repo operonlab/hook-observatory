@@ -233,6 +233,53 @@ async def list_tools() -> list[Tool]:
                 "required": ["primary_id", "secondary_id"],
             },
         ),
+        Tool(
+            name="memvault_session_context",
+            description="查詢某 session 的完整上下文：blocks + triples + entities（Flywheel cross-reference）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_session": {
+                        "type": "string",
+                        "description": "來源 session ID",
+                    },
+                    "space_id": {
+                        "type": "string",
+                        "default": "default",
+                        "description": "Space ID",
+                    },
+                },
+                "required": ["source_session"],
+            },
+        ),
+        Tool(
+            name="memvault_intelligence_ingest",
+            description="將 intelligence digest 注入 memvault（觸發 DIGEST_COMPLETED 事件 → 自動建立 knowledge block + KG triples）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "Digest 內容（至少 10 字元）",
+                    },
+                    "space_id": {
+                        "type": "string",
+                        "default": "default",
+                    },
+                    "digest_type": {
+                        "type": "string",
+                        "enum": ["daily", "weekly"],
+                        "default": "weekly",
+                    },
+                    "period": {
+                        "type": "string",
+                        "default": "",
+                        "description": "期間標籤，如 '2026-W11'",
+                    },
+                },
+                "required": ["content"],
+            },
+        ),
     ]
 
 
@@ -267,6 +314,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return await handle_entity_stats(arguments)
             case "memvault_entity_merge":
                 return await handle_entity_merge(arguments)
+            case "memvault_session_context":
+                return await handle_session_context(arguments)
+            case "memvault_intelligence_ingest":
+                return await handle_intelligence_ingest(arguments)
             case _:
                 return text_result(f"Unknown tool: {name}")
     except APIError as e:
@@ -540,6 +591,74 @@ async def handle_entity_merge(args: dict) -> list[TextContent]:
         f"Canonical: {result.get('canonical_name', '?')}\n"
         f"Aliases: {', '.join(result.get('aliases', []))}\n"
         f"Triples updated: {result.get('triples_updated', 0)}"
+    )
+
+
+async def handle_session_context(args: dict) -> list[TextContent]:
+    """memvault_session_context -- blocks + triples + entities for a session."""
+    result = await to_thread(
+        client.session_context,
+        args["source_session"],
+        space_id=args.get("space_id", "default"),
+    )
+    summary = result.get("summary", {})
+    parts = [
+        f"# Session Context: {result.get('source_session', '?')}",
+        f"Blocks: {summary.get('total_blocks', 0)} | "
+        f"Triples: {summary.get('total_triples', 0)} | "
+        f"Entities: {summary.get('total_entities', 0)}",
+        "",
+    ]
+
+    blocks = result.get("blocks", [])
+    if blocks:
+        parts.append(f"## Blocks ({len(blocks)})")
+        for b in blocks:
+            content = b.get("content", "")[:150]
+            parts.append(f"  [{b.get('block_type', '?')}] {content}...")
+        parts.append("")
+
+    triples = result.get("triples", [])
+    if triples:
+        parts.append(f"## Triples ({len(triples)})")
+        for t in triples[:20]:
+            parts.append(f"  {t['subject']} --[{t['predicate']}]--> {t['object']}")
+        if len(triples) > 20:
+            parts.append(f"  ... and {len(triples) - 20} more")
+        parts.append("")
+
+    entities = result.get("entities", [])
+    if entities:
+        parts.append(f"## Entities ({len(entities)})")
+        for e in entities:
+            aliases = ", ".join(e.get("aliases", []))
+            parts.append(
+                f"  {e['canonical_name']} ({e.get('entity_type', '?')})"
+                + (f" aliases: {aliases}" if aliases else "")
+            )
+        parts.append("")
+
+    if not (blocks or triples or entities):
+        parts.append("No data found for this session.")
+
+    return text_result("\n".join(parts))
+
+
+async def handle_intelligence_ingest(args: dict) -> list[TextContent]:
+    """memvault_intelligence_ingest -- publish digest into memvault."""
+    result = await to_thread(
+        client.intelligence_ingest,
+        content=args["content"],
+        space_id=args.get("space_id", "default"),
+        digest_type=args.get("digest_type", "weekly"),
+        period=args.get("period", ""),
+    )
+    return text_result(
+        f"Intelligence digest ingested.\n"
+        f"Status: {result.get('status', '?')}\n"
+        f"Type: {result.get('digest_type', '?')}\n"
+        f"Period: {result.get('period', 'N/A')}\n"
+        f"Space: {result.get('space_id', 'default')}"
     )
 
 
