@@ -125,7 +125,11 @@ function ItemCard({
         style={{
           width: 8,
           height: 8,
-          backgroundColor: itemGroup ? itemGroup.color : item.is_active ? '#94e2d5' : 'var(--do-text-muted)',
+          backgroundColor: itemGroup
+            ? itemGroup.color
+            : item.is_active
+              ? '#94e2d5'
+              : 'var(--do-text-muted)',
           transition: 'background-color 150ms ease',
         }}
       />
@@ -550,7 +554,10 @@ function AddForm({
         >
           群組
         </span>
-        <GroupSelector value={form.group_id ?? undefined} onChange={(gid) => patch({ group_id: gid ?? undefined })} />
+        <GroupSelector
+          value={form.group_id ?? undefined}
+          onChange={(gid) => patch({ group_id: gid ?? undefined })}
+        />
       </div>
 
       {/* Action row */}

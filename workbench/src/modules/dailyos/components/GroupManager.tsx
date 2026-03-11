@@ -18,7 +18,11 @@ function ColorDot({
   color,
   selected,
   onClick,
-}: { color: string; selected: boolean; onClick: () => void }) {
+}: {
+  color: string
+  selected: boolean
+  onClick: () => void
+}) {
   return (
     <button
       type="button"
@@ -62,10 +66,7 @@ function GroupRow({
         className="shrink-0 rounded-full block"
         style={{ width: 10, height: 10, backgroundColor: group.color }}
       />
-      <span
-        className="flex-1 text-[12px] font-medium truncate"
-        style={{ color: 'var(--do-text)' }}
-      >
+      <span className="flex-1 text-[12px] font-medium truncate" style={{ color: 'var(--do-text)' }}>
         {group.name}
       </span>
       <button
@@ -90,7 +91,10 @@ function GroupRow({
         type="button"
         onClick={onRemove}
         className="shrink-0 p-0.5 rounded cursor-pointer opacity-0 group-hover:opacity-100 hover:!text-[#f38ba8]"
-        style={{ color: 'var(--do-text-muted)', transition: 'opacity 150ms ease, color 150ms ease' }}
+        style={{
+          color: 'var(--do-text-muted)',
+          transition: 'opacity 150ms ease, color 150ms ease',
+        }}
         title="刪除"
       >
         <Trash2 size={12} />
@@ -266,9 +270,7 @@ export default function GroupManager() {
         ),
       )}
 
-      {showForm && (
-        <InlineForm onSave={handleAdd} onCancel={() => setShowForm(false)} />
-      )}
+      {showForm && <InlineForm onSave={handleAdd} onCancel={() => setShowForm(false)} />}
     </div>
   )
 }
