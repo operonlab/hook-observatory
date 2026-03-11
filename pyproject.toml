@@ -60,6 +60,7 @@ ignore = [
 "stations/sentinel/remediation.py" = ["E501", "S603", "S607"]  # service restart subprocess + long strings
 "stations/sentinel/checker.py" = ["ASYNC109"]  # timeout in async health checks is intentional
 "mcp/memvault/pipelines/cluster_pipeline.py" = ["N806", "S310", "S603", "B905"]  # ML matrix vars + trusted subprocess + oMLX URL
+"schedules/runners/*.py" = ["S603", "S607"]  # trusted hardcoded runner scripts
 
 [tool.ruff.format]
 quote-style = "double"
