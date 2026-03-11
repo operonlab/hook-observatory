@@ -15,8 +15,14 @@ from src.events.bus import Event, event_bus
 from src.events.types import MemvaultEvents
 from src.shared.cache import cached
 from src.shared.errors import BadRequestError, NotFoundError
+from src.shared.fallback_search import (
+    build_ilike_conditions,
+    get_avgdl,
+    score_text_match,
+)
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
+from src.shared.text_utils import is_cjk, is_cjk_dominant
 from src.shared.tier_config import get_threshold
 
 from .models import (
@@ -48,13 +54,6 @@ from .schemas import (
 from .scopes import parse_scopes, scopes_to_filters
 from .scoring_pipeline import ScoringConfig, ScoringPipeline
 
-# --- CJK detection helper ---
-
-_CJK_RANGES = re.compile(
-    r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f"
-    r"\u30a0-\u30ff\uff00-\uffef\uac00-\ud7af]"
-)
-
 # --- Greeting patterns (shared with noise_filter for should_search) ---
 
 _GREETING_ONLY = re.compile(
@@ -63,27 +62,20 @@ _GREETING_ONLY = re.compile(
     re.IGNORECASE,
 )
 
-
-def _is_cjk_dominant(text: str) -> bool:
-    """Check if text is predominantly CJK characters."""
-    if not text:
-        return False
-    cjk_count = len(_CJK_RANGES.findall(text))
-    return cjk_count / len(text) > 0.3
-
-
-def _is_cjk(text: str) -> bool:
-    """Check if text contains any CJK characters."""
-    return bool(_CJK_RANGES.search(text))
+# CJK range pattern retained for should_search char counting only
+_CJK_RANGES = re.compile(
+    r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f"
+    r"\u30a0-\u30ff\uff00-\uffef\uac00-\ud7af]"
+)
 
 
 def should_search(query: str) -> tuple[bool, str]:
     """Determine if a query warrants memory retrieval."""
     stripped = query.strip()
     # Too short
-    if _is_cjk_dominant(stripped) and len(stripped) < 3:
+    if is_cjk_dominant(stripped) and len(stripped) < 3:
         return False, "cjk_too_short"
-    if not _is_cjk_dominant(stripped) and len(stripped) < 10:
+    if not is_cjk_dominant(stripped) and len(stripped) < 10:
         return False, "too_short"
     # Pure greeting
     if _GREETING_ONLY.match(stripped):
@@ -281,10 +273,11 @@ class MemoryBlockService(
             results = vector_results
 
         # Warm tier: text-based augmentation for older blocks
-        if include_warm and len(results) < top_k:
+        if include_warm and query and len(results) < top_k:
             warm_results = await self._warm_tier_search(
                 db,
                 space_id,
+                query,
                 top_k - len(results),
                 tags,
                 block_type,
@@ -482,16 +475,19 @@ class MemoryBlockService(
     ) -> list[SemanticSearchResult]:
         """PostgreSQL keyword search.
 
-        Uses tsvector for English text; falls back to ILIKE for CJK.
+        Uses tsvector for English text; jieba multi-term ILIKE for CJK.
+        CJK improvement: "port 衝突" → jieba → ["port", "衝突"]
+          → WHERE content ILIKE '%port%' AND content ILIKE '%衝突%'
+          instead of: WHERE content ILIKE '%port 衝突%' (exact substring).
         """
-        if _is_cjk(query):
-            # CJK: use ILIKE
-            pattern = f"%{query}%"
+        if is_cjk(query):
+            # CJK: jieba multi-term ILIKE with BM25-lite scoring
+            conditions = build_ilike_conditions(query, MemoryBlock.content)
             q = (
                 select(MemoryBlock)
                 .where(
                     MemoryBlock.space_id == space_id,
-                    MemoryBlock.content.ilike(pattern),
+                    *conditions,
                     MemoryBlock.deleted_at == None,  # noqa: E711
                 )
                 .order_by(MemoryBlock.updated_at.desc())
@@ -522,11 +518,13 @@ class MemoryBlockService(
 
         rows = (await db.execute(q)).all()
 
+        avgdl = get_avgdl("memvault")
         results = []
         for row in rows:
-            if _is_cjk(query):
+            if is_cjk(query):
                 block = row
-                score = 0.5
+                # BM25-lite scoring instead of hardcoded 0.5
+                score = score_text_match(query, block.content, tier="hot", avgdl=avgdl)
             else:
                 block = row.MemoryBlock
                 score = float(row.rank) if row.rank else 0.3
@@ -663,6 +661,7 @@ class MemoryBlockService(
         self,
         db: AsyncSession,
         space_id: str,
+        query: str,
         remaining: int,
         tags: list[str] | None,
         block_type: str | None,
@@ -671,18 +670,21 @@ class MemoryBlockService(
         """Search warm-tier blocks (no HNSW, still in main table).
 
         Warm tier: hot_days < age <= warm_days.
-        Uses ILIKE on content; score = best_hnsw_score * 0.7
-        (capped at 0.5 * 0.7 = 0.35 for text matches).
+        Uses jieba multi-term search for CJK with BM25-lite scoring.
         """
         tier = get_threshold("memvault")
         now = datetime.now(UTC)
         hot_cutoff = now - timedelta(days=tier.hot_days)
         warm_cutoff = now - timedelta(days=tier.warm_days)
 
+        # CJK-aware conditions (jieba multi-term instead of single ILIKE)
+        conditions = build_ilike_conditions(query, MemoryBlock.content)
+
         q = (
             select(MemoryBlock)
             .where(
                 MemoryBlock.space_id == space_id,
+                *conditions,
                 MemoryBlock.created_at < hot_cutoff,
                 MemoryBlock.created_at >= warm_cutoff,
             )
@@ -697,10 +699,11 @@ class MemoryBlockService(
             q = q.where(f)
 
         rows = (await db.execute(q)).scalars().all()
+        avgdl = get_avgdl("memvault")
         return [
             SemanticSearchResult(
                 block=self.to_response(r),
-                score=0.35,  # warm tier: 0.5 * 0.7
+                score=round(score_text_match(query, r.content, tier="warm", avgdl=avgdl), 4),
             )
             for r in rows
         ]
@@ -715,28 +718,31 @@ class MemoryBlockService(
         include_warm: bool = True,
         scope: str | None = None,
     ) -> list[SemanticSearchResult]:
-        """Fallback text search using ILIKE.
+        """Fallback text search — CJK-aware jieba multi-term + BM25-lite scoring.
 
-        Tier-aware search:
-          Hot  (age <= hot_days): score 0.5
-          Warm (hot_days < age <= warm_days): score 0.35
-          Cold (archive table, include_archived): score 0.3
+        Tier-aware search with configurable scoring:
+          Hot  (age <= hot_days): BM25-lite score
+          Warm (hot_days < age <= warm_days): BM25-lite * warm_decay
+          Cold (archive table, include_archived): BM25-lite * cold_decay
         """
-        pattern = f"%{query}%"
         tier = get_threshold("memvault")
         now = datetime.now(UTC)
         hot_cutoff = now - timedelta(days=tier.hot_days)
         warm_cutoff = now - timedelta(days=tier.warm_days)
+        avgdl = get_avgdl("memvault")
 
         # Defense ⑦: Parse scope filters
         extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
+
+        # CJK-aware conditions (jieba multi-term instead of single ILIKE)
+        conditions = build_ilike_conditions(query, MemoryBlock.content)
 
         # --- Hot tier: recent blocks (full index coverage) ---
         hot_q = (
             select(MemoryBlock)
             .where(
                 MemoryBlock.space_id == space_id,
-                MemoryBlock.content.ilike(pattern),
+                *conditions,
                 MemoryBlock.created_at >= hot_cutoff,
             )
             .order_by(MemoryBlock.updated_at.desc())
@@ -748,7 +754,7 @@ class MemoryBlockService(
         results: list[SemanticSearchResult] = [
             SemanticSearchResult(
                 block=self.to_response(r),
-                score=0.5,
+                score=round(score_text_match(query, r.content, tier="hot", avgdl=avgdl), 4),
             )
             for r in hot_rows
         ]
@@ -760,7 +766,7 @@ class MemoryBlockService(
                 select(MemoryBlock)
                 .where(
                     MemoryBlock.space_id == space_id,
-                    MemoryBlock.content.ilike(pattern),
+                    *conditions,
                     MemoryBlock.created_at < hot_cutoff,
                     MemoryBlock.created_at >= warm_cutoff,
                 )
@@ -774,7 +780,9 @@ class MemoryBlockService(
                 [
                     SemanticSearchResult(
                         block=self.to_response(r),
-                        score=0.35,  # warm: 0.5 * 0.7
+                        score=round(
+                            score_text_match(query, r.content, tier="warm", avgdl=avgdl), 4,
+                        ),
                     )
                     for r in warm_rows
                 ]
@@ -783,11 +791,12 @@ class MemoryBlockService(
         # --- Cold tier: archive table ---
         if include_archived and len(results) < top_k:
             remaining = top_k - len(results)
+            cold_conditions = build_ilike_conditions(query, BlockArchive.content)
             archive_q = (
                 select(BlockArchive)
                 .where(
                     BlockArchive.space_id == space_id,
-                    BlockArchive.content.ilike(pattern),
+                    *cold_conditions,
                     ~BlockArchive.content.like("s3://%"),
                 )
                 .order_by(BlockArchive.created_at.desc())
@@ -809,7 +818,9 @@ class MemoryBlockService(
                             source_session=r.source_session,
                             confidence=r.confidence or 0.0,
                         ),
-                        score=0.3,  # cold: archived result
+                        score=round(
+                            score_text_match(query, r.content, tier="cold", avgdl=avgdl), 4,
+                        ),
                     )
                     for r in archive_rows
                 ]
