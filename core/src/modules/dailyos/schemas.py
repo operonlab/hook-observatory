@@ -121,6 +121,17 @@ class DailyPlanResponse(SpaceScopedResponse):
     deleted_at: datetime | None = None
 
 
+# ======================== Plan Stats ========================
+
+
+class DailyPlanStats(BaseModel):
+    plan_date: date
+    status: str
+    total_items: int
+    done_count: int
+    completion_score: float
+
+
 # ======================== Strategy Preview ========================
 
 
