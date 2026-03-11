@@ -11,7 +11,7 @@ from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .embedding import get_embedding, get_embeddings_batch
-from .entity_resolution import entity_resolution_service
+from .entity_resolution import entity_resolution_service, normalize_entity_text
 from .kg_schemas import (
     AttitudeEvolveRequest,
     AttitudeEvolveResult,
@@ -506,12 +506,13 @@ async def graph_traverse(
     entity: str = Query(..., min_length=1, max_length=500),
     space_id: str = Query("default"),
     max_depth: int = Query(2, ge=1, le=4),
-    direction: str = Query("both", regex="^(outgoing|incoming|both)$"),
+    direction: str = Query("both", pattern="^(outgoing|incoming|both)$"),
     predicates: str | None = Query(None, description="Comma-separated predicate filter"),
     max_results: int = Query(200, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
     """Multi-hop graph traversal from a seed entity using recursive CTE."""
+    entity = normalize_entity_text(entity)
     predicate_filter = (
         [p.strip() for p in predicates.split(",") if p.strip()] if predicates else None
     )

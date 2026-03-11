@@ -415,7 +415,8 @@ class GraphTraversalService:
         # predicates_clause is only "AND t.predicate = ANY(:predicates)" — safe
         if direction == "outgoing":
             seed = """
-                SELECT id, subject, predicate, object, 1 AS depth, ARRAY[id] AS path
+                SELECT id, subject, predicate, object, 1 AS depth,
+                       ARRAY[id]::varchar[] AS path
                 FROM memvault.triples
                 WHERE subject = :entity AND space_id = :space_id
                   AND deleted_at IS NULL AND invalid_at IS NULL
@@ -429,7 +430,8 @@ class GraphTraversalService:
             """  # noqa: S608
         elif direction == "incoming":
             seed = """
-                SELECT id, subject, predicate, object, 1 AS depth, ARRAY[id] AS path
+                SELECT id, subject, predicate, object, 1 AS depth,
+                       ARRAY[id]::varchar[] AS path
                 FROM memvault.triples
                 WHERE object = :entity AND space_id = :space_id
                   AND deleted_at IS NULL AND invalid_at IS NULL
@@ -443,7 +445,8 @@ class GraphTraversalService:
             """  # noqa: S608
         else:  # both
             seed = """
-                SELECT id, subject, predicate, object, 1 AS depth, ARRAY[id] AS path
+                SELECT id, subject, predicate, object, 1 AS depth,
+                       ARRAY[id]::varchar[] AS path
                 FROM memvault.triples
                 WHERE (subject = :entity OR object = :entity) AND space_id = :space_id
                   AND deleted_at IS NULL AND invalid_at IS NULL
@@ -457,11 +460,13 @@ class GraphTraversalService:
                   AND t.id != ALL(g.path) {predicates_clause}
             """  # noqa: S608
 
+        # Set statement timeout separately (can't combine in prepared stmt)
+        await db.execute(sa_text(f"SET LOCAL statement_timeout = '{self.QUERY_TIMEOUT_MS}ms'"))
+
         sql = (
-            f"SET LOCAL statement_timeout = '{self.QUERY_TIMEOUT_MS}ms';"  # noqa: S608
-            f" WITH RECURSIVE graph AS ({seed} UNION ALL {recurse})"
+            f"WITH RECURSIVE graph AS ({seed} UNION ALL {recurse})"  # noqa: S608
             " SELECT DISTINCT ON (id) id, subject, predicate, object, depth"
-            " FROM graph ORDER BY id, depth LIMIT :max_results;"
+            " FROM graph ORDER BY id, depth LIMIT :max_results"
         )
 
         result = await db.execute(sa_text(sql), params)

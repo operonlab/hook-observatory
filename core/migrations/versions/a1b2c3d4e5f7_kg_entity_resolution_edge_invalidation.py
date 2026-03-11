@@ -1,7 +1,7 @@
 """add KG entity resolution + edge invalidation + traversal indexes
 
 Revision ID: a1b2c3d4e5f7
-Revises: z7r8s9t0u1v2
+Revises: f2g3h4i5j6k7
 Create Date: 2026-03-11
 """
 
@@ -10,12 +10,12 @@ from alembic import op
 from pgvector.sqlalchemy import Vector
 
 revision = "a1b2c3d4e5f7"
-down_revision = "z7r8s9t0u1v2"
+down_revision = "f2g3h4i5j6k7"
 branch_labels = None
 depends_on = None
 
 SCHEMA = "memvault"
-EMBEDDING_DIM = 768
+EMBEDDING_DIM = 1024
 
 
 def upgrade() -> None:
