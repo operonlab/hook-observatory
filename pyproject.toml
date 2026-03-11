@@ -54,6 +54,12 @@ ignore = [
 "stations/hook-observatory/handlers/session_pipeline.py" = ["S110", "S603"]  # fail-open + trusted subprocess
 "stations/hook-observatory/handlers/verify_commit.py" = ["S108"]  # /tmp state file
 "stations/hook-observatory/handlers/voice_notify.py" = ["RUF001", "S108", "S110", "S310", "S311", "S603", "S607"]  # Chinese TTS + trusted subprocess + /tmp audio
+"scripts/workshop_services.py" = ["S603", "S607"]  # trusted service management subprocess calls
+"stations/sentinel/prompt_templates.py" = ["E501", "RUF001"]  # long prompt template strings + Chinese
+"stations/sentinel/main.py" = ["E501", "S603", "S607"]  # Claude CLI subprocess + long strings
+"stations/sentinel/remediation.py" = ["E501", "S603", "S607"]  # service restart subprocess + long strings
+"stations/sentinel/checker.py" = ["ASYNC109"]  # timeout in async health checks is intentional
+"mcp/memvault/pipelines/cluster_pipeline.py" = ["N806", "S310", "S603", "B905"]  # ML matrix vars + trusted subprocess + oMLX URL
 
 [tool.ruff.format]
 quote-style = "double"

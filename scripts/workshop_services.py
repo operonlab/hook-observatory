@@ -16,7 +16,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 # ── Daemon PATH (launchd does not inherit .zshenv) ─────────────
-_DAEMON_PATH = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/joneshong/.local/bin"
+_DAEMON_PATH = (
+    "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin"
+    ":/usr/bin:/bin:/usr/sbin:/sbin:/Users/joneshong/.local/bin"
+)
 _DAEMON_ENV = {**dict(os.environ), "PATH": _DAEMON_PATH}
 
 # ── Configuration ──────────────────────────────────────────────
@@ -31,7 +34,10 @@ SERVICES = [
     {
         "name": "core",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/.venv/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8801 --env-file .env",
+        "cmd": (
+            "/Users/joneshong/workshop/.venv/bin/python3 -m uvicorn"
+            " src.main:app --host 127.0.0.1 --port 8801 --env-file .env"
+        ),
         "port": 8801,
         "health": "http://127.0.0.1:8801/docs",
         "workdir": "/Users/joneshong/workshop/core",
@@ -40,7 +46,10 @@ SERVICES = [
     {
         "name": "agent-vista",
         "type": "binary",
-        "cmd": "/Users/joneshong/workshop/stations/agent-vista/bin/agent-vista --no-browser --port 8840",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/agent-vista/bin/agent-vista"
+            " --no-browser --port 8840"
+        ),
         "port": 8840,
         "health": "http://127.0.0.1:8840",
         "workdir": "/Users/joneshong/workshop/stations/agent-vista",
@@ -56,7 +65,9 @@ SERVICES = [
     {
         "name": "system-monitor",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/system-monitor/.venv/bin/python3 api.py --port 9526",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/system-monitor/.venv/bin/python3 api.py --port 9526"
+        ),
         "port": 9526,
         "health": "http://127.0.0.1:9526",
         "workdir": "/Users/joneshong/workshop/stations/system-monitor",
@@ -64,7 +75,10 @@ SERVICES = [
     {
         "name": "agent-metrics",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3 -m agent_metrics serve",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
+            " -m agent_metrics serve"
+        ),
         "port": 8795,
         "health": "http://127.0.0.1:8795/health",
         "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
@@ -72,7 +86,11 @@ SERVICES = [
     {
         "name": "auto-survey",
         "type": "uvicorn",
-        "cmd": "/opt/homebrew/bin/uv run --project /Users/joneshong/workshop/stations/auto-survey auto-survey serve --host 127.0.0.1 --port 4102",
+        "cmd": (
+            "/opt/homebrew/bin/uv run --project"
+            " /Users/joneshong/workshop/stations/auto-survey"
+            " auto-survey serve --host 127.0.0.1 --port 4102"
+        ),
         "port": 4102,
         "health": "http://127.0.0.1:4102/api/people",
         "workdir": "/Users/joneshong/workshop/stations/auto-survey",
@@ -80,7 +98,10 @@ SERVICES = [
     {
         "name": "anvil",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/anvil/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port 4103",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/anvil/.venv/bin/python3"
+            " -m uvicorn server:app --host 127.0.0.1 --port 4103"
+        ),
         "port": 4103,
         "health": "http://127.0.0.1:4103/docs",
         "workdir": "/Users/joneshong/workshop/stations/anvil/src",
@@ -88,7 +109,7 @@ SERVICES = [
     {
         "name": "tmux-webui",
         "type": "uvicorn",
-        "cmd": "/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",
+        "cmd": "/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",  # noqa: E501
         "port": 8765,
         "health": "http://127.0.0.1:8765",
         "workdir": "/Users/joneshong/workshop/stations/tmux-webui",
@@ -96,7 +117,7 @@ SERVICES = [
     {
         "name": "capture-console",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/capture-console/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port 4104",
+        "cmd": "/Users/joneshong/workshop/stations/capture-console/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port 4104",  # noqa: E501
         "port": 4104,
         "health": "http://127.0.0.1:4104/docs",
         "workdir": "/Users/joneshong/workshop/stations/capture-console",
@@ -121,7 +142,7 @@ SERVICES = [
     {
         "name": "litellm",
         "type": "binary",
-        "cmd": "/Users/joneshong/.local/bin/litellm --config /Users/joneshong/.config/litellm/config.yaml --port 4000 --host 127.0.0.1",
+        "cmd": "/Users/joneshong/.local/bin/litellm --config /Users/joneshong/.config/litellm/config.yaml --port 4000 --host 127.0.0.1",  # noqa: E501
         "port": 4000,
         "health": "http://127.0.0.1:4000",
         "workdir": "/Users/joneshong",
@@ -165,7 +186,7 @@ DOCKER_CONTAINERS = [
         "health_url": "http://127.0.0.1:8090/ping",
     },
     {
-        "name": "ws-infra-ntfy-1",
+        "name": "ntfy",
         "port": 9080,
         "health_cmd": None,
         "health_url": "http://127.0.0.1:9080/v1/health",
@@ -237,11 +258,11 @@ def wait_for_health(url: str, timeout: int, name: str) -> bool:
     elapsed = 0
     while elapsed < timeout:
         try:
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            req = urllib.request.Request(url)  # noqa: S310
+            with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310
                 if resp.status < 500:
                     return True
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         time.sleep(2)
         elapsed += 2
@@ -308,11 +329,11 @@ def ensure_containers() -> None:
                     break
             elif container.get("health_url"):
                 try:
-                    with urllib.request.urlopen(container["health_url"], timeout=3) as resp:
+                    with urllib.request.urlopen(container["health_url"], timeout=3) as resp:  # noqa: S310
                         if 200 <= resp.status < 500:
                             healthy = True
                             break
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
             time.sleep(2)
             elapsed += 2
@@ -442,7 +463,7 @@ def check_log_sizes() -> None:
                     base = service_dir / f"{today}"
                     ext = "error.log"
                 else:
-                    base = service_dir / f"{today}"
+                    base = service_dir / f"{today}"  # noqa: F841
                     ext = "log"
 
                 n = 1
@@ -476,7 +497,7 @@ def compress_old_logs() -> None:
                 with gzip.open(gz_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
             logfile.unlink()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
 
@@ -486,11 +507,56 @@ def cleanup_old_logs() -> None:
         try:
             if gz_file.stat().st_mtime < cutoff:
                 gz_file.unlink()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
 
 # ── Health Check Loop ──────────────────────────────────────────
+
+
+def health_check_docker() -> None:
+    """Check Docker containers and restart any that are not running."""
+    # Quick Docker availability check — skip if daemon not ready (e.g. OrbStack still resuming)
+    result = subprocess.run(["docker", "info"], capture_output=True, timeout=10)
+    if result.returncode != 0:
+        log("Docker not ready — skipping container health check")
+        return
+
+    for container in DOCKER_CONTAINERS:
+        name = container["name"]
+        result = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Running}}", name],
+            capture_output=True,
+            text=True,
+        )
+        state = result.stdout.strip() if result.returncode == 0 else "false"
+        if state != "true":
+            log(f"ALERT: container {name} is down — starting...")
+            start_result = subprocess.run(
+                ["docker", "start", name],
+                capture_output=True,
+                text=True,
+            )
+            if start_result.returncode == 0:
+                log(f"Container {name} started successfully")
+            else:
+                # Container might not exist (first boot) — try compose up
+                log(f"docker start failed for {name}, trying compose up...")
+                subprocess.run(
+                    [
+                        "docker",
+                        "compose",
+                        "-p",
+                        "ws-infra",
+                        "-f",
+                        "/Users/joneshong/workshop/infra/docker/docker-compose.yml",
+                        "up",
+                        "-d",
+                    ],
+                    capture_output=True,
+                    env=_DAEMON_ENV,
+                )
+                break  # compose up starts all — no need to check remaining
 
 
 def health_check_all() -> None:
@@ -526,6 +592,7 @@ def daemon_mode() -> None:
         time.sleep(60)
         if shutdown_requested:
             break
+        health_check_docker()
         health_check_all()
         check_log_sizes()
         today = date.today().strftime("%Y-%m-%d")

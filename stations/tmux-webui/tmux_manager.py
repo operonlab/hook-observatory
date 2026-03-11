@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import os
 
 logger = logging.getLogger("tmux-webui")
 
@@ -118,7 +117,7 @@ async def list_panes(session: str) -> list[dict]:
 
 
 async def capture_pane(target: str, lines: int = 150) -> str:
-    rc, out, _ = await _run(
+    rc, out, _ = await _run(  # noqa: RUF059
         [
             "tmux",
             "capture-pane",
@@ -199,50 +198,39 @@ async def select_pane(session: str, direction: str) -> bool:
 
 
 async def status_metrics() -> dict:
-    """Collect system metrics from tmux status scripts + LLM usage."""
-    scripts = {
-        "net": "net-speed",
-        "cpu": "cpu-status",
-        "mem": "mem-status",
-        "disk": "disk-status",
-    }
-    results = {}
+    """Collect system metrics + LLM usage from agent-metrics sysmon API."""
+    results = {"net": "", "cpu": "", "mem": "", "disk": "", "llm": {}}
 
-    for key, script in scripts.items():
-        try:
-            script_path = os.path.expanduser(f"~/.tmux/scripts/{script}.sh")
-            if not os.path.exists(script_path):
-                results[key] = ""
-                continue
-            rc, out, _ = await _run([script_path])
-            results[key] = out.strip() if rc == 0 else ""
-        except Exception:
-            results[key] = ""
-
-    # LLM Usage — dynamic from V2 agent-metrics API
-    # Extracts all llm_* keys, groups by provider: {cc: {5h: "26%", ...}, gm: {pro: "11%", flash: "9%"}}
-    results["llm"] = {}
     try:
         rc, out, _ = await _run(
             ["curl", "-sf", "--max-time", "3", "http://127.0.0.1:8795/sysmon/current"]
         )
-        if rc == 0 and out.strip():
-            data = json.loads(out)
-            llm: dict[str, dict[str, str]] = {}
-            for k, v in data.items():
-                if not k.startswith("llm_") or k == "llm_display":
-                    continue
-                if not v or v == "?":
-                    continue
-                # llm_cc_5h → provider=cc, metric=5h
-                rest = k[4:]  # "cc_5h"
-                sep = rest.find("_")
-                if sep < 0:
-                    continue
-                provider, metric = rest[:sep], rest[sep + 1 :]
-                llm.setdefault(provider, {})[metric] = v
-            results["llm"] = llm
-    except Exception:
+        if rc != 0 or not out.strip():
+            return results
+
+        data = json.loads(out)
+
+        # System metrics — use pre-formatted display strings from agent-metrics
+        results["net"] = data.get("net_display", "")
+        results["cpu"] = data.get("cpu_display", "")
+        results["mem"] = data.get("mem_display", "")
+        results["disk"] = data.get("disk_display", "")
+
+        # LLM Usage — group by provider: {cc: {5h: "26%", ...}, gm: {pro: "11%", flash: "9%"}}
+        llm: dict[str, dict[str, str]] = {}
+        for k, v in data.items():
+            if not k.startswith("llm_") or k == "llm_display":
+                continue
+            if not v or v == "?":
+                continue
+            rest = k[4:]  # "cc_5h"
+            sep = rest.find("_")
+            if sep < 0:
+                continue
+            provider, metric = rest[:sep], rest[sep + 1 :]
+            llm.setdefault(provider, {})[metric] = v
+        results["llm"] = llm
+    except Exception:  # noqa: S110
         pass
 
     return results

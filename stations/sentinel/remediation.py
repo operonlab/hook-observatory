@@ -1,4 +1,10 @@
-"""Auto-remediation: simple restart first, AI repair as fallback."""
+"""Auto-remediation: simple restart → frontend rebuild → AI repair.
+
+Three layers:
+  Layer 1: SimpleRestarter — process/docker restart (fastest, no code changes)
+  Layer 2: FrontendRebuilder — pnpm build + nginx reload (for stale builds)
+  Layer 3: Remediator — AI agent via claude -p (code-level diagnosis & fix)
+"""
 
 from __future__ import annotations
 
@@ -14,10 +20,12 @@ logger = logging.getLogger(__name__)
 
 RELAY_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/relay.sh"
 PANE_POOL_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/pane_pool.sh"
-SIGNAL_DIR = Path("/tmp")
+SIGNAL_DIR = Path("/tmp")  # noqa: S108
 
 WORKSHOP_SERVICES = Path.home() / "workshop/scripts/workshop_services.py"
 PYTHON = Path.home() / ".local/bin/python3"
+WORKBENCH_DIR = Path.home() / "workshop/workbench"
+PNPM = "/opt/homebrew/Cellar/node@22/22.22.0/lib/node_modules/corepack/shims/pnpm"
 
 # Map sentinel service names → workshop_services.py service names
 # Only services managed by workshop_services.py are eligible for simple restart
@@ -40,8 +48,8 @@ DOCKER_RESTART_MAP: dict[str, str] = {
     "postgres": "ws-infra-postgres-1",
     "redis": "ws-infra-redis-1",
     "rustfs": "ws-infra-rustfs-1",
-    "bark": "bark-server",
-    "ntfy": "ws-infra-ntfy-1",
+    "bark": "ws-infra-bark-1",
+    "ntfy": "ntfy",
     "qdrant": "ws-infra-qdrant-1",
 }
 
@@ -103,6 +111,63 @@ class SimpleRestarter:
             return False
 
 
+class FrontendRebuilder:
+    """Layer 2: Rebuild frontend and reload Nginx.
+
+    Handles frontend-* service failures that SimpleRestarter can't fix.
+    A rebuild regenerates chunk hashes + SW version, clearing stale caches.
+    """
+
+    @staticmethod
+    def can_rebuild(service: str) -> bool:
+        """Check if this service is a frontend module eligible for rebuild."""
+        return service.startswith("frontend") and service != "frontend"
+
+    async def try_rebuild(self) -> bool:
+        """Run pnpm build in workbench/ and reload Nginx. Returns True on success."""
+        if not WORKBENCH_DIR.exists():
+            logger.warning("workbench/ not found at %s", WORKBENCH_DIR)
+            return False
+
+        try:
+            # Step 1: pnpm build
+            logger.info("Frontend rebuild: running pnpm build...")
+            proc = await asyncio.create_subprocess_exec(
+                PNPM,
+                "run",
+                "build",
+                cwd=str(WORKBENCH_DIR),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)  # noqa: RUF059
+
+            if proc.returncode != 0:
+                logger.error("Frontend rebuild failed: %s", stderr.decode()[-500:])
+                return False
+
+            logger.info("Frontend rebuild succeeded")
+
+            # Step 2: Nginx reload
+            nginx_proc = await asyncio.create_subprocess_exec(
+                "nginx",
+                "-s",
+                "reload",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(nginx_proc.communicate(), timeout=10)
+
+            return True
+
+        except TimeoutError:
+            logger.error("Frontend rebuild timed out")
+            return False
+        except FileNotFoundError as e:
+            logger.error("Frontend rebuild tool not found: %s", e)
+            return False
+
+
 @dataclass
 class RepairJob:
     service: str
@@ -118,7 +183,13 @@ class Remediator:
     def __init__(self):
         self._active_jobs: dict[str, RepairJob] = {}
 
-    async def dispatch(self, service: str, detail: str, timeout: float = 600.0) -> str | None:
+    async def dispatch(
+        self,
+        service: str,
+        detail: str,
+        timeout: float = 600.0,
+        url: str = "",  # noqa: ASYNC109
+    ) -> str | None:
         """Dispatch a repair agent. Returns pane ID or None on failure."""
         if service in self._active_jobs:
             logger.warning("Repair already active for %s", service)
@@ -131,7 +202,7 @@ class Remediator:
             return None
 
         # Build prompt
-        prompt = build_repair_prompt(service, detail)
+        prompt = build_repair_prompt(service, detail, url=url)
         signal_file = SIGNAL_DIR / f"sentinel-repair-{service}-{int(time.time())}"
 
         # Dispatch via relay
