@@ -95,6 +95,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "PreCompact": [
+        (None, external.progressive_extract),
         (None, observability.handle),
     ],
 }
