@@ -73,7 +73,13 @@ def _parse_tags(raw: str | None) -> list[str] | None:
 
 def cmd_recall(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Semantic search over memory blocks."""
-    data = client.recall(args.query, top_k=args.top_k, min_score=args.min_score)
+    data = client.recall(
+        args.query,
+        top_k=args.top_k,
+        min_score=args.min_score,
+        date_from=getattr(args, "since", None),
+        date_to=getattr(args, "before", None),
+    )
     if _json_out(data, args):
         return
 
@@ -1038,6 +1044,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.3,
         help="Minimum similarity score (default: 0.3)",
     )
+    p.add_argument("--since", help="Filter: created_at >= date (ISO format, e.g. 2026-03-01)")
+    p.add_argument("--before", help="Filter: created_at <= date (ISO format, e.g. 2026-03-11)")
 
     # extract
     p = sub.add_parser("extract", parents=[common], help="Create a new memory block")

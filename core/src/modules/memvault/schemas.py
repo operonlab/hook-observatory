@@ -107,6 +107,8 @@ class ProfileScoreUpdate(BaseModel):
 class SemanticSearchParams(BaseModel):
     q: str = Field(..., min_length=1, max_length=2000)
     top_k: int = Field(default=10, ge=1, le=100)
+    date_from: datetime | None = Field(default=None, description="Filter: created_at >= date_from")
+    date_to: datetime | None = Field(default=None, description="Filter: created_at <= date_to")
 
 
 class SemanticSearchResult(BaseModel):

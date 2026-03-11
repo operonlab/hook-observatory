@@ -134,6 +134,8 @@ async def search(
         None,
         description="Scope filter: global, session:{id}, user:{id}, type:{type}. Comma-separated.",
     ),
+    date_from: datetime | None = Query(None, description="Filter: created_at >= date_from"),
+    date_to: datetime | None = Query(None, description="Filter: created_at <= date_to"),
     db: AsyncSession = Depends(get_db),
 ):
     # Phase B2: Adaptive Retrieval
@@ -163,6 +165,8 @@ async def search(
             q,
             top_k,
             scope=scope,
+            date_from=date_from,
+            date_to=date_to,
         )
         meta = SearchMetadata(
             vector_used=False,
@@ -179,8 +183,14 @@ async def search(
 
     # Try Qdrant hybrid search first, fall back to pgvector
     qdrant_result = await memory_block_service.qdrant_search(
-        db, space_id, q, query_embedding,
-        top_k=top_k, scope=scope,
+        db,
+        space_id,
+        q,
+        query_embedding,
+        top_k=top_k,
+        scope=scope,
+        date_from=date_from,
+        date_to=date_to,
     )
     if qdrant_result is not None:
         results, meta = qdrant_result
@@ -196,6 +206,8 @@ async def search(
         top_k=top_k,
         query=q,
         scope=scope,
+        date_from=date_from,
+        date_to=date_to,
     )
     return EnhancedSearchResult(
         results=results,

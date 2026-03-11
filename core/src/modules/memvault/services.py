@@ -220,6 +220,8 @@ class MemoryBlockService(
         query: str | None = None,
         scoring_config: ScoringConfig | None = None,
         scope: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
         """Vector similarity search with RRF hybrid retrieval + scoring pipeline.
 
@@ -242,6 +244,12 @@ class MemoryBlockService(
 
         # Defense ⑦: Parse scope and build extra filters
         extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
+
+        # Time range pre-filters (shrink candidate set before vector search)
+        if date_from:
+            extra_filters.append(MemoryBlock.created_at >= date_from)
+        if date_to:
+            extra_filters.append(MemoryBlock.created_at <= date_to)
 
         # Phase B1: Run vector search + keyword search sequentially
         # (async SQLAlchemy session does not support concurrent queries)
@@ -340,6 +348,8 @@ class MemoryBlockService(
         block_type: str | None = None,
         scoring_config: ScoringConfig | None = None,
         scope: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata] | None:
         """Search via Qdrant hybrid (BM25 + dense) with full scoring pipeline.
 
@@ -370,13 +380,14 @@ class MemoryBlockService(
 
         # Fetch full records from DB by entity_id for scoring pipeline
         entity_ids = [r.entity_id for r in qdrant_results]
-        q = (
-            select(MemoryBlock)
-            .where(
-                MemoryBlock.id.in_(entity_ids),
-                MemoryBlock.deleted_at == None,  # noqa: E711
-            )
+        q = select(MemoryBlock).where(
+            MemoryBlock.id.in_(entity_ids),
+            MemoryBlock.deleted_at == None,  # noqa: E711
         )
+        if date_from:
+            q = q.where(MemoryBlock.created_at >= date_from)
+        if date_to:
+            q = q.where(MemoryBlock.created_at <= date_to)
         if block_type:
             q = q.where(MemoryBlock.block_type == block_type)
 
@@ -392,14 +403,16 @@ class MemoryBlockService(
             block = block_map.get(eid)
             if not block:
                 continue
-            scored_dicts.append({
-                "block": self.to_response(block),
-                "score": score_map.get(eid, 0.0),
-                "content": block.content,
-                "created_at": block.created_at,
-                "confidence": block.confidence,
-                "embedding": None,
-            })
+            scored_dicts.append(
+                {
+                    "block": self.to_response(block),
+                    "score": score_map.get(eid, 0.0),
+                    "content": block.content,
+                    "created_at": block.created_at,
+                    "confidence": block.confidence,
+                    "embedding": None,
+                }
+            )
 
         # Apply full scoring pipeline
         pipeline = ScoringPipeline(scoring_config)
@@ -717,6 +730,8 @@ class MemoryBlockService(
         include_archived: bool = False,
         include_warm: bool = True,
         scope: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
     ) -> list[SemanticSearchResult]:
         """Fallback text search — CJK-aware jieba multi-term + BM25-lite scoring.
 
@@ -731,8 +746,12 @@ class MemoryBlockService(
         warm_cutoff = now - timedelta(days=tier.warm_days)
         avgdl = get_avgdl("memvault")
 
-        # Defense ⑦: Parse scope filters
+        # Defense ⑦: Parse scope filters + time range pre-filters
         extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
+        if date_from:
+            extra_filters.append(MemoryBlock.created_at >= date_from)
+        if date_to:
+            extra_filters.append(MemoryBlock.created_at <= date_to)
 
         # CJK-aware conditions (jieba multi-term instead of single ILIKE)
         conditions = build_ilike_conditions(query, MemoryBlock.content)
@@ -781,7 +800,8 @@ class MemoryBlockService(
                     SemanticSearchResult(
                         block=self.to_response(r),
                         score=round(
-                            score_text_match(query, r.content, tier="warm", avgdl=avgdl), 4,
+                            score_text_match(query, r.content, tier="warm", avgdl=avgdl),
+                            4,
                         ),
                     )
                     for r in warm_rows
@@ -819,7 +839,8 @@ class MemoryBlockService(
                             confidence=r.confidence or 0.0,
                         ),
                         score=round(
-                            score_text_match(query, r.content, tier="cold", avgdl=avgdl), 4,
+                            score_text_match(query, r.content, tier="cold", avgdl=avgdl),
+                            4,
                         ),
                     )
                     for r in archive_rows
