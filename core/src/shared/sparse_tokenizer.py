@@ -103,15 +103,18 @@ def _get_idf(token_id: int, tf: int) -> float:
     """
     global _global_idf, _global_idf_loaded
 
-    # Try loading global IDF on first call
+    # Try loading global IDF on first call (sync redis — this runs in sync context)
     if not _global_idf_loaded:
         _global_idf_loaded = True
         try:
-            from .redis import redis_client
+            import redis as sync_redis
 
-            raw = redis_client.get("search:idf_stats")
+            from src.config import settings
+
+            r = sync_redis.from_url(settings.redis_url, decode_responses=True)
+            raw = r.get("search:idf_stats")
+            r.close()
             if raw:
-                # Keys are stored as strings in JSON, convert to int
                 data = json.loads(raw)
                 _global_idf = {int(k): float(v) for k, v in data.items()}
                 logger.info("Loaded global IDF stats: %d tokens", len(_global_idf))
@@ -207,11 +210,12 @@ async def store_idf_to_redis(idf_stats: dict[int, float]) -> bool:
     Called by background job (e.g. cron or lifecycle script).
     """
     try:
-        from .redis import redis_client
+        from .redis import get_redis
 
+        r = get_redis()
         # Store as JSON with string keys
         data = {str(k): v for k, v in idf_stats.items()}
-        redis_client.set("search:idf_stats", json.dumps(data), ex=86400)  # 24h TTL
+        await r.set("search:idf_stats", json.dumps(data), ex=86400)  # 24h TTL
 
         # Reset in-memory cache so next call picks up fresh data
         global _global_idf, _global_idf_loaded
