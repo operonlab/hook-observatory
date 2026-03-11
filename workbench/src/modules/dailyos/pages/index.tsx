@@ -7,6 +7,7 @@ import PlannerPage from './PlannerPage'
 
 const RecurringPage = lazy(() => import('./RecurringPage'))
 const CalendarPage = lazy(() => import('./CalendarPage'))
+const WeekViewPage = lazy(() => import('./WeekViewPage'))
 
 export default function DailyosPages() {
   return (
@@ -18,6 +19,14 @@ export default function DailyosPages() {
           element={
             <Suspense>
               <CalendarPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="week"
+          element={
+            <Suspense>
+              <WeekViewPage />
             </Suspense>
           }
         />

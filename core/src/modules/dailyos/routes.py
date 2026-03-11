@@ -15,6 +15,7 @@ from src.shared.schemas import PaginatedResponse, PaginationParams
 from .schemas import (
     DailyOSSearchResult,
     DailyPlanResponse,
+    DailyPlanStats,
     DailyPlanUpdate,
     MethodActivateRequest,
     MethodActivateResponse,
@@ -380,6 +381,35 @@ async def get_today_plan(
     )
     await db.commit()
     return daily_plan_service.to_response(plan)
+
+
+@router.get("/plans/for-date/{plan_date}", response_model=DailyPlanResponse)
+async def get_plan_for_date(
+    plan_date: date,
+    space_id: str = Query("default"),
+    context: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    plan = await daily_plan_service.get_or_create_for_date(
+        db, space_id, plan_date, user_id=user.get("id"), context=context
+    )
+    await db.commit()
+    return daily_plan_service.to_response(plan)
+
+
+@router.get("/plans/stats", response_model=list[DailyPlanStats])
+async def get_plan_stats(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    space_id: str = Query("default"),
+    context: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    return await daily_plan_service.get_date_range_stats(
+        db, space_id, date_from, date_to, context
+    )
 
 
 @router.get("/plans/{plan_id}", response_model=DailyPlanResponse)

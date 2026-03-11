@@ -520,24 +520,23 @@ class DailyPlanService:
         )
         return plan
 
-    async def get_or_create_today(
+    async def get_or_create_for_date(
         self,
         db: AsyncSession,
         space_id: str,
+        plan_date: date,
         user_id: str | None = None,
         context: str = "default",
     ) -> DailyPlan:
-        """Get today's plan, or create one if it doesn't exist.
+        """Get a plan for the given date, or create one if it doesn't exist.
 
         When creating a new plan, checks the most recent previous plan for
         incomplete items and carries them forward via strategy.handle_overflow().
         """
-        today = date.today()
-
         # Check for existing plan
         q = select(DailyPlan).where(
             DailyPlan.space_id == space_id,
-            DailyPlan.plan_date == today,
+            DailyPlan.plan_date == plan_date,
             DailyPlan.context == context,
             DailyPlan.deleted_at == None,  # noqa: E711
         )
@@ -545,8 +544,8 @@ class DailyPlanService:
         if existing:
             return existing
 
-        # Create today's plan
-        plan = await self.create_plan(db, space_id, today, user_id, context)
+        # Create plan for the given date
+        plan = await self.create_plan(db, space_id, plan_date, user_id, context)
 
         # Look for the most recent previous plan to carry forward incomplete items
         prev_q = (
@@ -554,7 +553,7 @@ class DailyPlanService:
             .where(
                 DailyPlan.space_id == space_id,
                 DailyPlan.context == context,
-                DailyPlan.plan_date < today,
+                DailyPlan.plan_date < plan_date,
                 DailyPlan.deleted_at == None,  # noqa: E711
             )
             .options(selectinload(DailyPlan.method_selection).selectinload(MethodSelection.method))
@@ -593,6 +592,53 @@ class DailyPlanService:
                 await db.refresh(plan)
 
         return plan
+
+    async def get_or_create_today(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        user_id: str | None = None,
+        context: str = "default",
+    ) -> DailyPlan:
+        """Convenience wrapper: get or create plan for today."""
+        return await self.get_or_create_for_date(db, space_id, date.today(), user_id, context)
+
+    async def get_date_range_stats(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        date_from: date,
+        date_to: date,
+        context: str = "default",
+    ) -> list[dict]:
+        """Return per-day stats (status, item counts, completion) for a date range."""
+        q = (
+            select(DailyPlan)
+            .where(
+                DailyPlan.space_id == space_id,
+                DailyPlan.context == context,
+                DailyPlan.plan_date >= date_from,
+                DailyPlan.plan_date <= date_to,
+                DailyPlan.deleted_at == None,  # noqa: E711
+            )
+            .order_by(DailyPlan.plan_date.asc())
+        )
+        rows: Sequence[DailyPlan] = (await db.execute(q)).scalars().all()
+        stats = []
+        for plan in rows:
+            items = plan.items or []
+            total = len(items)
+            done = sum(1 for i in items if i.get("done"))
+            stats.append(
+                {
+                    "plan_date": plan.plan_date.isoformat(),
+                    "status": plan.status,
+                    "total_items": total,
+                    "done_count": done,
+                    "completion_score": plan.completion_score or (done / total if total else 0),
+                }
+            )
+        return stats
 
     async def update_plan(
         self,

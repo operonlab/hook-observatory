@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Circle, Repeat } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { planApi, recurringApi } from '../api'
+import { CompletionHeatmap } from '../components/CompletionHeatmap'
 import type { DailyPlan, PlanItem, RecurringItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
 
@@ -155,7 +156,12 @@ function DayCell({ date, inMonth, isToday, plan, dayRecurring, onNavigate }: Day
   return (
     <button
       type="button"
-      onClick={() => inMonth && onNavigate(isToday ? '/dailyos' : '/dailyos/history')}
+      onClick={() => {
+        if (!inMonth) return
+        const ds = toDateStr(date)
+        const todayStr = toDateStr(new Date())
+        onNavigate(ds === todayStr ? '/dailyos' : `/dailyos?date=${ds}`)
+      }}
       className="relative flex flex-col p-1.5 md:p-2 min-h-[72px] md:min-h-[90px] border-b border-r transition-colors text-left"
       style={{
         borderColor: 'var(--do-border)',
@@ -362,6 +368,9 @@ export default function CalendarPage() {
           })}
         </div>
       </div>
+
+      {/* ─── Heatmap ─── */}
+      <CompletionHeatmap year={viewMonth.getFullYear()} month={viewMonth.getMonth()} />
 
       {/* ─── Legend ─── */}
       <div
