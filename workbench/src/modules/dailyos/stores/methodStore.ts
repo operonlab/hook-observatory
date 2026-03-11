@@ -61,8 +61,9 @@ interface MethodStore {
   layoutType: LayoutType
   compositeConfig: MethodConfig
 
-  // Today's plan
-  todayPlan: DailyPlan | null
+  // Current plan (any date)
+  currentDate: string | null
+  currentPlan: DailyPlan | null
   planItems: PlanItem[]
 
   // Methods list (for MethodsPage)
@@ -80,7 +81,7 @@ interface MethodStore {
 
   // Actions — data fetching
   fetchActiveMethod: () => Promise<void>
-  fetchTodayPlan: () => Promise<void>
+  fetchPlan: (date?: string) => Promise<void>
   fetchMethods: (includePresets?: boolean) => Promise<void>
   activateMethod: (methodId: string, overrides?: Record<string, unknown>) => Promise<void>
 
@@ -118,7 +119,8 @@ const initialState = {
   primaryMethod: null as Method | null,
   layoutType: 'list' as LayoutType,
   compositeConfig: {} as MethodConfig,
-  todayPlan: null as DailyPlan | null,
+  currentDate: null as string | null,
+  currentPlan: null as DailyPlan | null,
   planItems: [] as PlanItem[],
   methods: [] as Method[],
   methodsLoading: false,
@@ -152,17 +154,20 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     }
   },
 
-  fetchTodayPlan: async () => {
+  fetchPlan: async (date?: string) => {
     set({ planLoading: true, error: null })
     try {
-      const plan = await planApi.today().catch(() => null)
+      const plan = date
+        ? await planApi.forDate(date).catch(() => null)
+        : await planApi.today().catch(() => null)
       set({
-        todayPlan: plan,
+        currentDate: date || plan?.plan_date || null,
+        currentPlan: plan,
         planItems: plan?.items || [],
       })
     } catch (err) {
       set({
-        error: err instanceof Error ? err.message : 'Failed to fetch today plan',
+        error: err instanceof Error ? err.message : 'Failed to fetch plan',
       })
     } finally {
       set({ planLoading: false })
@@ -215,8 +220,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
   },
 
   addItem: (title: string, extra?: Partial<PlanItem>) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const maxOrder = planItems.reduce((max, i) => Math.max(max, i.sort_order), 0)
     const newItem: PlanItem = {
       id: crypto.randomUUID(),
@@ -226,35 +231,35 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
       ...extra,
     }
     const updatedItems = [...planItems, newItem]
-    set({ planItems: updatedItems, todayPlan: { ...todayPlan, items: updatedItems } })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   removeItem: (itemId: string) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const updatedItems = planItems.filter((i) => i.id !== itemId)
-    set({ planItems: updatedItems, todayPlan: { ...todayPlan, items: updatedItems } })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   editItem: (itemId: string, updates: Partial<PlanItem>) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, ...updates } : i))
-    set({ planItems: updatedItems, todayPlan: { ...todayPlan, items: updatedItems } })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   reorderItem: (itemId: string, direction: 'up' | 'down') => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const sorted = [...planItems].sort((a, b) => a.sort_order - b.sort_order)
     const idx = sorted.findIndex((i) => i.id === itemId)
     if (idx < 0) return
@@ -263,28 +268,28 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     const temp = sorted[idx].sort_order
     sorted[idx] = { ...sorted[idx], sort_order: sorted[swapIdx].sort_order }
     sorted[swapIdx] = { ...sorted[swapIdx], sort_order: temp }
-    set({ planItems: sorted, todayPlan: { ...todayPlan, items: sorted } })
-    planApi.update(todayPlan.id, { items: sorted }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    set({ planItems: sorted, currentPlan: { ...currentPlan, items: sorted } })
+    planApi.update(currentPlan.id, { items: sorted }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   reorderItems: (orderedIds: string[]) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const updatedItems = planItems.map((item) => {
       const newOrder = orderedIds.indexOf(item.id)
       return newOrder >= 0 ? { ...item, sort_order: newOrder } : item
     })
-    set({ planItems: updatedItems, todayPlan: { ...todayPlan, items: updatedItems } })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   toggleItem: (itemId: string) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const updatedItems = planItems.map((i) =>
       i.id === itemId
         ? {
@@ -295,43 +300,43 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     )
     set({
       planItems: updatedItems,
-      todayPlan: { ...todayPlan, items: updatedItems },
+      currentPlan: { ...currentPlan, items: updatedItems },
     })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   assignCategory: (itemId: string, categoryId: string) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const updatedItems = planItems.map((i) =>
       i.id === itemId ? { ...i, category: categoryId || undefined } : i,
     )
     set({
       planItems: updatedItems,
-      todayPlan: { ...todayPlan, items: updatedItems },
+      currentPlan: { ...currentPlan, items: updatedItems },
     })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   scheduleItem: (itemId: string, time: string | undefined) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const updatedItems = planItems.map((i) =>
       i.id === itemId ? { ...i, scheduled_time: time } : i,
     )
-    set({ planItems: updatedItems, todayPlan: { ...todayPlan, items: updatedItems } })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   moveRight: (itemId: string) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const item = planItems.find((i) => i.id === itemId)
     if (!item) return
     let updatedItems: PlanItem[]
@@ -344,16 +349,16 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     }
     set({
       planItems: updatedItems,
-      todayPlan: { ...todayPlan, items: updatedItems },
+      currentPlan: { ...currentPlan, items: updatedItems },
     })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
   moveLeft: (itemId: string) => {
-    const { todayPlan, planItems } = get()
-    if (!todayPlan) return
+    const { currentPlan, planItems } = get()
+    if (!currentPlan) return
     const item = planItems.find((i) => i.id === itemId)
     if (!item) return
     let updatedItems: PlanItem[]
@@ -368,9 +373,9 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     } else {
       updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
     }
-    set({ planItems: updatedItems, todayPlan: { ...todayPlan, items: updatedItems } })
-    planApi.update(todayPlan.id, { items: updatedItems }).catch(() => {
-      set({ planItems: todayPlan.items, todayPlan })
+    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+      set({ planItems: currentPlan.items, currentPlan })
     })
   },
 
@@ -431,11 +436,11 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
   },
 
   transitionPlan: async (status: string) => {
-    const { todayPlan } = get()
-    if (!todayPlan) return
+    const { currentPlan } = get()
+    if (!currentPlan) return
     try {
-      const updated = await planApi.transition(todayPlan.id, status)
-      set({ todayPlan: updated, planItems: updated.items })
+      const updated = await planApi.transition(currentPlan.id, status)
+      set({ currentPlan: updated, planItems: updated.items })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to transition plan',
@@ -444,12 +449,12 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
   },
 
   completeReview: async (reflection: string) => {
-    const { todayPlan } = get()
-    if (!todayPlan) return
+    const { currentPlan } = get()
+    if (!currentPlan) return
     try {
-      await planApi.update(todayPlan.id, { reflection })
-      const updated = await planApi.transition(todayPlan.id, 'completed')
-      set({ todayPlan: updated, planItems: updated.items })
+      await planApi.update(currentPlan.id, { reflection })
+      const updated = await planApi.transition(currentPlan.id, 'completed')
+      set({ currentPlan: updated, planItems: updated.items })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to complete review',
@@ -458,13 +463,13 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
   },
 
   updatePlanItems: async (items: PlanItem[]) => {
-    const { todayPlan } = get()
-    if (!todayPlan) return
-    set({ planItems: items, todayPlan: { ...todayPlan, items } })
+    const { currentPlan } = get()
+    if (!currentPlan) return
+    set({ planItems: items, currentPlan: { ...currentPlan, items } })
     try {
-      await planApi.update(todayPlan.id, { items })
+      await planApi.update(currentPlan.id, { items })
     } catch (err) {
-      set({ planItems: todayPlan.items, todayPlan })
+      set({ planItems: currentPlan.items, currentPlan })
       set({
         error: err instanceof Error ? err.message : 'Failed to update plan items',
       })

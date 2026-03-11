@@ -3,6 +3,7 @@ import type { PaginatedResponse } from '@/types'
 import type {
   ActivateResponse,
   DailyPlan,
+  DailyPlanStats,
   Method,
   MethodCreate,
   MethodSelection,
@@ -72,6 +73,11 @@ export const planApi = {
   },
 
   today: () => request<DailyPlan>('/dailyos/plans/today'),
+
+  forDate: (date: string) => request<DailyPlan>(`/dailyos/plans/for-date/${date}`),
+
+  stats: (dateFrom: string, dateTo: string) =>
+    request<DailyPlanStats[]>(`/dailyos/plans/stats?date_from=${dateFrom}&date_to=${dateTo}`),
 
   get: (id: string) => request<DailyPlan>(`/dailyos/plans/${id}`),
 

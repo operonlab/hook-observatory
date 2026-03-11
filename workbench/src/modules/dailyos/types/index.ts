@@ -195,6 +195,16 @@ export interface DailyPlan extends BaseEntity {
   completion_score: number | null
 }
 
+// ─── Plan Stats ───
+
+export interface DailyPlanStats {
+  plan_date: string
+  status: PlanStatus
+  total_items: number
+  done_count: number
+  completion_score: number
+}
+
 // ─── Recurring Item ───
 
 export interface RecurringItem {

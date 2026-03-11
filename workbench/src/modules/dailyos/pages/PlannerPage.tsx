@@ -10,10 +10,11 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import AddItemInput from '../components/AddItemInput'
 import CompositeGuide from '../components/CompositeGuide'
+import { DateNavigator } from '../components/DateNavigator'
 import ColumnsLayout from '../components/layouts/ColumnsLayout'
 import GridLayout from '../components/layouts/GridLayout'
 import KanbanLayout from '../components/layouts/KanbanLayout'
@@ -23,7 +24,7 @@ import MethodInfoPanel from '../components/MethodInfoPanel'
 import MethodSwitcher from '../components/MethodSwitcher'
 import ProgressBar from '../components/ProgressBar'
 import { useActiveMethod } from '../hooks/useActiveMethod'
-import { useTodayPlan } from '../hooks/useTodayPlan'
+import { useDatePlan } from '../hooks/useTodayPlan'
 import type { PlanItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
 
@@ -48,6 +49,20 @@ const TRANSITION_LABELS: Record<string, string> = {
 
 export default function PlannerPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dateParam = searchParams.get('date') || undefined
+
+  const handleDateChange = useCallback(
+    (newDate: string) => {
+      const today = new Date().toISOString().slice(0, 10)
+      if (newDate === today) {
+        setSearchParams({}, { replace: true })
+      } else {
+        setSearchParams({ date: newDate }, { replace: true })
+      }
+    },
+    [setSearchParams],
+  )
 
   const {
     selections,
@@ -61,6 +76,7 @@ export default function PlannerPage() {
 
   const {
     plan,
+    currentDate,
     items,
     loading: planLoading,
     addItem,
@@ -75,7 +91,7 @@ export default function PlannerPage() {
     transitionPlan,
     completeReview,
     refresh: refreshPlan,
-  } = useTodayPlan()
+  } = useDatePlan(dateParam)
 
   const [reflection, setReflection] = useState('')
   const [savingReflection, setSavingReflection] = useState(false)
@@ -199,8 +215,13 @@ export default function PlannerPage() {
       {/* Method quick-switch strip — full width */}
       <MethodSwitcher />
 
+      {/* Date navigator — full width */}
+      <div className="mt-4 px-1">
+        {currentDate && <DateNavigator currentDate={currentDate} onChange={handleDateChange} />}
+      </div>
+
       {/* Mobile compact header — visible below lg */}
-      <div className="lg:hidden mt-4 flex items-center justify-between px-1">
+      <div className="lg:hidden mt-3 flex items-center justify-between px-1">
         <div className="min-w-0">
           <h1
             className="text-[14px] font-semibold tracking-tight truncate"
@@ -210,13 +231,6 @@ export default function PlannerPage() {
               ? method.name_zh || method.name
               : `${selections.length} 個方法組合`}
           </h1>
-          <span
-            className="flex items-center gap-1 text-[11px]"
-            style={{ color: 'var(--do-text-muted)' }}
-          >
-            <Calendar size={11} />
-            {plan?.plan_date || '今日'}
-          </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {statusConfig && (
@@ -315,7 +329,7 @@ export default function PlannerPage() {
                 style={{ color: 'var(--do-text-muted)' }}
               >
                 <Calendar size={11} />
-                {plan?.plan_date || '今日'}
+                {currentDate || '今日'}
               </span>
               {selections.length > 1 &&
                 selections.map((sel) => (
