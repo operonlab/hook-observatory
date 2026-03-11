@@ -103,8 +103,8 @@ async def index_document(doc: IndexDocument) -> bool:
             logger.warning("Failed to generate embedding for %s/%s", doc.service_id, doc.entity_id)
             return False
 
-        # Generate sparse vector (BM25-like)
-        sparse = text_to_sparse_vector(doc.content)
+        # Generate sparse vector (BM25-like, per-service avgdl)
+        sparse = text_to_sparse_vector(doc.content, service=doc.service_id)
 
         # Build point
         point_id = _entity_to_point_id(doc.service_id, doc.entity_id)
@@ -155,7 +155,7 @@ async def index_documents_batch(docs: list[IndexDocument]) -> int:
             if embedding is None:
                 continue
 
-            sparse = text_to_sparse_vector(doc.content)
+            sparse = text_to_sparse_vector(doc.content, service=doc.service_id)
             point_id = _entity_to_point_id(doc.service_id, doc.entity_id)
 
             points.append(PointStruct(
@@ -242,7 +242,11 @@ async def hybrid_search(
                 meta.dense_used = True
 
         if config.use_sparse:
-            sparse = text_to_sparse_vector(query)
+            # Use first service_id for per-service avgdl if filtering single service
+            query_service = None
+            if config.service_ids and len(config.service_ids) == 1:
+                query_service = config.service_ids[0]
+            sparse = text_to_sparse_vector(query, service=query_service)
             if sparse:
                 prefetch_list.append(
                     Prefetch(
