@@ -241,6 +241,70 @@ class MemvaultClient(BaseClient):
         body.update({k: v for k, v in fields.items() if v is not None})
         return self._put(f"/kg/triples/{triple_id}", body)
 
+    def invalidate_triple(
+        self,
+        triple_id: str,
+        reason: str = "manual",
+        replacement_id: str | None = None,
+    ) -> dict:
+        """Invalidate a KG triple (soft temporal invalidation). PUT /kg/triples/{id}/invalidate"""
+        body: dict = {"reason": reason}
+        if replacement_id:
+            body["replacement_triple_id"] = replacement_id
+        return self._put(f"/kg/triples/{triple_id}/invalidate", body)
+
+    # ======================== KG — Entity Resolution ========================
+
+    def list_entities(
+        self,
+        entity_type: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict:
+        """List canonical entities. GET /kg/entities"""
+        params: dict = {"page": page, "page_size": page_size}
+        if entity_type:
+            params["entity_type"] = entity_type
+        return self._get("/kg/entities", params)
+
+    def entity_stats(self) -> dict:
+        """Entity resolution statistics. GET /kg/entities/stats"""
+        return self._get("/kg/entities/stats")
+
+    def entity_merge_candidates(self, threshold: float = 0.92, limit: int = 50) -> list:
+        """Find entities that are merge candidates. GET /kg/entities/merge-candidates"""
+        return self._get("/kg/entities/merge-candidates", {"threshold": threshold, "limit": limit})
+
+    def merge_entities(self, primary_id: str, secondary_id: str) -> dict:
+        """Merge secondary entity into primary. POST /kg/entities/merge"""
+        body = {"primary_id": primary_id, "secondary_id": secondary_id}
+        return self._post("/kg/entities/merge", body)
+
+    def backfill_entity_resolution(self) -> dict:
+        """Backfill entity resolution for unresolved triples. POST /kg/entities/backfill"""
+        return self._post("/kg/entities/backfill", timeout=120)
+
+    # ======================== KG — Graph Traversal ========================
+
+    def graph_traverse(
+        self,
+        entity: str,
+        max_depth: int = 2,
+        direction: str = "both",
+        predicates: str | None = None,
+        max_results: int = 200,
+    ) -> dict:
+        """Multi-hop graph traversal from a seed entity. GET /kg/traverse"""
+        params: dict = {
+            "entity": entity,
+            "max_depth": max_depth,
+            "direction": direction,
+            "max_results": max_results,
+        }
+        if predicates:
+            params["predicates"] = predicates
+        return self._get("/kg/traverse", params)
+
     # ======================== KG — Clusters ========================
 
     def list_clusters(self) -> list:

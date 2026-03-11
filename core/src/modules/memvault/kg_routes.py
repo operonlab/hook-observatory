@@ -11,6 +11,7 @@ from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .embedding import get_embedding, get_embeddings_batch
+from .entity_resolution import entity_resolution_service
 from .kg_schemas import (
     AttitudeEvolveRequest,
     AttitudeEvolveResult,
@@ -20,11 +21,17 @@ from .kg_schemas import (
     ClusterDetail,
     ClusterRegenerateRequest,
     ClusterResponse,
+    EntityCanonicalResponse,
+    EntityMergeRequest,
+    EntityMergeResult,
+    EntityResolutionStats,
+    GraphTraversalResult,
     SkillInvocationCreate,
     SkillInvocationResponse,
     SkillProficiencyResponse,
     TripleBatchCreate,
     TripleCreate,
+    TripleInvalidateRequest,
     TripleResponse,
     WisdomNodeResponse,
     WisdomRegenerateRequest,
@@ -34,6 +41,7 @@ from .kg_services import (
     cascade_recall_service,
     cluster_service,
     confidence_decay_service,
+    graph_traversal_service,
     skill_tracking_service,
     triple_service,
     wisdom_service,
@@ -79,12 +87,19 @@ async def list_triples(
     space_id: str = Query("default"),
     predicate: str | None = Query(None),
     subject: str | None = Query(None),
+    include_invalid: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
     if predicate:
-        results = await triple_service.search_by_predicate(db, space_id, predicate, subject=subject)
+        results = await triple_service.search_by_predicate(
+            db,
+            space_id,
+            predicate,
+            subject=subject,
+            include_invalid=include_invalid,
+        )
         return PaginatedResponse(
             items=results,
             total=len(results),
@@ -126,6 +141,24 @@ async def update_triple(
     db: AsyncSession = Depends(get_db),
 ):
     instance = await triple_service.update_by_id(db, triple_id, body)
+    await db.commit()
+    await db.refresh(instance)
+    return triple_service.to_response(instance)
+
+
+@router.put("/triples/{triple_id}/invalidate", response_model=TripleResponse)
+async def invalidate_triple(
+    triple_id: str,
+    body: TripleInvalidateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark a triple as invalid (soft temporal invalidation)."""
+    instance = await triple_service.invalidate(
+        db,
+        triple_id,
+        reason=body.reason,
+        replacement_id=body.replacement_triple_id,
+    )
     await db.commit()
     await db.refresh(instance)
     return triple_service.to_response(instance)
@@ -355,6 +388,142 @@ async def apply_confidence_decay(
     result = await confidence_decay_service.apply_decay(db, space_id)
     await db.commit()
     return result
+
+
+# ======================== Embedding Backfill ========================
+
+
+# ======================== Entity Resolution ========================
+
+
+@router.get("/entities", response_model=PaginatedResponse[EntityCanonicalResponse])
+async def list_entities(
+    space_id: str = Query("default"),
+    entity_type: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """List canonical entities with optional type filter."""
+    from sqlalchemy import func, select
+
+    from .kg_models import EntityCanonical
+
+    q = select(EntityCanonical).where(
+        EntityCanonical.space_id == space_id,
+        EntityCanonical.deleted_at.is_(None),
+    )
+    if entity_type:
+        q = q.where(EntityCanonical.entity_type == entity_type)
+
+    count_q = select(func.count()).select_from(q.subquery())
+    total = (await db.execute(count_q)).scalar_one()
+
+    q = q.order_by(EntityCanonical.canonical_name).offset((page - 1) * page_size).limit(page_size)
+    entities = (await db.execute(q)).scalars().all()
+
+    return PaginatedResponse(
+        items=[entity_resolution_service.to_response(e) for e in entities],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/entities/stats", response_model=EntityResolutionStats)
+async def entity_stats(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get entity resolution statistics."""
+    return await entity_resolution_service.get_stats(db, space_id)
+
+
+@router.get(
+    "/entities/merge-candidates",
+    response_model=list[dict],
+)
+async def entity_merge_candidates(
+    space_id: str = Query("default"),
+    threshold: float = Query(0.92, ge=0.5, le=1.0),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """Find entities that are candidates for merging (high embedding similarity)."""
+    candidates = await entity_resolution_service.find_merge_candidates(
+        db,
+        space_id,
+        threshold=threshold,
+        limit=limit,
+    )
+    return [
+        {"primary": a.model_dump(), "secondary": b.model_dump(), "similarity": sim}
+        for a, b, sim in candidates
+    ]
+
+
+@router.post("/entities/merge", response_model=EntityMergeResult)
+async def merge_entities(
+    body: EntityMergeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Merge secondary entity into primary."""
+    result = await entity_resolution_service.merge_entities(
+        db,
+        body.primary_id,
+        body.secondary_id,
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/entities/backfill", status_code=200)
+async def backfill_entity_resolution(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Backfill entity resolution for triples missing canonical IDs."""
+    from sqlalchemy import select
+
+    from .kg_models import Triple
+
+    q = select(Triple).where(
+        Triple.space_id == space_id,
+        Triple.deleted_at.is_(None),
+        Triple.canonical_subject_id.is_(None),
+    )
+    triples = list((await db.execute(q)).scalars().all())
+    resolved = await entity_resolution_service.batch_resolve_triples(db, space_id, triples)
+    await db.commit()
+    return {"total_unresolved": len(triples), "resolved": resolved}
+
+
+# ======================== Graph Traversal ========================
+
+
+@router.get("/traverse", response_model=GraphTraversalResult)
+async def graph_traverse(
+    entity: str = Query(..., min_length=1, max_length=500),
+    space_id: str = Query("default"),
+    max_depth: int = Query(2, ge=1, le=4),
+    direction: str = Query("both", regex="^(outgoing|incoming|both)$"),
+    predicates: str | None = Query(None, description="Comma-separated predicate filter"),
+    max_results: int = Query(200, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    """Multi-hop graph traversal from a seed entity using recursive CTE."""
+    predicate_filter = (
+        [p.strip() for p in predicates.split(",") if p.strip()] if predicates else None
+    )
+    return await graph_traversal_service.traverse(
+        db,
+        space_id,
+        entity,
+        max_depth=max_depth,
+        direction=direction,
+        predicate_filter=predicate_filter,
+        max_results=max_results,
+    )
 
 
 # ======================== Embedding Backfill ========================
