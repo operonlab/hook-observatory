@@ -132,6 +132,21 @@ class DailyPlan(SpaceScopedModel):
     method_selection: Mapped["MethodSelection | None"] = relationship(lazy="selectin")
 
 
+class TaskGroup(SpaceScopedModel):
+    """User-defined task group for categorizing items across views."""
+
+    __tablename__ = "task_groups"
+    __table_args__ = (
+        Index("idx_tg_space", "space_id"),
+        {"schema": SCHEMA},
+    )
+
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    color: Mapped[str] = mapped_column(Text, server_default=text("'#cba6f7'"))
+    icon: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+
+
 class RecurringItem(SpaceScopedModel):
     """A recurring plan item — fixed schedule events like daily sleep, weekly church, etc."""
 
@@ -149,4 +164,7 @@ class RecurringItem(SpaceScopedModel):
     start_time: Mapped[str | None] = mapped_column(Text, nullable=True)  # HH:MM
     end_time: Mapped[str | None] = mapped_column(Text, nullable=True)  # HH:MM
     category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    group_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.task_groups.id", ondelete="SET NULL"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))

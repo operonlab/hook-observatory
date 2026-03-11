@@ -1,5 +1,6 @@
 import { Bug, Check, ChevronDown, ChevronUp, Circle, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useMethodStore } from '../stores/methodStore'
 import type { PlanItem } from '../types'
 
 interface PlanItemRowProps {
@@ -32,6 +33,8 @@ export default function PlanItemRow({
   onReorder,
   showReorder,
 }: PlanItemRowProps) {
+  const taskGroups = useMethodStore((s) => s.taskGroups)
+  const group = item.group_id ? taskGroups.find((g) => g.id === item.group_id) : null
   const isDone = item.status === 'done'
   const isCancelled = item.status === 'cancelled'
   const opacity = dimmed ? 0.4 : 1
@@ -107,6 +110,23 @@ export default function PlanItemRow({
           }}
         >
           <Bug size={12} />
+        </span>
+      )}
+
+      {/* Group Badge */}
+      {group && (
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1"
+          style={{
+            color: group.color,
+            backgroundColor: `${group.color}18`,
+          }}
+        >
+          <span
+            className="rounded-full block"
+            style={{ width: 5, height: 5, backgroundColor: group.color }}
+          />
+          {group.name}
         </span>
       )}
 
