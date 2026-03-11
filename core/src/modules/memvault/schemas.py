@@ -131,6 +131,7 @@ class SearchMetadata(BaseModel):
     input_count: int = 0
     output_count: int = 0
     scope: str | None = None
+    backend: str | None = None
 
 
 class EnhancedSearchResult(BaseModel):
