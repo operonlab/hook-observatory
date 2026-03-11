@@ -42,6 +42,37 @@ def skill_tracker(event_type: str, tool_name: str, tool_input: dict, raw_input: 
     )
 
 
+def progressive_extract(
+    event_type: str, tool_name: str, tool_input: dict, raw_input: str
+) -> HookResult:
+    """PreCompact: async progressive memory extraction — fire-and-forget."""
+    import tempfile
+
+    from .base import HOME, run_background
+
+    PYTHON = os.path.join(HOME, ".local", "bin", "python3")
+
+    # Write input to temp file for background process
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", prefix="memvault-prog-", suffix=".json", dir="/tmp", delete=False
+        ) as tmpf:
+            tmpf.write(raw_input)
+            tmpfile_path = tmpf.name
+    except Exception:
+        return HookResult()
+
+    script = os.path.join(MEMVAULT_SCRIPTS, "extract_progressive.py")
+    if not os.path.isfile(script):
+        return HookResult()
+
+    # Background: cat input | python extract_progressive.py
+    run_background(
+        f"cat {tmpfile_path} | {PYTHON} {script}; rm -f {tmpfile_path}",
+    )
+    return HookResult()
+
+
 def sync_login(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """SessionStart: sync Playwright profile from master."""
     return call_external_script(
