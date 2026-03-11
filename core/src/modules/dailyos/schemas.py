@@ -158,6 +158,35 @@ class DailyOSSearchResult(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
+# ======================== Task Groups ========================
+
+
+class TaskGroupCreate(BaseModel):
+    name: str
+    color: str = "#cba6f7"
+    icon: str | None = None
+    sort_order: int = 0
+
+
+class TaskGroupUpdate(BaseModel):
+    name: str | None = None
+    color: str | None = None
+    icon: str | None = None
+    sort_order: int | None = None
+
+
+class TaskGroupResponse(BaseModel):
+    id: str
+    name: str
+    color: str
+    icon: str | None = None
+    sort_order: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ======================== Recurring Items ========================
 
 
@@ -169,6 +198,7 @@ class RecurringItemCreate(BaseModel):
     start_time: str | None = None
     end_time: str | None = None
     category: str | None = None
+    group_id: str | None = None
 
 
 class RecurringItemUpdate(BaseModel):
@@ -179,6 +209,7 @@ class RecurringItemUpdate(BaseModel):
     start_time: str | None = None
     end_time: str | None = None
     category: str | None = None
+    group_id: str | None = None
     is_active: bool | None = None
 
 
@@ -191,6 +222,7 @@ class RecurringItemResponse(BaseModel):
     start_time: str | None = None
     end_time: str | None = None
     category: str | None = None
+    group_id: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

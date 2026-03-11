@@ -17,7 +17,7 @@ from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
-from .models import DailyPlan, Method, MethodSelection, RecurringItem
+from .models import DailyPlan, Method, MethodSelection, RecurringItem, TaskGroup
 from .schemas import (
     DailyPlanResponse,
     DailyPlanUpdate,
@@ -29,6 +29,7 @@ from .schemas import (
     MethodSelectionUpdate,
     MethodUpdate,
     RecurringItemResponse,
+    TaskGroupResponse,
 )
 from .strategies.base import MethodStrategy
 
@@ -1143,6 +1144,49 @@ class RecurringItemService:
         return [RecurringItemResponse.model_validate(r) for r in result]
 
 
+class TaskGroupService:
+    """CRUD for user-defined task groups."""
+
+    async def list_groups(self, db: AsyncSession, space_id: str) -> list[TaskGroupResponse]:
+        q = (
+            select(TaskGroup)
+            .where(TaskGroup.space_id == space_id, TaskGroup.deleted_at == None)  # noqa: E711
+            .order_by(TaskGroup.sort_order.asc(), TaskGroup.created_at.asc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [TaskGroupResponse.model_validate(r) for r in rows]
+
+    async def create_group(
+        self, db: AsyncSession, space_id: str, data, user_id: str | None = None
+    ) -> TaskGroupResponse:
+        group = TaskGroup(
+            id=_uuid7_hex(), space_id=space_id, created_by=user_id, **data.model_dump()
+        )
+        db.add(group)
+        await db.flush()
+        await db.refresh(group)
+        return TaskGroupResponse.model_validate(group)
+
+    async def update_group(
+        self, db: AsyncSession, group_id: str, space_id: str, data
+    ) -> TaskGroupResponse:
+        group = await db.get(TaskGroup, group_id)
+        if not group or group.deleted_at is not None or str(group.space_id) != str(space_id):
+            raise NotFoundError("Task group not found", code="dailyos.group_not_found")
+        for key, value in data.model_dump(exclude_unset=True).items():
+            setattr(group, key, value)
+        await db.flush()
+        await db.refresh(group)
+        return TaskGroupResponse.model_validate(group)
+
+    async def delete_group(self, db: AsyncSession, group_id: str, space_id: str) -> None:
+        group = await db.get(TaskGroup, group_id)
+        if not group or group.deleted_at is not None or str(group.space_id) != str(space_id):
+            raise NotFoundError("Task group not found", code="dailyos.group_not_found")
+        await db.delete(group)
+        await db.flush()
+
+
 # ======================== Module-level singletons ========================
 
 method_service = MethodService()
@@ -1150,3 +1194,4 @@ method_selection_service = MethodSelectionService()
 daily_plan_service = DailyPlanService()
 guide_service = GuideService()
 recurring_item_service = RecurringItemService()
+task_group_service = TaskGroupService()

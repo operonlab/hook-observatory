@@ -1,19 +1,22 @@
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
+import type { PlanItem } from '../types'
+import GroupSelector from './GroupSelector'
 
 interface AddItemInputProps {
-  onAdd: (title: string) => void
+  onAdd: (title: string, extra?: Partial<PlanItem>) => void
   placeholder?: string
 }
 
 export default function AddItemInput({ onAdd, placeholder = '新增項目...' }: AddItemInputProps) {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
+  const [groupId, setGroupId] = useState<string | undefined>()
 
   const handleSubmit = () => {
     const trimmed = value.trim()
     if (!trimmed) return
-    onAdd(trimmed)
+    onAdd(trimmed, groupId ? { group_id: groupId } : undefined)
     setValue('')
   }
 
@@ -59,6 +62,7 @@ export default function AddItemInput({ onAdd, placeholder = '新增項目...' }:
         className="flex-1 bg-transparent text-[13px] outline-none"
         style={{ color: 'var(--do-text)' }}
       />
+      <GroupSelector value={groupId} onChange={setGroupId} compact />
       {value.trim() && (
         <button
           type="button"
