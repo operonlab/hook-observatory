@@ -203,6 +203,19 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                     source="memvault",
                 )
             )
+            # Post-ingest auto-merge (best-effort, >= 0.95 only)
+            try:
+                merges = await entity_resolution_service.auto_merge(
+                    db, space_id, threshold=0.95, max_merges=10
+                )
+                if merges:
+                    logger.info(
+                        "Post-ingest auto-merged %d entity pairs (space=%s)",
+                        len(merges),
+                        space_id,
+                    )
+            except Exception:
+                logger.warning("Post-ingest auto-merge failed", exc_info=True)
 
         return created
 

@@ -498,6 +498,31 @@ async def backfill_entity_resolution(
     return {"total_unresolved": len(triples), "resolved": resolved}
 
 
+@router.post("/entities/auto-merge", status_code=200)
+async def auto_merge_entities(
+    space_id: str = Query("default"),
+    threshold: float = Query(0.95, ge=0.85, le=1.0),
+    max_merges: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Auto-merge entity pairs above similarity threshold."""
+    results = await entity_resolution_service.auto_merge(
+        db, space_id, threshold=threshold, max_merges=max_merges
+    )
+    await db.commit()
+    return {
+        "merged": len(results),
+        "details": [
+            {
+                "canonical_name": r.canonical_name,
+                "aliases": r.aliases,
+                "triples_updated": r.triples_updated,
+            }
+            for r in results
+        ],
+    }
+
+
 # ======================== Graph Traversal ========================
 
 
