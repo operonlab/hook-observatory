@@ -1242,6 +1242,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("entity-backfill", parents=[common], help="Backfill entity resolution")
 
+    p = sub.add_parser(
+        "entity-auto-merge",
+        parents=[common],
+        help="Auto-merge entities above similarity threshold",
+    )
+    p.add_argument(
+        "--threshold",
+        type=float,
+        default=0.95,
+        help="Similarity threshold (default: 0.95)",
+    )
+    p.add_argument(
+        "--max-merges",
+        type=int,
+        default=20,
+        help="Max merges per run (default: 20)",
+    )
+
     p = sub.add_parser("traverse", parents=[common], help="Multi-hop graph traversal")
     p.add_argument("entity", help="Seed entity name")
     p.add_argument("--depth", type=int, default=2, help="Max traversal depth (1-4)")
@@ -1353,6 +1371,29 @@ def cmd_entity_backfill(client: MemvaultClient, args: argparse.Namespace) -> Non
     print(f"  Entity backfill: {resolved} resolved out of {total}")
 
 
+def cmd_entity_auto_merge(
+    client: MemvaultClient,
+    args: argparse.Namespace,
+) -> None:
+    """Auto-merge entities above similarity threshold."""
+    data = client._post(
+        "/kg/entities/auto-merge",
+        params={
+            "space_id": args.space_id,
+            "threshold": args.threshold,
+            "max_merges": args.max_merges,
+        },
+    )
+    if _json_out(data, args):
+        return
+    merged = data.get("merged", 0)
+    print(f"  Auto-merged: {merged} entity pairs")
+    for d in data.get("details", []):
+        cn = d.get("canonical_name", "?")
+        tu = d.get("triples_updated", 0)
+        print(f"    {cn} ({tu} triples updated)")
+
+
 def cmd_traverse(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Multi-hop graph traversal from a seed entity."""
     data = client.graph_traverse(
@@ -1435,6 +1476,7 @@ COMMAND_MAP = {
     "entity-merge": cmd_entity_merge,
     "entity-merge-candidates": cmd_entity_merge_candidates,
     "entity-backfill": cmd_entity_backfill,
+    "entity-auto-merge": cmd_entity_auto_merge,
     "traverse": cmd_traverse,
 }
 

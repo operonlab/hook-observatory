@@ -330,5 +330,49 @@ class EntityResolutionService:
 
         return candidates[:limit]
 
+    async def auto_merge(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        threshold: float = 0.95,
+        max_merges: int = 20,
+    ) -> list[EntityMergeResult]:
+        """Auto-merge entity pairs above threshold. Safe for post-ingest use.
+
+        Only merges pairs with similarity >= threshold (default 0.95).
+        Stops after max_merges to bound execution time.
+        """
+        candidates = await self.find_merge_candidates(
+            db, space_id, threshold=threshold, limit=max_merges * 2
+        )
+        results = []
+        merged_ids: set[str] = set()
+
+        for primary_resp, secondary_resp, similarity in candidates:
+            if len(results) >= max_merges:
+                break
+            # Skip if either entity was already merged in this batch
+            if primary_resp.id in merged_ids or secondary_resp.id in merged_ids:
+                continue
+            try:
+                result = await self.merge_entities(db, primary_resp.id, secondary_resp.id)
+                merged_ids.add(secondary_resp.id)
+                results.append(result)
+                logger.info(
+                    "Auto-merged: %s <- %s (sim=%.3f)",
+                    primary_resp.canonical_name,
+                    secondary_resp.canonical_name,
+                    similarity,
+                )
+            except Exception:
+                logger.warning(
+                    "Auto-merge failed: %s <- %s",
+                    primary_resp.canonical_name,
+                    secondary_resp.canonical_name,
+                    exc_info=True,
+                )
+
+        return results
+
 
 entity_resolution_service = EntityResolutionService()
