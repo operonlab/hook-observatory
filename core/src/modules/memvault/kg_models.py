@@ -61,6 +61,38 @@ class TripleEmbedding(Base):
 # ---------------------------------------------------------------------------
 
 
+class EntityCanonical(SpaceScopedModel):
+    """Canonical entity node — deduplicates subject/object strings across triples."""
+
+    __tablename__ = "entity_canonicals"
+    __table_args__ = (
+        Index("idx_ec_canonical_name", "space_id", "canonical_name"),
+        Index("idx_ec_entity_type", "entity_type"),
+        Index(
+            "idx_ec_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        Index("idx_ec_aliases", "aliases", postgresql_using="gin"),
+        UniqueConstraint(
+            "space_id",
+            "canonical_name",
+            name="uq_entity_canonical_space_name",
+        ),
+        {"schema": SCHEMA},
+    )
+
+    canonical_name: Mapped[str] = mapped_column(String(500))
+    aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    entity_type: Mapped[str] = mapped_column(
+        String(50), server_default=text("'concept'")
+    )  # concept | tool | person | org | language
+    merge_count: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+
+
 class Triple(SpaceScopedModel):
     """A single subject-predicate-object fact extracted from a session (Knowledge L0)."""
 
@@ -69,6 +101,12 @@ class Triple(SpaceScopedModel):
         Index("idx_triples_session", "source_session"),
         Index("idx_triples_predicate", "predicate"),
         Index("idx_triples_subject", "subject"),
+        Index("idx_triples_object", "object"),
+        Index(
+            "idx_triples_valid",
+            "space_id",
+            postgresql_where=text("invalid_at IS NULL"),
+        ),
         Index(
             "idx_triples_embedding",
             "embedding",
@@ -96,16 +134,28 @@ class Triple(SpaceScopedModel):
     )
 
     source_session: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    timestamp: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     subject: Mapped[str] = mapped_column(String(500))
     predicate: Mapped[str] = mapped_column(String(100))
     object: Mapped[str] = mapped_column(Text)
     topic: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(EMBEDDING_DIM), nullable=True
+    # Edge invalidation (Graphiti-inspired temporal validity)
+    valid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalidated_by: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.triples.id"), nullable=True
+    )  # ID of newer triple that superseded this one; NULL = valid
+    invalidation_reason: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )  # contradiction | manual | correction
+    # Entity resolution FK (canonical entity references)
+    canonical_subject_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.entity_canonicals.id"), nullable=True
     )
+    canonical_object_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.entity_canonicals.id"), nullable=True
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -117,21 +167,15 @@ class Cluster(SpaceScopedModel):
     """A GMM-derived cluster grouping related triples (Knowledge L1)."""
 
     __tablename__ = "clusters"
-    __table_args__ = (
-        {"schema": SCHEMA},
-    )
+    __table_args__ = ({"schema": SCHEMA},)
 
     name: Mapped[str] = mapped_column(String(200))
     size: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     top_subjects: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     top_predicates: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     top_objects: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    summary: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # "情境→判斷→結果" pattern
-    verdict: Mapped[str] = mapped_column(
-        String(20), server_default=text("'UNVERIFIED'")
-    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # "情境→判斷→結果" pattern
+    verdict: Mapped[str] = mapped_column(String(20), server_default=text("'UNVERIFIED'"))
     generation_batch: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
@@ -170,9 +214,7 @@ class WisdomNode(SpaceScopedModel):
     """A cross-cluster insight that bridges multiple clusters (Knowledge L2)."""
 
     __tablename__ = "wisdom_nodes"
-    __table_args__ = (
-        {"schema": SCHEMA},
-    )
+    __table_args__ = ({"schema": SCHEMA},)
 
     wisdom: Mapped[str] = mapped_column(Text)
     confidence: Mapped[str] = mapped_column(String(20))  # HIGH / MEDIUM / LOW
@@ -224,9 +266,7 @@ class AttitudeFact(SpaceScopedModel):
         ForeignKey(f"{SCHEMA}.attitude_facts.id"),
         nullable=True,
     )
-    embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(EMBEDDING_DIM), nullable=True
-    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
 
 # ---------------------------------------------------------------------------

@@ -1220,12 +1220,163 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--attitude", type=float, default=None, help="Attitude score")
     p.add_argument("--skill", type=float, default=None, help="Skill score")
 
+    # ---- Edge Invalidation + Entity Resolution + Graph Traversal ----
+
+    p = sub.add_parser("triple-invalidate", parents=[common], help="Invalidate a triple")
+    p.add_argument("triple_id", help="Triple ID")
+    p.add_argument("--reason", default="manual", help="Invalidation reason")
+    p.add_argument("--replacement", default=None, help="Replacement triple ID")
+
+    p = sub.add_parser("entities", parents=[common, paginated], help="List canonical entities")
+    p.add_argument("--type", default=None, help="Entity type filter")
+
+    sub.add_parser("entity-stats", parents=[common], help="Entity resolution statistics")
+
+    p = sub.add_parser("entity-merge", parents=[common], help="Merge two entities")
+    p.add_argument("primary_id", help="Primary entity ID (kept)")
+    p.add_argument("secondary_id", help="Secondary entity ID (merged into primary)")
+
+    p = sub.add_parser("entity-merge-candidates", parents=[common], help="Find merge candidates")
+    p.add_argument("--threshold", type=float, default=0.92, help="Similarity threshold")
+    p.add_argument("--limit", type=int, default=50, help="Max candidates")
+
+    sub.add_parser("entity-backfill", parents=[common], help="Backfill entity resolution")
+
+    p = sub.add_parser("traverse", parents=[common], help="Multi-hop graph traversal")
+    p.add_argument("entity", help="Seed entity name")
+    p.add_argument("--depth", type=int, default=2, help="Max traversal depth (1-4)")
+    p.add_argument("--direction", default="both", choices=["outgoing", "incoming", "both"])
+    p.add_argument("--predicates", default=None, help="Comma-separated predicate filter")
+    p.add_argument("--max-results", type=int, default=200, help="Max results (1-500)")
+
     return parser
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Command handlers — Edge Invalidation, Entity Resolution, Graph Traversal
+# ---------------------------------------------------------------------------
+
+
+def cmd_triple_invalidate(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Invalidate a triple (soft temporal invalidation)."""
+    data = client.invalidate_triple(
+        args.triple_id,
+        reason=args.reason,
+        replacement_id=getattr(args, "replacement", None),
+    )
+    if _json_out(data, args):
+        return
+    print(f"  Triple {args.triple_id} invalidated (reason: {args.reason})")
+
+
+def cmd_entities(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """List canonical entities."""
+    data = client.list_entities(
+        entity_type=getattr(args, "type", None),
+        page=args.page,
+        page_size=args.page_size,
+    )
+    if _json_out(data, args):
+        return
+    items = data.get("items", [])
+    total = data.get("total", len(items))
+    if not items:
+        print("  No entities found.")
+        return
+    print(f"  Canonical Entities ({total} total)")
+    print(f"  {'─' * 60}")
+    for e in items:
+        aliases = ", ".join(e.get("aliases", [])[:3])
+        merge = e.get("merge_count", 1)
+        etype = e.get("entity_type", "concept")
+        print(f"  {e['canonical_name']:<40s} [{etype}] merges={merge}")
+        if aliases:
+            print(f"    aliases: {aliases}")
+
+
+def cmd_entity_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Entity resolution statistics."""
+    data = client.entity_stats()
+    if _json_out(data, args):
+        return
+    print("  Entity Resolution Stats")
+    print(f"  {'─' * 30}")
+    print(f"  Total entities   : {data.get('total_entities', 0)}")
+    print(f"  Total aliases    : {data.get('total_aliases', 0)}")
+    print(f"  Avg merge count  : {data.get('avg_merge_count', 1.0):.2f}")
+    print(f"  Unresolved triples: {data.get('unresolved_triples', 0)}")
+
+
+def cmd_entity_merge(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Merge two entities."""
+    data = client.merge_entities(args.primary_id, args.secondary_id)
+    if _json_out(data, args):
+        return
+    print(f"  Merged → {data.get('canonical_name', '?')}")
+    print(f"  Aliases: {', '.join(data.get('aliases', []))}")
+    print(f"  Triples updated: {data.get('triples_updated', 0)}")
+
+
+def cmd_entity_merge_candidates(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Find entity merge candidates by embedding similarity."""
+    data = client.entity_merge_candidates(
+        threshold=getattr(args, "threshold", 0.92),
+        limit=getattr(args, "limit", 50),
+    )
+    if _json_out(data, args):
+        return
+    if not data:
+        print("  No merge candidates found.")
+        return
+    print(f"  Merge Candidates ({len(data)} pairs)")
+    print(f"  {'─' * 70}")
+    for c in data:
+        p = c.get("primary", {})
+        s = c.get("secondary", {})
+        sim = c.get("similarity", 0)
+        pn = p.get("canonical_name", "?")
+        sn = s.get("canonical_name", "?")
+        print(f"  {pn:<30s} ↔ {sn:<30s} sim={sim:.4f}")
+
+
+def cmd_entity_backfill(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Backfill entity resolution for unresolved triples."""
+    data = client.backfill_entity_resolution()
+    if _json_out(data, args):
+        return
+    resolved = data.get("resolved", 0)
+    total = data.get("total_unresolved", 0)
+    print(f"  Entity backfill: {resolved} resolved out of {total}")
+
+
+def cmd_traverse(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Multi-hop graph traversal from a seed entity."""
+    data = client.graph_traverse(
+        entity=args.entity,
+        max_depth=args.depth,
+        direction=args.direction,
+        predicates=getattr(args, "predicates", None),
+        max_results=getattr(args, "max_results", 200),
+    )
+    if _json_out(data, args):
+        return
+    nodes = data.get("nodes", [])
+    edges = data.get("edges", [])
+    truncated = data.get("truncated", False)
+    print(f"  Graph Traversal: {data.get('seed_entity', '?')}")
+    print(f"  Direction: {data.get('direction', '?')} | Max depth: {data.get('max_depth', '?')}")
+    print(f"  Nodes: {len(nodes)} | Edges: {len(edges)}{' (TRUNCATED)' if truncated else ''}")
+    print()
+    for edge in edges[:50]:
+        d = edge.get("depth", "?")
+        print(f"  [d={d}] {edge['source']} --[{edge['predicate']}]--> {edge['target']}")
+    if len(edges) > 50:
+        print(f"  ... and {len(edges) - 50} more edges")
+
 
 COMMAND_MAP = {
     # Existing
@@ -1277,6 +1428,14 @@ COMMAND_MAP = {
     "attitude-evolve": cmd_attitude_evolve,
     "attitude-delete": cmd_attitude_delete,
     "profile-upsert": cmd_profile_upsert,
+    # Edge Invalidation + Entity Resolution + Graph Traversal
+    "triple-invalidate": cmd_triple_invalidate,
+    "entities": cmd_entities,
+    "entity-stats": cmd_entity_stats,
+    "entity-merge": cmd_entity_merge,
+    "entity-merge-candidates": cmd_entity_merge_candidates,
+    "entity-backfill": cmd_entity_backfill,
+    "traverse": cmd_traverse,
 }
 
 
