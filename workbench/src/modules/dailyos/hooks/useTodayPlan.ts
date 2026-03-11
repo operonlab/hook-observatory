@@ -1,9 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { useMethodStore } from '../stores/methodStore'
 
-export function useTodayPlan() {
+/**
+ * Hook to load a plan for a specific date.
+ * Defaults to today when no date is provided.
+ */
+export function useDatePlan(date?: string) {
   const {
-    todayPlan,
+    currentDate,
+    currentPlan,
     planItems,
     planLoading,
     addItem,
@@ -19,19 +24,20 @@ export function useTodayPlan() {
     transitionPlan,
     completeReview,
     updatePlanItems,
-    fetchTodayPlan,
+    fetchPlan,
   } = useMethodStore()
 
-  const fetched = useRef(false)
+  const lastDate = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (!fetched.current) {
-      fetched.current = true
-      fetchTodayPlan()
+    if (lastDate.current !== date) {
+      lastDate.current = date
+      fetchPlan(date)
     }
-  }, [fetchTodayPlan])
+  }, [date, fetchPlan])
 
   return {
-    plan: todayPlan,
+    plan: currentPlan,
+    currentDate,
     items: planItems,
     loading: planLoading,
     addItem,
@@ -47,6 +53,11 @@ export function useTodayPlan() {
     transitionPlan,
     completeReview,
     updatePlanItems,
-    refresh: fetchTodayPlan,
+    refresh: () => fetchPlan(date),
   }
+}
+
+/** Backward-compatible wrapper: loads today's plan. */
+export function useTodayPlan() {
+  return useDatePlan()
 }
