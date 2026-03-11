@@ -70,14 +70,18 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 def _post_to_api(payload: dict) -> bool:
     """Synchronous POST to Anvil API. Returns True on success."""
     try:
+        url = f"{ANVIL_API}/api/anvil/invocations"
+        # Guard: only allow http/https — never file: or custom schemes (S310)
+        if not url.startswith(("http://", "https://")):
+            return False
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        req = urllib.request.Request(
-            f"{ANVIL_API}/api/anvil/invocations",
+        req = urllib.request.Request(  # noqa: S310
+            url,
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=3) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310
             return resp.status == 201
     except (urllib.error.URLError, OSError, ValueError):
         return False

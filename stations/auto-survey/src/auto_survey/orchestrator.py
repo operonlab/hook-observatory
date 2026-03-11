@@ -79,18 +79,22 @@ def _run_pipeline(db: Session, url: str, survey_type: str, dry_run: bool = False
     _log("Phase 3: Fill — submitting forms...")
     random.shuffle(people)
 
-    # Pathfinder: first person is the scout
+    # Pathfinder: randomly selected scout (shuffle already done above)
     if survey_type == "quiz" and answers:
         scout = people[0]
         _log(f"Pathfinder: {scout.name} goes first...")
         _fill_one_person(db, survey, scout, answers)
 
-        # Check score
+        # Mark as pathfinder
         sub = (
             db.query(Submission)
             .filter(Submission.survey_id == survey.id, Submission.person_id == scout.id)
             .first()
         )
+        if sub:
+            sub.is_pathfinder = True
+            db.commit()
+
         if sub and sub.status == "success" and sub.score is not None:
             _log(f"  Pathfinder score: {sub.score}")
             if sub.score < 100:
@@ -120,7 +124,7 @@ def _run_pipeline(db: Session, url: str, survey_type: str, dry_run: bool = False
             .first()
         )
         if existing:
-            _log(f"  [{i+1}/{len(remaining)}] {person.name} — already submitted, skipping")
+            _log(f"  [{i + 1}/{len(remaining)}] {person.name} — already submitted, skipping")
             continue
 
         # Stagger delay
@@ -129,7 +133,7 @@ def _run_pipeline(db: Session, url: str, survey_type: str, dry_run: bool = False
             _log(f"  Waiting {delay}s before next submission...")
             time.sleep(delay)
 
-        _log(f"  [{i+1}/{len(remaining)}] {person.name}...")
+        _log(f"  [{i + 1}/{len(remaining)}] {person.name}...")
         _fill_one_person(db, survey, person, answers if survey_type == "quiz" else None)
 
         sub = (
@@ -173,7 +177,7 @@ def _print_summary(db: Session, survey: Survey):
     if survey.type == "quiz":
         scores = [s.score for s in subs if s.score is not None]
         if scores:
-            _log(f"  Avg score: {sum(scores)/len(scores):.1f}")
+            _log(f"  Avg score: {sum(scores) / len(scores):.1f}")
             _log(f"  Min: {min(scores)}, Max: {max(scores)}")
             passed = sum(1 for s in scores if s >= 60)
             _log(f"  Pass rate (>=60): {passed}/{len(scores)}")

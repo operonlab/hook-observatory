@@ -20,7 +20,7 @@ case "${1:-status}" in
 import json
 with open('$CLAUDE_JSON') as f:
     cfg = json.load(f)
-cfg['mcpServers'] = {'mcpproxy': {'url': 'http://127.0.0.1:8808/mcp'}}
+cfg['mcpServers'] = {'mcpproxy': {'type': 'http', 'url': 'http://127.0.0.1:8808/mcp'}}
 with open('$CLAUDE_JSON', 'w') as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
 print('✅ Switched to proxy mode (http://127.0.0.1:8808/mcp)')

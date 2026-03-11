@@ -99,6 +99,7 @@ class Submission(Base):
     person_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("people.id"), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)  # success | failed | skipped
     score: Mapped[int | None] = mapped_column(Integer)
+    is_pathfinder: Mapped[bool] = mapped_column(Boolean, default=False)
     answers_snapshot: Mapped[dict | None] = mapped_column(JSONB)  # {subject_id: answer_text}
     error_message: Mapped[str | None] = mapped_column(Text)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

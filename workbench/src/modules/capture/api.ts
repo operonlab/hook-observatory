@@ -1,4 +1,5 @@
 import { request } from '@/api/client'
+import type { PaginatedResponse } from '@/types'
 
 export interface Capture {
   id: string
@@ -41,7 +42,9 @@ export const captureApi = {
     if (params?.status) qs.set('status', params.status)
     if (params?.limit) qs.set('limit', String(params.limit))
     const q = qs.toString()
-    return request<Capture[]>(`/captures${q ? `?${q}` : ''}`)
+    return request<PaginatedResponse<Capture>>(`/captures${q ? `?${q}` : ''}`).then(
+      (res) => res.items,
+    )
   },
 
   get: (id: string) => request<Capture>(`/captures/${id}`),

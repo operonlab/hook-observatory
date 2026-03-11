@@ -10,10 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .db import get_session, init_db
-
+from .db import engine, get_session, init_db
 from .models import Base, DailyRun, Person, Question, Submission, Survey
-from .db import engine
 
 STATIC_DIR = Path(__file__).parent.parent.parent / "static"
 
@@ -264,6 +262,110 @@ def _execute_pipeline_bg(run_id: str, attend_url: str | None, quiz_url: str | No
         db.close()
 
 
+# ── SSE Stream API ──────────────────────────────────────
+
+
+def _build_day_data(db, run) -> dict:
+    """Build the same payload as /api/day/{date} for SSE streaming."""
+    from sqlalchemy import func as _func
+
+    target = run.run_date
+    subs = (
+        db.query(Submission)
+        .join(Person)
+        .filter(_func.date(Submission.submitted_at) == target)
+        .order_by(Person.name)
+        .all()
+    )
+    survey_ids = {s.survey_id for s in subs}
+    questions = []
+    if survey_ids:
+        questions = (
+            db.query(Question)
+            .filter(Question.survey_id.in_(survey_ids))
+            .order_by(Question.subject_id)
+            .all()
+        )
+    person_map: dict[str, dict] = {}
+    for s in subs:
+        name = s.person.name if s.person else "?"
+        if name not in person_map:
+            person_map[name] = {
+                "person_name": name,
+                "attendance": None,
+                "quiz": None,
+                "score": None,
+                "is_pathfinder": False,
+                "answers_snapshot": None,
+            }
+        entry = person_map[name]
+        stype = s.survey.type if s.survey else ""
+        if stype == "attendance":
+            entry["attendance"] = s.status
+        elif stype == "quiz":
+            entry["quiz"] = s.status
+            entry["score"] = s.score
+            if s.is_pathfinder:
+                entry["is_pathfinder"] = True
+            if s.answers_snapshot:
+                entry["answers_snapshot"] = s.answers_snapshot
+    return {
+        "run": _run_out(run).__dict__ if run else None,
+        "submissions": list(person_map.values()),
+        "questions": [
+            {
+                "id": str(q.id),
+                "subject_id": q.subject_id,
+                "question_text": q.question_text,
+                "options": q.options,
+                "correct_answer": q.correct_answer,
+                "verified": q.verified,
+            }
+            for q in questions
+        ],
+    }
+
+
+@app.get("/api/runs/{run_id}/events")
+async def run_events_stream(run_id: str):
+    """SSE endpoint — push updates until run completes or fails."""
+    import asyncio
+    import json
+
+    from starlette.responses import StreamingResponse
+
+    async def event_generator():
+        last_snapshot = None
+        while True:
+            db = get_session()
+            try:
+                run = db.query(DailyRun).filter(DailyRun.id == uuid.UUID(run_id)).first()
+                if not run:
+                    yield f"event: error\ndata: {json.dumps({'message': 'Run not found'})}\n\n"
+                    return
+
+                data = _build_day_data(db, run)
+                snapshot = json.dumps(data, ensure_ascii=False, default=str)
+
+                if snapshot != last_snapshot:
+                    yield f"data: {snapshot}\n\n"
+                    last_snapshot = snapshot
+
+                if run.status in ("completed", "failed"):
+                    yield f"event: done\ndata: {json.dumps({'status': run.status})}\n\n"
+                    return
+            finally:
+                db.close()
+
+            await asyncio.sleep(2)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # ── History API ──────────────────────────────────────────
 
 
@@ -397,6 +499,7 @@ def get_day_detail(run_date: str):
                     "attendance": None,
                     "quiz": None,
                     "score": None,
+                    "is_pathfinder": False,
                     "answers_snapshot": None,
                 }
             entry = person_map[name]
@@ -406,6 +509,8 @@ def get_day_detail(run_date: str):
             elif stype == "quiz":
                 entry["quiz"] = s.status
                 entry["score"] = s.score
+                if s.is_pathfinder:
+                    entry["is_pathfinder"] = True
                 if s.answers_snapshot:
                     entry["answers_snapshot"] = s.answers_snapshot
 

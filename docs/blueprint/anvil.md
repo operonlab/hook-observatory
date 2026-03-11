@@ -182,11 +182,11 @@ Claude Code main agent 需透過 MCP 工具直接調用 Anvil 功能，無需透
 
 **為何此優先級**: MCP 是 Claude Code 原生整合管道，skill layer 依賴 MCP 進行結構化操作。
 
-**獨立測試方式**: 在 Claude Code 中使用 `ToolSearch` 載入 anvil tools → 呼叫 `anvil_test_skill` → 取得結構化結果。
+**獨立測試方式**: 在 Claude Code 中使用 `mcpproxy` 載入 anvil tools → 呼叫 `anvil_test_skill` → 取得結構化結果。
 
 **驗收場景**:
 
-1. **Given** MCP server 已啟動並註冊於 `~/.claude.json`, **When** `ToolSearch "anvil"`, **Then** 列出所有 Anvil MCP tools
+1. **Given** MCP server 已啟動並註冊於 `~/.claude.json`, **When** `mcp__mcpproxy__retrieve_tools(server_name: "anvil")`, **Then** 列出所有 Anvil MCP tools
 2. **Given** MCP tool `anvil_eval_skill`, **When** 傳入 `{"skill_name": "finance", "mode": "full"}`, **Then** 回傳結構化評估結果（markdown formatted）
 3. **Given** MCP tool `anvil_stats`, **When** 傳入 `{"skill_name": "finance", "period": "7d"}`, **Then** 回傳格式化統計摘要
 
@@ -286,7 +286,7 @@ Claude Code main agent 需透過 MCP 工具直接調用 Anvil 功能，無需透
 
 **Skill 層**
 
-- **FR-050**: Skill MUST 只透過 CLI（Bash tool）+ MCP（ToolSearch）調用，不 import SDK
+- **FR-050**: Skill MUST 只透過 CLI（Bash tool）+ MCP（mcpproxy）調用，不 import SDK
 - **FR-051**: Skill MUST 在 SKILL.md 中維護 Interfaces 表（CLI / MCP / SDK 對照）
 
 **WebUI**

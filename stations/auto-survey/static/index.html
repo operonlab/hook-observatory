@@ -125,7 +125,7 @@
               <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>管線執行中，每 5 秒自動更新...
+              </svg>管線執行中，即時更新...
             </div>
             <p x-show="!dayDetail.run && !isSelectedToday" class="text-sm text-gray-400 mt-1">當天無執行紀錄</p>
           </div>
@@ -171,7 +171,10 @@
                 <tbody class="divide-y divide-gray-100">
                   <template x-for="s in dayDetail.submissions" :key="s.person_name">
                     <tr class="hover:bg-gray-50">
-                      <td class="px-4 py-2.5 font-medium" x-text="s.person_name"></td>
+                      <td class="px-4 py-2.5 font-medium">
+                        <span x-text="s.person_name"></span>
+                        <span x-show="s.is_pathfinder" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">先行者</span>
+                      </td>
                       <td class="px-4 py-2.5 text-center" x-text="s.attendance==='success' ? '✅' : s.attendance ? '❌' : '—'"></td>
                       <td class="px-4 py-2.5 text-center" x-text="s.quiz==='success' ? '✅' : s.quiz ? '❌' : '—'"></td>
                       <td class="px-4 py-2.5 text-center font-mono" x-text="s.score!=null ? s.score : '—'"></td>
@@ -184,7 +187,10 @@
             <div class="sm:hidden divide-y divide-gray-100">
               <template x-for="s in dayDetail.submissions" :key="s.person_name">
                 <div class="px-4 py-3 flex items-center justify-between">
-                  <span class="font-medium text-sm" x-text="s.person_name"></span>
+                  <span class="font-medium text-sm">
+                    <span x-text="s.person_name"></span>
+                    <span x-show="s.is_pathfinder" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">先行者</span>
+                  </span>
                   <div class="flex items-center gap-3 text-sm">
                     <span class="text-xs text-gray-400">簽到<span x-text="s.attendance==='success' ? '✅' : s.attendance ? '❌' : '—'"></span></span>
                     <span class="text-xs text-gray-400">測驗<span x-text="s.quiz==='success' ? '✅' : s.quiz ? '❌' : '—'"></span></span>
@@ -344,7 +350,7 @@ function app() {
     selectedDate: null,
     dayDetail: null,
     loadingDay: false,
-    pollTimer: null,
+    eventSource: null,
 
     // Run form
     attendUrl: '',
@@ -433,13 +439,13 @@ function app() {
 
     async prevMonth() {
       if (this.month === 1) { this.year--; this.month = 12; } else this.month--;
-      this.selectedDate = null; this.dayDetail = null; this.stopPolling();
+      this.selectedDate = null; this.dayDetail = null; this.stopSSE();
       await this.fetchCalendar();
     },
 
     async nextMonth() {
       if (this.month === 12) { this.year++; this.month = 1; } else this.month++;
-      this.selectedDate = null; this.dayDetail = null; this.stopPolling();
+      this.selectedDate = null; this.dayDetail = null; this.stopSSE();
       await this.fetchCalendar();
     },
 
@@ -461,9 +467,9 @@ function app() {
 
     async selectDay(ds) {
       this.selectedDate = ds;
-      this.stopPolling();
+      this.stopSSE();
       await this.fetchDayDetail(ds);
-      this.maybeStartPolling();
+      this.maybeStartSSE();
     },
 
     async fetchDayDetail(ds) {
@@ -477,20 +483,26 @@ function app() {
       this.loadingDay = false;
     },
 
-    maybeStartPolling() {
-      if (this.dayDetail?.run?.status === 'running' && this.isSelectedToday) {
-        this.pollTimer = setInterval(async () => {
-          await this.fetchDayDetail(this.selectedDate);
-          if (this.dayDetail?.run?.status !== 'running') {
-            this.stopPolling();
-            await this.fetchCalendar();
-          }
-        }, 5000);
+    maybeStartSSE() {
+      const runId = this.dayDetail?.run?.id;
+      if (runId && this.dayDetail?.run?.status === 'running' && this.isSelectedToday) {
+        this.stopSSE();
+        this.eventSource = new EventSource(`api/runs/${runId}/events`);
+        this.eventSource.onmessage = (e) => {
+          try { this.dayDetail = JSON.parse(e.data); } catch {}
+        };
+        this.eventSource.addEventListener('done', async () => {
+          this.stopSSE();
+          await this.fetchCalendar();
+        });
+        this.eventSource.onerror = () => {
+          this.stopSSE();
+        };
       }
     },
 
-    stopPolling() {
-      if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; }
+    stopSSE() {
+      if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
     },
 
     async startRun() {

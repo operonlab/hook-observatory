@@ -52,23 +52,31 @@ class ReportService(BaseCRUDService[Report, ReportCreate, ReportUpdate, ReportRe
         return data.model_dump(exclude={"created_at"})
 
     def after_create(self, instance: Report) -> None:
-        event_bus.publish(
-            Event(
-                type=IntelflowEvents.REPORT_CREATED,
-                data={
-                    "id": instance.id,
-                    "report_id": instance.id,  # backward compat
-                    "space_id": instance.space_id,
-                    "title": instance.title,
-                    "query": instance.query,
-                    "content": instance.content,
-                    "tags": instance.tags or [],
-                    "skill_name": instance.skill_name,
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="intelflow",
-                user_id=instance.created_by,
+        import asyncio
+
+        asyncio.ensure_future(  # noqa: RUF006
+            event_bus.publish(
+                Event(
+                    type=IntelflowEvents.REPORT_CREATED,
+                    data={
+                        "id": instance.id,
+                        "report_id": instance.id,  # backward compat
+                        "space_id": instance.space_id,
+                        "title": instance.title,
+                        "query": instance.query,
+                        "content": instance.content,
+                        "tags": instance.tags or [],
+                        "skill_name": instance.skill_name,
+                        "created_at": instance.created_at.isoformat()
+                        if instance.created_at
+                        else None,
+                        "updated_at": instance.updated_at.isoformat()
+                        if instance.updated_at
+                        else None,
+                    },
+                    source="intelflow",
+                    user_id=instance.created_by,
+                )
             )
         )
 

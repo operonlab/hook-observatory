@@ -56,20 +56,20 @@ def _build_fill_script(
     // 1. Select company
     {company_click}
     {company_fill}
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(200);
 
     // 2. Fill name (subject-3) + email (subject-4)
     const nameField = page.locator('[data-qa="subject-3"] input, [data-qa="subject-3"] textarea').first();
     if (await nameField.count() > 0) {{
       await nameField.fill('{name_escaped}');
     }}
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(100);
 
     const emailField = page.locator('[data-qa="subject-4"] input, [data-qa="subject-4"] textarea').first();
     if (await emailField.count() > 0) {{
       await emailField.fill('{email_escaped}');
     }}
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(100);
 
     // 3. Answer quiz questions (if any)
     {answer_clicks}
@@ -82,12 +82,12 @@ def _build_fill_script(
     }}
 
     // 5. Random delay before submit (simulate human)
-    const delay = Math.floor(Math.random() * 5000) + 1000;
+    const delay = Math.floor(Math.random() * 1500) + 500;
     await page.waitForTimeout(delay);
 
     // 6. Submit
     await page.locator('text=送出').first().click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
 
     // 7. Handle confirmation dialog
     const confirmBtns = ['text=確定送出', 'text=確定', 'text=確認', 'text=OK'];
@@ -98,9 +98,13 @@ def _build_fill_script(
         break;
       }}
     }}
-    await page.waitForTimeout(3000);
+    // 8. Wait for result page to fully load after redirect
+    try {{
+      await page.waitForLoadState('networkidle', {{ timeout: 10000 }});
+    }} catch (e) {{}}
+    await page.waitForTimeout(500);
 
-    // 8. Extract score (quiz only)
+    // 9. Extract score (quiz only)
     const bodyText = await page.evaluate(() => document.body.innerText);
     return bodyText;
   }}"""

@@ -4,8 +4,7 @@
 Usage:
     python scripts/update_idf_stats.py [--services memvault,intelflow]
 
-Runs once then exits. Schedule via cron (daily recommended):
-    0 3 * * * cd /path/to/workshop && .venv/bin/python scripts/update_idf_stats.py
+Runs once then exits. Scheduled via Cronicle: ws-search-idf-update (daily 3:30AM).
 """
 
 import asyncio
@@ -39,9 +38,11 @@ async def collect_texts(service: str) -> list[str]:
         elif service == "intelflow":
             from core.src.modules.intelflow.models import Report
 
-            rows = (await db.execute(
-                select(Report.content).where(Report.content.isnot(None))
-            )).scalars().all()
+            rows = (
+                (await db.execute(select(Report.content).where(Report.content.isnot(None))))
+                .scalars()
+                .all()
+            )
             texts = list(rows)
         else:
             logger.warning("Unknown service %s — skipping", service)
