@@ -170,6 +170,69 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="memvault_kg_invalidate",
+            description="標記 triple 為無效（軟性時間失效），用於矛盾偵測或手動修正",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "triple_id": {"type": "string", "description": "要失效的 Triple ID"},
+                    "reason": {
+                        "type": "string",
+                        "default": "manual",
+                        "description": "失效原因 (contradiction / manual / correction)",
+                    },
+                    "replacement_triple_id": {
+                        "type": "string",
+                        "description": "取代此 triple 的新 triple ID",
+                    },
+                },
+                "required": ["triple_id"],
+            },
+        ),
+        Tool(
+            name="memvault_kg_traverse",
+            description="從種子實體出發的多跳圖遍歷（遞迴 CTE），支援方向過濾、predicate 過濾",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity": {"type": "string", "description": "種子實體名稱"},
+                    "max_depth": {
+                        "type": "integer",
+                        "default": 2,
+                        "description": "最大遍歷深度 (1-4)",
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["outgoing", "incoming", "both"],
+                        "default": "both",
+                    },
+                    "predicates": {
+                        "type": "string",
+                        "description": "逗號分隔的 predicate 過濾",
+                    },
+                    "max_results": {"type": "integer", "default": 200},
+                },
+                "required": ["entity"],
+            },
+        ),
+        Tool(
+            name="memvault_entity_stats",
+            description="實體解析統計：canonical 總數、aliases 總數、平均合併次數、未解析 triples",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="memvault_entity_merge",
+            description="合併兩個 canonical entity（secondary → primary），自動更新所有引用的 triples",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "primary_id": {"type": "string", "description": "保留的主要 entity ID"},
+                    "secondary_id": {"type": "string", "description": "被合併的次要 entity ID"},
+                },
+                "required": ["primary_id", "secondary_id"],
+            },
+        ),
     ]
 
 
@@ -196,6 +259,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 return await handle_attitude_evolve(arguments)
             case "memvault_skill_proficiency":
                 return await handle_skill_proficiency(arguments)
+            case "memvault_kg_invalidate":
+                return await handle_kg_invalidate(arguments)
+            case "memvault_kg_traverse":
+                return await handle_kg_traverse(arguments)
+            case "memvault_entity_stats":
+                return await handle_entity_stats(arguments)
+            case "memvault_entity_merge":
+                return await handle_entity_merge(arguments)
             case _:
                 return text_result(f"Unknown tool: {name}")
     except APIError as e:
@@ -398,6 +469,78 @@ async def handle_skill_proficiency(args: dict) -> list[TextContent]:
     )
     truncated = f" (showing {limit} of {total})" if total > limit else ""
     return text_result(f"# Skill Proficiency Ranking ({total} skills{truncated})\n\n{rows}")
+
+
+async def handle_kg_invalidate(args: dict) -> list[TextContent]:
+    """memvault_kg_invalidate -- invalidate a triple."""
+    result = await to_thread(
+        client.invalidate_triple,
+        args["triple_id"],
+        reason=args.get("reason", "manual"),
+        replacement_id=args.get("replacement_triple_id"),
+    )
+    return text_result(
+        f"Triple invalidated.\n"
+        f"ID: {result.get('id', '?')}\n"
+        f"Subject: {result.get('subject', '?')} → Object: {result.get('object', '?')}\n"
+        f"Reason: {result.get('invalidation_reason', 'manual')}"
+    )
+
+
+async def handle_kg_traverse(args: dict) -> list[TextContent]:
+    """memvault_kg_traverse -- multi-hop graph traversal."""
+    result = await to_thread(
+        client.graph_traverse,
+        entity=args["entity"],
+        max_depth=args.get("max_depth", 2),
+        direction=args.get("direction", "both"),
+        predicates=args.get("predicates"),
+        max_results=args.get("max_results", 200),
+    )
+    nodes = result.get("nodes", [])
+    edges = result.get("edges", [])
+    truncated = result.get("truncated", False)
+
+    parts = [
+        f"# Graph Traversal: {result.get('seed_entity', '?')}",
+        f"Direction: {result.get('direction', '?')} | Max depth: {result.get('max_depth', '?')}",
+        f"Nodes: {len(nodes)} | Edges: {len(edges)}{' (TRUNCATED)' if truncated else ''}",
+        "",
+    ]
+    for edge in edges[:30]:
+        d = edge.get("depth", "?")
+        parts.append(f"[d={d}] {edge['source']} --[{edge['predicate']}]--> {edge['target']}")
+    if len(edges) > 30:
+        parts.append(f"... and {len(edges) - 30} more edges")
+
+    return text_result("\n".join(parts))
+
+
+async def handle_entity_stats(args: dict) -> list[TextContent]:
+    """memvault_entity_stats -- entity resolution statistics."""
+    result = await to_thread(client.entity_stats)
+    return text_result(
+        f"# Entity Resolution Stats\n\n"
+        f"- Total entities: {result.get('total_entities', 0)}\n"
+        f"- Total aliases: {result.get('total_aliases', 0)}\n"
+        f"- Avg merge count: {result.get('avg_merge_count', 1.0):.2f}\n"
+        f"- Unresolved triples: {result.get('unresolved_triples', 0)}"
+    )
+
+
+async def handle_entity_merge(args: dict) -> list[TextContent]:
+    """memvault_entity_merge -- merge two entities."""
+    result = await to_thread(
+        client.merge_entities,
+        args["primary_id"],
+        args["secondary_id"],
+    )
+    return text_result(
+        f"Entity merge complete.\n"
+        f"Canonical: {result.get('canonical_name', '?')}\n"
+        f"Aliases: {', '.join(result.get('aliases', []))}\n"
+        f"Triples updated: {result.get('triples_updated', 0)}"
+    )
 
 
 # ======================== Resources ========================

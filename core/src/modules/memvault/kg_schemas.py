@@ -11,16 +11,21 @@ from src.shared.schemas import SpaceScopedResponse
 
 class TripleCreate(BaseModel):
     subject: str = Field(
-        ..., max_length=500, validation_alias=AliasChoices("subject", "s"),
+        ...,
+        max_length=500,
+        validation_alias=AliasChoices("subject", "s"),
     )
     predicate: str = Field(
-        ..., max_length=100, validation_alias=AliasChoices("predicate", "p"),
+        ...,
+        max_length=100,
+        validation_alias=AliasChoices("predicate", "p"),
     )
     object: str = Field(
         validation_alias=AliasChoices("object", "o"),
     )
     source_session: str | None = Field(
-        default=None, validation_alias=AliasChoices("source_session", "session_id"),
+        default=None,
+        validation_alias=AliasChoices("source_session", "session_id"),
     )
     timestamp: datetime | None = None
     topic: str | None = Field(default=None, max_length=500)
@@ -42,6 +47,14 @@ class TripleResponse(SpaceScopedResponse):
     source_session: str | None = None
     timestamp: datetime | None = None
     topic: str | None = None
+    # Edge invalidation
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
+    invalidated_by: str | None = None
+    invalidation_reason: str | None = None
+    # Entity resolution
+    canonical_subject_id: str | None = None
+    canonical_object_id: str | None = None
     # embedding intentionally excluded from response
 
 
@@ -180,3 +193,76 @@ class CascadeRecallResult(BaseModel):
     triples: list[TripleResponse] = []  # L0
     blocks: list = []  # existing blocks (import MemoryBlockResponse if needed)
     layers_searched: list[str] = []  # which layers returned results
+
+
+# ======================== Triple Invalidation ========================
+
+
+class TripleInvalidateRequest(BaseModel):
+    """Manual invalidation of a triple."""
+
+    reason: str = Field(default="manual", max_length=50)
+    replacement_triple_id: str | None = None
+
+
+# ======================== Entity Resolution ========================
+
+
+class EntityCanonicalResponse(SpaceScopedResponse):
+    canonical_name: str
+    aliases: list[str] = []
+    entity_type: str = "concept"
+    merge_count: int = 1
+
+
+class EntityMergeRequest(BaseModel):
+    primary_id: str
+    secondary_id: str
+
+
+class EntityMergeResult(BaseModel):
+    merged_id: str
+    canonical_name: str
+    aliases: list[str]
+    triples_updated: int
+
+
+class EntityResolutionStats(BaseModel):
+    total_entities: int
+    total_aliases: int
+    avg_merge_count: float
+    unresolved_triples: int
+
+
+# ======================== Graph Traversal ========================
+
+
+class GraphNode(BaseModel):
+    """A unique entity discovered during traversal."""
+
+    id: str  # Entity name string
+    label: str
+    depth: int
+    triple_count: int = 0
+
+
+class GraphEdge(BaseModel):
+    """A triple represented as a directed edge."""
+
+    id: str  # Triple DB id
+    source: str  # subject
+    target: str  # object
+    predicate: str
+    depth: int
+
+
+class GraphTraversalResult(BaseModel):
+    """Graph structure for visualization."""
+
+    seed_entity: str
+    direction: str  # outgoing | incoming | both
+    max_depth: int
+    nodes: list[GraphNode] = []
+    edges: list[GraphEdge] = []
+    total_triples_traversed: int = 0
+    truncated: bool = False

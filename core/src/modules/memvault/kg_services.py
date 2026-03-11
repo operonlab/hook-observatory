@@ -14,10 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.events.types import MemvaultEvents
-from src.shared.errors import NotFoundError
+from src.shared.errors import ConflictError, NotFoundError
 from src.shared.services import BaseCRUDService
 
 from .embedding import get_embedding
+from .entity_resolution import entity_resolution_service, normalize_entity_text
 from .kg_config import normalize_predicate
 from .kg_models import (
     AttitudeFact,
@@ -36,6 +37,9 @@ from .kg_schemas import (
     CascadeRecallResult,
     ClusterDetail,
     ClusterResponse,
+    GraphEdge,
+    GraphNode,
+    GraphTraversalResult,
     SkillInvocationCreate,
     SkillInvocationResponse,
     SkillProficiencyResponse,
@@ -73,9 +77,11 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
     model = Triple
 
     def before_create(self, data: TripleCreate, **kwargs: Any) -> dict:
-        """Normalize predicate before inserting."""
+        """Normalize predicate and entity text before inserting."""
         d = data.model_dump()
         d["predicate"] = normalize_predicate(d["predicate"])
+        d["subject"] = normalize_entity_text(d["subject"])
+        d["object"] = normalize_entity_text(d["object"])
         return d
 
     def after_create(self, instance: Triple) -> None:
@@ -108,6 +114,12 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             source_session=instance.source_session,
             timestamp=instance.timestamp,
             topic=instance.topic,
+            valid_at=instance.valid_at,
+            invalid_at=instance.invalid_at,
+            invalidated_by=instance.invalidated_by,
+            invalidation_reason=instance.invalidation_reason,
+            canonical_subject_id=instance.canonical_subject_id,
+            canonical_object_id=instance.canonical_object_id,
         )
 
     async def batch_ingest(
@@ -123,21 +135,24 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         """
         created: list[Triple] = []
 
+        invalidated_count = 0
         for item in batch.triples:
             predicate = normalize_predicate(item.predicate)
+            subject = normalize_entity_text(item.subject)
+            object_text = normalize_entity_text(item.object)
             topic = batch.topic or item.topic
             timestamp = batch.timestamp or item.timestamp
 
             # Best-effort embedding
-            embedding_text = f"{item.subject} {predicate} {item.object}"
+            embedding_text = f"{subject} {predicate} {object_text}"
             embedding = await get_embedding(embedding_text)
 
             triple = Triple(
                 space_id=space_id,
                 source_session=batch.session_id,
-                subject=item.subject,
+                subject=subject,
                 predicate=predicate,
-                object=item.object,
+                object=object_text,
                 topic=topic,
                 timestamp=timestamp,
                 embedding=embedding,
@@ -149,14 +164,30 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                 if embedding is not None:
                     db.add(TripleEmbedding(triple_id=triple.id, embedding=embedding))
                     await db.flush()
+                # Entity resolution (best-effort)
+                await entity_resolution_service.resolve_and_link_triple(db, space_id, triple)
+                # Detect and invalidate contradictions
+                contradictions = await self.detect_contradictions(db, space_id, triple)
+                for old_triple in contradictions:
+                    old_triple.invalid_at = datetime.now(UTC)
+                    old_triple.invalidated_by = triple.id
+                    old_triple.invalidation_reason = "contradiction"
+                    invalidated_count += 1
+                    logger.info(
+                        "Auto-invalidated triple %s (replaced by %s)",
+                        old_triple.id,
+                        triple.id,
+                    )
+                if contradictions:
+                    await db.flush()
                 created.append(triple)
             except IntegrityError:
                 await db.rollback()
                 logger.debug(
                     "Skipping duplicate triple: %s %s %s (session=%s)",
-                    item.subject,
+                    subject,
                     predicate,
-                    item.object,
+                    object_text,
                     batch.session_id,
                 )
 
@@ -183,6 +214,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         subject: str | None = None,
         object: str | None = None,
         limit: int = 50,
+        include_invalid: bool = False,
     ) -> list[TripleResponse]:
         """Query triples by predicate, optionally filtered by subject or object."""
         canonical = normalize_predicate(predicate)
@@ -194,6 +226,8 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             )
             .limit(limit)
         )
+        if not include_invalid:
+            q = q.where(Triple.invalid_at.is_(None))
         if subject is not None:
             q = q.where(Triple.subject.ilike(f"%{subject}%"))
         if object is not None:
@@ -222,6 +256,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             .join(TripleEmbedding, TripleEmbedding.triple_id == Triple.id)
             .where(
                 Triple.space_id == space_id,
+                Triple.invalid_at.is_(None),
                 distance < (1 - threshold),
             )
             .order_by(distance)
@@ -238,6 +273,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             .where(
                 Triple.space_id == space_id,
                 Triple.embedding.isnot(None),
+                Triple.invalid_at.is_(None),
                 distance < (1 - threshold),
             )
             .order_by(distance)
@@ -264,6 +300,212 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         for key, val in d.items():
             setattr(instance, key, val)
         return instance
+
+    async def invalidate(
+        self,
+        db: AsyncSession,
+        triple_id: str,
+        reason: str = "manual",
+        replacement_id: str | None = None,
+    ) -> Triple:
+        """Mark a triple as invalidated (edge invalidation)."""
+        result = await db.execute(select(Triple).where(Triple.id == triple_id))
+        instance = result.scalar_one_or_none()
+        if not instance:
+            raise NotFoundError("Triple not found", code="memvault.triple_not_found")
+        if instance.invalid_at is not None:
+            raise ConflictError(
+                "Triple already invalidated", code="memvault.triple_already_invalid"
+            )
+
+        instance.invalid_at = datetime.now(UTC)
+        instance.invalidation_reason = reason
+        if replacement_id:
+            instance.invalidated_by = replacement_id
+        await db.flush()
+
+        event_bus.publish(
+            Event(
+                type=MemvaultEvents.TRIPLE_INVALIDATED,
+                data={
+                    "triple_id": triple_id,
+                    "reason": reason,
+                    "replacement_id": replacement_id,
+                },
+                source="memvault",
+            )
+        )
+        return instance
+
+    async def detect_contradictions(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        new_triple: Triple,
+        similarity_threshold: float = 0.85,
+    ) -> list[Triple]:
+        """Find valid triples that contradict the new triple.
+
+        Same subject + same predicate + high embedding similarity + different object.
+        """
+        if new_triple.embedding is None:
+            return []
+
+        distance = Triple.embedding.cosine_distance(new_triple.embedding)
+        q = (
+            select(Triple)
+            .where(
+                Triple.space_id == space_id,
+                Triple.id != new_triple.id,
+                Triple.invalid_at.is_(None),
+                Triple.subject == new_triple.subject,
+                Triple.predicate == new_triple.predicate,
+                Triple.embedding.isnot(None),
+                distance < (1 - similarity_threshold),
+            )
+            .order_by(distance)
+            .limit(5)
+        )
+        candidates = (await db.execute(q)).scalars().all()
+
+        return [
+            c for c in candidates if c.object.strip().lower() != new_triple.object.strip().lower()
+        ]
+
+
+# ======================== GraphTraversalService ========================
+
+
+class GraphTraversalService:
+    """SQL-based multi-hop graph traversal using PostgreSQL recursive CTE."""
+
+    MAX_DEPTH_CAP = 4
+    MAX_RESULTS_CAP = 500
+    QUERY_TIMEOUT_MS = 5000
+
+    async def traverse(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        entity: str,
+        max_depth: int = 2,
+        direction: str = "both",
+        predicate_filter: list[str] | None = None,
+        max_results: int = 200,
+    ) -> GraphTraversalResult:
+        """Multi-hop graph traversal from a seed entity."""
+        from sqlalchemy import text as sa_text
+
+        max_depth = min(max_depth, self.MAX_DEPTH_CAP)
+        max_results = min(max_results, self.MAX_RESULTS_CAP)
+
+        # Build direction-specific CTE
+        predicates_clause = ""
+        params: dict[str, Any] = {
+            "entity": entity,
+            "space_id": space_id,
+            "max_depth": max_depth,
+            "max_results": max_results,
+        }
+        if predicate_filter:
+            predicates_clause = "AND t.predicate = ANY(:predicates)"
+            params["predicates"] = predicate_filter
+
+        # All values are parameterized (:entity, :space_id, :predicates, :max_depth)
+        # predicates_clause is only "AND t.predicate = ANY(:predicates)" — safe
+        if direction == "outgoing":
+            seed = """
+                SELECT id, subject, predicate, object, 1 AS depth, ARRAY[id] AS path
+                FROM memvault.triples
+                WHERE subject = :entity AND space_id = :space_id
+                  AND deleted_at IS NULL AND invalid_at IS NULL
+            """
+            recurse = f"""
+                SELECT t.id, t.subject, t.predicate, t.object, g.depth + 1, g.path || t.id
+                FROM memvault.triples t JOIN graph g ON t.subject = g.object
+                WHERE g.depth < :max_depth AND t.space_id = :space_id
+                  AND t.deleted_at IS NULL AND t.invalid_at IS NULL
+                  AND t.id != ALL(g.path) {predicates_clause}
+            """  # noqa: S608
+        elif direction == "incoming":
+            seed = """
+                SELECT id, subject, predicate, object, 1 AS depth, ARRAY[id] AS path
+                FROM memvault.triples
+                WHERE object = :entity AND space_id = :space_id
+                  AND deleted_at IS NULL AND invalid_at IS NULL
+            """
+            recurse = f"""
+                SELECT t.id, t.subject, t.predicate, t.object, g.depth + 1, g.path || t.id
+                FROM memvault.triples t JOIN graph g ON t.object = g.subject
+                WHERE g.depth < :max_depth AND t.space_id = :space_id
+                  AND t.deleted_at IS NULL AND t.invalid_at IS NULL
+                  AND t.id != ALL(g.path) {predicates_clause}
+            """  # noqa: S608
+        else:  # both
+            seed = """
+                SELECT id, subject, predicate, object, 1 AS depth, ARRAY[id] AS path
+                FROM memvault.triples
+                WHERE (subject = :entity OR object = :entity) AND space_id = :space_id
+                  AND deleted_at IS NULL AND invalid_at IS NULL
+            """
+            recurse = f"""
+                SELECT t.id, t.subject, t.predicate, t.object, g.depth + 1, g.path || t.id
+                FROM memvault.triples t JOIN graph g
+                  ON (t.subject = g.object OR t.object = g.subject)
+                WHERE g.depth < :max_depth AND t.space_id = :space_id
+                  AND t.deleted_at IS NULL AND t.invalid_at IS NULL
+                  AND t.id != ALL(g.path) {predicates_clause}
+            """  # noqa: S608
+
+        sql = (
+            f"SET LOCAL statement_timeout = '{self.QUERY_TIMEOUT_MS}ms';"  # noqa: S608
+            f" WITH RECURSIVE graph AS ({seed} UNION ALL {recurse})"
+            " SELECT DISTINCT ON (id) id, subject, predicate, object, depth"
+            " FROM graph ORDER BY id, depth LIMIT :max_results;"
+        )
+
+        result = await db.execute(sa_text(sql), params)
+        rows = result.fetchall()
+
+        # Build nodes + edges
+        node_map: dict[str, GraphNode] = {}
+        edges: list[GraphEdge] = []
+
+        for row in rows:
+            edge = GraphEdge(
+                id=row.id,
+                source=row.subject,
+                target=row.object,
+                predicate=row.predicate,
+                depth=row.depth,
+            )
+            edges.append(edge)
+
+            for name in (row.subject, row.object):
+                if name not in node_map:
+                    node_map[name] = GraphNode(
+                        id=name,
+                        label=name,
+                        depth=row.depth if name != entity else 0,
+                        triple_count=0,
+                    )
+                node_map[name].triple_count += 1
+                if row.depth < node_map[name].depth:
+                    node_map[name].depth = row.depth
+
+        # Ensure seed entity is in nodes even if no results
+        if entity not in node_map:
+            node_map[entity] = GraphNode(id=entity, label=entity, depth=0)
+
+        return GraphTraversalResult(
+            seed_entity=entity,
+            direction=direction,
+            max_depth=max_depth,
+            nodes=sorted(node_map.values(), key=lambda n: (n.depth, n.id)),
+            edges=edges,
+            total_triples_traversed=len(edges),
+            truncated=len(edges) >= max_results,
+        )
 
 
 # ======================== ClusterService ========================
@@ -1053,3 +1295,4 @@ attitude_service = AttitudeService()
 skill_tracking_service = SkillTrackingService()
 cascade_recall_service = CascadeRecallService()
 confidence_decay_service = ConfidenceDecayService()
+graph_traversal_service = GraphTraversalService()
