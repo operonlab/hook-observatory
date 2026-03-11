@@ -45,7 +45,7 @@ def log(msg: str) -> None:
     try:
         with open(LOG_FILE, "a") as f:
             f.write(line + "\n")
-    except Exception:  # noqa: S110
+    except Exception:
         pass
 
 
@@ -56,7 +56,7 @@ def log_separator() -> None:
     try:
         with open(LOG_FILE, "a") as f:
             f.write(sep + "\n")
-    except Exception:  # noqa: S110
+    except Exception:
         pass
 
 
@@ -278,8 +278,8 @@ def main() -> None:
   "blocks": [
     {{
       "topic": "簡短主題（5-15字）",
-      "block_type": "technical | decision | preference | insight | pattern",
-      "content": "完整的記憶內容。保留具體的：檔案路徑、函數名、版本號、錯誤訊息、指令。每條記憶用換行分隔。不要過度摘要 — 保留足夠的上下文讓未來搜尋能命中。",
+      "block_type": "technical | decision | preference | insight | pattern | skill",
+      "content": "用完整的自然語句描述。包含因果關係和上下文（為什麼這樣做、遇到什麼問題、怎麼解決）。保留具體的檔案路徑、函數名、版本號、錯誤訊息。",
       "tags": ["具體標籤", "工具名", "模組名"],
       "search_keywords": ["關鍵搜尋詞", "中英文都要", "技術術語原文保留"],
       "importance": 0.7,
@@ -299,19 +299,21 @@ def main() -> None:
 - `preference`: 使用者的工具偏好、命名慣例、工作流程
 - `insight`: 跨領域洞察、模式識別、趨勢觀察
 - `pattern`: 反覆出現的問題或解決模式
+- `skill`: 使用者展現的具體技能、熟練度、學習過程（如 CLI 進階用法、特定框架深度使用、調優技巧）
 
-### tags（3-8 個）
+### tags（3-12 個）
 - 必須包含：涉及的工具名、模組名、語言名（如 python, react, psycopg3, sentinel）
 - 中英文都可以（如 "排程", "cronicle", "docker"）
 - 禁止泛泛單詞：ai, code, tool, system, project, workflow
 - 允許複合標籤：css-grid, docker-healthcheck, session-end-hook
 
-### search_keywords（5-15 個）
-這是為了讓 BM25 搜尋能精準命中。包括：
-- 涉及的函數名、檔案路徑片段（如 "embedding.py", "omlx_bridge"）
-- 錯誤訊息的關鍵片段（如 "SyntaxError", "cast vector"）
-- 中文關鍵詞（如 "嵌入向量", "混合搜尋", "排程"）
-- 英文技術術語原文（如 "BM25", "hybrid search", "psycopg3"）
+### search_keywords（5-15 個，BM25 專用）
+這些詞會被 BM25 + jieba 分詞索引，用於精確關鍵字匹配。只放 content 中沒有的補充搜尋詞：
+- 同義詞/別名（content 寫 "OrbStack" → keywords 加 "Docker Desktop 替代品"）
+- 中英對照（content 用中文描述 → keywords 加英文術語原文，反之亦然）
+- 使用者可能用來搜尋的口語化詞彙（如 "掛掉", "卡住", "炸了"）
+- 錯誤訊息的關鍵片段（如 "SyntaxError", "FATAL: terminating connection"）
+- 不要重複 content 已有的詞 — BM25 已經會分詞 content
 
 ### importance（0.0 - 1.0）
 Key Point Analysis 權重 — 這條記憶有多重要？
@@ -333,9 +335,10 @@ Key Point Analysis 權重 — 這條記憶有多重要？
 ## 重要原則
 1. **多 block 萃取**：如果 session 涵蓋多個不同主題，拆成多個 block（1-5 個）。每個 block 聚焦一個主題。
 2. **保留具體性**：寧可保留 `embedding.py line 42 的 CAST(:emb AS vector)` 也不要抽象成「修復了 SQL 語法」
-3. **搜尋導向**：content 和 search_keywords 要包含未來搜尋時可能用到的詞彙
-4. **雙語標註**：tags 和 search_keywords 中英文都要有，因為搜尋可能用任一語言
-5. **不要編造**：只提取對話中明確出現的資訊
+3. **語意搜尋友善**：content 用完整自然語句（非碎片條列），因為 dense embedding 模型會理解語意。「因為 psycopg3 的 AsyncSession 在長時間 HTTP 呼叫後會損毀連線」比「psycopg3 AsyncSession 損毀」好得多。
+4. **關鍵字搜尋互補**：search_keywords 只放 content 中沒有的補充詞。BM25 已經會分詞 content，keywords 的價值在於加入同義詞、中英對照、口語化搜尋詞。
+5. **雙語標註**：tags 和 search_keywords 中英文都要有，因為搜尋可能用任一語言
+6. **不要編造**：只提取對話中明確出現的資訊
 
 Session ID: {session_id}
 Project: {cwd}
@@ -430,8 +433,8 @@ Timestamp: {timestamp}
 ## 審查規則
 1. **content 具體性** — 刪除空泛的描述（如「使用者偏好繁體中文」若已是已知事實），保留具體的檔案路徑、函數名、錯誤訊息
 2. **去重** — 合併高度相似的 block，但保留不同主題的 block
-3. **tags 品質** — 3-8 個，禁止泛泛（ai, code, tool, system），必須具體（psycopg3, docker-healthcheck）
-4. **search_keywords 品質** — 5-15 個，中英文混合，包含實際搜尋時會用的詞
+3. **tags 品質** — 3-12 個，禁止泛泛（ai, code, tool, system），必須具體（psycopg3, docker-healthcheck）
+4. **search_keywords 品質** — 5-15 個，只放 content 中沒有的補充搜尋詞（同義詞、中英對照、口語化詞彙）
 5. **attitudes 驗證** — category 必須是：tool_behavior | config | architecture | workflow | preference | technical | naming | syntax | performance
 6. **destination 控制** — CLAUDE 最多 2 個 block，其餘都是 MEMORY
 7. **block 數量** — 1-5 個，寧精不濫
@@ -592,6 +595,7 @@ Timestamp: {timestamp}
             "insight": "knowledge",
             "pattern": "knowledge",
             "preference": "attitude",
+            "skill": "skill",
         }
         api_block_type = type_aliases.get(block_type, block_type)
         if api_block_type not in {"knowledge", "skill", "attitude", "general"}:
@@ -623,7 +627,7 @@ Timestamp: {timestamp}
             total_created += 1
 
             # Set confidence (importance) via PATCH — not in Create schema
-            if block_id and importance != 0.5:
+            if block_id:
                 conf_payload = json.dumps({"confidence": importance}).encode("utf-8")
                 _http_post(
                     f"{MEMVAULT_API_URL}/api/memvault/blocks/{block_id}?space_id={MEMVAULT_SPACE_ID}",
