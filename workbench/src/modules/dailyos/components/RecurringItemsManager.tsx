@@ -1,7 +1,9 @@
 import { Calendar, CalendarDays, CalendarPlus, Plus, Repeat, Sun, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRecurringItems } from '../hooks/useRecurringItems'
+import { useMethodStore } from '../stores/methodStore'
 import type { RecurringItem, RecurringItemCreate } from '../types'
+import GroupSelector from './GroupSelector'
 
 // ─── Constants ───
 
@@ -106,6 +108,8 @@ function ItemCard({
 }) {
   const badge = scheduleBadge(item)
   const time = timeRange(item.start_time, item.end_time)
+  const taskGroups = useMethodStore((s) => s.taskGroups)
+  const itemGroup = item.group_id ? taskGroups.find((g) => g.id === item.group_id) : null
 
   return (
     <div
@@ -121,7 +125,7 @@ function ItemCard({
         style={{
           width: 8,
           height: 8,
-          backgroundColor: item.is_active ? '#94e2d5' : 'var(--do-text-muted)',
+          backgroundColor: itemGroup ? itemGroup.color : item.is_active ? '#94e2d5' : 'var(--do-text-muted)',
           transition: 'background-color 150ms ease',
         }}
       />
@@ -137,6 +141,19 @@ function ItemCard({
       >
         {item.title}
       </span>
+
+      {/* Group badge */}
+      {itemGroup && (
+        <span
+          className="shrink-0 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"
+          style={{
+            color: itemGroup.color,
+            backgroundColor: `${itemGroup.color}18`,
+          }}
+        >
+          {itemGroup.name}
+        </span>
+      )}
 
       {/* Schedule badge */}
       {badge && (
@@ -523,6 +540,17 @@ function AddForm({
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Group selector */}
+      <div>
+        <span
+          className="block text-[11px] mb-2 uppercase tracking-wide"
+          style={{ color: 'var(--do-text-tertiary)' }}
+        >
+          群組
+        </span>
+        <GroupSelector value={form.group_id ?? undefined} onChange={(gid) => patch({ group_id: gid ?? undefined })} />
       </div>
 
       {/* Action row */}

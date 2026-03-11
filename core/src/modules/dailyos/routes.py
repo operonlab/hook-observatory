@@ -28,12 +28,16 @@ from .schemas import (
     RecurringItemCreate,
     RecurringItemResponse,
     RecurringItemUpdate,
+    TaskGroupCreate,
+    TaskGroupResponse,
+    TaskGroupUpdate,
 )
 from .services import (
     daily_plan_service,
     method_selection_service,
     method_service,
     recurring_item_service,
+    task_group_service,
 )
 
 router = APIRouter(tags=["dailyos"])
@@ -506,3 +510,51 @@ async def get_recurring_for_date(
     user: dict = require_permission("dailyos.read"),
 ):
     return await recurring_item_service.get_items_for_date(db, space_id, target_date)
+
+
+# ======================== Task Groups ========================
+
+
+@router.get("/groups", response_model=list[TaskGroupResponse])
+async def list_task_groups(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    return await task_group_service.list_groups(db, space_id)
+
+
+@router.post("/groups", response_model=TaskGroupResponse, status_code=201)
+async def create_task_group(
+    data: TaskGroupCreate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    group = await task_group_service.create_group(db, space_id, data, user_id=user.get("id"))
+    await db.commit()
+    return group
+
+
+@router.put("/groups/{group_id}", response_model=TaskGroupResponse)
+async def update_task_group(
+    group_id: str,
+    data: TaskGroupUpdate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    group = await task_group_service.update_group(db, group_id, space_id, data)
+    await db.commit()
+    return group
+
+
+@router.delete("/groups/{group_id}", status_code=204)
+async def delete_task_group(
+    group_id: str,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    await task_group_service.delete_group(db, group_id, space_id)
+    await db.commit()

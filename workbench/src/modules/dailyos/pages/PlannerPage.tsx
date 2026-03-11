@@ -15,6 +15,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import AddItemInput from '../components/AddItemInput'
 import CompositeGuide from '../components/CompositeGuide'
 import { DateNavigator } from '../components/DateNavigator'
+import GroupManager from '../components/GroupManager'
 import ColumnsLayout from '../components/layouts/ColumnsLayout'
 import GridLayout from '../components/layouts/GridLayout'
 import KanbanLayout from '../components/layouts/KanbanLayout'
@@ -25,6 +26,7 @@ import MethodSwitcher from '../components/MethodSwitcher'
 import ProgressBar from '../components/ProgressBar'
 import { useActiveMethod } from '../hooks/useActiveMethod'
 import { useDatePlan } from '../hooks/useTodayPlan'
+import { useMethodStore } from '../stores/methodStore'
 import type { PlanItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
 
@@ -92,6 +94,9 @@ export default function PlannerPage() {
     completeReview,
     refresh: refreshPlan,
   } = useDatePlan(dateParam)
+
+  const hiddenGroupIds = useMethodStore((s) => s.hiddenGroupIds)
+  const visibleItems = items.filter((i) => !i.group_id || !hiddenGroupIds.has(i.group_id))
 
   const [reflection, setReflection] = useState('')
   const [savingReflection, setSavingReflection] = useState(false)
@@ -203,8 +208,8 @@ export default function PlannerPage() {
     )
   }
 
-  const doneCount = items.filter((i) => i.status === 'done').length
-  const totalCount = items.length
+  const doneCount = visibleItems.filter((i) => i.status === 'done').length
+  const totalCount = visibleItems.length
   const statusConfig = plan ? PLAN_STATUS_CONFIG[plan.status] : null
   const canTransition = plan && NEXT_STATUS[plan.status]
 
@@ -249,12 +254,12 @@ export default function PlannerPage() {
       <div className="mt-4 lg:mt-5 flex flex-col lg:flex-row gap-5 lg:gap-6">
         {/* ─── Main content area ─── */}
         <div className="flex-1 min-w-0 space-y-4">
-          {plan && <AddItemInput onAdd={(title) => addItem(title)} />}
+          {plan && <AddItemInput onAdd={(title, extra) => addItem(title, extra)} />}
 
           <div>
             {layoutType === 'list' && (
               <ListLayout
-                items={items}
+                items={visibleItems}
                 config={methodConfig}
                 onToggle={handleToggle}
                 onReorderItems={reorderItems}
@@ -264,7 +269,7 @@ export default function PlannerPage() {
             )}
             {layoutType === 'columns' && (
               <ColumnsLayout
-                items={items}
+                items={visibleItems}
                 config={methodConfig}
                 onToggle={handleToggle}
                 onAssignCategory={assignCategory}
@@ -273,7 +278,7 @@ export default function PlannerPage() {
             )}
             {layoutType === 'grid' && (
               <GridLayout
-                items={items}
+                items={visibleItems}
                 config={methodConfig}
                 onToggle={handleToggle}
                 onAssignCategory={assignCategory}
@@ -281,7 +286,7 @@ export default function PlannerPage() {
             )}
             {layoutType === 'kanban' && (
               <KanbanLayout
-                items={items}
+                items={visibleItems}
                 config={methodConfig}
                 onMoveRight={handleMoveRight}
                 onMoveLeft={handleMoveLeft}
@@ -290,7 +295,7 @@ export default function PlannerPage() {
             )}
             {layoutType === 'timeline' && (
               <TimelineLayout
-                items={items}
+                items={visibleItems}
                 config={methodConfig}
                 onToggle={handleToggle}
                 onSchedule={scheduleItem}
@@ -374,6 +379,9 @@ export default function PlannerPage() {
               </>
             )}
           </div>
+
+          {/* Task groups manager */}
+          <GroupManager />
 
           {/* Method info — always visible */}
           <MethodInfoPanel method={method} />

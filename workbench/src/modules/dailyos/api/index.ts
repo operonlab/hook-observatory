@@ -12,6 +12,9 @@ import type {
   RecurringItem,
   RecurringItemCreate,
   RecurringItemUpdate,
+  TaskGroup,
+  TaskGroupCreate,
+  TaskGroupUpdate,
 } from '../types'
 
 export const methodApi = {
@@ -120,4 +123,22 @@ export const recurringApi = {
   remove: (id: string) => request<void>(`/dailyos/recurring/${id}`, { method: 'DELETE' }),
 
   forDate: (date: string) => request<RecurringItem[]>(`/dailyos/recurring/for-date/${date}`),
+}
+
+export const taskGroupApi = {
+  list: () => request<TaskGroup[]>('/dailyos/groups'),
+
+  create: (data: TaskGroupCreate) =>
+    request<TaskGroup>('/dailyos/groups', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: TaskGroupUpdate) =>
+    request<TaskGroup>(`/dailyos/groups/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  remove: (id: string) => request<void>(`/dailyos/groups/${id}`, { method: 'DELETE' }),
 }

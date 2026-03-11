@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { configApi, methodApi, planApi, recurringApi } from '../api'
+import { configApi, methodApi, planApi, recurringApi, taskGroupApi } from '../api'
 import type {
   DailyPlan,
   LayoutType,
@@ -10,6 +10,9 @@ import type {
   RecurringItem,
   RecurringItemCreate,
   RecurringItemUpdate,
+  TaskGroup,
+  TaskGroupCreate,
+  TaskGroupUpdate,
 } from '../types'
 
 /**
@@ -74,6 +77,11 @@ interface MethodStore {
   recurringItems: RecurringItem[]
   recurringLoading: boolean
 
+  // Task groups
+  taskGroups: TaskGroup[]
+  taskGroupsLoading: boolean
+  hiddenGroupIds: Set<string>
+
   // Loading states
   loading: boolean
   planLoading: boolean
@@ -106,12 +114,32 @@ interface MethodStore {
   updateRecurringItem: (id: string, data: RecurringItemUpdate) => Promise<void>
   removeRecurringItem: (id: string) => Promise<void>
 
+  // Actions — task groups
+  fetchTaskGroups: () => Promise<void>
+  addTaskGroup: (data: TaskGroupCreate) => Promise<void>
+  updateTaskGroup: (id: string, data: TaskGroupUpdate) => Promise<void>
+  removeTaskGroup: (id: string) => Promise<void>
+  toggleGroupVisibility: (groupId: string) => void
+
   // Actions — plan lifecycle
   transitionPlan: (status: string) => Promise<void>
   completeReview: (reflection: string) => Promise<void>
   updatePlanItems: (items: PlanItem[]) => Promise<void>
 
   reset: () => void
+}
+
+function loadHiddenGroupIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem('dailyos:hiddenGroupIds')
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveHiddenGroupIds(ids: Set<string>) {
+  localStorage.setItem('dailyos:hiddenGroupIds', JSON.stringify([...ids]))
 }
 
 const initialState = {
@@ -126,6 +154,9 @@ const initialState = {
   methodsLoading: false,
   recurringItems: [] as RecurringItem[],
   recurringLoading: false,
+  taskGroups: [] as TaskGroup[],
+  taskGroupsLoading: false,
+  hiddenGroupIds: loadHiddenGroupIds(),
   loading: false,
   planLoading: false,
   error: null as string | null,
@@ -474,6 +505,69 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
         error: err instanceof Error ? err.message : 'Failed to update plan items',
       })
     }
+  },
+
+  fetchTaskGroups: async () => {
+    set({ taskGroupsLoading: true })
+    try {
+      const groups = await taskGroupApi.list()
+      set({ taskGroups: groups })
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to fetch task groups',
+      })
+    } finally {
+      set({ taskGroupsLoading: false })
+    }
+  },
+
+  addTaskGroup: async (data: TaskGroupCreate) => {
+    try {
+      const group = await taskGroupApi.create(data)
+      set({ taskGroups: [...get().taskGroups, group] })
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to create task group',
+      })
+    }
+  },
+
+  updateTaskGroup: async (id: string, data: TaskGroupUpdate) => {
+    const prev = get().taskGroups
+    set({ taskGroups: prev.map((g) => (g.id === id ? { ...g, ...data } : g)) })
+    try {
+      const updated = await taskGroupApi.update(id, data)
+      set({ taskGroups: get().taskGroups.map((g) => (g.id === id ? updated : g)) })
+    } catch (err) {
+      set({
+        taskGroups: prev,
+        error: err instanceof Error ? err.message : 'Failed to update task group',
+      })
+    }
+  },
+
+  removeTaskGroup: async (id: string) => {
+    const prev = get().taskGroups
+    set({ taskGroups: prev.filter((g) => g.id !== id) })
+    try {
+      await taskGroupApi.remove(id)
+    } catch (err) {
+      set({
+        taskGroups: prev,
+        error: err instanceof Error ? err.message : 'Failed to remove task group',
+      })
+    }
+  },
+
+  toggleGroupVisibility: (groupId: string) => {
+    const hidden = new Set(get().hiddenGroupIds)
+    if (hidden.has(groupId)) {
+      hidden.delete(groupId)
+    } else {
+      hidden.add(groupId)
+    }
+    saveHiddenGroupIds(hidden)
+    set({ hiddenGroupIds: hidden })
   },
 
   reset: () => set(initialState),

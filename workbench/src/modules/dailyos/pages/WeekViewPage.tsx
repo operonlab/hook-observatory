@@ -2,7 +2,8 @@ import { ChevronLeft, ChevronRight, Circle, Repeat } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { planApi, recurringApi } from '../api'
-import type { DailyPlan, RecurringItem } from '../types'
+import { useMethodStore } from '../stores/methodStore'
+import type { DailyPlan, PlanItem, RecurringItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
 
 function toDateStr(d: Date): string {
@@ -99,9 +100,13 @@ interface DayColumnProps {
 }
 
 function DayColumn({ date, isToday, plan, dayRecurring, onNavigate }: DayColumnProps) {
+  const hiddenGroupIds = useMethodStore((s) => s.hiddenGroupIds)
+  const filterItem = (i: PlanItem) => !i.group_id || !hiddenGroupIds.has(i.group_id)
+  const visiblePlanItems = plan ? plan.items.filter(filterItem) : []
+  const visibleRecurring = dayRecurring.filter((r) => !r.group_id || !hiddenGroupIds.has(r.group_id))
   const statusCfg = plan ? PLAN_STATUS_CONFIG[plan.status] : null
-  const doneCount = plan ? plan.items.filter((i) => i.status === 'done').length : 0
-  const totalItems = plan?.items.length ?? 0
+  const doneCount = visiblePlanItems.filter((i) => i.status === 'done').length
+  const totalItems = visiblePlanItems.length
   const pct = totalItems > 0 ? Math.round((doneCount / totalItems) * 100) : 0
   const ds = toDateStr(date)
   const todayStr = toDateStr(new Date())
@@ -132,7 +137,7 @@ function DayColumn({ date, isToday, plan, dayRecurring, onNavigate }: DayColumnP
 
       {/* Plan items */}
       <div className="flex-1 space-y-1 overflow-hidden">
-        {plan?.items.slice(0, 6).map((item) => (
+        {visiblePlanItems.slice(0, 6).map((item) => (
           <div key={item.id} className="flex items-center gap-1 truncate">
             <span
               className="w-1.5 h-1.5 rounded-full flex-shrink-0"
@@ -156,14 +161,14 @@ function DayColumn({ date, isToday, plan, dayRecurring, onNavigate }: DayColumnP
             </span>
           </div>
         ))}
-        {(plan?.items.length ?? 0) > 6 && (
+        {visiblePlanItems.length > 6 && (
           <span className="text-[9px]" style={{ color: 'var(--do-text-muted)' }}>
-            +{(plan?.items.length ?? 0) - 6} 項
+            +{visiblePlanItems.length - 6} 項
           </span>
         )}
 
         {/* Recurring */}
-        {dayRecurring.slice(0, 3).map((r) => (
+        {visibleRecurring.slice(0, 3).map((r) => (
           <div key={r.id} className="flex items-center gap-1 truncate">
             <Repeat size={8} style={{ color: 'var(--do-accent-dim)', flexShrink: 0 }} />
             <span className="text-[10px] truncate" style={{ color: 'var(--do-text-tertiary)' }}>
