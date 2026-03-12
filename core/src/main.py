@@ -146,8 +146,10 @@ app.include_router(workpool_router, prefix="/api/workpool", tags=["workpool"])
 app.include_router(matchcore_router, prefix="/api/matchcore", tags=["matchcore"])
 app.include_router(nodeflow_router, prefix="/api/nodeflow", tags=["nodeflow"])
 
+from src.modules.capture.routes import register_capture_sse_events  # noqa: E402
 from src.modules.capture.routes import router as capture_router  # noqa: E402
 from src.modules.dailyos.routes import router as dailyos_router  # noqa: E402
 
 app.include_router(capture_router, prefix="/api/captures", tags=["capture"])
+register_capture_sse_events()
 app.include_router(dailyos_router, prefix="/api/dailyos", tags=["dailyos"])
