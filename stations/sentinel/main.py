@@ -64,8 +64,49 @@ async def _persist_check(result: CheckResult) -> None:
     )
 
 
+def _build_status_payload() -> dict:
+    """Build the same data shape as /api/sentinel/status for SSE broadcast."""
+    statuses = intervention_engine.get_all_statuses()
+    services = []
+    for _name, s in statuses.items():
+        services.append(
+            {
+                "service": s["service"],
+                "status": s["status"],
+                "group": s.get("group"),
+                "light_status": s.get("light_status"),
+                "deep_status": s.get("deep_status"),
+                "last_check": s.get("last_check"),
+                "response_ms": s.get("response_ms"),
+            }
+        )
+
+    severity_order = {
+        "major_outage": 4,
+        "partial_outage": 3,
+        "degraded": 2,
+        "maintenance": 1,
+        "operational": 0,
+    }
+    worst = max((severity_order.get(svc["status"], 0) for svc in services), default=0)
+    overall_map = {
+        0: "all_operational",
+        1: "maintenance",
+        2: "degraded",
+        3: "partial_outage",
+        4: "major_outage",
+    }
+    return {
+        "status": overall_map.get(worst, "all_operational"),
+        "services": services,
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+
+
 async def _light_check_loop() -> None:
     """Run light checks every 30s."""
+    from sse import sse_broadcast
+
     await asyncio.sleep(5)  # Initial delay for startup
     while True:
         try:
@@ -79,6 +120,9 @@ async def _light_check_loop() -> None:
 
             # Clean up expired locks for virtual services not in check lists
             intervention_engine.sweep_expired_locks()
+
+            # Broadcast updated status to all SSE clients
+            await sse_broadcast("status", _build_status_payload())
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -89,6 +133,8 @@ async def _light_check_loop() -> None:
 
 async def _deep_check_loop() -> None:
     """Run deep checks every 5 min."""
+    from sse import sse_broadcast
+
     await asyncio.sleep(30)  # Initial delay
     while True:
         try:
@@ -99,6 +145,9 @@ async def _deep_check_loop() -> None:
 
             healthy = sum(1 for r in results if r.status == "healthy")
             logger.info("Deep check: %d/%d healthy", healthy, len(results))
+
+            # Broadcast updated status to all SSE clients
+            await sse_broadcast("status", _build_status_payload())
         except asyncio.CancelledError:
             raise
         except Exception:

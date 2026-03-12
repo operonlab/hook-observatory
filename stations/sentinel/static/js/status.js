@@ -433,7 +433,45 @@ async function workshopPushSubscribe(reg, appScope) {
     } catch (e) { console.warn('[Push] subscribe failed:', e); }
 }
 
+// ── SSE: Real-time status updates ──
+
+function connectSSE() {
+    const es = new EventSource(`${API_BASE}/api/sentinel/events`);
+
+    es.addEventListener('connected', () => {
+        console.log('[Sentinel] SSE connected');
+    });
+
+    es.addEventListener('status', (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            renderBanner(data);
+            renderServices(data);
+            // Update timestamp
+            const updateEl = document.getElementById('last-update');
+            if (updateEl) {
+                updateEl.textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW', {
+                    hour:   '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                })}`;
+            }
+        } catch (err) {
+            console.warn('[Sentinel] SSE parse error', err);
+        }
+    });
+
+    es.onerror = () => {
+        console.warn('[Sentinel] SSE disconnected, reconnecting...');
+        es.close();
+        setTimeout(() => {
+            refresh();        // Full refresh to catch any missed updates
+            connectSSE();
+        }, 5000);
+    };
+}
+
 // ── Init ──
 
-refresh();
-setInterval(refresh, POLL_INTERVAL);
+refresh();   // Initial full load (status + uptime + incidents)
+connectSSE(); // Subscribe to real-time status updates via SSE
