@@ -1,4 +1,4 @@
-"""Sentinel API routes — 10 endpoints."""
+"""Sentinel API routes — 11 endpoints."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from auth import require_auth
 from database import get_session, persist
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from models import ActiveOperation, Incident, Subscription
 from schemas import (
     ActiveOperationResponse,
@@ -173,7 +173,7 @@ async def resolve_operation(req: ResolveRequest, db: AsyncSession = Depends(get_
             op.result = req.result
             await db.commit()
             return ResolveResponse(message="Resolved", operation_id=op.id)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     return ResolveResponse(message="Resolved (no matching operation found)")
@@ -367,3 +367,43 @@ async def list_operations(
         ]
     except Exception:
         return []
+
+
+# ── GET /api/sentinel/events (no auth — SSE stream) ──
+
+
+@router.get("/api/sentinel/events")
+async def sse_events(request: Request):
+    """SSE stream for real-time sentinel status updates."""
+    import asyncio
+
+    from sse import register_client, unregister_client
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    register_client(queue)
+
+    async def generate():
+        try:
+            yield "event: connected\ndata: {}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield msg
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            unregister_client(queue)
+
+    from starlette.responses import StreamingResponse
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
