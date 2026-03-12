@@ -57,8 +57,17 @@ class Settings(BaseSettings):
             "plan": "advanced",
             "monthly_cost_usd": 0,
         },
+        "litellm": {
+            "provider": "multi",
+            "plan": "self-hosted",
+            "monthly_cost_usd": 0,
+        },
     }
     API_MONTHLY_BUDGET_USD: float = 50.0
+
+    # LiteLLM proxy
+    LITELLM_BASE_URL: str = "http://127.0.0.1:4000"
+    LITELLM_MASTER_KEY: str = "sk-litellm-local-dev"
     BUDGET_WARNING_PCT: float = 80.0
     MODEL_POLICY_STATE_PATH: str = "~/.claude/data/model-policy/state.json"
     MODEL_POLICY_CONFIG_PATH: str = "~/.claude/data/model-policy/config.json"
