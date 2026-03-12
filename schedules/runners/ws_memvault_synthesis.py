@@ -16,10 +16,17 @@ Logs: ~/workshop/outputs/memvault/logs/synthesis.log
 import json
 import os
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+
+# ── Quota Gate ─────────────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.quota_gate import request_clearance
+
+request_clearance("ws-memvault-synthesis")
 
 # ── Configuration ──────────────────────────────────────────────
 HOME = Path.home()
