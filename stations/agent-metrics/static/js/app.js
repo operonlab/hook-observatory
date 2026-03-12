@@ -2,7 +2,7 @@
 
 // --- State ---
 let autoRefresh = true;
-const timers = {};
+let _sse = null;
 
 // --- Tab Switching ---
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -21,8 +21,8 @@ if (toggleEl) {
     autoRefresh = !autoRefresh;
     const track = document.getElementById('toggle-track');
     track.classList.toggle('active', autoRefresh);
-    if (autoRefresh) startTimers();
-    else stopTimers();
+    if (autoRefresh) connectSSE();
+    else disconnectSSE();
   });
 }
 
@@ -198,49 +198,7 @@ async function refreshSessions() {
 
 async function refreshSystem() {
   const data = await api('/sysmon/current');
-  if (!data || data.error) return;
-
-  // CPU
-  setGauge('cpu-gauge', data.cpu_pct || 0, 'cpu-pct', 'cpu-details', data.cpu_display || '');
-
-  // Memory
-  setGauge('mem-gauge', data.mem_pct || 0, 'mem-pct', 'mem-details',
-    `${data.mem_used_gb || 0}/${data.mem_total_gb || 0} GB | P:${data.mem_pressure ?? '?'}`);
-
-  // Disk
-  setGauge('disk-gauge', data.disk_pct || 0, 'disk-pct', 'disk-details',
-    `${data.disk_used_gb || 0}/${data.disk_total_gb || 0} GB`);
-
-  // Network
-  const netEl = document.getElementById('net-info');
-  if (netEl) {
-    netEl.innerHTML = `
-      <div class="net-row">
-        <span class="net-label">RX</span>
-        <span class="net-value" style="color:var(--green)">${fmtBytes(data.net_rx_bps)}</span>
-      </div>
-      <div class="net-row">
-        <span class="net-label">TX</span>
-        <span class="net-value" style="color:var(--blue)">${fmtBytes(data.net_tx_bps)}</span>
-      </div>
-    `;
-  }
-
-  // Claude processes
-  const claudeEl = document.getElementById('claude-procs');
-  if (claudeEl) {
-    const cc = data.cc_active || 0;
-    const ci = data.cc_idle || 0;
-    const cm = data.cc_mem_mb || 0;
-    claudeEl.innerHTML = `
-      <div style="font-size:0.75rem">
-        Active: <strong>${cc}</strong> &nbsp; Idle: <strong>${ci}</strong>
-        &nbsp; MEM: <strong>${Math.round(cm)} MB</strong>
-      </div>
-    `;
-  }
-
-  updateTimestamp();
+  renderSystem(data);
 }
 
 // ========================================================================
@@ -386,30 +344,63 @@ async function refreshOps() {
 }
 
 // ========================================================================
-// Timer Management
+// SSE Connection (replaces setInterval polling)
 // ========================================================================
 
-function startTimers() {
-  stopTimers();
-  // Initial load
+function connectSSE() {
+  disconnectSSE();
+  _sse = new EventSource('events/stream');
+
+  _sse.addEventListener('system', (e) => {
+    try { renderSystem(JSON.parse(e.data)); } catch {}
+  });
+  _sse.addEventListener('sessions', () => refreshSessions());
+  _sse.addEventListener('quota', () => refreshQuotas());
+  _sse.addEventListener('usage', () => refreshUsage());
+  _sse.addEventListener('operations', () => refreshOps());
+
+  _sse.onerror = () => {
+    disconnectSSE();
+    setTimeout(connectSSE, 5000);
+  };
+}
+
+function disconnectSSE() {
+  if (_sse) { _sse.close(); _sse = null; }
+}
+
+function renderSystem(data) {
+  if (!data || data.error) return;
+  setGauge('cpu-gauge', data.cpu_pct || 0, 'cpu-pct', 'cpu-details', data.cpu_display || '');
+  setGauge('mem-gauge', data.mem_pct || 0, 'mem-pct', 'mem-details',
+    `${data.mem_used_gb || 0}/${data.mem_total_gb || 0} GB | P:${data.mem_pressure ?? '?'}`);
+  setGauge('disk-gauge', data.disk_pct || 0, 'disk-pct', 'disk-details',
+    `${data.disk_used_gb || 0}/${data.disk_total_gb || 0} GB`);
+  const netEl = document.getElementById('net-info');
+  if (netEl) {
+    netEl.innerHTML = `
+      <div class="net-row"><span class="net-label">RX</span>
+        <span class="net-value" style="color:var(--green)">${fmtBytes(data.net_rx_bps)}</span></div>
+      <div class="net-row"><span class="net-label">TX</span>
+        <span class="net-value" style="color:var(--blue)">${fmtBytes(data.net_tx_bps)}</span></div>`;
+  }
+  const claudeEl = document.getElementById('claude-procs');
+  if (claudeEl) {
+    claudeEl.innerHTML = `<div style="font-size:0.75rem">
+      Active: <strong>${data.cc_active || 0}</strong> &nbsp; Idle: <strong>${data.cc_idle || 0}</strong>
+      &nbsp; MEM: <strong>${Math.round(data.cc_mem_mb || 0)} MB</strong></div>`;
+  }
+  updateTimestamp();
+}
+
+// --- Boot ---
+document.addEventListener('DOMContentLoaded', () => {
+  // Initial full load from REST API
   refreshQuotas();
   refreshSessions();
   refreshSystem();
   refreshUsage();
   refreshOps();
-
-  // Intervals: System 5s, Sessions 10s, Quotas 60s, Usage 60s, Ops 30s
-  timers.system = setInterval(refreshSystem, 5000);
-  timers.sessions = setInterval(refreshSessions, 10000);
-  timers.quotas = setInterval(refreshQuotas, 60000);
-  timers.usage = setInterval(refreshUsage, 60000);
-  timers.ops = setInterval(refreshOps, 30000);
-}
-
-function stopTimers() {
-  Object.values(timers).forEach(t => clearInterval(t));
-  Object.keys(timers).forEach(k => delete timers[k]);
-}
-
-// --- Boot ---
-document.addEventListener('DOMContentLoaded', startTimers);
+  // Then switch to SSE for live updates
+  connectSSE();
+});

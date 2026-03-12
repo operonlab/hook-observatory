@@ -8,16 +8,21 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from starlette.requests import Request
+
+logger = logging.getLogger("system-monitor")
 
 SCRIPT_DIR = Path(__file__).parent
 
@@ -37,7 +42,126 @@ REPORTS_DIR = Path(
     CONFIG.get("reports", {}).get("output_dir", "~/.claude/data/system-monitor/reports")
 ).expanduser()
 
-app = FastAPI(title="System Monitor API", version="2.0.0")
+# Background broadcast intervals
+_DASHBOARD_INTERVAL = 30  # seconds — hardware + status + alerts + history
+_DISK_INTERVAL = 300  # seconds — disk summary (heavier, 5 min)
+
+_broadcast_task: asyncio.Task | None = None
+_disk_task: asyncio.Task | None = None
+
+
+async def _dashboard_broadcast_loop() -> None:
+    """Collect hardware + status data and broadcast to SSE clients every 30s."""
+    from sse import sse_broadcast
+
+    await asyncio.sleep(5)  # short startup delay
+    while True:
+        try:
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, _get_latest_data)
+
+            # Auto-save snapshot with rate limiting
+            import time
+
+            global _last_snapshot_time
+            now = time.time()
+            if now - _last_snapshot_time >= SNAPSHOT_INTERVAL:
+                _last_snapshot_time = now
+                _save_snapshot(data)
+
+            # Build dashboard payload mirroring what /status + /history + /alerts return
+            payload = _build_dashboard_payload(data)
+            await sse_broadcast("dashboard", payload)
+            logger.debug("SSE dashboard broadcast: pressure=%s", data.get("pressure_level"))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Dashboard broadcast loop error")
+
+        await asyncio.sleep(_DASHBOARD_INTERVAL)
+
+
+async def _disk_broadcast_loop() -> None:
+    """Collect disk summary and broadcast to SSE clients every 5 min."""
+    from sse import sse_broadcast
+
+    await asyncio.sleep(15)  # let dashboard loop go first
+    while True:
+        try:
+            from collector import collect_disk_fast, load_config
+
+            loop = asyncio.get_event_loop()
+            config = load_config()
+            disk_data = await loop.run_in_executor(None, lambda cfg=config: collect_disk_fast(cfg))
+            await sse_broadcast("disk", disk_data)
+            logger.debug("SSE disk broadcast: usage=%.1f%%", disk_data.get("usage_pct", 0))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Disk broadcast loop error")
+
+        await asyncio.sleep(_DISK_INTERVAL)
+
+
+def _build_dashboard_payload(status_data: dict) -> dict:
+    """Build a combined payload for the 'dashboard' SSE event.
+
+    Shape mirrors the individual REST responses so the frontend can update
+    status, history, and alerts from a single event.
+    """
+    # History snapshots (latest 30)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    snapshots = []
+    for f in sorted(DATA_DIR.glob("snapshot-*.json"), reverse=True)[:30]:
+        try:
+            snap = json.loads(f.read_text())
+            snapshots.append(
+                {
+                    "filename": f.name,
+                    "timestamp": snap.get("timestamp"),
+                    "pressure_level": snap.get("pressure_level"),
+                    "disk_usage_pct": snap.get("disk", {}).get("usage_pct"),
+                    "cpu_usage_pct": snap.get("hardware", {}).get("cpu", {}).get("usage_pct"),
+                    "memory_usage_pct": snap.get("hardware", {}).get("memory", {}).get("usage_pct"),
+                }
+            )
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    # Alerts (latest 20)
+    ALERTS_DIR.mkdir(parents=True, exist_ok=True)
+    alerts = []
+    for f in sorted(ALERTS_DIR.glob("alert-*.json"), reverse=True)[:20]:
+        try:
+            alerts.append(json.loads(f.read_text()))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    return {
+        "status": status_data,
+        "history": {"snapshots": snapshots, "total": len(snapshots)},
+        "alerts": {"alerts": alerts, "total": len(alerts)},
+    }
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _broadcast_task, _disk_task
+    _broadcast_task = asyncio.create_task(_dashboard_broadcast_loop())
+    _disk_task = asyncio.create_task(_disk_broadcast_loop())
+    logger.info("System-Monitor SSE broadcast loops started")
+    yield
+    for task in (_broadcast_task, _disk_task):
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    logger.info("System-Monitor SSE broadcast loops stopped")
+
+
+app = FastAPI(title="System Monitor API", version="2.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=SCRIPT_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=SCRIPT_DIR / "templates")
 
@@ -109,6 +233,39 @@ async def service_worker():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "system-monitor", "version": "2.0.0"}
+
+
+@app.get("/events/stream")
+async def sse_events(request: Request):
+    """SSE stream for real-time system-monitor updates."""
+    from sse import register_client, unregister_client
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    register_client(queue)
+
+    async def generate():
+        try:
+            yield "event: connected\ndata: {}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield msg
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            unregister_client(queue)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _save_snapshot(data: dict) -> None:

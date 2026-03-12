@@ -97,7 +97,9 @@ def _tmux_var(name: str) -> str:
     try:
         r = subprocess.run(
             ["tmux", "show", "-gqv", name],
-            capture_output=True, text=True, timeout=2,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         return r.stdout.strip()
     except Exception:
@@ -123,10 +125,23 @@ def get_metric(metric: str) -> str:
 
 
 def ex_segment() -> str:
-    """Conditional EX powerline segment with Catppuccin colors."""
+    """Conditional EX powerline segment with Catppuccin colors.
+    Only shown when extra usage balance > 0.
+    """
     val = get_metric("cc-ex")
-    if not val or val == "?":
+    if not val or val == "?" or val == "off":
         return ""
+
+    # Parse balance from format like "$3.24/$10 32% 余$0.00"
+    import re
+
+    m = re.search(r"余\$([0-9.]+)", val)
+    if m:
+        try:
+            if float(m.group(1)) <= 0:
+                return ""
+        except ValueError:
+            pass
 
     flamingo = _tmux_var("@thm_flamingo")
     crust = _tmux_var("@thm_crust")

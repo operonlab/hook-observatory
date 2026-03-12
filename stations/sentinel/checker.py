@@ -225,6 +225,11 @@ _PW_ROOT_CHECK = (
 _PW_BODY_CHECK = (
     'async (page) => { await page.waitForSelector("body > *", {timeout:10000}); return "ok"; }'
 )
+# Canvas-based apps: #root has no intrinsic dimensions → use state:'attached'
+_PW_CANVAS_CHECK = (
+    'async (page) => { await page.waitForSelector("#root > *",'
+    ' {timeout:10000, state:"attached"}); return "ok"; }'
+)
 
 
 def _pw_module_check(css_class: str) -> str:
@@ -298,7 +303,7 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="agent-vista-render",
         group="external",
         url="http://127.0.0.1:8080/apps/vista/",
-        playwright_code=_PW_BODY_CHECK,
+        playwright_code=_PW_CANVAS_CHECK,
     ),
     DeepCheck(
         name="system-monitor-render",
