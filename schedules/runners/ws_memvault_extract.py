@@ -12,8 +12,15 @@ Logs: ~/workshop/outputs/memvault/logs/extract-batch.log
 
 import os
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# ── Quota Gate ─────────────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.quota_gate import request_clearance
+
+request_clearance("ws-memvault-extract")
 
 # ── Configuration ──────────────────────────────────────────────
 HOME = Path.home()

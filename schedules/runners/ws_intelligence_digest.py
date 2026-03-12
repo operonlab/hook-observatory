@@ -12,6 +12,13 @@ Cronicle event: ws-intelligence-digest
 import json
 import subprocess
 import sys
+from pathlib import Path
+
+# ── Quota Gate ─────────────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.quota_gate import request_clearance
+
+request_clearance("ws-intelligence-digest")
 
 
 def main():

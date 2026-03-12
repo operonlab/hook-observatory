@@ -1,4 +1,4 @@
-"""Sysmon + Quota + Guardian/Sweep API routes."""
+"""Sysmon + Quota + Gate + Guardian/Sweep API routes."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from agent_metrics.quota_collector import (
     get_raw_cache,
     reset_cc_backoff,
 )
+from agent_metrics.quota_gate import evaluate, evaluate_all
 from agent_metrics.sysmon_loop import get_history, get_latest
 
 router = APIRouter()
@@ -95,6 +96,27 @@ async def quota_reset_cc_backoff():
         "cc_5h": quota.get("llm_cc_5h", "?"),
         "cc_7d": quota.get("llm_cc_7d", "?"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Quota Gate Authority
+# ---------------------------------------------------------------------------
+
+
+@router.get("/quota/gate")
+async def quota_gate(job: str = Query(..., description="Job name to check authorization")):
+    """Gate Authority — evaluate whether a scheduled job is allowed to run.
+
+    Returns {allowed, level, max_level, reason, quotas}.
+    Runners call this before executing LLM-dependent tasks.
+    """
+    return await evaluate(job)
+
+
+@router.get("/quota/gate/status")
+async def quota_gate_status():
+    """Gate Authority dashboard — show current level and all job statuses."""
+    return await evaluate_all()
 
 
 # ---------------------------------------------------------------------------
