@@ -25,9 +25,9 @@
     {
       "name": "daily-briefing",
       "label": "com.joneshong.scheduler.daily-briefing",
-      "command": "~/.local/bin/python3 ~/.claude/scripts/daily-briefing/run.py",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py daily-briefing && ~/.local/bin/python3 ~/.claude/scripts/daily-briefing/run.py",
       "schedule": { "calendar": { "Hour": 7, "Minute": 0 } },
-      "description": "每日情報簡報：金融、AI、科技、地緣政治（7:00 AM）",
+      "description": "每日情報簡報：金融、AI、科技、地緣政治（7:00 AM）⚡quota-gate",
       "category": "jonathan",
       "type": "periodic",
       "enabled": true
@@ -65,9 +65,9 @@
     {
       "name": "ws-sysmon-weekly",
       "label": "com.joneshong.scheduler.ws-sysmon-weekly",
-      "command": "~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=weekly",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py ws-sysmon-weekly && ~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=weekly",
       "schedule": { "calendar": { "Weekday": 1, "Hour": 5, "Minute": 0 } },
-      "description": "每週一 5AM: 系統監控週報（磁碟+硬體+AI 建議）",
+      "description": "每週一 5AM: 系統監控週報（磁碟+硬體+AI 建議）⚡quota-gate",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
@@ -75,9 +75,9 @@
     {
       "name": "ws-sysmon-monthly",
       "label": "com.joneshong.scheduler.ws-sysmon-monthly",
-      "command": "~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=monthly",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py ws-sysmon-monthly && ~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=monthly",
       "schedule": { "calendar": { "Day": 1, "Hour": 5, "Minute": 0 } },
-      "description": "每月 1 日 5AM: 系統監控月報（深度分析+容量規劃）",
+      "description": "每月 1 日 5AM: 系統監控月報（深度分析+容量規劃）⚡quota-gate",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
