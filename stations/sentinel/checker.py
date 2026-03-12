@@ -87,7 +87,8 @@ LIGHT_CHECKS: list[LightCheck] = [
     LightCheck(
         name="litellm",
         group="infra",
-        url="http://127.0.0.1:4000/health",
+        url="http://127.0.0.1:4000/health/liveliness",
+        expect_contains="I'm alive!",
     ),
     LightCheck(
         name="omlx",
