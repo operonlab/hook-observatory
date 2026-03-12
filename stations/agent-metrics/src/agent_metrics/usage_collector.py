@@ -5,6 +5,7 @@ Merged from llm-usage station's subscription_collector.py + ccusage_adapter.py.
 Collects:
 - Claude Code: sysmon API (5h/7d window percentages)
 - Codex CLI / Gemini CLI: installation + basic status
+- LiteLLM: proxy health + model availability from /health API
 - ccusage: daily cost data, model breakdowns, month-to-date
 """
 
@@ -13,6 +14,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -159,6 +161,64 @@ def _collect_gemini() -> dict:
     return result
 
 
+def _collect_litellm() -> dict:
+    """Collect LiteLLM proxy status and model health."""
+    sub_cfg = settings.SUBSCRIPTIONS.get("litellm", {})
+    result = {
+        "provider": "multi",
+        "cli": "litellm",
+        "plan": sub_cfg.get("plan", "self-hosted"),
+        "monthly_cost_usd": sub_cfg.get("monthly_cost_usd", 0),
+        "collected_at": datetime.now(UTC).isoformat(),
+    }
+
+    # Check if proxy is alive (no auth required)
+    try:
+        req = urllib.request.Request(
+            f"{settings.LITELLM_BASE_URL}/health/liveliness",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
+            result["proxy_alive"] = resp.status == 200
+    except Exception:
+        result["proxy_alive"] = False
+        result["source"] = "unreachable"
+        return result
+
+    # Fetch model health (requires auth)
+    try:
+        req = urllib.request.Request(
+            f"{settings.LITELLM_BASE_URL}/health",
+            headers={
+                "Authorization": f"Bearer {settings.LITELLM_MASTER_KEY}",
+                "Accept": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            data = json.loads(resp.read().decode())
+
+        healthy = data.get("healthy_endpoints", [])
+        unhealthy = data.get("unhealthy_endpoints", [])
+
+        result["models_healthy"] = len(healthy)
+        result["models_unhealthy"] = len(unhealthy)
+        result["models_total"] = len(healthy) + len(unhealthy)
+        result["healthy_models"] = [ep.get("model", "?") for ep in healthy]
+        result["unhealthy_models"] = [
+            {
+                "model": ep.get("model", "?"),
+                "error": str(ep.get("error", ""))[:100],
+            }
+            for ep in unhealthy
+        ]
+        result["source"] = "health_api"
+    except Exception as e:
+        result["source"] = "health_api_error"
+        result["error"] = str(e)[:100]
+
+    return result
+
+
 def collect_subscriptions() -> dict:
     """Collect subscription usage for all providers."""
     result = {
@@ -166,7 +226,7 @@ def collect_subscriptions() -> dict:
         "timestamp": datetime.now(UTC).isoformat(),
         "providers": [],
     }
-    for fn in (_collect_claude_code, _collect_codex, _collect_gemini):
+    for fn in (_collect_claude_code, _collect_codex, _collect_gemini, _collect_litellm):
         result["providers"].append(fn())
     result["total_monthly_cost_usd"] = sum(
         p.get("monthly_cost_usd", 0) for p in result["providers"]
