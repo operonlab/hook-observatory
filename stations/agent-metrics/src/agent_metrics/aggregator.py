@@ -19,16 +19,28 @@ log = structlog.get_logger()
 
 _last_db_flush = 0.0
 _last_retention = 0.0
+_last_ops_broadcast = 0.0
+_last_usage_broadcast = 0.0
+
+# Broadcast intervals (seconds)
+_OPS_BROADCAST_INTERVAL = 30.0
+_USAGE_BROADCAST_INTERVAL = 60.0
 
 
 async def aggregator_loop() -> None:
     """Background loop: session expiry, DB flush, daily rollover, retention."""
-    global _last_db_flush, _last_retention
+    global _last_db_flush, _last_retention, _last_ops_broadcast, _last_usage_broadcast
 
-    _last_db_flush = time.time()
-    _last_retention = time.time()
+    now = time.time()
+    _last_db_flush = now
+    _last_retention = now
+    _last_ops_broadcast = now
+    _last_usage_broadcast = now
 
     log.info("aggregator_started")
+
+    # Import SSE broadcast here to avoid circular imports at module level
+    from agent_metrics.sse import sse_broadcast
 
     try:
         while True:
@@ -38,6 +50,13 @@ async def aggregator_loop() -> None:
             expired = await session_store.expire_stale_sessions()
             if expired > 0:
                 log.info("sessions_expired", count=expired)
+
+            # SSE: broadcast sessions every tick (~10s via EXPIRY_CHECK_INTERVAL)
+            try:
+                snapshot = await session_store.get_snapshot()
+                await sse_broadcast("sessions", snapshot)
+            except Exception:
+                log.debug("sse_sessions_broadcast_failed", exc_info=True)
 
             # Daily rollover check
             rollover = await session_store.get_daily_rollover_data()
@@ -51,6 +70,42 @@ async def aggregator_loop() -> None:
                 if snapshots:
                     await _flush_snapshots(snapshots)
                 _last_db_flush = now
+
+            # SSE: broadcast usage every ~60s
+            if now - _last_usage_broadcast >= _USAGE_BROADCAST_INTERVAL:
+                try:
+                    from agent_metrics.usage_collector import get_month_to_date
+                    from agent_metrics.config import settings as _settings
+
+                    loop = asyncio.get_running_loop()
+                    mtd = await loop.run_in_executor(None, get_month_to_date)
+                    budget = _settings.API_MONTHLY_BUDGET_USD
+                    used = mtd.get("total_cost_usd", 0)
+                    used_pct = round(used / budget * 100, 1) if budget > 0 else 0
+                    usage_payload = {
+                        "budget_usd": budget,
+                        "used_usd": used,
+                        "used_pct": used_pct,
+                        "remaining_usd": round(budget - used, 2),
+                        "warning": used_pct >= _settings.BUDGET_WARNING_PCT,
+                        "days_elapsed": mtd.get("days", 0),
+                    }
+                    await sse_broadcast("usage", usage_payload)
+                except Exception:
+                    log.debug("sse_usage_broadcast_failed", exc_info=True)
+                _last_usage_broadcast = now
+
+            # SSE: broadcast operations (maestro runs) every ~30s
+            if now - _last_ops_broadcast >= _OPS_BROADCAST_INTERVAL:
+                try:
+                    pool = await get_pool()
+                    from agent_metrics.engines import maestro as me
+
+                    runs = await me.list_runs(pool, limit=20)
+                    await sse_broadcast("operations", {"runs": runs})
+                except Exception:
+                    log.debug("sse_operations_broadcast_failed", exc_info=True)
+                _last_ops_broadcast = now
 
             # Retention (every 24h)
             if now - _last_retention >= 86400:
@@ -134,9 +189,7 @@ async def _run_retention() -> None:
     try:
         pool = await get_pool()
         snap_cutoff = datetime.now(UTC) - timedelta(days=settings.RETENTION_SNAPSHOTS_DAYS)
-        daily_cutoff = (
-            datetime.now(UTC) - timedelta(days=settings.RETENTION_DAILY_DAYS)
-        ).date()
+        daily_cutoff = (datetime.now(UTC) - timedelta(days=settings.RETENTION_DAILY_DAYS)).date()
 
         async with pool.acquire() as con:
             await con.execute("DELETE FROM snapshots WHERE ts < $1", snap_cutoff)

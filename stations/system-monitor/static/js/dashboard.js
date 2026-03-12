@@ -8,7 +8,6 @@ function esc(s) {
 }
 
 // ─── Constants ───
-const REFRESH_MS = 30_000;
 const GAUGE_CIRCUMFERENCE = 100; // matches stroke-dasharray
 
 const COLORS = {
@@ -900,28 +899,45 @@ function setupToggle() {
     autoRefresh = !autoRefresh;
     track.classList.toggle("active", autoRefresh);
     if (autoRefresh) {
-      startTimer();
+      connectSSE();
     } else {
-      stopTimer();
+      disconnectSSE();
     }
   });
 }
 
-function startTimer() {
-  stopTimer();
-  refreshTimer = setInterval(() => {
-    fetchAll();
-    // Also refresh current tab data
-    if (currentTab === "services") fetchServices();
-    if (currentTab === "guardian") fetchGuardian();
-  }, REFRESH_MS);
+// ─── SSE Connection (replaces setInterval polling) ───
+
+let _sse = null;
+
+function connectSSE() {
+  disconnectSSE();
+  _sse = new EventSource("events/stream");
+
+  _sse.addEventListener("dashboard", (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.status) {
+        renderStatus(d.status);
+        renderTopProcesses(d.status.top_processes);
+      }
+      if (d.history) renderHistory(d.history);
+      if (d.alerts) renderAlerts(d.alerts);
+    } catch {}
+  });
+
+  _sse.addEventListener("disk", (e) => {
+    try { renderDiskSummary(JSON.parse(e.data)); } catch {}
+  });
+
+  _sse.onerror = () => {
+    disconnectSSE();
+    setTimeout(connectSSE, 5000);
+  };
 }
 
-function stopTimer() {
-  if (refreshTimer) {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
-  }
+function disconnectSSE() {
+  if (_sse) { _sse.close(); _sse = null; }
 }
 
 // ─── Init ───
@@ -932,5 +948,5 @@ document.addEventListener("DOMContentLoaded", () => {
   setupServiceFilter();
   setupReportFilter();
   fetchAll();
-  startTimer();
+  connectSSE();
 });

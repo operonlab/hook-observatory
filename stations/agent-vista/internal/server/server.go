@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"nhooyr.io/websocket"
 
@@ -61,6 +62,7 @@ func (s *Server) Tracker() *AgentTracker {
 func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
+	mux.HandleFunc("/ws/events", s.handleWS) // alias for WebSocket push endpoint
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/agents", s.handleAgents)
 	mux.HandleFunc("/api/stats", s.handleStats)
@@ -165,11 +167,21 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[server] ws client connected (sub=%d)", subID)
 	}
 
+	pingTicker := time.NewTicker(30 * time.Second)
+	defer pingTicker.Stop()
+
 	// Forward events to client until disconnect
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-pingTicker.C:
+			if err := conn.Ping(ctx); err != nil {
+				if s.verbose {
+					log.Printf("[server] ws ping error (sub=%d): %v", subID, err)
+				}
+				return
+			}
 		case msg, ok := <-ch:
 			if !ok {
 				return

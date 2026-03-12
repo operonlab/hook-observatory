@@ -735,12 +735,11 @@ def _parse_cc(data: dict) -> dict:
     if "extra_usage" in data:
         ex = data["extra_usage"]
         if ex.get("is_enabled"):
+            used = (ex.get("used_credits") or 0) / 100
+            limit = (ex.get("monthly_limit") or 0) / 100
+            pct = round(ex.get("utilization") or 0)
             balance = (ex.get("balance_cents") or 0) / 100
-            if balance > 0:
-                used = (ex.get("used_credits") or 0) / 100
-                limit = (ex.get("monthly_limit") or 0) / 100
-                pct = round(ex.get("utilization") or 0)
-                result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余${balance:.2f}"
+            result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余${balance:.2f}"
         else:
             result["ex"] = "off"
     return result

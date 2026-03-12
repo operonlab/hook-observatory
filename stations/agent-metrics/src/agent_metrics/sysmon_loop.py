@@ -65,12 +65,19 @@ async def sysmon_loop() -> None:
 
     # Import here to avoid circular imports
     from agent_metrics.quota_collector import get_quota
+    from agent_metrics.sse import sse_broadcast
+
+    # Quota broadcast interval: broadcast quota every ~60s (12 ticks at 5s)
+    _quota_tick_interval = max(1, 60 // settings.SYSMON_COLLECT_INTERVAL)
 
     try:
         while True:
             try:
                 snapshot: SysmonSnapshot = await loop.run_in_executor(None, collect_all)
                 snap_dict = snapshot.to_dict()
+
+                # Track whether quota was refreshed this tick
+                quota_refreshed = False
 
                 # Merge quota data (60s TTL controlled internally)
                 try:
@@ -87,6 +94,7 @@ async def sysmon_loop() -> None:
                     ):
                         if key in quota:
                             snap_dict[key] = quota[key]
+                    quota_refreshed = True
                 except Exception:
                     log.debug("quota_merge_failed", exc_info=True)
 
@@ -97,6 +105,26 @@ async def sysmon_loop() -> None:
                 # Write to primary output path
                 json_str = json.dumps(snap_dict)
                 _atomic_write(settings.SYSMON_OUTPUT_PATH, json_str)
+
+                # SSE: broadcast system metrics on every tick
+                await sse_broadcast("system", snap_dict)
+
+                # SSE: broadcast quota data every ~60s
+                if quota_refreshed and _tick_count % _quota_tick_interval == 0:
+                    quota_payload = {
+                        k: snap_dict.get(k)
+                        for k in (
+                            "llm_cc_5h",
+                            "llm_cc_7d",
+                            "llm_cc_ex",
+                            "llm_cx_5h",
+                            "llm_cx_7d",
+                            "llm_gm_pro",
+                            "llm_gm_flash",
+                            "llm_display",
+                        )
+                    }
+                    await sse_broadcast("quota", quota_payload)
 
                 # Guardian + Sweep (Phase 3)
                 try:
