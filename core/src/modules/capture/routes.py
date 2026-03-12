@@ -1,8 +1,9 @@
 """Capture pipeline routes."""
 
+import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db, require_permission
@@ -100,6 +101,34 @@ async def capture_stats(
     return await capture_service.stats(db, space_id, user_id=user.get("id"))
 
 
+@router.get("/events/stream")
+async def capture_events_stream(
+    request: Request,
+    _user: dict = require_permission("capture.read"),
+):
+    """SSE stream — emits 'changed' events when captures are created/enriched/promoted."""
+    from sse_starlette.sse import EventSourceResponse
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _capture_sse_clients.add(queue)
+
+    async def generate():
+        try:
+            yield {"event": "connected", "data": "ok"}
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield msg
+                except TimeoutError:
+                    yield {"event": "keepalive", "data": ""}
+        finally:
+            _capture_sse_clients.discard(queue)
+
+    return EventSourceResponse(generate())
+
+
 @router.get("/search", response_model=list[CaptureSearchResult])
 async def search_captures(
     q: str = Query(..., description="Search query string"),
@@ -113,7 +142,9 @@ async def search_captures(
 ):
     """Search captures using Qdrant hybrid search with ILIKE fallback."""
     results = await capture_service.search(
-        db, q, space_id,
+        db,
+        q,
+        space_id,
         module=module,
         entity_type=entity_type,
         status=status,
@@ -269,3 +300,27 @@ async def get_enrichments(
     _check_owner(capture, user)
     enrichments = await capture_service.get_enrichments(db, capture_id)
     return enrichments
+
+
+# ─── SSE: push notifications on capture changes ───
+
+_capture_sse_clients: set[asyncio.Queue] = set()
+
+
+def _notify_capture_changed(event_type: str) -> None:
+    """Queue a 'changed' notification to all SSE clients."""
+    dead: set[asyncio.Queue] = set()
+    for q in _capture_sse_clients:
+        try:
+            q.put_nowait({"event": "changed", "data": event_type})
+        except asyncio.QueueFull:
+            dead.add(q)
+    _capture_sse_clients.difference_update(dead)
+
+
+def register_capture_sse_events() -> None:
+    """Subscribe to capture EventBus events for SSE broadcast."""
+    from src.events.bus import event_bus
+
+    for evt in ("capture.created", "capture.enriched", "capture.promoted"):
+        event_bus.subscribe(evt, lambda e: _notify_capture_changed(e.type))

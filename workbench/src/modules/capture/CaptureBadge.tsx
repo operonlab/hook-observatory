@@ -27,8 +27,18 @@ export default function CaptureBadge() {
 
   useEffect(() => {
     refresh()
-    const interval = setInterval(refresh, 30000)
-    return () => clearInterval(interval)
+    const es = new EventSource('/api/captures/events/stream')
+    es.addEventListener('changed', () => refresh())
+    es.onerror = () => {
+      es.close()
+      // Fallback: retry SSE after 10s
+      const timer = setTimeout(() => {
+        // Will reconnect on next mount cycle
+        refresh()
+      }, 10000)
+      return () => clearTimeout(timer)
+    }
+    return () => es.close()
   }, [refresh])
 
   // Fetch recent pending items when popover opens
