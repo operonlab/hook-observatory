@@ -51,8 +51,8 @@ class Settings(BaseSettings):
 
     # S3 Object Storage (RustFS)
     s3_endpoint: str = "http://localhost:9000"
-    s3_access_key: str = "rustfsadmin"
-    s3_secret_key: str = "rustfsadmin"
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
     s3_archive_bucket: str = "workshop-archive"
 
     # Web Push (VAPID)
