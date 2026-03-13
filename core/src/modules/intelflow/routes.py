@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.deps import get_db
+from src.shared.deps import get_db, require_permission
 from src.shared.embedding import get_embedding
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
@@ -55,6 +55,7 @@ async def list_reports(
     tags: str | None = Query(None, description="Comma-separated tags"),
     topic_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     pagination = PaginationParams(page=page, page_size=page_size)
     tag_list = None
@@ -74,6 +75,7 @@ async def list_reports(
 async def get_report(
     report_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     instance = await report_service.get_with_content_resolve(db, report_id)
     if not instance:
@@ -107,6 +109,7 @@ async def create_report(
     body: ReportCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.write"),
 ):
     # Strip skill_name from tags to avoid pollution
     if body.skill_name and body.tags:
@@ -147,6 +150,7 @@ async def update_report(
     report_id: str,
     body: ReportUpdate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.write"),
 ):
     instance = await report_service.update(db, report_id, body)
     if not instance:
@@ -160,6 +164,7 @@ async def update_report(
 async def delete_report(
     report_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.write"),
 ):
     deleted = await report_service.delete(db, report_id)
     if not deleted:
@@ -175,6 +180,7 @@ async def search_reports(
     body: SearchRequest,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     results = await search_engine.semantic_search(
         db, space_id, body.query, limit=body.limit, threshold=body.threshold
@@ -194,6 +200,7 @@ async def check_duplicate(
     body: SearchCheckRequest,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     return await search_engine.check_duplicate(db, space_id, body.query, threshold=body.threshold)
 
@@ -207,6 +214,7 @@ async def list_topics(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     pagination = PaginationParams(page=page, page_size=page_size)
     return await topic_service.list_topics(db, space_id, pagination)
@@ -217,6 +225,7 @@ async def create_topic(
     body: TopicCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.write"),
 ):
     result = await topic_service.create_topic(db, space_id, body)
     await db.commit()
@@ -227,6 +236,7 @@ async def create_topic(
 async def get_related_topics(
     topic_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     return await topic_service.get_related(db, topic_id)
 
@@ -235,6 +245,7 @@ async def get_related_topics(
 async def backfill_topics(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.write"),
 ):
     """Backfill topics from all existing report tags. Idempotent."""
     result = await topic_service.backfill_all(db, space_id)
@@ -246,6 +257,7 @@ async def backfill_topics(
 async def get_topic_graph(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     return await topic_service.get_graph(db, space_id)
 
@@ -257,6 +269,7 @@ async def get_topic_graph(
 async def get_dashboard(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     return await dashboard_service.get_summary(db, space_id)
 
@@ -266,6 +279,7 @@ async def get_timeline(
     space_id: str = Query("default"),
     days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     return await dashboard_service.get_timeline(db, space_id, days)
 
@@ -288,6 +302,7 @@ async def list_frozen_reports(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     """List frozen report metadata (no content -- needs thaw)."""
     from .models import ReportFrozen
@@ -335,6 +350,7 @@ async def list_frozen_reports(
 async def thaw_frozen_report(
     report_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     """Fetch full content from S3 for a frozen report.
 
@@ -385,6 +401,7 @@ async def list_frozen_briefings(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     """List frozen briefing metadata (no content -- needs thaw)."""
     from .models import BriefingFrozen
@@ -429,6 +446,7 @@ async def list_frozen_briefings(
 async def thaw_frozen_briefing(
     briefing_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
 ):
     """Fetch full content from S3 for a frozen briefing.
 
