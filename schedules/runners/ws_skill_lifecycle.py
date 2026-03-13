@@ -38,7 +38,7 @@ SKIPPED_PHASES = ["audit", "optimize", "publish"]
 def run_cmd(cmd: list[str], timeout: int = 300) -> tuple[int, str, str]:
     """Run command and return (rc, stdout, stderr)."""
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
@@ -442,4 +442,13 @@ def main():
 
 
 if __name__ == "__main__":
+    import fcntl
+
+    _lock_path = f"/tmp/{Path(__file__).stem}.lock"
+    _lock_fd = open(_lock_path, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
+        sys.exit(0)
     main()

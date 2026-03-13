@@ -65,4 +65,14 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import fcntl
+    import sys
+
+    _lock_path = f"/tmp/{Path(__file__).stem}.lock"
+    _lock_fd = open(_lock_path, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
+        sys.exit(0)
     main()

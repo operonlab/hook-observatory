@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -23,9 +24,9 @@ from datetime import datetime
 CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
 GEMINI_CMD = "gemini"
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
-MIN_CLUSTERS_FOR_BRIDGE = 2   # entity must appear in ≥2 clusters
-MIN_TRIPLES_PER_BRIDGE = 4    # need enough triples to synthesize
-DEFAULT_MAX_BRIDGES = 15      # max Gemini calls per run
+MIN_CLUSTERS_FOR_BRIDGE = 2  # entity must appear in ≥2 clusters
+MIN_TRIPLES_PER_BRIDGE = 4  # need enough triples to synthesize
+DEFAULT_MAX_BRIDGES = 15  # max Gemini calls per run
 
 WISDOM_PROMPT = """You are a knowledge distillation expert. Given triples from MULTIPLE clusters
 that share a common entity/theme, synthesize a single WISDOM NODE — a high-level heuristic
@@ -55,6 +56,7 @@ Here are the cross-cluster triples:
 def http_get(url: str, params: dict | None = None) -> dict:
     if params:
         from urllib.parse import urlencode
+
         url = f"{url}?{urlencode(params)}"
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     try:
@@ -72,10 +74,12 @@ def http_get(url: str, params: dict | None = None) -> dict:
 def http_post(url: str, body: dict, params: dict | None = None) -> dict:
     if params:
         from urllib.parse import urlencode
+
         url = f"{url}?{urlencode(params)}"
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
-        url, data=payload,
+        url,
+        data=payload,
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
@@ -145,16 +149,18 @@ def find_bridges(data: dict) -> list[dict]:
         if len(cluster_map) >= MIN_CLUSTERS_FOR_BRIDGE:
             total = sum(len(ts) for ts in cluster_map.values())
             if total >= MIN_TRIPLES_PER_BRIDGE:
-                bridges.append({
-                    "entity": entity,
-                    "cluster_ids": sorted(cluster_map.keys()),
-                    "n_clusters": len(cluster_map),
-                    "n_triples": total,
-                    "triples_by_cluster": {
-                        cid: [{"s": t["s"], "p": t["p"], "o": t["o"]} for t in ts]
-                        for cid, ts in cluster_map.items()
-                    },
-                })
+                bridges.append(
+                    {
+                        "entity": entity,
+                        "cluster_ids": sorted(cluster_map.keys()),
+                        "n_clusters": len(cluster_map),
+                        "n_triples": total,
+                        "triples_by_cluster": {
+                            cid: [{"s": t["s"], "p": t["p"], "o": t["o"]} for t in ts]
+                            for cid, ts in cluster_map.items()
+                        },
+                    }
+                )
 
     bridges.sort(key=lambda b: (b["n_clusters"], b["n_triples"]), reverse=True)
     return bridges
@@ -174,20 +180,30 @@ def call_gemini(bridge: dict) -> dict | None:
 
     try:
         result = subprocess.run(
-            [GEMINI_CMD, "-m", GEMINI_MODEL,
-             "-p", "Synthesize a wisdom node from cross-cluster triples. Output ONLY valid JSON."],
+            [
+                GEMINI_CMD,
+                "-m",
+                GEMINI_MODEL,
+                "-p",
+                "Synthesize a wisdom node from cross-cluster triples. Output ONLY valid JSON.",
+            ],
             input=prompt_content,
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             return None
 
         raw = result.stdout.strip()
-        lines = [ln for ln in raw.splitlines()
-                 if not ln.startswith("```")
-                 and not ln.startswith("Created execution plan")
-                 and not ln.startswith("Expanding hook")
-                 and not ln.startswith("Hook execution")]
+        lines = [
+            ln
+            for ln in raw.splitlines()
+            if not ln.startswith("```")
+            and not ln.startswith("Created execution plan")
+            and not ln.startswith("Expanding hook")
+            and not ln.startswith("Hook execution")
+        ]
         clean = "\n".join(lines).strip()
         if not clean:
             return None
@@ -208,8 +224,8 @@ def save_wisdom(wisdom_nodes: list[dict], space_id: str, dry_run: bool) -> bool:
     if dry_run:
         print(f"\n[Phase 4] DRY RUN — would POST {len(wisdom_nodes)} wisdom nodes to {url}")
         for w in wisdom_nodes:
-            print(f"  [{w.get('confidence','?')}] {w.get('bridge_entity','?')[:50]}")
-            print(f"    {w.get('wisdom','')[:120]}")
+            print(f"  [{w.get('confidence', '?')}] {w.get('bridge_entity', '?')[:50]}")
+            print(f"    {w.get('wisdom', '')[:120]}")
         return True
 
     print(f"\n[Phase 4] POSTing {len(wisdom_nodes)} wisdom nodes to Core API ...")
@@ -224,12 +240,25 @@ def save_wisdom(wisdom_nodes: list[dict], space_id: str, dry_run: bool) -> bool:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Memvault wisdom pipeline — cross-cluster bridge synthesis")
+    parser = argparse.ArgumentParser(
+        description="Memvault wisdom pipeline — cross-cluster bridge synthesis"
+    )
     parser.add_argument("--space-id", default=os.environ.get("MEMVAULT_SPACE_ID", "default"))
-    parser.add_argument("--max-bridges", type=int, default=DEFAULT_MAX_BRIDGES,
-                        help="Max Gemini calls (default: 15)")
+    parser.add_argument(
+        "--max-bridges",
+        type=int,
+        default=DEFAULT_MAX_BRIDGES,
+        help="Max Gemini calls (default: 15)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Skip writing to Core API")
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        help="Global timeout in seconds (default: 600 = 10 min)",
+    )
     args = parser.parse_args()
+    _deadline = time.monotonic() + args.timeout
 
     print("Memvault — wisdom_pipeline.py")
     print(f"Core API : {CORE_API}")
@@ -247,14 +276,20 @@ def main() -> None:
     for b in bridges[:10]:
         print(f"  {b['entity'][:50]:50s}  clusters={b['n_clusters']}  triples={b['n_triples']}")
 
-    top_bridges = bridges[:args.max_bridges]
-    print(f"\n[Phase 3] Synthesizing wisdom from top {len(top_bridges)} bridges via Gemini Flash...")
+    top_bridges = bridges[: args.max_bridges]
+    print(
+        f"\n[Phase 3] Synthesizing wisdom from top {len(top_bridges)} bridges via Gemini Flash..."
+    )
 
     # Phase 3
     wisdom_nodes = []
     for i, bridge in enumerate(top_bridges):
+        if time.monotonic() > _deadline:
+            remaining = len(top_bridges) - i
+            print(f"\n  [TIMEOUT] {args.timeout}s reached, {remaining} bridges skipped")
+            break
         label = bridge["entity"][:40]
-        print(f"  [{i+1}/{len(top_bridges)}] {label}...", end=" ", flush=True)
+        print(f"  [{i + 1}/{len(top_bridges)}] {label}...", end=" ", flush=True)
         result = call_gemini(bridge)
         if result:
             result["bridge_entity"] = bridge["entity"]
@@ -269,13 +304,13 @@ def main() -> None:
     ok = save_wisdom(wisdom_nodes, args.space_id, args.dry_run)
 
     # Report
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  Memvault — Wisdom Pipeline Report")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Bridges found   : {len(bridges)}")
     print(f"  Processed       : {len(top_bridges)}")
     print(f"  Wisdom generated: {len(wisdom_nodes)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for w in wisdom_nodes:
         conf = w.get("confidence", "?")
         entity = w.get("bridge_entity", "?")[:50]
@@ -284,7 +319,7 @@ def main() -> None:
         print(f"\n  [{conf}] {entity}")
         print(f"    Clusters: {clusters}")
         print(f"    Wisdom  : {wisdom_text[:120]}{'...' if len(wisdom_text) > 120 else ''}")
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
 
     if not ok:
         sys.exit(1)
