@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.deps import get_db
+from src.shared.deps import get_db, require_permission
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
@@ -52,6 +52,7 @@ async def list_blocks(
     tags: str | None = Query(None, description="Comma-separated tag filter"),
     block_type: str | None = Query(None, description="Block type filter"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     pagination = PaginationParams(page=page, page_size=page_size)
     # Support both singular 'tag' and plural 'tags' params
@@ -72,6 +73,7 @@ async def list_blocks(
 async def get_block(
     block_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     instance = await memory_block_service.get(db, block_id)
     if not instance:
@@ -84,6 +86,7 @@ async def create_block(
     body: MemoryBlockCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     instance = await memory_block_service.create(db, space_id, body)
     # Generate embedding asynchronously (best-effort)
@@ -100,6 +103,7 @@ async def update_block(
     block_id: str,
     body: MemoryBlockUpdate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     instance = await memory_block_service.update(db, block_id, body)
     if not instance:
@@ -113,6 +117,7 @@ async def update_block(
 async def delete_block(
     block_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     deleted = await memory_block_service.delete(db, block_id)
     if not deleted:
@@ -137,6 +142,7 @@ async def search(
     date_from: datetime | None = Query(None, description="Filter: created_at >= date_from"),
     date_to: datetime | None = Query(None, description="Filter: created_at <= date_to"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     # Phase B2: Adaptive Retrieval
     if not skip_adaptive:
@@ -222,6 +228,7 @@ async def search(
 async def list_tags(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     return await tag_service.list_tags(db, space_id)
 
@@ -230,6 +237,7 @@ async def list_tags(
 async def sync_tags(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     count = await tag_service.sync_tags(db, space_id)
     await db.commit()
@@ -245,6 +253,7 @@ async def list_domains(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     pagination = PaginationParams(page=page, page_size=page_size)
     return await knowledge_domain_service.list(db, space_id, pagination)
@@ -255,6 +264,7 @@ async def create_domain(
     body: KnowledgeDomainCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     instance = await knowledge_domain_service.create(db, space_id, body)
     await db.commit()
@@ -266,6 +276,7 @@ async def update_domain(
     domain_id: str,
     body: KnowledgeDomainUpdate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     instance = await knowledge_domain_service.update(db, domain_id, body)
     if not instance:
@@ -281,6 +292,7 @@ async def update_domain(
 async def get_profile(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     profile = await profile_score_service.get_by_space(db, space_id)
     if not profile:
@@ -303,6 +315,7 @@ async def upsert_profile(
     body: ProfileScoreUpdate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     result = await profile_score_service.upsert(db, space_id, body)
     await db.commit()
@@ -313,6 +326,7 @@ async def upsert_profile(
 async def recalculate_profile(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Recalculate KAS scores from actual KG data."""
     from .kg_models import AttitudeFact, Cluster, SkillInvocation, Triple, WisdomNode

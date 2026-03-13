@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from src.shared.deps import get_current_user, get_db
+from src.shared.deps import get_current_user, get_db, require_permission
 from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
@@ -81,6 +81,7 @@ async def list_topics(
     page_size: int = 50,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     pagination = PaginationParams(page=page, page_size=page_size)
     return await briefing_topic_service.list(db, space_id, pagination)
@@ -91,6 +92,7 @@ async def create_topic(
     body: BriefingTopicCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     instance = await briefing_topic_service.create(db, space_id, body)
     await db.commit()
@@ -102,6 +104,7 @@ async def update_topic(
     topic_id: str,
     body: BriefingTopicUpdate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     instance = await briefing_topic_service.update(db, topic_id, body)
     if not instance:
@@ -111,7 +114,11 @@ async def update_topic(
 
 
 @router.delete("/topics/{topic_id}", status_code=204)
-async def delete_topic(topic_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_topic(
+    topic_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
+):
     deleted = await briefing_topic_service.delete(db, topic_id)
     if not deleted:
         raise NotFoundError("Briefing topic not found", code="briefing.topic_not_found")
@@ -119,7 +126,11 @@ async def delete_topic(topic_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/topics/{topic_id}/toggle", response_model=BriefingTopicResponse)
-async def toggle_topic(topic_id: str, db: AsyncSession = Depends(get_db)):
+async def toggle_topic(
+    topic_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
+):
     result = await briefing_topic_service.toggle(db, topic_id)
     await db.commit()
     return result
@@ -138,6 +149,7 @@ async def create_subtopic(
     body: BriefingSubtopicCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     result = await briefing_topic_service.add_subtopic(db, topic_id, space_id, body)
     await db.commit()
@@ -152,6 +164,7 @@ async def update_subtopic(
     subtopic_id: str,
     body: BriefingSubtopicUpdate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     result = await briefing_topic_service.update_subtopic(db, subtopic_id, body)
     await db.commit()
@@ -162,6 +175,7 @@ async def update_subtopic(
 async def delete_subtopic(
     subtopic_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     deleted = await briefing_topic_service.delete_subtopic(db, subtopic_id)
     if not deleted:
@@ -176,6 +190,7 @@ async def delete_subtopic(
 async def list_analysts(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     pagination = PaginationParams(page=1, page_size=100)
     result = await analyst_service.list(db, space_id, pagination)
@@ -187,6 +202,7 @@ async def create_analyst(
     body: AnalystCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     instance = await analyst_service.create(db, space_id, body)
     await db.commit()
@@ -198,6 +214,7 @@ async def update_analyst(
     analyst_id: str,
     body: AnalystUpdate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     instance = await analyst_service.update(db, analyst_id, body)
     if not instance:
@@ -207,7 +224,11 @@ async def update_analyst(
 
 
 @router.delete("/analysts/{analyst_id}", status_code=204)
-async def delete_analyst(analyst_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_analyst(
+    analyst_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
+):
     deleted = await analyst_service.delete(db, analyst_id)
     if not deleted:
         raise NotFoundError("Analyst not found", code="briefing.analyst_not_found")
@@ -215,7 +236,11 @@ async def delete_analyst(analyst_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/analysts/{analyst_id}/toggle", response_model=AnalystResponse)
-async def toggle_analyst(analyst_id: str, db: AsyncSession = Depends(get_db)):
+async def toggle_analyst(
+    analyst_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
+):
     result = await analyst_service.toggle(db, analyst_id)
     await db.commit()
     return result
@@ -233,6 +258,7 @@ async def list_briefings(
     topic_id: str | None = None,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     return await briefing_service.list_briefings(
         db, space_id, date_from, date_to, topic_id, PaginationParams(page=page, page_size=page_size)
@@ -244,6 +270,7 @@ async def get_briefings_by_date(
     target_date: date,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     return await briefing_service.get_by_date(db, space_id, target_date)
 
@@ -253,6 +280,7 @@ async def get_daily_summary(
     target_date: date,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     return await briefing_service.get_daily_summary(db, space_id, target_date)
 
@@ -263,6 +291,7 @@ async def get_briefing_by_domain(
     domain: str,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     result = await briefing_service.get_by_date_and_topic(db, space_id, target_date, domain)
     if not result:
@@ -275,6 +304,7 @@ async def create_briefing(
     body: BriefingCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     result = await briefing_service.create_briefing(db, space_id, body)
     await db.commit()
@@ -286,6 +316,7 @@ async def update_briefing_status(
     briefing_id: str,
     body: BriefingUpdate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     result = await briefing_service.update_status(db, briefing_id, body)
     await db.commit()
@@ -303,6 +334,7 @@ async def list_entries(
     briefing_id: str,
     phase: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     return await briefing_service.get_entries(db, briefing_id, phase)
 
@@ -317,6 +349,7 @@ async def add_entry(
     body: BriefingEntryCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     result = await briefing_service.add_entry(db, briefing_id, space_id, body)
     await db.commit()
@@ -333,6 +366,7 @@ async def add_entry(
 async def list_follow_ups(
     briefing_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     return await follow_up_service.list_follow_ups(db, briefing_id)
 
@@ -347,6 +381,7 @@ async def create_follow_up(
     body: FollowUpCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
 ):
     result = await follow_up_service.create_follow_up(db, briefing_id, space_id, body)
     await db.commit()
@@ -362,6 +397,7 @@ async def list_frozen_briefings(
     page_size: int = 20,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     from sqlalchemy import select as sa_select
 
@@ -390,6 +426,7 @@ async def list_frozen_briefings(
 async def thaw_frozen_briefing(
     briefing_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
 ):
     from sqlalchemy import select as sa_select
 
