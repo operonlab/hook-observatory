@@ -69,6 +69,10 @@ class WebCrawlCaptureAdapter(BaseCaptureAdapter):
 
             raise BadRequestError("URL is required for webcrawl capture")
 
+        from src.shared.ssrf_guard import validate_url
+
+        validate_url(url)
+
         from src.modules.intelflow.webcrawl import create_report_from_url
 
         result = await create_report_from_url(
