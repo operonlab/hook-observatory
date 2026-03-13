@@ -22,11 +22,30 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 # ── Quota Gate ─────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.quota_gate import request_clearance
 
 request_clearance("ws-memvault-synthesis")
+
+# ── Memory Guardian ───────────────────────────────────────────
+MEMORY_THRESHOLD = 85  # 記憶體使用率超過 85% 時停止執行
+
+
+def check_memory_pressure() -> bool:
+    """檢查記憶體壓力，超過閾值返回 False"""
+    if psutil is None:
+        return True  # 沒有 psutil 則預設允許執行
+    memory_percent = psutil.virtual_memory().percent
+    if memory_percent > MEMORY_THRESHOLD:
+        return False
+    return True
+
 
 # ── Configuration ──────────────────────────────────────────────
 HOME = Path.home()
@@ -92,6 +111,14 @@ def api_post(url: str, data: dict) -> int | None:
 def main() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Memory pressure check
+    if not check_memory_pressure():
+        mem_percent = psutil.virtual_memory().percent if psutil else "unknown"
+        log(
+            f"ABORT: Memory pressure too high ({mem_percent}% > {MEMORY_THRESHOLD}%), skipping synthesis"
+        )
+        sys.exit(0)
+
     log("========== Daily synthesis started ==========")
 
     # Step 1: Cluster pipeline (GMM re-clustering)
@@ -102,8 +129,8 @@ def main() -> None:
         log("Step 1 FAILED — continuing anyway")
 
     # Step 2: Wisdom pipeline (depends on fresh clusters)
-    log("Step 2/6: wisdom_pipeline.py")
-    if run_pipeline("wisdom_pipeline.py"):
+    log("Step 2/6: wisdom_pipeline.py (timeout=600s)")
+    if run_pipeline("wisdom_pipeline.py", ["--timeout", "600"]):
         log("Step 2 OK")
     else:
         log("Step 2 FAILED — continuing anyway")
@@ -177,4 +204,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import fcntl
+
+    _lock_path = f"/tmp/{Path(__file__).stem}.lock"
+    _lock_fd = open(_lock_path, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
+        sys.exit(0)
     main()
