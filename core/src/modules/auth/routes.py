@@ -1,6 +1,7 @@
 """Authentication routes — register, login, logout, session check, OAuth."""
 
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,30 @@ from .schemas import PreferencesUpdate, SessionResponse, UserCreate, UserLogin
 from .services import user_service
 
 router = APIRouter(tags=["auth"])
+
+# --- Security helpers ---
+
+_ALLOWED_HOSTS = {"workshop.joneshong.com"}
+
+
+def _safe_redirect_url(url: str | None) -> str:
+    """Validate redirect URL to prevent open redirect attacks.
+
+    Only allows:
+    - Relative paths starting with "/" (but not protocol-relative "//...")
+    - Absolute URLs whose hostname is in _ALLOWED_HOSTS
+    Everything else falls back to "/".
+    """
+    if not url:
+        return "/"
+    # Allow relative paths, but reject protocol-relative URLs like //evil.com
+    if url.startswith("/") and not url.startswith("//"):
+        return url
+    # Allow only whitelisted hosts for absolute URLs
+    parsed = urlparse(url)
+    if parsed.hostname and parsed.hostname in _ALLOWED_HOSTS:
+        return url
+    return "/"
 
 
 async def _create_session(request: Request, db: AsyncSession, user: User) -> None:
@@ -177,7 +202,7 @@ async def update_preferences(
 async def oauth_google(request: Request):
     """Initiate Google OAuth flow."""
     redirect_uri = f"{settings.oauth_redirect_base}/auth/callback/google"
-    request.session["oauth_redirect"] = request.query_params.get("redirect", "/")
+    request.session["oauth_redirect"] = _safe_redirect_url(request.query_params.get("redirect"))
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
@@ -223,7 +248,7 @@ async def oauth_google_callback(
 async def oauth_github(request: Request):
     """Initiate GitHub OAuth flow."""
     redirect_uri = f"{settings.oauth_redirect_base}/auth/callback/github"
-    request.session["oauth_redirect"] = request.query_params.get("redirect", "/")
+    request.session["oauth_redirect"] = _safe_redirect_url(request.query_params.get("redirect"))
     return await oauth.github.authorize_redirect(request, redirect_uri)
 
 
