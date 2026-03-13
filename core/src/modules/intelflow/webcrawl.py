@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.rate_limiter import RateLimiter
+from src.shared.ssrf_guard import validate_url
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ async def create_report_from_url(
 
     from .schemas import ReportCreate
     from .services import report_service
+
+    # 0. SSRF guard — reject internal/private network targets
+    validate_url(url)
 
     # 1. Crawl (rate-limited per domain)
     await _limiter.acquire(url)
