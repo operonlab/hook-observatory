@@ -1,5 +1,6 @@
 """In-process async event bus. Swappable to Redis Streams."""
 
+import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -9,6 +10,8 @@ from src.events.backends.base import EventBackend, Handler, _current_trace_id, c
 
 # Re-export Handler so callers can import it from here if needed
 __all__ = ["Event", "EventBus", "current_trace_id", "event_bus"]
+
+_log = logging.getLogger(__name__)
 
 
 class Event:
@@ -22,6 +25,28 @@ class Event:
         user_id: str | None = None,
         trace_id: str | None = None,
     ):
+        # SEC-07: Validate that source is consistent with the event type's module prefix.
+        # Legitimate patterns:
+        #   source="finance"              type="finance.transaction.created"  → exact match
+        #   source="finance.cron"         type="finance.subscription.renewed" → starts with prefix
+        #   source="session-intelligence" type="intelligence.digest.completed" → prefix in source
+        # Any other combination may indicate spoofing — log a warning for visibility.
+        if source and "." in type:
+            expected_module = type.split(".")[0]
+            source_lower = source.lower()
+            prefix_lower = expected_module.lower()
+            is_consistent = (
+                source_lower == prefix_lower
+                or source_lower.startswith(prefix_lower + ".")
+                or prefix_lower in source_lower
+            )
+            if not is_consistent:
+                _log.warning(
+                    "Event source mismatch: source=%r but event type prefix=%r (type=%r)",
+                    source,
+                    expected_module,
+                    type,
+                )
         self.type = type
         self.data = data
         self.id = uuid.uuid4().hex
