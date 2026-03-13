@@ -12,12 +12,6 @@ const fmtTime = (ts) => {
   if (isNaN(d.getTime())) return ts;
   return d.toLocaleString("zh-TW", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
-const fmtBytes = (bps) => {
-  if (!bps || bps < 1024) return (bps || 0) + " B/s";
-  if (bps < 1048576) return (bps / 1024).toFixed(1) + " KB/s";
-  return (bps / 1048576).toFixed(1) + " MB/s";
-};
-
 /* ── 用量 Tab ── */
 async function refreshUsage() {
   const [budget, byModel] = await Promise.all([api("usage/budget"), api("usage/by-model")]);
@@ -30,38 +24,48 @@ async function refreshUsage() {
                      <div style="font-size:0.7rem;color:var(--subtext0)">Claude (ccusage) 本月花費</div>`;
   }
 
-  // LiteLLM 總帳
+  // LiteLLM 總帳（已用 / 儲值）
   const lEl = document.getElementById("litellm-budget-info");
   if (lEl && budget.litellm) {
     const l = budget.litellm;
-    const pct = Math.round((l.used_usd / (l.budget_usd || 1)) * 100);
+    const pct = l.budget_usd > 0 ? Math.round((l.used_usd / l.budget_usd) * 100) : 0;
     lEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline">
-                       <span style="font-size:1.2rem;font-weight:700">${fmt$(l.remaining_usd)}</span>
-                       <span style="font-size:0.7rem;color:var(--subtext0)">共 ${fmt$(l.budget_usd)} 剩餘</span>
+                       <span style="font-size:1.2rem;font-weight:700;color:var(--peach)">${fmt$(l.used_usd)}<span style="font-size:0.7rem;font-weight:400;color:var(--subtext0)"> 已用</span></span>
+                       <span style="font-size:1.2rem;font-weight:700">${fmt$(l.budget_usd)}<span style="font-size:0.7rem;font-weight:400;color:var(--subtext0)"> 儲值</span></span>
                      </div>
                      <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background-color:var(--green)"></div></div>`;
   }
 
-  // Claude 模型
+  // Claude 模型（僅顯示 claude-* 開頭）
   const cBody = document.getElementById("claude-model-tbody");
   if (cBody && byModel.claude_models) {
-    cBody.innerHTML = byModel.claude_models.length
-      ? byModel.claude_models.map(m => `<tr><td>${m.model}</td><td style="text-align:right">${fmt$(m.cost_usd)}</td></tr>`).join("")
+    const claudeOnly = byModel.claude_models.filter(m => m.model.startsWith("claude-"));
+    cBody.innerHTML = claudeOnly.length
+      ? claudeOnly.map(m => `<tr><td>${m.model}</td><td style="text-align:right">${fmt$(m.cost_usd)}</td></tr>`).join("")
       : `<tr><td colspan="2" class="empty">暫無資料</td></tr>`;
   }
 
-  // LiteLLM 模型 (4 欄: 供應商 | 剩餘 | 已用 | 使用率)
+  // LiteLLM 模型 (5 欄: 供應商 | 儲值 | 剩餘 | 已用 | 使用率) + 累計總額
   const lBody = document.getElementById("litellm-model-tbody");
   if (lBody && byModel.litellm_models) {
-    lBody.innerHTML = byModel.litellm_models.length
-      ? byModel.litellm_models.map(m => {
-          const name = m.name || m.model;
-          const spent = m.spent || m.used_usd || m.cost_usd || 0;
-          const remaining = m.remaining != null ? fmt$(m.remaining) : "—";
-          const pct = m.pct != null ? m.pct + "%" : "—";
-          return `<tr><td>${name}</td><td style="text-align:right">${remaining}</td><td style="text-align:right;color:var(--peach)">${fmt$(spent)}</td><td style="text-align:right">${pct}</td></tr>`;
-        }).join("")
-      : `<tr><td colspan="4" class="empty">暫無資料</td></tr>`;
+    if (!byModel.litellm_models.length) {
+      lBody.innerHTML = `<tr><td colspan="5" class="empty">暫無資料</td></tr>`;
+    } else {
+      const rows = byModel.litellm_models.map(m => {
+        const name = m.name || m.model;
+        const deposit = m.total != null ? fmt$(m.total) : "—";
+        const spent = m.spent || m.used_usd || m.cost_usd || 0;
+        const remaining = m.remaining != null ? fmt$(m.remaining) : "—";
+        const pct = m.pct != null ? m.pct + "%" : "—";
+        return `<tr><td>${name}</td><td style="text-align:right">${deposit}</td><td style="text-align:right">${remaining}</td><td style="text-align:right;color:var(--peach)">${fmt$(spent)}</td><td style="text-align:right">${pct}</td></tr>`;
+      });
+      const totalDeposit = byModel.litellm_models.reduce((s, m) => s + (m.total || 0), 0);
+      const totalRemaining = byModel.litellm_models.reduce((s, m) => s + (m.remaining || 0), 0);
+      const totalSpent = byModel.litellm_models.reduce((s, m) => s + (m.spent || m.used_usd || m.cost_usd || 0), 0);
+      const totalPct = totalDeposit > 0 ? Math.round(totalSpent / totalDeposit * 100 * 10) / 10 + "%" : "—";
+      rows.push(`<tr style="border-top:1px solid var(--surface1);font-weight:600"><td>累計</td><td style="text-align:right">${fmt$(totalDeposit)}</td><td style="text-align:right">${fmt$(totalRemaining)}</td><td style="text-align:right;color:var(--peach)">${fmt$(totalSpent)}</td><td style="text-align:right">${totalPct}</td></tr>`);
+      lBody.innerHTML = rows.join("");
+    }
   }
 }
 
@@ -91,7 +95,9 @@ async function refreshQuota() {
       if (pct >= 85) color = "var(--red)";
       else if (pct >= 60) color = "var(--yellow)";
     }
-    items.push(`<div class="quota-card">
+    // 長文字只在環內顯示百分比，完整值放 tooltip
+    const ringLabel = val.length > 5 && pctMatch ? pctMatch[0] : val;
+    items.push(`<div class="quota-card" title="${val}">
       <div class="quota-label">${label}</div>
       <div class="gauge-container">
         <div class="gauge-ring" style="width:60px;height:60px">
@@ -102,7 +108,7 @@ async function refreshQuota() {
               stroke-dashoffset="0"
               style="stroke:${color}"/>
           </svg>
-          <div class="gauge-value" style="font-size:0.7rem">${val}</div>
+          <div class="gauge-value" style="font-size:0.7rem">${ringLabel}</div>
         </div>
       </div>
     </div>`);
@@ -130,7 +136,8 @@ function updateQuotaFromSSE(data) {
       if (pct >= 85) color = "var(--red)";
       else if (pct >= 60) color = "var(--yellow)";
     }
-    items.push(`<div class="quota-card">
+    const ringLabel = val.length > 5 && pctMatch ? pctMatch[0] : val;
+    items.push(`<div class="quota-card" title="${val}">
       <div class="quota-label">${label}</div>
       <div class="gauge-container">
         <div class="gauge-ring" style="width:60px;height:60px">
@@ -141,7 +148,7 @@ function updateQuotaFromSSE(data) {
               stroke-dashoffset="0"
               style="stroke:${color}"/>
           </svg>
-          <div class="gauge-value" style="font-size:0.7rem">${val}</div>
+          <div class="gauge-value" style="font-size:0.7rem">${ringLabel}</div>
         </div>
       </div>
     </div>`);
@@ -149,145 +156,10 @@ function updateQuotaFromSSE(data) {
   grid.innerHTML = items.join("") || '<div class="empty">暫無配額資料</div>';
 }
 
-/* ── 工作階段 Tab ── */
-async function refreshSessions() {
-  const [current, history] = await Promise.all([api("current"), api("history?days=7")]);
-
-  if (current) {
-    const el = (id) => document.getElementById(id);
-    if (el("stat-today-cost")) el("stat-today-cost").textContent = fmt$(current.total_cost_usd);
-    if (el("stat-active")) el("stat-active").textContent = current.active_sessions || current.sessions?.length || 0;
-    if (el("stat-sessions")) el("stat-sessions").textContent = current.sessions?.length || 0;
-    renderSessionsTable(current.sessions || []);
-  }
-
-  if (history) {
-    const el = document.getElementById("stat-7d");
-    if (el) el.textContent = history.summaries?.length || 0;
-  }
-}
-
-function renderSessionsTable(sessions) {
-  const tbody = document.getElementById("sessions-tbody");
-  if (!tbody) return;
-  if (!sessions.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">目前無活躍工作階段</td></tr>';
-    return;
-  }
-  tbody.innerHTML = sessions.map(s => `<tr>
-    <td><span class="badge badge-blue">${s.cli || "claude"}</span></td>
-    <td>${s.model || "—"}</td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.cwd || ""}">${s.cwd || "—"}</td>
-    <td style="color:var(--peach);font-weight:600">${fmt$(s.cost_usd)}</td>
-    <td style="font-size:0.7rem;color:var(--subtext0)">${fmtTime(s.last_seen)}</td>
-  </tr>`).join("");
-}
-
-/* ── 系統 Tab ── */
-async function refreshSystem() {
-  const data = await api("sysmon/current");
-  if (!data || data.error) return;
-  updateSystemFromData(data);
-}
-
-function updateSystemFromData(data) {
-  // CPU
-  if (typeof setGauge === "function") {
-    setGauge("cpu-gauge", data.cpu_pct || 0, "cpu-pct", "cpu-details", data.cpu_display || "");
-    setGauge("mem-gauge", data.mem_pct || 0, "mem-pct", "mem-details", data.mem_display || "");
-    setGauge("disk-gauge", data.disk_pct || 0, "disk-pct", "disk-details", data.disk_display || "");
-  }
-
-  // 網路
-  const netEl = document.getElementById("net-info");
-  if (netEl) {
-    netEl.innerHTML = `
-      <div class="net-row"><span class="net-label">下載</span><span class="net-value" style="color:var(--green)">${fmtBytes(data.net_rx_bps)}</span></div>
-      <div class="net-row"><span class="net-label">上傳</span><span class="net-value" style="color:var(--blue)">${fmtBytes(data.net_tx_bps)}</span></div>`;
-  }
-
-  // Claude 程序
-  const procsEl = document.getElementById("claude-procs");
-  if (procsEl) {
-    const active = data.cc_active || 0;
-    const idle = data.cc_idle || 0;
-    const mem = (data.cc_mem_mb || 0).toFixed(0);
-    procsEl.innerHTML = active + idle > 0
-      ? `<div style="display:flex;gap:1rem;align-items:center;padding:0.5rem 0">
-           <span><span class="badge badge-green">${active} 活躍</span></span>
-           <span><span class="badge badge-yellow">${idle} 閒置</span></span>
-           <span style="font-size:0.7rem;color:var(--subtext0)">記憶體: ${mem} MB</span>
-         </div>`
-      : '<div class="empty">無 Claude 程序</div>';
-  }
-}
-
-/* ── 運維 Tab ── */
-async function refreshOps() {
-  const [guardian, sweep, maestro] = await Promise.all([
-    api("guardian/log?hours=48"),
-    api("sweep/log?hours=48"),
-    api("maestro/runs?limit=20")
-  ]);
-
-  renderLogList("guardian-list", guardian?.actions, "守衛");
-  renderLogList("sweep-list", sweep?.actions, "清掃");
-  renderMaestroList("maestro-list", Array.isArray(maestro) ? maestro : maestro?.runs);
-}
-
-function renderLogList(elId, actions, emptyLabel) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  if (!actions || !actions.length) {
-    el.innerHTML = `<div class="empty">近 48 小時無${emptyLabel}動作</div>`;
-    return;
-  }
-  el.innerHTML = actions.slice(0, 50).map(a => {
-    const levelBadge = a.level === "WARN" ? "badge-yellow" : a.level === "CRIT" ? "badge-red" : "badge-green";
-    return `<div class="log-item">
-      <span class="log-time">${fmtTime(a.ts)}</span>
-      <span class="badge ${levelBadge}">${a.level || "INFO"}</span>
-      <span class="log-detail">${a.process_name || ""} — ${a.action || ""} ${a.result || ""}</span>
-    </div>`;
-  }).join("");
-}
-
-function renderMaestroList(elId, runs) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  if (!runs || !runs.length) {
-    el.innerHTML = '<div class="empty">暫無排程記錄</div>';
-    return;
-  }
-  el.innerHTML = runs.slice(0, 20).map(r => {
-    const statusBadge = r.status === "completed" ? "badge-green" : r.status === "failed" ? "badge-red" : "badge-yellow";
-    return `<div class="log-item">
-      <span class="log-time">${fmtTime(r.started_at)}</span>
-      <span class="badge ${statusBadge}">${r.status || "—"}</span>
-      <span class="log-detail">${r.name || ""} [${r.pattern || "solo"}] ${r.duration_s ? r.duration_s + "s" : ""}</span>
-    </div>`;
-  }).join("");
-}
-
 /* ── SSE 連線 ── */
 function connectSSE() {
   if (_sse) { _sse.close(); _sse = null; }
   _sse = new EventSource("events/stream");
-
-  _sse.addEventListener("system", (e) => {
-    try { updateSystemFromData(JSON.parse(e.data)); } catch {}
-  });
-
-  _sse.addEventListener("sessions", (e) => {
-    try {
-      const d = JSON.parse(e.data);
-      const el = (id) => document.getElementById(id);
-      if (el("stat-today-cost")) el("stat-today-cost").textContent = fmt$(d.total_cost_usd);
-      if (el("stat-active")) el("stat-active").textContent = d.active_sessions || d.sessions?.length || 0;
-      if (el("stat-sessions")) el("stat-sessions").textContent = d.sessions?.length || 0;
-      renderSessionsTable(d.sessions || []);
-    } catch {}
-  });
 
   _sse.addEventListener("quota", (e) => {
     try { updateQuotaFromSSE(JSON.parse(e.data)); } catch {}
@@ -296,13 +168,6 @@ function connectSSE() {
   _sse.addEventListener("usage", (e) => {
     // SSE usage is simplified; do a full refresh for detailed data
     refreshUsage();
-  });
-
-  _sse.addEventListener("operations", (e) => {
-    try {
-      const d = JSON.parse(e.data);
-      renderMaestroList("maestro-list", d.runs);
-    } catch {}
   });
 
   _sse.onerror = () => {
@@ -346,9 +211,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // 初次載入所有 Tab 資料
   refreshQuota();
   refreshUsage();
-  refreshSessions();
-  refreshSystem();
-  refreshOps();
   updateTimestamp();
 
   // 啟動 SSE
@@ -359,8 +221,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!_autoRefresh) return;
     refreshQuota();
     refreshUsage();
-    refreshSessions();
-    refreshOps();
     updateTimestamp();
   }, 120000);
 });

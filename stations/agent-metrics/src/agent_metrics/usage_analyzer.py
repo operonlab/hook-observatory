@@ -107,44 +107,12 @@ def generate_trends(days: int = 30) -> dict:
 
 
 def generate_by_model(days: int = 30) -> dict:
-    """Generate per-model cost breakdown from ccusage."""
-    models = get_model_breakdown(days=days)
-    total_cost = sum(m.get("cost_usd", 0) for m in models)
-
-    for m in models:
-        m["pct_of_total"] = (
-            round(m.get("cost_usd", 0) / total_cost * 100, 1) if total_cost > 0 else 0
-        )
-
-    by_provider: dict[str, dict] = {}
-    for m in models:
-        provider = m.get("provider", "unknown")
-        if provider not in by_provider:
-            by_provider[provider] = {
-                "provider": provider,
-                "models": [],
-                "total_cost_usd": 0,
-                "total_requests": 0,
-            }
-        by_provider[provider]["models"].append(m)
-        by_provider[provider]["total_cost_usd"] += m.get("cost_usd", 0)
-        by_provider[provider]["total_requests"] += m.get("requests", 0)
-
-    for p in by_provider.values():
-        p["total_cost_usd"] = round(p["total_cost_usd"], 4)
-
-    provider_list = sorted(
-        by_provider.values(),
-        key=lambda x: x["total_cost_usd"],
-        reverse=True,
-    )
-
+    from agent_metrics import usage_collector
+    data = usage_collector.get_model_breakdown(days)
+    # 這裡直接回傳拆分後的格式，不需額外加總，前端已經會處理
     return {
         "type": "by_model",
-        "timestamp": datetime.now(UTC).isoformat(),
-        "period_days": days,
-        "total_cost_usd": round(total_cost, 4),
-        "model_count": len(models),
-        "models": models,
-        "by_provider": provider_list,
+        "timestamp": "now",
+        "claude_models": data.get("claude_models", []),
+        "litellm_models": data.get("litellm_models", [])
     }

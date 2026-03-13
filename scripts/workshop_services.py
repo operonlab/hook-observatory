@@ -186,7 +186,7 @@ DOCKER_CONTAINERS = [
         "health_url": "http://127.0.0.1:8090/ping",
     },
     {
-        "name": "ntfy",
+        "name": "ws-infra-ntfy-1",
         "port": 9080,
         "health_cmd": None,
         "health_url": "http://127.0.0.1:9080/v1/health",
@@ -227,9 +227,27 @@ def ensure_dirs() -> None:
     (LOG_BASE / "launcher").mkdir(parents=True, exist_ok=True)
 
 
-def is_running(name: str) -> int | None:
+def _find_pid_by_port(port: int) -> int | None:
+    """Find the PID listening on a given port via lsof."""
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            # lsof may return multiple PIDs; take the first
+            return int(result.stdout.strip().splitlines()[0])
+    except (subprocess.TimeoutExpired, ValueError):
+        pass
+    return None
+
+
+def is_running(name: str, port: int | None = None) -> int | None:
     """Return PID if service is running, else None.
     Detects zombie processes (state Z) as not running.
+    Falls back to port-based detection if PID file is stale.
     """
     pidfile = PID_DIR / f"{name}.pid"
     if pidfile.exists():
@@ -246,10 +264,20 @@ def is_running(name: str) -> int | None:
             if state.startswith("Z"):
                 log(f"{name} (PID {pid}) is zombie — cleaning up")
                 pidfile.unlink(missing_ok=True)
-                return None
-            return pid
+                # Fall through to port-based detection below
+            else:
+                return pid
         except (ValueError, ProcessLookupError, PermissionError):
             pidfile.unlink(missing_ok=True)
+
+    # Port-based fallback: detect service running without valid PID file
+    if port is not None:
+        actual_pid = _find_pid_by_port(port)
+        if actual_pid is not None:
+            # Re-sync PID file
+            pidfile.write_text(str(actual_pid))
+            return actual_pid
+
     return None
 
 
@@ -355,7 +383,7 @@ def start_service(svc: dict) -> None:
     health = svc["health"]
     workdir = svc["workdir"]
 
-    pid = is_running(name)
+    pid = is_running(name, port)
     if pid is not None:
         log(f"{name} already running (PID {pid})")
         return
@@ -395,7 +423,7 @@ def start_service(svc: dict) -> None:
 
 def stop_service(svc: dict) -> None:
     name = svc["name"]
-    pid = is_running(name)
+    pid = is_running(name, svc["port"])
 
     if pid is not None:
         log(f"Stopping {name} (PID {pid})")
@@ -562,7 +590,7 @@ def health_check_docker() -> None:
 def health_check_all() -> None:
     for svc in SERVICES:
         name = svc["name"]
-        if is_running(name) is None:
+        if is_running(name, svc["port"]) is None:
             log(f"ALERT: {name} is down — restarting...")
             start_service(svc)
 
@@ -656,7 +684,7 @@ def cmd_status() -> None:
         name = svc["name"]
         svc_type = svc["type"]
         port = svc["port"]
-        pid = is_running(name)
+        pid = is_running(name, port)
         if pid is not None:
             print(f"  {CHECKMARK} {name:<18} {svc_type:<9} :{port:<6} running (PID {pid})")
         else:

@@ -42,7 +42,12 @@
       for (const provider of providers) {
         const metrics = m.llm[provider];
         if (!metrics || typeof metrics !== 'object') continue;
-        const entries = Object.entries(metrics).filter(([, v]) => v && v !== '?');
+        const entries = Object.entries(metrics).filter(([k, v]) => {
+          if (!v || v === '?') return false;
+          // Claude Ex: 餘額為零時不顯示
+          if (provider === 'cc' && k === 'ex' && v === '0%') return false;
+          return true;
+        });
         if (!entries.length) continue;
         entries.sort((a, b) => {
           const ia = METRIC_ORDER.indexOf(a[0]), ib = METRIC_ORDER.indexOf(b[0]);
