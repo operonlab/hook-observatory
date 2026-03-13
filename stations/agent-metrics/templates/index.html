@@ -36,9 +36,6 @@
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="quotas">配額</button>
     <button class="tab-btn" data-tab="usage">用量</button>
-    <button class="tab-btn" data-tab="sessions">工作階段</button>
-    <button class="tab-btn" data-tab="system">系統</button>
-    <button class="tab-btn" data-tab="ops">運維</button>
   </nav>
 
   <!-- ═══ Tab: 配額 ═══ -->
@@ -57,178 +54,27 @@
   <div class="tab-panel" id="panel-usage">
     <div class="container">
       <div class="two-col">
-        <!-- Claude 預算 -->
+        <!-- Claude 綜合 -->
         <div class="card">
-          <div class="card-title">Claude (CCusage) 花費</div>
-          <div id="claude-budget-info">
-            <div class="empty">載入中...</div>
+          <div class="card-title">Claude (CCusage)</div>
+          <div id="claude-budget-info"><div class="empty">載入中...</div></div>
+          <div class="table-wrap" style="margin-top:0.75rem">
+            <table class="data-table">
+              <thead><tr><th>模型 (30 天)</th><th style="text-align:right">花費</th></tr></thead>
+              <tbody id="claude-model-tbody"><tr><td colspan="2" class="empty">載入中...</td></tr></tbody>
+            </table>
           </div>
         </div>
-        <!-- LiteLLM 預算 -->
+        <!-- LiteLLM 綜合 -->
         <div class="card">
-          <div class="card-title">LiteLLM API 餘額</div>
-          <div id="litellm-budget-info">
-            <div class="empty">載入中...</div>
+          <div class="card-title">LiteLLM (預付)</div>
+          <div id="litellm-budget-info"><div class="empty">載入中...</div></div>
+          <div class="table-wrap" style="margin-top:0.75rem">
+            <table class="data-table">
+              <thead><tr><th>供應商</th><th style="text-align:right">儲值</th><th style="text-align:right">剩餘</th><th style="text-align:right">已用</th><th style="text-align:right">使用率</th></tr></thead>
+              <tbody id="litellm-model-tbody"><tr><td colspan="5" class="empty">載入中...</td></tr></tbody>
+            </table>
           </div>
-        </div>
-      </div>
-
-      <!-- Claude 模型 -->
-      <div class="card">
-        <div class="card-title">Claude 模型用量 (30 天)</div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead><tr><th>模型</th><th style="text-align:right">花費</th></tr></thead>
-            <tbody id="claude-model-tbody"><tr><td colspan="2" class="empty">載入中...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- LiteLLM 模型 -->
-      <div class="card">
-        <div class="card-title">LiteLLM 供應商用量 (預付)</div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead><tr><th>供應商</th><th style="text-align:right">剩餘</th><th style="text-align:right">已用</th><th style="text-align:right">使用率</th></tr></thead>
-            <tbody id="litellm-model-tbody"><tr><td colspan="4" class="empty">載入中...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ Tab: 工作階段 ═══ -->
-  <div class="tab-panel" id="panel-sessions">
-    <div class="container">
-      <!-- 統計卡 -->
-      <div class="stat-grid" id="session-stats">
-        <div class="stat-card"><div class="stat-label">今日花費</div><div class="stat-value" id="stat-today-cost">—</div></div>
-        <div class="stat-card"><div class="stat-label">活躍中</div><div class="stat-value" id="stat-active">—</div></div>
-        <div class="stat-card"><div class="stat-label">總工作階段</div><div class="stat-value" id="stat-sessions">—</div></div>
-        <div class="stat-card"><div class="stat-label">7 天摘要</div><div class="stat-value" id="stat-7d">—</div></div>
-      </div>
-
-      <!-- 工作階段表格 -->
-      <div class="card">
-        <div class="card-title">活躍工作階段</div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>CLI</th>
-                <th>模型</th>
-                <th>工作目錄</th>
-                <th>花費</th>
-                <th>最後活動</th>
-              </tr>
-            </thead>
-            <tbody id="sessions-tbody">
-              <tr><td colspan="5" class="empty">載入中...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ Tab: 系統 ═══ -->
-  <div class="tab-panel" id="panel-system">
-    <div class="container">
-      <!-- 儀表板 -->
-      <div class="gauge-grid">
-        <!-- CPU -->
-        <div class="card">
-          <div class="card-title">CPU</div>
-          <div class="gauge-container">
-            <div class="gauge-ring">
-              <svg viewBox="0 0 36 36">
-                <circle class="track" cx="18" cy="18" r="15.9"/>
-                <circle class="fill" id="cpu-gauge" cx="18" cy="18" r="15.9"
-                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
-              </svg>
-              <div class="gauge-value" id="cpu-pct">—</div>
-            </div>
-            <div class="gauge-details" id="cpu-details"></div>
-          </div>
-        </div>
-
-        <!-- 記憶體 -->
-        <div class="card">
-          <div class="card-title">記憶體</div>
-          <div class="gauge-container">
-            <div class="gauge-ring">
-              <svg viewBox="0 0 36 36">
-                <circle class="track" cx="18" cy="18" r="15.9"/>
-                <circle class="fill" id="mem-gauge" cx="18" cy="18" r="15.9"
-                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
-              </svg>
-              <div class="gauge-value" id="mem-pct">—</div>
-            </div>
-            <div class="gauge-details" id="mem-details"></div>
-          </div>
-        </div>
-
-        <!-- 磁碟 -->
-        <div class="card">
-          <div class="card-title">磁碟</div>
-          <div class="gauge-container">
-            <div class="gauge-ring">
-              <svg viewBox="0 0 36 36">
-                <circle class="track" cx="18" cy="18" r="15.9"/>
-                <circle class="fill" id="disk-gauge" cx="18" cy="18" r="15.9"
-                  stroke-dasharray="100, 100" stroke-dashoffset="100"/>
-              </svg>
-              <div class="gauge-value" id="disk-pct">—</div>
-            </div>
-            <div class="gauge-details" id="disk-details"></div>
-          </div>
-        </div>
-
-        <!-- 網路 -->
-        <div class="card">
-          <div class="card-title">網路</div>
-          <div id="net-info" style="padding:0.5rem 0">
-            <div class="empty">—</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Claude 程序 -->
-      <div class="card">
-        <div class="card-title">Claude 程序</div>
-        <div id="claude-procs">
-          <div class="empty">—</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ Tab: 運維 ═══ -->
-  <div class="tab-panel" id="panel-ops">
-    <div class="container">
-      <div class="two-col">
-        <!-- Guardian -->
-        <div class="card">
-          <div class="card-title">守衛日誌 (48h)</div>
-          <div class="log-list" id="guardian-list">
-            <div class="empty">載入中...</div>
-          </div>
-        </div>
-
-        <!-- Sweep -->
-        <div class="card">
-          <div class="card-title">清掃日誌 (48h)</div>
-          <div class="log-list" id="sweep-list">
-            <div class="empty">載入中...</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Maestro -->
-      <div class="card">
-        <div class="card-title">Maestro 排程歷史</div>
-        <div class="log-list" id="maestro-list">
-          <div class="empty">載入中...</div>
         </div>
       </div>
     </div>

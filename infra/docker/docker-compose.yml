@@ -7,6 +7,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: always
+    mem_limit: 512m
     environment:
       POSTGRES_USER: joneshong
       POSTGRES_PASSWORD: REDACTED
@@ -25,6 +26,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    mem_limit: 256m
     ports:
       - "6379:6379"
     volumes:
@@ -38,6 +40,7 @@ services:
   lgtm:
     image: grafana/otel-lgtm:latest
     restart: always
+    mem_limit: 1g
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
     ports:
@@ -46,6 +49,9 @@ services:
       - "4318:4318"   # OTLP HTTP
     volumes:
       - lgtm-data:/data
+      - ./lgtm/loki-config.yaml:/otel-lgtm/loki-config.yaml:ro
+      - ./lgtm/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./lgtm/run-prometheus.sh:/otel-lgtm/run-prometheus.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
       interval: 15s
@@ -107,6 +113,7 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     restart: always
+    mem_limit: 512m
     ports:
       - "6333:6333"   # REST API
       - "6334:6334"   # gRPC
@@ -123,7 +130,6 @@ services:
 
   ntfy:
     image: binwiederhier/ntfy:latest
-    container_name: ntfy
     command: serve
     ports:
       - "127.0.0.1:9080:80"
