@@ -249,21 +249,27 @@ async def stats_timeline(
     _user: dict = Depends(require_auth),
 ) -> list[TimelineBucket]:
     """Time-series event counts in buckets."""
-    # Parse range (e.g. "7d", "24h", "60m")
-    unit_map = {"d": "days", "h": "hours", "m": "minutes"}
+    # Parse range (e.g. "7d", "24h", "60m").
+    # Input is already validated by Query(pattern=r"^\d+[dhm]$"),
+    # but we use make_interval() with named parameters to fully
+    # eliminate f-string interpolation of user-supplied values.
     amount = int(range[:-1])
-    unit = unit_map.get(range[-1], "days")
-    interval = f"{amount} {unit}"
+    unit_key = range[-1]  # one of d / h / m
+    days = amount if unit_key == "d" else 0
+    hours = amount if unit_key == "h" else 0
+    mins = amount if unit_key == "m" else 0
 
     result = await db.execute(
-        text(f"""
+        text("""
             SELECT date_trunc(:granularity, created_at) AS bucket,
                 COUNT(*) AS count
             FROM hook_observatory.events
-            WHERE created_at > now() - interval '{interval}'
+            WHERE created_at > now() - make_interval(
+                days => :days, hours => :hours, mins => :mins
+            )
             GROUP BY bucket ORDER BY bucket
         """),
-        {"granularity": granularity},
+        {"granularity": granularity, "days": days, "hours": hours, "mins": mins},
     )
     return [TimelineBucket(bucket=r.bucket, count=r.count) for r in result.all()]
 
