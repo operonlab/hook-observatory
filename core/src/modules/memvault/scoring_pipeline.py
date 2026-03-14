@@ -2,6 +2,9 @@
 
 Inspired by memory-lancedb-pro's 7-stage scoring system.
 Each stage is independently bypassable and try-catch isolated.
+
+G3 enhancement: Weibull decay replaces linear time decay for more
+realistic memory forgetting curves with tier-aware parameters.
 """
 
 import logging
@@ -12,6 +15,34 @@ from datetime import UTC, datetime
 from .noise_filter import check_noise
 
 logger = logging.getLogger(__name__)
+
+# --- Weibull decay parameters per memory tier ---
+# β (shape): <1 = rapid early decay, 1 = exponential, >1 = slow then fast
+# λ (scale): characteristic lifetime in days
+# floor: minimum decay factor (memory never fully forgotten)
+WEIBULL_PARAMS = {
+    "core": {"beta": 0.8, "lambda_": 180.0, "floor": 0.4},
+    "hot": {"beta": 1.0, "lambda_": 60.0, "floor": 0.3},
+    "warm": {"beta": 1.2, "lambda_": 30.0, "floor": 0.2},
+    "cold": {"beta": 1.5, "lambda_": 14.0, "floor": 0.1},
+}
+
+
+def weibull_decay(age_days: float, tier: str = "hot") -> float:
+    """Compute Weibull survival function for memory decay.
+
+    S(t) = floor + (1 - floor) * exp(-(t/λ)^β)
+    """
+    params = WEIBULL_PARAMS.get(tier, WEIBULL_PARAMS["hot"])
+    beta = params["beta"]
+    lambda_ = params["lambda_"]
+    floor = params["floor"]
+
+    if age_days <= 0:
+        return 1.0
+
+    survival = math.exp(-((age_days / lambda_) ** beta))
+    return floor + (1 - floor) * survival
 
 
 @dataclass
@@ -158,16 +189,31 @@ class ScoringPipeline:
         return results
 
     def _apply_time_decay(self, results: list[dict]) -> list[dict]:
-        """Decay score based on age. Recent memories score higher."""
+        """Weibull decay: tier-aware forgetting curve replaces linear decay.
+
+        G3 cannibalization from memory-lancedb-pro.
+        Determines tier from block confidence:
+          confidence >= 0.8 → core (slowest decay)
+          confidence >= 0.5 → hot (default)
+          confidence >= 0.3 → warm
+          else → cold (fastest decay)
+        """
         now = datetime.now(UTC)
         for r in results:
             created_at = r.get("created_at")
             if created_at:
                 age_days = max((now - created_at).total_seconds() / 86400, 0)
-                # Gentle decay: 30-day half-life, floor at 0.6
-                decay = 0.6 + 0.4 * math.exp(-age_days / 30.0)
-                r["score"] *= decay
-            # No penalty if created_at is missing
+                # Determine tier from confidence
+                confidence = r.get("confidence") or 0.5
+                if confidence >= 0.8:
+                    tier = "core"
+                elif confidence >= 0.5:
+                    tier = "hot"
+                elif confidence >= 0.3:
+                    tier = "warm"
+                else:
+                    tier = "cold"
+                r["score"] *= weibull_decay(age_days, tier)
         return results
 
     def _apply_min_score(self, results: list[dict]) -> list[dict]:
