@@ -3,6 +3,7 @@
 Prefix: /api/memvault (mounted in main.py)
 """
 
+import logging
 import math
 from datetime import UTC, datetime
 
@@ -14,7 +15,9 @@ from src.shared.deps import get_db, require_permission
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
+from .dedup import DedupDecision, check_duplicate, merge_content
 from .embedding import get_embedding
+from .injection_guard import is_unsafe_for_injection, sanitize_for_injection
 from .schemas import (
     EnhancedSearchResult,
     KnowledgeDomainCreate,
@@ -36,6 +39,8 @@ from .services import (
     should_search,
     tag_service,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["memvault"])
 
@@ -85,12 +90,56 @@ async def get_block(
 async def create_block(
     body: MemoryBlockCreate,
     space_id: str = Query("default"),
+    skip_dedup: bool = Query(False, description="Skip dedup check"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
+    # G1: Pre-creation dedup check (requires embedding)
+    embedding = await get_embedding(body.content, task_type="search_document")
+
+    if embedding and not skip_dedup:
+        dedup_result = await check_duplicate(db, space_id, body.content, embedding)
+
+        if dedup_result.decision == DedupDecision.SKIP:
+            # Near-identical block exists — return existing
+            logger.info(
+                "Dedup SKIP: %s (existing=%s)",
+                dedup_result.reason,
+                dedup_result.existing_block_id,
+            )
+            existing = await memory_block_service.get(db, dedup_result.existing_block_id)
+            if existing:
+                return memory_block_service.to_response(existing)
+
+        if dedup_result.decision == DedupDecision.MERGE:
+            # Merge new content into existing block
+            logger.info(
+                "Dedup MERGE: %s (existing=%s)",
+                dedup_result.reason,
+                dedup_result.existing_block_id,
+            )
+            existing = await memory_block_service.get(db, dedup_result.existing_block_id)
+            if existing:
+                merged = merge_content(existing.content, body.content)
+                from .schemas import MemoryBlockUpdate
+
+                await memory_block_service.update(
+                    db,
+                    dedup_result.existing_block_id,
+                    MemoryBlockUpdate(content=merged),
+                )
+                # Re-embed with merged content
+                merged_emb = await get_embedding(merged, task_type="search_document")
+                if merged_emb:
+                    await memory_block_service.update_embedding(
+                        db, dedup_result.existing_block_id, merged_emb
+                    )
+                await db.commit()
+                await db.refresh(existing)
+                return memory_block_service.to_response(existing)
+
+    # Normal creation path
     instance = await memory_block_service.create(db, space_id, body)
-    # Generate embedding asynchronously (best-effort)
-    embedding = await get_embedding(instance.content, task_type="search_document")
     if embedding:
         await memory_block_service.update_embedding(db, instance.id, embedding)
     await db.commit()
@@ -215,6 +264,14 @@ async def search(
         date_from=date_from,
         date_to=date_to,
     )
+
+    # G2: Sanitize results before returning (prevents injection via stored memories)
+    for r in results:
+        unsafe, reason = is_unsafe_for_injection(r.block.content)
+        if unsafe:
+            r.block.content = sanitize_for_injection(r.block.content)
+            meta.injection_sanitized = (meta.injection_sanitized or 0) + 1
+
     return EnhancedSearchResult(
         results=results,
         metadata=meta if include_metadata else None,
@@ -459,6 +516,53 @@ async def sync_scan():
         "skipped": 0,
         "already": 0,
         "log": "Session extraction is handled automatically by SessionEnd hook pipeline.",
+    }
+
+
+# ======================== Reflection (G5) ========================
+
+
+@router.post("/reflect")
+async def reflect_session(
+    session_id: str = Query(..., description="Session ID to reflect on"),
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """G5: Extract invariants and derived insights from a session's memories."""
+    # Fetch blocks from this session
+    from .models import MemoryBlock
+    from .reflection import format_reflection_for_injection, reflect_on_session
+
+    q = (
+        select(MemoryBlock)
+        .where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.source_session == session_id,
+            MemoryBlock.deleted_at == None,  # noqa: E711
+        )
+        .order_by(MemoryBlock.created_at)
+    )
+    rows = (await db.execute(q)).scalars().all()
+
+    blocks = [
+        {
+            "content": r.content,
+            "block_type": r.block_type,
+            "tags": r.tags or [],
+        }
+        for r in rows
+    ]
+
+    result = reflect_on_session(blocks, session_id=session_id)
+
+    return {
+        "session_id": session_id,
+        "block_count": result.block_count,
+        "invariants": result.invariants,
+        "derived": result.derived,
+        "formatted": format_reflection_for_injection(result),
+        "reflected_at": result.reflected_at.isoformat(),
     }
 
 

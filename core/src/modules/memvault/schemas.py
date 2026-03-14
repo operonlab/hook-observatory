@@ -128,6 +128,7 @@ class SearchMetadata(BaseModel):
     adaptive_skipped: bool = False
     adaptive_reason: str | None = None
     noise_filtered: int = 0
+    injection_sanitized: int = 0  # G2: count of results sanitized for injection safety
     input_count: int = 0
     output_count: int = 0
     scope: str | None = None
