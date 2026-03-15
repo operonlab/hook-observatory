@@ -301,7 +301,11 @@ async def api_relay(request: Request):
 @app.get("/api/relay/check")
 async def api_relay_check(signal_file: str):
     """Check if a dispatched relay command has completed."""
-    if os.path.exists(signal_file):
+    # Path validation: only allow /tmp/relay-webui-* signal files
+    resolved = str(Path(signal_file).resolve())
+    if not resolved.startswith("/tmp/relay-webui-"):
+        raise HTTPException(status_code=400, detail="Invalid signal file path")
+    if os.path.exists(resolved):
         return {"status": "completed", "signal_file": signal_file}
     return {"status": "running", "signal_file": signal_file}
 

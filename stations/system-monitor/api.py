@@ -417,12 +417,14 @@ async def restart_service(label: str):
         raise HTTPException(status_code=404, detail=f"找不到服務: {label}")
 
     # Unload
-    subprocess.run(
+    unload = subprocess.run(
         ["launchctl", "unload", str(plist_path)],
         capture_output=True,
         text=True,
         timeout=10,
     )
+    if unload.returncode != 0:
+        logger.warning("launchctl unload failed for %s: %s", label, unload.stderr.strip())
     # Load
     result = subprocess.run(
         ["launchctl", "load", str(plist_path)],

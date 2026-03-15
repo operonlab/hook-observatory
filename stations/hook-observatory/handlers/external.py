@@ -67,9 +67,16 @@ def progressive_extract(
         return HookResult()
 
     # Background: cat input | python extract_progressive.py
-    run_background(
-        f"cat {tmpfile_path} | {python} {script}; rm -f {tmpfile_path}",
-    )
+    try:
+        run_background(
+            f"cat {tmpfile_path} | {python} {script}; rm -f {tmpfile_path}",
+        )
+    except Exception:
+        # Cleanup temp file if background dispatch fails
+        try:
+            os.unlink(tmpfile_path)
+        except OSError:
+            pass
     return HookResult()
 
 
