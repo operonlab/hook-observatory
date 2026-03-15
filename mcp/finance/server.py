@@ -261,7 +261,6 @@ async def list_tools() -> list[Tool]:
                             "category",
                             "wallet",
                             "installment_plan",
-                            "budget",
                         ],
                         "description": "實體類型",
                     },
@@ -307,6 +306,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return text_result(f"API error {e.status_code}: {e.detail}")
     except APIConnectionError as e:
         return text_result(str(e))
+    except Exception as e:
+        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
 
 
 # ======================== Tool Implementations ========================
@@ -344,11 +345,13 @@ async def handle_add_transaction(args: dict) -> list[TextContent]:
 
 
 async def handle_update_transaction(args: dict) -> list[TextContent]:
-    txn_id = args.pop("id")
+    txn_id = args.pop("id", None)
+    if not txn_id:
+        return text_result("Error: transaction id is required")
     result = await to_thread(client.update_transaction, txn_id, args)
     return text_result(
         f"Transaction {txn_id} updated.\n"
-        f"Amount: {fmt_amount(result['amount'])} | Type: {result['type']}"
+        f"Amount: {fmt_amount(result.get('amount', 0))} | Type: {result.get('type', '-')}"
     )
 
 
@@ -420,11 +423,13 @@ async def handle_add_subscription(args: dict) -> list[TextContent]:
 
 
 async def handle_update_subscription(args: dict) -> list[TextContent]:
-    sub_id = args.pop("id")
+    sub_id = args.pop("id", None)
+    if not sub_id:
+        return text_result("Error: subscription id is required")
     result = await to_thread(client.update_subscription, sub_id, args)
     return text_result(
         f"Subscription {sub_id} updated.\n"
-        f"Name: {result['name']} | Status: {result.get('status', '-')}"
+        f"Name: {result.get('name', '-')} | Status: {result.get('status', '-')}"
     )
 
 

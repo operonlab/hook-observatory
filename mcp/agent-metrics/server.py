@@ -423,6 +423,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     except AgentMetricsError as e:
         return text_result(f"agent-metrics error: {e}")
+    except Exception as e:
+        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
 
 
 # ======================== Main ========================

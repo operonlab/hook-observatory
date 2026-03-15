@@ -550,6 +550,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         return text_result(f"API 錯誤: {e}")
     except APIConnectionError as e:
         return text_result(f"連線失敗: {e}")
+    except Exception as e:
+        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
 
 
 # ======================== Main ========================

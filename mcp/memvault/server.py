@@ -321,9 +321,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             case _:
                 return text_result(f"Unknown tool: {name}")
     except APIError as e:
-        return text_result(str(e))
+        return text_result(f"memvault error: {type(e).__name__}: {e}")
     except APIConnectionError as e:
-        return text_result(str(e))
+        return text_result(f"memvault error: {type(e).__name__}: {e}")
+    except Exception as e:
+        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
 
 
 # ======================== Tool Implementations ========================
@@ -687,25 +689,32 @@ async def list_resources():
 
 @server.read_resource()
 async def read_resource(uri: str) -> str:
-    if "attitudes/current" in str(uri):
-        result = await to_thread(client.attitudes)
-        if not result:
-            return "No active attitude facts."
-        return "\n\n---\n\n".join(
-            f"## [{a['category']}]\n**{a['fact']}**\n"
-            f"Confidence: {a.get('confidence', 0.5):.2f} | Operation: {a.get('operation', 'ADD')}"
-            for a in result
-        )
-    if "profile/kas" in str(uri):
-        profile = await to_thread(client.profile)
-        return (
-            f"# KAS Profile\n\n"
-            f"- Knowledge: {profile.get('knowledge_score', 0)}\n"
-            f"- Attitude: {profile.get('attitude_score', 0)}\n"
-            f"- Skill: {profile.get('skill_score', 0)}\n"
-            f"- Updated: {profile.get('updated_at', 'N/A')}"
-        )
-    return f"Unknown resource: {uri}"
+    try:
+        if "attitudes/current" in str(uri):
+            result = await to_thread(client.attitudes)
+            if not result:
+                return "No active attitude facts."
+            return "\n\n---\n\n".join(
+                f"## [{a['category']}]\n**{a['fact']}**\n"
+                f"Confidence: {a.get('confidence', 0.5):.2f} | Operation: {a.get('operation', 'ADD')}"
+                for a in result
+            )
+        if "profile/kas" in str(uri):
+            profile = await to_thread(client.profile)
+            return (
+                f"# KAS Profile\n\n"
+                f"- Knowledge: {profile.get('knowledge_score', 0)}\n"
+                f"- Attitude: {profile.get('attitude_score', 0)}\n"
+                f"- Skill: {profile.get('skill_score', 0)}\n"
+                f"- Updated: {profile.get('updated_at', 'N/A')}"
+            )
+        return f"Unknown resource: {uri}"
+    except APIError as e:
+        return f"memvault error: {type(e).__name__}: {e}"
+    except APIConnectionError as e:
+        return f"memvault error: {type(e).__name__}: {e}"
+    except Exception as e:
+        return f"memvault error: {type(e).__name__}: {e}"
 
 
 # ======================== Main ========================
