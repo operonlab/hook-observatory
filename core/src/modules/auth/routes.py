@@ -1,5 +1,6 @@
 """Authentication routes — register, login, logout, session check, OAuth."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
@@ -19,6 +20,8 @@ from .models import User
 from .oauth import oauth
 from .schemas import PreferencesUpdate, SessionResponse, UserCreate, UserLogin
 from .services import user_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["auth"])
 
@@ -86,14 +89,17 @@ async def register(
 
     await _create_session(request, db, user)
 
-    await event_bus.publish(
-        Event(
-            type=AuthEvents.USER_REGISTERED,
-            data={"email": body.email, "name": body.name},
-            source="auth",
-            user_id=user.id,
+    try:
+        await event_bus.publish(
+            Event(
+                type=AuthEvents.USER_REGISTERED,
+                data={"email": body.email, "name": body.name},
+                source="auth",
+                user_id=user.id,
+            )
         )
-    )
+    except Exception:
+        logger.warning("Failed to publish USER_REGISTERED event", exc_info=True)
 
     return {"user": user_service.to_response(user)}
 
@@ -111,14 +117,17 @@ async def login(
     await db.commit()
     await _create_session(request, db, user)
 
-    await event_bus.publish(
-        Event(
-            type=AuthEvents.USER_LOGGED_IN,
-            data={"email": body.email},
-            source="auth",
-            user_id=user.id,
+    try:
+        await event_bus.publish(
+            Event(
+                type=AuthEvents.USER_LOGGED_IN,
+                data={"email": body.email},
+                source="auth",
+                user_id=user.id,
+            )
         )
-    )
+    except Exception:
+        logger.warning("Failed to publish USER_LOGGED_IN event", exc_info=True)
 
     return {"user": user_service.to_response(user)}
 
@@ -142,14 +151,17 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     request.state.user = None
     request.state._session_cleared = True
 
-    await event_bus.publish(
-        Event(
-            type=AuthEvents.USER_LOGGED_OUT,
-            data={},
-            source="auth",
-            user_id=user_id,
+    try:
+        await event_bus.publish(
+            Event(
+                type=AuthEvents.USER_LOGGED_OUT,
+                data={},
+                source="auth",
+                user_id=user_id,
+            )
         )
-    )
+    except Exception:
+        logger.warning("Failed to publish USER_LOGGED_OUT event", exc_info=True)
 
 
 @router.get("/session", response_model=SessionResponse)
@@ -231,14 +243,17 @@ async def oauth_google_callback(
     await _create_session(request, db, user)
 
     event_type = AuthEvents.USER_REGISTERED if is_new else AuthEvents.USER_LOGGED_IN
-    await event_bus.publish(
-        Event(
-            type=event_type,
-            data={"email": user.email, "provider": "google"},
-            source="auth",
-            user_id=user.id,
+    try:
+        await event_bus.publish(
+            Event(
+                type=event_type,
+                data={"email": user.email, "provider": "google"},
+                source="auth",
+                user_id=user.id,
+            )
         )
-    )
+    except Exception:
+        logger.warning("Failed to publish OAuth Google event", exc_info=True)
 
     redirect = request.session.pop("oauth_redirect", "/")
     return RedirectResponse(url=redirect)
@@ -285,14 +300,17 @@ async def oauth_github_callback(
     await _create_session(request, db, user)
 
     event_type = AuthEvents.USER_REGISTERED if is_new else AuthEvents.USER_LOGGED_IN
-    await event_bus.publish(
-        Event(
-            type=event_type,
-            data={"email": user.email, "provider": "github"},
-            source="auth",
-            user_id=user.id,
+    try:
+        await event_bus.publish(
+            Event(
+                type=event_type,
+                data={"email": user.email, "provider": "github"},
+                source="auth",
+                user_id=user.id,
+            )
         )
-    )
+    except Exception:
+        logger.warning("Failed to publish OAuth GitHub event", exc_info=True)
 
     redirect = request.session.pop("oauth_redirect", "/")
     return RedirectResponse(url=redirect)
