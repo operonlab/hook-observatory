@@ -263,7 +263,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     }
     const updatedItems = [...planItems, newItem]
     set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -273,7 +274,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     if (!currentPlan) return
     const updatedItems = planItems.filter((i) => i.id !== itemId)
     set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -283,7 +285,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     if (!currentPlan) return
     const updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, ...updates } : i))
     set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -300,7 +303,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     sorted[idx] = { ...sorted[idx], sort_order: sorted[swapIdx].sort_order }
     sorted[swapIdx] = { ...sorted[swapIdx], sort_order: temp }
     set({ planItems: sorted, currentPlan: { ...currentPlan, items: sorted } })
-    planApi.update(currentPlan.id, { items: sorted }).catch(() => {
+    planApi.update(currentPlan.id, { items: sorted }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -313,7 +317,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
       return newOrder >= 0 ? { ...item, sort_order: newOrder } : item
     })
     set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -333,7 +338,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
       planItems: updatedItems,
       currentPlan: { ...currentPlan, items: updatedItems },
     })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -348,7 +354,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
       planItems: updatedItems,
       currentPlan: { ...currentPlan, items: updatedItems },
     })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -360,7 +367,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
       i.id === itemId ? { ...i, scheduled_time: time } : i,
     )
     set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -382,7 +390,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
       planItems: updatedItems,
       currentPlan: { ...currentPlan, items: updatedItems },
     })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },
@@ -405,7 +414,8 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
       updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
     }
     set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch(() => {
+    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+      console.error('Operation failed:', err)
       set({ planItems: currentPlan.items, currentPlan })
     })
   },

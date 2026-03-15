@@ -103,7 +103,10 @@ class AgentMetricsClient:
         try:
             self.health()
             return True
-        except Exception:
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).debug("health check failed: %s", e)
             return False
 
     # ======================== Maestro Dispatch ========================

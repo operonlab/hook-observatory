@@ -54,7 +54,6 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 # --- Constants ---
 
@@ -66,8 +65,14 @@ EXCLUDE_DOCS_SUBDIRS = {"api", "guides", "runbooks"}
 
 # Directories to skip during global discovery (dependencies, build artifacts, etc.)
 GLOBAL_EXCLUDE_DIRS = {
-    "node_modules", ".venv", "backup", ".git", "__pycache__",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "node_modules",
+    ".venv",
+    "backup",
+    ".git",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
 }
 
 # Match translation output directories: docs-en/, docs-ja/, etc.
@@ -126,12 +131,13 @@ MCP_NOISE_RE = re.compile(
 LATIN_TARGETS = {"en", "fr", "de", "es"}
 
 # Dynamic timeout: BASE + content_length / CHARS_PER_SEC, capped at MAX
-TIMEOUT_BASE_S = 60       # minimum timeout for any file
+TIMEOUT_BASE_S = 60  # minimum timeout for any file
 TIMEOUT_CHARS_PER_SEC = 100  # ~1KB = 10s additional
-TIMEOUT_MAX_S = 600       # 10 minute hard cap
+TIMEOUT_MAX_S = 600  # 10 minute hard cap
 
 
 # --- Frontmatter helpers ---
+
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
     """Parse YAML frontmatter from markdown. Returns (metadata_dict, body)."""
@@ -151,7 +157,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
                 val = int(val)
             meta[key.strip()] = val
 
-    body = text[m.end():]
+    body = text[m.end() :]
     return meta, body
 
 
@@ -172,7 +178,8 @@ def content_hash(body: str) -> str:
 
 # --- File discovery ---
 
-def discover_sources(target: Optional[Path] = None) -> list[Path]:
+
+def discover_sources(target: Path | None = None) -> list[Path]:
     """Find all translatable .md files in the workshop.
 
     Scans the entire WORKSHOP_ROOT, skipping:
@@ -247,9 +254,14 @@ def get_target_path(src: Path, lang: str) -> Path:
 
 # --- Sync metadata ---
 
+
 def get_source_hash(src: Path) -> str:
     """Compute source hash from source body (never mutates source)."""
-    text = src.read_text(encoding="utf-8")
+    try:
+        text = src.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"  WARNING: Cannot read {src}: {e}")
+        return ""
     _, body = parse_frontmatter(text)
     return content_hash(body)
 
@@ -258,7 +270,11 @@ def get_target_source_hash(dst: Path) -> str:
     """Read source_hash from translation file. Returns empty string if missing."""
     if not dst.exists():
         return ""
-    text = dst.read_text(encoding="utf-8")
+    try:
+        text = dst.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"  WARNING: Cannot read {dst}: {e}")
+        return ""
     meta, _ = parse_frontmatter(text)
     return str(meta.get("source_hash", ""))
 
@@ -276,11 +292,17 @@ def needs_retranslate_due_to_suspect_copy(src: Path, dst: Path, target_lang: str
     if not dst.exists():
         return False
 
-    src_text = src.read_text(encoding="utf-8")
+    try:
+        src_text = src.read_text(encoding="utf-8")
+    except OSError:
+        return False
     src_meta, src_body = parse_frontmatter(src_text)
     src_lang = str(src_meta.get("target_lang", "en"))
 
-    dst_text = dst.read_text(encoding="utf-8")
+    try:
+        dst_text = dst.read_text(encoding="utf-8")
+    except OSError:
+        return False
     _, dst_body = parse_frontmatter(dst_text)
 
     if src_lang == target_lang:
@@ -303,20 +325,35 @@ def needs_retranslate_due_to_suspect_copy(src: Path, dst: Path, target_lang: str
 
 def mirror_source_to_target(src: Path, dst: Path, dry_run: bool = False) -> bool:
     """Mirror source file to target path with identical filename and structure."""
-    src_text = src.read_text(encoding="utf-8")
+    try:
+        src_text = src.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"  WARNING: Cannot read {src}: {e}")
+        return False
     if dst.exists():
-        dst_text = dst.read_text(encoding="utf-8")
-        if dst_text == src_text:
-            return False
+        try:
+            dst_text = dst.read_text(encoding="utf-8")
+            if dst_text == src_text:
+                return False
+        except OSError:
+            pass
     if not dry_run:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(src_text, encoding="utf-8")
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(src_text, encoding="utf-8")
+        except OSError as e:
+            print(f"  WARNING: Cannot write {dst}: {e}")
+            return False
     return True
 
 
 def set_target_metadata(dst: Path, source_hash: str, source_lang: str, target_lang: str):
     """Update metadata in translated file for future hash-based sync."""
-    text = dst.read_text(encoding="utf-8")
+    try:
+        text = dst.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"  WARNING: Cannot read {dst} for metadata update: {e}")
+        return
     meta, body = parse_frontmatter(text)
     meta["source_hash"] = source_hash
     meta["source_lang"] = source_lang
@@ -324,10 +361,14 @@ def set_target_metadata(dst: Path, source_hash: str, source_lang: str, target_la
     meta["translated_at"] = str(date.today())
     body_stripped = body.lstrip("\n")
     new_text = render_frontmatter(meta) + "\n" + body_stripped
-    dst.write_text(new_text, encoding="utf-8")
+    try:
+        dst.write_text(new_text, encoding="utf-8")
+    except OSError as e:
+        print(f"  WARNING: Cannot write metadata to {dst}: {e}")
 
 
 # --- Translation ---
+
 
 def _strip_cli_noise(text: str) -> str:
     """Remove CLI hook output and other noise from Gemini CLI stdout."""
@@ -444,7 +485,7 @@ def translate_file(src: Path, dst: Path, lang: str) -> bool:
         # Strip markdown fences if Gemini wraps the output
         for prefix in ("```markdown", "```md", "```"):
             if output.startswith(prefix):
-                output = output[len(prefix):].strip()
+                output = output[len(prefix) :].strip()
                 break
         if output.endswith("```"):
             output = output[:-3].strip()
@@ -456,7 +497,7 @@ def translate_file(src: Path, dst: Path, lang: str) -> bool:
     except KeyboardInterrupt:
         raise
     except FileNotFoundError:
-        print(f"\n  ERROR: 'gemini' command not found. Install Gemini CLI first.")
+        print("\n  ERROR: 'gemini' command not found. Install Gemini CLI first.")
         return False
     except Exception as e:
         print(f"\n  ERROR: {e}")
@@ -464,6 +505,7 @@ def translate_file(src: Path, dst: Path, lang: str) -> bool:
 
 
 # --- Commands ---
+
 
 def _print_status_line(src: Path, lang: str):
     """Print a single status line for a source file."""
@@ -481,7 +523,7 @@ def _print_status_line(src: Path, lang: str):
     else:
         status = "OK"
 
-    print(f"  {str(rel):<53} {src_hash:<10} {status:<10}")
+    print(f"  {rel!s:<53} {src_hash:<10} {status:<10}")
 
 
 def cmd_status(sources: list[Path], lang: str):
@@ -497,7 +539,9 @@ def cmd_status(sources: list[Path], lang: str):
     print()
 
     if docs_sources:
-        print(f"=== docs/ → {target_dir.relative_to(WORKSHOP_ROOT)}/ (mirror) [{len(docs_sources)} files] ===")
+        print(
+            f"=== docs/ → {target_dir.relative_to(WORKSHOP_ROOT)}/ (mirror) [{len(docs_sources)} files] ==="
+        )
         print(f"  {'File':<53} {'Hash':<10} {'Status':<10}")
         print(f"  {'-' * 73}")
         for src in docs_sources:
@@ -513,8 +557,7 @@ def cmd_status(sources: list[Path], lang: str):
         print()
 
 
-def cmd_translate(sources: list[Path], lang: str,
-                  force: bool, dry_run: bool, version_only: bool):
+def cmd_translate(sources: list[Path], lang: str, force: bool, dry_run: bool, version_only: bool):
     """Main translate workflow."""
     translated = 0
     skipped = 0
@@ -528,7 +571,9 @@ def cmd_translate(sources: list[Path], lang: str,
     module_count = len(sources) - docs_count
 
     print(f"Target:    {lang_name} ({lang})")
-    print(f"Sources:   {len(sources)} files ({docs_count} docs/ → {target_dir.relative_to(WORKSHOP_ROOT)}/, {module_count} modules → *.{lang}.md)")
+    print(
+        f"Sources:   {len(sources)} files ({docs_count} docs/ → {target_dir.relative_to(WORKSHOP_ROOT)}/, {module_count} modules → *.{lang}.md)"
+    )
     print()
 
     for src in sources:
@@ -570,7 +615,11 @@ def cmd_translate(sources: list[Path], lang: str,
         ok = translate_file(src, dst, lang)
 
         if ok:
-            src_text = src.read_text(encoding="utf-8")
+            try:
+                src_text = src.read_text(encoding="utf-8")
+            except OSError as e:
+                print(f"WARNING: Cannot re-read {src} for metadata: {e}")
+                src_text = ""
             src_meta, _ = parse_frontmatter(src_text)
             source_lang = str(src_meta.get("target_lang", "en"))
             set_target_metadata(dst, src_hash, source_lang, lang)
@@ -597,34 +646,32 @@ def cmd_translate(sources: list[Path], lang: str,
 
 # --- Main ---
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Translate all workshop .md files: docs/ mirror to docs-<lang>/, others in-place as *.lang.md"
     )
     parser.add_argument(
-        "path", nargs="?", default=None,
-        help="File or directory to translate (default: all .md files in workshop)"
+        "path",
+        nargs="?",
+        default=None,
+        help="File or directory to translate (default: all .md files in workshop)",
     )
     parser.add_argument(
-        "--lang", default="zh-TW",
-        help="Target language code (default: zh-TW). Examples: zh-TW, ja, ko, zh-CN, es, fr, de"
+        "--lang",
+        default="zh-TW",
+        help="Target language code (default: zh-TW). Examples: zh-TW, ja, ko, zh-CN, es, fr, de",
+    )
+    parser.add_argument("--force", action="store_true", help="Force re-translate all files")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would change without doing it"
     )
     parser.add_argument(
-        "--force", action="store_true",
-        help="Force re-translate all files"
+        "--version-only",
+        action="store_true",
+        help="Only create target files (mirror/sibling), skip translation",
     )
-    parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Show what would change without doing it"
-    )
-    parser.add_argument(
-        "--version-only", action="store_true",
-        help="Only create target files (mirror/sibling), skip translation"
-    )
-    parser.add_argument(
-        "--status", action="store_true",
-        help="Show version comparison table"
-    )
+    parser.add_argument("--status", action="store_true", help="Show version comparison table")
     args = parser.parse_args()
 
     target = Path(args.path) if args.path else None

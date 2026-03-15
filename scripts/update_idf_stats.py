@@ -28,24 +28,27 @@ async def collect_texts(service: str) -> list[str]:
 
     texts: list[str] = []
 
-    async with async_session_factory() as db:
-        db: AsyncSession
-        if service == "memvault":
-            from core.src.modules.memvault.models import MemoryBlock
+    try:
+        async with async_session_factory() as db:
+            db: AsyncSession
+            if service == "memvault":
+                from core.src.modules.memvault.models import MemoryBlock
 
-            rows = (await db.execute(select(MemoryBlock.content))).scalars().all()
-            texts = [r for r in rows if r]
-        elif service == "intelflow":
-            from core.src.modules.intelflow.models import Report
+                rows = (await db.execute(select(MemoryBlock.content))).scalars().all()
+                texts = [r for r in rows if r]
+            elif service == "intelflow":
+                from core.src.modules.intelflow.models import Report
 
-            rows = (
-                (await db.execute(select(Report.content).where(Report.content.isnot(None))))
-                .scalars()
-                .all()
-            )
-            texts = list(rows)
-        else:
-            logger.warning("Unknown service %s — skipping", service)
+                rows = (
+                    (await db.execute(select(Report.content).where(Report.content.isnot(None))))
+                    .scalars()
+                    .all()
+                )
+                texts = list(rows)
+            else:
+                logger.warning("Unknown service %s — skipping", service)
+    except Exception as e:
+        logger.error("Failed to collect texts from %s: %s", service, e)
 
     return texts
 

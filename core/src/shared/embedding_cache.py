@@ -37,7 +37,7 @@ async def get_cached(text: str, task_type: str | None = None) -> list[float] | N
         if data and len(data) == _PACK_SIZE:
             return list(struct.unpack(_FMT_1024, data))
     except Exception:
-        logger.debug("embedding cache get failed", exc_info=True)
+        logger.warning("embedding cache get failed", exc_info=True)
     return None
 
 
@@ -48,7 +48,7 @@ async def set_cached(text: str, vector: list[float], task_type: str | None = Non
         packed = struct.pack(_FMT_1024, *vector)
         await r.set(_cache_key(text, task_type), packed, ex=_TTL)
     except Exception:
-        logger.debug("embedding cache set failed", exc_info=True)
+        logger.warning("embedding cache set failed", exc_info=True)
 
 
 async def get_cached_batch(
@@ -69,7 +69,7 @@ async def get_cached_batch(
             if data and len(data) == _PACK_SIZE:
                 results[i] = list(struct.unpack(_FMT_1024, data))
     except Exception:
-        logger.debug("embedding cache batch get failed", exc_info=True)
+        logger.warning("embedding cache batch get failed", exc_info=True)
     return results
 
 
@@ -88,4 +88,4 @@ async def set_cached_batch(
                 pipe.set(_cache_key(text, task_type), packed, ex=_TTL)
         await pipe.execute()
     except Exception:
-        logger.debug("embedding cache batch set failed", exc_info=True)
+        logger.warning("embedding cache batch set failed", exc_info=True)

@@ -432,7 +432,7 @@ class SessionIntelligenceClient:
             try:
                 with open(jsonl_file, encoding="utf-8", errors="replace") as f:
                     line_count = sum(1 for _ in f)
-            except Exception:
+            except OSError:
                 line_count = 0
 
             # Use st_birthtime (macOS) for creation time if available

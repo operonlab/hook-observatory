@@ -83,10 +83,17 @@ async def _send_request(request: dict) -> dict | None:
 
     try:
         line = json.dumps(request) + "\n"
-        _process.stdin.write(line)
-        _process.stdin.flush()
-
         loop = asyncio.get_event_loop()
+
+        def _write_request() -> None:
+            _process.stdin.write(line)
+            _process.stdin.flush()
+
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _write_request),
+            timeout=10,
+        )
+
         response_line = await asyncio.wait_for(
             loop.run_in_executor(None, _process.stdout.readline),
             timeout=30,

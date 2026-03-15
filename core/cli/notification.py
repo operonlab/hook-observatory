@@ -106,7 +106,7 @@ def cmd_sub_preferences(args):
                 try:
                     val = json.loads(val)
                 except (json.JSONDecodeError, ValueError):
-                    pass
+                    print(f"Warning: invalid JSON for {key}, using raw value", file=sys.stderr)
                 prefs[key] = val
         if not prefs:
             print("No preferences provided. Use --key value pairs.", file=sys.stderr)

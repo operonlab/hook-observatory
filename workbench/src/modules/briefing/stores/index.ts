@@ -91,6 +91,7 @@ export const useBriefingStore = create<BriefingState>()(
           const summary = await briefingApi.getDailySummary(date)
           set({ todaySummary: summary, todayFetchedAt: Date.now() })
         } catch (err) {
+          console.error('fetchTodaySummary failed:', err)
           set({ error: err instanceof Error ? err.message : 'Failed to fetch summary' })
         } finally {
           set({ todayLoading: false })

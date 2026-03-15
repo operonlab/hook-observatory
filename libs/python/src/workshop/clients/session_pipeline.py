@@ -277,7 +277,10 @@ class SessionPipelineClient:
                 # stderr goes to log file for debuggability (not DEVNULL).
                 log_path = Path(HOME) / ".claude" / "data" / "session-pipeline" / "extract.log"
                 log_path.parent.mkdir(parents=True, exist_ok=True)
-                stderr_fh = open(log_path, "a")
+                try:
+                    stderr_fh = open(log_path, "a")
+                except OSError as e:
+                    raise RuntimeError(f"failed to open extract log {log_path}: {e}") from e
                 proc = subprocess.Popen(
                     [sys.executable, str(script)],
                     stdin=subprocess.PIPE,
@@ -285,9 +288,11 @@ class SessionPipelineClient:
                     stderr=stderr_fh,
                     start_new_session=True,
                 )
-                proc.stdin.write(payload.encode())
-                proc.stdin.close()
                 stderr_fh.close()
+                try:
+                    proc.stdin.write(payload.encode())
+                finally:
+                    proc.stdin.close()
                 stage.details = {"pid": proc.pid, "mode": "background", "log": str(log_path)}
         except Exception as exc:
             stage.success = False

@@ -71,8 +71,10 @@ def brew_install(packages: list[str], cask: bool = False) -> tuple[int, int]:
             skipped += 1
             continue
         try:
-            run(["brew", "install", *flag, pkg], check=True)
+            run(["brew", "install", *flag, pkg], check=True, timeout=300)
             installed += 1
+        except subprocess.TimeoutExpired:
+            err(0, f"  Timed out installing: {pkg}")
         except subprocess.CalledProcessError:
             err(0, f"  Failed to install: {pkg}")
     return installed, skipped
