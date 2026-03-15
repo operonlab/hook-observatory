@@ -50,7 +50,7 @@ def progressive_extract(
 
     from .base import HOME, run_background
 
-    PYTHON = os.path.join(HOME, ".local", "bin", "python3")
+    python = os.path.join(HOME, ".local", "bin", "python3")
 
     # Write input to temp file for background process
     try:
@@ -68,7 +68,7 @@ def progressive_extract(
 
     # Background: cat input | python extract_progressive.py
     run_background(
-        f"cat {tmpfile_path} | {PYTHON} {script}; rm -f {tmpfile_path}",
+        f"cat {tmpfile_path} | {python} {script}; rm -f {tmpfile_path}",
     )
     return HookResult()
 
