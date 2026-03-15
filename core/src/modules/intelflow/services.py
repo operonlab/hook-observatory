@@ -4,6 +4,7 @@ This is the PUBLIC API of the intelflow module.
 Other modules import from here, never from models.py.
 """
 
+import logging
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -39,6 +40,8 @@ from .schemas import (
     TopicGraphResponse,
     TopicResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 # ======================== Report Service ========================
 
@@ -229,7 +232,11 @@ class TopicService:
             display_name=data.display_name or data.name,
         )
         # Generate embedding for topic name
-        embedding = await get_embedding(data.name)
+        try:
+            embedding = await get_embedding(data.name)
+        except Exception:
+            logger.warning("Failed to generate embedding for topic %s", data.name, exc_info=True)
+            embedding = None
         if embedding:
             topic.embedding = embedding
         db.add(topic)
@@ -248,7 +255,11 @@ class TopicService:
         if existing:
             return existing
         topic = Topic(space_id=space_id, name=name, display_name=name)
-        embedding = await get_embedding(name)
+        try:
+            embedding = await get_embedding(name)
+        except Exception:
+            logger.warning("Failed to generate embedding for topic %s", name, exc_info=True)
+            embedding = None
         if embedding:
             topic.embedding = embedding
         db.add(topic)

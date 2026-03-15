@@ -145,14 +145,17 @@ async def execute_flow(
         flow_run.finished_at = datetime.now(UTC)
         await emit_state_changed("nodeflow", "flow_run", flow_run.id, "running", "failed", user_id)
 
-        await event_bus.publish(
-            Event(
-                type=NodeflowEvents.FLOW_RUN_FAILED,
-                data={"flow_id": flow.id, "flow_run_id": flow_run.id, "error": str(exc)},
-                source="nodeflow",
-                user_id=user_id,
+        try:
+            await event_bus.publish(
+                Event(
+                    type=NodeflowEvents.FLOW_RUN_FAILED,
+                    data={"flow_id": flow.id, "flow_run_id": flow_run.id, "error": str(exc)},
+                    source="nodeflow",
+                    user_id=user_id,
+                )
             )
-        )
+        except Exception:
+            logger.warning("Failed to publish FLOW_RUN_FAILED event", exc_info=True)
 
     await db.flush()
     return flow_run
