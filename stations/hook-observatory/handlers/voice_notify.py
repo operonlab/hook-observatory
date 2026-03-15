@@ -224,15 +224,23 @@ def _tmux_label(pane_id: str) -> str:
 
 
 def _enqueue_tts(msg: str) -> None:
-    """Append to queue file (atomic via flock) and ensure consumer alive."""
+    """Append to queue file (atomic via flock) and ensure consumer alive.
+
+    Fail-open: if the queue file cannot be written (e.g. /tmp full), we
+    return silently rather than crashing the hook — TTS errors must never
+    block Claude Code.
+    """
     entry = json.dumps(
         {"text": msg, "voice": VOICE, "rate": RATE, "vol": PLAYBACK_VOL},
         ensure_ascii=False,
     )
-    with open(QUEUE_FILE, "a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        f.write(entry + "\n")
-        fcntl.flock(f, fcntl.LOCK_UN)
+    try:
+        with open(QUEUE_FILE, "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            f.write(entry + "\n")
+            fcntl.flock(f, fcntl.LOCK_UN)
+    except Exception:
+        return  # fail-open: TTS failure must never block the hook
     _ensure_consumer()
 
 
