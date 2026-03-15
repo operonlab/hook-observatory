@@ -19,7 +19,11 @@ function readCache(): SavedOrder | null {
 }
 
 function writeCache(order: SavedOrder) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(order))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(order))
+  } catch {
+    // QuotaExceededError in private browsing — ignore
+  }
 }
 
 // Simple pub-sub so useSyncExternalStore re-renders on writes

@@ -13,7 +13,11 @@ function loadWidgets(): WidgetInstance[] {
 }
 
 function saveWidgets(widgets: WidgetInstance[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets))
+  } catch {
+    // QuotaExceededError in private browsing — ignore
+  }
 }
 
 interface DashboardState {

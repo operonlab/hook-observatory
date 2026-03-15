@@ -127,7 +127,7 @@ export default function AppHeader() {
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = 'transparent'
             }}
-            onClick={() => void logout()}
+            onClick={() => logout().catch(() => {})}
             title="登出"
           >
             <div

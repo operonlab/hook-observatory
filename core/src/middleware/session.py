@@ -63,8 +63,12 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 if raw:
                     user_data = json.loads(raw)
             except Exception as e:
-                logging.getLogger(__name__).warning("Redis session lookup failed: %s", e)
-                session_token = None  # treat as unauthenticated
+                logging.getLogger(__name__).warning(
+                    "Redis session lookup failed — keeping token, auth layer will enforce: %s", e
+                )
+                # Do NOT null session_token: fail-open for reads so Redis downtime
+                # doesn't log everyone out. The auth layer (require_permission) still
+                # enforces authorization on each protected endpoint.
             finally:
                 await redis.aclose()
 

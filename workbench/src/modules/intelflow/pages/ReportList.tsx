@@ -28,9 +28,16 @@ export default function ReportList() {
     setActiveTag,
   } = useReports()
 
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const handleDelete = async (id: string) => {
     if (!window.confirm('確定要刪除這份報告嗎？')) return
-    await deleteReport(id)
+    try {
+      await deleteReport(id)
+      setDeleteError(null)
+    } catch {
+      setDeleteError('刪除失敗，請稍後再試')
+    }
   }
   const [searchText, setSearchText] = useState('')
   const [tagsExpanded, setTagsExpanded] = useState(false)
@@ -65,6 +72,20 @@ export default function ReportList() {
 
   return (
     <div className="p-4 sm:p-6 xl:p-8 space-y-5 sm:space-y-6">
+      {/* Delete error */}
+      {deleteError && (
+        <div
+          className="px-4 py-3 text-sm"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            color: 'rgb(252, 165, 165)',
+          }}
+        >
+          {deleteError}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <h1
@@ -74,6 +95,7 @@ export default function ReportList() {
           研究報告
         </h1>
         <button
+          type="button"
           className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm border shrink-0 min-h-[44px]"
           style={{
             borderColor: 'var(--if-accent)',
@@ -116,6 +138,7 @@ export default function ReportList() {
         <div className="flex shrink-0">
           {SORT_OPTIONS.map(({ mode, label }, i) => (
             <button
+              type="button"
               key={mode}
               onClick={() => setSortMode(mode)}
               className={`flex-1 sm:flex-none px-3 py-3 text-xs border-y border-r ${i === 0 ? 'border-l' : ''} min-h-[44px]`}
@@ -145,6 +168,7 @@ export default function ReportList() {
           ))}
           {hiddenCount > 0 && (
             <button
+              type="button"
               onClick={() => setTagsExpanded(!tagsExpanded)}
               className="shrink-0 text-xs px-2.5 py-2 border transition-colors min-h-[36px]"
               style={{
@@ -200,6 +224,7 @@ export default function ReportList() {
           </span>
           <div className="flex gap-1">
             <button
+              type="button"
               onClick={() => fetchReports(page - 1)}
               disabled={page <= 1}
               className="p-2.5 border disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -208,6 +233,7 @@ export default function ReportList() {
               <ChevronLeft size={14} />
             </button>
             <button
+              type="button"
               onClick={() => fetchReports(page + 1)}
               disabled={page >= totalPages}
               className="p-2.5 border disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"

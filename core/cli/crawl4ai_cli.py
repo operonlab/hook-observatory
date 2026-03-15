@@ -48,7 +48,11 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     sys.path.insert(0, _LIBS_SRC)
     from workshop.crawl4ai_bridge import crawl_url
 
-    r = asyncio.run(crawl_url(args.url, timeout=args.timeout))
+    try:
+        r = asyncio.run(crawl_url(args.url, timeout=args.timeout))
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     if args.json:
         _jout(
             {

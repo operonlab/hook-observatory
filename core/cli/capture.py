@@ -54,7 +54,11 @@ def _bar(completeness: float) -> str:
 
 def cmd_add(args):
     c = _client()
-    payload = json.loads(args.payload) if args.payload else {}
+    try:
+        payload = json.loads(args.payload) if args.payload else {}
+    except json.JSONDecodeError as e:
+        print(f"Error: invalid JSON payload: {e}", file=sys.stderr)
+        sys.exit(1)
     try:
         result = c.create(
             module=args.module,
