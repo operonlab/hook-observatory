@@ -57,7 +57,8 @@ async function refreshUsage() {
         const spent = m.spent || m.used_usd || m.cost_usd || 0;
         const remaining = m.remaining != null ? fmt$(m.remaining) : "—";
         const pct = m.pct != null ? m.pct + "%" : "—";
-        return `<tr><td>${name}</td><td style="text-align:right">${deposit}</td><td style="text-align:right">${remaining}</td><td style="text-align:right;color:var(--peach)">${fmt$(spent)}</td><td style="text-align:right">${pct}</td></tr>`;
+        const note = m.note ? ` <span style="font-size:0.65rem;color:var(--subtext0)">${m.note}</span>` : "";
+        return `<tr><td>${name}${note}</td><td style="text-align:right">${deposit}</td><td style="text-align:right">${remaining}</td><td style="text-align:right;color:var(--peach)">${fmt$(spent)}</td><td style="text-align:right">${pct}</td></tr>`;
       });
       const totalDeposit = byModel.litellm_models.reduce((s, m) => s + (m.total || 0), 0);
       const totalRemaining = byModel.litellm_models.reduce((s, m) => s + (m.remaining || 0), 0);

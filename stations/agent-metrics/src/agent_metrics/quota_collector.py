@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 import httpx
+import redis
 import structlog
 
 from agent_metrics.config import settings
@@ -26,25 +27,25 @@ from agent_metrics.config import settings
 log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
-# Internal cache (general TTL for CX/GM)
+# Redis cache (replaces in-memory _cache / _raw_cache / _cc_raw_result)
 # ---------------------------------------------------------------------------
-_cache: dict = {}
-_cache_ts: float = 0.0
+_r = redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-# Raw API response cache (for compat output)
-_raw_cache: dict = {}
+_RKEY_FORMATTED = "agent-metrics:quota:formatted"
+_RKEY_RAW = "agent-metrics:quota:raw"
+_RKEY_CC_RAW = "agent-metrics:quota:cc_raw"
 
-# CC-specific result cache (15-min interval, separate from CX/GM)
-_cc_raw_result: dict = {}
-_cc_raw_result_ts: float = 0.0
-
-# Gemini project ID cache (1h TTL)
+# Gemini project ID cache (1h TTL, in-memory is fine — token-specific)
 _gm_project: str = ""
 _gm_project_ts: float = 0.0
 _GM_PROJECT_TTL = 3600.0
 
-# CC quota persistence path
+# CC quota persistence path (disk fallback for restart resilience)
 _CC_PERSIST_PATH = Path("/tmp/agent-metrics-cc-quota.json")
+
+# CC-specific result (in-process fallback alongside Redis)
+_cc_raw_result: dict = {}
+_cc_raw_result_ts: float = 0.0
 
 # Claude quota state (for 429 backoff + fallback visibility)
 _cc_last_success: dict = {}
@@ -69,10 +70,22 @@ def _persist_cc_quota(data: dict, source: str = "api") -> None:
 
 
 def _load_persisted_cc_quota() -> None:
-    """Load persisted CC quota on startup as fallback seed."""
-    global _cc_last_success, _cc_last_success_ts, _cc_raw_result, _cc_raw_result_ts
+    """Load persisted CC quota on startup — seed Redis if empty."""
+    global _cc_last_success, _cc_last_success_ts
     if _cc_last_success:
         return
+    # Check Redis first
+    try:
+        cached = _r.get(_RKEY_CC_RAW)
+        if cached:
+            data = json.loads(cached)
+            _cc_last_success = data
+            _cc_last_success_ts = time.time()
+            log.info("cc_quota_loaded_from_redis")
+            return
+    except Exception:
+        pass
+    # Fall back to disk
     try:
         if _CC_PERSIST_PATH.exists():
             payload = json.loads(_CC_PERSIST_PATH.read_text())
@@ -81,8 +94,8 @@ def _load_persisted_cc_quota() -> None:
             if data and (time.time() - ts) <= settings.CC_QUOTA_STALE_MAX_SECONDS:
                 _cc_last_success = data
                 _cc_last_success_ts = ts
-                _cc_raw_result = data
-                _cc_raw_result_ts = ts
+                # Seed Redis from disk
+                _r.setex(_RKEY_CC_RAW, settings.CC_QUOTA_FETCH_INTERVAL, json.dumps(data))
                 source = payload.get("source", "disk")
                 log.info("cc_quota_loaded_from_disk", age_s=int(time.time() - ts), source=source)
     except (OSError, json.JSONDecodeError, KeyError):
@@ -175,6 +188,10 @@ async def fetch_cc_quota(client: httpx.AsyncClient) -> dict:
         _cc_last_error = None
         _cc_last_fetch_mode = "live"
         _persist_cc_quota(data)
+        try:
+            _r.setex(_RKEY_CC_RAW, settings.CC_QUOTA_FETCH_INTERVAL, json.dumps(data))
+        except Exception:
+            pass
         return data
     except httpx.HTTPStatusError as e:
         status = e.response.status_code if e.response is not None else None
@@ -624,16 +641,27 @@ async def fetch_gm_quota(client: httpx.AsyncClient) -> dict:
 
 async def get_quota(force: bool = False) -> dict:
     """Fetch all LLM quotas. CC at 15-min interval, CX/GM at QUOTA_CACHE_TTL."""
-    global _cache, _cache_ts, _raw_cache, _cc_raw_result, _cc_raw_result_ts
+    global _cc_raw_result, _cc_raw_result_ts
+
+    # Check Redis cache first
+    if not force:
+        try:
+            cached = _r.get(_RKEY_FORMATTED)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass
 
     now = time.time()
-    if not force and _cache and (now - _cache_ts) < settings.QUOTA_CACHE_TTL:
-        return _cache
 
-    # CC: 30-min interval with API → Playwright fallback chain
-    fetch_cc = (
-        force or not _cc_raw_result or (now - _cc_raw_result_ts) >= settings.CC_QUOTA_FETCH_INTERVAL
-    )
+    # CC: check Redis for cc_raw freshness
+    cc_raw_cached = None
+    try:
+        cc_raw_cached = _r.get(_RKEY_CC_RAW)
+    except Exception:
+        pass
+    fetch_cc = force or not cc_raw_cached
+    cc_raw = {}  # initialize before conditional branches
 
     # If API is in backoff, skip API entirely and go straight to Playwright
     cc_in_backoff = _cc_backoff_until > now
@@ -667,24 +695,47 @@ async def get_quota(force: bool = False) -> dict:
             _cc_raw_result = cc_raw
             _cc_raw_result_ts = now
             _persist_cc_quota(cc_raw, source=_cc_last_fetch_mode)
+            try:
+                _r.setex(_RKEY_CC_RAW, settings.CC_QUOTA_FETCH_INTERVAL, json.dumps(cc_raw))
+            except Exception:
+                pass
 
-    cc_raw = _cc_raw_result
+    # Use fresh or Redis-cached cc_raw
+    if not cc_raw and cc_raw_cached:
+        cc_raw = json.loads(cc_raw_cached)
+    elif _cc_raw_result:
+        cc_raw = _cc_raw_result
 
-    _raw_cache = {"cc": cc_raw, "cx": cx_raw, "gm": gm_raw}
+    raw_cache = {"cc": cc_raw, "cx": cx_raw, "gm": gm_raw}
     result = format_quota(cc_raw, cx_raw, gm_raw)
-    _cache = result
-    _cache_ts = now
+    try:
+        _r.setex(_RKEY_FORMATTED, settings.QUOTA_CACHE_TTL, json.dumps(result))
+        _r.setex(_RKEY_RAW, settings.QUOTA_CACHE_TTL, json.dumps(raw_cache))
+    except Exception:
+        pass
     return result
 
 
 def get_quota_sync() -> dict:
-    """Synchronous cache reader (returns last cached value, never blocks)."""
-    return _cache
+    """Synchronous cache reader from Redis (never blocks)."""
+    try:
+        cached = _r.get(_RKEY_FORMATTED)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+    return {}
 
 
 def get_raw_cache() -> dict:
-    """Return raw API responses (for compat output)."""
-    return _raw_cache
+    """Return raw API responses from Redis."""
+    try:
+        cached = _r.get(_RKEY_RAW)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+    return {}
 
 
 def reset_cc_backoff() -> None:
@@ -697,11 +748,16 @@ def reset_cc_backoff() -> None:
 def get_quota_health() -> dict:
     """Return fetch health metadata for quota collectors."""
     now = time.time()
-    next_cc_fetch = (
-        max(0, int(settings.CC_QUOTA_FETCH_INTERVAL - (now - _cc_raw_result_ts)))
-        if _cc_raw_result_ts
-        else 0
-    )
+    # Use Redis TTL for next_fetch countdown
+    try:
+        ttl = _r.ttl(_RKEY_CC_RAW)
+        next_cc_fetch = max(0, ttl) if ttl and ttl > 0 else 0
+    except Exception:
+        next_cc_fetch = (
+            max(0, int(settings.CC_QUOTA_FETCH_INTERVAL - (now - _cc_raw_result_ts)))
+            if _cc_raw_result_ts
+            else 0
+        )
     return {
         "cc": {
             "last_status_code": _cc_last_status_code,
@@ -739,7 +795,10 @@ def _parse_cc(data: dict) -> dict:
             limit = (ex.get("monthly_limit") or 0) / 100
             pct = round(ex.get("utilization") or 0)
             balance = (ex.get("balance_cents") or 0) / 100
-            result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余${balance:.2f}"
+            if balance <= 0:
+                result["ex"] = "off"
+            else:
+                result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余${balance:.2f}"
         else:
             result["ex"] = "off"
     return result

@@ -66,11 +66,11 @@ def _extract_provider(model_name: str) -> str:
     """Extract provider from LiteLLM model name."""
     model_lower = model_name.lower()
     provider_map = {
-        "glm": "z.ai",
+        "glm": "zhipu",
         "kimi": "moonshot",
         "minimax": "minimax",
         "deepseek": "deepseek",
-        "qwen": "alibaba",
+        "qwen": "dashscope",
         "grok": "xai",
         "claude": "anthropic",
         "gpt": "openai",
@@ -265,40 +265,95 @@ def get_litellm_daily_data(days: int = 30) -> list[dict]:
     return []
 
 
-# 手動錄入的額度資訊 (少爺提供的最新數據)
-MANUAL_QUOTAS = {
+# 額度預設值 (Redis 無資料時的 fallback)
+# key = 模型提供商 (非模型名稱)
+_DEFAULT_QUOTAS = {
     "minimax": {"total": 25.0, "remaining": 24.24},
-    "kimi": {"total": 25.0, "remaining": 23.67811},
-    "glm": {"total": 10.0, "remaining": 10.0},
+    "moonshot": {"total": 25.0, "remaining": 23.67811},
+    "zhipu": {"total": 10.0, "remaining": 10.0},
     "deepseek": {"total": 12.0, "remaining": 10.25},
-    "qwen": {"total": 0.0, "remaining": 0.0},  # 免費額度，無儲值
-    "xai": {"total": 25.0, "remaining": 25.0},  # Grok-3
+    "dashscope": {"total": 0.0, "remaining": 0.0},  # 免費額度 (token制)，無儲值
+    "xai": {"total": 25.0, "remaining": 25.0},
+}
+
+_PROVIDER_REDIS_PREFIX = "agent-metrics:provider"
+DASHSCOPE_FREE_QUOTA_REDIS_KEY = "agent-metrics:dashscope:free_quota"
+DASHSCOPE_FREE_QUOTA_DEFAULTS = {
+    "total_models": 95,
+    "healthy": 90,
+    "over_50pct": 0,
+    "over_80pct": 0,
+    "no_free": 5,
+    "top_models": [
+        {"model": "qwen3-max", "remaining": 999961, "total": 1000000},
+        {"model": "qwen-max", "remaining": 999984, "total": 1000000},
+        {"model": "qwen3.5-122b-a10b", "remaining": 1000000, "total": 1000000},
+    ],
 }
 
 
+def _get_provider_quotas() -> dict:
+    """取得各供應商額度：Redis 優先（ws_provider_balance_sync.py 定期更新），fallback 到預設值。"""
+    quotas = dict(_DEFAULT_QUOTAS)
+    try:
+        import redis as _redis
+
+        r = _redis.from_url(settings.REDIS_URL, decode_responses=True)
+        for name in ("minimax", "moonshot", "zhipu", "deepseek", "xai"):
+            cached = r.get(f"{_PROVIDER_REDIS_PREFIX}:{name}:balance")
+            if cached:
+                data = json.loads(cached)
+                quotas[name] = {
+                    "total": data.get("total", quotas[name]["total"]),
+                    "remaining": data.get("remaining", quotas[name]["remaining"]),
+                }
+    except Exception:
+        pass
+    return quotas
+
+
+def get_dashscope_free_quota() -> dict:
+    """取得 DashScope (Qwen) 免費額度資訊：Redis 優先，fallback 到預設值。"""
+    try:
+        import redis as _redis
+
+        r = _redis.from_url(settings.REDIS_URL, decode_responses=True)
+        cached = r.get(DASHSCOPE_FREE_QUOTA_REDIS_KEY)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+    return DASHSCOPE_FREE_QUOTA_DEFAULTS
+
+
 def get_litellm_manual_summary():
-    """回傳手動錄入的額度總計。"""
-    total_budget = sum(q["total"] for q in MANUAL_QUOTAS.values())
-    total_remaining = sum(q["remaining"] for q in MANUAL_QUOTAS.values())
+    """回傳各供應商額度總計 + Qwen 免費額度（Redis 即時資料優先）。"""
+    quotas = _get_provider_quotas()
+    total_budget = sum(q["total"] for q in quotas.values())
+    total_remaining = sum(q["remaining"] for q in quotas.values())
     total_spent = total_budget - total_remaining
 
     breakdown = []
-    for name, q in MANUAL_QUOTAS.items():
-        breakdown.append(
-            {
-                "name": name,
-                "total": q["total"],
-                "remaining": q["remaining"],
-                "spent": round(q["total"] - q["remaining"], 4),
-                "pct": round((q["total"] - q["remaining"]) / q["total"] * 100, 1)
-                if q["total"] > 0
-                else 0,
-            }
-        )
+    for name, q in quotas.items():
+        entry = {
+            "name": name,
+            "total": q["total"],
+            "remaining": q["remaining"],
+            "spent": round(q["total"] - q["remaining"], 4),
+            "pct": round((q["total"] - q["remaining"]) / q["total"] * 100, 1)
+            if q["total"] > 0
+            else 0,
+        }
+        if name == "dashscope":
+            fq = get_dashscope_free_quota()
+            entry["free_quota"] = fq
+            entry["note"] = f"免費額度 {fq['total_models']} 模型，各 1M tokens"
+        breakdown.append(entry)
 
     return {
         "total_budget_usd": total_budget,
         "total_remaining_usd": total_remaining,
         "total_spent_usd": round(total_spent, 4),
         "breakdown": breakdown,
+        "dashscope_free_quota": get_dashscope_free_quota(),
     }
