@@ -54,7 +54,7 @@ LIGHT_CHECKS: list[LightCheck] = [
     LightCheck(
         name="orbstack",
         group="system",
-        command="pgrep -q OrbStack",
+        command="docker info --format '{{.ServerVersion}}' 2>/dev/null",
     ),
     # ── infra ──
     LightCheck(

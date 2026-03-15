@@ -53,6 +53,11 @@ DOCKER_RESTART_MAP: dict[str, str] = {
     "qdrant": "ws-infra-qdrant-1",
 }
 
+# Infrastructure engine restarts: sentinel name → command args
+INFRA_RESTART_MAP: dict[str, list[str]] = {
+    "orbstack": ["orbctl", "start"],
+}
+
 
 class SimpleRestarter:
     """Fast, direct service restart without AI involvement."""
@@ -63,11 +68,17 @@ class SimpleRestarter:
             return await self._restart_workshop_service(SIMPLE_RESTART_MAP[service])
         if service in DOCKER_RESTART_MAP:
             return await self._restart_docker(DOCKER_RESTART_MAP[service])
+        if service in INFRA_RESTART_MAP:
+            return await self._restart_infra(service)
         return False
 
     @staticmethod
     def can_restart(service: str) -> bool:
-        return service in SIMPLE_RESTART_MAP or service in DOCKER_RESTART_MAP
+        return (
+            service in SIMPLE_RESTART_MAP
+            or service in DOCKER_RESTART_MAP
+            or service in INFRA_RESTART_MAP
+        )
 
     async def _restart_workshop_service(self, name: str) -> bool:
         if not WORKSHOP_SERVICES.exists():
@@ -108,6 +119,51 @@ class SimpleRestarter:
             return False
         except (TimeoutError, FileNotFoundError) as e:
             logger.error("Docker restart failed for %s: %s", container, e)
+            return False
+
+    async def _restart_infra(self, service: str) -> bool:
+        """Restart infrastructure engines (e.g. OrbStack Docker engine)."""
+        cmd = INFRA_RESTART_MAP.get(service)
+        if not cmd:
+            return False
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            if proc.returncode == 0:
+                logger.info("Infra restart succeeded for %s", service)
+                # Wait for engine to be fully ready
+                await asyncio.sleep(5)
+                return True
+            # Fallback: if orbctl fails, try opening the app
+            if service == "orbstack":
+                logger.warning("orbctl start failed, trying open -a OrbStack")
+                fallback = await asyncio.create_subprocess_exec(
+                    "open",
+                    "-a",
+                    "OrbStack",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await asyncio.wait_for(fallback.communicate(), timeout=10)
+                await asyncio.sleep(15)  # Wait for app + engine startup
+                retry = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                _, _ = await asyncio.wait_for(retry.communicate(), timeout=30)
+                if retry.returncode == 0:
+                    logger.info("Infra restart succeeded for %s (fallback)", service)
+                    await asyncio.sleep(5)
+                    return True
+            logger.error("Infra restart failed for %s: %s", service, stderr.decode()[:200])
+            return False
+        except (TimeoutError, FileNotFoundError) as e:
+            logger.error("Infra restart failed for %s: %s", service, e)
             return False
 
 
@@ -187,8 +243,8 @@ class Remediator:
         self,
         service: str,
         detail: str,
-        timeout: float = 600.0,
-        url: str = "",  # noqa: ASYNC109
+        timeout: float = 600.0,  # noqa: ASYNC109
+        url: str = "",
     ) -> str | None:
         """Dispatch a repair agent. Returns pane ID or None on failure."""
         if service in self._active_jobs:
