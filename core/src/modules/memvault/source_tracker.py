@@ -184,7 +184,7 @@ class AnomalySignal:
     """A detected anomaly in memory access or creation patterns."""
 
     signal_type: str  # "burst_access" | "foreign_source" | "prompt_like" | "temporal_anomaly"
-    severity: float  # 0.0–1.0
+    severity: float  # 0.0-1.0
     description: str
     memory_id: str
     pattern_matched: str | None = field(default=None)  # the matched text snippet (truncated)
@@ -316,7 +316,7 @@ def compute_trust_score(provenance: MemoryProvenance) -> float:
       +0.50  base (no anomaly signals)
       +0.20  known session_id (not None / not empty)
       +0.10  known agent_id
-      +0.10  automated extraction method ("auto_extract" | "progressive" | "reflection" | "kg_triple")
+      +0.10  automated method ("auto_extract" | "progressive" | "reflection" | "kg_triple")
       +0.10  recent extraction (within 7 days)
 
     Returns:

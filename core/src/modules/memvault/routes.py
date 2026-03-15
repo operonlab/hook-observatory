@@ -223,8 +223,20 @@ async def search(
                 metadata=meta if include_metadata else None,
             )
 
+    # HyDE: Expand query for better retrieval (short/vague queries → hypothetical memory)
     try:
-        query_embedding = await get_embedding(q, task_type="search_query")
+        from .query_expander import expand_query
+
+        expanded = await expand_query(q)
+        embed_text = expanded.expanded_text
+        logger.debug(
+            "query_expander: %s → %r (%s)", q[:30], embed_text[:50], expanded.expansion_used
+        )
+    except Exception:
+        embed_text = q  # fallback to original query
+
+    try:
+        query_embedding = await get_embedding(embed_text, task_type="search_query")
     except Exception:
         logger.warning("Embedding failed for search query, falling back to text", exc_info=True)
         query_embedding = None

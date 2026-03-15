@@ -84,12 +84,14 @@ class ScoringConfig:
     length_anchor: int = 500
     min_score: float = 0.10
     mmr_threshold: float = 0.85
+    semantic_boost: float = 0.3
     stages_enabled: dict[str, bool] = field(
         default_factory=lambda: {
             "recency": True,
             "importance": True,
             "length_norm": True,
             "time_decay": True,
+            "semantic_boost": True,
             "min_score": True,
             "noise_filter": True,
             "mmr": True,
@@ -155,6 +157,15 @@ class ScoringPipeline:
 
         # Stage 4: Time Decay (G3 Weibull + G6 access reinforcement)
         results = self._run_stage("time_decay", results, meta, self._apply_time_decay)
+
+        # Stage 4.5: Semantic Relevance Boost (FadeMem-inspired)
+        results = self._run_stage(
+            "semantic_boost",
+            results,
+            meta,
+            self._apply_semantic_relevance,
+            query_embedding=query_embedding,
+        )
 
         # Stage 5: Hard Min Score
         results = self._run_stage("min_score", results, meta, self._apply_min_score)
@@ -267,6 +278,33 @@ class ScoringPipeline:
             else:
                 # Fallback: standard Weibull decay (G3 behaviour)
                 r["score"] *= weibull_decay(age_days, tier)
+
+        return results
+
+    def _apply_semantic_relevance(
+        self,
+        results: list[dict],
+        query_embedding: list[float] | None = None,
+    ) -> list[dict]:
+        """FadeMem-inspired: boost scores for memories semantically close to query.
+
+        If query_embedding is available, compute cosine similarity between each
+        result's embedding and the query. Higher similarity = less decay penalty.
+
+        Formula: score *= (1 + semantic_boost_factor * similarity)
+        where semantic_boost_factor defaults to 0.3
+        """
+        if not query_embedding:
+            return results
+
+        for r in results:
+            emb = r.get("embedding")
+            if not emb:
+                continue
+            similarity = _cosine_similarity(emb, query_embedding)
+            # similarity is in [-1, 1]; clamp to [0, 1] for boost calculation
+            similarity = max(0.0, similarity)
+            r["score"] *= 1.0 + self.config.semantic_boost * similarity
 
         return results
 
