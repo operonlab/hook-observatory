@@ -7,14 +7,20 @@ import logging
 logger = logging.getLogger("tmux-webui")
 
 
-async def _run(args: list[str]) -> tuple[int, str, str]:
+async def _run(args: list[str], timeout: float = 10) -> tuple[int, str, str]:
     """Run a subprocess and return (returncode, stdout, stderr)."""
     proc = await asyncio.create_subprocess_exec(
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        logger.warning("subprocess timed out after %ss: %s", timeout, args[:3])
+        return (1, "", f"timeout after {timeout}s")
     return (
         proc.returncode or 0,
         stdout.decode("utf-8", errors="replace"),
