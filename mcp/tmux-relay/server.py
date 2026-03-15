@@ -203,9 +203,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 client.check,
                 signal_file=arguments["signal_file"],
             )
-            status = result["status"].upper()
+            status = result.get("status", "unknown").upper()
             meta = result.get("meta", "")
-            return text_result(f"**Status**: {status}\nSignal: {result['signal_file']}\n{meta}")
+            return text_result(f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}")
 
         elif name == "relay_result":
             result = await to_thread(
@@ -219,6 +219,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     except TmuxRelayError as e:
         return text_result(f"tmux-relay error: {e}")
+    except Exception as e:
+        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
 
 
 # ======================== Main ========================

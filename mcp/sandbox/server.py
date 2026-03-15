@@ -169,21 +169,25 @@ def _format_result(result, description=None, max_output: int = 3000) -> str:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    if name == "sandbox_execute":
-        language = arguments.get("language", "python")
-        code = arguments.get("code", "")
-        timeout = arguments.get("timeout", 30)
-        description = arguments.get("description")
-        max_output = min(arguments.get("max_output", 3000), 5000)
+    try:
+        if name == "sandbox_execute":
+            language = arguments.get("language", "python")
+            code = arguments.get("code", "")
+            timeout = arguments.get("timeout", 30)
+            description = arguments.get("description")
+            max_output = min(arguments.get("max_output", 3000), 5000)
 
-        result = await to_thread(client.execute, code, language, timeout)
-        return text_result(_format_result(result, description, max_output=max_output))
+            result = await to_thread(client.execute, code, language, timeout)
+            return text_result(_format_result(result, description, max_output=max_output))
 
-    elif name == "sandbox_info":
-        language = arguments.get("language", "python")
-        return text_result(client.info(language))
+        elif name == "sandbox_info":
+            language = arguments.get("language", "python")
+            return text_result(client.info(language))
 
-    return text_result(f"Unknown tool: {name}")
+        return text_result(f"Unknown tool: {name}")
+
+    except Exception as e:
+        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
 
 
 # ======================== Main ========================

@@ -438,17 +438,24 @@ async def handle_upload_attachment(args: dict) -> list[TextContent]:
     if not os.path.exists(file_path):
         return text_result(f"File not found: {file_path}")
 
-    with open(file_path, "rb") as f:
-        data = f.read()
-    files = {"file": (filename, data, content_type)}
-    async with httpx.AsyncClient(timeout=60) as http:
-        resp = await http.post(
-            f"{client.prefix}/transactions/{txn_id}/attachments",
-            files=files,
-            params={"space_id": client.space_id},
-        )
-        resp.raise_for_status()
-        result = resp.json()
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+        files = {"file": (filename, data, content_type)}
+        async with httpx.AsyncClient(timeout=60) as http:
+            resp = await http.post(
+                f"{client.prefix}/transactions/{txn_id}/attachments",
+                files=files,
+                params={"space_id": client.space_id},
+            )
+            resp.raise_for_status()
+            result = resp.json()
+    except httpx.ConnectError as e:
+        return text_result(f"Connection error uploading attachment: {e}")
+    except httpx.TimeoutException as e:
+        return text_result(f"Timeout uploading attachment: {e}")
+    except httpx.HTTPStatusError as e:
+        return text_result(f"Upload failed ({e.response.status_code}): {e.response.text[:200]}")
 
     return text_result(f"Attachment uploaded.\nID: {result.get('id', '-')}\nFilename: {filename}")
 

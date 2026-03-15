@@ -189,7 +189,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return text_result(f"Unknown tool: {name}")
 
     except Exception as e:
-        return text_result(f"Error: {e}")
+        return text_result(f"Error: {type(e).__name__}: {e}")
 
 
 # ======================== Entry Point ========================

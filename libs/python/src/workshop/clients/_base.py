@@ -96,6 +96,10 @@ class BaseClient:
             return resp
         except httpx.ConnectError:
             raise APIConnectionError(self.base_url) from None
+        except httpx.TimeoutException as e:
+            err = APIConnectionError(self.base_url)
+            err.args = ("Request timed out",)
+            raise err from e
         except httpx.HTTPStatusError as e:
             raise APIError(e.response.status_code, e.response.text[:500]) from e
 
