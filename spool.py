@@ -23,6 +23,9 @@ def _hash_event(evt: dict) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
+_BACKOFF_STEPS = (2, 30, 60, 120)  # seconds: 2s → 30s → 60s → 120s cap
+
+
 class SpoolDrainer:
     """Simplified spool processor.
 
@@ -41,6 +44,7 @@ class SpoolDrainer:
         self.drain_interval = drain_interval
         self.batch_size = batch_size
         self._task: asyncio.Task | None = None
+        self._consecutive_errors: int = 0
 
     async def start(self, db_writer: DbWriter) -> None:
         """Start drain loop."""
@@ -59,7 +63,11 @@ class SpoolDrainer:
         logger.info("SpoolDrainer stopped")
 
     async def _drain_loop(self, db_writer: DbWriter) -> None:
-        """Main loop: rotate active spool → process → delete → sleep."""
+        """Main loop: rotate active spool → process → delete → sleep.
+
+        Uses exponential backoff on consecutive failures: 2s → 30s → 60s → 120s.
+        Resets to normal interval after a successful drain cycle.
+        """
         while True:
             try:
                 # Process any leftover .draining files first (crash recovery)
@@ -73,12 +81,25 @@ class SpoolDrainer:
                     draining = self.spool_dir / f"events-{ts}.draining"
                     spool.rename(draining)
                     await self._process_file(draining, db_writer)
+
+                self._consecutive_errors = 0  # reset backoff on success
             except FileNotFoundError:
                 pass  # Race with another drain cycle
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception("Spool drain error")
+                self._consecutive_errors += 1
+                backoff = _BACKOFF_STEPS[
+                    min(self._consecutive_errors - 1, len(_BACKOFF_STEPS) - 1)
+                ]
+                logger.warning(
+                    "Spool drain backoff: %ds (consecutive_errors=%d)",
+                    backoff,
+                    self._consecutive_errors,
+                )
+                await asyncio.sleep(backoff)
+                continue
 
             await asyncio.sleep(self.drain_interval)
 
