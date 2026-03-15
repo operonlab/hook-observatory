@@ -78,7 +78,11 @@ def _get_git_hash() -> str:
 GIT_HASH = _get_git_hash()
 
 # 讀取 sw.js 模板並替換 placeholder
-_SW_JS_TEMPLATE = (BASE_DIR / "sw.js").read_text()
+try:
+    _SW_JS_TEMPLATE = (BASE_DIR / "sw.js").read_text()
+except OSError:
+    logger.warning("sw.js template not found at %s, using empty fallback", BASE_DIR / "sw.js")
+    _SW_JS_TEMPLATE = ""
 _SW_JS_CONTENT = _SW_JS_TEMPLATE.replace("__GIT_HASH__", GIT_HASH)
 
 # ── Relay scripts (shared with MCP server) ──

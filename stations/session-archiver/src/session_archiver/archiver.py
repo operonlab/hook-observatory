@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -76,16 +76,35 @@ def _compress_file_safe(src: Path, dst: Path, level: int = 9) -> bool:
 def _compress_companion(companion_path: Path, dst: Path, level: int = 9) -> bool:
     """Compress companion directory: tar | zstd."""
     try:
-        result = subprocess.run(
-            f'tar cf - -C "{companion_path.parent}" "{companion_path.name}" | zstd -{level} -o "{dst}"',
-            shell=True,
-            capture_output=True,
-            text=True,
+        # Two-step pipeline (shell=False prevents injection): tar → zstd via stdin/stdout
+        tar_proc = subprocess.Popen(
+            ["tar", "cf", "-", "-C", str(companion_path.parent), companion_path.name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-        if result.returncode != 0:
-            logger.error("companion_compress_failed", stderr=result.stderr[:200])
+        zstd_proc = subprocess.Popen(
+            ["zstd", f"-{level}", "-o", str(dst)],
+            stdin=tar_proc.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        # Allow tar to receive SIGPIPE if zstd exits early
+        if tar_proc.stdout:
+            tar_proc.stdout.close()
+        _, zstd_err = zstd_proc.communicate()
+        tar_proc.wait()
+        if tar_proc.returncode != 0 or zstd_proc.returncode != 0:
+            logger.error(
+                "companion_compress_failed",
+                tar_rc=tar_proc.returncode,
+                zstd_rc=zstd_proc.returncode,
+                stderr=zstd_err.decode()[:200],
+            )
             return False
         return True
+    except FileNotFoundError as e:
+        logger.error("companion_compress_tool_not_found", error=str(e))
+        return False
     except OSError as e:
         logger.error("companion_compress_error", error=str(e))
         return False
@@ -120,7 +139,7 @@ def _write_stub(
         "sessionId": meta.session_id,
         "tier": "cold",
         "archiveType": "cold-archive",
-        "archivedAt": datetime.now(timezone.utc).isoformat(),
+        "archivedAt": datetime.now(UTC).isoformat(),
         "originalSize": meta.file_size_bytes,
         "compressedSize": compressed_size,
         "compressionRatio": round(compression_ratio, 4),
