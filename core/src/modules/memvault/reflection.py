@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 class ReflectionResult:
     invariants: list[str] = field(default_factory=list)
     derived: list[str] = field(default_factory=list)
+    corrections: list[str] = field(default_factory=list)  # factual fixes / retractions
     session_id: str = ""
     reflected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     block_count: int = 0
@@ -25,34 +26,57 @@ class ReflectionResult:
 
 # --- Pattern-based extraction (no LLM dependency) ---
 
+# Preferences: what the user/system always/never does, favors, or avoids
 _PREFERENCE_PATTERN = re.compile(
-    r"(偏好|喜歡|prefer|always|never|一律|禁止|必須|鐵律|must|should|shouldn'?t)",
+    r"(偏好|喜歡|我比較喜歡|我覺得.*比較好|prefer|rather|instead of|always|never"
+    r"|一律|禁止|必須|鐵律|must|should|shouldn'?t)",
     re.IGNORECASE,
 )
+
+# Workflows: step-by-step processes, migration paths, new approaches
 _WORKFLOW_PATTERN = re.compile(
-    r"(流程|步驟|pipeline|workflow|先.*再.*然後|step\s*\d|phase\s*\d)",
+    r"(流程|步驟|流程改成|改用|從.*改成|新做法|pipeline|workflow"
+    r"|switch\s+to|migrate\s+to|先.*再.*然後|step\s*\d|phase\s*\d)",
     re.IGNORECASE,
 )
+
+# Decisions: confirmed choices, rejected options, finalized direction
 _DECISION_PATTERN = re.compile(
-    r"(決定|決策|decided|chose|選擇|採用|rejected|不採用|棄用)",
+    r"(決定|決策|決定了|拍板|定案|最後選|decided|chose|confirmed|we'?ll\s+go\s+with"
+    r"|選擇|採用|rejected|不採用|棄用)",
     re.IGNORECASE,
 )
+
+# Lessons: things learned the hard way, caveats, surprises
 _LESSON_PATTERN = re.compile(
-    r"(學到|教訓|踩坑|lesson|learned|gotcha|注意|小心|caveat|pitfall)",
+    r"(學到|教訓|踩坑|才知道|原來|注意|小心"
+    r"|lesson|learned|gotcha|turns?\s+out|caveat|pitfall)",
     re.IGNORECASE,
 )
+
+# Rules: conventions, principles, strategies — stable behavioral patterns
 _RULE_PATTERN = re.compile(
-    r"(規則|慣例|convention|pattern|原則|principle|策略|strategy)",
+    r"(規則|慣例|以後|鐵律|convention|pattern|原則|principle|策略|strategy"
+    r"|must\s+always|never\s+again|禁止|一定要)",
+    re.IGNORECASE,
+)
+
+# Corrections/Updates: factual fixes, retractions, "actually it's X not Y"
+_CORRECTION_PATTERN = re.compile(
+    r"(不[是對]|搞錯|更正|其實是|correction|actually|wait.*wrong"
+    r"|之前說錯|should\s+be|not.*but\s+rather)",
     re.IGNORECASE,
 )
 
 
 def _classify_content(content: str) -> str | None:
-    """Classify content into invariant/derived categories."""
+    """Classify content into invariant/derived/correction categories."""
     if _PREFERENCE_PATTERN.search(content):
         return "invariant"
     if _RULE_PATTERN.search(content):
         return "invariant"
+    if _CORRECTION_PATTERN.search(content):
+        return "correction"
     if _WORKFLOW_PATTERN.search(content):
         return "derived"
     if _DECISION_PATTERN.search(content):
@@ -100,8 +124,9 @@ def reflect_on_session(
     if not blocks:
         return result
 
-    seen_invariants: set[str] = set()
-    seen_derived: set[str] = set()
+    seen_invariants: set[frozenset] = set()
+    seen_derived: set[frozenset] = set()
+    seen_corrections: set[frozenset] = set()
 
     for block in blocks:
         content = block.get("content", "")
@@ -125,10 +150,15 @@ def reflect_on_session(
             if key_words not in seen_derived:
                 seen_derived.add(key_words)
                 result.derived.append(key_sentence)
+        elif category == "correction":
+            if key_words not in seen_corrections:
+                seen_corrections.add(key_words)
+                result.corrections.append(key_sentence)
 
     # Cap at reasonable limits
     result.invariants = result.invariants[:10]
     result.derived = result.derived[:10]
+    result.corrections = result.corrections[:5]  # corrections are high-signal, keep fewer
 
     return result
 
@@ -146,5 +176,10 @@ def format_reflection_for_injection(reflection: ReflectionResult) -> str:
         parts.append("## Derived Insights")
         for d in reflection.derived:
             parts.append(f"- {d}")
+
+    if reflection.corrections:
+        parts.append("## Corrections / Updates")
+        for c in reflection.corrections:
+            parts.append(f"- {c}")
 
     return "\n".join(parts)
