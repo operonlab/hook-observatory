@@ -114,6 +114,17 @@ async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSON
     )
 
 
+@app.exception_handler(Exception)
+async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    import logging
+
+    logging.getLogger(__name__).error("Unhandled exception on %s", request.url.path, exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "code": "internal.error"},
+    )
+
+
 app.add_middleware(SessionMiddleware)
 
 # Starlette SessionMiddleware for authlib OAuth state (CSRF protection).

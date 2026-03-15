@@ -220,8 +220,19 @@ def fill_form(
         submission.status = "failed"
         submission.error_message = str(e)[:500]
 
-        if not existing:
-            db.add(submission)
-        db.commit()
-        db.refresh(submission)
+        try:
+            if not existing:
+                db.add(submission)
+            db.commit()
+            db.refresh(submission)
+        except Exception:
+            log.critical(
+                "Failed to persist error submission for survey=%s person=%s: %s",
+                survey.id,
+                person.id,
+                e,
+                exc_info=True,
+            )
+            db.rollback()
+            return submission
         return submission

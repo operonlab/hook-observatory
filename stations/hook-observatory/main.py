@@ -30,6 +30,8 @@ _drainer: SpoolDrainer | None = None
 
 async def _batch_write_events(events: list[dict]) -> None:
     """Write a batch of events to PostgreSQL. ON CONFLICT DO NOTHING for idempotency."""
+    import asyncio
+
     if not events:
         return
 
@@ -51,8 +53,8 @@ async def _batch_write_events(events: list[dict]) -> None:
 
         stmt = pg_insert(HookEvent).values(rows)
         stmt = stmt.on_conflict_do_nothing(index_elements=["dedup_hash"])
-        await session.execute(stmt)
-        await session.commit()
+        await asyncio.wait_for(session.execute(stmt), timeout=30)
+        await asyncio.wait_for(session.commit(), timeout=30)
 
 
 @asynccontextmanager
