@@ -130,42 +130,30 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         return d
 
     def after_create(self, instance: Wallet) -> None:
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=FinanceEvents.WALLET_CREATED,
-                    data={"id": instance.id, "space_id": instance.space_id},
-                    source="finance",
-                    user_id=instance.created_by,
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=FinanceEvents.WALLET_CREATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+                user_id=instance.created_by,
             )
         )
 
     def after_update(self, instance: Wallet, changes: dict) -> None:
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=FinanceEvents.WALLET_UPDATED,
-                    data={"id": instance.id, "space_id": instance.space_id},
-                    source="finance",
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=FinanceEvents.WALLET_UPDATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
             )
         )
 
     def after_delete(self, instance: Wallet) -> None:
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=FinanceEvents.WALLET_DELETED,
-                    data={"id": instance.id, "space_id": instance.space_id},
-                    source="finance",
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=FinanceEvents.WALLET_DELETED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
             )
         )
 
@@ -374,42 +362,30 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
     audit_entity_type = "categories"
 
     def after_create(self, instance: Category) -> None:
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=FinanceEvents.CATEGORY_CREATED,
-                    data={"id": instance.id, "space_id": instance.space_id},
-                    source="finance",
-                    user_id=instance.created_by,
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=FinanceEvents.CATEGORY_CREATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
+                user_id=instance.created_by,
             )
         )
 
     def after_update(self, instance: Category, changes: dict) -> None:
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=FinanceEvents.CATEGORY_UPDATED,
-                    data={"id": instance.id, "space_id": instance.space_id},
-                    source="finance",
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=FinanceEvents.CATEGORY_UPDATED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
             )
         )
 
     def after_delete(self, instance: Category) -> None:
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=FinanceEvents.CATEGORY_DELETED,
-                    data={"id": instance.id, "space_id": instance.space_id},
-                    source="finance",
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=FinanceEvents.CATEGORY_DELETED,
+                data={"id": instance.id, "space_id": instance.space_id},
+                source="finance",
             )
         )
 
@@ -917,17 +893,12 @@ class InstallmentPlanService(
         )
 
     def after_create(self, instance: InstallmentPlan) -> None:
-        # Fire-and-forget: after_create is sync, so schedule the coroutine
-        import asyncio
-
-        _task = asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=FinanceEvents.INSTALLMENT_CREATED,
-                    data={"plan_id": instance.id, "num_installments": instance.num_installments},
-                    source="finance",
-                    user_id=instance.created_by,
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=FinanceEvents.INSTALLMENT_CREATED,
+                data={"plan_id": instance.id, "num_installments": instance.num_installments},
+                source="finance",
+                user_id=instance.created_by,
             )
         )
 

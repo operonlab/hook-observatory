@@ -3,8 +3,11 @@
 This is the PUBLIC API of the briefing module.
 """
 
+import logging
 from datetime import date
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -489,14 +492,21 @@ class BriefingService:
         db.add(briefing)
         await db.flush()
         await db.refresh(briefing, ["entries", "follow_ups"])
-        event_bus.publish(
-            Event(
-                type=BriefingEvents.DAILY_COMPLETED,
-                data={"briefing_id": briefing.id, "date": str(data.date), "domain": data.domain},
-                source="briefing",
-                user_id=user_id,
+        try:
+            await event_bus.publish(
+                Event(
+                    type=BriefingEvents.DAILY_COMPLETED,
+                    data={
+                        "briefing_id": briefing.id,
+                        "date": str(data.date),
+                        "domain": data.domain,
+                    },
+                    source="briefing",
+                    user_id=user_id,
+                )
             )
-        )
+        except Exception:
+            logger.warning("Failed to publish DAILY_COMPLETED event", exc_info=True)
         return self._to_response(briefing)
 
     async def update_status(
@@ -668,18 +678,21 @@ class FollowUpService:
         db.add(fu)
         await db.flush()
 
-        event_bus.publish(
-            Event(
-                type=BriefingEvents.FOLLOW_UP_ASKED,
-                data={
-                    "follow_up_id": fu.id,
-                    "briefing_id": briefing_id,
-                    "question": data.question,
-                },
-                source="briefing",
-                user_id=user_id,
+        try:
+            await event_bus.publish(
+                Event(
+                    type=BriefingEvents.FOLLOW_UP_ASKED,
+                    data={
+                        "follow_up_id": fu.id,
+                        "briefing_id": briefing_id,
+                        "question": data.question,
+                    },
+                    source="briefing",
+                    user_id=user_id,
+                )
             )
-        )
+        except Exception:
+            logger.warning("Failed to publish FOLLOW_UP_ASKED event", exc_info=True)
         return self._to_response(fu)
 
     def _to_response(self, fu: BriefingFollowUp) -> FollowUpResponse:

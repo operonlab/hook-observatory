@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,9 +82,7 @@ class MethodService(BaseCRUDService[Method, MethodCreate, MethodUpdate, MethodRe
             )
 
     def after_create(self, instance: Method) -> None:
-        import asyncio
-
-        coro = event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=DailyosEvents.METHOD_CREATED,
                 data={
@@ -99,12 +100,9 @@ class MethodService(BaseCRUDService[Method, MethodCreate, MethodUpdate, MethodRe
                 user_id=instance.created_by,
             )
         )
-        asyncio.ensure_future(coro)  # noqa: RUF006
 
     def after_update(self, instance: Method, changes: dict) -> None:
-        import asyncio
-
-        coro = event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=DailyosEvents.METHOD_UPDATED,
                 data={
@@ -122,7 +120,6 @@ class MethodService(BaseCRUDService[Method, MethodCreate, MethodUpdate, MethodRe
                 user_id=instance.created_by,
             )
         )
-        asyncio.ensure_future(coro)  # noqa: RUF006
 
     def to_response(self, instance: Method) -> MethodResponse:
         return MethodResponse(
@@ -384,9 +381,7 @@ def _build_completion_payload(plan) -> dict:
         "total_items": len(items),
         "completed_count": len(completed_items),
         "carry_count": len(carry_items),
-        "frog_completed": any(
-            i.get("status") == "completed" for i in frog_items
-        ),
+        "frog_completed": any(i.get("status") == "completed" for i in frog_items),
         "frog_title": frog_items[0].get("title") if frog_items else None,
         "reflection": plan.reflection,
         "method_state": plan.method_state,
@@ -499,26 +494,29 @@ class DailyPlanService:
         await db.flush()
         await db.refresh(plan)
 
-        # Publish PLAN_CREATED for Qdrant indexing
+        # Publish PLAN_CREATED for Qdrant indexing (best-effort)
         _method_name = selection.method.name if selection.method else None
-        await event_bus.publish(
-            Event(
-                type=DailyosEvents.PLAN_CREATED,
-                data={
-                    "plan_id": plan.id,
-                    "id": plan.id,
-                    "space_id": plan.space_id,
-                    "reflection": plan.reflection,
-                    "tags": [],
-                    "method_name": _method_name,
-                    "plan_date": str(plan.plan_date),
-                    "created_at": plan.created_at.isoformat() if plan.created_at else None,
-                    "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
-                },
-                source="dailyos",
-                user_id=user_id,
+        try:
+            await event_bus.publish(
+                Event(
+                    type=DailyosEvents.PLAN_CREATED,
+                    data={
+                        "plan_id": plan.id,
+                        "id": plan.id,
+                        "space_id": plan.space_id,
+                        "reflection": plan.reflection,
+                        "tags": [],
+                        "method_name": _method_name,
+                        "plan_date": str(plan.plan_date),
+                        "created_at": plan.created_at.isoformat() if plan.created_at else None,
+                        "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
+                    },
+                    source="dailyos",
+                    user_id=user_id,
+                )
             )
-        )
+        except Exception:
+            logger.warning("Failed to publish PLAN_CREATED event", exc_info=True)
         return plan
 
     async def get_or_create_for_date(
@@ -682,12 +680,17 @@ class DailyPlanService:
             plan.completion_score = score
             if is_complete and plan.status == "planning":
                 plan.status = "completed"
-                await event_bus.publish(Event(
-                    type=DailyosEvents.PLAN_COMPLETED,
-                    data=_build_completion_payload(plan),
-                    source="dailyos",
-                    user_id=user_id,
-                ))
+                try:
+                    await event_bus.publish(
+                        Event(
+                            type=DailyosEvents.PLAN_COMPLETED,
+                            data=_build_completion_payload(plan),
+                            source="dailyos",
+                            user_id=user_id,
+                        )
+                    )
+                except Exception:
+                    logger.warning("Failed to publish PLAN_COMPLETED event", exc_info=True)
 
         await db.flush()
         await db.refresh(plan)
@@ -797,12 +800,17 @@ class DailyPlanService:
         if comment and new_status == "completed":
             plan.reflection = comment
         if new_status == "completed":
-            await event_bus.publish(Event(
-                type=DailyosEvents.PLAN_COMPLETED,
-                data=_build_completion_payload(plan),
-                source="dailyos",
-                user_id=user_id,
-            ))
+            try:
+                await event_bus.publish(
+                    Event(
+                        type=DailyosEvents.PLAN_COMPLETED,
+                        data=_build_completion_payload(plan),
+                        source="dailyos",
+                        user_id=user_id,
+                    )
+                )
+            except Exception:
+                logger.warning("Failed to publish PLAN_COMPLETED event", exc_info=True)
         await db.flush()
         await db.refresh(plan)
         return plan
