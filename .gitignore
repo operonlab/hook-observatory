@@ -55,4 +55,13 @@ outputs/
 lab/*/outputs/*.tmp
 lab/*/outputs/*.bin
 
+# External / standalone
+clients/
+
+# Backup files
+*.bak
+
+# Cronicle temp working dirs
+vendor/cronicle/temp_*/
+
 # Rigour
