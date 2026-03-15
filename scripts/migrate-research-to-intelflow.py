@@ -25,7 +25,6 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
 
 import httpx
 
@@ -55,9 +54,17 @@ SOURCES = [
 
 # Files to exclude
 EXCLUDE_NAMES = {
-    "SKILL.md", "README.md", "README", "CLAUDE.md", "HANDOFF.md",
-    "KAS-GALAXY.md", "embeddings.json", "galaxy-data.json",
-    "galaxy-explorer.html", "profile.json", "tags.idx",
+    "SKILL.md",
+    "README.md",
+    "README",
+    "CLAUDE.md",
+    "HANDOFF.md",
+    "KAS-GALAXY.md",
+    "embeddings.json",
+    "galaxy-data.json",
+    "galaxy-explorer.html",
+    "profile.json",
+    "tags.idx",
 }
 
 EXCLUDE_EXTENSIONS = {".json", ".html", ".log", ".err", ".idx"}
@@ -120,7 +127,7 @@ def date_to_iso(date_str: str) -> str:
 def parse_report(filepath: str, skill_name: str) -> dict | None:
     """Parse a markdown report file into a ReportCreate-compatible dict."""
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             text = f.read()
     except Exception as e:
         print(f"  ERROR reading {filepath}: {e}")
@@ -143,7 +150,9 @@ def parse_report(filepath: str, skill_name: str) -> dict | None:
     query = ""
     for line in lines:
         if line.startswith("> Query:") or line.startswith("> Query："):
-            query = line.split(":", 1)[-1].strip() if ":" in line else line.split("：", 1)[-1].strip()
+            query = (
+                line.split(":", 1)[-1].strip() if ":" in line else line.split("：", 1)[-1].strip()
+            )
             break
 
     # Extract source URLs from footer (markdown links)
@@ -306,12 +315,16 @@ def fix_existing_dates(client: httpx.Client, dry_run: bool = False):
     page = 1
     all_reports = []
     while True:
-        resp = client.get(
-            f"{CORE_API}{API_PREFIX}/reports?space_id=default&page={page}&page_size=100",
-            timeout=30.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        try:
+            resp = client.get(
+                f"{CORE_API}{API_PREFIX}/reports?space_id=default&page={page}&page_size=100",
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            print(f"ERROR fetching reports page {page}: {e}")
+            break
         items = data.get("items", [])
         all_reports.extend(items)
         if len(all_reports) >= data.get("total", 0):
@@ -367,7 +380,9 @@ def main():
     parser = argparse.ArgumentParser(description="Migrate ALL reports → Intelflow")
     parser.add_argument("--dry-run", action="store_true", help="Parse only, don't POST")
     parser.add_argument("--force", action="store_true", help="Skip dedup check")
-    parser.add_argument("--fix-dates", action="store_true", help="Fix created_at for existing reports")
+    parser.add_argument(
+        "--fix-dates", action="store_true", help="Fix created_at for existing reports"
+    )
     args = parser.parse_args()
 
     client = httpx.Client()
@@ -414,7 +429,7 @@ def main():
         report = parse_report(path, skill_name)
         if not report:
             no_content += 1
-            print(f"  SKIP (not a report)")
+            print("  SKIP (not a report)")
             continue
 
         # Skip very short content (< 100 chars)
@@ -434,7 +449,7 @@ def main():
 
         # Check for duplicates via semantic search
         if not args.force and check_existing(client, report["query"]):
-            print(f"  SKIP (similar exists)")
+            print("  SKIP (similar exists)")
             skipped += 1
             continue
 
@@ -447,7 +462,7 @@ def main():
             failed += 1
 
     print()
-    print(f"Migration complete:")
+    print("Migration complete:")
     print(f"  Migrated:    {migrated}")
     print(f"  Skipped:     {skipped}")
     print(f"  No content:  {no_content}")
