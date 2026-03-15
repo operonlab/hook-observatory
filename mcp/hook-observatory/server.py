@@ -184,6 +184,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     except HookObservatoryError as e:
         return text_result(f"Hook Observatory error: {e}")
+    except Exception as e:
+        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
 
 
 # ======================== Main ========================

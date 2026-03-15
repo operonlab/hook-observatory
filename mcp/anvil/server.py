@@ -243,8 +243,11 @@ async def anvil_stats(skill_name: str = "", period: str = "7d") -> str:
                 return c.get_skill_stats(skill_name)
             return c.get_stats()
 
-    result = await asyncio.to_thread(_run)
-    return _format_stats(result, skill_name)
+    try:
+        result = await asyncio.to_thread(_run)
+        return _format_stats(result, skill_name)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -255,8 +258,11 @@ async def anvil_catalog(status: str = "active", limit: int = 50) -> str:
         with _client() as c:
             return c.list_skills(status=status, limit=limit)
 
-    result = await asyncio.to_thread(_run)
-    return _format_catalog(result)
+    try:
+        result = await asyncio.to_thread(_run)
+        return _format_catalog(result)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -267,8 +273,11 @@ async def anvil_test_skill(name: str) -> str:
         with _client() as c:
             return c.test_skill_structure(name)
 
-    result = await asyncio.to_thread(_run)
-    return _format_test_results(result)
+    try:
+        result = await asyncio.to_thread(_run)
+        return _format_test_results(result)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -279,8 +288,11 @@ async def anvil_scan_skill(name: str) -> str:
         with _client() as c:
             return c.scan_skill_security(name)
 
-    result = await asyncio.to_thread(_run)
-    return _format_scan_results(result)
+    try:
+        result = await asyncio.to_thread(_run)
+        return _format_scan_results(result)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -291,8 +303,11 @@ async def anvil_eval_skill(name: str, mode: str = "grader") -> str:
         with _client() as c:
             return c.trigger_eval(name, mode=mode)
 
-    result = await asyncio.to_thread(_run)
-    return _format_eval(result)
+    try:
+        result = await asyncio.to_thread(_run)
+        return _format_eval(result)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -303,8 +318,11 @@ async def anvil_skill_detail(name: str) -> str:
         with _client() as c:
             return c.get_skill(name)
 
-    result = await asyncio.to_thread(_run)
-    return _format_skill_detail(result)
+    try:
+        result = await asyncio.to_thread(_run)
+        return _format_skill_detail(result)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -323,8 +341,11 @@ async def anvil_register_skill(
                 tags=tag_list or None,
             )
 
-    result = await asyncio.to_thread(_run)
-    return f"Registered skill: {result.get('name', name)} (v{result.get('version', '?')})"
+    try:
+        result = await asyncio.to_thread(_run)
+        return f"Registered skill: {result.get('name', name)} (v{result.get('version', '?')})"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -353,13 +374,16 @@ async def anvil_sync_skills() -> str:
                 "errors": errors,
             }
 
-    result = await asyncio.to_thread(_run)
-    parts = [f"Synced {result['registered']}/{result['total_found']} skills"]
-    if result.get("errors"):
-        parts.append(f"\nErrors ({len(result['errors'])}):")
-        for err in result["errors"][:10]:
-            parts.append(f"  - {err}")
-    return "\n".join(parts)
+    try:
+        result = await asyncio.to_thread(_run)
+        parts = [f"Synced {result['registered']}/{result['total_found']} skills"]
+        if result.get("errors"):
+            parts.append(f"\nErrors ({len(result['errors'])}):")
+            for err in result["errors"][:10]:
+                parts.append(f"  - {err}")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -381,27 +405,30 @@ async def anvil_lifecycle_runs(
                 limit=limit,
             )
 
-    data = await asyncio.to_thread(_run)
-    items = data.get("items", [])
-    if not items:
-        return "No lifecycle runs found."
+    try:
+        data = await asyncio.to_thread(_run)
+        items = data.get("items", [])
+        if not items:
+            return "No lifecycle runs found."
 
-    lines = [
-        "## Lifecycle Runs",
-        "",
-        "| Run ID | Status | Date | Pass Rate | Skills |",
-        "|--------|--------|------|-----------|--------|",
-    ]
-    for r in items:
-        total = r.get("total_skills", 0) or 1
-        passed = r.get("test_passed", 0)
-        rate = f"{(passed / total * 100):.0f}%" if total > 0 else "—"
-        date = r.get("started_at", "")[:10]
-        lines.append(
-            f"| {r['run_id']} | {r['status']} | {date} | {rate} | {r.get('total_skills', 0)} |"
-        )
-    lines.append(f"\n**Total:** {data.get('total', 0)} runs")
-    return "\n".join(lines)
+        lines = [
+            "## Lifecycle Runs",
+            "",
+            "| Run ID | Status | Date | Pass Rate | Skills |",
+            "|--------|--------|------|-----------|--------|",
+        ]
+        for r in items:
+            total = r.get("total_skills", 0) or 1
+            passed = r.get("test_passed", 0)
+            rate = f"{(passed / total * 100):.0f}%" if total > 0 else "—"
+            date = r.get("started_at", "")[:10]
+            lines.append(
+                f"| {r['run_id']} | {r['status']} | {date} | {rate} | {r.get('total_skills', 0)} |"
+            )
+        lines.append(f"\n**Total:** {data.get('total', 0)} runs")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 @mcp.tool()
@@ -416,38 +443,41 @@ async def anvil_lifecycle_detail(run_id: str) -> str:
         with _client() as c:
             return c.get_lifecycle_run(run_id)
 
-    r = await asyncio.to_thread(_run)
+    try:
+        r = await asyncio.to_thread(_run)
 
-    lines = [
-        f"## Lifecycle Run: {r['run_id']}",
-        "",
-        f"**Status:** {r['status']}  **Trigger:** {r['trigger']}",
-        f"**Started:** {r.get('started_at', '')}  **Completed:** {r.get('completed_at', '—')}",
-        "",
-        "### Test Results",
-        f"- Passed: {r.get('test_passed', 0)} / {r.get('total_skills', 0)}",
-        f"- Partial: {r.get('test_partial', 0)}",
-        f"- Failed: {r.get('test_failed', 0)}",
-        "",
-        "### Security",
-        f"- Clean: {r.get('sec_clean', 0)}",
-        f"- Warned: {r.get('sec_warned', 0)}",
-        f"- Blocked: {r.get('sec_blocked', 0)}",
-        "",
-        "### Optimization",
-        f"- Skills optimized: {r.get('optimized', 0)}",
-        f"- Changes applied: {r.get('changes_applied', 0)}",
-    ]
+        lines = [
+            f"## Lifecycle Run: {r['run_id']}",
+            "",
+            f"**Status:** {r['status']}  **Trigger:** {r['trigger']}",
+            f"**Started:** {r.get('started_at', '')}  **Completed:** {r.get('completed_at', '—')}",
+            "",
+            "### Test Results",
+            f"- Passed: {r.get('test_passed', 0)} / {r.get('total_skills', 0)}",
+            f"- Partial: {r.get('test_partial', 0)}",
+            f"- Failed: {r.get('test_failed', 0)}",
+            "",
+            "### Security",
+            f"- Clean: {r.get('sec_clean', 0)}",
+            f"- Warned: {r.get('sec_warned', 0)}",
+            f"- Blocked: {r.get('sec_blocked', 0)}",
+            "",
+            "### Optimization",
+            f"- Skills optimized: {r.get('optimized', 0)}",
+            f"- Changes applied: {r.get('changes_applied', 0)}",
+        ]
 
-    skipped = r.get("skipped_phases", [])
-    if skipped:
-        lines.append(f"\n**Skipped:** {', '.join(skipped)}")
-    errors = r.get("errors", {})
-    if errors:
-        lines.append("\n**Errors:**")
-        for phase, msg in errors.items():
-            lines.append(f"- {phase}: {msg}")
-    return "\n".join(lines)
+        skipped = r.get("skipped_phases", [])
+        if skipped:
+            lines.append(f"\n**Skipped:** {', '.join(skipped)}")
+        errors = r.get("errors", {})
+        if errors:
+            lines.append("\n**Errors:**")
+            for phase, msg in errors.items():
+                lines.append(f"- {phase}: {msg}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 if __name__ == "__main__":
