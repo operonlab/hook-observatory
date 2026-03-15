@@ -4,6 +4,7 @@ This is the PUBLIC API of the finance module.
 Other modules import from here, never from models.py.
 """
 
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -60,6 +61,8 @@ from .schemas import (
     WalletSyncRequest,
     WalletUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 # ======================== Privacy Filter ========================
 
@@ -244,14 +247,17 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         await db.flush()
         await db.refresh(snapshot)
 
-        await event_bus.publish(
-            Event(
-                type=FinanceEvents.WALLET_SYNCED,
-                data={"wallet_id": wallet_id, "synced_balance": str(data.synced_balance)},
-                source="finance",
-                user_id=user_id,
+        try:
+            await event_bus.publish(
+                Event(
+                    type=FinanceEvents.WALLET_SYNCED,
+                    data={"wallet_id": wallet_id, "synced_balance": str(data.synced_balance)},
+                    source="finance",
+                    user_id=user_id,
+                )
             )
-        )
+        except Exception:
+            logger.warning("Failed to publish WALLET_SYNCED event", exc_info=True)
 
         return WalletSnapshotResponse(
             id=snapshot.id,

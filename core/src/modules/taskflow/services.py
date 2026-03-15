@@ -6,6 +6,7 @@ Other modules import from here, never from models.py.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -32,6 +33,8 @@ from .schemas import (
     TaskUpdateCreate,
     TaskUpdateResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 VALID_SOURCES = {"personal", "family", "company"}
 VALID_PRIORITIES = {"urgent", "high", "medium", "low"}
@@ -246,14 +249,17 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
         )
 
         if new_status == "done":
-            await event_bus.publish(
-                Event(
-                    type=TaskflowEvents.TASK_COMPLETED,
-                    data={"task_id": task_id, "title": task.title},
-                    source="taskflow",
-                    user_id=user_id,
+            try:
+                await event_bus.publish(
+                    Event(
+                        type=TaskflowEvents.TASK_COMPLETED,
+                        data={"task_id": task_id, "title": task.title},
+                        source="taskflow",
+                        user_id=user_id,
+                    )
                 )
-            )
+            except Exception:
+                logger.warning("Failed to publish TASK_COMPLETED event", exc_info=True)
 
         return task
 

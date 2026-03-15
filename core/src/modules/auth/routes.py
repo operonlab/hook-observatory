@@ -87,7 +87,13 @@ async def register(
     user = await user_service.register(db, body.email, body.password, body.name)
     await db.commit()
 
-    await _create_session(request, db, user)
+    try:
+        await _create_session(request, db, user)
+    except Exception:
+        logger.warning(
+            "Redis session creation failed after register — user created but not auto-logged in",
+            exc_info=True,
+        )
 
     try:
         await event_bus.publish(
@@ -115,7 +121,13 @@ async def login(
         raise BadRequestError("Invalid credentials", code="auth.invalid_credentials")
 
     await db.commit()
-    await _create_session(request, db, user)
+    try:
+        await _create_session(request, db, user)
+    except Exception:
+        logger.warning(
+            "Redis session creation failed after login — user authenticated but session not cached",
+            exc_info=True,
+        )
 
     try:
         await event_bus.publish(

@@ -7,8 +7,6 @@ import logging
 from datetime import date
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +47,8 @@ from .schemas import (
     FollowUpCreate,
     FollowUpResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 # ======================== Topic Service ========================
 
@@ -486,9 +486,15 @@ class BriefingService:
             debate=data.debate,
         )
         if data.debate:
-            embedding = await get_embedding(data.debate)
-            if embedding:
-                briefing.embedding = embedding
+            try:
+                embedding = await get_embedding(data.debate)
+                if embedding:
+                    briefing.embedding = embedding
+            except Exception:
+                logger.warning(
+                    "get_embedding failed for briefing debate, continuing without embedding",
+                    exc_info=True,
+                )
         db.add(briefing)
         await db.flush()
         await db.refresh(briefing, ["entries", "follow_ups"])
@@ -559,9 +565,15 @@ class BriefingService:
             content=data.content,
             meta=data.metadata,
         )
-        embedding = await get_embedding(data.content)
-        if embedding:
-            entry.embedding = embedding
+        try:
+            embedding = await get_embedding(data.content)
+            if embedding:
+                entry.embedding = embedding
+        except Exception:
+            logger.warning(
+                "get_embedding failed for briefing entry, continuing without embedding",
+                exc_info=True,
+            )
         db.add(entry)
         await db.flush()
         return self._entry_to_response(entry)
