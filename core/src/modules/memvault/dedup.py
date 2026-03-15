@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 DEDUP_SIMILARITY_THRESHOLD = 0.88
 # If content overlap exceeds this ratio, auto-merge
 CONTENT_OVERLAP_RATIO = 0.7
+# P2: Similarity threshold that triggers LLM conflict arbitration
+_CONFLICT_SIMILARITY_THRESHOLD = 0.85
 
 
 class DedupDecision(Enum):
@@ -206,7 +208,35 @@ async def check_duplicate(
                 block_type=block_type,
             )
 
-    # High similarity (threshold~0.95) — check content overlap
+    # P2: LLM conflict arbitration for uncertain zone (0.85-0.95 similarity)
+    # Instead of simple content overlap, use LLM to determine MERGE / SUPERSEDE / COEXIST
+    if best_sim >= _CONFLICT_SIMILARITY_THRESHOLD:
+        try:
+            from .conflict_resolver import ConflictDecision, resolve_conflict
+
+            cr = await resolve_conflict(
+                new_content=content,
+                existing_content=best_content,
+                existing_block_id=best_id,
+                block_type=block_type or "general",
+                similarity=best_sim,
+            )
+            decision_map = {
+                ConflictDecision.MERGE: DedupDecision.MERGE,
+                ConflictDecision.SUPERSEDE: DedupDecision.SUPERSEDE,
+                ConflictDecision.COEXIST: DedupDecision.CREATE,
+            }
+            return DedupResult(
+                decision=decision_map.get(cr.decision, DedupDecision.CREATE),
+                existing_block_id=best_id,
+                similarity=best_sim,
+                reason=f"conflict_resolver:{cr.decision.value} ({cr.reason})",
+                block_type=block_type,
+            )
+        except Exception:
+            logger.warning("conflict_resolver failed, falling back to heuristic", exc_info=True)
+
+    # Fallback: High similarity (threshold~0.95) — check content overlap
     overlap = _content_overlap(content, best_content)
     if overlap > CONTENT_OVERLAP_RATIO:
         return DedupResult(
