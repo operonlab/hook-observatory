@@ -14,10 +14,13 @@ Usage:
             return self._get("/search", {"q": query, "top_k": top_k})
 """
 
+import logging
 import os
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class APIError(Exception):
@@ -103,8 +106,22 @@ class BaseClient:
         except httpx.HTTPStatusError as e:
             raise APIError(e.response.status_code, e.response.text[:500]) from e
 
+    def _parse_json(self, resp: httpx.Response) -> Any:
+        """Parse JSON response body, raising APIError on invalid JSON."""
+        try:
+            return resp.json()
+        except ValueError:
+            logger.warning(
+                "Non-JSON response from %s (status=%d, content-type=%s): %r",
+                resp.url,
+                resp.status_code,
+                resp.headers.get("content-type", ""),
+                resp.text[:200],
+            )
+            raise APIError(resp.status_code, f"Non-JSON response: {resp.text[:200]}") from None
+
     def _get(self, path: str, params: dict | None = None) -> Any:
-        return self._request("GET", path, params=self._params(params)).json()
+        return self._parse_json(self._request("GET", path, params=self._params(params)))
 
     def _post(
         self,
@@ -113,19 +130,23 @@ class BaseClient:
         params: dict | None = None,
         timeout: float | None = None,
     ) -> Any:
-        return self._request(
-            "POST",
-            path,
-            json=body or {},
-            params=self._params(params),
-            timeout=timeout or 60,
-        ).json()
+        return self._parse_json(
+            self._request(
+                "POST",
+                path,
+                json=body or {},
+                params=self._params(params),
+                timeout=timeout or 60,
+            )
+        )
 
     def _patch(self, path: str, body: dict | None = None) -> Any:
-        return self._request("PATCH", path, json=body or {}, params=self._params()).json()
+        return self._parse_json(
+            self._request("PATCH", path, json=body or {}, params=self._params())
+        )
 
     def _put(self, path: str, body: dict | None = None) -> Any:
-        return self._request("PUT", path, json=body or {}, params=self._params()).json()
+        return self._parse_json(self._request("PUT", path, json=body or {}, params=self._params()))
 
     def _delete(self, path: str) -> None:
         self._request("DELETE", path, params=self._params())

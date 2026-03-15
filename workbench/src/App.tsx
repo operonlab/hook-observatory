@@ -7,6 +7,55 @@ import Login from '@/pages/Login'
 import NotFound from '@/pages/NotFound'
 import AppShell from '@/shell/AppShell'
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '100vh',
+            gap: '16px',
+            backgroundColor: '#0a0a0a',
+            color: 'rgba(255, 255, 255, 0.7)',
+            fontFamily: 'system-ui, sans-serif',
+          }}
+        >
+          <p style={{ fontSize: '1rem', margin: 0 }}>發生錯誤，請重新整理頁面</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '8px 20px',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '6px',
+              backgroundColor: 'transparent',
+              color: 'rgba(255, 255, 255, 0.7)',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+            }}
+          >
+            重新整理
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 const FinancePage = React.lazy(() => import('./modules/finance/pages'))
 const TaskflowPage = React.lazy(() => import('./modules/taskflow/pages'))
 const IdeagraphPage = React.lazy(() => import('./modules/ideagraph/pages'))
@@ -267,8 +316,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter basename={__BASE_PATH__ || '/'}>
-      <AppRoutes />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter basename={__BASE_PATH__ || '/'}>
+        <AppRoutes />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

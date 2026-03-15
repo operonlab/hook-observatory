@@ -41,7 +41,11 @@ def embed_batch(proc, texts):
     proc.stdin.write(request)
     proc.stdin.flush()
     response = proc.stdout.readline().strip()
-    result = json.loads(response)
+    try:
+        result = json.loads(response)
+    except json.JSONDecodeError as e:
+        print(f"  Worker response parse error: {e}", file=sys.stderr)
+        return [None] * len(texts)
     if "error" in result:
         print(f"  Worker error: {result['error']}", file=sys.stderr)
         return [None] * len(texts)
@@ -151,7 +155,11 @@ def main():
             total_embedded += embedded
 
     proc.stdin.close()
-    proc.wait(timeout=10)
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        print("Warning: worker did not exit within 10s, killing.", file=sys.stderr)
+        proc.kill()
     print(f"\n=== Total: {total_embedded} embeddings generated ===")
 
 

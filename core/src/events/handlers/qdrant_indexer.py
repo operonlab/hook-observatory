@@ -97,7 +97,7 @@ async def _handle_upsert(event: Event, module: str, entity: str) -> None:
     if success:
         logger.debug("Indexed %s/%s to Qdrant", module, entity_id)
     else:
-        logger.warning("Failed to index %s/%s to Qdrant", module, entity_id)
+        logger.error("Failed to index %s/%s to Qdrant", module, entity_id)
 
 
 async def _handle_delete(event: Event, module: str, entity: str) -> None:

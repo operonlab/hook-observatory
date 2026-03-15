@@ -41,7 +41,11 @@ export function NotesWidget({ instanceId }: WidgetProps) {
   const [text, setText] = useState(() => localStorage.getItem(storageKey) ?? '')
 
   useEffect(() => {
-    localStorage.setItem(storageKey, text)
+    try {
+      localStorage.setItem(storageKey, text)
+    } catch {
+      // QuotaExceededError in private browsing — ignore
+    }
   }, [storageKey, text])
 
   return (

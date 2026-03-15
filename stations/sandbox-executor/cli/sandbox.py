@@ -78,8 +78,12 @@ def cmd_exec(args):
             output = format_result(result, as_json=args.json)
             print(output)
             if args.output:
-                with open(args.output, "w") as f:
-                    json.dump(result.to_dict(), f, ensure_ascii=False, indent=2)
+                try:
+                    with open(args.output, "w") as f:
+                        json.dump(result.to_dict(), f, ensure_ascii=False, indent=2)
+                except (OSError, PermissionError) as e:
+                    print(f"Error: cannot write output file '{args.output}': {e}", file=sys.stderr)
+                    sys.exit(1)
             sys.exit(0 if result.success else 1)
             return
     elif args.code:
@@ -103,8 +107,12 @@ def cmd_exec(args):
     print(output)
 
     if args.output:
-        with open(args.output, "w") as f:
-            json.dump(result.to_dict(), f, ensure_ascii=False, indent=2)
+        try:
+            with open(args.output, "w") as f:
+                json.dump(result.to_dict(), f, ensure_ascii=False, indent=2)
+        except (OSError, PermissionError) as e:
+            print(f"Error: cannot write output file '{args.output}': {e}", file=sys.stderr)
+            sys.exit(1)
 
     sys.exit(0 if result.success else 1)
 

@@ -23,7 +23,7 @@ _LIBS = os.path.expanduser("~/workshop/libs/python/src")
 if _LIBS not in sys.path:
     sys.path.insert(0, _LIBS)
 
-from workshop.clients.session_pipeline import SessionPipelineClient
+from workshop.clients.session_pipeline import SessionPipelineClient  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -65,10 +65,14 @@ def _err(msg: str) -> None:
 
 def cmd_run(args: argparse.Namespace) -> None:
     client = SessionPipelineClient()
-    result = client.run_pipeline(
-        session_id=args.session_id,
-        transcript_path=args.transcript,
-    )
+    try:
+        result = client.run_pipeline(
+            session_id=args.session_id,
+            transcript_path=args.transcript,
+        )
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     data = result.to_dict()
     if args.json:
         _out(data, True)
@@ -84,7 +88,11 @@ def cmd_run(args: argparse.Namespace) -> None:
 
 def cmd_stages(args: argparse.Namespace) -> None:
     client = SessionPipelineClient()
-    stages = client.list_stages()
+    try:
+        stages = client.list_stages()
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     if args.json:
         _out(stages, True)
     else:
@@ -96,7 +104,11 @@ def cmd_stages(args: argparse.Namespace) -> None:
 
 def cmd_config(args: argparse.Namespace) -> None:
     client = SessionPipelineClient()
-    config = client.get_pipeline_config()
+    try:
+        config = client.get_pipeline_config()
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     if args.json:
         _out(config, True)
     else:

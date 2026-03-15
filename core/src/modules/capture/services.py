@@ -83,21 +83,24 @@ class CaptureService:
         db.add(capture)
         await db.flush()
 
-        await event_bus.publish(
-            Event(
-                type="capture.created",
-                data={
-                    "capture_id": capture.id,
-                    "space_id": capture.space_id,
-                    "module": capture.module,
-                    "entity_type": capture.entity_type,
-                    "raw_input": capture.raw_input,
-                    "completeness": capture.completeness,
-                },
-                source="capture",
-                user_id=user_id,
+        try:
+            await event_bus.publish(
+                Event(
+                    type="capture.created",
+                    data={
+                        "capture_id": capture.id,
+                        "space_id": capture.space_id,
+                        "module": capture.module,
+                        "entity_type": capture.entity_type,
+                        "raw_input": capture.raw_input,
+                        "completeness": capture.completeness,
+                    },
+                    source="capture",
+                    user_id=user_id,
+                )
             )
-        )
+        except Exception:
+            logger.warning("capture.created event publish failed for id=%s", capture.id)
         return capture
 
     async def get(self, db: AsyncSession, capture_id: str) -> Capture | None:
@@ -180,21 +183,24 @@ class CaptureService:
                 )
                 db.add(enrichment)
 
-                await event_bus.publish(
-                    Event(
-                        type="capture.enriched",
-                        data={
-                            "capture_id": capture_id,
-                            "space_id": capture.space_id,
-                            "module": capture.module,
-                            "entity_type": capture.entity_type,
-                            "agent_id": agent_id or "user",
-                            "delta_fields": list(delta.keys()),
-                            "completeness": capture.completeness,
-                        },
-                        source="capture",
+                try:
+                    await event_bus.publish(
+                        Event(
+                            type="capture.enriched",
+                            data={
+                                "capture_id": capture_id,
+                                "space_id": capture.space_id,
+                                "module": capture.module,
+                                "entity_type": capture.entity_type,
+                                "agent_id": agent_id or "user",
+                                "delta_fields": list(delta.keys()),
+                                "completeness": capture.completeness,
+                            },
+                            source="capture",
+                        )
                     )
-                )
+                except Exception:
+                    logger.warning("capture.enriched event publish failed for id=%s", capture_id)
 
         if data.raw_input is not None:
             capture.raw_input = data.raw_input
@@ -219,9 +225,11 @@ class CaptureService:
         user_prefs: dict[str, Any] | None = None,
     ) -> CapturePromoteResult:
         # Row-level lock to prevent concurrent promote on same capture
-        stmt = select(Capture).where(
-            Capture.id == capture_id, Capture.deleted_at.is_(None)
-        ).with_for_update()
+        stmt = (
+            select(Capture)
+            .where(Capture.id == capture_id, Capture.deleted_at.is_(None))
+            .with_for_update()
+        )
         result = await db.execute(stmt)
         capture = result.scalar_one_or_none()
         if not capture:
@@ -306,19 +314,22 @@ class CaptureService:
         capture.promoted_at = datetime.now(UTC)
         await db.flush()
 
-        await event_bus.publish(
-            Event(
-                type="capture.promoted",
-                data={
-                    "capture_id": capture.id,
-                    "module": capture.module,
-                    "entity_type": capture.entity_type,
-                    "promoted_id": promoted_id,
-                },
-                source="capture",
-                user_id=user_id,
+        try:
+            await event_bus.publish(
+                Event(
+                    type="capture.promoted",
+                    data={
+                        "capture_id": capture.id,
+                        "module": capture.module,
+                        "entity_type": capture.entity_type,
+                        "promoted_id": promoted_id,
+                    },
+                    source="capture",
+                    user_id=user_id,
+                )
             )
-        )
+        except Exception:
+            logger.warning("capture.promoted event publish failed for id=%s", capture.id)
 
         return CapturePromoteResult(
             success=True,
@@ -445,7 +456,8 @@ class CaptureService:
                 logger.debug(
                     "Qdrant returned 0 results for capture space=%s query=%r"
                     " — falling back to ILIKE",
-                    space_id, query,
+                    space_id,
+                    query,
                 )
         except Exception:
             logger.exception("Qdrant search failed, falling back to ILIKE")
