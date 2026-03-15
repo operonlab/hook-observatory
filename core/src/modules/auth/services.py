@@ -5,6 +5,7 @@ This is the PUBLIC API of the auth module.
 
 import hashlib
 import json
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -19,6 +20,8 @@ from .deps import hash_password, verify_password
 from .lifecycle import UserLifecycle
 from .models import OAuthAccount, Session, User
 from .schemas import OAuthAccountResponse, UserDetailResponse, UserResponse
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -198,11 +201,17 @@ class UserService:
             "status": user.status,
             "avatar_url": user.avatar_url,
         }
-        await redis.set(
-            f"auth:session:{token_hash}",
-            json.dumps(user_data),
-            ex=settings.session_max_age,
-        )
+        try:
+            await redis.set(
+                f"auth:session:{token_hash}",
+                json.dumps(user_data),
+                ex=settings.session_max_age,
+            )
+        except Exception:
+            logger.warning(
+                "Redis session write failed — session won't persist in cache",
+                exc_info=True,
+            )
 
         return token
 
@@ -227,7 +236,14 @@ class UserService:
         sessions = (await db.execute(q)).scalars().all()
         count = 0
         for s in sessions:
-            await redis.delete(f"auth:session:{s.token_hash}")
+            try:
+                await redis.delete(f"auth:session:{s.token_hash}")
+            except Exception:
+                logger.warning(
+                    "Redis session revoke failed for token_hash=%s",
+                    s.token_hash,
+                    exc_info=True,
+                )
             count += 1
         await db.execute(delete(Session).where(Session.user_id == user_id))
         await db.flush()

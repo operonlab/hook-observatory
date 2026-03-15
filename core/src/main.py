@@ -67,10 +67,22 @@ async def lifespan(app: FastAPI):
 
     # Start Redis push listener for station-originated notifications
     import asyncio
+    import logging
 
     from src.modules.notification.redis_listener import redis_push_listener
 
+    _listener_logger = logging.getLogger("src.modules.notification.redis_listener")
+
+    def _log_listener_failure(task: asyncio.Task) -> None:
+        """Done callback: log unexpected listener exits so they don't die silently."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            _listener_logger.error("redis_push_listener terminated unexpectedly", exc_info=exc)
+
     push_task = asyncio.create_task(redis_push_listener())
+    push_task.add_done_callback(_log_listener_failure)
 
     yield
 

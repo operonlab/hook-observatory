@@ -106,13 +106,16 @@ class FlowService(BaseCRUDService[Flow, FlowCreate, FlowUpdate, FlowResponse]):
         validate_transition(FlowLifecycle, flow.status, "active", "Flow")
         flow.status = "active"
         await db.flush()
-        await event_bus.publish(
-            Event(
-                type=NodeflowEvents.FLOW_ACTIVATED,
-                data={"flow_id": flow.id, "name": flow.name},
-                source="nodeflow",
+        try:
+            await event_bus.publish(
+                Event(
+                    type=NodeflowEvents.FLOW_ACTIVATED,
+                    data={"flow_id": flow.id, "name": flow.name},
+                    source="nodeflow",
+                )
             )
-        )
+        except Exception:
+            logger.warning("Failed to publish FLOW_ACTIVATED event", exc_info=True)
         return self.to_response(flow)
 
     async def pause(self, db: AsyncSession, flow_id: str) -> FlowResponse:
@@ -122,13 +125,16 @@ class FlowService(BaseCRUDService[Flow, FlowCreate, FlowUpdate, FlowResponse]):
         validate_transition(FlowLifecycle, flow.status, "paused", "Flow")
         flow.status = "paused"
         await db.flush()
-        await event_bus.publish(
-            Event(
-                type=NodeflowEvents.FLOW_PAUSED,
-                data={"flow_id": flow.id, "name": flow.name},
-                source="nodeflow",
+        try:
+            await event_bus.publish(
+                Event(
+                    type=NodeflowEvents.FLOW_PAUSED,
+                    data={"flow_id": flow.id, "name": flow.name},
+                    source="nodeflow",
+                )
             )
-        )
+        except Exception:
+            logger.warning("Failed to publish FLOW_PAUSED event", exc_info=True)
         return self.to_response(flow)
 
     async def trigger_manual(
