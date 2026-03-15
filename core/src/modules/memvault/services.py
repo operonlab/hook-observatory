@@ -69,30 +69,85 @@ _CJK_RANGES = re.compile(
 )
 
 
-def should_search(query: str) -> tuple[bool, str]:
-    """Determine if a query warrants memory retrieval."""
-    stripped = query.strip()
-    # Too short
-    if is_cjk_dominant(stripped) and len(stripped) < 3:
-        return False, "cjk_too_short"
-    if not is_cjk_dominant(stripped) and len(stripped) < 10:
-        return False, "too_short"
-    # Pure greeting
-    if _GREETING_ONLY.match(stripped):
-        return False, "greeting"
-    # Memory keywords force search
-    memory_kw = [
-        "記得",
-        "之前",
-        "上次",
+# --- Memory intent keywords (force search even for short queries) ---
+
+# English memory-intent keywords: recollection, temporal reference, recall prompts
+_MEMORY_KEYWORDS_EN = frozenset(
+    {
         "remember",
+        "recall",
+        "forgot",
+        "memory",
+        "mentioned",
+        "discussed",
+        "talked about",
+        "previous",
         "previously",
         "earlier",
         "last time",
-        "recall",
-    ]
-    if any(kw in stripped.lower() for kw in memory_kw):
+        "before",
+        "we said",
+        "you said",
+        "i said",
+        "noted",
+        "recorded",
+        "what was",
+        "when did",
+        "where did",
+    }
+)
+
+# CJK memory-intent keywords: same categories in Chinese/Japanese
+_MEMORY_KEYWORDS_ZH = frozenset(
+    {
+        "記得",
+        "記住",
+        "忘了",
+        "想起",
+        "提過",
+        "討論過",
+        "說過",
+        "之前",
+        "上次",
+        "以前",
+        "前面",
+        "先前",
+        "剛才",
+        "我們聊過",
+        "有聊過",
+        "講過",
+        "聊到",
+        "提到",
+        "想想",
+        "回想",
+        "那個",
+        "那時",
+    }
+)
+
+
+def should_search(query: str) -> tuple[bool, str]:
+    """Determine if a query warrants memory retrieval."""
+    stripped = query.strip()
+    lower = stripped.lower()
+
+    # Memory keywords force search — check before length filter so short
+    # CJK queries like "之前說過?" still trigger recall
+    if any(kw in lower for kw in _MEMORY_KEYWORDS_EN):
         return True, "memory_keyword"
+    if any(kw in stripped for kw in _MEMORY_KEYWORDS_ZH):
+        return True, "memory_keyword"
+
+    # Too short — CJK has lower threshold (each char carries more information)
+    if is_cjk_dominant(stripped) and len(stripped) < 6:
+        return False, "cjk_too_short"
+    if not is_cjk_dominant(stripped) and len(stripped) < 10:
+        return False, "too_short"
+
+    # Pure greeting
+    if _GREETING_ONLY.match(stripped):
+        return False, "greeting"
+
     return True, "default"
 
 
