@@ -4,6 +4,7 @@ Prefix: /api/intelflow (mounted in main.py)
 """
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -39,6 +40,8 @@ from .services import (
     search_session_service,
     topic_service,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["intelflow"])
 
@@ -119,27 +122,36 @@ async def create_report(
     # Override created_at if provided (for migration)
     if body.created_at:
         instance.created_at = body.created_at
-    # Generate embedding (best-effort) — write to both inline column and sub-table
-    embedding = await get_embedding(f"{instance.title} {instance.query}")
-    if embedding:
-        instance.embedding = embedding
-        from .models import ReportEmbedding
+    # Generate embedding (best-effort) — never block report creation
+    try:
+        embedding = await get_embedding(f"{instance.title} {instance.query}")
+        if embedding:
+            instance.embedding = embedding
+            from .models import ReportEmbedding
 
-        db.add(ReportEmbedding(report_id=instance.id, embedding=embedding))
+            db.add(ReportEmbedding(report_id=instance.id, embedding=embedding))
+    except Exception:
+        logger.warning("Failed to generate embedding for report %s", instance.id, exc_info=True)
     await db.commit()
     await db.refresh(instance)
-    # Extract topics from tags
-    if instance.tags:
-        await topic_service.extract_from_report(db, instance)
-    # Record search session
-    await search_session_service.record(
-        db,
-        space_id,
-        body.query,
-        source=body.skill_name,
-        result_type="new_report",
-        report_id=instance.id,
-    )
+    # Extract topics from tags (best-effort)
+    try:
+        if instance.tags:
+            await topic_service.extract_from_report(db, instance)
+    except Exception:
+        logger.warning("Failed to extract topics for report %s", instance.id, exc_info=True)
+    # Record search session (best-effort)
+    try:
+        await search_session_service.record(
+            db,
+            space_id,
+            body.query,
+            source=body.skill_name,
+            result_type="new_report",
+            report_id=instance.id,
+        )
+    except Exception:
+        logger.warning("Failed to record search session for report %s", instance.id, exc_info=True)
     await db.commit()
     await db.refresh(instance)
     return report_service.to_response(instance)
