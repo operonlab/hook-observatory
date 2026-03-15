@@ -44,8 +44,8 @@
         if (!metrics || typeof metrics !== 'object') continue;
         const entries = Object.entries(metrics).filter(([k, v]) => {
           if (!v || v === '?') return false;
-          // Claude Ex: 餘額為零時不顯示
-          if (provider === 'cc' && k === 'ex' && v === '0%') return false;
+          // Claude Ex: 餘額耗盡（off / 0% / 負值）時不顯示
+          if (provider === 'cc' && k === 'ex' && (v === 'off' || v === '0%' || /余\$-/.test(v) || /余\$0\.00/.test(v))) return false;
           return true;
         });
         if (!entries.length) continue;
