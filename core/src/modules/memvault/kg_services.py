@@ -86,21 +86,17 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
 
     def after_create(self, instance: Triple) -> None:
         """Publish TRIPLE_INGESTED event (fire-and-forget)."""
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=MemvaultEvents.TRIPLE_INGESTED,
-                    data={
-                        "triple_id": instance.id,
-                        "subject": instance.subject,
-                        "predicate": instance.predicate,
-                        "source_session": instance.source_session,
-                    },
-                    source="memvault",
-                    user_id=instance.created_by,
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=MemvaultEvents.TRIPLE_INGESTED,
+                data={
+                    "triple_id": instance.id,
+                    "subject": instance.subject,
+                    "predicate": instance.predicate,
+                    "source_session": instance.source_session,
+                },
+                source="memvault",
+                user_id=instance.created_by,
             )
         )
 
@@ -196,7 +192,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                 )
 
         if created:
-            event_bus.publish(
+            event_bus.publish_fire_and_forget(
                 Event(
                     type=MemvaultEvents.TRIPLE_BATCH_INGESTED,
                     data={
@@ -341,7 +337,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             instance.invalidated_by = replacement_id
         await db.flush()
 
-        event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.TRIPLE_INVALIDATED,
                 data={
@@ -643,7 +639,7 @@ class ClusterService:
 
         await db.flush()
 
-        event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.CLUSTER_REGENERATED,
                 data={"space_id": space_id, "count": saved},
@@ -729,7 +725,7 @@ class WisdomService:
 
         await db.flush()
 
-        event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.WISDOM_REGENERATED,
                 data={"space_id": space_id, "count": saved},
@@ -852,7 +848,7 @@ class AttitudeService:
             # NOOP — bump confidence on existing fact
             best_fact.confidence = min(1.0, best_fact.confidence + 0.05)
             await db.flush()
-            event_bus.publish(
+            event_bus.publish_fire_and_forget(
                 Event(
                     type=MemvaultEvents.ATTITUDE_EVOLVED,
                     data={
@@ -892,7 +888,7 @@ class AttitudeService:
             best_fact.superseded_by = new_fact.id
             await db.flush()
 
-            event_bus.publish(
+            event_bus.publish_fire_and_forget(
                 Event(
                     type=MemvaultEvents.ATTITUDE_EVOLVED,
                     data={
@@ -925,7 +921,7 @@ class AttitudeService:
         db.add(new_fact)
         await db.flush()
 
-        event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.ATTITUDE_EVOLVED,
                 data={
@@ -1039,7 +1035,7 @@ class SkillTrackingService:
             )
             invocation = (await db.execute(q)).scalar_one()
 
-        event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.SKILL_INVOKED,
                 data={
