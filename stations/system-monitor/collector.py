@@ -1057,7 +1057,11 @@ def collect_guardian_log(max_entries: int = 50) -> list[dict]:
     entries = []
     current_entry = None
 
-    for line in log_path.read_text().splitlines():
+    try:
+        log_text = log_path.read_text()
+    except OSError:
+        return []
+    for line in log_text.splitlines():
         line = line.strip()
         if not line or line == "---":
             if current_entry:
