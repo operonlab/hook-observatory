@@ -1,12 +1,18 @@
-"""G1: Block-level deduplication — prevent memory bloat from duplicate content.
+"""G1+G8: Block-level deduplication — prevent memory bloat from duplicate content.
 
-Adapted from memory-lancedb-pro's two-stage dedup:
+Adapted from memory-lancedb-pro's two-stage dedup (G1) and per-category dedup rules (G8):
 Stage 1: Vector similarity pre-filter (fast, DB-level)
-Stage 2: Content comparison decision (merge/skip/create)
+Stage 2: Content comparison decision (merge/skip/create) — now category-aware
+
+G8: Per-category dedup behavior mapping:
+  knowledge  → MERGE_IF_SIMILAR  (standard threshold 0.88)
+  attitude   → ALWAYS_MERGE      (aggressive threshold 0.75, opinions/preferences consolidate)
+  skill      → APPEND_ONLY       (skills are discrete, don't merge)
+  general    → MERGE_IF_SIMILAR  (standard threshold 0.88)
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from sqlalchemy import select
@@ -26,6 +32,58 @@ class DedupDecision(Enum):
     CREATE = "create"  # No similar block found, proceed normally
     SKIP = "skip"  # Near-identical block exists, skip creation
     MERGE = "merge"  # Similar block exists, merge content
+    SUPERSEDE = "supersede"  # New version supersedes old (reserved for future temporal use)
+
+
+class DedupBehavior(Enum):
+    ALWAYS_MERGE = "always_merge"  # Force merge even at lower similarity (e.g. attitude/opinions)
+    MERGE_IF_SIMILAR = "merge_if_similar"  # Standard two-stage dedup (knowledge, general)
+    APPEND_ONLY = "append_only"  # Never merge, always create new (e.g. discrete skills)
+    SUPERSEDE = "supersede"  # New version replaces old (reserved, not yet active)
+
+
+@dataclass
+class CategoryDedupRule:
+    behavior: DedupBehavior
+    threshold: float  # Similarity threshold for vector pre-filter
+
+
+# G8: Per-category dedup rules — maps block_type → rule
+# Cannibalized from memory-lancedb-pro memory-categories.ts
+CATEGORY_DEDUP_RULES: dict[str, CategoryDedupRule] = {
+    "knowledge": CategoryDedupRule(
+        behavior=DedupBehavior.MERGE_IF_SIMILAR,
+        threshold=0.88,
+    ),
+    "attitude": CategoryDedupRule(
+        behavior=DedupBehavior.ALWAYS_MERGE,
+        threshold=0.75,  # More aggressive — opinions/preferences benefit from consolidation
+    ),
+    "skill": CategoryDedupRule(
+        behavior=DedupBehavior.APPEND_ONLY,
+        threshold=0.88,  # Threshold not used for APPEND_ONLY, kept for completeness
+    ),
+    "general": CategoryDedupRule(
+        behavior=DedupBehavior.MERGE_IF_SIMILAR,
+        threshold=0.88,
+    ),
+}
+
+# Fallback rule for unknown block_types
+_DEFAULT_DEDUP_RULE = CategoryDedupRule(
+    behavior=DedupBehavior.MERGE_IF_SIMILAR,
+    threshold=DEDUP_SIMILARITY_THRESHOLD,
+)
+
+
+def get_dedup_rule(block_type: str | None) -> CategoryDedupRule:
+    """Look up per-category dedup rule for a given block_type.
+
+    Falls back to MERGE_IF_SIMILAR with standard threshold for unknown types.
+    """
+    if block_type is None:
+        return _DEFAULT_DEDUP_RULE
+    return CATEGORY_DEDUP_RULES.get(block_type, _DEFAULT_DEDUP_RULE)
 
 
 @dataclass
@@ -34,6 +92,7 @@ class DedupResult:
     existing_block_id: str | None = None
     similarity: float = 0.0
     reason: str = ""
+    block_type: str | None = field(default=None)  # block_type used for this check
 
 
 async def find_similar_blocks(
@@ -86,21 +145,55 @@ async def check_duplicate(
     content: str,
     embedding: list[float],
     threshold: float = DEDUP_SIMILARITY_THRESHOLD,
+    block_type: str | None = None,
 ) -> DedupResult:
-    """Two-stage dedup check before block creation.
+    """Two-stage, category-aware dedup check before block creation.
 
-    Stage 1: Vector similarity search for candidates
-    Stage 2: Content comparison to decide action
+    G8: Looks up per-category rule (DedupBehavior) for block_type, then applies
+    behavior-specific thresholds and decisions.
+
+    Stage 1: Vector similarity search for candidates (threshold from category rule)
+    Stage 2: Content comparison to decide action (logic from category rule)
+
+    Backward-compatible: block_type=None falls back to MERGE_IF_SIMILAR with
+    the default threshold, identical to the original behavior.
     """
-    # Stage 1: Find similar blocks by embedding
-    similar = await find_similar_blocks(db, space_id, embedding, threshold)
+    # G8: Resolve category-specific rule
+    rule = get_dedup_rule(block_type)
+    effective_threshold = threshold if threshold != DEDUP_SIMILARITY_THRESHOLD else rule.threshold
+
+    # APPEND_ONLY: skip all similarity checks, always create
+    if rule.behavior == DedupBehavior.APPEND_ONLY:
+        return DedupResult(
+            decision=DedupDecision.CREATE,
+            reason=f"append_only ({block_type})",
+            block_type=block_type,
+        )
+
+    # Stage 1: Find similar blocks by embedding using category threshold
+    similar = await find_similar_blocks(db, space_id, embedding, effective_threshold)
 
     if not similar:
-        return DedupResult(decision=DedupDecision.CREATE, reason="no_similar_found")
+        return DedupResult(
+            decision=DedupDecision.CREATE,
+            reason="no_similar_found",
+            block_type=block_type,
+        )
 
-    # Stage 2: Content comparison
+    # Stage 2: Content comparison — behavior-specific logic
     best_id, best_content, best_sim = similar[0]
 
+    # ALWAYS_MERGE: any candidate above threshold → merge immediately (no content check)
+    if rule.behavior == DedupBehavior.ALWAYS_MERGE:
+        return DedupResult(
+            decision=DedupDecision.MERGE,
+            existing_block_id=best_id,
+            similarity=best_sim,
+            reason=f"always_merge ({block_type}, sim={best_sim:.3f})",
+            block_type=block_type,
+        )
+
+    # MERGE_IF_SIMILAR (default): original two-stage content comparison
     # Very high similarity (>0.95) = almost certainly duplicate
     if best_sim > 0.95:
         overlap = _content_overlap(content, best_content)
@@ -110,6 +203,7 @@ async def check_duplicate(
                 existing_block_id=best_id,
                 similarity=best_sim,
                 reason=f"near_identical (sim={best_sim:.3f}, overlap={overlap:.2f})",
+                block_type=block_type,
             )
 
     # High similarity (threshold~0.95) — check content overlap
@@ -120,12 +214,14 @@ async def check_duplicate(
             existing_block_id=best_id,
             similarity=best_sim,
             reason=f"high_overlap (sim={best_sim:.3f}, overlap={overlap:.2f})",
+            block_type=block_type,
         )
 
     # Similar embedding but different content — new perspective on same topic
     return DedupResult(
         decision=DedupDecision.CREATE,
         reason=f"different_content (sim={best_sim:.3f}, overlap={overlap:.2f})",
+        block_type=block_type,
     )
 
 

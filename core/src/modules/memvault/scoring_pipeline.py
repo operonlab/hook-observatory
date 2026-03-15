@@ -5,12 +5,19 @@ Each stage is independently bypassable and try-catch isolated.
 
 G3 enhancement: Weibull decay replaces linear time decay for more
 realistic memory forgetting curves with tier-aware parameters.
+
+G6 enhancement: Access reinforcement — frequently-accessed memories
+decay more slowly via compute_effective_half_life() from access_tracker.
+Results dicts should carry access_count and last_accessed_at for this
+stage to take effect (populated by services.py search queries).
 """
 
 import logging
 import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+
+from src.shared.access_tracker import compute_effective_half_life
 
 from .noise_filter import check_noise
 
@@ -27,6 +34,11 @@ WEIBULL_PARAMS = {
     "cold": {"beta": 1.5, "lambda_": 14.0, "floor": 0.1},
 }
 
+# --- Access reinforcement defaults (G6) ---
+# Base half-life used when adjusting Weibull λ via access reinforcement.
+# The effective λ replaces the tier's lambda_ when access_count > 0.
+_ACCESS_BASE_HALF_LIFE_DAYS: float = 30.0
+
 
 def weibull_decay(age_days: float, tier: str = "hot") -> float:
     """Compute Weibull survival function for memory decay.
@@ -42,6 +54,26 @@ def weibull_decay(age_days: float, tier: str = "hot") -> float:
         return 1.0
 
     survival = math.exp(-((age_days / lambda_) ** beta))
+    return floor + (1 - floor) * survival
+
+
+def weibull_decay_with_half_life(
+    age_days: float, effective_half_life: float, tier: str = "hot"
+) -> float:
+    """Weibull decay with an access-adjusted characteristic lifetime.
+
+    Replaces the tier's default lambda_ with effective_half_life so that
+    frequently-accessed memories decay more slowly.
+    """
+    params = WEIBULL_PARAMS.get(tier, WEIBULL_PARAMS["hot"])
+    beta = params["beta"]
+    floor = params["floor"]
+
+    if age_days <= 0:
+        return 1.0
+
+    # Use effective half-life as the scale parameter (λ)
+    survival = math.exp(-((age_days / effective_half_life) ** beta))
     return floor + (1 - floor) * survival
 
 
@@ -102,6 +134,7 @@ class ScoringPipeline:
         """Apply all enabled stages.
 
         Each result dict has: block, score, content, created_at, confidence, embedding (optional).
+        G6 fields (optional): access_count, last_accessed_at — used by time_decay stage.
         """
         meta = ScoringMetadata(input_count=len(results))
 
@@ -120,7 +153,7 @@ class ScoringPipeline:
         # Stage 3: Length Normalization
         results = self._run_stage("length_norm", results, meta, self._apply_length_norm)
 
-        # Stage 4: Time Decay
+        # Stage 4: Time Decay (G3 Weibull + G6 access reinforcement)
         results = self._run_stage("time_decay", results, meta, self._apply_time_decay)
 
         # Stage 5: Hard Min Score
@@ -189,31 +222,52 @@ class ScoringPipeline:
         return results
 
     def _apply_time_decay(self, results: list[dict]) -> list[dict]:
-        """Weibull decay: tier-aware forgetting curve replaces linear decay.
+        """Weibull decay with G6 access reinforcement.
 
-        G3 cannibalization from memory-lancedb-pro.
-        Determines tier from block confidence:
-          confidence >= 0.8 → core (slowest decay)
-          confidence >= 0.5 → hot (default)
-          confidence >= 0.3 → warm
-          else → cold (fastest decay)
+        G3: tier-aware Weibull forgetting curve (confidence → tier).
+        G6: effective half-life replaces fixed λ when access data is present.
+
+        Result dict optional fields for G6:
+          access_count (int)       — number of times block was retrieved
+          last_accessed_at (datetime | None) — timestamp of last access
         """
         now = datetime.now(UTC)
         for r in results:
             created_at = r.get("created_at")
-            if created_at:
-                age_days = max((now - created_at).total_seconds() / 86400, 0)
-                # Determine tier from confidence
-                confidence = r.get("confidence") or 0.5
-                if confidence >= 0.8:
-                    tier = "core"
-                elif confidence >= 0.5:
-                    tier = "hot"
-                elif confidence >= 0.3:
-                    tier = "warm"
-                else:
-                    tier = "cold"
+            if not created_at:
+                continue
+
+            age_days = max((now - created_at).total_seconds() / 86400, 0)
+
+            # Determine tier from confidence (G3 logic unchanged)
+            confidence = r.get("confidence") or 0.5
+            if confidence >= 0.8:
+                tier = "core"
+            elif confidence >= 0.5:
+                tier = "hot"
+            elif confidence >= 0.3:
+                tier = "warm"
+            else:
+                tier = "cold"
+
+            # G6: if access tracking data is present, compute effective half-life
+            access_count: int = r.get("access_count") or 0
+            last_accessed_at = r.get("last_accessed_at")
+
+            if access_count > 0 and last_accessed_at is not None:
+                # Use tier's default λ as the base for effective half-life
+                tier_lambda = WEIBULL_PARAMS.get(tier, WEIBULL_PARAMS["hot"])["lambda_"]
+                effective_hl = compute_effective_half_life(
+                    access_count=access_count,
+                    last_accessed_at=last_accessed_at,
+                    created_at=created_at,
+                    base_half_life_days=tier_lambda,
+                )
+                r["score"] *= weibull_decay_with_half_life(age_days, effective_hl, tier)
+            else:
+                # Fallback: standard Weibull decay (G3 behaviour)
                 r["score"] *= weibull_decay(age_days, tier)
+
         return results
 
     def _apply_min_score(self, results: list[dict]) -> list[dict]:
