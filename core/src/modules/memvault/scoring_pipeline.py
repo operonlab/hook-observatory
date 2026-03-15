@@ -85,10 +85,12 @@ class ScoringConfig:
     min_score: float = 0.10
     mmr_threshold: float = 0.85
     semantic_boost: float = 0.3
+    trust_penalty: float = 0.3  # max penalty for low-trust memories
     stages_enabled: dict[str, bool] = field(
         default_factory=lambda: {
             "recency": True,
             "importance": True,
+            "trust_boost": True,
             "length_norm": True,
             "time_decay": True,
             "semantic_boost": True,
@@ -151,6 +153,9 @@ class ScoringPipeline:
 
         # Stage 2: Importance Weight
         results = self._run_stage("importance", results, meta, self._apply_importance)
+
+        # Stage 2.5: Trust Boost (P3 source tracking → scoring)
+        results = self._run_stage("trust_boost", results, meta, self._apply_trust_boost)
 
         # Stage 3: Length Normalization
         results = self._run_stage("length_norm", results, meta, self._apply_length_norm)
@@ -221,6 +226,30 @@ class ScoringPipeline:
         for r in results:
             confidence = r.get("confidence") or 0.5  # unset → neutral
             r["score"] *= 0.7 + 0.3 * confidence
+        return results
+
+    def _apply_trust_boost(self, results: list[dict]) -> list[dict]:
+        """P3 source tracking → scoring integration.
+
+        Compute trust_score from source_tracker provenance heuristics.
+        Low-trust memories get penalized; high-trust memories are unaffected.
+        Formula: score *= (1 - trust_penalty * (1 - trust_score))
+        """
+        from .source_tracker import MemoryProvenance, compute_trust_score
+
+        for r in results:
+            block = r.get("block")
+            if not block:
+                continue
+            # Build provenance from available block metadata
+            session_id = getattr(block, "source_session", None)
+            provenance = MemoryProvenance(
+                source_session_id=session_id,
+                extraction_method="auto_extract" if session_id else "manual",
+            )
+            trust = compute_trust_score(provenance)
+            # Apply penalty: trust=1.0 → no penalty, trust=0.5 → 15% penalty (default)
+            r["score"] *= 1.0 - self.config.trust_penalty * (1.0 - trust)
         return results
 
     def _apply_length_norm(self, results: list[dict]) -> list[dict]:
