@@ -1,11 +1,14 @@
 """Phase 3: Fill — generate and execute Playwright fill scripts."""
 
+import logging
 import re
 
 from sqlalchemy.orm import Session
 
 from .models import Person, Submission, Survey
 from .pw import PlaywrightSession
+
+log = logging.getLogger("auto_survey")
 
 
 def _build_fill_script(
@@ -90,6 +93,7 @@ def _build_fill_script(
     await page.waitForTimeout(500);
 
     // 7. Handle confirmation dialog
+    const preSubmitUrl = page.url();
     const confirmBtns = ['text=確定送出', 'text=確定', 'text=確認', 'text=OK'];
     for (const sel of confirmBtns) {{
       const btn = page.locator(sel).first();
@@ -98,13 +102,32 @@ def _build_fill_script(
         break;
       }}
     }}
-    // 8. Wait for result page to fully load after redirect
+
+    // 8. Wait for redirect to result page (detect URL change)
+    try {{
+      await page.waitForFunction(
+        (oldUrl) => window.location.href !== oldUrl,
+        preSubmitUrl,
+        {{ timeout: 15000 }}
+      );
+    }} catch (e) {{}}
+
+    // 9. Wait for result page to fully load
     try {{
       await page.waitForLoadState('networkidle', {{ timeout: 10000 }});
     }} catch (e) {{}}
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(2000);
 
-    // 9. Extract score (quiz only)
+    // 10. Wait for score text to appear (quiz result pages)
+    try {{
+      await page.waitForFunction(
+        () => /成績|分數|Score|感謝/.test(document.body.innerText),
+        null,
+        {{ timeout: 5000 }}
+      );
+    }} catch (e) {{}}
+
+    // 11. Extract page text
     const bodyText = await page.evaluate(() => document.body.innerText);
     return bodyText;
   }}"""
@@ -166,6 +189,13 @@ def fill_form(
             result_text = raw_output
 
         score = _extract_score(result_text) if survey.type == "quiz" else None
+
+        # Debug: log result text for score extraction diagnosis
+        if survey.type == "quiz":
+            preview = result_text[:300].replace("\n", " | ")
+            log.info("[fill] %s result_text: %s", person.name, preview)
+            if score is None:
+                log.warning("[fill] %s score=None — regex matched nothing", person.name)
 
         submission = existing or Submission(
             survey_id=survey.id,
