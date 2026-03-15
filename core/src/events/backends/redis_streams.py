@@ -319,6 +319,23 @@ class RedisStreamsBackend(EventBackend):
             )
         except Exception as e:
             logger.error("redis_streams_dlq_write_error", error=str(e))
+            # Last-resort fallback: persist to local file so events are not completely lost
+            try:
+                import datetime
+
+                fallback_entry = json.dumps(
+                    {
+                        "ts": datetime.datetime.utcnow().isoformat(),
+                        "original_event": event_data,
+                        "handler": handler_name,
+                        "error": error,
+                        "dlq_error": str(e),
+                    }
+                )
+                with open("/tmp/workshop-dlq-fallback.jsonl", "a") as f:  # noqa: ASYNC230, S108
+                    f.write(fallback_entry + "\n")
+            except Exception as fallback_err:
+                logger.error("redis_streams_dlq_fallback_write_error", error=str(fallback_err))
 
 
 # ------------------------------------------------------------------ helpers

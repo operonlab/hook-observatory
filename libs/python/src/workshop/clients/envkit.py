@@ -91,8 +91,11 @@ class EnvkitClient:
         """
         if output_file:
             self._run("snapshot", "--output", output_file)
-            with open(output_file, encoding="utf-8") as f:
-                return f.read()
+            try:
+                with open(output_file, encoding="utf-8") as f:
+                    return f.read()
+            except OSError as e:
+                raise EnvkitError(f"failed to read snapshot file {output_file!r}: {e}") from e
         return self._run("snapshot")
 
     def verify(self, snapshot_path: str) -> str:
@@ -168,7 +171,10 @@ class EnvkitClient:
         try:
             self._run("list", "all", timeout=15)
             return True
-        except (EnvkitError, Exception):
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).debug("health check failed: %s", e)
             return False
 
     def __repr__(self) -> str:

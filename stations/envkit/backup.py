@@ -7,6 +7,7 @@ Tier 2 (important): VS Code, Codex, Gemini, LiteLLM
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import sys
@@ -22,8 +23,16 @@ TIER1_FILES: list[dict] = [
     {"src": HOME / ".zshenv", "dst": "zshenv", "label": "Zsh environment"},
     {"src": HOME / ".gitconfig", "dst": "gitconfig", "label": "Git config"},
     {"src": HOME / ".gitignore_global", "dst": "gitignore_global", "label": "Git global ignore"},
-    {"src": HOME / ".claude" / "settings.json", "dst": "claude-settings.json", "label": "Claude Code settings"},
-    {"src": HOME / ".claude" / "CLAUDE.md", "dst": "claude-md", "label": "Claude Code instructions"},
+    {
+        "src": HOME / ".claude" / "settings.json",
+        "dst": "claude-settings.json",
+        "label": "Claude Code settings",
+    },
+    {
+        "src": HOME / ".claude" / "CLAUDE.md",
+        "dst": "claude-md",
+        "label": "Claude Code instructions",
+    },
 ]
 
 # Tier 1 — Critical directories (shallow copy)
@@ -48,11 +57,15 @@ TIER2_DIRS: list[dict] = [
 ]
 
 
+_logger = logging.getLogger(__name__)
+
+
 def _safe_copy2(src: str, dst: str) -> None:
     """shutil.copy2 wrapper that skips broken symlinks and permission errors."""
     try:
         shutil.copy2(src, dst)
-    except (OSError, PermissionError):
+    except (OSError, PermissionError) as e:
+        _logger.debug("copy failed: %s → %s: %s", src, dst, e)
         pass
 
 
@@ -83,9 +96,14 @@ def backup_configs(output_dir: Path) -> dict:
         if src.is_dir():
             if dst.exists():
                 shutil.rmtree(dst)
-            shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True,
-                            ignore_dangling_symlinks=True,
-                            copy_function=_safe_copy2)
+            shutil.copytree(
+                src,
+                dst,
+                symlinks=True,
+                dirs_exist_ok=True,
+                ignore_dangling_symlinks=True,
+                copy_function=_safe_copy2,
+            )
             backed_up.append(f"[T1] {item['label']}: {src}")
         else:
             skipped.append(f"[T1] {item['label']}: {src} (not found)")
@@ -107,9 +125,14 @@ def backup_configs(output_dir: Path) -> dict:
         if src.is_dir():
             if dst.exists():
                 shutil.rmtree(dst)
-            shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True,
-                            ignore_dangling_symlinks=True,
-                            copy_function=_safe_copy2)
+            shutil.copytree(
+                src,
+                dst,
+                symlinks=True,
+                dirs_exist_ok=True,
+                ignore_dangling_symlinks=True,
+                copy_function=_safe_copy2,
+            )
             backed_up.append(f"[T2] {item['label']}: {src}")
         else:
             skipped.append(f"[T2] {item['label']}: {src} (not found)")
@@ -120,7 +143,9 @@ def backup_configs(output_dir: Path) -> dict:
         try:
             r = subprocess.run(
                 [code_bin, "--list-extensions"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if r.returncode == 0 and r.stdout.strip():
                 ext_path = output_dir / "vscode-extensions.txt"

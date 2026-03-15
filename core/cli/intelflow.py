@@ -48,7 +48,9 @@ def cmd_reports_list(args):
         print(f"Reports ({len(items)} of {total}):\n")
         for r in items:
             date = str(r.get("created_at", ""))[:10]
-            tags = ", ".join(r.get("tags", [])[:3])
+            raw_tags = r.get("tags") or []
+            raw_tags = raw_tags[:3] if isinstance(raw_tags, list) else []
+            tags = ", ".join(raw_tags)
             print(f"  [{date}] {r.get('title', '?')[:60]}")
             if tags:
                 print(f"           tags: {tags}")

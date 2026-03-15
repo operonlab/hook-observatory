@@ -17,9 +17,7 @@ API_URL = "http://127.0.0.1:8801/api/intelflow/reports"
 # Always read from the main workshop vendor dir (canonical source of truth).
 # Override via CANNIBALIZE_JSON env var if needed.
 _default_json = Path.home() / "workshop" / "vendor" / "cannibalization.json"
-CANNIBALIZE_JSON = Path(
-    __import__("os").environ.get("CANNIBALIZE_JSON", str(_default_json))
-)
+CANNIBALIZE_JSON = Path(__import__("os").environ.get("CANNIBALIZE_JSON", str(_default_json)))
 
 
 def build_content(entry: dict) -> str:
@@ -141,7 +139,12 @@ def create_report(payload: dict, dry_run: bool) -> str | None:
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-            body = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
+            try:
+                body = json.loads(raw)
+            except json.JSONDecodeError as e:
+                print(f"  [ERROR] Invalid JSON response: {e} — raw: {raw[:200]}", file=sys.stderr)
+                return None
             report_id = body.get("id") or body.get("report_id") or str(body)
             return report_id
     except urllib.error.HTTPError as e:
@@ -160,8 +163,15 @@ def main():
         print(f"[FATAL] Cannot find {CANNIBALIZE_JSON}", file=sys.stderr)
         sys.exit(1)
 
-    with open(CANNIBALIZE_JSON, encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(CANNIBALIZE_JSON, encoding="utf-8") as f:
+            data = json.load(f)
+    except OSError as e:
+        print(f"[FATAL] Cannot read {CANNIBALIZE_JSON}: {e}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"[FATAL] Invalid JSON in {CANNIBALIZE_JSON}: {e}", file=sys.stderr)
+        sys.exit(1)
 
     sources = data.get("sources", [])
     print(f"Loaded {len(sources)} sources from cannibalization.json")
@@ -192,7 +202,7 @@ def main():
             print("FAILED")
             results.append({"id": eid, "report_id": None, "error": True})
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Summary: {len(results)} processed, {len(skipped)} skipped")
     succeeded = [r for r in results if not r.get("error")]
     failed = [r for r in results if r.get("error")]

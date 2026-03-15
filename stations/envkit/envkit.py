@@ -422,7 +422,10 @@ def cmd_bootstrap(args) -> None:
         cmd.extend(["--to", str(args.to_phase)])
     if args.dry_run:
         cmd.append("--dry-run")
-    sp.run(cmd)
+    try:
+        sp.run(cmd, timeout=3600)
+    except sp.TimeoutExpired:
+        print("  [envkit] Bootstrap timed out after 3600s", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------

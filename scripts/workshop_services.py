@@ -259,6 +259,7 @@ def is_running(name: str, port: int | None = None) -> int | None:
                 ["ps", "-o", "state=", "-p", str(pid)],
                 capture_output=True,
                 text=True,
+                timeout=5,
             )
             state = result.stdout.strip()
             if state.startswith("Z"):
@@ -267,7 +268,7 @@ def is_running(name: str, port: int | None = None) -> int | None:
                 # Fall through to port-based detection below
             else:
                 return pid
-        except (ValueError, ProcessLookupError, PermissionError):
+        except (ValueError, ProcessLookupError, PermissionError, subprocess.TimeoutExpired):
             pidfile.unlink(missing_ok=True)
 
     # Port-based fallback: detect service running without valid PID file
@@ -308,6 +309,7 @@ def wait_for_docker(timeout: int = 120) -> bool:
         result = subprocess.run(
             ["docker", "info"],
             capture_output=True,
+            timeout=10,
         )
         if result.returncode == 0:
             log("Docker is ready.")
@@ -328,6 +330,7 @@ def ensure_containers() -> None:
             ["docker", "inspect", "--format", "{{.State.Running}}", name],
             capture_output=True,
             text=True,
+            timeout=10,
         )
         state = result.stdout.strip() if result.returncode == 0 else "false"
 
@@ -336,6 +339,7 @@ def ensure_containers() -> None:
             start_result = subprocess.run(
                 ["docker", "start", name],
                 capture_output=True,
+                timeout=30,
             )
             if start_result.returncode != 0:
                 err(f"Failed to start {name}")
@@ -351,6 +355,7 @@ def ensure_containers() -> None:
                 result = subprocess.run(
                     container["health_cmd"],
                     capture_output=True,
+                    timeout=10,
                 )
                 if result.returncode == 0:
                     healthy = True
@@ -401,18 +406,25 @@ def start_service(svc: dict) -> None:
 
     cmd_parts = shlex.split(cmd)
 
-    with open(stdout_log, "ab") as fout, open(stderr_log, "ab") as ferr:
-        proc = subprocess.Popen(
-            cmd_parts,
-            cwd=workdir,
-            stdout=fout,
-            stderr=ferr,
-            start_new_session=True,
-            env=_DAEMON_ENV,
-        )
+    try:
+        with open(stdout_log, "ab") as fout, open(stderr_log, "ab") as ferr:
+            proc = subprocess.Popen(
+                cmd_parts,
+                cwd=workdir,
+                stdout=fout,
+                stderr=ferr,
+                start_new_session=True,
+                env=_DAEMON_ENV,
+            )
+    except OSError as e:
+        err(f"Failed to start {name}: {e}")
+        return
 
     pid = proc.pid
-    (PID_DIR / f"{name}.pid").write_text(str(pid))
+    try:
+        (PID_DIR / f"{name}.pid").write_text(str(pid))
+    except OSError as e:
+        err(f"Failed to write PID file for {name}: {e}")
 
     timeout = 15 if svc_type == "binary" else 30
     if wait_for_health(health, timeout, name):
@@ -478,14 +490,22 @@ def stop_all() -> None:
 
 def check_log_sizes() -> None:
     today = date.today().strftime("%Y-%m-%d")
-    for service_dir in LOG_BASE.iterdir():
+    try:
+        service_dirs = list(LOG_BASE.iterdir())
+    except OSError as e:
+        log(f"WARNING: cannot list log directory: {e}")
+        return
+    for service_dir in service_dirs:
         if not service_dir.is_dir():
             continue
         for suffix in ["log", "error.log"]:
             logfile = service_dir / f"{today}.{suffix}"
             if not logfile.exists():
                 continue
-            size = logfile.stat().st_size
+            try:
+                size = logfile.stat().st_size
+            except OSError:
+                continue
             if size > LOG_MAX_SIZE:
                 if suffix == "error.log":
                     base = service_dir / f"{today}"
@@ -718,7 +738,11 @@ def cmd_status() -> None:
         log_dir = LOG_BASE / name
         today_log = log_dir / f"{today}.log"
         if today_log.exists():
-            size = today_log.stat().st_size
+            try:
+                size = today_log.stat().st_size
+            except OSError:
+                print(f"  {name + '/':<16} (cannot read log size)")
+                continue
             if size >= 1048576:
                 human_size = f"{size / 1048576:.1f}M"
             elif size >= 1024:

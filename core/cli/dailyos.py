@@ -93,7 +93,11 @@ def cmd_methods_get(args):
 def cmd_methods_create(args):
     client = DailyOSClient()
     try:
-        config = json.loads(args.config) if args.config else None
+        try:
+            config = json.loads(args.config) if args.config else None
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON for --config: {e}", file=sys.stderr)
+            sys.exit(1)
         data = {"slug": args.slug, "name": args.name}
         if args.name_zh:
             data["name_zh"] = args.name_zh
@@ -161,7 +165,11 @@ def cmd_config_active(args):
 def cmd_config_activate(args):
     client = DailyOSClient()
     try:
-        overrides = json.loads(args.overrides) if args.overrides else None
+        try:
+            overrides = json.loads(args.overrides) if args.overrides else None
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON for --overrides: {e}", file=sys.stderr)
+            sys.exit(1)
         result = client.activate_method(
             method_id=args.method_id,
             context=args.context,
@@ -307,7 +315,11 @@ def cmd_plans_get(args):
 def cmd_plans_update(args):
     client = DailyOSClient()
     try:
-        items = json.loads(args.items)
+        try:
+            items = json.loads(args.items)
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON for --items: {e}", file=sys.stderr)
+            sys.exit(1)
         result = client.update_plan(args.id, {"items": items})
         if args.json:
             _json_out(result, True)

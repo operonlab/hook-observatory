@@ -149,8 +149,8 @@ def send_notification(summary: str) -> None:
             capture_output=True,
             timeout=10,
         )
-    except Exception:  # noqa: S110
-        pass  # Best-effort notification
+    except Exception as e:
+        print(f"Warning: {e}", file=sys.stderr)
 
 
 def main() -> int:

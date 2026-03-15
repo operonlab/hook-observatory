@@ -226,7 +226,11 @@ def main() -> None:
         "test": cmd_test,
     }
 
-    dispatch[args.command](args, client)
+    try:
+        dispatch[args.command](args, client)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

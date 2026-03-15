@@ -199,6 +199,7 @@ export const useIntelflowStore = create<IntelflowState>()(
             selectedReport: state.selectedReport?.id === id ? null : state.selectedReport,
           }))
         } catch (err) {
+          console.error('deleteReport failed:', err)
           set({ error: err instanceof Error ? err.message : 'Failed to delete report' })
         }
       },

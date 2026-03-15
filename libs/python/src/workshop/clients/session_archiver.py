@@ -209,7 +209,10 @@ class SessionArchiverClient:
         try:
             self.status()
             return True
-        except (SessionArchiverError, Exception):
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).debug("health check failed: %s", e)
             return False
 
     def __repr__(self) -> str:

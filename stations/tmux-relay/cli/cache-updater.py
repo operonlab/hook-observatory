@@ -30,7 +30,8 @@ def main():
 
     try:
         r = redis.from_url(REDIS_URL, decode_responses=True)
-    except Exception:
+    except Exception as e:
+        print(f"Error: failed to connect to Redis: {e}", file=sys.stderr)
         sys.exit(0)
 
     try:
@@ -60,8 +61,10 @@ def main():
                 r.hset(PANES_KEY, pane_safe, json.dumps(data))
                 r.set(CACHE_TS_KEY, str(time.time()), ex=CACHE_TS_TTL)
 
-    except Exception:
-        pass  # Cache is advisory — never block tmux
+    except Exception as e:
+        print(
+            f"Error: cache update failed: {e}", file=sys.stderr
+        )  # Cache is advisory — never block tmux
 
 
 if __name__ == "__main__":

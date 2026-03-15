@@ -13,7 +13,8 @@ async def migrate():
     engine = create_async_engine(DATABASE_URL)
     async with engine.begin() as conn:
         # Create task_groups table
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS dailyos.task_groups (
                 id VARCHAR(32) PRIMARY KEY,
                 space_id VARCHAR(32) NOT NULL,
@@ -26,24 +27,35 @@ async def migrate():
                 icon TEXT,
                 sort_order INTEGER DEFAULT 0
             )
-        """))
+        """)
+        )
 
         # Create index
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE INDEX IF NOT EXISTS idx_tg_space
             ON dailyos.task_groups (space_id)
-        """))
+        """)
+        )
 
         # Add group_id to recurring_items
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             ALTER TABLE dailyos.recurring_items
             ADD COLUMN IF NOT EXISTS group_id VARCHAR(32)
             REFERENCES dailyos.task_groups(id) ON DELETE SET NULL
-        """))
+        """)
+        )
 
     await engine.dispose()
     print("Migration complete: task_groups table created, group_id added to recurring_items")
 
 
 if __name__ == "__main__":
-    asyncio.run(migrate())
+    import sys
+
+    try:
+        asyncio.run(migrate())
+    except Exception as e:
+        print(f"Migration failed: {e}", file=sys.stderr)
+        sys.exit(1)
