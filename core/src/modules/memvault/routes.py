@@ -94,11 +94,17 @@ async def create_block(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
-    # G1: Pre-creation dedup check (requires embedding)
-    embedding = await get_embedding(body.content, task_type="search_document")
+    # G1: Pre-creation dedup check (requires embedding, best-effort)
+    try:
+        embedding = await get_embedding(body.content, task_type="search_document")
+    except Exception:
+        logger.warning("Embedding failed for dedup check, skipping", exc_info=True)
+        embedding = None
 
     if embedding and not skip_dedup:
-        dedup_result = await check_duplicate(db, space_id, body.content, embedding)
+        dedup_result = await check_duplicate(
+            db, space_id, body.content, embedding, block_type=body.block_type
+        )
 
         if dedup_result.decision == DedupDecision.SKIP:
             # Near-identical block exists — return existing
@@ -128,20 +134,26 @@ async def create_block(
                     dedup_result.existing_block_id,
                     MemoryBlockUpdate(content=merged),
                 )
-                # Re-embed with merged content
-                merged_emb = await get_embedding(merged, task_type="search_document")
-                if merged_emb:
-                    await memory_block_service.update_embedding(
-                        db, dedup_result.existing_block_id, merged_emb
-                    )
+                # Re-embed with merged content (best-effort)
+                try:
+                    merged_emb = await get_embedding(merged, task_type="search_document")
+                    if merged_emb:
+                        await memory_block_service.update_embedding(
+                            db, dedup_result.existing_block_id, merged_emb
+                        )
+                except Exception:
+                    logger.warning("Embedding failed for merge, skipping", exc_info=True)
                 await db.commit()
                 await db.refresh(existing)
                 return memory_block_service.to_response(existing)
 
     # Normal creation path
     instance = await memory_block_service.create(db, space_id, body)
-    if embedding:
-        await memory_block_service.update_embedding(db, instance.id, embedding)
+    try:
+        if embedding:
+            await memory_block_service.update_embedding(db, instance.id, embedding)
+    except Exception:
+        logger.warning("Failed to store embedding for block %s", instance.id, exc_info=True)
     await db.commit()
     await db.refresh(instance)
     return memory_block_service.to_response(instance)
@@ -211,7 +223,11 @@ async def search(
                 metadata=meta if include_metadata else None,
             )
 
-    query_embedding = await get_embedding(q, task_type="search_query")
+    try:
+        query_embedding = await get_embedding(q, task_type="search_query")
+    except Exception:
+        logger.warning("Embedding failed for search query, falling back to text", exc_info=True)
+        query_embedding = None
     if query_embedding is None:
         # Fallback: ILIKE text search when Ollama is unavailable
         results = await memory_block_service.text_search(

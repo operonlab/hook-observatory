@@ -125,30 +125,26 @@ class MemoryBlockService(
         return d
 
     def after_create(self, instance: MemoryBlock) -> None:
-        import asyncio
-
-        asyncio.ensure_future(  # noqa: RUF006
-            event_bus.publish(
-                Event(
-                    type=MemvaultEvents.MEMORY_STORED,
-                    data={
-                        "id": instance.id,
-                        "block_id": instance.id,
-                        "space_id": instance.space_id,
-                        "content": instance.content,
-                        "block_type": instance.block_type,
-                        "tags": instance.tags or [],
-                        "source_session": instance.source_session,
-                        "created_at": (
-                            instance.created_at.isoformat() if instance.created_at else None
-                        ),
-                        "updated_at": (
-                            instance.updated_at.isoformat() if instance.updated_at else None
-                        ),
-                    },
-                    source="memvault",
-                    user_id=instance.created_by,
-                )
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=MemvaultEvents.MEMORY_STORED,
+                data={
+                    "id": instance.id,
+                    "block_id": instance.id,
+                    "space_id": instance.space_id,
+                    "content": instance.content,
+                    "block_type": instance.block_type,
+                    "tags": instance.tags or [],
+                    "source_session": instance.source_session,
+                    "created_at": (
+                        instance.created_at.isoformat() if instance.created_at else None
+                    ),
+                    "updated_at": (
+                        instance.updated_at.isoformat() if instance.updated_at else None
+                    ),
+                },
+                source="memvault",
+                user_id=instance.created_by,
             )
         )
 
@@ -305,7 +301,7 @@ class MemoryBlockService(
         # Phase A1 + A2: Noise filter on results + Scoring Pipeline
         results, _ = filter_results(results)
 
-        # Convert to scoring pipeline format
+        # Convert to scoring pipeline format (G6: include access tracking fields)
         pipeline = ScoringPipeline(scoring_config)
         scored_dicts = [
             {
@@ -315,6 +311,8 @@ class MemoryBlockService(
                 "created_at": r.block.created_at,
                 "confidence": r.block.confidence,
                 "embedding": None,
+                "access_count": getattr(r.block, "access_count", 0) or 0,
+                "last_accessed_at": getattr(r.block, "last_accessed_at", None),
             }
             for r in results
         ]
@@ -343,6 +341,16 @@ class MemoryBlockService(
             )
             for d in scored_dicts[:top_k]
         ]
+
+        # G6: Record access for returned blocks (fire-and-forget, best-effort)
+        if final_results:
+            from src.shared.access_tracker import record_access
+
+            for sr in final_results:
+                try:
+                    await record_access(sr.block.id, db)
+                except Exception:  # noqa: S110
+                    pass  # never block search results for tracking failures
 
         return final_results, meta
 

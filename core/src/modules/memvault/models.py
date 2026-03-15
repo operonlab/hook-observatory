@@ -3,8 +3,10 @@
 All tables live in the `memvault` PostgreSQL schema.
 """
 
+from datetime import datetime
+
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,6 +50,11 @@ class MemoryBlock(SpaceScopedModel):
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # G6: Access tracking — increment on each retrieval for effective half-life computation
+    access_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class BlockEmbedding(Base):
