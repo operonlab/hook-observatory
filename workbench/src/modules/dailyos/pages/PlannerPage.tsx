@@ -238,6 +238,9 @@ export default function PlannerPage() {
           <MethodSwitcher />
           <ViewModeSwitcher value={viewParam} onChange={handleViewChange} />
         </div>
+        <div className="mb-4">
+          <AddItemInput onAdd={(title, extra) => addItem(title, extra)} />
+        </div>
         <Suspense
           fallback={
             <div className="flex justify-center py-16">

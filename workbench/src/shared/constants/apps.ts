@@ -137,6 +137,16 @@ export const APP_LIST: AppInfo[] = [
     status: 'available',
   },
   {
+    id: 'agent-metrics',
+    name: 'Agent 儀表板',
+    description: 'LLM 用量追蹤、配額監控、模型成本分析',
+    icon: '📈',
+    path: '/agent-metrics',
+    color: '#f38ba8',
+    status: 'external',
+    externalUrl: '/apps/agent-metrics/',
+  },
+  {
     id: 'agent-vista',
     name: 'Agent Vista',
     description: '像素風虛擬辦公室 — CLI Agent 即時視覺化',
