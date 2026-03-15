@@ -40,7 +40,7 @@
 	"server_comm_use_hostnames": false,
 	"web_direct_connect": false,
 	"web_socket_use_hostnames": false,
-	"job_memory_max": 33554432,
+	"job_memory_max": 268435456,
 	"job_memory_sustain": 0,
 	"job_cpu_max": 0,
 	"job_cpu_sustain": 0,
