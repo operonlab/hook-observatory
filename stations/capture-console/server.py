@@ -133,6 +133,7 @@ async def query_gemini(user_message: str) -> str:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=GEMINI_TIMEOUT)
     except TimeoutError:
         proc.kill()
+        await proc.communicate()  # drain buffers to prevent zombie process
         raise TimeoutError("Gemini CLI timed out")
 
     if proc.returncode != 0:

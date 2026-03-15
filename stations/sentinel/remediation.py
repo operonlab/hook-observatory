@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -261,8 +262,8 @@ class Remediator:
         prompt = build_repair_prompt(service, detail, url=url)
         signal_file = SIGNAL_DIR / f"sentinel-repair-{service}-{int(time.time())}"
 
-        # Dispatch via relay
-        command = f'claude -p "{prompt}"'
+        # Dispatch via relay — shlex.quote prevents quote injection in the prompt
+        command = f"claude -p {shlex.quote(prompt)}"
         success = await self._relay_dispatch(pane, command, signal_file)
 
         if success:

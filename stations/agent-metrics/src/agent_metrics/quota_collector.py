@@ -29,7 +29,21 @@ log = structlog.get_logger()
 # ---------------------------------------------------------------------------
 # Redis cache (replaces in-memory _cache / _raw_cache / _cc_raw_result)
 # ---------------------------------------------------------------------------
-_r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+_r: redis.Redis | None = None
+
+
+def _get_redis() -> redis.Redis | None:
+    """Lazy-init Redis client — avoids crash if Redis is down at import time."""
+    global _r
+    if _r is not None:
+        return _r
+    try:
+        _r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        _r.ping()
+        return _r
+    except Exception:
+        _r = None
+        return None
 
 _RKEY_FORMATTED = "agent-metrics:quota:formatted"
 _RKEY_RAW = "agent-metrics:quota:raw"
