@@ -136,9 +136,16 @@ def check_github_commits(source: dict) -> dict:
 
 def send_notification(summary: str) -> None:
     """Send drift summary via Bark notification."""
+    from urllib.parse import quote
+
     try:
+        encoded = quote(summary, safe="")
         subprocess.run(  # noqa: S603
-            ["/usr/bin/curl", "-s", f"http://127.0.0.1:8090/workshop/蠶食漂移偵測/{summary}"],
+            [
+                "/usr/bin/curl",
+                "-s",
+                f"http://127.0.0.1:8090/workshop/{quote('蠶食漂移偵測', safe='')}/{encoded}",
+            ],
             capture_output=True,
             timeout=10,
         )
