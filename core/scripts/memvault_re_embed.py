@@ -87,16 +87,15 @@ class OmlxWorker:
                 self.proc.kill()
 
 
-def get_all_blocks(conn):
-    """Fetch all block IDs and content."""
+def get_all_blocks(conn, missing_only: bool = False):
+    """Fetch block IDs and content. If missing_only, only blocks without embedding."""
     from sqlalchemy import text
 
-    rows = conn.execute(
-        text(
-            "SELECT id, content, length(content) FROM memvault.blocks "
-            "WHERE deleted_at IS NULL ORDER BY created_at"
-        )
-    ).fetchall()
+    query = "SELECT id, content, length(content) FROM memvault.blocks WHERE deleted_at IS NULL"
+    if missing_only:
+        query += " AND embedding IS NULL"
+    query += " ORDER BY created_at"
+    rows = conn.execute(text(query)).fetchall()
     return rows
 
 
@@ -109,13 +108,13 @@ def update_embeddings(conn, block_ids: list[str], embeddings: list[list[float]])
             continue
         emb_str = "[" + ",".join(str(v) for v in emb) + "]"
         conn.execute(
-            text("UPDATE memvault.blocks SET embedding = :emb::vector WHERE id = :bid"),
+            text("UPDATE memvault.blocks SET embedding = CAST(:emb AS vector) WHERE id = :bid"),
             {"emb": emb_str, "bid": bid},
         )
         conn.execute(
             text(
                 "INSERT INTO memvault.block_embeddings (block_id, embedding) "
-                "VALUES (:bid, :emb::vector) "
+                "VALUES (:bid, CAST(:emb AS vector)) "
                 "ON CONFLICT (block_id) DO UPDATE SET embedding = EXCLUDED.embedding"
             ),
             {"bid": bid, "emb": emb_str},
@@ -136,6 +135,9 @@ def save_checkpoint(processed: set[str]):
 def main():
     parser = argparse.ArgumentParser(description="Re-embed memvault blocks via oMLX")
     parser.add_argument("--dry-run", action="store_true", help="Only report, don't update DB")
+    parser.add_argument(
+        "--missing-only", action="store_true", help="Only re-embed blocks with NULL embedding"
+    )
     args = parser.parse_args()
 
     from sqlalchemy import create_engine
@@ -148,8 +150,10 @@ def main():
 
     try:
         with engine.connect() as conn:
-            blocks = get_all_blocks(conn)
-            logger.info("Total blocks: %d", len(blocks))
+            blocks = get_all_blocks(conn, missing_only=args.missing_only)
+            logger.info(
+                "Total blocks: %d%s", len(blocks), " (missing only)" if args.missing_only else ""
+            )
 
             processed = load_checkpoint()
             pending = [

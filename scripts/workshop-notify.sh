@@ -83,8 +83,14 @@ if [[ "$MODE" == "bark" ]]; then
     fi
 
     params=""
-    [[ -n "$URL" && "$URL" != "/" ]] && params="${params:+$params&}url=$URL"
-    [[ -n "$CATEGORY" ]] && params="${params:+$params&}group=$CATEGORY"
+    if [[ -n "$URL" && "$URL" != "/" ]]; then
+        encoded_url=$(python3 -c "from urllib.parse import quote; print(quote('$URL', safe=''))")
+        params="${params:+$params&}url=$encoded_url"
+    fi
+    if [[ -n "$CATEGORY" ]]; then
+        encoded_cat=$(python3 -c "from urllib.parse import quote; print(quote('$CATEGORY', safe=''))")
+        params="${params:+$params&}group=$encoded_cat"
+    fi
     [[ "$SEVERITY" == "critical" || "$SEVERITY" == "warning" ]] && params="${params:+$params&}level=timeSensitive"
     [[ -n "$params" ]] && bark_url="${bark_url}?${params}"
 
