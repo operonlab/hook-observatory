@@ -116,7 +116,28 @@ class EventBus:
     # ------------------------------------------------------------------ dispatch
 
     async def publish(self, event: Event) -> None:
-        await self._backend.publish(event)
+        try:
+            await self._backend.publish(event)
+        except Exception:
+            _log.warning("EventBus.publish failed for %s", event.type, exc_info=True)
+
+    def publish_fire_and_forget(self, event: Event) -> None:
+        """Schedule event publish without awaiting. Safe for sync hooks (after_create etc.).
+
+        Logs exceptions instead of swallowing them silently.
+        """
+        import asyncio
+
+        def _on_done(fut: asyncio.Future) -> None:
+            if fut.exception():
+                _log.warning(
+                    "Fire-and-forget publish failed for %s: %s",
+                    event.type,
+                    fut.exception(),
+                )
+
+        task = asyncio.ensure_future(self.publish(event))
+        task.add_done_callback(_on_done)
 
     # ------------------------------------------------------------------ lifecycle
 

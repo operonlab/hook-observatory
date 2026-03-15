@@ -63,35 +63,29 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
         return d
 
     def after_create(self, instance: Task) -> None:
-        import asyncio
-
-        data = {
-            "task_id": instance.id,
-            "id": instance.id,
-            "space_id": instance.space_id,
-            "title": instance.title,
-            "description": instance.description,
-            "status": instance.status,
-            "priority": instance.priority,
-            "project": instance.project,
-            "tags": instance.tags or [],
-            "created_at": instance.created_at.isoformat() if instance.created_at else None,
-            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-        }
-        coro = event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=TaskflowEvents.TASK_CREATED,
-                data=data,
+                data={
+                    "task_id": instance.id,
+                    "id": instance.id,
+                    "space_id": instance.space_id,
+                    "title": instance.title,
+                    "description": instance.description,
+                    "status": instance.status,
+                    "priority": instance.priority,
+                    "project": instance.project,
+                    "tags": instance.tags or [],
+                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+                },
                 source="taskflow",
                 user_id=instance.created_by,
             )
         )
-        _task = asyncio.ensure_future(coro)  # noqa: RUF006
 
     def after_update(self, instance: Task, changes: dict) -> None:
-        import asyncio
-
-        coro = event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=TaskflowEvents.TASK_UPDATED,
                 data={
@@ -111,12 +105,9 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
                 user_id=instance.created_by,
             )
         )
-        _task = asyncio.ensure_future(coro)  # noqa: RUF006
 
     def after_delete(self, instance: Task) -> None:
-        import asyncio
-
-        coro = event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=TaskflowEvents.TASK_DELETED,
                 data={
@@ -128,7 +119,6 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
                 user_id=instance.created_by,
             )
         )
-        _task = asyncio.ensure_future(coro)  # noqa: RUF006
 
     def to_response(self, instance: Task) -> TaskResponse:
         return TaskResponse(
@@ -410,27 +400,15 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
         total = (await db.execute(select(func.count()).select_from(Task).where(*base))).scalar_one()
 
         # By status
-        status_q = (
-            select(Task.status, func.count())
-            .where(*base)
-            .group_by(Task.status)
-        )
+        status_q = select(Task.status, func.count()).where(*base).group_by(Task.status)
         by_status = dict((await db.execute(status_q)).all())
 
         # By source
-        source_q = (
-            select(Task.source, func.count())
-            .where(*base)
-            .group_by(Task.source)
-        )
+        source_q = select(Task.source, func.count()).where(*base).group_by(Task.source)
         by_source = dict((await db.execute(source_q)).all())
 
         # By priority
-        priority_q = (
-            select(Task.priority, func.count())
-            .where(*base)
-            .group_by(Task.priority)
-        )
+        priority_q = select(Task.priority, func.count()).where(*base).group_by(Task.priority)
         by_priority = dict((await db.execute(priority_q)).all())
 
         # Overdue
