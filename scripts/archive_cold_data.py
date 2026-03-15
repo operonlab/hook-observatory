@@ -368,16 +368,24 @@ async def archive_memvault_blocks(
     dry_run: bool,
     s3_upload_fn=None,
 ) -> dict:
-    """Phase 2: Archive old memvault blocks to archive table."""
+    """Phase 2: Archive old memvault blocks to archive table.
+
+    G7 integration: Uses tier_manager to evaluate composite scores before
+    archiving. Blocks with high access count / importance may be preserved.
+    P4 integration: Calls tier_digest to generate summaries during tier transition.
+    """
     from src.modules.memvault.models import (
         BlockArchive,
         BlockEmbedding,
         MemoryBlock,
     )
+    from src.modules.memvault.scoring_pipeline import weibull_decay
+    from src.shared.tier_manager import TierableMemory, evaluate_tier
 
     stats = {
         "scanned": 0, "cold_archive": 0,
         "cold_blob": 0, "skipped": 0, "errors": 0,
+        "tier_preserved": 0, "digests_generated": 0,
     }
 
     q = select(MemoryBlock).where(
@@ -386,9 +394,36 @@ async def archive_memvault_blocks(
     rows = (await db.execute(q)).scalars().all()
     stats["scanned"] = len(rows)
 
+    now = datetime.now(UTC)
     batch_count = 0
     for block in rows:
         try:
+            # G7: Evaluate composite score — high-access blocks may be preserved
+            age_days = max((now - block.created_at).total_seconds() / 86400, 0)
+            confidence = block.confidence or 0.5
+            tier_label = "core" if confidence >= 0.8 else ("hot" if confidence >= 0.5 else "warm")
+            decay_score = weibull_decay(age_days, tier_label)
+
+            tierable = TierableMemory(
+                memory_id=block.id,
+                current_tier="warm",  # candidates here are warm (past hot cutoff)
+                importance=confidence,
+                access_count=block.access_count or 0,
+                created_at=block.created_at,
+            )
+            transition = evaluate_tier(tierable, decay_score, now=now)
+
+            # If tier_manager says promote (warm→hot) or no change, skip archiving
+            if transition is None or transition.to_tier in ("warm", "hot"):
+                stats["tier_preserved"] += 1
+                logger.info(
+                    "[Phase 2] memvault: preserving block %s "
+                    "(access=%d, decay=%.3f, reason=%s)",
+                    block.id, block.access_count or 0, decay_score,
+                    transition.reason if transition else "no_change",
+                )
+                continue
+
             content = block.content or ""
             content_size = len(content.encode("utf-8"))
             archive_type = (
@@ -396,7 +431,7 @@ async def archive_memvault_blocks(
                 if content_size > blob_threshold
                 else "cold-archive"
             )
-            now_str = datetime.now(UTC).isoformat()
+            now_str = now.isoformat()
 
             if dry_run:
                 logger.info(
@@ -455,6 +490,29 @@ async def archive_memvault_blocks(
             )
 
             stats[archive_type.replace("-", "_")] += 1
+
+            # P4: Generate tier digest during warm→cold transition
+            try:
+                from src.modules.memvault.tier_digest import process_tier_transition
+                from src.shared.tier_manager import TierTransition
+
+                digest_result = await process_tier_transition(
+                    TierTransition(
+                        memory_id=block.id,
+                        from_tier="warm",
+                        to_tier="cold",
+                        reason="age-based archive",
+                    ),
+                    db,
+                )
+                if digest_result.get("digest"):
+                    stats["digests_generated"] += 1
+            except Exception as digest_exc:
+                logger.warning(
+                    "[Phase 2] tier_digest failed for %s: %s",
+                    block.id, digest_exc,
+                )
+
             logger.info(
                 "Archived block %s -> %s", block.id, archive_type
             )
@@ -786,7 +844,21 @@ async def freeze_memvault_blocks(
                 stats["errors"] += 1
                 continue
 
-            # 4. Insert frozen metadata
+            # 4. P4: Generate digest for frozen summary
+            summary = None
+            try:
+                from src.modules.memvault.tier_digest import generate_digest
+
+                summary = await generate_digest(
+                    content, row.block_type, list(row.tags or []),
+                )
+            except Exception as digest_exc:
+                logger.warning(
+                    "[Phase 3] tier_digest failed for %s: %s",
+                    row.id, digest_exc,
+                )
+
+            # 5. Insert frozen metadata
             now_str = datetime.now(UTC).isoformat()
             db.add(BlockFrozen(
                 id=row.id,
@@ -798,7 +870,7 @@ async def freeze_memvault_blocks(
                 block_type=row.block_type,
                 tags=row.tags or [],
                 source_session=row.source_session,
-                summary=None,
+                summary=summary,
                 s3_uri=s3_uri,
                 content_hash=content_hash,
                 content_size=len(
@@ -806,14 +878,14 @@ async def freeze_memvault_blocks(
                 ),
             ))
 
-            # 5. Delete from archive table
+            # 6. Delete from archive table
             await db.execute(
                 delete(BlockArchive).where(
                     BlockArchive.id == row.id
                 )
             )
 
-            # 6. Delete old cold-blob S3 object if present
+            # 7. Delete old cold-blob S3 object if present
             if (
                 row.content
                 and row.content.startswith("s3://")

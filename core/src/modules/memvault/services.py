@@ -282,6 +282,7 @@ class MemoryBlockService(
         scope: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        keywords: list[str] | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
         """Vector similarity search with RRF hybrid retrieval + scoring pipeline.
 
@@ -333,6 +334,7 @@ class MemoryBlockService(
                 tags,
                 block_type,
                 extra_filters=extra_filters,
+                keywords=keywords,
             )
             meta.keyword_used = True
             # RRF Fusion
@@ -356,7 +358,24 @@ class MemoryBlockService(
         # Phase A1 + A2: Noise filter on results + Scoring Pipeline
         results, _ = filter_results(results)
 
-        # Convert to scoring pipeline format (G6: include access tracking fields)
+        # Fetch ORM rows for access tracking (G6) + embeddings (P1 semantic_boost/MMR)
+        # SemanticSearchResult.block is MemoryBlockResponse (Pydantic), not ORM model,
+        # so access_count/last_accessed_at/embedding don't survive serialization.
+        block_ids = [r.block.id for r in results]
+        orm_map: dict[str, MemoryBlock] = {}
+        emb_map: dict[str, list[float]] = {}
+        if block_ids:
+            orm_q = (
+                select(MemoryBlock, BlockEmbedding.embedding)
+                .outerjoin(BlockEmbedding, BlockEmbedding.block_id == MemoryBlock.id)
+                .where(MemoryBlock.id.in_(block_ids))
+            )
+            for row in (await db.execute(orm_q)).all():
+                orm_map[row.MemoryBlock.id] = row.MemoryBlock
+                if row.embedding is not None:
+                    emb_map[row.MemoryBlock.id] = list(row.embedding)
+
+        # Convert to scoring pipeline format
         pipeline = ScoringPipeline(scoring_config)
         scored_dicts = [
             {
@@ -365,9 +384,9 @@ class MemoryBlockService(
                 "content": r.block.content,
                 "created_at": r.block.created_at,
                 "confidence": r.block.confidence,
-                "embedding": None,
-                "access_count": getattr(r.block, "access_count", 0) or 0,
-                "last_accessed_at": getattr(r.block, "last_accessed_at", None),
+                "embedding": emb_map.get(r.block.id),
+                "access_count": getattr(orm_map.get(r.block.id), "access_count", 0) or 0,
+                "last_accessed_at": getattr(orm_map.get(r.block.id), "last_accessed_at", None),
             }
             for r in results
         ]
@@ -469,6 +488,13 @@ class MemoryBlockService(
         # Build score map from Qdrant results
         score_map = {r.entity_id: r.score for r in qdrant_results}
 
+        # Fetch embeddings for scoring pipeline (P1 semantic_boost/MMR)
+        emb_map: dict[str, list[float]] = {}
+        if entity_ids:
+            emb_q = select(BlockEmbedding).where(BlockEmbedding.block_id.in_(entity_ids))
+            for emb_row in (await db.execute(emb_q)).scalars().all():
+                emb_map[emb_row.block_id] = list(emb_row.embedding)
+
         # Convert to scoring pipeline format
         scored_dicts = []
         for eid in entity_ids:
@@ -482,7 +508,9 @@ class MemoryBlockService(
                     "content": block.content,
                     "created_at": block.created_at,
                     "confidence": block.confidence,
-                    "embedding": None,
+                    "embedding": emb_map.get(eid),
+                    "access_count": block.access_count or 0,
+                    "last_accessed_at": block.last_accessed_at,
                 }
             )
 
@@ -510,6 +538,16 @@ class MemoryBlockService(
             )
             for d in scored_dicts[:top_k]
         ]
+
+        # G6: Record access for returned blocks (fire-and-forget, best-effort)
+        if final:
+            from src.shared.access_tracker import record_access
+
+            for sr in final:
+                try:
+                    await record_access(sr.block.id, db)
+                except Exception:  # noqa: S110
+                    pass
 
         return final, meta
 
@@ -557,17 +595,30 @@ class MemoryBlockService(
         tags: list[str] | None = None,
         block_type: str | None = None,
         extra_filters: list | None = None,
+        keywords: list[str] | None = None,
     ) -> list[SemanticSearchResult]:
         """PostgreSQL keyword search.
 
         Uses tsvector for English text; jieba multi-term ILIKE for CJK.
-        CJK improvement: "port 衝突" → jieba → ["port", "衝突"]
-          → WHERE content ILIKE '%port%' AND content ILIKE '%衝突%'
-          instead of: WHERE content ILIKE '%port 衝突%' (exact substring).
+        When HyDE-expanded keywords are provided, they augment the search terms.
         """
         if is_cjk(query):
             # CJK: jieba multi-term ILIKE with BM25-lite scoring
-            conditions = build_ilike_conditions(query, MemoryBlock.content)
+            # When HyDE keywords are available, use them for richer search conditions
+            if keywords:
+                from sqlalchemy import or_
+
+                # Original conditions + OR-expanded conditions from HyDE keywords
+                base_conditions = build_ilike_conditions(query, MemoryBlock.content)
+                extra_kw_conditions = [
+                    MemoryBlock.content.ilike(f"%{kw}%") for kw in keywords if len(kw) >= 2
+                ]
+                if extra_kw_conditions:
+                    conditions = [or_(*base_conditions, *extra_kw_conditions)]
+                else:
+                    conditions = base_conditions
+            else:
+                conditions = build_ilike_conditions(query, MemoryBlock.content)
             q = (
                 select(MemoryBlock)
                 .where(
@@ -580,7 +631,14 @@ class MemoryBlockService(
             )
         else:
             # English: use tsvector + ts_rank_cd
-            ts_query = func.plainto_tsquery("english", query)
+            # When HyDE keywords are available, combine them with original query
+            search_text = query
+            if keywords:
+                # Merge HyDE keywords into the search text for richer tsvector matching
+                extra_terms = " ".join(kw for kw in keywords if kw.lower() not in query.lower())
+                if extra_terms:
+                    search_text = f"{query} {extra_terms}"
+            ts_query = func.plainto_tsquery("english", search_text)
             ts_vector = func.to_tsvector("english", MemoryBlock.content)
             rank = func.ts_rank_cd(ts_vector, ts_query).label("rank")
             q = (
@@ -918,6 +976,17 @@ class MemoryBlockService(
                     for r in archive_rows
                 ]
             )
+
+        # G6: Record access for returned blocks (fire-and-forget, best-effort)
+        # Only for hot/warm results (archive blocks don't have access_count)
+        if results:
+            from src.shared.access_tracker import record_access
+
+            for sr in results:
+                try:
+                    await record_access(sr.block.id, db)
+                except Exception:  # noqa: S110
+                    pass
 
         return results
 

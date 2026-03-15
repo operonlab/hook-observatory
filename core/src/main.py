@@ -55,6 +55,11 @@ async def lifespan(app: FastAPI):
     register_module_actions()
     event_bus.subscribe("*", on_any_event)
 
+    # Register KG auto-evolution handler (P5)
+    from src.modules.memvault.kg_auto_evolve import register_auto_evolve_handler
+
+    register_auto_evolve_handler()
+
     # Initialize Qdrant search index and register indexing handlers
     from src.events.handlers.qdrant_indexer import startup as qdrant_startup
 
