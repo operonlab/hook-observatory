@@ -87,7 +87,10 @@ async def _send_request(request: dict) -> dict | None:
         _process.stdin.flush()
 
         loop = asyncio.get_event_loop()
-        response_line = await loop.run_in_executor(None, _process.stdout.readline)
+        response_line = await asyncio.wait_for(
+            loop.run_in_executor(None, _process.stdout.readline),
+            timeout=30,
+        )
         if not response_line:
             logger.warning("oMLX worker returned empty response")
             _ready = False

@@ -224,6 +224,7 @@ async def search(
             )
 
     # HyDE: Expand query for better retrieval (short/vague queries → hypothetical memory)
+    expanded = None
     try:
         from .query_expander import expand_query
 
@@ -283,11 +284,7 @@ async def search(
         )
 
     # Pass HyDE-expanded keywords to semantic_search for enriched keyword matching
-    hyde_keywords = None
-    try:
-        hyde_keywords = expanded.keywords or None
-    except NameError:
-        pass
+    hyde_keywords = getattr(expanded, "keywords", None) if expanded else None
 
     results, meta = await memory_block_service.semantic_search(
         db,

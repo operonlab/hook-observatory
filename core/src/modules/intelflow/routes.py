@@ -197,13 +197,16 @@ async def search_reports(
     results = await search_engine.semantic_search(
         db, space_id, body.query, limit=body.limit, threshold=body.threshold
     )
-    # Record search session
-    result_type = "found_existing" if results else "no_results"
-    report_id = results[0].report.id if results else None
-    await search_session_service.record(
-        db, space_id, body.query, source="api", result_type=result_type, report_id=report_id
-    )
-    await db.commit()
+    # Record search session (non-critical — degrade gracefully on failure)
+    try:
+        result_type = "found_existing" if results else "no_results"
+        report_id = results[0].report.id if results else None
+        await search_session_service.record(
+            db, space_id, body.query, source="api", result_type=result_type, report_id=report_id
+        )
+        await db.commit()
+    except Exception:
+        logger.warning("Failed to record search session", exc_info=True)
     return results
 
 
