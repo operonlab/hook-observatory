@@ -282,6 +282,13 @@ async def search(
             metadata=meta if include_metadata else None,
         )
 
+    # Pass HyDE-expanded keywords to semantic_search for enriched keyword matching
+    hyde_keywords = None
+    try:
+        hyde_keywords = expanded.keywords or None
+    except NameError:
+        pass
+
     results, meta = await memory_block_service.semantic_search(
         db,
         space_id,
@@ -291,6 +298,7 @@ async def search(
         scope=scope,
         date_from=date_from,
         date_to=date_to,
+        keywords=hyde_keywords,
     )
 
     # G2: Sanitize results before returning (prevents injection via stored memories)
