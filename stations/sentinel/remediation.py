@@ -97,6 +97,20 @@ class SimpleRestarter:
                     stderr=asyncio.subprocess.PIPE,
                 )
                 await asyncio.wait_for(proc.communicate(), timeout=45)
+            # Brief wait then verify the process came back
+            await asyncio.sleep(2)
+            check_proc = await asyncio.create_subprocess_exec(
+                str(PYTHON),
+                str(WORKSHOP_SERVICES),
+                "status",
+                name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _stdout, _ = await asyncio.wait_for(check_proc.communicate(), timeout=10)
+            if check_proc.returncode != 0:
+                logger.warning("Service %s restarted but health check failed", name)
+                return False
             logger.info("Simple restart succeeded for %s", name)
             return True
         except (TimeoutError, FileNotFoundError, OSError) as e:

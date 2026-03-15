@@ -525,8 +525,8 @@ def compress_old_logs() -> None:
                 with gzip.open(gz_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
             logfile.unlink()
-        except Exception:  # noqa: S110
-            pass
+        except Exception:
+            log(f"WARNING: gzip compression failed for {logfile}")
 
 
 def cleanup_old_logs() -> None:
@@ -535,8 +535,8 @@ def cleanup_old_logs() -> None:
         try:
             if gz_file.stat().st_mtime < cutoff:
                 gz_file.unlink()
-        except Exception:  # noqa: S110
-            pass
+        except Exception:
+            log(f"WARNING: failed to remove old log {gz_file}")
 
 
 # ── Health Check Loop ──────────────────────────────────────────
@@ -583,6 +583,7 @@ def health_check_docker() -> None:
                     ],
                     capture_output=True,
                     env=_DAEMON_ENV,
+                    timeout=120,
                 )
                 break  # compose up starts all — no need to check remaining
 

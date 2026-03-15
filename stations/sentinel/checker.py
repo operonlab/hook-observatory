@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -383,7 +384,16 @@ async def run_light_check(check: LightCheck) -> CheckResult:
                     )
 
                 if check.expect_json:
-                    data = resp.json()
+                    try:
+                        data = resp.json()
+                    except (ValueError, json.JSONDecodeError):
+                        return CheckResult(
+                            check.name,
+                            "light",
+                            "unhealthy",
+                            elapsed,
+                            "json_parse_error",
+                        )
                     for k, v in check.expect_json.items():
                         if data.get(k) != v:
                             return CheckResult(
@@ -445,6 +455,13 @@ async def run_light_check(check: LightCheck) -> CheckResult:
             "Connection refused",
         )
     except (TimeoutError, httpx.TimeoutException):
+        # Kill lingering subprocess if it exists
+        try:
+            if proc.returncode is None:  # type: ignore[possibly-undefined]
+                proc.kill()
+                await proc.communicate()
+        except (NameError, ProcessLookupError):
+            pass
         return CheckResult(
             check.name, "light", "timeout", (time.monotonic() - start) * 1000, "Timeout"
         )
