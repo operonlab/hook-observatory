@@ -197,7 +197,7 @@ class EntityResolutionService:
         secondary.deleted_at = datetime.now(UTC)
         await db.flush()
 
-        event_bus.publish(
+        event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.ENTITY_MERGED,
                 data={
