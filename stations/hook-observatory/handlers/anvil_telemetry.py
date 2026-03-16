@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -49,6 +50,7 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         "skill_name": skill_name,
         "session_id": data.get("session_id", ""),
         "agent_model": data.get("agent_model", ""),
+        "tool_use_id": data.get("tool_use_id", ""),
         "success": tool_response.get("success", True),
         "error_message": tool_response.get("error", None),
         "tool_calls_count": 1,
@@ -82,8 +84,9 @@ def _post_to_api(payload: dict) -> bool:
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310
-            return resp.status == 201
-    except (urllib.error.URLError, OSError, ValueError):
+            return resp.status in (200, 201)
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        print(f"[anvil-telemetry] API POST failed: {exc}", file=sys.stderr)
         return False
 
 
@@ -98,8 +101,8 @@ def _write_spool(payload: dict) -> None:
         }
         with open(SPOOL_FILE, "a") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
+    except OSError as exc:
+        print(f"[anvil-telemetry] Spool write failed: {exc}", file=sys.stderr)
 
 
 def _sync_pending() -> HookResult:

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from db import Invocation, get_session
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ class InvocationCreateRequest(BaseModel):
     session_id: str | None = None
     agent_model: str | None = None
     payload: dict[str, Any] | None = None
+    tool_use_id: str | None = None
 
 
 class InvocationResponse(BaseModel):
@@ -41,6 +42,7 @@ class InvocationResponse(BaseModel):
     session_id: str | None
     agent_model: str | None
     payload: dict[str, Any] | None
+    tool_use_id: str | None
 
     model_config = {"from_attributes": True}
 
@@ -60,9 +62,20 @@ class InvocationListResponse(BaseModel):
 @router.post("/invocations", status_code=201)
 async def record_invocation(
     body: InvocationCreateRequest,
+    response: Response,
     db: AsyncSession = Depends(get_session),
 ) -> InvocationResponse:
     """Record a skill invocation (from hook telemetry)."""
+    # Dedup by tool_use_id if provided
+    if body.tool_use_id:
+        existing = await db.execute(
+            select(Invocation).where(Invocation.tool_use_id == body.tool_use_id)
+        )
+        found = existing.scalar_one_or_none()
+        if found:
+            response.status_code = 200
+            return InvocationResponse.model_validate(found)
+
     inv = Invocation(**body.model_dump())
     db.add(inv)
     await db.commit()

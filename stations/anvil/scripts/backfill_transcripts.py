@@ -62,31 +62,6 @@ def check_anvil_alive() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Deduplication cache
-# ---------------------------------------------------------------------------
-
-
-def fetch_existing(session_id: str, skill_name: str) -> bool:
-    """Return True if an invocation for this session+skill already exists."""
-    params = urllib.parse.urlencode(
-        {"session_id": session_id, "skill_name": skill_name, "limit": 1}
-    )
-    url = f"{ANVIL_BASE}/invocations?{params}"
-    try:
-        result = _http_get(url)
-        # API returns {"items": [...], "total": N, ...}
-        # Also handle plain list response just in case
-        if isinstance(result, dict):
-            items = result.get("items", result.get("results", []))
-        else:
-            items = result
-        return len(items) > 0
-    except Exception:
-        # If we can't check, assume not exists to avoid missing data
-        return False
-
-
-# ---------------------------------------------------------------------------
 # JSONL parsing
 # ---------------------------------------------------------------------------
 
@@ -155,12 +130,15 @@ def extract_skill_calls(path: Path, since: datetime | None) -> list[dict]:
                     if not skill_name:
                         continue
 
+                    tool_use_id = block.get("id", "")
+
                     results.append(
                         {
                             "skill_name": skill_name,
                             "session_id": session_id,
                             "timestamp": ts.isoformat(),
                             "args": args,
+                            "tool_use_id": tool_use_id,
                         }
                     )
     except OSError as exc:
@@ -226,6 +204,7 @@ def main() -> None:
     total_found = 0
     total_posted = 0
     total_skipped = 0
+    seen: set[str] = set()
 
     for idx, jsonl_path in enumerate(all_jsonl, 1):
         calls = extract_skill_calls(jsonl_path, since_dt)
@@ -235,15 +214,19 @@ def main() -> None:
             for call in calls:
                 session_id = call["session_id"]
                 skill_name = call["skill_name"]
+                tool_use_id = call.get("tool_use_id", "")
 
-                # Deduplicate
-                if fetch_existing(session_id, skill_name):
-                    total_skipped += 1
-                    continue
+                # Deduplicate within this run using tool_use_id
+                if tool_use_id:
+                    if tool_use_id in seen:
+                        total_skipped += 1
+                        continue
+                    seen.add(tool_use_id)
 
                 payload = {
                     "skill_name": skill_name,
                     "session_id": session_id,
+                    "tool_use_id": tool_use_id or None,
                     "success": True,
                     "tool_calls_count": 1,
                     "payload": {
