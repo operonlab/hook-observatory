@@ -376,6 +376,108 @@ def cmd_status(args):
         sys.exit(1)
 
 
+# ======================== Activity Spans ========================
+
+
+def cmd_spans_list(args):
+    client = DailyOSClient()
+    try:
+        result = client.list_spans(date_from=args.date_from, date_to=args.date_to)
+        if args.json:
+            _json_out(result, True)
+            return
+        items = result if isinstance(result, list) else result.get("items", [])
+        print(f"📅 Activity Spans ({len(items)}):\n")
+        for s in items:
+            active = "✅" if s.get("is_active") else "⏸"
+            cat = f"  [{s['category']}]" if s.get("category") else ""
+            print(
+                f"  {active} {s.get('title', '?'):30s}  {s.get('start_date', '?')} ~ {s.get('end_date', '?')}{cat}"
+            )
+            print(f"      id={str(s.get('id', '?'))[:12]}")
+    except (APIError, APIConnectionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_spans_create(args):
+    client = DailyOSClient()
+    try:
+        data = {
+            "title": args.title,
+            "start_date": args.start_date,
+            "end_date": args.end_date,
+        }
+        if args.category:
+            data["category"] = args.category
+        if args.color:
+            data["color"] = args.color
+        if args.notes:
+            data["notes"] = args.notes
+        result = client.create_span(data)
+        if args.json:
+            _json_out(result, True)
+            return
+        print(f"✅ Span created: {result.get('id', '?')}")
+        print(f"   {result.get('title')}  {result.get('start_date')} ~ {result.get('end_date')}")
+    except (APIError, APIConnectionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_spans_get_for_date(args):
+    client = DailyOSClient()
+    try:
+        result = client.get_spans_for_date(args.date)
+        if args.json:
+            _json_out(result, True)
+            return
+        items = result if isinstance(result, list) else []
+        print(f"📅 Spans for {args.date} ({len(items)}):\n")
+        for s in items:
+            print(f"  • {s.get('title', '?'):30s}  {s.get('start_date', '?')} ~ {s.get('end_date', '?')}")
+    except (APIError, APIConnectionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_spans_update(args):
+    client = DailyOSClient()
+    try:
+        data = {}
+        if args.title:
+            data["title"] = args.title
+        if args.start_date:
+            data["start_date"] = args.start_date
+        if args.end_date:
+            data["end_date"] = args.end_date
+        if args.category:
+            data["category"] = args.category
+        if args.color:
+            data["color"] = args.color
+        if args.active is not None:
+            data["is_active"] = args.active
+        result = client.update_span(args.id, data)
+        if args.json:
+            _json_out(result, True)
+            return
+        print(f"✅ Span updated: {args.id}")
+        print(f"   {result.get('title')}  {result.get('start_date')} ~ {result.get('end_date')}")
+    except (APIError, APIConnectionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_spans_delete(args):
+    client = DailyOSClient()
+    try:
+        client.delete_span(args.id)
+        print(f"🗑  Span deleted: {args.id}")
+    except (APIError, APIConnectionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 # ======================== Main ========================
 
 
@@ -472,6 +574,42 @@ def main():
     p_ptrans.add_argument("--status", required=True, help="Target status")
     p_ptrans.add_argument("--comment", help="Transition comment")
     p_ptrans.set_defaults(func=cmd_plans_transition)
+
+    # spans
+    p_spans = sub.add_parser("spans", help="Activity span management")
+    ssub = p_spans.add_subparsers(dest="spans_cmd", required=True)
+
+    p_slist = ssub.add_parser("list", help="List activity spans")
+    p_slist.add_argument("--date-from", dest="date_from", help="Start date (YYYY-MM-DD)")
+    p_slist.add_argument("--date-to", dest="date_to", help="End date (YYYY-MM-DD)")
+    p_slist.set_defaults(func=cmd_spans_list)
+
+    p_screate = ssub.add_parser("create", help="Create an activity span")
+    p_screate.add_argument("--title", required=True, help="Span title")
+    p_screate.add_argument("--start-date", dest="start_date", required=True, help="Start date (YYYY-MM-DD)")
+    p_screate.add_argument("--end-date", dest="end_date", required=True, help="End date (YYYY-MM-DD)")
+    p_screate.add_argument("--category", help="Category label")
+    p_screate.add_argument("--color", help="Hex color code")
+    p_screate.add_argument("--notes", help="Notes")
+    p_screate.set_defaults(func=cmd_spans_create)
+
+    p_sdate = ssub.add_parser("get-for-date", help="Get spans for a date")
+    p_sdate.add_argument("date", help="Target date (YYYY-MM-DD)")
+    p_sdate.set_defaults(func=cmd_spans_get_for_date)
+
+    p_supdate = ssub.add_parser("update", help="Update an activity span")
+    p_supdate.add_argument("id", help="Span ID")
+    p_supdate.add_argument("--title", help="New title")
+    p_supdate.add_argument("--start-date", dest="start_date", help="New start date")
+    p_supdate.add_argument("--end-date", dest="end_date", help="New end date")
+    p_supdate.add_argument("--category", help="New category")
+    p_supdate.add_argument("--color", help="New color")
+    p_supdate.add_argument("--active", type=lambda x: x.lower() in ("true", "1", "yes"), default=None, help="Active state")
+    p_supdate.set_defaults(func=cmd_spans_update)
+
+    p_sdelete = ssub.add_parser("delete", help="Delete an activity span")
+    p_sdelete.add_argument("id", help="Span ID")
+    p_sdelete.set_defaults(func=cmd_spans_delete)
 
     # status
     p_status = sub.add_parser("status", help="DailyOS summary status")

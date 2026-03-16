@@ -192,3 +192,48 @@ class DailyOSClient(BaseClient):
         if comment is not None:
             body["comment"] = comment
         return self._post(f"/plans/{plan_id}/transition", body)
+
+    # ======================== Activity Spans ========================
+
+    def list_spans(
+        self,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list:
+        """List activity spans, optionally filtered by date range. GET /spans"""
+        return self._get(
+            "/spans",
+            {"date_from": date_from, "date_to": date_to},
+        )
+
+    def create_span(self, data: dict) -> dict:
+        """Create a new activity span. POST /spans
+
+        data keys:
+            title (str): Span title.
+            start_date (str): Start date (YYYY-MM-DD, inclusive).
+            end_date (str): End date (YYYY-MM-DD, inclusive).
+            category (str, optional): Category label.
+            color (str, optional): Hex color code.
+            notes (str, optional): Free-form notes.
+        """
+        return self._post("/spans", data)
+
+    def update_span(self, span_id: str, data: dict) -> dict:
+        """Update an activity span. PUT /spans/{span_id}"""
+        return self._put(f"/spans/{span_id}", data)
+
+    def delete_span(self, span_id: str) -> None:
+        """Delete an activity span. DELETE /spans/{span_id}"""
+        return self._delete(f"/spans/{span_id}")
+
+    def get_spans_for_date(self, target_date: str) -> list:
+        """Get active spans covering a date. GET /spans/for-date/{target_date}"""
+        return self._get(f"/spans/for-date/{target_date}")
+
+    def get_spans_for_range(self, range_start: str, range_end: str) -> list:
+        """Get active spans overlapping a range. GET /spans/for-range"""
+        return self._get(
+            "/spans/for-range",
+            {"range_start": range_start, "range_end": range_end},
+        )

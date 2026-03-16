@@ -2,6 +2,9 @@ import { createCrudApi, request } from '@/api/client'
 import type { PaginatedResponse } from '@/types'
 import type {
   ActivateResponse,
+  ActivitySpan,
+  ActivitySpanCreate,
+  ActivitySpanUpdate,
   DailyPlan,
   DailyPlanStats,
   Method,
@@ -141,4 +144,33 @@ export const taskGroupApi = {
     }),
 
   remove: (id: string) => request<void>(`/dailyos/groups/${id}`, { method: 'DELETE' }),
+}
+
+export const spanApi = {
+  list: (params?: { date_from?: string; date_to?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.date_from) qs.set('date_from', params.date_from)
+    if (params?.date_to) qs.set('date_to', params.date_to)
+    const query = qs.toString()
+    return request<ActivitySpan[]>(`/dailyos/spans${query ? `?${query}` : ''}`)
+  },
+
+  create: (data: ActivitySpanCreate) =>
+    request<ActivitySpan>('/dailyos/spans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: ActivitySpanUpdate) =>
+    request<ActivitySpan>(`/dailyos/spans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  remove: (id: string) => request<void>(`/dailyos/spans/${id}`, { method: 'DELETE' }),
+
+  forDate: (date: string) => request<ActivitySpan[]>(`/dailyos/spans/for-date/${date}`),
+
+  forRange: (start: string, end: string) =>
+    request<ActivitySpan[]>(`/dailyos/spans/for-range?range_start=${start}&range_end=${end}`),
 }

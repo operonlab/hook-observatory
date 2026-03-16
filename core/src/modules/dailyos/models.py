@@ -168,3 +168,22 @@ class RecurringItem(SpaceScopedModel):
         String(32), ForeignKey(f"{SCHEMA}.task_groups.id", ondelete="SET NULL"), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+
+
+class ActivitySpan(SpaceScopedModel):
+    """A multi-day activity span — one-time events like trips, conferences, vacations."""
+
+    __tablename__ = "activity_spans"
+    __table_args__ = (
+        Index("idx_as_space", "space_id"),
+        Index("idx_as_date_range", "space_id", "start_date", "end_date"),
+        {"schema": SCHEMA},
+    )
+
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)  # inclusive
+    category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str] = mapped_column(Text, server_default=text("'#89b4fa'"))
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
