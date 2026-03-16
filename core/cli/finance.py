@@ -25,6 +25,7 @@ import json
 import sys
 from datetime import datetime
 
+from cli.cli_utils import resolve_text_arg
 from cli.exit_codes import exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.finance import FinanceClient
@@ -201,8 +202,9 @@ def cmd_wallet_sync(args):
     client = _client()
     try:
         data = {"synced_balance": args.balance}
-        if args.notes:
-            data["notes"] = args.notes
+        notes = resolve_text_arg(args.notes)
+        if notes:
+            data["notes"] = notes
         result = client.sync_wallet(args.wallet_id, data)
         if _json_out(result, args):
             return
@@ -467,8 +469,9 @@ def cmd_transfer(args):
             "to_wallet_id": args.to_wallet,
             "amount": args.amount,
         }
-        if args.description:
-            data["description"] = args.description
+        description = resolve_text_arg(args.description)
+        if description:
+            data["description"] = description
         if args.fee:
             data["fee"] = args.fee
         result = client.transfer(data)

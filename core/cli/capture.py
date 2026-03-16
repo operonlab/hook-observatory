@@ -22,6 +22,7 @@ import argparse
 import json
 import sys
 
+from cli.cli_utils import resolve_text_arg
 from cli.exit_codes import EXIT_VALIDATION, exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.capture import CaptureClient
@@ -55,7 +56,8 @@ def _bar(completeness: float) -> str:
 def cmd_add(args):
     c = _client()
     try:
-        payload = json.loads(args.payload) if args.payload else {}
+        payload_raw = resolve_text_arg(args.payload)
+        payload = json.loads(payload_raw) if payload_raw else {}
     except json.JSONDecodeError as e:
         print(f"Error: invalid JSON payload: {e}", file=sys.stderr)
         sys.exit(1)
@@ -135,7 +137,7 @@ def cmd_show(args):
 
 def cmd_fill(args):
     c = _client()
-    payload = json.loads(args.payload)
+    payload = json.loads(resolve_text_arg(args.payload))
     try:
         result = c.update(args.id, payload=payload)
     except (APIConnectionError, APIError) as e:
@@ -227,7 +229,7 @@ def cmd_batch_promote(args):
 def cmd_batch_fill(args):
     c = _client()
     try:
-        payload = json.loads(args.payload)
+        payload = json.loads(resolve_text_arg(args.payload))
     except json.JSONDecodeError as e:
         _err(f"Invalid JSON payload: {e}")
 
