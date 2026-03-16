@@ -207,6 +207,119 @@
         "latest_upstream": null,
         "drift_level": "unknown"
       }
+    },
+    {
+      "id": "amazing-marvin",
+      "type": "product",
+      "name": "Amazing Marvin",
+      "origin_url": "https://amazingmarvin.com",
+      "upstream_ref": null,
+      "pinned_at": {
+        "version": null,
+        "commit": null,
+        "date": "2026-03-16"
+      },
+      "cannibalized_on": "2026-03-16",
+      "status": "active",
+      "notes": "全盤蠶食 15 個設計模式 + 自創領航法。概念蠶食（非代碼蠶食）— 研究 Marvin 的設計哲學與機制，在 DailyOS 中重新實現。目標：首個認知預算優先的生產力平台。",
+      "extractions": [
+        {
+          "pattern": "Feature Toggle System (94+ strategies as independent switches)",
+          "source_path": "concept: Strategy System with on/off toggles per feature",
+          "target_path": "core/src/modules/dailyos/models.py (UserToggle)",
+          "adaptation": "user_toggles 表 + toggle_key CRUD，source 標記 toggle 來源 (manual/workflow/snippet/quiz)"
+        },
+        {
+          "pattern": "Task Funnel (progressive focus narrowing)",
+          "source_path": "concept: Backburner → Master → Scheduled → Today flow",
+          "target_path": "core/src/modules/dailyos/models.py (BacklogItem)",
+          "adaptation": "backlog_items 表 + funnel_layer 欄位，promote/demote API 逐層推進"
+        },
+        {
+          "pattern": "Capacity Bar + Auto-Learning",
+          "source_path": "concept: Time estimate + auto-learning from history + real-time bar",
+          "target_path": "core/src/modules/dailyos/models.py (CapacityHistory)",
+          "adaptation": "capacity_history 表支持 dual-track (time + cognitive)，14 天滑動平均自動校準"
+        },
+        {
+          "pattern": "Planning vs Scheduling (三日期分離)",
+          "source_path": "concept: start_date/end_date (planning) ≠ do_date (scheduling)",
+          "target_path": "core/src/modules/dailyos/models.py (BacklogItem)",
+          "adaptation": "BacklogItem 具備 start_date, due_date, do_date 三欄位"
+        },
+        {
+          "pattern": "Workflow Library (strategy bundles)",
+          "source_path": "concept: Preset workflow = method + settings + labels bundle",
+          "target_path": "core/src/modules/dailyos/models.py (Workflow)",
+          "adaptation": "workflows 表 + method_ids + toggle_overrides + snippet_ids 組合"
+        },
+        {
+          "pattern": "Workflow Snippets (additive layer)",
+          "source_path": "concept: Non-exclusive, stackable feature bundles",
+          "target_path": "core/src/modules/dailyos/models.py (Snippet)",
+          "adaptation": "snippets 表 + toggle_keys + config_patch，C2 覆蓋優先級鏈"
+        },
+        {
+          "pattern": "Smart Lists (RPN dynamic filtering)",
+          "source_path": "concept: RPN filter expressions for cross-cutting queries",
+          "target_path": "core/src/modules/dailyos/models.py (SmartList)",
+          "adaptation": "smart_lists 表 + RPN filter_expr engine，C5 遷移 accept_filter"
+        },
+        {
+          "pattern": "Guided Daily Ritual (morning/evening review cycle)",
+          "source_path": "concept: Plan one day at a time + evening review + carryover",
+          "target_path": "core/src/modules/dailyos/services_p2.py (RitualService)",
+          "adaptation": "morning/evening ritual endpoints，整合 active methods 的 review_cycle config"
+        },
+        {
+          "pattern": "Gamification & Reward System (points/streaks/celebrations)",
+          "source_path": "concept: Points + Kudos + Streaks + Real-world rewards",
+          "target_path": "core/src/modules/dailyos/models.py (GamificationState, PointHistory)",
+          "adaptation": "跨模組成長貨幣 + 動態定價（拖延加倍）+ C6 驗證通過才加分"
+        },
+        {
+          "pattern": "Procrastination Wizard (structured resistance-breaking)",
+          "source_path": "concept: Hover → full-screen prompts → decompose → micro-start",
+          "target_path": "core/src/modules/dailyos/services_p3.py (ProcrastinationWizardService)",
+          "adaptation": "4 步驟狀態機：識別阻力→分解→環境切換→微啟動"
+        },
+        {
+          "pattern": "Template-Based Task Decomposition",
+          "source_path": "concept: Save task as template with all properties auto-persisted",
+          "target_path": "core/src/modules/dailyos/models.py (PlanTemplate)",
+          "adaptation": "plan_templates 表，支持從現有 daily plan 一鍵建立模板"
+        },
+        {
+          "pattern": "Eisenhower Matrix as Smart Lists",
+          "source_path": "concept: 4 quadrants = 4 smart list presets",
+          "target_path": "core/src/modules/dailyos/services_p3.py (EisenhowerService)",
+          "adaptation": "C5 長期遷移：靜態 categories → 動態 SmartList 查詢"
+        },
+        {
+          "pattern": "Onboarding Quiz (cognitive calibration engine)",
+          "source_path": "concept: First-run questionnaire → recommend workflow",
+          "target_path": "core/src/modules/dailyos/services_p3.py (OnboardingService)",
+          "adaptation": "C7 tag-matching：quiz 答案產生 tag set，匹配 workflow/toggle tags"
+        },
+        {
+          "pattern": "Sandbox / Experimentation Mode",
+          "source_path": "concept: Workflow Builder to test templates before committing",
+          "target_path": "core/src/modules/dailyos/models.py (Experiment)",
+          "adaptation": "experiments 表，A/B 測試不同 workflow，自動比較完成率/連勝/積分"
+        },
+        {
+          "pattern": "Pilot Method (領航法 — 獨創)",
+          "source_path": "original: 雙軌容量 + 四飛行模式 + 驗證棘輪 + 黑盒子審查",
+          "target_path": "core/src/modules/dailyos/models.py (PilotState) + presets.py",
+          "adaptation": "DailyOS 護城河：認知預算管理（競品未觸及維度）"
+        }
+      ],
+      "drift": {
+        "check_method": "manual",
+        "latest_checked": "2026-03-16",
+        "latest_upstream": null,
+        "drift_level": "none"
+      }
     }
   ]
 }
