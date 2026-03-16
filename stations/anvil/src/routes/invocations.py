@@ -29,6 +29,7 @@ class InvocationCreateRequest(BaseModel):
     agent_model: str | None = None
     payload: dict[str, Any] | None = None
     tool_use_id: str | None = None
+    timestamp: datetime | None = None
 
 
 class InvocationResponse(BaseModel):
@@ -76,7 +77,11 @@ async def record_invocation(
             response.status_code = 200
             return InvocationResponse.model_validate(found)
 
-    inv = Invocation(**body.model_dump())
+    data = body.model_dump()
+    # Strip None timestamp so DB server_default applies for real-time calls
+    if data.get("timestamp") is None:
+        data.pop("timestamp", None)
+    inv = Invocation(**data)
     db.add(inv)
     await db.commit()
     await db.refresh(inv)

@@ -227,12 +227,12 @@ def main() -> None:
                     "skill_name": skill_name,
                     "session_id": session_id,
                     "tool_use_id": tool_use_id or None,
+                    "timestamp": call["timestamp"],
                     "success": True,
                     "tool_calls_count": 1,
                     "payload": {
                         "args": call["args"],
                         "source": "backfill",
-                        "original_timestamp": call["timestamp"],
                     },
                 }
 
