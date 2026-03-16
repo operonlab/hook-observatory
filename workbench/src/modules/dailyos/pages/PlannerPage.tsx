@@ -2,6 +2,7 @@ import {
   ArrowRight,
   BookOpen,
   Calendar,
+  CalendarRange,
   Check,
   CheckCircle,
   Eye,
@@ -10,8 +11,9 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { spanApi } from '../api'
 import AddItemInput from '../components/AddItemInput'
 import CompositeGuide from '../components/CompositeGuide'
 import { DateNavigator } from '../components/DateNavigator'
@@ -29,7 +31,7 @@ import ViewModeSwitcher from '../components/ViewModeSwitcher'
 import { useActiveMethod } from '../hooks/useActiveMethod'
 import { useDatePlan } from '../hooks/useTodayPlan'
 import { useMethodStore } from '../stores/methodStore'
-import type { PlanItem } from '../types'
+import type { ActivitySpan, PlanItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
 
 const WeekViewPage = lazy(() => import('./WeekViewPage'))
@@ -117,8 +119,14 @@ export default function PlannerPage() {
   const hiddenGroupIds = useMethodStore((s) => s.hiddenGroupIds)
   const visibleItems = items.filter((i) => !i.group_id || !hiddenGroupIds.has(i.group_id))
 
+  const [daySpans, setDaySpans] = useState<ActivitySpan[]>([])
   const [reflection, setReflection] = useState('')
   const [savingReflection, setSavingReflection] = useState(false)
+
+  useEffect(() => {
+    if (!currentDate) return
+    spanApi.forDate(currentDate).then(setDaySpans).catch(() => setDaySpans([]))
+  }, [currentDate])
 
   const [reflectionSynced, setReflectionSynced] = useState(false)
   if (plan?.reflection && !reflectionSynced) {
@@ -276,6 +284,22 @@ export default function PlannerPage() {
       <div className="mt-4 px-1">
         {currentDate && <DateNavigator currentDate={currentDate} onChange={handleDateChange} />}
       </div>
+
+      {/* Activity span indicators */}
+      {daySpans.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-3 px-1">
+          {daySpans.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+              style={{ backgroundColor: s.color + '22', color: s.color }}
+            >
+              <CalendarRange size={12} />
+              {s.title}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Mobile compact header — visible below lg */}
       <div className="lg:hidden mt-3 flex items-center justify-between px-1">

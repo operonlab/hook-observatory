@@ -1,9 +1,10 @@
 import { ChevronLeft, ChevronRight, Circle, Repeat } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { planApi, recurringApi } from '../api'
+import { planApi, recurringApi, spanApi } from '../api'
 import { CompletionHeatmap } from '../components/CompletionHeatmap'
-import type { DailyPlan, PlanItem, RecurringItem } from '../types'
+import SpanBannerRow from '../components/SpanBannerRow'
+import type { ActivitySpan, DailyPlan, PlanItem, RecurringItem } from '../types'
 import { PLAN_STATUS_CONFIG } from '../types'
 
 // ─── Helpers ───
@@ -208,6 +209,7 @@ export default function CalendarPage() {
   )
   const [plans, setPlans] = useState<DailyPlan[]>([])
   const [recurring, setRecurring] = useState<RecurringItem[]>([])
+  const [activitySpans, setActivitySpans] = useState<ActivitySpan[]>([])
   const [loading, setLoading] = useState(true)
 
   // ─── Fetch data for visible month ───
@@ -216,12 +218,14 @@ export default function CalendarPage() {
     try {
       const s = startOfMonth(month)
       const e = endOfMonth(month)
-      const [planRes, recRes] = await Promise.all([
+      const [planRes, recRes, spanRes] = await Promise.all([
         planApi.list({ date_from: toDateStr(s), date_to: toDateStr(e), page: 1 }),
         recurringApi.list(),
+        spanApi.forRange(toDateStr(s), toDateStr(e)),
       ])
       setPlans(planRes.items)
       setRecurring(recRes)
+      setActivitySpans(spanRes)
     } catch {
       // silently fail — calendar just shows empty
     } finally {
@@ -273,6 +277,15 @@ export default function CalendarPage() {
     }
     return map
   }, [plans])
+
+  // ─── Chunk cells into week rows ───
+  const weekRows = useMemo(() => {
+    const rows: Array<Array<{ date: Date; inMonth: boolean }>> = []
+    for (let i = 0; i < cells.length; i += 7) {
+      rows.push(cells.slice(i, i + 7))
+    }
+    return rows
+  }, [cells])
 
   // ─── Navigation ───
   const prevMonth = () => setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))
@@ -347,23 +360,36 @@ export default function CalendarPage() {
           ))}
         </div>
 
-        {/* Day cells */}
-        <div
-          className="grid grid-cols-7"
-          style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 200ms' }}
-        >
-          {cells.map(({ date, inMonth }) => {
-            const dateStr = toDateStr(date)
+        {/* Week rows with span banners */}
+        <div style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 200ms' }}>
+          {weekRows.map((week, wi) => {
+            const weekDates = week.map((c) => c.date)
             return (
-              <DayCell
-                key={dateStr}
-                date={date}
-                inMonth={inMonth}
-                isToday={isSameDay(date, today)}
-                plan={plansByDate.get(dateStr)}
-                dayRecurring={recurring.filter((r) => recurringMatchesDate(r, date))}
-                onNavigate={navigate}
-              />
+              <div key={wi}>
+                {activitySpans.length > 0 && (
+                  <div className="grid grid-cols-7 border-b" style={{ borderColor: 'var(--do-border)' }}>
+                    <div className="col-span-7 px-1 py-0.5">
+                      <SpanBannerRow spans={activitySpans} weekDates={weekDates} />
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-7">
+                  {week.map(({ date, inMonth }) => {
+                    const dateStr = toDateStr(date)
+                    return (
+                      <DayCell
+                        key={dateStr}
+                        date={date}
+                        inMonth={inMonth}
+                        isToday={isSameDay(date, today)}
+                        plan={plansByDate.get(dateStr)}
+                        dayRecurring={recurring.filter((r) => recurringMatchesDate(r, date))}
+                        onNavigate={navigate}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
             )
           })}
         </div>
@@ -392,6 +418,10 @@ export default function CalendarPage() {
         <div className="flex items-center gap-1.5">
           <Repeat size={10} style={{ color: 'var(--do-accent-dim)' }} />
           <span>固定行程</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-2 rounded-sm" style={{ backgroundColor: '#89b4fa33', border: '1px solid #89b4fa' }} />
+          <span>多日活動</span>
         </div>
       </div>
     </div>

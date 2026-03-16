@@ -1,6 +1,9 @@
 import { create } from 'zustand'
-import { configApi, methodApi, planApi, recurringApi, taskGroupApi } from '../api'
+import { configApi, methodApi, planApi, recurringApi, spanApi, taskGroupApi } from '../api'
 import type {
+  ActivitySpan,
+  ActivitySpanCreate,
+  ActivitySpanUpdate,
   DailyPlan,
   LayoutType,
   Method,
@@ -121,6 +124,14 @@ interface MethodStore {
   removeTaskGroup: (id: string) => Promise<void>
   toggleGroupVisibility: (groupId: string) => void
 
+  // Activity spans
+  activitySpans: ActivitySpan[]
+  spansLoading: boolean
+  fetchActivitySpans: (dateFrom?: string, dateTo?: string) => Promise<void>
+  addActivitySpan: (data: ActivitySpanCreate) => Promise<void>
+  updateActivitySpan: (id: string, data: ActivitySpanUpdate) => Promise<void>
+  removeActivitySpan: (id: string) => Promise<void>
+
   // Actions — plan lifecycle
   transitionPlan: (status: string) => Promise<void>
   completeReview: (reflection: string) => Promise<void>
@@ -157,6 +168,8 @@ const initialState = {
   taskGroups: [] as TaskGroup[],
   taskGroupsLoading: false,
   hiddenGroupIds: loadHiddenGroupIds(),
+  activitySpans: [] as ActivitySpan[],
+  spansLoading: false,
   loading: false,
   planLoading: false,
   error: null as string | null,
@@ -578,6 +591,62 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
     }
     saveHiddenGroupIds(hidden)
     set({ hiddenGroupIds: hidden })
+  },
+
+  fetchActivitySpans: async (dateFrom?: string, dateTo?: string) => {
+    set({ spansLoading: true })
+    try {
+      const spans = await spanApi.list({ date_from: dateFrom, date_to: dateTo })
+      set({ activitySpans: spans })
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to fetch activity spans',
+      })
+    } finally {
+      set({ spansLoading: false })
+    }
+  },
+
+  addActivitySpan: async (data: ActivitySpanCreate) => {
+    try {
+      const span = await spanApi.create(data)
+      set({ activitySpans: [...get().activitySpans, span] })
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : 'Failed to add activity span',
+      })
+    }
+  },
+
+  updateActivitySpan: async (id: string, data: ActivitySpanUpdate) => {
+    const prev = get().activitySpans
+    set({
+      activitySpans: prev.map((s) => (s.id === id ? { ...s, ...data } : s)),
+    })
+    try {
+      const updated = await spanApi.update(id, data)
+      set({
+        activitySpans: get().activitySpans.map((s) => (s.id === id ? updated : s)),
+      })
+    } catch (err) {
+      set({
+        activitySpans: prev,
+        error: err instanceof Error ? err.message : 'Failed to update activity span',
+      })
+    }
+  },
+
+  removeActivitySpan: async (id: string) => {
+    const prev = get().activitySpans
+    set({ activitySpans: prev.filter((s) => s.id !== id) })
+    try {
+      await spanApi.remove(id)
+    } catch (err) {
+      set({
+        activitySpans: prev,
+        error: err instanceof Error ? err.message : 'Failed to remove activity span',
+      })
+    }
   },
 
   reset: () => set(initialState),

@@ -1,4 +1,4 @@
-import { BookOpen, Calendar, CalendarDays, History, Repeat } from 'lucide-react'
+import { BookOpen, Calendar, CalendarDays, CalendarRange, History, Repeat } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import '../styles/dailyos.css'
 
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { id: 'methods', label: '方法論', icon: BookOpen, path: '/dailyos/methods' },
   { id: 'history', label: '歷史紀錄', icon: History, path: '/dailyos/history' },
   { id: 'recurring', label: '固定行程', icon: Repeat, path: '/dailyos/recurring' },
+  { id: 'spans', label: '多日活動', icon: CalendarRange, path: '/dailyos/spans' },
 ] as const
 
 export default function DailyosLayout() {
