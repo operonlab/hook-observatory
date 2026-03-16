@@ -84,7 +84,7 @@ class PilotStateUpdate(BaseModel):
 
 class PilotDecisionRequest(BaseModel):
     description: str | None = None
-    cognitive_cost: int = Field(default=1, ge=1, le=5)
+    fuel_cost: float = Field(default=1.0, ge=0.1, le=100.0)
 
 
 class PilotStateResponse(SpaceScopedResponse):

@@ -162,7 +162,7 @@ async def record_pilot_decision(
         db,
         space_id,
         description=data.description,
-        cognitive_cost=data.cognitive_cost,
+        fuel_cost=data.fuel_cost,
         user_id=user.get("id"),
     )
     await db.commit()
