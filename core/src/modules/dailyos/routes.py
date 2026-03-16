@@ -13,6 +13,9 @@ from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .schemas import (
+    ActivitySpanCreate,
+    ActivitySpanResponse,
+    ActivitySpanUpdate,
     DailyOSSearchResult,
     DailyPlanResponse,
     DailyPlanStats,
@@ -33,6 +36,7 @@ from .schemas import (
     TaskGroupUpdate,
 )
 from .services import (
+    activity_span_service,
     daily_plan_service,
     method_selection_service,
     method_service,
@@ -484,10 +488,11 @@ async def create_recurring_item(
 async def update_recurring_item(
     item_id: str,
     data: RecurringItemUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("dailyos.write"),
 ):
-    item = await recurring_item_service.update_item(db, item_id, data)
+    item = await recurring_item_service.update_item(db, item_id, space_id, data)
     await db.commit()
     return item
 
@@ -495,10 +500,11 @@ async def update_recurring_item(
 @router.delete("/recurring/{item_id}", status_code=204)
 async def delete_recurring_item(
     item_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("dailyos.write"),
 ):
-    await recurring_item_service.delete_item(db, item_id)
+    await recurring_item_service.delete_item(db, item_id, space_id)
     await db.commit()
 
 
@@ -558,3 +564,74 @@ async def delete_task_group(
 ):
     await task_group_service.delete_group(db, group_id, space_id)
     await db.commit()
+
+
+# ======================== Activity Spans ========================
+
+
+@router.get("/spans", response_model=list[ActivitySpanResponse])
+async def list_activity_spans(
+    space_id: str = Query("default"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    return await activity_span_service.list_spans(db, space_id, date_from, date_to)
+
+
+@router.post("/spans", response_model=ActivitySpanResponse, status_code=201)
+async def create_activity_span(
+    data: ActivitySpanCreate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    span = await activity_span_service.create_span(db, space_id, data, user_id=user.get("id"))
+    await db.commit()
+    return span
+
+
+@router.put("/spans/{span_id}", response_model=ActivitySpanResponse)
+async def update_activity_span(
+    span_id: str,
+    data: ActivitySpanUpdate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    span = await activity_span_service.update_span(db, span_id, space_id, data)
+    await db.commit()
+    return span
+
+
+@router.delete("/spans/{span_id}", status_code=204)
+async def delete_activity_span(
+    span_id: str,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    await activity_span_service.delete_span(db, span_id, space_id)
+    await db.commit()
+
+
+@router.get("/spans/for-date/{target_date}", response_model=list[ActivitySpanResponse])
+async def get_spans_for_date(
+    target_date: date,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    return await activity_span_service.get_spans_for_date(db, space_id, target_date)
+
+
+@router.get("/spans/for-range", response_model=list[ActivitySpanResponse])
+async def get_spans_for_range(
+    range_start: date = Query(...),
+    range_end: date = Query(...),
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.read"),
+):
+    return await activity_span_service.get_spans_for_range(db, space_id, range_start, range_end)

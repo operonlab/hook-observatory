@@ -20,8 +20,9 @@ from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
-from .models import DailyPlan, Method, MethodSelection, RecurringItem, TaskGroup
+from .models import ActivitySpan, DailyPlan, Method, MethodSelection, RecurringItem, TaskGroup
 from .schemas import (
+    ActivitySpanResponse,
     DailyPlanResponse,
     DailyPlanUpdate,
     DimensionConflict,
@@ -1195,6 +1196,110 @@ class TaskGroupService:
         await db.flush()
 
 
+# ======================== Activity Span Service ========================
+
+
+class ActivitySpanService:
+    """CRUD + date-based filtering for multi-day activity spans."""
+
+    async def list_spans(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[ActivitySpanResponse]:
+        """List all activity spans for a space, optionally filtered by date range."""
+        filters = [
+            ActivitySpan.space_id == space_id,
+            ActivitySpan.deleted_at == None,  # noqa: E711
+        ]
+        if date_from is not None and date_to is not None:
+            # Overlap: span.start <= range_end AND span.end >= range_start
+            filters.append(ActivitySpan.start_date <= date_to)
+            filters.append(ActivitySpan.end_date >= date_from)
+
+        q = select(ActivitySpan).where(*filters).order_by(ActivitySpan.start_date.asc())
+        rows = (await db.execute(q)).scalars().all()
+        return [ActivitySpanResponse.model_validate(r) for r in rows]
+
+    async def create_span(
+        self, db: AsyncSession, space_id: str, data, user_id: str | None = None
+    ) -> ActivitySpanResponse:
+        """Create a new activity span."""
+        span = ActivitySpan(
+            id=_uuid7_hex(),
+            space_id=space_id,
+            created_by=user_id,
+            **data.model_dump(),
+        )
+        db.add(span)
+        await db.flush()
+        await db.refresh(span)
+        return ActivitySpanResponse.model_validate(span)
+
+    async def update_span(
+        self, db: AsyncSession, span_id: str, space_id: str, data
+    ) -> ActivitySpanResponse:
+        """Update an activity span (verify ownership by space)."""
+        span = await db.get(ActivitySpan, span_id)
+        if not span or span.deleted_at is not None or str(span.space_id) != str(space_id):
+            raise NotFoundError("Activity span not found", code="dailyos.span_not_found")
+
+        update_data = data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(span, key, value)
+
+        # Validate dates after update
+        if span.end_date < span.start_date:
+            raise BadRequestError("end_date must be >= start_date", code="dailyos.invalid_dates")
+
+        await db.flush()
+        await db.refresh(span)
+        return ActivitySpanResponse.model_validate(span)
+
+    async def delete_span(self, db: AsyncSession, span_id: str, space_id: str) -> None:
+        """Delete an activity span (verify ownership by space)."""
+        span = await db.get(ActivitySpan, span_id)
+        if not span or span.deleted_at is not None or str(span.space_id) != str(space_id):
+            raise NotFoundError("Activity span not found", code="dailyos.span_not_found")
+
+        await db.delete(span)
+        await db.flush()
+
+    async def get_spans_for_date(
+        self, db: AsyncSession, space_id: str, target_date: date
+    ) -> list[ActivitySpanResponse]:
+        """Get active spans covering a specific date."""
+        q = select(ActivitySpan).where(
+            ActivitySpan.space_id == space_id,
+            ActivitySpan.is_active == True,  # noqa: E712
+            ActivitySpan.deleted_at == None,  # noqa: E711
+            ActivitySpan.start_date <= target_date,
+            ActivitySpan.end_date >= target_date,
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [ActivitySpanResponse.model_validate(r) for r in rows]
+
+    async def get_spans_for_range(
+        self, db: AsyncSession, space_id: str, range_start: date, range_end: date
+    ) -> list[ActivitySpanResponse]:
+        """Get active spans overlapping a date range."""
+        q = (
+            select(ActivitySpan)
+            .where(
+                ActivitySpan.space_id == space_id,
+                ActivitySpan.is_active == True,  # noqa: E712
+                ActivitySpan.deleted_at == None,  # noqa: E711
+                ActivitySpan.start_date <= range_end,
+                ActivitySpan.end_date >= range_start,
+            )
+            .order_by(ActivitySpan.start_date.asc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [ActivitySpanResponse.model_validate(r) for r in rows]
+
+
 # ======================== Module-level singletons ========================
 
 method_service = MethodService()
@@ -1203,3 +1308,4 @@ daily_plan_service = DailyPlanService()
 guide_service = GuideService()
 recurring_item_service = RecurringItemService()
 task_group_service = TaskGroupService()
+activity_span_service = ActivitySpanService()

@@ -6,6 +6,7 @@ import MethodsPage from './MethodsPage'
 import PlannerPage from './PlannerPage'
 
 const RecurringPage = lazy(() => import('./RecurringPage'))
+const SpansPage = lazy(() => import('./SpansPage'))
 
 export default function DailyosPages() {
   return (
@@ -22,6 +23,14 @@ export default function DailyosPages() {
           element={
             <Suspense>
               <RecurringPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="spans"
+          element={
+            <Suspense>
+              <SpansPage />
             </Suspense>
           }
         />
