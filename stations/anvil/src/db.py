@@ -95,6 +95,12 @@ class Invocation(Base):
         Index("idx_invocations_skill", "skill_name"),
         Index("idx_invocations_ts", "timestamp"),
         Index("idx_invocations_session", "session_id"),
+        Index(
+            "idx_invocations_tool_use_id",
+            "tool_use_id",
+            unique=True,
+            postgresql_where=text("tool_use_id IS NOT NULL"),
+        ),
         {"schema": "anvil"},
     )
 
@@ -114,6 +120,7 @@ class Invocation(Base):
     session_id: Mapped[str | None] = mapped_column(String(100))
     agent_model: Mapped[str | None] = mapped_column(String(100))
     payload: Mapped[dict | None] = mapped_column(JSONB)
+    tool_use_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
 
 
 class SkillVersion(Base):
