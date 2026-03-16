@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -25,6 +26,26 @@ from pathlib import Path
 
 ANVIL_BASE = "http://127.0.0.1:4103/api/anvil"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
+
+# Tool registry for CLI/MCP backfill
+_REGISTRY_PATH = (
+    Path.home() / "workshop" / "stations" / "hook-observatory" / "handlers" / "tool_registry.json"
+)
+_MCP_REGISTRY: dict[str, str] = {}
+_CLI_REGISTRY: dict[str, str] = {}
+_MCP_PROXY_TOOLS = {
+    "mcp__mcpproxy__call_tool_read",
+    "mcp__mcpproxy__call_tool_write",
+    "mcp__mcpproxy__call_tool_destructive",
+}
+
+try:
+    with open(_REGISTRY_PATH) as _f:
+        _reg = json.load(_f)
+    _MCP_REGISTRY = _reg.get("mcp_servers", {})
+    _CLI_REGISTRY = _reg.get("cli_commands", {})
+except (OSError, json.JSONDecodeError):
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -120,27 +141,72 @@ def extract_skill_calls(path: Path, since: datetime | None) -> list[dict]:
                         continue
                     if block.get("type") != "tool_use":
                         continue
-                    if block.get("name") != "Skill":
-                        continue
 
+                    block_name = block.get("name", "")
                     inp = block.get("input", {})
-                    skill_name = inp.get("skill")
-                    args = inp.get("args", "")
-
-                    if not skill_name:
-                        continue
-
                     tool_use_id = block.get("id", "")
 
-                    results.append(
-                        {
-                            "skill_name": skill_name,
-                            "session_id": session_id,
-                            "timestamp": ts.isoformat(),
-                            "args": args,
-                            "tool_use_id": tool_use_id,
-                        }
-                    )
+                    # --- Channel 1: Skill tool calls ---
+                    if block_name == "Skill":
+                        skill_name = inp.get("skill")
+                        if not skill_name:
+                            continue
+                        results.append(
+                            {
+                                "skill_name": skill_name,
+                                "session_id": session_id,
+                                "timestamp": ts.isoformat(),
+                                "args": inp.get("args", ""),
+                                "tool_use_id": tool_use_id,
+                                "category": "skill",
+                            }
+                        )
+
+                    # --- Channel 2: MCP proxy calls ---
+                    elif block_name in _MCP_PROXY_TOOLS:
+                        mcp_name = inp.get("name", "")
+                        if ":" not in mcp_name:
+                            continue
+                        server, tool = mcp_name.split(":", 1)
+                        station = _MCP_REGISTRY.get(server)
+                        if not station:
+                            continue
+                        results.append(
+                            {
+                                "skill_name": station,
+                                "session_id": session_id,
+                                "timestamp": ts.isoformat(),
+                                "args": "",
+                                "tool_use_id": tool_use_id,
+                                "category": "mcp",
+                                "mcp_tool": tool,
+                                "mcp_server": server,
+                            }
+                        )
+
+                    # --- Channel 3: CLI commands ---
+                    elif block_name == "Bash":
+                        cmd = inp.get("command", "").strip()
+                        if not cmd:
+                            continue
+                        tokens = cmd.split(None, 2)
+                        if not tokens:
+                            continue
+                        binary = os.path.basename(tokens[0])
+                        station = _CLI_REGISTRY.get(binary)
+                        if not station:
+                            continue
+                        results.append(
+                            {
+                                "skill_name": station,
+                                "session_id": session_id,
+                                "timestamp": ts.isoformat(),
+                                "args": "",
+                                "tool_use_id": tool_use_id,
+                                "category": "cli",
+                                "cli_command": cmd[:200],
+                            }
+                        )
     except OSError as exc:
         print(f"  [warn] Cannot read {path}: {exc}", file=sys.stderr)
 
@@ -223,17 +289,26 @@ def main() -> None:
                         continue
                     seen.add(tool_use_id)
 
+                category = call.get("category", "skill")
+                payload_data: dict = {
+                    "args": call.get("args", ""),
+                    "source": "backfill",
+                }
+                if call.get("mcp_tool"):
+                    payload_data["tool"] = call["mcp_tool"]
+                    payload_data["server"] = call.get("mcp_server", "")
+                if call.get("cli_command"):
+                    payload_data["command"] = call["cli_command"]
+
                 payload = {
                     "skill_name": skill_name,
                     "session_id": session_id,
                     "tool_use_id": tool_use_id or None,
                     "timestamp": call["timestamp"],
+                    "category": category,
                     "success": True,
                     "tool_calls_count": 1,
-                    "payload": {
-                        "args": call["args"],
-                        "source": "backfill",
-                    },
+                    "payload": payload_data,
                 }
 
                 try:
