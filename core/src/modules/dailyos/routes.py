@@ -635,3 +635,14 @@ async def get_spans_for_range(
     user: dict = require_permission("dailyos.read"),
 ):
     return await activity_span_service.get_spans_for_range(db, space_id, range_start, range_end)
+
+
+# ======================== P1-P4 Sub-routers ========================
+
+from .routes_p1 import router_p1  # noqa: E402
+from .routes_p2 import router_p2  # noqa: E402
+from .routes_p3 import router_p3  # noqa: E402
+
+router.include_router(router_p1)
+router.include_router(router_p2)
+router.include_router(router_p3)
