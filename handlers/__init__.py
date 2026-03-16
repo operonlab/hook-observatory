@@ -83,6 +83,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "UserPromptSubmit": [
         (None, context_supervisor.handle),
         (None, external.recall),
+        (None, anvil_telemetry.handle),
         (None, observability.handle),
     ],
     "SessionStart": [
