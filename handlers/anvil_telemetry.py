@@ -1,11 +1,16 @@
 """
-Anvil telemetry — PostToolUse/Skill handler.
+Anvil telemetry — multi-channel usage tracker.
+
+Tracks three invocation channels:
+  1. Skill tool calls (PostToolUse/Skill)
+  2. MCP server calls (PostToolUse/mcp__mcpproxy__call_tool_*)
+  3. CLI commands (PostToolUse/Bash) — known station CLIs only
 
 API-first, file-fallback: try synchronous POST to Anvil API first.
 Only writes to local JSONL spool when API is unreachable.
 SessionStart triggers background sync of any pending spool entries.
 
-Latency: ~2-5ms when API is up (sync HTTP), <1ms fallback (file append).
+Latency: ~2-5ms when API is up (match + HTTP), <0.01ms on non-match (dict lookup).
 """
 
 from __future__ import annotations
@@ -24,15 +29,47 @@ ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:4103")
 SPOOL_DIR = os.path.join(os.path.expanduser("~"), ".claude", "data", "anvil-telemetry")
 SPOOL_FILE = os.path.join(SPOOL_DIR, "pending.jsonl")
 
-# Alias resolution: these names should be attributed to their real skill
+# ---------------------------------------------------------------------------
+# Skill-level config
+# ---------------------------------------------------------------------------
+
 ALIAS_MAP = {
     "r": "prompt-router",
 }
 
-# Test patterns: skip tracking entirely
 _TEST_PREFIXES = ("_", "test-")
 _TEST_EXACT = {"test-skill", "test-verify", "general-purpose", "commit"}
-_TEST_PATTERN_DIGITS = re.compile(r"^skill-\d+$")  # skill-1, skill-2, etc.
+_TEST_PATTERN_DIGITS = re.compile(r"^skill-\d+$")
+
+# ---------------------------------------------------------------------------
+# Tool registry (loaded once at module level)
+# ---------------------------------------------------------------------------
+
+_REGISTRY_PATH = os.path.join(os.path.dirname(__file__), "tool_registry.json")
+
+_MCP_REGISTRY: dict[str, str] = {}
+_CLI_REGISTRY: dict[str, str] = {}
+
+try:
+    with open(_REGISTRY_PATH) as _f:
+        _reg = json.load(_f)
+    _MCP_REGISTRY = _reg.get("mcp_servers", {})
+    _CLI_REGISTRY = _reg.get("cli_commands", {})
+except (OSError, json.JSONDecodeError):
+    pass
+
+_MCP_PROXY_TOOLS = frozenset(
+    {
+        "mcp__mcpproxy__call_tool_read",
+        "mcp__mcpproxy__call_tool_write",
+        "mcp__mcpproxy__call_tool_destructive",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def _is_test(name: str) -> bool:
@@ -46,70 +83,173 @@ def _is_test(name: str) -> bool:
     return False
 
 
-def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
-    """PostToolUse/Skill: API POST → file fallback.
-    SessionStart: sync any pending spool entries."""
-    if event_type == "SessionStart":
-        return _sync_pending()
+def _parse_context(raw_input: str) -> dict:
+    """Extract session context from raw hook input."""
+    try:
+        parsed = json.loads(raw_input) if raw_input.strip() else {}
+    except (json.JSONDecodeError, AttributeError):
+        parsed = {}
+    return parsed.get("data", parsed)
 
-    if tool_name != "Skill":
-        return ALLOW
 
+def _send(payload: dict) -> None:
+    """POST to Anvil API, fall back to spool on failure."""
+    if _post_to_api(payload):
+        return
+    _write_spool(payload)
+
+
+# ---------------------------------------------------------------------------
+# Channel handlers
+# ---------------------------------------------------------------------------
+
+
+def _handle_skill(tool_input: dict, raw_input: str) -> HookResult:
+    """Handle Skill tool invocations."""
     skill_name = tool_input.get("skill", "")
     if not skill_name:
         return ALLOW
 
-    # Skip test/probe invocations
     if _is_test(skill_name):
         return ALLOW
 
-    # Resolve aliases — track under the real skill name
     original_name = None
     if skill_name in ALIAS_MAP:
         original_name = skill_name
         skill_name = ALIAS_MAP[skill_name]
 
-    # Parse raw_input for session context + tool_response
-    try:
-        parsed = json.loads(raw_input) if raw_input.strip() else {}
-    except (json.JSONDecodeError, AttributeError):
-        parsed = {}
-
-    data = parsed.get("data", parsed)
+    data = _parse_context(raw_input)
     tool_response = data.get("tool_response", {})
 
-    payload_data = {
+    payload_data: dict = {
         "args": tool_input.get("args", ""),
         "cwd": data.get("cwd", ""),
     }
     if original_name:
         payload_data["original_name"] = original_name
 
-    payload = {
-        "skill_name": skill_name,
-        "session_id": data.get("session_id", ""),
-        "agent_model": data.get("agent_model", ""),
-        "tool_use_id": data.get("tool_use_id", ""),
-        "success": tool_response.get("success", True),
-        "error_message": tool_response.get("error", None),
-        "tool_calls_count": 1,
-        "payload": payload_data,
-    }
+    _send(
+        {
+            "skill_name": skill_name,
+            "session_id": data.get("session_id", ""),
+            "agent_model": data.get("agent_model", ""),
+            "tool_use_id": data.get("tool_use_id", ""),
+            "success": tool_response.get("success", True),
+            "error_message": tool_response.get("error", None),
+            "tool_calls_count": 1,
+            "category": "skill",
+            "payload": payload_data,
+        }
+    )
+    return ALLOW
 
-    # --- API first ---
-    if _post_to_api(payload):
+
+def _handle_mcp(tool_input: dict, raw_input: str) -> HookResult:
+    """Handle MCP proxy tool calls (call_tool_read/write/destructive)."""
+    # tool_input.name = "tmux-relay:relay_run"
+    mcp_name = tool_input.get("name", "")
+    if ":" not in mcp_name:
         return ALLOW
 
-    # --- File fallback (API unreachable) ---
-    _write_spool(payload)
+    server_name, tool_name = mcp_name.split(":", 1)
+    station = _MCP_REGISTRY.get(server_name)
+    if not station:
+        return ALLOW
+
+    data = _parse_context(raw_input)
+
+    _send(
+        {
+            "skill_name": station,
+            "session_id": data.get("session_id", ""),
+            "agent_model": data.get("agent_model", ""),
+            "tool_use_id": data.get("tool_use_id", ""),
+            "success": True,
+            "tool_calls_count": 1,
+            "category": "mcp",
+            "payload": {
+                "tool": tool_name,
+                "server": server_name,
+                "cwd": data.get("cwd", ""),
+            },
+        }
+    )
     return ALLOW
+
+
+def _handle_cli(tool_input: dict, raw_input: str) -> HookResult:
+    """Handle Bash commands that match known station CLIs."""
+    cmd = tool_input.get("command", "").strip()
+    if not cmd:
+        return ALLOW
+
+    # Extract first token basename: "/Users/.../relay" → "relay"
+    tokens = cmd.split(None, 2)  # split into max 3 parts
+    if not tokens:
+        return ALLOW
+
+    binary = os.path.basename(tokens[0])
+    station = _CLI_REGISTRY.get(binary)
+    if not station:
+        return ALLOW
+
+    data = _parse_context(raw_input)
+    subcommand = tokens[1] if len(tokens) > 1 else ""
+
+    _send(
+        {
+            "skill_name": station,
+            "session_id": data.get("session_id", ""),
+            "agent_model": data.get("agent_model", ""),
+            "tool_use_id": data.get("tool_use_id", ""),
+            "success": True,
+            "tool_calls_count": 1,
+            "category": "cli",
+            "payload": {
+                "tool": subcommand,
+                "command": cmd[:200],
+                "cwd": data.get("cwd", ""),
+            },
+        }
+    )
+    return ALLOW
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+
+def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
+    """Multi-channel telemetry handler.
+
+    Routes to the appropriate channel handler based on tool_name.
+    Non-matching tools return ALLOW immediately (<0.01ms).
+    """
+    if event_type == "SessionStart":
+        return _sync_pending()
+
+    if tool_name == "Skill":
+        return _handle_skill(tool_input, raw_input)
+
+    if tool_name in _MCP_PROXY_TOOLS:
+        return _handle_mcp(tool_input, raw_input)
+
+    if tool_name == "Bash":
+        return _handle_cli(tool_input, raw_input)
+
+    return ALLOW
+
+
+# ---------------------------------------------------------------------------
+# API + spool (shared infrastructure)
+# ---------------------------------------------------------------------------
 
 
 def _post_to_api(payload: dict) -> bool:
     """Synchronous POST to Anvil API. Returns True on success."""
     try:
         url = f"{ANVIL_API}/api/anvil/invocations"
-        # Guard: only allow http/https — never file: or custom schemes (S310)
         if not url.startswith(("http://", "https://")):
             return False
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
