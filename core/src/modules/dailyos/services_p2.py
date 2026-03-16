@@ -382,16 +382,16 @@ class PilotService:
         db: AsyncSession,
         space_id: str,
         description: str | None = None,
-        cognitive_cost: int = 1,
+        fuel_cost: float = 1.0,
         user_id: str | None = None,
     ) -> PilotDecisionResponse:
         state = await self.get_or_create_today(db, space_id, user_id=user_id)
 
-        # Increment decision count and add cognitive cost
+        # Increment decision count and add fuel cost
         state.decision_count = (state.decision_count or 0) + 1
         state.cognitive_fuel_spent = min(
             state.cognitive_fuel_budget,
-            (state.cognitive_fuel_spent or 0) + cognitive_cost,
+            (state.cognitive_fuel_spent or 0) + fuel_cost,
         )
 
         # Recalculate fatigue score: count / (budget - spent + 1)

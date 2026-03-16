@@ -1048,6 +1048,7 @@ class ExperimentService(
         exp.status = "running"
         exp.started_at = datetime.now(UTC)
         await db.flush()
+        await db.refresh(exp)
         return self.to_response(exp)
 
     async def end_experiment(
@@ -1076,6 +1077,7 @@ class ExperimentService(
             exp.winner = "inconclusive"
 
         await db.flush()
+        await db.refresh(exp)
         return self.to_response(exp)
 
     async def _compute_results(self, db: AsyncSession, exp: Experiment) -> tuple[dict, str]:
