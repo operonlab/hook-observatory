@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -22,6 +23,27 @@ from .base import ALLOW, HookResult, run_background
 ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:4103")
 SPOOL_DIR = os.path.join(os.path.expanduser("~"), ".claude", "data", "anvil-telemetry")
 SPOOL_FILE = os.path.join(SPOOL_DIR, "pending.jsonl")
+
+# Alias resolution: these names should be attributed to their real skill
+ALIAS_MAP = {
+    "r": "prompt-router",
+}
+
+# Test patterns: skip tracking entirely
+_TEST_PREFIXES = ("_", "test-")
+_TEST_EXACT = {"test-skill", "test-verify", "general-purpose", "commit"}
+_TEST_PATTERN_DIGITS = re.compile(r"^skill-\d+$")  # skill-1, skill-2, etc.
+
+
+def _is_test(name: str) -> bool:
+    """Return True if this is a test/probe invocation that should not be tracked."""
+    if any(name.startswith(p) for p in _TEST_PREFIXES):
+        return True
+    if name in _TEST_EXACT:
+        return True
+    if _TEST_PATTERN_DIGITS.match(name):
+        return True
+    return False
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
@@ -37,6 +59,16 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     if not skill_name:
         return ALLOW
 
+    # Skip test/probe invocations
+    if _is_test(skill_name):
+        return ALLOW
+
+    # Resolve aliases — track under the real skill name
+    original_name = None
+    if skill_name in ALIAS_MAP:
+        original_name = skill_name
+        skill_name = ALIAS_MAP[skill_name]
+
     # Parse raw_input for session context + tool_response
     try:
         parsed = json.loads(raw_input) if raw_input.strip() else {}
@@ -46,6 +78,13 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     data = parsed.get("data", parsed)
     tool_response = data.get("tool_response", {})
 
+    payload_data = {
+        "args": tool_input.get("args", ""),
+        "cwd": data.get("cwd", ""),
+    }
+    if original_name:
+        payload_data["original_name"] = original_name
+
     payload = {
         "skill_name": skill_name,
         "session_id": data.get("session_id", ""),
@@ -54,10 +93,7 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         "success": tool_response.get("success", True),
         "error_message": tool_response.get("error", None),
         "tool_calls_count": 1,
-        "payload": {
-            "args": tool_input.get("args", ""),
-            "cwd": data.get("cwd", ""),
-        },
+        "payload": payload_data,
     }
 
     # --- API first ---
