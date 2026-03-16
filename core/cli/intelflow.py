@@ -21,6 +21,7 @@ import argparse
 import json
 import sys
 
+from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.intelflow import IntelflowClient
 
@@ -123,12 +124,14 @@ def cmd_reports_check(args):
 def cmd_reports_create(args):
     client = IntelflowClient()
     try:
+        content = resolve_text_arg(args.content)
+        query = resolve_text_arg(args.query)
         sources = json.loads(args.sources) if args.sources else []
         tags = [t.strip() for t in args.tags.split(",")] if args.tags else []
         result = client.create_report(
             title=args.title,
-            query=args.query,
-            content=args.content,
+            query=query,
+            content=content,
             sources=sources,
             tags=tags,
             skill_name=args.skill,
