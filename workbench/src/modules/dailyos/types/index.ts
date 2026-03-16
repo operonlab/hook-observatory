@@ -250,6 +250,24 @@ export type RecurringItemCreate = Omit<
 >
 export type RecurringItemUpdate = Partial<RecurringItemCreate> & { is_active?: boolean }
 
+// ─── Activity Span ───
+
+export interface ActivitySpan {
+  id: string
+  title: string
+  start_date: string // YYYY-MM-DD, inclusive
+  end_date: string // YYYY-MM-DD, inclusive
+  category?: string
+  color: string
+  notes?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ActivitySpanCreate = Omit<ActivitySpan, 'id' | 'is_active' | 'created_at' | 'updated_at'>
+export type ActivitySpanUpdate = Partial<ActivitySpanCreate> & { is_active?: boolean }
+
 // ─── Plan Status Config ───
 
 export interface PlanStatusConfig {
