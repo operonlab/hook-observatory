@@ -127,6 +127,30 @@ class Invocation(Base):
     )
 
 
+class Intent(Base):
+    """User skill invocation intents from command-name tags."""
+
+    __tablename__ = "intents"
+    __table_args__ = (
+        Index("idx_intents_skill", "skill_name"),
+        Index("idx_intents_ts", "timestamp"),
+        Index("idx_intents_session", "session_id"),
+        {"schema": "anvil"},
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    skill_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    session_id: Mapped[str | None] = mapped_column(String(100))
+    payload: Mapped[dict | None] = mapped_column(JSONB)
+
+
 class SkillVersion(Base):
     """Version snapshots for trend tracking."""
 

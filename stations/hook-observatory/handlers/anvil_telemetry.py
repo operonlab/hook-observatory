@@ -41,6 +41,41 @@ _TEST_PREFIXES = ("_", "test-")
 _TEST_EXACT = {"test-skill", "test-verify", "general-purpose", "commit"}
 _TEST_PATTERN_DIGITS = re.compile(r"^skill-\d+$")
 
+# CLI builtins (not skills, skip intent tracking)
+_CLI_BUILTINS = frozenset(
+    {
+        "clear",
+        "exit",
+        "context",
+        "mcp",
+        "login",
+        "model",
+        "config",
+        "help",
+        "compact",
+        "fast",
+        "cost",
+        "memory",
+        "permissions",
+        "agents",
+        "skills",
+        "terminal-setup",
+        "vim",
+        "bug",
+        "doctor",
+        "release-notes",
+        "init",
+        "review",
+        "allowed-tools",
+        "listen",
+        "status-bar",
+        "add-dir",
+        "loop",
+    }
+)
+
+_COMMAND_NAME_RE = re.compile(r"<command-name>/([^<]+)</command-name>")
+
 # ---------------------------------------------------------------------------
 # Tool registry (loaded once at module level)
 # ---------------------------------------------------------------------------
@@ -92,6 +127,24 @@ def _parse_context(raw_input: str) -> dict:
     return parsed.get("data", parsed)
 
 
+def _post_intent(payload: dict) -> None:
+    """POST intent to Anvil API. Fire-and-forget, no spool."""
+    try:
+        url = f"{ANVIL_API}/api/anvil/intents"
+        if not url.startswith(("http://", "https://")):
+            return
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(  # noqa: S310
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=3)  # noqa: S310
+    except (urllib.error.URLError, OSError, ValueError):
+        pass
+
+
 def _send(payload: dict) -> None:
     """POST to Anvil API, fall back to spool on failure."""
     if _post_to_api(payload):
@@ -102,6 +155,31 @@ def _send(payload: dict) -> None:
 # ---------------------------------------------------------------------------
 # Channel handlers
 # ---------------------------------------------------------------------------
+
+
+def _handle_intent(raw_input: str) -> HookResult:
+    """UserPromptSubmit: extract <command-name> tags and POST intents."""
+    matches = _COMMAND_NAME_RE.findall(raw_input)
+    if not matches:
+        return ALLOW
+
+    session_id = ""
+    try:
+        parsed = json.loads(raw_input) if raw_input.strip().startswith("{") else {}
+        data = parsed.get("data", parsed)
+        session_id = data.get("session_id", "")
+    except (json.JSONDecodeError, AttributeError):
+        pass
+
+    for skill_name in matches:
+        skill_name = skill_name.strip()
+        if skill_name in _CLI_BUILTINS:
+            continue
+        if _is_test(skill_name):
+            continue
+        _post_intent({"skill_name": skill_name, "session_id": session_id})
+
+    return ALLOW
 
 
 def _handle_skill(tool_input: dict, raw_input: str) -> HookResult:
@@ -228,6 +306,9 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     """
     if event_type == "SessionStart":
         return _sync_pending()
+
+    if event_type == "UserPromptSubmit":
+        return _handle_intent(raw_input)
 
     if tool_name == "Skill":
         return _handle_skill(tool_input, raw_input)
