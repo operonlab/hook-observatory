@@ -1,4 +1,4 @@
-"""Built-in method presets — 7 planning method configs seeded into the database."""
+"""Built-in method presets — 9 planning method configs seeded into the database."""
 
 PRESETS: list[dict] = [
     # ======================== 1. Ivy Lee Method ========================
@@ -733,6 +733,209 @@ PRESETS: list[dict] = [
                 "show_time_column": False,
                 "show_frog_badge": True,
                 "empty_state_message_zh": "先選出「今日必達」，再安排其他待辦。不確定就問自己：今天只能做一件事，做哪件？",  # noqa: E501
+                "compact_mode": False,
+            },
+        },
+    },
+    # ======================== 9. Pilot Method (領航法) ========================
+    {
+        "slug": "pilot-method",
+        "name": "Pilot Method",
+        "name_zh": "領航法",
+        "description": "獨創認知操作系統——雙軌容量管理（時間＋認知燃料），四種飛行模式（衝刺/巡航/滑翔/緊急）動態切換，驗證棘輪確保品質，黑盒子審查持續最佳化。不只管理時間，更管理你的認知預算。",  # noqa: E501
+        "icon": "\u2708\ufe0f",
+        "color": "#74c7ec",
+        "layout_type": "list",
+        "is_preset": True,
+        "tags": ["cognitive", "dual-track", "innovative", "self-optimizing"],
+        "config": {
+            "max_items": None,
+            "categories": [
+                {
+                    "id": "sprint",
+                    "name": "Sprint Tasks",
+                    "name_zh": "衝刺任務",
+                    "icon": "\U0001f680",
+                    "color": "#f38ba8",
+                    "max_items": 3,
+                    "min_items": 0,
+                    "sort_order": 0,
+                    "priority_weight": 4,
+                    "accept_filter": {"priority": ["urgent", "high"]},
+                },
+                {
+                    "id": "cruise",
+                    "name": "Cruise Tasks",
+                    "name_zh": "巡航任務",
+                    "icon": "\u2708\ufe0f",
+                    "color": "#89b4fa",
+                    "max_items": None,
+                    "min_items": 0,
+                    "sort_order": 1,
+                    "priority_weight": 2,
+                    "accept_filter": {"priority": ["medium"]},
+                },
+                {
+                    "id": "glide",
+                    "name": "Glide Tasks",
+                    "name_zh": "滑翔任務",
+                    "icon": "\U0001f54a\ufe0f",
+                    "color": "#a6e3a1",
+                    "max_items": None,
+                    "min_items": 0,
+                    "sort_order": 2,
+                    "priority_weight": 1,
+                    "accept_filter": {"priority": ["low"]},
+                },
+            ],
+            "ordering": "category",
+            "sequential_strict": False,
+            "frog": {
+                "enabled": True,
+                "count": 1,
+                "label": "Mission Critical",
+                "label_zh": "關鍵任務",
+                "icon": "\U0001f3af",
+                "auto_suggest": True,
+                "suggest_criteria": {
+                    "prefer_high_priority": True,
+                    "prefer_dreaded": True,
+                    "prefer_high_impact": True,
+                    "max_age_days": 5,
+                },
+                "must_do_first": True,
+            },
+            "time_awareness": {
+                "enabled": True,
+                "mode": "estimates",
+                "day_start": "09:00",
+                "day_end": "18:00",
+                "slot_duration_minutes": 30,
+                "include_breaks": True,
+                "break_pattern": {"work_minutes": 90, "break_minutes": 15},
+                "pomodoro": None,
+            },
+            "pilot": {
+                "enabled": True,
+                "dual_track": True,
+                "cognitive_fuel_budget": 100,
+                "time_budget_min": 480,
+                "flight_modes": {
+                    "sprint": {
+                        "fuel_multiplier": 2.0,
+                        "max_duration_min": 120,
+                        "description_zh": "全力衝刺，高認知消耗",
+                    },
+                    "cruise": {
+                        "fuel_multiplier": 1.0,
+                        "max_duration_min": None,
+                        "description_zh": "穩定巡航，可持續產出",
+                    },
+                    "glide": {
+                        "fuel_multiplier": 0.5,
+                        "max_duration_min": None,
+                        "description_zh": "低能耗滑翔，處理簡單事務",
+                    },
+                    "emergency": {
+                        "fuel_multiplier": 3.0,
+                        "max_duration_min": 60,
+                        "description_zh": "緊急模式，只處理關鍵事項",
+                    },
+                },
+                "validation_ratchet": {
+                    "enabled": True,
+                    "thresholds": {
+                        "skip": 0.25,
+                        "light": 0.50,
+                        "normal": 0.75,
+                        "thorough": 1.0,
+                    },
+                    "description_zh": "認知燃料消耗越多，驗證標準自動提高",
+                },
+                "black_box": {
+                    "enabled": True,
+                    "capture_fields": [
+                        "completion_score",
+                        "flight_mode_changes",
+                        "decision_count",
+                        "cognitive_fuel_spent",
+                        "time_spent_min",
+                        "frog_completed",
+                    ],
+                    "description_zh": "每日自動記錄飛行數據，持續最佳化",
+                },
+                "decision_fatigue": {
+                    "enabled": True,
+                    "warning_threshold": 0.7,
+                    "critical_threshold": 0.9,
+                    "description_zh": "監測決策疲勞，超過閾值建議切換滑翔模式",
+                },
+            },
+            "review_cycle": {
+                "morning_review": {
+                    "enabled": True,
+                    "default_time": "08:00",
+                    "prompt_zh": "檢查認知燃料，選擇今日飛行模式，確認關鍵任務",
+                },
+                "evening_review": {
+                    "enabled": True,
+                    "default_time": "21:00",
+                    "prompt_zh": "填寫黑盒子：今日燃料消耗、決策次數、驗證棘輪觸發次數",
+                },
+                "weekly_review": {
+                    "enabled": True,
+                    "day_of_week": 0,
+                    "prompt": "Black box analysis: review flight patterns and optimize",
+                    "prompt_zh": "黑盒子分析：回顧飛行模式、燃料效率、決策品質",
+                },
+            },
+            "completion_rule": {
+                "mode": "frog_plus_percentage",
+                "threshold": 0.7,
+                "frog_required": True,
+                "streak_tracking": True,
+                "celebration": {
+                    "on_frog_done": "Mission critical complete! Fuel well spent.",
+                    "on_day_complete": "Perfect landing! All systems nominal.",
+                },
+            },
+            "overflow": {
+                "mode": "review_then_decide",
+                "max_carry_days": 2,
+                "carry_limit": 3,
+                "stale_warning_days": 2,
+            },
+            "item_sources": {
+                "taskflow": {
+                    "enabled": True,
+                    "auto_include_due_today": True,
+                    "auto_include_overdue": True,
+                },
+                "finance": {
+                    "enabled": True,
+                    "include_types": ["subscription_due"],
+                },
+                "invest": {"enabled": False},
+                "briefing": {
+                    "enabled": True,
+                    "include_types": ["daily_briefing"],
+                },
+                "capture": {
+                    "enabled": True,
+                    "include_types": ["pending_captures"],
+                },
+            },
+            "ui_hints": {
+                "show_numbers": False,
+                "show_category_headers": True,
+                "show_progress_bar": True,
+                "show_time_column": True,
+                "show_frog_badge": True,
+                "show_fuel_gauge": True,
+                "show_flight_mode": True,
+                "show_ratchet_level": True,
+                "show_decision_count": True,
+                "empty_state_message_zh": "設定今日飛行模式，分配認知燃料預算，選出關鍵任務。",
                 "compact_mode": False,
             },
         },
