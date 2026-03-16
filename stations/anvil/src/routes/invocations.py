@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from classify import classify
 from db import Invocation, get_session
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
@@ -30,6 +31,7 @@ class InvocationCreateRequest(BaseModel):
     payload: dict[str, Any] | None = None
     tool_use_id: str | None = None
     timestamp: datetime | None = None
+    category: str | None = None
 
 
 class InvocationResponse(BaseModel):
@@ -44,6 +46,7 @@ class InvocationResponse(BaseModel):
     agent_model: str | None
     payload: dict[str, Any] | None
     tool_use_id: str | None
+    category: str
 
     model_config = {"from_attributes": True}
 
@@ -81,6 +84,9 @@ async def record_invocation(
     # Strip None timestamp so DB server_default applies for real-time calls
     if data.get("timestamp") is None:
         data.pop("timestamp", None)
+    # Auto-classify if not explicitly provided
+    if not data.get("category"):
+        data["category"] = classify(data["skill_name"])
     inv = Invocation(**data)
     db.add(inv)
     await db.commit()
@@ -95,6 +101,9 @@ async def list_invocations(
     success: bool | None = Query(None),
     since: datetime | None = Query(None, description="Start of date range (ISO 8601)"),
     until: datetime | None = Query(None, description="End of date range (ISO 8601)"),
+    category: str | None = Query(
+        None, description="Filter by category (skill, command, test, unknown)"
+    ),
     limit: int = Query(50, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_session),
@@ -118,6 +127,9 @@ async def list_invocations(
     if until:
         query = query.where(Invocation.timestamp <= until)
         count_query = count_query.where(Invocation.timestamp <= until)
+    if category:
+        query = query.where(Invocation.category == category)
+        count_query = count_query.where(Invocation.category == category)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
