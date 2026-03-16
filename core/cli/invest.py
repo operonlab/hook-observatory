@@ -23,6 +23,7 @@ import argparse
 import json
 import sys
 
+from cli.cli_utils import resolve_text_arg
 from cli.exit_codes import exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.invest import InvestClient
@@ -121,8 +122,9 @@ def cmd_account_create(args):
             data["broker"] = args.broker
         if args.currency:
             data["currency"] = args.currency
-        if args.notes:
-            data["notes"] = args.notes
+        notes = resolve_text_arg(args.notes)
+        if notes:
+            data["notes"] = notes
         result = client.create_account(data)
         if _json_out(result, args):
             return
@@ -195,8 +197,9 @@ def cmd_position_create(args):
             data["asset_type"] = args.asset_type
         if args.currency:
             data["currency"] = args.currency
-        if args.notes:
-            data["notes"] = args.notes
+        notes = resolve_text_arg(args.notes)
+        if notes:
+            data["notes"] = notes
         result = client.create_position(data)
         if _json_out(result, args):
             return
@@ -273,8 +276,9 @@ def cmd_trade_create(args):
             data["tax"] = args.tax
         if args.currency:
             data["currency"] = args.currency
-        if args.notes:
-            data["notes"] = args.notes
+        notes = resolve_text_arg(args.notes)
+        if notes:
+            data["notes"] = notes
         result = client.create_trade(data)
         if _json_out(result, args):
             return

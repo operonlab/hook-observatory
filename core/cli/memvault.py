@@ -11,6 +11,7 @@ import os
 import sys
 from datetime import datetime
 
+from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.memvault import MemvaultClient
 
@@ -399,8 +400,9 @@ def cmd_block_get(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_block_update(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Update a memory block."""
     fields: dict = {}
-    if args.content:
-        fields["content"] = args.content
+    content = resolve_text_arg(args.content)
+    if content:
+        fields["content"] = content
     if args.type:
         fields["block_type"] = args.type
     if args.tags is not None:
@@ -503,7 +505,7 @@ def cmd_domains(client: MemvaultClient, args: argparse.Namespace) -> None:
 
 def cmd_domain_create(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Create a knowledge domain."""
-    data = client.create_domain(args.name, description=args.description)
+    data = client.create_domain(args.name, description=resolve_text_arg(args.description))
     if _json_out(data, args):
         return
 
@@ -518,8 +520,9 @@ def cmd_domain_update(client: MemvaultClient, args: argparse.Namespace) -> None:
     fields: dict = {}
     if args.name:
         fields["name"] = args.name
-    if args.description:
-        fields["description"] = args.description
+    description = resolve_text_arg(args.description)
+    if description:
+        fields["description"] = description
     data = client.update_domain(args.domain_id, **fields)
     if _json_out(data, args):
         return
@@ -1476,7 +1479,7 @@ def cmd_intelligence_ingest(client: MemvaultClient, args: argparse.Namespace) ->
             "space_id": args.space_id,
             "digest_type": args.digest_type,
             "period": args.period,
-            "content": args.content,
+            "content": resolve_text_arg(args.content),
         },
     )
     if _json_out(data, args):

@@ -32,6 +32,7 @@ import argparse
 import json
 import sys
 
+from cli.cli_utils import resolve_text_arg
 from cli.exit_codes import exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.taskflow import TaskflowClient
@@ -161,8 +162,9 @@ def cmd_task_create(args):
     client = _client()
     try:
         data: dict = {"title": args.title, "source": args.source}
-        if args.description:
-            data["description"] = args.description
+        description = resolve_text_arg(args.description)
+        if description:
+            data["description"] = description
         if args.project:
             data["project"] = args.project
         if args.priority:
@@ -195,8 +197,9 @@ def cmd_task_update(args):
         data: dict = {}
         if args.title:
             data["title"] = args.title
-        if args.description:
-            data["description"] = args.description
+        description = resolve_text_arg(args.description)
+        if description:
+            data["description"] = description
         if args.source:
             data["source"] = args.source
         if args.project:
@@ -303,7 +306,7 @@ def cmd_update_list(args):
 def cmd_update_add(args):
     client = _client()
     try:
-        data: dict = {"type": args.type, "content": args.content}
+        data: dict = {"type": args.type, "content": resolve_text_arg(args.content)}
         if args.hours is not None:
             data["hours_logged"] = args.hours
         result = client.add_update(args.task_id, data)

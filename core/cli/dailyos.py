@@ -29,6 +29,7 @@ import argparse
 import json
 import sys
 
+from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.dailyos import DailyOSClient
 
@@ -101,8 +102,9 @@ def cmd_methods_create(args):
         data = {"slug": args.slug, "name": args.name}
         if args.name_zh:
             data["name_zh"] = args.name_zh
-        if args.description:
-            data["description"] = args.description
+        description = resolve_text_arg(args.description)
+        if description:
+            data["description"] = description
         if args.icon:
             data["icon"] = args.icon
         if config is not None:
@@ -412,8 +414,9 @@ def cmd_spans_create(args):
             data["category"] = args.category
         if args.color:
             data["color"] = args.color
-        if args.notes:
-            data["notes"] = args.notes
+        notes = resolve_text_arg(args.notes)
+        if notes:
+            data["notes"] = notes
         result = client.create_span(data)
         if args.json:
             _json_out(result, True)

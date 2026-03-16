@@ -23,6 +23,7 @@ import argparse
 import json
 import sys
 
+from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.nodeflow import NodeflowClient
 
@@ -89,8 +90,9 @@ def cmd_flows_create(args):
             "trigger_type": args.trigger_type,
             "status": "draft",
         }
-        if args.description:
-            data["description"] = args.description
+        description = resolve_text_arg(args.description)
+        if description:
+            data["description"] = description
         result = client.create_flow(data)
         if args.json:
             _json_out(result, True)
@@ -130,7 +132,8 @@ def cmd_flows_pause(args):
 def cmd_flows_trigger(args):
     client = NodeflowClient()
     try:
-        input_data = json.loads(args.input) if args.input else {}
+        input_raw = resolve_text_arg(args.input)
+        input_data = json.loads(input_raw) if input_raw else {}
         result = client.trigger_flow(args.id, input_data)
         if args.json:
             _json_out(result, True)
