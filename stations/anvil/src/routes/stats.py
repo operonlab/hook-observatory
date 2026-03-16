@@ -59,16 +59,18 @@ class SkillStatsResponse(BaseModel):
 
 class DemandStat(BaseModel):
     skill_name: str
-    intents: int
-    executions: int
-    conversion_rate: float  # executions / intents * 100
+    user_invocations: int  # /command direct calls (from intents)
+    auto_invocations: int  # Claude Skill() tool calls (from invocations)
+    total_usage: int  # user + auto
+    auto_rate: float  # auto / total × 100 (higher = better description)
 
 
 class DemandStatsResponse(BaseModel):
     items: list[DemandStat]
-    total_intents: int
-    total_executions: int
-    overall_conversion_rate: float
+    total_user: int
+    total_auto: int
+    total_usage: int
+    overall_auto_rate: float
 
 
 # ---------------------------------------------------------------------------
@@ -115,36 +117,40 @@ async def demand_stats(
     intent_result = await db.execute(intent_query)
     exec_result = await db.execute(exec_query)
 
-    intents = {r.skill_name: r.intent_count for r in intent_result.all()}
-    execs = {r.skill_name: r.exec_count for r in exec_result.all()}
+    user = {r.skill_name: r.intent_count for r in intent_result.all()}
+    auto = {r.skill_name: r.exec_count for r in exec_result.all()}
 
-    all_skills = set(intents) | set(execs)
+    all_skills = set(user) | set(auto)
     items = []
     for skill in all_skills:
-        i = intents.get(skill, 0)
-        e = execs.get(skill, 0)
-        rate = round(e / i * 100, 1) if i > 0 else 0.0
+        u = user.get(skill, 0)
+        a = auto.get(skill, 0)
+        total = u + a
+        rate = round(a / total * 100, 1) if total > 0 else 0.0
         items.append(
             DemandStat(
                 skill_name=skill,
-                intents=i,
-                executions=e,
-                conversion_rate=rate,
+                user_invocations=u,
+                auto_invocations=a,
+                total_usage=total,
+                auto_rate=rate,
             )
         )
 
-    items.sort(key=lambda x: -(x.intents + x.executions))
+    items.sort(key=lambda x: -x.total_usage)
     items = items[:limit]
 
-    total_i = sum(intents.values())
-    total_e = sum(execs.values())
-    overall = round(total_e / total_i * 100, 1) if total_i > 0 else 0.0
+    total_u = sum(user.values())
+    total_a = sum(auto.values())
+    total_all = total_u + total_a
+    overall = round(total_a / total_all * 100, 1) if total_all > 0 else 0.0
 
     return DemandStatsResponse(
         items=items,
-        total_intents=total_i,
-        total_executions=total_e,
-        overall_conversion_rate=overall,
+        total_user=total_u,
+        total_auto=total_a,
+        total_usage=total_all,
+        overall_auto_rate=overall,
     )
 
 
