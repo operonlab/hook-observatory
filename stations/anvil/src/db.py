@@ -101,6 +101,7 @@ class Invocation(Base):
             unique=True,
             postgresql_where=text("tool_use_id IS NOT NULL"),
         ),
+        Index("idx_invocations_category", "category"),
         {"schema": "anvil"},
     )
 
@@ -121,6 +122,9 @@ class Invocation(Base):
     agent_model: Mapped[str | None] = mapped_column(String(100))
     payload: Mapped[dict | None] = mapped_column(JSONB)
     tool_use_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    category: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'skill'")
+    )
 
 
 class SkillVersion(Base):

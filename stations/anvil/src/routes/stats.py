@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from db import get_session
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from services.telemetry import TelemetryService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,22 +61,24 @@ class SkillStatsResponse(BaseModel):
 
 @router.get("/stats")
 async def global_stats(
+    category: str = Query("skill", description="Category filter; use 'all' for no filter"),
     db: AsyncSession = Depends(get_session),
 ) -> GlobalStatsResponse:
     """Aggregated stats: top skills by count, avg success rate, 7d trend."""
     svc = TelemetryService(db)
-    data = await svc.get_global_stats()
+    data = await svc.get_global_stats(category=category)
     return GlobalStatsResponse(**data)
 
 
 @router.get("/stats/{name}")
 async def skill_stats(
     name: str,
+    category: str = Query("skill", description="Category filter; use 'all' for no filter"),
     db: AsyncSession = Depends(get_session),
 ) -> SkillStatsResponse:
     """Per-skill stats: daily counts, avg duration, failure rate, common errors."""
     svc = TelemetryService(db)
-    data = await svc.get_skill_stats(name)
+    data = await svc.get_skill_stats(name, category=category)
     if data is None:
         raise HTTPException(status_code=404, detail=f"No invocations found for skill '{name}'")
     return SkillStatsResponse(**data)
