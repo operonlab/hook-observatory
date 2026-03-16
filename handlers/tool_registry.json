@@ -1,0 +1,24 @@
+{
+  "mcp_servers": {
+    "tmux-relay": "tmux-relay",
+    "memvault": "memvault",
+    "capture": "capture",
+    "anvil": "anvil",
+    "taskflow": "taskflow",
+    "finance": "finance",
+    "invest": "invest",
+    "dailyos": "dailyos",
+    "sandbox-executor": "sandbox-executor",
+    "session-intelligence": "session-intelligence",
+    "session-redactor": "session-redactor",
+    "agent-metrics": "agent-metrics",
+    "hook-observatory": "hook-observatory",
+    "crawl4ai": "crawl4ai",
+    "pencil": "pencil",
+    "intelflow": "intelflow",
+    "notification": "notification"
+  },
+  "cli_commands": {
+    "relay": "tmux-relay"
+  }
+}

@@ -21,7 +21,9 @@ from . import (
     claudemd_suggest,
     cleanup_versions,
     context_inject,
+    context_supervisor,
     external,
+    memory_sync,
     observability,
     pm_autopilot,
     relay_signal,
@@ -51,20 +53,24 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ("Bash", bash_safety.handle),
         ("Bash", sentinel_notify.handle),
         ("Write|Edit", skill_security.handle),
+        (None, context_supervisor.handle),
         (None, observability.handle),
     ],
     "PostToolUse": [
         ("Edit|Write", auto_format.handle),
+        ("Edit|Write", memory_sync.handle),
         ("Bash", sentinel_notify.handle),
         ("Bash", pm_autopilot.handle),
-        ("Skill", anvil_telemetry.handle),
+        (None, anvil_telemetry.handle),
         ("Skill", external.skill_tracker),
+        (None, context_supervisor.handle),
         (None, observability.handle),
     ],
     "Stop": [
         (None, relay_signal.handle),
         (None, pm_autopilot.handle),
         (None, voice_notify.handle),
+        (None, context_supervisor.handle),
         (None, observability.handle),
     ],
     "Notification": [
@@ -75,6 +81,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "UserPromptSubmit": [
+        (None, context_supervisor.handle),
         (None, external.recall),
         (None, observability.handle),
     ],
@@ -84,6 +91,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, claudemd_suggest.handle),
         (None, cleanup_versions.handle),
         (None, pm_autopilot.handle),
+        (None, context_supervisor.handle),
         (None, observability.handle),
     ],
     "SubagentStart": [
@@ -92,9 +100,11 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "SubagentStop": [
         (None, verify_completion.handle),
+        (None, voice_notify.handle),
         (None, observability.handle),
     ],
     "PreCompact": [
+        (None, context_supervisor.handle),
         (None, external.progressive_extract),
         (None, observability.handle),
     ],
