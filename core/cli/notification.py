@@ -19,15 +19,6 @@ from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.notification import NotificationClient
 
 
-def _json_out(data, as_json=False):
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    return data
-
-
-def _err(e):
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
 
 
 # ======================== Commands ========================
@@ -38,11 +29,11 @@ def cmd_vapid_key(args):
     try:
         result = client.get_vapid_key()
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             print(f"VAPID Public Key: {result.get('public_key', result)}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_sub_list(args):
@@ -50,7 +41,7 @@ def cmd_sub_list(args):
     try:
         subs = client.list_subscriptions()
         if args.json:
-            _json_out(subs, True)
+            json_out(subs, True)
         else:
             if not subs:
                 print("No subscriptions found.")
@@ -61,7 +52,7 @@ def cmd_sub_list(args):
                 endpoint = s.get("endpoint", "?")
                 print(f"  [{sid}] {endpoint[:60]}...")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_sub_create(args):
@@ -75,11 +66,11 @@ def cmd_sub_create(args):
             }
         )
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             print(f"Subscription created: {result.get('id', result)}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_sub_delete(args):
@@ -89,7 +80,7 @@ def cmd_sub_delete(args):
         if not args.json:
             print("Subscription deleted.")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_sub_preferences(args):
@@ -113,11 +104,11 @@ def cmd_sub_preferences(args):
             sys.exit(1)
         result = client.update_preferences(args.sub_id, prefs)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             print(f"Preferences updated for {args.sub_id}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ======================== Main ========================

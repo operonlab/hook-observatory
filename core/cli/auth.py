@@ -12,22 +12,11 @@ Symlink: ln -sf ~/workshop/core/cli/auth.py ~/.local/bin/auth
 """
 
 import argparse
-import json
 import sys
 
+from cli.cli_helpers import err, json_out
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.auth import AuthClient
-
-
-def _json_out(data, as_json=False):
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    return data
-
-
-def _err(e):
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
 
 
 # ======================== Commands ========================
@@ -39,11 +28,11 @@ def cmd_register(args):
         name = args.name or args.email.split("@")[0]
         result = client.register(args.email, args.password, name)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             print(f"User registered: {result.get('email', result.get('id', result))}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_login(args):
@@ -51,7 +40,7 @@ def cmd_login(args):
     try:
         result = client.login(args.email, args.password)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             user = result.get("user", result)
             if isinstance(user, dict):
@@ -61,7 +50,7 @@ def cmd_login(args):
             else:
                 print(f"Logged in: {result}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_logout(args):
@@ -71,7 +60,7 @@ def cmd_logout(args):
         if not args.json:
             print("Logged out successfully.")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_session(args):
@@ -79,7 +68,7 @@ def cmd_session(args):
     try:
         result = client.get_session()
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             user = result.get("user", result)
             if isinstance(user, dict):
@@ -96,9 +85,9 @@ def cmd_session(args):
         if e.status_code == 401:
             print("No active session.")
             sys.exit(1)
-        _err(e)
+        err(e)
     except APIConnectionError as e:
-        _err(e)
+        err(e)
 
 
 # ======================== Main ========================

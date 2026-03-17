@@ -18,11 +18,11 @@ Configure in ~/.claude.json:
     }
 """
 
-import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.agent_metrics import AgentMetricsClient, AgentMetricsError
+from workshop.clients.agent_metrics import AgentMetricsClient
+from workshop.mcp_helpers import json_text, mcp_error_handler
 
 mcp = FastMCP("agent-metrics")
 client = AgentMetricsClient(dispatch_timeout=600)
@@ -128,27 +128,24 @@ def _format_ready(tasks: list[dict]) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def maestro_plan(
     task: str,
     budget: str = "balanced",
     pattern: str = "",
 ) -> str:
     """Analyze a task and return recommended orchestration pattern, complexity, categories, and phases. No execution."""
-    try:
-        result = await to_thread(
-            client.plan,
-            task=task,
-            budget=budget,
-            pattern=pattern or None,
-        )
-        return _format_plan(result)
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.plan,
+        task=task,
+        budget=budget,
+        pattern=pattern or None,
+    )
+    return _format_plan(result)
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def maestro_run(
     task: str,
     budget: str = "balanced",
@@ -157,50 +154,38 @@ async def maestro_run(
     timeout: int = 300,
 ) -> str:
     """Execute a dispatch: analyze task → route to CLI(s) → run agents → return report. Long-running — may take minutes. Use from background agent for true async."""
-    try:
-        result = await to_thread(
-            client.run,
-            task=task,
-            budget=budget,
-            pattern=pattern or None,
-            cwd=cwd,
-            timeout=timeout,
-        )
-        return _format_report(result)
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.run,
+        task=task,
+        budget=budget,
+        pattern=pattern or None,
+        cwd=cwd,
+        timeout=timeout,
+    )
+    return _format_report(result)
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def maestro_runs(limit: int = 20) -> str:
     """List recent dispatch run history with name, pattern, status, duration."""
-    try:
-        runs = await to_thread(client.list_runs, limit=limit)
-        return _format_runs(runs)
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    runs = await to_thread(client.list_runs, limit=limit)
+    return _format_runs(runs)
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def project_list(limit: int = 20) -> str:
     """List team-task projects with name, mode, status, goal."""
-    try:
-        projects = await to_thread(client.list_projects)
-        total_count = len(projects)
-        projects = projects[:limit]
-        header = f"Showing {len(projects)} of {total_count} projects\n\n"
-        return header + _format_projects(projects)
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    projects = await to_thread(client.list_projects)
+    total_count = len(projects)
+    projects = projects[:limit]
+    header = f"Showing {len(projects)} of {total_count} projects\n\n"
+    return header + _format_projects(projects)
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def project_create(
     name: str,
     mode: str = "dag",
@@ -209,35 +194,27 @@ async def project_create(
     workspace: str = "",
 ) -> str:
     """Create a new team-task project. Modes: linear (sequential pipeline), dag (dependency graph), debate (multi-perspective review)."""
-    try:
-        await to_thread(
-            client.create_project,
-            name=name,
-            mode=mode,
-            goal=goal,
-            pipeline=pipeline,
-            workspace=workspace,
-        )
-        return f"✅ Created project **{name}** ({mode})"
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    await to_thread(
+        client.create_project,
+        name=name,
+        mode=mode,
+        goal=goal,
+        pipeline=pipeline,
+        workspace=workspace,
+    )
+    return f"✅ Created project **{name}** ({mode})"
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def project_status(name: str) -> str:
     """Get full project state including all tasks/stages and their statuses."""
-    try:
-        proj = await to_thread(client.get_project, name=name)
-        return _format_project(proj)
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    proj = await to_thread(client.get_project, name=name)
+    return _format_project(proj)
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def project_add_task(
     project: str,
     task_id: str,
@@ -246,59 +223,47 @@ async def project_add_task(
     deps: str = "",
 ) -> str:
     """Add a task to a DAG project with optional dependencies and agent assignment."""
-    try:
-        await to_thread(
-            client.add_task,
-            project=project,
-            task_id=task_id,
-            agent=agent,
-            description=description,
-            deps=deps,
-        )
-        return f"✅ Added task **{task_id}** to {project}"
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    await to_thread(
+        client.add_task,
+        project=project,
+        task_id=task_id,
+        agent=agent,
+        description=description,
+        deps=deps,
+    )
+    return f"✅ Added task **{task_id}** to {project}"
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def project_ready(project: str) -> str:
     """Get ready-to-dispatch tasks: all dependencies resolved, status pending. DAG mode only."""
-    try:
-        tasks = await to_thread(client.ready_tasks, project=project)
-        return _format_ready(tasks)
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    tasks = await to_thread(client.ready_tasks, project=project)
+    return _format_ready(tasks)
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def project_update_task(
     project: str,
     task_id: str,
     status: str,
 ) -> str:
     """Update task status (pending → in-progress → done/failed/skipped)."""
-    try:
-        result = await to_thread(
-            client.update_task,
-            project=project,
-            task_id=task_id,
-            status=status,
-        )
-        msg = f"✅ Updated **{task_id}** → {status}"
-        if result.get("newly_ready"):
-            msg += f"\n\nNewly ready: {', '.join(result['newly_ready'])}"
-        return msg
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.update_task,
+        project=project,
+        task_id=task_id,
+        status=status,
+    )
+    msg = f"✅ Updated **{task_id}** → {status}"
+    if result.get("newly_ready"):
+        msg += f"\n\nNewly ready: {', '.join(result['newly_ready'])}"
+    return msg
 
 
 @mcp.tool()
+@mcp_error_handler("AgentMetrics")
 async def project_round(
     project: str,
     action: str,
@@ -306,19 +271,14 @@ async def project_round(
     text: str = "",
 ) -> str:
     """Manage debate rounds: start, submit response, cross-review, synthesize, or check status. Debate mode only."""
-    try:
-        result = await to_thread(
-            client.manage_round,
-            project=project,
-            action=action,
-            debater_id=debater_id,
-            text=text,
-        )
-        return json.dumps(result, indent=2, ensure_ascii=False)
-    except AgentMetricsError as e:
-        return f"agent-metrics error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.manage_round,
+        project=project,
+        action=action,
+        debater_id=debater_id,
+        text=text,
+    )
+    return json_text(result)
 
 
 if __name__ == "__main__":

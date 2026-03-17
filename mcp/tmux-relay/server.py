@@ -18,7 +18,8 @@ Configure in ~/.claude.json:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.tmux_relay import TmuxRelayClient, TmuxRelayError
+from workshop.clients.tmux_relay import TmuxRelayClient
+from workshop.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("tmux-relay")
 _default_client = TmuxRelayClient(silent=True)
@@ -69,6 +70,7 @@ def _format_panes(panes) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("TmuxRelay")
 async def relay_run(
     command: str,
     timeout: int = 600,
@@ -77,22 +79,16 @@ async def relay_run(
     silent: bool = True,
 ) -> str:
     """Blocking relay: acquire pane → send command → wait for completion (event-driven via tmux wait-for, zero CPU) → return result. Use from a background Agent for true async. This is the PRIMARY tool."""
-    try:
-        c = _client(model, silent)
-        result = await to_thread(
-            c.run,
-            command=command,
-            timeout=timeout,
-            max_lines=lines,
-        )
-        return _format_relay_result(result)
-    except TmuxRelayError as e:
-        return f"tmux-relay error: {e}"
-    except Exception as e:
-        return f"Unexpected error: {type(e).__name__}: {e}"
-
-
+    c = _client(model, silent)
+    result = await to_thread(
+        c.run,
+        command=command,
+        timeout=timeout,
+        max_lines=lines,
+    )
+    return _format_relay_result(result)
 @mcp.tool()
+@mcp_error_handler("TmuxRelay")
 async def relay_dispatch(
     command: str,
     timeout: int = 600,
@@ -101,65 +97,40 @@ async def relay_dispatch(
     silent: bool = True,
 ) -> str:
     """Low-level: fire-and-forget dispatch. Returns signal_file for manual polling via relay_check/relay_result. Prefer relay_run instead."""
-    try:
-        c = _client(model, silent)
-        dispatched = await to_thread(
-            c.dispatch,
-            command=command,
-            timeout=timeout,
-            count=count,
-        )
-        return _format_dispatch(dispatched)
-    except TmuxRelayError as e:
-        return f"tmux-relay error: {e}"
-    except Exception as e:
-        return f"Unexpected error: {type(e).__name__}: {e}"
-
-
+    c = _client(model, silent)
+    dispatched = await to_thread(
+        c.dispatch,
+        command=command,
+        timeout=timeout,
+        count=count,
+    )
+    return _format_dispatch(dispatched)
 @mcp.tool()
+@mcp_error_handler("TmuxRelay")
 async def relay_list() -> str:
     """List all relay panes with their idle/busy status (cache-backed, ~0.5ms)."""
-    try:
-        panes = await to_thread(_default_client.list_panes)
-        return _format_panes(panes)
-    except TmuxRelayError as e:
-        return f"tmux-relay error: {e}"
-    except Exception as e:
-        return f"Unexpected error: {type(e).__name__}: {e}"
-
-
+    panes = await to_thread(_default_client.list_panes)
+    return _format_panes(panes)
 @mcp.tool()
+@mcp_error_handler("TmuxRelay")
 async def relay_check(signal_file: str) -> str:
     """Low-level: check if a dispatched command has completed (cache-backed, ~0.1ms)."""
-    try:
-        result = await to_thread(
-            _default_client.check,
-            signal_file=signal_file,
-        )
-        status = result.get("status", "unknown").upper()
-        meta = result.get("meta", "")
-        return f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}"
-    except TmuxRelayError as e:
-        return f"tmux-relay error: {e}"
-    except Exception as e:
-        return f"Unexpected error: {type(e).__name__}: {e}"
-
-
+    result = await to_thread(
+        _default_client.check,
+        signal_file=signal_file,
+    )
+    status = result.get("status", "unknown").upper()
+    meta = result.get("meta", "")
+    return f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}"
 @mcp.tool()
+@mcp_error_handler("TmuxRelay")
 async def relay_result(signal_file: str, lines: int = 200) -> str:
     """Low-level: read the output of a completed relay command."""
-    try:
-        result = await to_thread(
-            _default_client.result,
-            signal_file=signal_file,
-            max_lines=lines,
-        )
-        return _format_relay_result(result)
-    except TmuxRelayError as e:
-        return f"tmux-relay error: {e}"
-    except Exception as e:
-        return f"Unexpected error: {type(e).__name__}: {e}"
-
-
+    result = await to_thread(
+        _default_client.result,
+        signal_file=signal_file,
+        max_lines=lines,
+    )
+    return _format_relay_result(result)
 if __name__ == "__main__":
     mcp.run()

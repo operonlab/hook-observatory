@@ -34,6 +34,7 @@ if os.path.isdir(_workshop_libs) and _workshop_libs not in sys.path:
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 from workshop.clients.session_redactor import SessionRedactorClient  # noqa: E402
+from workshop.mcp_helpers import mcp_error_handler  # noqa: E402
 
 mcp = FastMCP("workshop-session-redactor")
 client = SessionRedactorClient()
@@ -47,59 +48,49 @@ def json_result(data) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("SessionRedactor")
 async def session_redactor_status() -> str:
     """Get Session Redactor aggregate stats: total files processed, total redactions made, and last processing timestamp. Use this to understand how much sensitive data has been cleaned."""
-    try:
-        stats = await to_thread(client.get_stats)
-        return json_result(stats)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    stats = await to_thread(client.get_stats)
+    return json_result(stats)
 
 
 @mcp.tool()
+@mcp_error_handler("SessionRedactor")
 async def session_redactor_sweep(trigger: str = "sweep") -> str:
     """Run a full sweep of all Claude session transcripts (~/.claude/projects/). Detects and redacts API keys, passwords, tokens, and other secrets. Returns count of files processed and total redactions made."""
-    try:
-        summary = await to_thread(client.full_sweep, trigger)
-        return json_result(summary)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    summary = await to_thread(client.full_sweep, trigger)
+    return json_result(summary)
 
 
 @mcp.tool()
+@mcp_error_handler("SessionRedactor")
 async def session_redactor_redact(file_path: str, trigger: str = "manual") -> str:
     """Redact sensitive data from a single .jsonl transcript file. Parses JSON, recursively walks all string values, applies all 16 detection patterns (API keys, passwords, tokens, AWS, SSH, etc.), and atomically writes the cleaned file back."""
-    try:
-        result = await to_thread(client.redact_file, file_path, trigger)
-        return json_result(result.to_dict())
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.redact_file, file_path, trigger)
+    return json_result(result.to_dict())
 
 
 @mcp.tool()
+@mcp_error_handler("SessionRedactor")
 async def session_redactor_patterns() -> str:
     """List all sensitive data detection patterns with their names and categories. Categories include: password, api_key, token, aws_key, aws_secret, ssh_key, db_password, generic_secret."""
-    try:
-        patterns = await to_thread(client.list_patterns)
-        return json_result(patterns)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    patterns = await to_thread(client.list_patterns)
+    return json_result(patterns)
 
 
 @mcp.tool()
+@mcp_error_handler("SessionRedactor")
 async def session_redactor_history(limit: int = 30, session_id: str = "") -> str:
     """Get recent session transcript processing records. Shows which files were processed, how many redactions were made, and what triggered each processing run."""
-    try:
-        limit = min(limit, 100)  # cap at 100
-        if session_id:
-            records = await to_thread(client.get_session_history, session_id)
-            records = records[:limit]  # SDK has no limit param; truncate here
-        else:
-            records = await to_thread(client.get_history, limit)
-        total_count = len(records)
-        return json_result({"total_count": total_count, "records": records})
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    limit = min(limit, 100)  # cap at 100
+    if session_id:
+        records = await to_thread(client.get_session_history, session_id)
+        records = records[:limit]  # SDK has no limit param; truncate here
+    else:
+        records = await to_thread(client.get_history, limit)
+    total_count = len(records)
+    return json_result({"total_count": total_count, "records": records})
 
 
 # ======================== Entry Point ========================

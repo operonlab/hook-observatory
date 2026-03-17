@@ -28,11 +28,6 @@ from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.nodeflow import NodeflowClient
 
 
-def _json_out(data, as_json=False):
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    return data
-
 
 # ======================== Flows ========================
 
@@ -42,7 +37,7 @@ def cmd_flows_list(args):
     try:
         result = client.list_flows(page=args.page, page_size=args.limit)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -62,7 +57,7 @@ def cmd_flows_get(args):
     try:
         f = client.get_flow(args.id)
         if args.json:
-            _json_out(f, True)
+            json_out(f, True)
             return
         print(f"Name: {f.get('name', '?')}")
         print(f"Status: {f.get('status', '?')}")
@@ -95,7 +90,7 @@ def cmd_flows_create(args):
             data["description"] = description
         result = client.create_flow(data)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"Created flow: {result.get('name', '?')} (id={result.get('id', '?')[:12]})")
     except (APIError, APIConnectionError) as e:
@@ -108,7 +103,7 @@ def cmd_flows_activate(args):
     try:
         result = client.activate_flow(args.id)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"Flow activated: {result.get('name', result.get('id', '?'))}")
     except (APIError, APIConnectionError) as e:
@@ -121,7 +116,7 @@ def cmd_flows_pause(args):
     try:
         result = client.pause_flow(args.id)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"Flow paused: {result.get('name', result.get('id', '?'))}")
     except (APIError, APIConnectionError) as e:
@@ -136,7 +131,7 @@ def cmd_flows_trigger(args):
         input_data = json.loads(input_raw) if input_raw else {}
         result = client.trigger_flow(args.id, input_data)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         run_id = result.get("id", result.get("flow_run_id", "?"))
         print(f"Flow triggered. Run ID: {run_id}")
@@ -156,7 +151,7 @@ def cmd_nodes_list(args):
     try:
         result = client.list_nodes(args.flow_id)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result if isinstance(result, list) else result.get("items", [])
         print(f"Nodes ({len(items)}):\n")
@@ -183,7 +178,7 @@ def cmd_nodes_create(args):
         }
         result = client.create_node(data)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"Created node: {result.get('label', '?')} (id={result.get('id', '?')[:12]})")
     except json.JSONDecodeError:
@@ -202,7 +197,7 @@ def cmd_edges_list(args):
     try:
         result = client.list_edges(args.flow_id)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result if isinstance(result, list) else result.get("items", [])
         print(f"Edges ({len(items)}):\n")
@@ -224,7 +219,7 @@ def cmd_runs_list(args):
     try:
         result = client.list_runs(args.flow_id, page_size=args.limit)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -243,7 +238,7 @@ def cmd_runs_get(args):
     try:
         r = client.get_run(args.id)
         if args.json:
-            _json_out(r, True)
+            json_out(r, True)
             return
         print(f"Run ID: {r.get('id', '?')}")
         print(f"Flow ID: {r.get('flow_id', '?')}")
@@ -270,7 +265,7 @@ def cmd_actions(args):
     try:
         result = client.list_actions()
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result if isinstance(result, list) else result.get("items", [])
         print(f"Available Actions ({len(items)}):\n")
@@ -292,18 +287,18 @@ def cmd_status(args):
         # Try health endpoint or just list flows to verify connectivity
         result = client.list_flows(page_size=1)
         if args.json:
-            _json_out({"status": "ok", "flows": result.get("total", 0)}, True)
+            json_out({"status": "ok", "flows": result.get("total", 0)}, True)
             return
         print(f"Nodeflow: OK (total flows: {result.get('total', 0)})")
     except APIConnectionError as e:
         if args.json:
-            _json_out({"status": "unreachable", "error": str(e)}, True)
+            json_out({"status": "unreachable", "error": str(e)}, True)
         else:
             print(f"Nodeflow: UNREACHABLE - {e}", file=sys.stderr)
         sys.exit(1)
     except APIError as e:
         if args.json:
-            _json_out({"status": "error", "code": e.status_code, "detail": e.detail}, True)
+            json_out({"status": "error", "code": e.status_code, "detail": e.detail}, True)
         else:
             print(f"Nodeflow: ERROR - {e}", file=sys.stderr)
         sys.exit(1)

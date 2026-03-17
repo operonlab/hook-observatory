@@ -10,22 +10,10 @@ Symlink: ln -sf ~/workshop/core/cli/admin.py ~/.local/bin/admin
 """
 
 import argparse
-import json
-import sys
 
+from cli.cli_helpers import err, json_out
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.admin import AdminClient
-
-
-def _json_out(data, as_json=False):
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    return data
-
-
-def _err(e):
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
 
 
 # ======================== Commands ========================
@@ -36,7 +24,7 @@ def cmd_status(args):
     try:
         result = client.status()
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             print(f"Status: {result.get('status', result)}")
             if result.get("version"):
@@ -44,7 +32,7 @@ def cmd_status(args):
             if result.get("uptime"):
                 print(f"Uptime: {result['uptime']}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_audit_list(args):
@@ -59,7 +47,7 @@ def cmd_audit_list(args):
             page_size=args.limit,
         )
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             items = result.get("items", result if isinstance(result, list) else [])
             total = result.get("total", len(items))
@@ -80,7 +68,7 @@ def cmd_audit_list(args):
                     uid = uid[:8] + "..."
                 print(f"{ts:<22} {mod:<14} {ent:<14} {act:<14} {uid:<20}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_audit_history(args):
@@ -88,7 +76,7 @@ def cmd_audit_history(args):
     try:
         result = client.get_entity_history(args.module, args.entity_type, args.entity_id)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
         else:
             items = result if isinstance(result, list) else result.get("items", [])
             if not items:
@@ -106,7 +94,7 @@ def cmd_audit_history(args):
                     uid = uid[:8] + "..."
                 print(f"{ts:<22} {act:<14} {uid:<20}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ======================== Main ========================
