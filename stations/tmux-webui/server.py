@@ -464,6 +464,7 @@ async def ws_handler(websocket: WebSocket):
 
     async def poll_output():
         nonlocal metrics_counter, active_window
+        idle_count = 0
         while True:
             try:
                 current_panes = await list_panes(session)
@@ -474,14 +475,20 @@ async def ws_handler(websocket: WebSocket):
                 old_ids = set(last_contents.keys())
                 if vis_ids != old_ids:
                     cur_windows = await list_windows(session)
-                    await websocket.send_json(
-                        {
-                            "type": "windows",
-                            "windows": cur_windows,
-                            "active": active_window,
-                        }
+                    await asyncio.wait_for(
+                        websocket.send_json(
+                            {
+                                "type": "windows",
+                                "windows": cur_windows,
+                                "active": active_window,
+                            }
+                        ),
+                        timeout=5.0,
                     )
-                    await websocket.send_json({"type": "panes", "panes": vis})
+                    await asyncio.wait_for(
+                        websocket.send_json({"type": "panes", "panes": vis}),
+                        timeout=5.0,
+                    )
                     for gone in old_ids - vis_ids:
                         last_contents.pop(gone, None)
 
@@ -494,7 +501,10 @@ async def ws_handler(websocket: WebSocket):
                         updates[p["id"]] = content
 
                 if updates:
-                    await websocket.send_json({"type": "output", "panes": updates})
+                    await asyncio.wait_for(
+                        websocket.send_json({"type": "output", "panes": updates}),
+                        timeout=5.0,
+                    )
 
                 # Metrics
                 metrics_counter += 1
@@ -502,16 +512,44 @@ async def ws_handler(websocket: WebSocket):
                     metrics = await status_metrics()
                     if metrics != last_metrics:
                         last_metrics.update(metrics)
-                        await websocket.send_json({"type": "metrics", "metrics": metrics})
+                        await asyncio.wait_for(
+                            websocket.send_json({"type": "metrics", "metrics": metrics}),
+                            timeout=5.0,
+                        )
 
-            except (WebSocketDisconnect, RuntimeError):
+            except (WebSocketDisconnect, RuntimeError, asyncio.TimeoutError):
                 break
             except Exception as exc:
                 logger.error("Poll error: %s", exc)
 
-            await asyncio.sleep(poll_interval)
+            # Adaptive interval: slow down during idle, resume fast when active
+            if updates:
+                current_interval = poll_interval  # Active: use configured interval (0.4s)
+                idle_count = 0
+            else:
+                idle_count += 1
+                # Gradually slow down: 0.4 → 0.8 → 1.2 → 1.6 → 2.0 (cap)
+                current_interval = min(poll_interval * (1 + idle_count * 0.5), 2.0)
+
+            await asyncio.sleep(current_interval)
 
     poll_task = asyncio.create_task(poll_output())
+
+    async def heartbeat():
+        """Send ping every 15s. Client responds with pong."""
+        while True:
+            try:
+                await asyncio.sleep(15)
+                await asyncio.wait_for(
+                    websocket.send_json({"type": "ping", "ts": int(time.time())}),
+                    timeout=5.0,
+                )
+            except (WebSocketDisconnect, RuntimeError, asyncio.TimeoutError):
+                break
+            except Exception:
+                break
+
+    heartbeat_task = asyncio.create_task(heartbeat())
 
     try:
         while True:
@@ -656,6 +694,7 @@ async def ws_handler(websocket: WebSocket):
         logger.error("WebSocket error: %s", exc)
     finally:
         poll_task.cancel()
+        heartbeat_task.cancel()
         _ws_clients.discard(websocket)
         _on_ws_disconnect(session)
 
