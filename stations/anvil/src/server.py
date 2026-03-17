@@ -2,23 +2,17 @@
 
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 
 from db import Base, engine
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from workshop.station_bootstrap import setup_cors, setup_logging
 
 from config import config
 from routes import router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s -- %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("anvil")
+logger = setup_logging("anvil")
 
 
 @asynccontextmanager
@@ -43,17 +37,7 @@ app = FastAPI(
 )
 
 # CORS -- allow workbench and local origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:4102",
-        "https://workshop.joneshong.com",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+setup_cors(app, mode="restricted", extra_origins=["http://localhost:4102"])
 
 # Mount routes
 app.include_router(router)

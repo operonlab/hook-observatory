@@ -1,4 +1,4 @@
-import { request } from '@/api/client'
+import { buildParams, request } from '@/api/client'
 import type { PaginatedResponse } from '@/types'
 
 export interface NotificationLog {
@@ -46,11 +46,7 @@ export function listHistory(params: {
   page_size?: number
   category?: string
 }): Promise<PaginatedResponse<NotificationLog>> {
-  const qs = new URLSearchParams()
-  if (params.page) qs.set('page', String(params.page))
-  if (params.page_size) qs.set('page_size', String(params.page_size))
-  if (params.category) qs.set('category', params.category)
-  return request<PaginatedResponse<NotificationLog>>(`/notification/history?${qs.toString()}`)
+  return request<PaginatedResponse<NotificationLog>>(`/notification/history${buildParams(params)}`)
 }
 
 export interface Subscription {

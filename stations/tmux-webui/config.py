@@ -1,12 +1,15 @@
 """Configuration management for tmux-webui V2."""
 
-import json
 import logging
 from pathlib import Path
 
+from workshop.station_bootstrap import load_yaml_config
+
 logger = logging.getLogger("tmux-webui")
 
-DEFAULT_CONFIG = {
+_CONFIG_PATH = Path(__file__).parent / "config.yaml"
+
+_DEFAULT_CONFIG = {
     "host": "127.0.0.1",
     "port": 9527,
     "poll_interval": 0.4,
@@ -14,9 +17,22 @@ DEFAULT_CONFIG = {
     "capture_lines": 150,
     "theme": "catppuccin-mocha",
     "extra_keys": [
-        "Ctrl", "Alt", "Cmd", "|",
-        "Tab", "Esc", "|",
-        "/", ".", ":", ";", "|", "-", "_", "~", "|",
+        "Ctrl",
+        "Alt",
+        "Cmd",
+        "|",
+        "Tab",
+        "Esc",
+        "|",
+        "/",
+        ".",
+        ":",
+        ";",
+        "|",
+        "-",
+        "_",
+        "~",
+        "|",
         "BSpace",
     ],
     "quick_actions": [
@@ -32,24 +48,10 @@ _config: dict = {}
 
 
 def load_config(config_path: Path | None = None) -> dict:
-    """Load config from JSON file, falling back to defaults."""
+    """Load config from YAML file, falling back to defaults."""
     global _config
-    _config = dict(DEFAULT_CONFIG)
-
-    if config_path is None:
-        config_path = Path(__file__).parent / "config.json"
-
-    if config_path.exists():
-        try:
-            with open(config_path) as f:
-                user_cfg = json.load(f)
-            _config.update(user_cfg)
-            logger.info("Loaded config from %s", config_path)
-        except Exception as e:
-            logger.warning("Failed to load config from %s: %s", config_path, e)
-    else:
-        logger.info("No config file found, using defaults")
-
+    path = config_path or _CONFIG_PATH
+    _config = load_yaml_config(path, defaults=_DEFAULT_CONFIG)
     return _config
 
 
