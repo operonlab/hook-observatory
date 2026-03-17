@@ -205,6 +205,14 @@ class SessionIntelligenceEvents:
     TREND_DETECTED = "intelligence.trend.detected"
 
 
+class PaperEvents:
+    ARTICLE_CREATED = "paper.article.created"
+    ARTICLE_UPDATED = "paper.article.updated"
+    ARTICLE_DELETED = "paper.article.deleted"
+    DIGEST_GENERATED = "paper.digest.generated"
+    ANNOTATION_CREATED = "paper.annotation.created"
+
+
 class SystemEvents:
     HEALTH_CHECKED = "system.health.checked"
     CONFIG_CHANGED = "system.config.changed"
