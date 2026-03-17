@@ -404,13 +404,16 @@ async def pwa_icon_512_png():
     return FileResponse(BASE_DIR / "icon-512.png", media_type="image/png")
 
 
-# ── Tmux prefix detection ──
+# ── Tmux prefix handling ──
+# send-keys/send-prefix can't trigger prefix bindings from external shells.
+# Instead: detect prefix key → set flag → next key looks up binding → execute.
 
 _tmux_prefix_cache: str | None = None
+_tmux_prefix_bindings: dict[str, str] | None = None
 
 
 async def _get_tmux_prefix() -> str:
-    """Get tmux prefix key (e.g. 'C-b'). Cached after first call."""
+    """Get tmux prefix key (e.g. 'C-b'). Cached."""
     global _tmux_prefix_cache
     if _tmux_prefix_cache is not None:
         return _tmux_prefix_cache
@@ -430,6 +433,64 @@ async def _get_tmux_prefix() -> str:
     return _tmux_prefix_cache
 
 
+async def _get_prefix_bindings() -> dict[str, str]:
+    """Map prefix keys → tmux commands. Cached."""
+    global _tmux_prefix_bindings
+    if _tmux_prefix_bindings is not None:
+        return _tmux_prefix_bindings
+    bindings: dict[str, str] = {}
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux",
+            "list-keys",
+            "-T",
+            "prefix",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        for line in stdout.decode().splitlines():
+            parts = line.split(None, 4)
+            if len(parts) >= 5 and parts[2] == "prefix":
+                bindings[parts[3]] = parts[4]
+    except Exception:
+        pass
+    _tmux_prefix_bindings = bindings
+    return bindings
+
+
+async def _exec_prefix_binding(target: str, key_combo: str) -> bool:
+    """Execute a tmux prefix binding by looking it up and running the command."""
+    bindings = await _get_prefix_bindings()
+    # Normalize: "C-s" matches, "s" matches for simple keys
+    cmd = bindings.get(key_combo)
+    if not cmd:
+        logger.info("No prefix binding for %r, sending as raw key", key_combo)
+        return False
+    logger.info("Prefix binding: %s → %s", key_combo, cmd)
+    try:
+        # run-shell commands need special handling
+        if cmd.startswith("run-shell"):
+            await asyncio.create_subprocess_exec(
+                "tmux",
+                "run-shell",
+                cmd.split(None, 1)[1].strip(),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        else:
+            await asyncio.create_subprocess_exec(
+                "tmux",
+                *cmd.split(),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        return True
+    except Exception as e:
+        logger.error("Prefix binding exec error: %s", e)
+        return False
+
+
 # ── WebSocket handler ──
 
 
@@ -437,6 +498,8 @@ async def _get_tmux_prefix() -> str:
 async def ws_handler(websocket: WebSocket):
     await websocket.accept()
     _ws_clients.add(websocket)
+
+    prefix_waiting = False  # Per-connection prefix FSM state
 
     session = websocket.query_params.get("session", "")
     if not session:
@@ -625,19 +688,19 @@ async def ws_handler(websocket: WebSocket):
                         if safe_mods:
                             combo = "-".join(safe_mods) + "-" + key[:8]
 
-                    # Detect tmux prefix combo (C-b): use send-prefix so tmux
-                    # interprets the NEXT key as a prefix binding, not a pane key.
                     prefix_key = await _get_tmux_prefix()
-                    if combo == prefix_key:
-                        # Send prefix to tmux (tmux intercepts it)
-                        await asyncio.create_subprocess_exec(
-                            "tmux",
-                            "send-prefix",
-                            "-t",
-                            target,
-                            stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL,
-                        )
+
+                    if prefix_waiting:
+                        # We're in prefix mode — execute the binding
+                        prefix_waiting = False
+                        ok = await _exec_prefix_binding(target, combo)
+                        if not ok:
+                            # No binding found, send as raw key
+                            ok = await send_keys(target, combo, literal=False)
+                    elif combo == prefix_key:
+                        # Enter prefix mode — wait for next key
+                        prefix_waiting = True
+                        await websocket.send_json({"type": "prefix_active"})
                         ok = True
                     elif mods and safe_mods:
                         ok = await send_keys(target, combo, literal=False)
