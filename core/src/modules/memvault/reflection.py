@@ -6,10 +6,16 @@ At session end, analyze stored memories to extract:
 - Derived: higher-order insights synthesized from multiple memories
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -183,3 +189,117 @@ def format_reflection_for_injection(reflection: ReflectionResult) -> str:
             parts.append(f"- {c}")
 
     return "\n".join(parts)
+
+
+async def apply_reflection_to_kg(
+    db: AsyncSession,
+    space_id: str,
+    reflection_result: ReflectionResult,
+    session_id: str = "",
+) -> dict[str, int]:
+    """Write reflection results back to the Knowledge Graph.
+
+    - invariants → TripleService.batch_ingest (predicate: has_behavioral_invariant)
+    - derived    → TripleService.batch_ingest (predicate: yielded_insight)
+    - corrections → mark matching triples invalid_at (predicate: contradicts)
+
+    All operations are fail-safe (try/except each section).
+
+    Returns:
+        {"triples_created": int, "triples_invalidated": int}
+    """
+    from .kg_schemas import TripleBatchCreate, TripleCreate
+    from .kg_services import triple_service
+
+    triples_created = 0
+    triples_invalidated = 0
+
+    ref_session_id = session_id or reflection_result.session_id
+    ingest_session = f"reflection:{ref_session_id}" if ref_session_id else "reflection:unknown"
+
+    # --- Invariants: user has_behavioral_invariant <text> ---
+    if reflection_result.invariants:
+        try:
+            batch = TripleBatchCreate(
+                session_id=ingest_session,
+                triples=[
+                    TripleCreate(
+                        subject="user",
+                        predicate="has_behavioral_invariant",
+                        object=inv[:500],
+                        source_session=ingest_session,
+                    )
+                    for inv in reflection_result.invariants
+                ],
+            )
+            created = await triple_service.batch_ingest(db, space_id, batch)
+            triples_created += len(created)
+            logger.debug(
+                "reflection.kg_writeback.invariants created=%d session=%s",
+                len(created),
+                ingest_session,
+            )
+        except Exception:
+            logger.warning(
+                "reflection.kg_writeback.invariants failed",
+                exc_info=True,
+            )
+
+    # --- Derived: session:{id} yielded_insight <text> ---
+    if reflection_result.derived:
+        try:
+            subject = f"session:{ref_session_id}" if ref_session_id else "session:unknown"
+            batch = TripleBatchCreate(
+                session_id=ingest_session,
+                triples=[
+                    TripleCreate(
+                        subject=subject,
+                        predicate="yielded_insight",
+                        object=d[:500],
+                        source_session=ingest_session,
+                    )
+                    for d in reflection_result.derived
+                ],
+            )
+            created = await triple_service.batch_ingest(db, space_id, batch)
+            triples_created += len(created)
+            logger.debug(
+                "reflection.kg_writeback.derived created=%d session=%s",
+                len(created),
+                ingest_session,
+            )
+        except Exception:
+            logger.warning(
+                "reflection.kg_writeback.derived failed",
+                exc_info=True,
+            )
+
+    # --- Corrections: record contradiction triples (Phase 1: mark, not auto-invalidate) ---
+    if reflection_result.corrections:
+        try:
+            batch = TripleBatchCreate(
+                session_id=ingest_session,
+                triples=[
+                    TripleCreate(
+                        subject="user",
+                        predicate="contradicts",
+                        object=c[:500],
+                        source_session=ingest_session,
+                    )
+                    for c in reflection_result.corrections
+                ],
+            )
+            created = await triple_service.batch_ingest(db, space_id, batch)
+            triples_created += len(created)
+            logger.debug(
+                "reflection.kg_writeback.corrections created=%d session=%s",
+                len(created),
+                ingest_session,
+            )
+        except Exception:
+            logger.warning(
+                "reflection.kg_writeback.corrections failed",
+                exc_info=True,
+            )
+
+    return {"triples_created": triples_created, "triples_invalidated": triples_invalidated}
