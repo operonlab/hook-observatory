@@ -79,13 +79,14 @@ async def capture_list(
 ) -> str:
     """列出捕捉中的資料（可依模組、類型、狀態篩選）。status 可為 pending/promoted/expired。"""
     try:
-        items = await to_thread(
+        raw = await to_thread(
             client.list,
             module=module or None,
             entity_type=entity_type or None,
             status=status or None,
             limit=limit,
         )
+        items = raw.get("items", []) if isinstance(raw, dict) else raw
         if not items:
             return "No captures found."
         lines = []
@@ -98,7 +99,8 @@ async def capture_list(
                 f"- [{c['module']}/{c['entity_type']}] {desc or '(no desc)'} "
                 f"| {pct}% | {c['status']} | {c['id'][:12]}..."
             )
-        return f"{len(items)} captures:\n" + "\n".join(lines)
+        total = raw.get("total", len(items)) if isinstance(raw, dict) else len(items)
+        return f"{len(items)} captures (total: {total}):\n" + "\n".join(lines)
     except APIConnectionError as e:
         return f"Connection error: {e}"
     except APIError as e:
@@ -253,9 +255,7 @@ async def capture_enrichments(capture_id: str) -> str:
             agent = entry.get("agent_id", "unknown")
             ts = str(entry.get("created_at", entry.get("timestamp", "")))[:19]
             delta = entry.get("delta", {})
-            delta_str = (
-                ", ".join(f"{k}={v}" for k, v in delta.items()) if delta else "(no fields)"
-            )
+            delta_str = ", ".join(f"{k}={v}" for k, v in delta.items()) if delta else "(no fields)"
             lines.append(f"  {ts}  {agent}  {delta_str}")
         return "\n".join(lines)
     except APIConnectionError as e:
