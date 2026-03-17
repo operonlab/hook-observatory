@@ -112,6 +112,8 @@ class MemvaultEvents:
     TRIPLE_INVALIDATED = "memvault.triple.invalidated"
     ENTITY_RESOLVED = "memvault.entity.resolved"
     ENTITY_MERGED = "memvault.entity.merged"
+    REFLECTION_COMPLETED = "memvault.reflection.completed"
+    KNOWLEDGE_CURATED = "memvault.knowledge.curated"
 
 
 class SkillpathEvents:

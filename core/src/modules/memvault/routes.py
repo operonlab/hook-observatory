@@ -559,13 +559,23 @@ async def sync_scan():
 async def reflect_session(
     session_id: str = Query(..., description="Session ID to reflect on"),
     space_id: str = Query("default"),
+    write_back: bool = Query(True, description="Write reflection results back to KG"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.read"),
 ):
-    """G5: Extract invariants and derived insights from a session's memories."""
-    # Fetch blocks from this session
+    """G5: Extract invariants and derived insights from a session's memories.
+
+    When write_back=True (default), also persists reflection results to KG:
+    - invariants → triples (subject=user, predicate=has_invariant)
+    - corrections → triples (subject=correction, predicate=contradicts)
+    - derived → triples (subject=session:{id}, predicate=derived_insight)
+    """
     from .models import MemoryBlock
-    from .reflection import format_reflection_for_injection, reflect_on_session
+    from .reflection import (
+        apply_reflection_to_kg,
+        format_reflection_for_injection,
+        reflect_on_session,
+    )
 
     q = (
         select(MemoryBlock)
@@ -589,14 +599,46 @@ async def reflect_session(
 
     result = reflect_on_session(blocks, session_id=session_id)
 
+    triples_created = 0
+    triples_invalidated = 0
+    if write_back and (result.invariants or result.corrections or result.derived):
+        kg_result = await apply_reflection_to_kg(db, space_id, result)
+        triples_created = kg_result.get("triples_created", 0)
+        triples_invalidated = kg_result.get("triples_invalidated", 0)
+        await db.commit()
+
     return {
         "session_id": session_id,
         "block_count": result.block_count,
         "invariants": result.invariants,
         "derived": result.derived,
+        "corrections": result.corrections,
+        "triples_created": triples_created,
+        "triples_invalidated": triples_invalidated,
         "formatted": format_reflection_for_injection(result),
         "reflected_at": result.reflected_at.isoformat(),
     }
+
+
+@router.post("/curate")
+async def curate_memories(
+    space_id: str = Query("default"),
+    confidence_threshold: float = Query(0.15, ge=0.0, le=1.0),
+    dry_run: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Automated knowledge quality maintenance.
+
+    Soft-deletes low-confidence, never-accessed, old blocks.
+    Cleans up orphaned KG triples (invalidated > 90 days).
+    """
+    from .curate import curate_space
+
+    result = await curate_space(db, space_id, confidence_threshold, dry_run)
+    if not dry_run:
+        await db.commit()
+    return result
 
 
 # ======================== Status ========================
