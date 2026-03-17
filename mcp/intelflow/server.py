@@ -57,8 +57,8 @@ def _format_search(results) -> str:
 
 @mcp.tool()
 async def intelflow_reports(
-    tag: str = None,
-    topic_id: str = None,
+    tag: str | None = None,
+    topic_id: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> str:
@@ -101,7 +101,7 @@ async def intelflow_report_create(
     content: str,
     tags: list = None,
     sources: list = None,
-    skill_name: str = None,
+    skill_name: str | None = None,
 ) -> str:
     """Create a new intelligence report."""
     try:
@@ -176,8 +176,8 @@ async def intelflow_topic_graph(max_nodes: int = 50) -> str:
 
 @mcp.tool()
 async def intelflow_briefings(
-    date_from: str = None,
-    date_to: str = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     page_size: int = 20,
 ) -> str:
     """List daily briefings with optional date range filter."""

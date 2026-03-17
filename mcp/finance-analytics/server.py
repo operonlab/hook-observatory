@@ -43,7 +43,7 @@ def pct(value: float, total: float) -> str:
 
 
 @mcp.tool()
-async def finance_summary(month: str = None) -> str:
+async def finance_summary(month: str | None = None) -> str:
     """月度收支摘要（含分類明細、錢包餘額總覽、淨資產）"""
     try:
         result = await to_thread(client.get_summary, month=month)
@@ -126,7 +126,7 @@ async def finance_insights(months: int = 6) -> str:
 async def finance_budget_set(
     year_month: str,
     budget_amount: float,
-    savings_target: float = None,
+    savings_target: float | None = None,
     category_budgets: list = None,
 ) -> str:
     """設定月度預算（總額 + 分類）"""
@@ -163,7 +163,7 @@ async def finance_budget_set(
 
 
 @mcp.tool()
-async def finance_budget_status(year_month: str = None) -> str:
+async def finance_budget_status(year_month: str | None = None) -> str:
     """查詢預算消耗狀態（含承諾支出 vs 自由支出）"""
     try:
         result = await to_thread(client.list_budgets, year_month=year_month)
@@ -234,7 +234,7 @@ async def finance_monthly_report(year_month: str, regenerate: bool = False) -> s
 
 
 @mcp.tool()
-async def finance_category_breakdown(month: str = None, category_id: str = None) -> str:
+async def finance_category_breakdown(month: str | None = None, category_id: str | None = None) -> str:
     """分類消費明細（含子分類展開）"""
     try:
         result = await to_thread(client.get_category_breakdown, month=month, category_id=category_id)
@@ -325,9 +325,9 @@ async def finance_installment_forecast(months: int = 6) -> str:
 async def finance_export(
     data_type: str,
     format: str = "csv",
-    month: str = None,
-    start_date: str = None,
-    end_date: str = None,
+    month: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
     include_archived: bool = False,
 ) -> str:
     """匯出財務資料（CSV / JSON，含隱密過濾）"""
