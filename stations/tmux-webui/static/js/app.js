@@ -703,6 +703,38 @@ function renderWindowTabs(windows, activeWin) {
 }
 
 // ========================================================================
+// 11.5 Line-Level Diff Renderer
+// ========================================================================
+
+// Line-level diff update — only touch changed lines
+function lineDiffUpdate(terminal, newContent) {
+  const newHtml = ansiToHtml(newContent);
+  const newLines = newHtml.split('\n');
+  const children = terminal.children;
+
+  // If terminal is empty or structure mismatch, fall back to full replace
+  if (children.length === 0 || Math.abs(children.length - newLines.length) > 20) {
+    terminal.innerHTML = newHtml;
+    return;
+  }
+
+  // Adjust line count
+  while (children.length > newLines.length) terminal.lastChild.remove();
+  while (children.length < newLines.length) {
+    const div = document.createElement('div');
+    div.className = 'term-line';
+    terminal.appendChild(div);
+  }
+
+  // Update only changed lines
+  for (let i = 0; i < newLines.length; i++) {
+    if (children[i].innerHTML !== newLines[i]) {
+      children[i].innerHTML = newLines[i];
+    }
+  }
+}
+
+// ========================================================================
 // 12. WebSocket with Exponential Backoff Reconnection
 // ========================================================================
 
@@ -726,8 +758,20 @@ window.tmuxWs = (function() {
       uploadBtn.disabled = false;
       inputEl.focus();
       reconnectDelay = 1000;
+      // Remove reconnect overlay if present
+      const overlay = document.getElementById('reconnect-overlay');
+      if (overlay) overlay.remove();
     } else if (state === 'reconnecting') {
       statusEl.innerHTML = `<span class="dot"></span> reconnecting (${Math.round(reconnectDelay/1000)}s)...`;
+      // Add overlay instead of clearing DOM
+      if (!document.getElementById('reconnect-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.id = 'reconnect-overlay';
+        overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:100;pointer-events:none;';
+        overlay.innerHTML = '<div style="color:#fff;font-size:14px;background:rgba(0,0,0,0.7);padding:8px 16px;border-radius:6px;">Reconnecting...</div>';
+        container.style.position = 'relative';
+        container.appendChild(overlay);
+      }
     } else {
       statusEl.innerHTML = '<span class="dot"></span> disconnected';
       inputEl.disabled = true;
@@ -746,15 +790,26 @@ window.tmuxWs = (function() {
     // Preserve input text across reconnects
     const savedInputs = S.currentSession === session ? { ...S.paneInputs } : {};
     const savedText = inputEl.value;
+    const isReconnect = (S.currentSession === session);
+
     if (ws) { ws.close(); ws = null; }
     S.currentSession = session;
-    S.focusedPane = '';
-    S.paneEls = {};
-    S.paneInfo = {};
-    S.paneOrder = [];
     S.paneInputs = savedInputs;
     S.currentTool = null;
-    container.innerHTML = '';
+
+    if (!isReconnect) {
+      // Fresh connection: full reset
+      S.focusedPane = '';
+      S.paneEls = {};
+      S.paneInfo = {};
+      S.paneOrder = [];
+      container.innerHTML = '<div class="skeleton-loading" style="display:flex;gap:8px;padding:8px;height:100%;">' +
+        '<div style="flex:1;background:var(--bg-secondary,#1a1a2e);border-radius:6px;animation:pulse 1.5s infinite;"></div>' +
+        '<div style="flex:1;background:var(--bg-secondary,#1a1a2e);border-radius:6px;animation:pulse 1.5s infinite;animation-delay:0.3s;"></div>' +
+        '</div>';
+    }
+    // Reconnect: keep existing DOM, paneEls, paneInfo, paneOrder intact
+
     // Restore input text after reconnect
     if (savedText) inputEl.value = savedText;
 
@@ -777,7 +832,7 @@ window.tmuxWs = (function() {
           // Skip update if user is selecting text in this terminal
           const sel = window.getSelection();
           if (sel && sel.toString() && pe.terminal.contains(sel.anchorNode)) continue;
-          pe.terminal.innerHTML = ansiToHtml(content);
+          lineDiffUpdate(pe.terminal, content);
           if (!pe.scrolledByUser()) {
             const t = pe.terminal;
             requestAnimationFrame(() => { requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; }); });
@@ -793,6 +848,8 @@ window.tmuxWs = (function() {
         window.handleAutocomplete?.(data.results);
       } else if (data.type === 'tts') {
         window.playTTS?.(data.id, data.text);
+      } else if (data.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', ts: data.ts }));
       } else if (data.type === 'error') {
         container.innerHTML = `<div class="welcome" style="color:var(--red)">${esc(data.message)}</div>`;
       }
@@ -819,7 +876,7 @@ window.tmuxWs = (function() {
       }
     };
 
-    ws.onerror = () => {};
+    ws.onerror = (ev) => { console.warn('tmux-webui WS error:', ev); };
   }
 
   function disconnect() {
