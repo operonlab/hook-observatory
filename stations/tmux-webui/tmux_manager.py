@@ -138,7 +138,17 @@ async def capture_pane(target: str, lines: int = 150) -> str:
     return out
 
 
+_SEND_KEYS_LIMIT = 512
+
+
 async def send_keys(target: str, text: str, literal: bool = True) -> bool:
+    """Send text to a tmux pane.
+
+    Short text (<512 chars): direct send-keys -l.
+    Long text: load-buffer stdin + paste-buffer to avoid truncation.
+    """
+    if literal and len(text) > _SEND_KEYS_LIMIT:
+        return await _paste_text(target, text)
     args = ["tmux", "send-keys", "-t", target]
     if literal:
         args += ["-l", text]
@@ -148,6 +158,31 @@ async def send_keys(target: str, text: str, literal: bool = True) -> bool:
     if rc != 0:
         logger.warning("send-keys failed for %s: %s", target, stderr.strip())
     return rc == 0
+
+
+async def _paste_text(target: str, text: str) -> bool:
+    """Send long text via load-buffer + paste-buffer (no length limit)."""
+    buf = "_webui_paste"
+    proc = await asyncio.create_subprocess_exec(
+        "tmux",
+        "load-buffer",
+        "-b",
+        buf,
+        "-",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await proc.communicate(input=text.encode())
+    if proc.returncode != 0:
+        logger.warning("load-buffer failed for %s", target)
+        return False
+    rc, _, stderr = await _run(["tmux", "paste-buffer", "-b", buf, "-t", target, "-d", "-p"])
+    if rc != 0:
+        logger.warning("paste-buffer failed for %s: %s", target, stderr.strip())
+        await _run(["tmux", "delete-buffer", "-b", buf])
+        return False
+    return True
 
 
 # ── Window management ──

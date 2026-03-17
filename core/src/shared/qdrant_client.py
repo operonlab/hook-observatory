@@ -38,7 +38,7 @@ def get_client() -> QdrantClient | None:
         logger.info("Qdrant client connected at %s:%s", QDRANT_HOST, QDRANT_PORT)
         return _client
     except Exception as e:
-        logger.warning("Qdrant unavailable: %s — search will fallback to pgvector", e)
+        logger.warning("Qdrant unavailable: %s — search will use legacy fallback", e)
         _available = False
         _client = None
         return None

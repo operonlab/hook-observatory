@@ -1,15 +1,16 @@
 """
 System Monitor V2 Reporter — AI-powered system report generation.
 
-Dual-layer LLM routing:
-  1. LiteLLM API (http://localhost:4000) — fast, cheap
-  2. Gemini CLI fallback — no server dependency
+Three-layer LLM routing:
+  1. LiteLLM API (http://localhost:4000) — fast, cheap, master_key auth
+  2. Gemini CLI fallback — preferred by user (AfterAgent hook guarded)
+  3. Gemini REST API — direct HTTP, no CLI dependency
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -80,25 +81,32 @@ PROMPTS = {
 
 
 def _call_litellm(prompt: str, config: dict) -> str | None:
-    """Call LiteLLM-compatible API."""
+    """Call LiteLLM-compatible API (with master_key auth)."""
     import urllib.error
     import urllib.request
 
     url = config.get("litellm_url", "http://localhost:4000")
     model = config.get("litellm_model", "gemini/gemini-2.5-flash")
     timeout = config.get("timeout_seconds", 120)
+    master_key = os.environ.get("LITELLM_MASTER_KEY", "")
 
-    payload = json.dumps({
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-        "max_tokens": 4096,
-    }).encode()
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+            "max_tokens": 4096,
+        }
+    ).encode()
+
+    headers = {"Content-Type": "application/json"}
+    if master_key:
+        headers["Authorization"] = f"Bearer {master_key}"
 
     req = urllib.request.Request(
         f"{url}/v1/chat/completions",
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
 
@@ -111,20 +119,59 @@ def _call_litellm(prompt: str, config: dict) -> str | None:
 
 
 def _call_gemini_cli(prompt: str, config: dict) -> str | None:
-    """Fallback: call Gemini CLI."""
+    """Fallback 1: Gemini CLI (voice_notify Guard 0 blocks AfterAgent TTS)."""
+    import subprocess
+
     cli = config.get("fallback_cli", "gemini")
     timeout = config.get("timeout_seconds", 120)
 
     try:
         r = subprocess.run(
             [cli, "-p", prompt, "-m", "gemini-2.5-flash"],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
         if r.returncode == 0 and r.stdout.strip():
             return r.stdout.strip()
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return None
+
+
+def _call_gemini_api(prompt: str, config: dict) -> str | None:
+    """Fallback 2: Gemini REST API direct (no CLI dependency)."""
+    import urllib.error
+    import urllib.request
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return None
+
+    model = config.get("gemini_model", "gemini-2.5-flash")
+    timeout = config.get("timeout_seconds", 120)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    payload = json.dumps(
+        {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096},
+        }
+    ).encode()
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read())
+            return body["candidates"][0]["content"]["parts"][0]["text"]
+    except (urllib.error.URLError, KeyError, json.JSONDecodeError, TimeoutError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +217,10 @@ class SystemReporter:
             engine = "gemini-cli"
 
         if not report_content:
+            report_content = _call_gemini_api(prompt, self.llm_config)
+            engine = "gemini-api"
+
+        if not report_content:
             report_content = self._offline_report(data, report_type, today)
             engine = "offline"
 
@@ -204,14 +255,16 @@ class SystemReporter:
         # Disk summary
         disk = data.get("disk", {})
         if disk:
-            lines.extend([
-                "## 磁碟狀態",
-                f"- 總容量：{disk.get('total_gb', '?')} GB",
-                f"- 已使用：{disk.get('used_gb', '?')} GB ({disk.get('usage_pct', '?')}%)",
-                f"- 可用：{disk.get('free_gb', '?')} GB",
-                f"- 壓力等級：{disk.get('pressure', '?')}",
-                "",
-            ])
+            lines.extend(
+                [
+                    "## 磁碟狀態",
+                    f"- 總容量：{disk.get('total_gb', '?')} GB",
+                    f"- 已使用：{disk.get('used_gb', '?')} GB ({disk.get('usage_pct', '?')}%)",
+                    f"- 可用：{disk.get('free_gb', '?')} GB",
+                    f"- 壓力等級：{disk.get('pressure', '?')}",
+                    "",
+                ]
+            )
 
         # Hardware summary
         hw = data.get("hardware", {})
@@ -228,12 +281,14 @@ class SystemReporter:
                 lines.append(f"- Swap：{swap.get('used_gb', '?')} GB ({swap.get('pressure', '?')})")
             lines.append("")
 
-        lines.extend([
-            "## 完整數據",
-            "```json",
-            json.dumps(data, indent=2, ensure_ascii=False)[:3000],
-            "```",
-        ])
+        lines.extend(
+            [
+                "## 完整數據",
+                "```json",
+                json.dumps(data, indent=2, ensure_ascii=False)[:3000],
+                "```",
+            ]
+        )
 
         return "\n".join(lines)
 

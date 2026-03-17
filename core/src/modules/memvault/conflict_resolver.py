@@ -24,7 +24,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# oMLX local inference endpoint
+# oMLX local LLM inference endpoint
 _OMLX_URL = "http://localhost:8000/v1/chat/completions"
 _LLM_TIMEOUT = 10  # seconds
 

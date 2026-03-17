@@ -23,8 +23,9 @@
   },
   "llm": {
     "litellm_url": "http://localhost:4000",
-    "litellm_model": "gemini/gemini-2.5-flash",
+    "litellm_model": "qwen3.5-flash",
     "fallback_cli": "gemini",
+    "gemini_model": "gemini-2.5-flash",
     "timeout_seconds": 120
   },
   "output_dir": "~/.claude/data/system-monitor",

@@ -40,7 +40,7 @@ services:
   lgtm:
     image: grafana/otel-lgtm:latest
     restart: always
-    mem_limit: 1g
+    mem_limit: 768m
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
     ports:
@@ -61,6 +61,7 @@ services:
   rustfs:
     image: rustfs/rustfs:latest
     restart: always
+    mem_limit: 256m
     ports:
       - "127.0.0.1:9000:9000"   # S3 API
       - "127.0.0.1:9001:9001"   # Web Console
@@ -79,6 +80,7 @@ services:
   filebrowser:
     image: filebrowser/filebrowser:v2
     restart: always
+    mem_limit: 128m
     ports:
       - "127.0.0.1:8850:80"
     volumes:
@@ -98,6 +100,7 @@ services:
   bark:
     image: finab/bark-server:latest
     restart: always
+    mem_limit: 128m
     ports:
       - "127.0.0.1:8090:8080"
     volumes:
@@ -131,6 +134,7 @@ services:
   ntfy:
     image: binwiederhier/ntfy:latest
     command: serve
+    mem_limit: 128m
     ports:
       - "127.0.0.1:9080:80"
     volumes:

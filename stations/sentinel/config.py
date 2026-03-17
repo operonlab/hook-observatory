@@ -29,7 +29,7 @@ class SpoolConfig:
 @dataclass
 class CheckConfig:
     light_interval: float = 30.0
-    deep_interval: float = 300.0
+    deep_interval: float = 600.0  # 10 minutes (was 5m, too aggressive)
     intervention_delay: float = 300.0  # 5 minutes
     repair_timeout: float = 600.0  # 10 minutes
 

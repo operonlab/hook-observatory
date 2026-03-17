@@ -18,6 +18,7 @@ from .adapters import BaseCaptureAdapter
 
 # Register finance resolvers on import
 from .finance_resolvers import register_finance_resolvers
+from .strategies import LLMEnrichmentStrategy
 
 register_finance_resolvers()
 
@@ -26,6 +27,13 @@ class TransactionCaptureAdapter(BaseCaptureAdapter):
     module = "finance"
     entity_type = "transaction"
     default_ttl_days = 30
+
+    @property
+    def enrichment_strategies(self):
+        from .enrichment_config import ENRICHMENT_SCHEMAS
+
+        schema = ENRICHMENT_SCHEMAS.get(("finance", "transaction"))
+        return [LLMEnrichmentStrategy(field_schema=schema)] if schema else []
 
     reference_fields = {
         "wallet_id": "finance.wallet",
@@ -94,6 +102,13 @@ class SubscriptionCaptureAdapter(BaseCaptureAdapter):
     entity_type = "subscription"
     default_ttl_days = 30
 
+    @property
+    def enrichment_strategies(self):
+        from .enrichment_config import ENRICHMENT_SCHEMAS
+
+        schema = ENRICHMENT_SCHEMAS.get(("finance", "subscription"))
+        return [LLMEnrichmentStrategy(field_schema=schema)] if schema else []
+
     reference_fields = {
         "wallet_id": "finance.wallet",
         "category_id": "finance.category",
@@ -142,6 +157,13 @@ class InstallmentCaptureAdapter(BaseCaptureAdapter):
     module = "finance"
     entity_type = "installment"
     default_ttl_days = 30
+
+    @property
+    def enrichment_strategies(self):
+        from .enrichment_config import ENRICHMENT_SCHEMAS
+
+        schema = ENRICHMENT_SCHEMAS.get(("finance", "installment"))
+        return [LLMEnrichmentStrategy(field_schema=schema)] if schema else []
 
     reference_fields = {
         "wallet_id": "finance.wallet",

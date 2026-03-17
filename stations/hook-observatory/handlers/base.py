@@ -23,13 +23,16 @@ SKILLS_DIR = os.path.join(HOME, ".claude", "skills")
 # Result type — every handler returns one of these
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class HookResult:
     """Outcome of a single hook handler invocation."""
-    decision: str | None = None   # "block", "approve", or None (passthrough)
+
+    decision: str | None = None  # "block", "approve", or None (passthrough)
     reason: str = ""
     message: str = ""
-    text: str = ""                # Raw text for passthrough (UserPromptSubmit)
+    text: str = ""  # Raw text for passthrough (UserPromptSubmit)
+    updated_input: dict | None = None  # PreToolUse: rewrite tool_input
 
     def is_block(self) -> bool:
         return self.decision == "block"
@@ -41,14 +44,18 @@ class HookResult:
 # Convenience constructors
 ALLOW = HookResult()
 
+
 def block(reason: str) -> HookResult:
     return HookResult(decision="block", reason=reason)
+
 
 def approve() -> HookResult:
     return HookResult(decision="approve")
 
+
 def message(msg: str) -> HookResult:
     return HookResult(message=msg)
+
 
 def text_result(text: str) -> HookResult:
     return HookResult(text=text)
@@ -57,6 +64,7 @@ def text_result(text: str) -> HookResult:
 # ---------------------------------------------------------------------------
 # Subprocess helpers (replace shell patterns)
 # ---------------------------------------------------------------------------
+
 
 def run_cmd(
     cmd: list[str] | str,
@@ -102,6 +110,7 @@ def find_executable(name: str) -> str | None:
 # ---------------------------------------------------------------------------
 # External handler wrapper (for scripts that live outside hook-observatory)
 # ---------------------------------------------------------------------------
+
 
 def call_external_script(
     command: str,

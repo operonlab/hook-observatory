@@ -18,6 +18,10 @@ from enum import Enum
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.qdrant_client import is_available as qdrant_available
+from src.shared.qdrant_search import hybrid_search
+from src.shared.search_types import SearchConfig
+
 from .models import EMBEDDING_DIM, BlockEmbedding, MemoryBlock
 
 logger = logging.getLogger(__name__)
@@ -103,11 +107,47 @@ async def find_similar_blocks(
     embedding: list[float],
     threshold: float = DEDUP_SIMILARITY_THRESHOLD,
     limit: int = 3,
+    content: str | None = None,
 ) -> list[tuple[str, str, float]]:
     """Find existing blocks with similar embeddings.
 
     Returns list of (block_id, content, similarity) tuples.
+
+    Primary path: Qdrant hybrid search (dense + BM25 fusion) when available.
+    Fallback: pgvector cosine_distance query (always kept for reliability).
     """
+    # --- Qdrant path (primary) ---
+    if content and qdrant_available():
+        try:
+            config = SearchConfig(
+                top_k=limit,
+                score_threshold=threshold,
+                service_ids=["memvault"],
+                use_sparse=True,
+                use_dense=True,
+            )
+            results, _meta = await hybrid_search(content, space_id, config)
+            if results:
+                # Qdrant returns entity_id (= block_id) + content_preview.
+                # We need full content for Stage 2 comparisons — fetch from DB.
+                block_ids = [r.entity_id for r in results]
+                q_content = select(MemoryBlock.id, MemoryBlock.content).where(
+                    MemoryBlock.id.in_(block_ids),
+                    MemoryBlock.deleted_at == None,  # noqa: E711
+                )
+                rows_map = {str(row[0]): str(row[1]) for row in (await db.execute(q_content)).all()}
+                tuples = []
+                for r in results:
+                    block_content = rows_map.get(r.entity_id)
+                    if block_content is not None:
+                        tuples.append((r.entity_id, block_content, float(r.score)))
+                if tuples:
+                    return tuples
+                # Fall through if DB lookup returned nothing (stale index)
+        except Exception:
+            logger.warning("Qdrant dedup search failed, falling back to pgvector", exc_info=True)
+
+    # --- pgvector fallback (legacy) ---
     if len(embedding) != EMBEDDING_DIM:
         return []
 
@@ -172,8 +212,11 @@ async def check_duplicate(
             block_type=block_type,
         )
 
-    # Stage 1: Find similar blocks by embedding using category threshold
-    similar = await find_similar_blocks(db, space_id, embedding, effective_threshold)
+    # Stage 1: Find similar blocks using category threshold.
+    # Pass content so Qdrant path can use hybrid search; pgvector path uses embedding.
+    similar = await find_similar_blocks(
+        db, space_id, embedding, effective_threshold, content=content
+    )
 
     if not similar:
         return DedupResult(

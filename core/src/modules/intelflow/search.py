@@ -1,6 +1,6 @@
-"""Intelflow semantic search engine — pgvector cosine similarity.
+"""Intelflow semantic search engine — Qdrant hybrid search (primary) with legacy pgvector fallback.
 
-Graceful degradation: falls back to ILIKE text search when Ollama is unavailable.
+Graceful degradation: falls back to ILIKE text search when oMLX is unavailable.
 """
 
 import logging
@@ -17,6 +17,7 @@ from src.shared.fallback_search import (
 )
 from src.shared.qdrant_client import is_available as qdrant_available
 from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+from src.shared.rerank_utils import rerank_generic
 from src.shared.search_types import SearchConfig as QdrantSearchConfig
 from src.shared.tier_config import get_threshold
 
@@ -40,16 +41,23 @@ async def qdrant_search(
     include_archived: bool = False,
     include_warm: bool = True,
 ) -> list[SemanticSearchResult]:
-    """Search using Qdrant hybrid (dense + sparse) with pgvector fallback.
+    """Search using Qdrant hybrid (dense + sparse).
 
-    Falls back to semantic_search() when:
+    Falls back to semantic_search() only when:
     - Qdrant is unavailable (not running / connection error)
-    - Qdrant returns empty results (no indexed data yet)
+
+    Empty results from Qdrant are returned as-is (not forwarded to legacy pgvector).
     """
     if not qdrant_available():
+        logger.warning("Qdrant unavailable — using legacy pgvector search for intelflow")
         return await semantic_search(
-            db, space_id, query, limit, threshold,
-            include_archived, include_warm,
+            db,
+            space_id,
+            query,
+            limit,
+            threshold,
+            include_archived,
+            include_warm,
         )
 
     config = QdrantSearchConfig(
@@ -60,15 +68,9 @@ async def qdrant_search(
     results, _meta = await qdrant_hybrid_search(query, space_id, config)
 
     if not results:
-        # Qdrant returned nothing — fall back to pgvector
-        logger.debug(
-            "Qdrant returned 0 results for space=%s query=%r — falling back to pgvector",
-            space_id, query,
-        )
-        return await semantic_search(
-            db, space_id, query, limit, threshold,
-            include_archived, include_warm,
-        )
+        # Qdrant available but found no matches — return empty (not pgvector fallback)
+        logger.debug("Qdrant returned 0 results for space=%s query=%r", space_id, query)
+        return []
 
     # Convert Qdrant SearchResult → intelflow SemanticSearchResult
     # title and query are stored in Qdrant payload via metadata_fields (index_registry)
@@ -97,7 +99,10 @@ async def semantic_search(
     include_archived: bool = False,
     include_warm: bool = True,
 ) -> list[SemanticSearchResult]:
-    """Search reports by semantic similarity. Falls back to text.
+    """LEGACY pgvector search path.
+
+    Only used as emergency fallback when Qdrant infrastructure is unavailable.
+    Primary search should go through qdrant_search().
 
     Tries report_embeddings sub-table first (Phase 2);
     falls back to inline reports.embedding.
@@ -109,13 +114,21 @@ async def semantic_search(
     query_embedding = await get_embedding(query)
     if query_embedding is None:
         return await _text_search_fallback(
-            db, space_id, query, limit,
-            include_archived, include_warm,
+            db,
+            space_id,
+            query,
+            limit,
+            include_archived,
+            include_warm,
         )
 
     # Phase 2 path: sub-table
     results = await _search_via_subtable(
-        db, space_id, query_embedding, limit, threshold,
+        db,
+        space_id,
+        query_embedding,
+        limit,
+        threshold,
     )
 
     if not results:
@@ -148,10 +161,21 @@ async def semantic_search(
     # Warm tier: text-based augmentation for older reports
     if include_warm and len(results) < limit:
         warm_results = await _warm_tier_search(
-            db, space_id, query,
+            db,
+            space_id,
+            query,
             limit - len(results),
         )
         results.extend(warm_results)
+
+    # Cross-encoder reranking
+    results = await rerank_generic(
+        query=query,
+        results=results,
+        content_fn=lambda r: f"{r.report.title} {r.report.query}",
+        score_fn=lambda r: r.score,
+        set_score_fn=lambda r, s: setattr(r, "score", s),
+    )
 
     return results
 
@@ -163,7 +187,10 @@ async def _search_via_subtable(
     limit: int,
     threshold: float,
 ) -> list[SemanticSearchResult]:
-    """Search using the report_embeddings sub-table (Phase 2)."""
+    """LEGACY pgvector search using the report_embeddings sub-table (Phase 2).
+
+    Part of the legacy pgvector fallback path — only called from semantic_search().
+    """
     distance = ReportEmbedding.embedding.cosine_distance(query_embedding)
     similarity = (1 - distance).label("similarity")
 
@@ -274,7 +301,7 @@ async def _text_search_fallback(
     include_archived: bool = False,
     include_warm: bool = True,
 ) -> list[SemanticSearchResult]:
-    """Fallback text search using CJK-aware ILIKE + BM25-lite when Ollama unavailable.
+    """Fallback text search using CJK-aware ILIKE + BM25-lite when oMLX unavailable.
 
     Tier-aware search with per-token matching and BM25-lite scoring:
       Hot  (age <= hot_days): BM25-lite * hot_base
@@ -323,24 +350,27 @@ async def _text_search_fallback(
             .order_by(Report.updated_at.desc())
             .limit(remaining)
         )
-        warm_rows = (
-            await db.execute(warm_q)
-        ).scalars().all()
-        results.extend([
-            SemanticSearchResult(
-                report=_to_brief(r),
-                score=round(
-                    score_text_match(query, r.content or r.title, tier="warm", avgdl=avgdl), 4,
-                ),
-            )
-            for r in warm_rows
-        ])
+        warm_rows = (await db.execute(warm_q)).scalars().all()
+        results.extend(
+            [
+                SemanticSearchResult(
+                    report=_to_brief(r),
+                    score=round(
+                        score_text_match(query, r.content or r.title, tier="warm", avgdl=avgdl),
+                        4,
+                    ),
+                )
+                for r in warm_rows
+            ]
+        )
 
     # --- Cold tier: archive table ---
     if include_archived and len(results) < limit:
         remaining = limit - len(results)
         archive_conditions = build_ilike_conditions(
-            query, ReportArchive.title, ReportArchive.content,
+            query,
+            ReportArchive.title,
+            ReportArchive.content,
         )
         archive_q = (
             select(ReportArchive)
@@ -352,25 +382,26 @@ async def _text_search_fallback(
             .order_by(ReportArchive.created_at.desc())
             .limit(remaining)
         )
-        archive_rows = (
-            await db.execute(archive_q)
-        ).scalars().all()
-        results.extend([
-            SemanticSearchResult(
-                report=ReportBrief(
-                    id=r.id,
-                    title=r.title,
-                    query=r.query,
-                    tags=r.tags or [],
-                    skill_name=r.skill_name,
-                    created_at=r.created_at,
-                ),
-                score=round(
-                    score_text_match(query, r.content or r.title, tier="cold", avgdl=avgdl), 4,
-                ),
-            )
-            for r in archive_rows
-        ])
+        archive_rows = (await db.execute(archive_q)).scalars().all()
+        results.extend(
+            [
+                SemanticSearchResult(
+                    report=ReportBrief(
+                        id=r.id,
+                        title=r.title,
+                        query=r.query,
+                        tags=r.tags or [],
+                        skill_name=r.skill_name,
+                        created_at=r.created_at,
+                    ),
+                    score=round(
+                        score_text_match(query, r.content or r.title, tier="cold", avgdl=avgdl),
+                        4,
+                    ),
+                )
+                for r in archive_rows
+            ]
+        )
 
     return results
 

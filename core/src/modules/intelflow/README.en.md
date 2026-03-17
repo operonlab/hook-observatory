@@ -12,7 +12,7 @@ translated_at: 2026-02-24
 ## Positioning
 
 The `intelflow` module of Workshop Core integrates three existing systems:
-1.  **research_report service** (V1: `~/Claude/services/research_report/`, migrated) — Report CRUD + pgvector
+1.  **research_report service** (V1: `~/Claude/services/research_report/`, migrated) — Report CRUD + Qdrant
 2.  **smart-search skill** (`~/.claude/skills/smart-search/`) — Multi-source search engine
 3.  **daily-briefing skill** (`~/.claude/skills/daily-briefing/`) — Three-AI-analyst debate
 
@@ -20,7 +20,7 @@ The `intelflow` module of Workshop Core integrates three existing systems:
 
 | Capability | Description |
 |---|---|
-| **Report Management** | CRUD + Semantic Search (pgvector 768d / 1536d) |
+| **Report Management** | CRUD + Semantic Search (Qdrant hybrid search) |
 | **Deduplication** | Before a new search, query for existing similar reports to avoid duplication |
 | **Topic Graph** | Automatically extract topics + build a relation graph (force-directed graph) |
 | **Daily Briefing** | Independent analysis by three AI analysts + cross-debate |
@@ -38,7 +38,7 @@ CREATE TABLE intelflow.reports (
     sources     JSONB DEFAULT '[]',       -- Source URLs + titles
     tags        TEXT[] DEFAULT '{}',
     skill_name  TEXT,                     -- The skill that generated this report (e.g., smart-search)
-    embedding   vector(768),              -- pgvector, Ollama nomic-embed-text
+    embedding   vector(768),              -- legacy storage, search via Qdrant
     space_id    UUID NOT NULL,
     created_at  TIMESTAMPTZ DEFAULT now(),
     updated_at  TIMESTAMPTZ DEFAULT now()
@@ -202,7 +202,7 @@ core/src/modules/intelflow/
 ├── schemas.py            ← Pydantic models
 ├── models.py             ← SQLAlchemy models
 ├── service.py            ← Business logic (CRUD + search)
-├── search.py             ← pgvector semantic search engine
+├── search.py             ← Qdrant hybrid search engine
 ├── topic_extractor.py    ← Automatic topic extraction + relation graph
 ├── briefing_pipeline.py  ← Three-analyst debate pipeline
 └── events.py             ← Event definitions (intelflow.report.created, etc.)

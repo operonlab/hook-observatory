@@ -45,6 +45,7 @@ async def search_tasks(
 
     from src.shared.qdrant_client import is_available as qdrant_available
     from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+    from src.shared.rerank_utils import rerank_generic
     from src.shared.search_types import SearchConfig
 
     from .models import Task
@@ -75,7 +76,7 @@ async def search_tasks(
 
             rows = (await db.execute(stmt)).scalars().all()
             id_to_task = {t.id: t for t in rows}
-            return [
+            output = [
                 TaskSearchResult(
                     task=task_service.to_response(id_to_task[eid]),
                     score=score_map[eid],
@@ -83,6 +84,18 @@ async def search_tasks(
                 for eid in entity_ids
                 if eid in id_to_task
             ]
+
+            # Cross-encoder reranking
+            if len(output) > 1:
+                output = await rerank_generic(
+                    query=q,
+                    results=output,
+                    content_fn=lambda r: r.task.title if hasattr(r, "task") else "",
+                    score_fn=lambda r: r.score,
+                    set_score_fn=lambda r, s: setattr(r, "score", s),
+                )
+
+            return output
 
         logger.debug(
             "Qdrant returned 0 results for taskflow space=%s query=%r — falling back to ILIKE",
@@ -104,7 +117,19 @@ async def search_tasks(
 
     stmt = stmt.order_by(Task.updated_at.desc()).limit(top_k)
     rows = (await db.execute(stmt)).scalars().all()
-    return [TaskSearchResult(task=task_service.to_response(t), score=1.0) for t in rows]
+    output = [TaskSearchResult(task=task_service.to_response(t), score=1.0) for t in rows]
+
+    # Cross-encoder reranking
+    if len(output) > 1:
+        output = await rerank_generic(
+            query=q,
+            results=output,
+            content_fn=lambda r: r.task.title if hasattr(r, "task") else "",
+            score_fn=lambda r: r.score,
+            set_score_fn=lambda r, s: setattr(r, "score", s),
+        )
+
+    return output
 
 
 # ======================== Tasks CRUD ========================

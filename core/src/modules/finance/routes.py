@@ -194,6 +194,19 @@ async def search_finance(
 
     # Sort combined results by score desc, then trim to top_k
     out.sort(key=lambda r: r.score, reverse=True)
+
+    # Cross-encoder reranking
+    from src.shared.rerank_utils import rerank_generic
+
+    if len(out) > 1:
+        out = await rerank_generic(
+            query=q,
+            results=out,
+            content_fn=lambda r: r.content_preview,
+            score_fn=lambda r: r.score,
+            set_score_fn=lambda r, s: setattr(r, "score", s),
+        )
+
     return out[:top_k]
 
 

@@ -85,7 +85,9 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         return d
 
     def after_create(self, instance: Triple) -> None:
-        """Publish TRIPLE_INGESTED event (fire-and-forget)."""
+        """Publish TRIPLE_INGESTED event and index to Qdrant (both fire-and-forget)."""
+        import asyncio
+
         event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.TRIPLE_INGESTED,
@@ -99,6 +101,51 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                 user_id=instance.created_by,
             )
         )
+        # Index to Qdrant (best-effort, fire-and-forget)
+        asyncio.ensure_future(self._index_triple_to_qdrant(instance))  # noqa: RUF006
+
+    async def _index_triple_to_qdrant(self, instance: Triple) -> None:
+        """Index a triple to Qdrant. Best-effort — never raises."""
+        try:
+            from src.shared.qdrant_search import index_document
+            from src.shared.search_types import IndexDocument
+
+            content = f"{instance.subject} {instance.predicate} {instance.object}"
+            doc = IndexDocument(
+                service_id="memvault-triple",
+                entity_id=str(instance.id),
+                entity_type="triple",
+                space_id=str(instance.space_id),
+                content=content,
+                tags=[instance.subject, instance.predicate],
+                created_at=instance.created_at,
+            )
+            await index_document(doc)
+        except Exception:
+            logger.debug("Failed to index triple %s to Qdrant", instance.id, exc_info=True)
+
+    async def _batch_index_triples_to_qdrant(self, instances: list[Triple]) -> None:
+        """Batch index triples to Qdrant. Best-effort — never raises."""
+        try:
+            from src.shared.qdrant_search import index_documents_batch
+            from src.shared.search_types import IndexDocument
+
+            docs = [
+                IndexDocument(
+                    service_id="memvault-triple",
+                    entity_id=str(t.id),
+                    entity_type="triple",
+                    space_id=str(t.space_id),
+                    content=f"{t.subject} {t.predicate} {t.object}",
+                    tags=[t.subject, t.predicate],
+                    created_at=t.created_at,
+                )
+                for t in instances
+            ]
+            indexed = await index_documents_batch(docs)
+            logger.debug("Batch indexed %d/%d triples to Qdrant", indexed, len(instances))
+        except Exception:
+            logger.debug("Failed to batch index triples to Qdrant", exc_info=True)
 
     def to_response(self, instance: Triple) -> TripleResponse:
         """Map ORM instance to TripleResponse (embedding excluded)."""
@@ -203,6 +250,10 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                     source="memvault",
                 )
             )
+            # Batch index to Qdrant (best-effort, fire-and-forget)
+            import asyncio
+
+            asyncio.ensure_future(self._batch_index_triples_to_qdrant(created))  # noqa: RUF006
             # Post-ingest auto-merge (best-effort, >= 0.95 only)
             try:
                 merges = await entity_resolution_service.auto_merge(
@@ -257,7 +308,12 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         top_k: int = 10,
         threshold: float = 0.5,
     ) -> list[TripleResponse]:
-        """Vector similarity search on triples using pgvector cosine distance.
+        """Legacy pgvector cosine distance search on triples.
+
+        Kept as fallback until callers pass query text to enable Qdrant hybrid search.
+        Callers (kg_routes.search_triples, cascade_recall_service) already compute embeddings
+        from query text — refactoring them to pass text directly would allow switching to
+        Qdrant hybrid_search. For now, pgvector path remains functional.
 
         Tries triple_embeddings sub-table first (Phase 2);
         falls back to inline triples.embedding.
@@ -303,6 +359,8 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         await db.delete(instance)
 
     async def update_by_id(self, db: AsyncSession, id: str, data: TripleCreate) -> Triple:
+        import asyncio
+
         result = await db.execute(select(self.model).where(self.model.id == id))
         instance = result.scalar_one_or_none()
         if not instance:
@@ -312,6 +370,8 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             d["predicate"] = normalize_predicate(d["predicate"])
         for key, val in d.items():
             setattr(instance, key, val)
+        # Re-index to Qdrant with updated content (best-effort)
+        asyncio.ensure_future(self._index_triple_to_qdrant(instance))  # noqa: RUF006
         return instance
 
     async def invalidate(

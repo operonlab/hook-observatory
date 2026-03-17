@@ -125,7 +125,10 @@ export default function PlannerPage() {
 
   useEffect(() => {
     if (!currentDate) return
-    spanApi.forDate(currentDate).then(setDaySpans).catch(() => setDaySpans([]))
+    spanApi
+      .forDate(currentDate)
+      .then(setDaySpans)
+      .catch(() => setDaySpans([]))
   }, [currentDate])
 
   const [reflectionSynced, setReflectionSynced] = useState(false)
@@ -330,7 +333,7 @@ export default function PlannerPage() {
       <div className="mt-4 lg:mt-5 flex flex-col lg:flex-row gap-5 lg:gap-6">
         {/* ─── Main content area ─── */}
         <div className="flex-1 min-w-0 space-y-4">
-          {plan && <AddItemInput onAdd={(title, extra) => addItem(title, extra)} />}
+          <AddItemInput onAdd={(title, extra) => addItem(title, extra)} />
 
           <div>
             {layoutType === 'list' && (

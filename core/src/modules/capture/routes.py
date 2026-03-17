@@ -264,6 +264,22 @@ async def promote_capture(
     return result
 
 
+@router.post("/{capture_id}/enrich", response_model=CaptureResponse)
+async def enrich_capture(
+    capture_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("capture.write"),
+):
+    """Run LLM enrichment pipeline on a pending capture."""
+    capture = await capture_service.get(db, capture_id)
+    if not capture:
+        raise NotFoundError("capture", capture_id)
+    _check_owner(capture, user)
+    result = await capture_service.enrich(db, capture_id, user_id=user.get("id"))
+    await db.commit()
+    return capture_service.to_response(result)
+
+
 @router.delete("/{capture_id}", status_code=204)
 async def delete_capture(
     capture_id: str,

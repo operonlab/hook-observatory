@@ -373,11 +373,13 @@ export default function EnrichmentChat({
           { role: 'system', content: '已套用欄位到捕捉紀錄。', timestamp: Date.now() },
         ])
       } else {
-        // Create new capture from parsed data
+        // Create new capture from parsed data — include raw_input for auto-enrichment
+        const lastUserMsg = messages.findLast((m) => m.role === 'user')
         await captureApi.create({
           module: parsed.module,
           entity_type: parsed.entity_type,
           payload: parsed.payload,
+          raw_input: lastUserMsg?.content,
         })
         onCaptureCreated()
         setMessages((prev) => [

@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .adapters import BaseCaptureAdapter
-from .strategies import PatternMatchStrategy
+from .strategies import LLMEnrichmentStrategy, PatternMatchStrategy
 
 
 class WebCrawlCaptureAdapter(BaseCaptureAdapter):
@@ -35,9 +35,15 @@ class WebCrawlCaptureAdapter(BaseCaptureAdapter):
     default_ttl_days = 7  # URLs are time-sensitive
 
     # Extract page title from raw HTML if captured via paste/clipboard
-    enrichment_strategies = [
-        PatternMatchStrategy(patterns={"title": r"<title>([^<]+)</title>"}),
-    ]
+    @property
+    def enrichment_strategies(self):
+        from .enrichment_config import ENRICHMENT_SCHEMAS
+
+        schema = ENRICHMENT_SCHEMAS.get(("intelflow", "webcrawl"))
+        strategies = [PatternMatchStrategy(patterns={"title": r"<title>([^<]+)</title>"})]
+        if schema:
+            strategies.append(LLMEnrichmentStrategy(field_schema=schema))
+        return strategies
 
     def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}

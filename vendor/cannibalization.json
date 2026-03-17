@@ -1,7 +1,7 @@
 {
   "$schema": "workshop-cannibalization-v1",
   "description": "蠶食追蹤清單 — 記錄所有被內化到 Workshop 的外部來源（代碼、論文、文章、概念）",
-  "updated_at": "2026-03-09",
+  "updated_at": "2026-03-16",
   "sources": [
     {
       "id": "crawl4ai",
@@ -69,9 +69,9 @@
       ],
       "drift": {
         "check_method": "github_tags",
-        "latest_checked": "2026-03-09",
-        "latest_upstream": "v0.8.0",
-        "drift_level": "none"
+        "latest_checked": "2026-03-16",
+        "latest_upstream": "vr0.6.3",
+        "drift_level": "minor"
       }
     },
     {
@@ -110,9 +110,9 @@
       ],
       "drift": {
         "check_method": "github_commits",
-        "latest_checked": "2026-03-09",
-        "latest_upstream": null,
-        "drift_level": "unknown"
+        "latest_checked": "2026-03-16",
+        "latest_upstream": "b02f5aa (2026-03-10)",
+        "drift_level": "none"
       }
     },
     {

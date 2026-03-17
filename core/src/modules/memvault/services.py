@@ -284,7 +284,10 @@ class MemoryBlockService(
         date_to: datetime | None = None,
         keywords: list[str] | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
-        """Vector similarity search with RRF hybrid retrieval + scoring pipeline.
+        """Vector similarity search — LEGACY pgvector path.
+
+        Only used as emergency fallback when Qdrant infrastructure is unavailable.
+        Primary search should go through qdrant_search().
 
         Tries block_embeddings sub-table first (Phase 2 path);
         falls back to inline blocks.embedding for backward compat.
@@ -465,7 +468,11 @@ class MemoryBlockService(
         qdrant_results, qdrant_meta = await qdrant_hybrid_search(query, space_id, config)
 
         if not qdrant_results:
-            return None  # fall back to pgvector
+            # Qdrant is available but found nothing — return empty results (NOT pgvector fallback)
+            meta.backend = "qdrant"
+            meta.input_count = 0
+            meta.output_count = 0
+            return [], meta
 
         meta.keyword_used = qdrant_meta.sparse_used
 

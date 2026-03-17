@@ -1,7 +1,11 @@
-"""Local cross-encoder reranking for memvault.
+"""Cross-encoder reranking for memvault.
 
-Uses Ollama nomic-embed-text with task-aware prefixes to re-score
-search results. Includes circuit breaker for graceful degradation.
+Uses Jina Reranker v3 (0.6B, MLX-native) via persistent subprocess worker.
+True cross-encoder: query and document are jointly encoded with cross-attention,
+producing more accurate relevance scores than bi-encoder cosine similarity.
+
+Includes circuit breaker for graceful degradation — falls back to original
+scoring when the reranker is unavailable.
 """
 
 import logging
@@ -16,9 +20,8 @@ class RerankerConfig:
     enabled: bool = True
     max_candidates: int = 20  # Only rerank top N
     snippet_length: int = 500  # Truncate content to this length
-    weight_original: float = 0.4  # Weight of original score
-    weight_rerank: float = 0.6  # Weight of rerank score
-    timeout: float = 5.0  # Max seconds for reranking
+    weight_original: float = 0.3  # Weight of original score
+    weight_rerank: float = 0.7  # Weight of cross-encoder score
     # Circuit breaker
     failure_threshold: int = 3
     recovery_seconds: float = 600  # 10 minutes
@@ -56,7 +59,7 @@ class CircuitBreaker:
 
 
 class LocalReranker:
-    """Rerank search results using Ollama embedding model."""
+    """Rerank search results using Jina cross-encoder via MLX bridge."""
 
     def __init__(self, config: RerankerConfig | None = None):
         self.config = config or RerankerConfig()
@@ -70,7 +73,7 @@ class LocalReranker:
         query: str,
         results: list[dict],
     ) -> tuple[list[dict], bool]:
-        """Rerank results using cross-embedding similarity.
+        """Rerank results using Jina cross-encoder.
 
         Returns (reranked_results, was_applied).
         If reranking fails or circuit breaker is open, returns original results unchanged.
@@ -82,36 +85,40 @@ class LocalReranker:
             return results, False
 
         try:
-            from src.shared.embedding import get_embedding, get_embeddings_batch
+            from src.shared import rerank_bridge
 
             # Limit candidates
             candidates = results[: self.config.max_candidates]
             remainder = results[self.config.max_candidates :]
 
-            # Get query embedding with search_query prefix
-            query_emb = await get_embedding(f"search_query: {query}")
-            if not query_emb:
+            # Prepare document snippets for cross-encoder
+            snippets = [r.get("content", "")[: self.config.snippet_length] for r in candidates]
+
+            # Call cross-encoder
+            scores = await rerank_bridge.rerank(query, snippets)
+            if scores is None:
                 self._breaker.record_failure()
                 return results, False
 
-            # Batch re-embed candidates with search_document prefix
-            snippets = [
-                f"search_document: {r.get('content', '')[:self.config.snippet_length]}"
-                for r in candidates
-            ]
-            doc_embeddings = await get_embeddings_batch(snippets)
+            # Build index→score map
+            score_map = {s["index"]: s["score"] for s in scores}
 
-            # Compute reranked scores
-            from .scoring_pipeline import _cosine_similarity
+            if len(scores) != len(candidates):
+                logger.warning(
+                    "Rerank score count mismatch: sent %d, got %d",
+                    len(candidates),
+                    len(scores),
+                )
 
+            # Blend original score with cross-encoder score
             for i, r in enumerate(candidates):
-                doc_emb = doc_embeddings[i] if i < len(doc_embeddings) else None
-                if doc_emb:
-                    rerank_score = max(_cosine_similarity(query_emb, doc_emb), 0.0)
-                    # Weighted blend of original score and rerank score
+                ce_score = score_map.get(i)
+                if ce_score is not None:
+                    # Normalize cross-encoder score from [-1, 1] to [0, 1]
+                    ce_normalized = (ce_score + 1) / 2
                     r["score"] = (
                         self.config.weight_original * r["score"]
-                        + self.config.weight_rerank * rerank_score
+                        + self.config.weight_rerank * ce_normalized
                     )
 
             # Re-sort candidates by new score

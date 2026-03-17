@@ -4,7 +4,7 @@ Inspired by crawl4ai's chunking_strategy.py (vendor/crawl4ai).
 Referenced by AD-12 (document ingestion pipeline).
 
 Used by:
-  - memvault: embedding chunking before nomic-embed-text indexing
+  - memvault: embedding chunking before Qwen3-Embedding indexing
   - capture: document splitting before adapter routing
 """
 
