@@ -141,6 +141,8 @@
       e.preventDefault();
       e.stopPropagation();
       sendEk(key.length === 1 ? key : key);
+      // Keep keyboard open on mobile — re-focus input after combo
+      requestAnimationFrame(() => inputEl.focus());
     });
 
     // Mobile fallback: 'input' event for keyboards that skip keydown
@@ -155,6 +157,8 @@
         // Undo insertion, send as combo
         inputEl.value = lastInputValue;
         sendEk(inserted[0]);
+        // Keep keyboard open on mobile
+        requestAnimationFrame(() => inputEl.focus());
       }
       lastInputValue = inputEl.value;
     });
