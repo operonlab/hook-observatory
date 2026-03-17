@@ -1,19 +1,13 @@
-"""TOML config loader for Workshop Sentinel."""
+"""YAML config loader for Workshop Sentinel."""
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:
-    import tomli
-except ModuleNotFoundError:
-    import tomllib as tomli  # type: ignore[no-redef]
+from workshop.station_bootstrap import load_yaml_config
 
-
-_DEFAULT_CONFIG_DIR = Path.home() / ".sentinel"
-_DEFAULT_CONFIG_PATH = _DEFAULT_CONFIG_DIR / "config.toml"
+_CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 LOCK_DIR = Path("/opt/homebrew/var/run/workshop/sentinel")
 SPOOL_DIR = Path("/opt/homebrew/var/log/workshop/sentinel")
@@ -49,46 +43,44 @@ class Config:
 
 
 def load_config(path: Path | None = None) -> Config:
-    """Load config from TOML file, with env var overrides."""
+    """Load config from YAML file, with env var overrides."""
+    raw = load_yaml_config(path or _CONFIG_PATH)
+
     cfg = Config()
-    toml_path = path or _DEFAULT_CONFIG_PATH
+    if "port" in raw:
+        cfg.port = int(raw["port"])
+    if "host" in raw:
+        cfg.host = str(raw["host"])
+    if "database_url" in raw:
+        cfg.database_url = str(raw["database_url"])
+    if "secret_key" in raw:
+        cfg.secret_key = str(raw["secret_key"])
+    if "session_cookie_name" in raw:
+        cfg.session_cookie_name = str(raw["session_cookie_name"])
+    if "session_max_age" in raw:
+        cfg.session_max_age = int(raw["session_max_age"])
+    if "login_url" in raw:
+        cfg.login_url = str(raw["login_url"])
+    if "lock_dir" in raw:
+        cfg.lock_dir = Path(raw["lock_dir"])
 
-    if toml_path.exists():
-        with open(toml_path, "rb") as f:
-            raw = tomli.load(f)
+    # Spool sub-config (flat keys: spool_*)
+    if "spool_dir" in raw:
+        cfg.spool.dir = Path(raw["spool_dir"])
+    if "spool_drain_interval" in raw:
+        cfg.spool.drain_interval = float(raw["spool_drain_interval"])
+    if "spool_batch_size" in raw:
+        cfg.spool.batch_size = int(raw["spool_batch_size"])
 
-        if "port" in raw:
-            cfg.port = int(raw["port"])
-        if "host" in raw:
-            cfg.host = str(raw["host"])
-        if "database_url" in raw:
-            cfg.database_url = str(raw["database_url"])
-
-        spool_raw = raw.get("spool", {})
-        if "dir" in spool_raw:
-            cfg.spool.dir = Path(os.path.expanduser(str(spool_raw["dir"])))
-        if "drain_interval" in spool_raw:
-            cfg.spool.drain_interval = float(spool_raw["drain_interval"])
-
-        check_raw = raw.get("check", {})
-        if "light_interval" in check_raw:
-            cfg.check.light_interval = float(check_raw["light_interval"])
-        if "deep_interval" in check_raw:
-            cfg.check.deep_interval = float(check_raw["deep_interval"])
-        if "intervention_delay" in check_raw:
-            cfg.check.intervention_delay = float(check_raw["intervention_delay"])
-
-    # Env var overrides
-    if v := os.environ.get("SENTINEL_PORT"):
-        cfg.port = int(v)
-    if v := os.environ.get("SENTINEL_HOST"):
-        cfg.host = v
-    if v := os.environ.get("SENTINEL_DATABASE_URL"):
-        cfg.database_url = v
-    if v := os.environ.get("SENTINEL_SECRET_KEY"):
-        cfg.secret_key = v
-    if v := os.environ.get("CORE_SECRET_KEY"):
-        cfg.secret_key = v
+    # Check sub-config (flat keys: check_*)
+    if "check_light_interval" in raw:
+        cfg.check.light_interval = float(raw["check_light_interval"])
+    if "check_deep_interval" in raw:
+        cfg.check.deep_interval = float(raw["check_deep_interval"])
+    if "check_intervention_delay" in raw:
+        cfg.check.intervention_delay = float(raw["check_intervention_delay"])
+    if "check_repair_timeout" in raw:
+        cfg.check.repair_timeout = float(raw["check_repair_timeout"])
 
     return cfg
 
