@@ -15,15 +15,12 @@ Configure in ~/.claude.json:
     }
 """
 
-import asyncio
 from asyncio import to_thread
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.server.fastmcp import FastMCP
 from workshop.clients.tmux_relay import TmuxRelayClient, TmuxRelayError
 
-server = Server("tmux-relay")
+mcp = FastMCP("tmux-relay")
 _default_client = TmuxRelayClient(silent=True)
 
 
@@ -32,133 +29,6 @@ def _client(model: str | None = None, silent: bool = True) -> TmuxRelayClient:
     if model or not silent:
         return TmuxRelayClient(model=model, silent=silent)
     return _default_client
-
-
-def text_result(text: str) -> list[TextContent]:
-    return [TextContent(type="text", text=text)]
-
-
-# ======================== Tool Definitions ========================
-
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [
-        Tool(
-            name="relay_run",
-            description=(
-                "Blocking relay: acquire pane → send command → wait for completion "
-                "(event-driven via tmux wait-for, zero CPU) → return result. "
-                "Use from a background Agent for true async. This is the PRIMARY tool."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The command/prompt to send to the relay pane",
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "default": 600,
-                        "description": "Max seconds to wait for completion",
-                    },
-                    "lines": {
-                        "type": "integer",
-                        "default": 200,
-                        "description": "Max lines of output to return",
-                    },
-                    "model": {
-                        "type": "string",
-                        "description": "Claude Code model (e.g. haiku, sonnet). Cheaper models for simple tasks.",
-                    },
-                    "silent": {
-                        "type": "boolean",
-                        "default": True,
-                        "description": "Suppress TTS voice notifications in relay pane",
-                    },
-                },
-                "required": ["command"],
-            },
-        ),
-        Tool(
-            name="relay_dispatch",
-            description=(
-                "Low-level: fire-and-forget dispatch. Returns signal_file for manual "
-                "polling via relay_check/relay_result. Prefer relay_run instead."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The command/prompt to send to the relay pane",
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "default": 600,
-                        "description": "Max seconds to wait for completion (background)",
-                    },
-                    "count": {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Number of panes to dispatch to (for parallel tasks)",
-                    },
-                    "model": {
-                        "type": "string",
-                        "description": "Claude Code model (e.g. haiku, sonnet). Cheaper models for simple tasks.",
-                    },
-                    "silent": {
-                        "type": "boolean",
-                        "default": True,
-                        "description": "Suppress TTS voice notifications in relay pane",
-                    },
-                },
-                "required": ["command"],
-            },
-        ),
-        Tool(
-            name="relay_list",
-            description="List all relay panes with their idle/busy status (cache-backed, ~0.5ms).",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="relay_check",
-            description="Low-level: check if a dispatched command has completed (cache-backed, ~0.1ms).",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "signal_file": {
-                        "type": "string",
-                        "description": "Path to the .done signal file returned by relay_dispatch",
-                    },
-                },
-                "required": ["signal_file"],
-            },
-        ),
-        Tool(
-            name="relay_result",
-            description="Low-level: read the output of a completed relay command.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "signal_file": {
-                        "type": "string",
-                        "description": "Path to the .done signal file",
-                    },
-                    "lines": {
-                        "type": "integer",
-                        "default": 200,
-                        "description": "Max lines of output to return",
-                    },
-                },
-                "required": ["signal_file"],
-            },
-        ),
-    ]
 
 
 # ======================== Result Formatting ========================
@@ -195,70 +65,101 @@ def _format_panes(panes) -> str:
     return "\n".join(parts)
 
 
-# ======================== Tool Handler ========================
+# ======================== Tools ========================
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+@mcp.tool()
+async def relay_run(
+    command: str,
+    timeout: int = 600,
+    lines: int = 200,
+    model: str | None = None,
+    silent: bool = True,
+) -> str:
+    """Blocking relay: acquire pane → send command → wait for completion (event-driven via tmux wait-for, zero CPU) → return result. Use from a background Agent for true async. This is the PRIMARY tool."""
     try:
-        if name == "relay_run":
-            c = _client(arguments.get("model"), arguments.get("silent", True))
-            result = await to_thread(
-                c.run,
-                command=arguments["command"],
-                timeout=arguments.get("timeout", 600),
-                max_lines=arguments.get("lines", 200),
-            )
-            return text_result(_format_relay_result(result))
-
-        elif name == "relay_dispatch":
-            c = _client(arguments.get("model"), arguments.get("silent", True))
-            dispatched = await to_thread(
-                c.dispatch,
-                command=arguments["command"],
-                timeout=arguments.get("timeout", 600),
-                count=arguments.get("count", 1),
-            )
-            return text_result(_format_dispatch(dispatched))
-
-        elif name == "relay_list":
-            panes = await to_thread(_default_client.list_panes)
-            return text_result(_format_panes(panes))
-
-        elif name == "relay_check":
-            result = await to_thread(
-                _default_client.check,
-                signal_file=arguments["signal_file"],
-            )
-            status = result.get("status", "unknown").upper()
-            meta = result.get("meta", "")
-            return text_result(
-                f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}"
-            )
-
-        elif name == "relay_result":
-            result = await to_thread(
-                _default_client.result,
-                signal_file=arguments["signal_file"],
-                max_lines=arguments.get("lines", 200),
-            )
-            return text_result(_format_relay_result(result))
-
-        return text_result(f"Unknown tool: {name}")
-
+        c = _client(model, silent)
+        result = await to_thread(
+            c.run,
+            command=command,
+            timeout=timeout,
+            max_lines=lines,
+        )
+        return _format_relay_result(result)
     except TmuxRelayError as e:
-        return text_result(f"tmux-relay error: {e}")
+        return f"tmux-relay error: {e}"
     except Exception as e:
-        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
+        return f"Unexpected error: {type(e).__name__}: {e}"
 
 
-# ======================== Main ========================
+@mcp.tool()
+async def relay_dispatch(
+    command: str,
+    timeout: int = 600,
+    count: int = 1,
+    model: str | None = None,
+    silent: bool = True,
+) -> str:
+    """Low-level: fire-and-forget dispatch. Returns signal_file for manual polling via relay_check/relay_result. Prefer relay_run instead."""
+    try:
+        c = _client(model, silent)
+        dispatched = await to_thread(
+            c.dispatch,
+            command=command,
+            timeout=timeout,
+            count=count,
+        )
+        return _format_dispatch(dispatched)
+    except TmuxRelayError as e:
+        return f"tmux-relay error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {type(e).__name__}: {e}"
 
 
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+@mcp.tool()
+async def relay_list() -> str:
+    """List all relay panes with their idle/busy status (cache-backed, ~0.5ms)."""
+    try:
+        panes = await to_thread(_default_client.list_panes)
+        return _format_panes(panes)
+    except TmuxRelayError as e:
+        return f"tmux-relay error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def relay_check(signal_file: str) -> str:
+    """Low-level: check if a dispatched command has completed (cache-backed, ~0.1ms)."""
+    try:
+        result = await to_thread(
+            _default_client.check,
+            signal_file=signal_file,
+        )
+        status = result.get("status", "unknown").upper()
+        meta = result.get("meta", "")
+        return f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}"
+    except TmuxRelayError as e:
+        return f"tmux-relay error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def relay_result(signal_file: str, lines: int = 200) -> str:
+    """Low-level: read the output of a completed relay command."""
+    try:
+        result = await to_thread(
+            _default_client.result,
+            signal_file=signal_file,
+            max_lines=lines,
+        )
+        return _format_relay_result(result)
+    except TmuxRelayError as e:
+        return f"tmux-relay error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {type(e).__name__}: {e}"
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run()

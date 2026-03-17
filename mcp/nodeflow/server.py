@@ -16,150 +16,14 @@ Configure in ~/.claude.json:
     }
 """
 
-import asyncio
-import json
 from asyncio import to_thread
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.server.fastmcp import FastMCP
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.nodeflow import NodeflowClient
 
-server = Server("nodeflow")
+mcp = FastMCP("nodeflow")
 client = NodeflowClient()
-
-
-def text_result(text: str) -> list[TextContent]:
-    return [TextContent(type="text", text=text)]
-
-
-def json_text(data) -> str:
-    return json.dumps(data, ensure_ascii=False, indent=2, default=str)
-
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [
-        Tool(
-            name="nodeflow_flows",
-            description="List DAG flows with pagination.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "page": {"type": "integer", "default": 1},
-                    "page_size": {"type": "integer", "default": 20},
-                },
-            },
-        ),
-        Tool(
-            name="nodeflow_flow_detail",
-            description="Get flow detail including nodes and edges.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "flow_id": {"type": "string", "description": "Flow ID"},
-                },
-                "required": ["flow_id"],
-            },
-        ),
-        Tool(
-            name="nodeflow_create_flow",
-            description="Create a new DAG flow.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Flow name"},
-                    "description": {"type": "string", "description": "Flow description"},
-                    "trigger_type": {
-                        "type": "string",
-                        "enum": ["manual", "event", "schedule"],
-                        "default": "manual",
-                    },
-                    "trigger_config": {"type": "object", "description": "Trigger configuration"},
-                },
-                "required": ["name"],
-            },
-        ),
-        Tool(
-            name="nodeflow_trigger_flow",
-            description="Manually trigger a flow execution.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "flow_id": {"type": "string", "description": "Flow ID"},
-                    "input_data": {"type": "object", "description": "Input data for the flow"},
-                },
-                "required": ["flow_id"],
-            },
-        ),
-        Tool(
-            name="nodeflow_nodes",
-            description="List nodes in a flow.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "flow_id": {"type": "string", "description": "Flow ID"},
-                    "limit": {
-                        "type": "integer",
-                        "default": 50,
-                        "description": "Max number of nodes to return",
-                    },
-                },
-                "required": ["flow_id"],
-            },
-        ),
-        Tool(
-            name="nodeflow_create_node",
-            description="Create a node in a flow.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "flow_id": {"type": "string", "description": "Flow ID"},
-                    "node_type": {"type": "string", "description": "Node type (action type)"},
-                    "label": {"type": "string", "description": "Node display label"},
-                    "config": {"type": "object", "description": "Node configuration"},
-                    "position_x": {"type": "number", "default": 0},
-                    "position_y": {"type": "number", "default": 0},
-                },
-                "required": ["flow_id", "node_type", "label"],
-            },
-        ),
-        Tool(
-            name="nodeflow_edges",
-            description="List edges in a flow.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "flow_id": {"type": "string", "description": "Flow ID"},
-                    "limit": {
-                        "type": "integer",
-                        "default": 50,
-                        "description": "Max number of edges to return",
-                    },
-                },
-                "required": ["flow_id"],
-            },
-        ),
-        Tool(
-            name="nodeflow_runs",
-            description="List execution runs for a flow.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "flow_id": {"type": "string", "description": "Flow ID"},
-                    "page": {"type": "integer", "default": 1},
-                    "page_size": {"type": "integer", "default": 20},
-                },
-                "required": ["flow_id"],
-            },
-        ),
-        Tool(
-            name="nodeflow_actions",
-            description="List available action types for building flows.",
-            inputSchema={"type": "object", "properties": {}},
-        ),
-    ]
 
 
 def _format_flows(result: dict) -> str:
@@ -239,108 +103,160 @@ def _format_runs(result: dict) -> str:
     return "\n".join(lines)
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+@mcp.tool()
+async def nodeflow_flows(page: int = 1, page_size: int = 20) -> str:
+    """List DAG flows with pagination."""
     try:
-        match name:
-            case "nodeflow_flows":
-                result = await to_thread(
-                    client.list_flows,
-                    page=arguments.get("page", 1),
-                    page_size=arguments.get("page_size", 20),
-                )
-                return text_result(_format_flows(result))
-
-            case "nodeflow_flow_detail":
-                result = await to_thread(client.get_flow, arguments["flow_id"])
-                return text_result(_format_flow_detail(result))
-
-            case "nodeflow_create_flow":
-                data = {"name": arguments["name"], "status": "draft"}
-                if "description" in arguments:
-                    data["description"] = arguments["description"]
-                data["trigger_type"] = arguments.get("trigger_type", "manual")
-                if "trigger_config" in arguments:
-                    data["trigger_config"] = arguments["trigger_config"]
-                result = await to_thread(client.create_flow, data)
-                return text_result(
-                    f"Flow created: **{result.get('name', '?')}** (id: {result.get('id', '?')[:12]})"
-                )
-
-            case "nodeflow_trigger_flow":
-                input_data = arguments.get("input_data", {})
-                result = await to_thread(client.trigger_flow, arguments["flow_id"], input_data)
-                run_id = result.get("id", result.get("flow_run_id", "?"))
-                return text_result(f"Flow triggered. Run ID: {run_id}")
-
-            case "nodeflow_nodes":
-                limit = arguments.get("limit", 50)
-                result = await to_thread(client.list_nodes, arguments["flow_id"])
-                items = result if isinstance(result, list) else result.get("items", [])
-                total_count = len(items)
-                items = items[:limit]
-                return text_result(
-                    f"Showing {len(items)} of {total_count} nodes\n\n" + _format_nodes(items)
-                )
-
-            case "nodeflow_create_node":
-                data = {
-                    "flow_id": arguments["flow_id"],
-                    "node_type": arguments["node_type"],
-                    "label": arguments["label"],
-                    "config": arguments.get("config", {}),
-                    "position_x": arguments.get("position_x", 0),
-                    "position_y": arguments.get("position_y", 0),
-                }
-                result = await to_thread(client.create_node, data)
-                return text_result(
-                    f"Node created: **{result.get('label', '?')}** (id: {result.get('id', '?')[:12]})"
-                )
-
-            case "nodeflow_edges":
-                limit = arguments.get("limit", 50)
-                result = await to_thread(client.list_edges, arguments["flow_id"])
-                items = result if isinstance(result, list) else result.get("items", [])
-                total_count = len(items)
-                items = items[:limit]
-                return text_result(
-                    f"Showing {len(items)} of {total_count} edges\n\n" + _format_edges(items)
-                )
-
-            case "nodeflow_runs":
-                result = await to_thread(
-                    client.list_runs,
-                    arguments["flow_id"],
-                    page=arguments.get("page", 1),
-                    page_size=arguments.get("page_size", 20),
-                )
-                return text_result(_format_runs(result))
-
-            case "nodeflow_actions":
-                result = await to_thread(client.list_actions)
-                items = result if isinstance(result, list) else result.get("items", [])
-                if not items:
-                    return text_result("No actions available.")
-                lines = [f"**Available Actions** ({len(items)})\n"]
-                for a in items:
-                    name_str = a.get("name", a.get("type", "?"))
-                    desc = a.get("description", "")[:60]
-                    lines.append(f"- **{name_str}**: {desc}")
-                return text_result("\n".join(lines))
-
-            case _:
-                return text_result(f"Unknown tool: {name}")
-
+        result = await to_thread(client.list_flows, page=page, page_size=page_size)
+        return _format_flows(result)
     except (APIError, APIConnectionError) as e:
-        return text_result(f"Nodeflow error: {e}")
+        return f"Nodeflow error: {e}"
     except Exception as e:
-        return text_result(f"Error: {type(e).__name__}: {e}")
+        return f"Error: {type(e).__name__}: {e}"
 
 
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+@mcp.tool()
+async def nodeflow_flow_detail(flow_id: str) -> str:
+    """Get flow detail including nodes and edges."""
+    try:
+        result = await to_thread(client.get_flow, flow_id)
+        return _format_flow_detail(result)
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def nodeflow_create_flow(
+    name: str,
+    description: str = "",
+    trigger_type: str = "manual",
+    trigger_config: dict = None,
+) -> str:
+    """Create a new DAG flow."""
+    try:
+        data = {"name": name, "status": "draft"}
+        if description:
+            data["description"] = description
+        data["trigger_type"] = trigger_type
+        if trigger_config is not None:
+            data["trigger_config"] = trigger_config
+        result = await to_thread(client.create_flow, data)
+        return f"Flow created: **{result.get('name', '?')}** (id: {result.get('id', '?')[:12]})"
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def nodeflow_trigger_flow(flow_id: str, input_data: dict = None) -> str:
+    """Manually trigger a flow execution."""
+    try:
+        input_data = input_data or {}
+        result = await to_thread(client.trigger_flow, flow_id, input_data)
+        run_id = result.get("id", result.get("flow_run_id", "?"))
+        return f"Flow triggered. Run ID: {run_id}"
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def nodeflow_nodes(flow_id: str, limit: int = 50) -> str:
+    """List nodes in a flow."""
+    try:
+        result = await to_thread(client.list_nodes, flow_id)
+        items = result if isinstance(result, list) else result.get("items", [])
+        total_count = len(items)
+        items = items[:limit]
+        return f"Showing {len(items)} of {total_count} nodes\n\n" + _format_nodes(items)
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def nodeflow_create_node(
+    flow_id: str,
+    node_type: str,
+    label: str,
+    config: dict = None,
+    position_x: float = 0,
+    position_y: float = 0,
+) -> str:
+    """Create a node in a flow."""
+    try:
+        data = {
+            "flow_id": flow_id,
+            "node_type": node_type,
+            "label": label,
+            "config": config or {},
+            "position_x": position_x,
+            "position_y": position_y,
+        }
+        result = await to_thread(client.create_node, data)
+        return f"Node created: **{result.get('label', '?')}** (id: {result.get('id', '?')[:12]})"
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def nodeflow_edges(flow_id: str, limit: int = 50) -> str:
+    """List edges in a flow."""
+    try:
+        result = await to_thread(client.list_edges, flow_id)
+        items = result if isinstance(result, list) else result.get("items", [])
+        total_count = len(items)
+        items = items[:limit]
+        return f"Showing {len(items)} of {total_count} edges\n\n" + _format_edges(items)
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def nodeflow_runs(flow_id: str, page: int = 1, page_size: int = 20) -> str:
+    """List execution runs for a flow."""
+    try:
+        result = await to_thread(
+            client.list_runs,
+            flow_id,
+            page=page,
+            page_size=page_size,
+        )
+        return _format_runs(result)
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def nodeflow_actions() -> str:
+    """List available action types for building flows."""
+    try:
+        result = await to_thread(client.list_actions)
+        items = result if isinstance(result, list) else result.get("items", [])
+        if not items:
+            return "No actions available."
+        lines = [f"**Available Actions** ({len(items)})\n"]
+        for a in items:
+            name_str = a.get("name", a.get("type", "?"))
+            desc = a.get("description", "")[:60]
+            lines.append(f"- **{name_str}**: {desc}")
+        return "\n".join(lines)
+    except (APIError, APIConnectionError) as e:
+        return f"Nodeflow error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run()
