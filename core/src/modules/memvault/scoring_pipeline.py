@@ -86,11 +86,13 @@ class ScoringConfig:
     mmr_threshold: float = 0.85
     semantic_boost: float = 0.3
     trust_penalty: float = 0.3  # max penalty for low-trust memories
+    feedback_weight: float = 0.15  # max boost/penalty from feedback signals
     stages_enabled: dict[str, bool] = field(
         default_factory=lambda: {
             "recency": True,
             "importance": True,
             "trust_boost": True,
+            "feedback_boost": True,
             "length_norm": True,
             "time_decay": True,
             "semantic_boost": True,
@@ -156,6 +158,9 @@ class ScoringPipeline:
 
         # Stage 2.5: Trust Boost (P3 source tracking → scoring)
         results = self._run_stage("trust_boost", results, meta, self._apply_trust_boost)
+
+        # Stage 2.75: Feedback Boost (closed-loop learning from explicit feedback)
+        results = self._run_stage("feedback_boost", results, meta, self._apply_feedback_boost)
 
         # Stage 3: Length Normalization
         results = self._run_stage("length_norm", results, meta, self._apply_length_norm)
@@ -250,6 +255,24 @@ class ScoringPipeline:
             trust = compute_trust_score(provenance)
             # Apply penalty: trust=1.0 → no penalty, trust=0.5 → 15% penalty (default)
             r["score"] *= 1.0 - self.config.trust_penalty * (1.0 - trust)
+        return results
+
+    def _apply_feedback_boost(self, results: list[dict]) -> list[dict]:
+        """Closed-loop learning: adjust scores based on accumulated explicit feedback.
+
+        Result dict optional field:
+          feedback_net (int) — net signal (positive_count - negative_count).
+                               Populated by services.py before calling pipeline.
+
+        Formula: score *= 1 + feedback_weight * tanh(net_signal / 3)
+        - tanh saturates smoothly: ±3 signals ≈ ±14% boost, ±10 ≈ ±15%
+        - Division by 3 controls sensitivity (3 signals for ~70% of max effect)
+        """
+        for r in results:
+            net = r.get("feedback_net", 0)
+            if net == 0:
+                continue
+            r["score"] *= 1.0 + self.config.feedback_weight * math.tanh(net / 3.0)
         return results
 
     def _apply_length_norm(self, results: list[dict]) -> list[dict]:

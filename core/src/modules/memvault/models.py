@@ -154,6 +154,32 @@ class ProfileScore(SpaceScopedModel):
     skill_score: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
 
 
+# ======================== Search Feedback ========================
+
+
+class SearchFeedback(SpaceScopedModel):
+    """Explicit relevance feedback on search results — enables closed-loop learning.
+
+    Agents or users can submit positive/negative signals for search results.
+    The scoring pipeline aggregates these to boost/penalize future rankings.
+    """
+
+    __tablename__ = "search_feedback"
+    __table_args__ = (
+        Index("idx_sf_entity", "entity_id"),
+        Index("idx_sf_query_hash", "query_hash"),
+        Index("idx_sf_entity_signal", "entity_id", "signal"),
+        {"schema": SCHEMA},
+    )
+
+    entity_id: Mapped[str] = mapped_column(String(32))  # block ID that was rated
+    query_hash: Mapped[str] = mapped_column(String(64))  # SHA-256 of query text
+    signal: Mapped[str] = mapped_column(String(20))  # positive | negative
+    feedback_source: Mapped[str] = mapped_column(
+        String(20), server_default=text("'agent'")
+    )  # agent | user | implicit
+
+
 # ======================== Frozen Tables ========================
 
 
