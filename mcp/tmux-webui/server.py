@@ -11,8 +11,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
+from workshop.clients.tmux_webui import TmuxWebuiClient
 from workshop.mcp_helpers import mcp_error_handler
-from workshop.clients.tmux_webui import TmuxWebuiClient, TmuxWebuiError
 
 mcp = FastMCP("tmux-webui")
 client = TmuxWebuiClient()
@@ -71,7 +71,9 @@ async def tmux_webui_relay(command: str, timeout: int = 30, wait: bool = False) 
 
 @mcp.tool()
 @mcp_error_handler("TmuxWebUI")
-async def tmux_webui_autocomplete(query: str, type: str = "", refresh: bool = False, limit: int = 20) -> str:
+async def tmux_webui_autocomplete(
+    query: str, type: str = "", refresh: bool = False, limit: int = 20
+) -> str:
     """Get autocomplete suggestions for tmux commands, sessions, or paths."""
     if refresh:
         await to_thread(client.refresh_autocomplete)
@@ -91,5 +93,7 @@ async def tmux_webui_autocomplete(query: str, type: str = "", refresh: bool = Fa
             "items": result[:limit],
         }
     return json_text(result)
+
+
 if __name__ == "__main__":
     mcp.run()
