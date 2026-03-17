@@ -309,6 +309,9 @@ footer:has(.extra-keys.visible) .quick-actions{flex-wrap:wrap;overflow-x:visible
 .ek.mod{font-size:11px;color:var(--cyan)}
 .ek.mod.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .ek.mod.locked{background:var(--accent);color:#fff;border-color:var(--accent-h);box-shadow:0 0 6px var(--accent)}
+.ek.prefix-btn{font-size:11px;color:var(--yellow,#e2b93d)}
+.tmux-prefix-active .ek.prefix-btn{background:var(--yellow,#e2b93d);color:#000;border-color:var(--yellow,#e2b93d);animation:pulse-prefix 1s infinite}
+@keyframes pulse-prefix{0%,100%{opacity:1}50%{opacity:.6}}
 .ek-sep{width:1px;height:28px;background:var(--border);flex-shrink:0}
 
 /* Arrow pad */
