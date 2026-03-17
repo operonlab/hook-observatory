@@ -1,4 +1,4 @@
-import { createCrudApi, request } from '@/api/client'
+import { buildParams, createCrudApi, request } from '@/api/client'
 import type { PaginatedResponse } from '@/types'
 import type {
   Task,
@@ -26,15 +26,10 @@ export const taskApi = {
     tag?: string
     search?: string
     top_level?: boolean
-  }) => {
-    const qs = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== '') qs.set(k, String(v))
-    }
-    if (!qs.has('page')) qs.set('page', '1')
-    if (!qs.has('page_size')) qs.set('page_size', '20')
-    return request<PaginatedResponse<Task>>(`/taskflow/tasks?${qs}`)
-  },
+  }) =>
+    request<PaginatedResponse<Task>>(
+      `/taskflow/tasks${buildParams(params as Record<string, unknown>)}`,
+    ),
 
   transition: (id: string, status: TaskStatus, comment?: string) =>
     request<TaskResponse>(`/taskflow/tasks/${id}/transition`, {

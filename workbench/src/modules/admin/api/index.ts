@@ -1,3 +1,4 @@
+import { buildParams } from '@/api/client'
 import type { PaginatedResponse, User, UserDetail } from '@/types'
 
 const BASE = ''
@@ -21,12 +22,7 @@ export function listUsers(params: {
   status_filter?: string
   search?: string
 }): Promise<PaginatedResponse<User>> {
-  const qs = new URLSearchParams()
-  if (params.page) qs.set('page', String(params.page))
-  if (params.page_size) qs.set('page_size', String(params.page_size))
-  if (params.status_filter) qs.set('status_filter', params.status_filter)
-  if (params.search) qs.set('search', params.search)
-  return request(`/auth/admin/users?${qs.toString()}`)
+  return request(`/auth/admin/users${buildParams(params as Record<string, unknown>)}`)
 }
 
 export function getUserDetail(userId: string): Promise<UserDetail> {

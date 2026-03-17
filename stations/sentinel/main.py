@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -16,23 +15,18 @@ from checker import (
 )
 from database import async_session, drain_spool_loop, engine, persist
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from models import Base
 from remediation import Remediator
 from sqlalchemy import text
 from state import InterventionEngine, State
+from workshop.station_bootstrap import setup_cors, setup_logging
 
 from config import config  # isort: skip
 from push_notify import publish_push  # isort: skip
 from routes import router, set_engine  # isort: skip
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("sentinel")
+logger = setup_logging("sentinel")
 
 # ── Global State ──
 
@@ -448,17 +442,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:4101",
-        "https://workshop.joneshong.com",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+setup_cors(app, mode="restricted", extra_origins=[f"http://localhost:{config.port + 1}"])
 
 app.include_router(router)
 

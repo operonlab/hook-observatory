@@ -1,4 +1,4 @@
-"""TOML config loader for Hook Observatory."""
+"""YAML config loader for Hook Observatory."""
 
 from __future__ import annotations
 
@@ -6,14 +6,10 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:
-    import tomli
-except ModuleNotFoundError:  # Python 3.11+ stdlib
-    import tomllib as tomli  # type: ignore[no-redef]
-
+from workshop.station_bootstrap import load_yaml_config
 
 _DEFAULT_CONFIG_DIR = Path.home() / ".hook-observatory"
-_DEFAULT_CONFIG_PATH = _DEFAULT_CONFIG_DIR / "config.toml"
+_CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 
 @dataclass
@@ -39,46 +35,30 @@ class Config:
 
 
 def load_config(path: Path | None = None) -> Config:
-    """Load config from TOML file, with env var overrides."""
+    """Load config from YAML file, with env var overrides."""
+    raw = load_yaml_config(path or _CONFIG_PATH)
+
     cfg = Config()
-    toml_path = path or _DEFAULT_CONFIG_PATH
+    if "port" in raw:
+        cfg.port = int(raw["port"])
+    if "host" in raw:
+        cfg.host = str(raw["host"])
+    if "database_url" in raw:
+        cfg.database_url = str(raw["database_url"])
+    if "secret_key" in raw:
+        cfg.secret_key = str(raw["secret_key"])
+    if "session_cookie_name" in raw:
+        cfg.session_cookie_name = str(raw["session_cookie_name"])
+    if "session_max_age" in raw:
+        cfg.session_max_age = int(raw["session_max_age"])
 
-    if toml_path.exists():
-        with open(toml_path, "rb") as f:
-            raw = tomli.load(f)
-
-        # Top-level scalars
-        if "port" in raw:
-            cfg.port = int(raw["port"])
-        if "host" in raw:
-            cfg.host = str(raw["host"])
-        if "database_url" in raw:
-            cfg.database_url = str(raw["database_url"])
-        if "secret_key" in raw:
-            cfg.secret_key = str(raw["secret_key"])
-        if "session_cookie_name" in raw:
-            cfg.session_cookie_name = str(raw["session_cookie_name"])
-        if "session_max_age" in raw:
-            cfg.session_max_age = int(raw["session_max_age"])
-
-        # [spool] section
-        spool_raw = raw.get("spool", {})
-        if "dir" in spool_raw:
-            cfg.spool.dir = Path(os.path.expanduser(str(spool_raw["dir"])))
-        if "drain_interval" in spool_raw:
-            cfg.spool.drain_interval = float(spool_raw["drain_interval"])
-        if "batch_size" in spool_raw:
-            cfg.spool.batch_size = int(spool_raw["batch_size"])
-
-    # Env var overrides
-    if v := os.environ.get("HOOK_OBS_PORT"):
-        cfg.port = int(v)
-    if v := os.environ.get("HOOK_OBS_HOST"):
-        cfg.host = v
-    if v := os.environ.get("HOOK_OBS_DATABASE_URL"):
-        cfg.database_url = v
-    if v := os.environ.get("HOOK_OBS_SECRET_KEY"):
-        cfg.secret_key = v
+    # Spool sub-config (flat keys: spool_*)
+    if "spool_dir" in raw:
+        cfg.spool.dir = Path(os.path.expanduser(str(raw["spool_dir"])))
+    if "spool_drain_interval" in raw:
+        cfg.spool.drain_interval = float(raw["spool_drain_interval"])
+    if "spool_batch_size" in raw:
+        cfg.spool.batch_size = int(raw["spool_batch_size"])
 
     return cfg
 
