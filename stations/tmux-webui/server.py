@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# dependencies = ["fastapi", "uvicorn", "jinja2", "websockets", "python-multipart"]
+# dependencies = ["fastapi", "uvicorn", "jinja2", "websockets", "python-multipart", "pyyaml"]
 # ///
 """
 tmux Web Controller V2 — Modular Edition
@@ -14,7 +14,6 @@ Usage:
 import argparse
 import asyncio
 import json
-import logging
 import os
 import re
 import time
@@ -40,15 +39,11 @@ from tmux_manager import (
     send_keys,
     status_metrics,
 )
+from workshop.station_bootstrap import setup_logging
 
 from config import get_config, load_config
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("tmux-webui")
+logger = setup_logging("tmux-webui")
 
 BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = Path.home() / "workshop" / "outputs" / "tmux-webui-uploads"

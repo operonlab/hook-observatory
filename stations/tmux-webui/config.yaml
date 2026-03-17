@@ -1,0 +1,37 @@
+host: "127.0.0.1"
+port: 9527
+poll_interval: 0.4
+metrics_interval: 5.0
+capture_lines: 150
+theme: "catppuccin-mocha"
+
+extra_keys:
+  - "Ctrl"
+  - "Alt"
+  - "Cmd"
+  - "|"
+  - "Tab"
+  - "Esc"
+  - "|"
+  - "/"
+  - "."
+  - ":"
+  - ";"
+  - "|"
+  - "-"
+  - "_"
+  - "~"
+  - "|"
+  - "BSpace"
+
+quick_actions:
+  - label: "y"
+    key: "y"
+  - label: "n"
+    key: "n"
+  - label: "Ctrl+C"
+    key: "C-c"
+  - label: "Enter"
+    key: "Enter"
+  - label: "Esc"
+    key: "Escape"
