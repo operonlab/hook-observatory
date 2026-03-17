@@ -23,22 +23,11 @@ import argparse
 import json
 import sys
 
+from cli.cli_helpers import err, json_out
 from cli.cli_utils import resolve_text_arg
-from cli.exit_codes import EXIT_VALIDATION, exit_code_for
+from cli.exit_codes import EXIT_VALIDATION
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.capture import CaptureClient
-
-
-def _json_out(data, args):
-    if args.json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-        return True
-    return False
-
-
-def _err(exc):
-    print(f"Error: {exc}", file=sys.stderr)
-    sys.exit(exit_code_for(exc))
 
 
 def _client():
@@ -70,9 +59,9 @@ def cmd_add(args):
             raw_input=args.raw,
         )
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(result, args):
+    if json_out(result, args):
         return
 
     print(f"Captured: {result['id']}")
@@ -93,9 +82,9 @@ def cmd_list(args):
             limit=args.limit,
         )
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(items, args):
+    if json_out(items, args):
         return
 
     if not items:
@@ -117,9 +106,9 @@ def cmd_show(args):
     try:
         result = c.get(args.id)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(result, args):
+    if json_out(result, args):
         return
 
     print(f"ID: {result['id']}")
@@ -142,9 +131,9 @@ def cmd_fill(args):
     try:
         result = c.update(args.id, payload=payload)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(result, args):
+    if json_out(result, args):
         return
 
     print(f"Updated: {_bar(result.get('completeness', 0))}")
@@ -160,9 +149,9 @@ def cmd_enrich(args):
     try:
         result = c.enrich(args.id)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(result, args):
+    if json_out(result, args):
         return
 
     print(f"Enriched: {args.id}")
@@ -176,9 +165,9 @@ def cmd_promote(args):
     try:
         result = c.promote(args.id)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(result, args):
+    if json_out(result, args):
         return
 
     if result.get("success"):
@@ -197,7 +186,7 @@ def cmd_delete(args):
     try:
         c.delete(args.id)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
     print("Deleted.")
 
 
@@ -206,9 +195,9 @@ def cmd_stats(args):
     try:
         result = c.stats()
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(result, args):
+    if json_out(result, args):
         return
 
     print(f"Total: {result['total']}")
@@ -227,9 +216,9 @@ def cmd_batch_promote(args):
     try:
         results = c.batch_promote(args.ids)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(results, args):
+    if json_out(results, args):
         return
 
     print(f"Batch promote: {len(results)} results")
@@ -248,14 +237,14 @@ def cmd_batch_fill(args):
     try:
         payload = json.loads(resolve_text_arg(args.payload))
     except json.JSONDecodeError as e:
-        _err(f"Invalid JSON payload: {e}")
+        err(f"Invalid JSON payload: {e}")
 
     try:
         results = c.batch_fill(args.ids, payload)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(results, args):
+    if json_out(results, args):
         return
 
     print(f"Batch fill: {len(results)} updated")
@@ -271,9 +260,9 @@ def cmd_history(args):
     try:
         history = c.enrichments(args.id)
     except (APIConnectionError, APIError) as e:
-        _err(str(e))
+        err(e)
 
-    if _json_out(history, args):
+    if json_out(history, args):
         return
 
     if not history:

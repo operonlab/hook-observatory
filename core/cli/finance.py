@@ -21,41 +21,12 @@ Symlink: ln -sf ~/workshop/core/cli/finance.py ~/.local/bin/finance
 """
 
 import argparse
-import json
-import sys
 from datetime import datetime
 
+from cli.cli_helpers import err, fmt_amount, fmt_date, json_out
 from cli.cli_utils import resolve_text_arg
-from cli.exit_codes import exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.finance import FinanceClient
-
-# ---------------------------------------------------------------------------
-# Formatting helpers
-# ---------------------------------------------------------------------------
-
-
-def _json_out(data, args):
-    """Print JSON if --json flag is set. Returns True if printed."""
-    if args.json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-        return True
-    return False
-
-
-def fmt_amount(amount, currency="TWD"):
-    return f"{currency} {float(amount):,.0f}"
-
-
-def fmt_date(iso):
-    if not iso:
-        return "n/a"
-    return str(iso)[:10]
-
-
-def _err(exc):
-    print(f"Error: {exc}", file=sys.stderr)
-    sys.exit(exit_code_for(exc))
 
 
 def _client():
@@ -80,7 +51,7 @@ def cmd_txn_list(args):
             page=args.page,
             page_size=args.limit,
         )
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -96,14 +67,14 @@ def cmd_txn_list(args):
                 f"  {icon} {fmt_amount(t['amount']):>14s}  {desc:<30s}  [{date}]  id={t['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_txn_get(args):
     client = _client()
     try:
         t = client.get_transaction(args.id)
-        if _json_out(t, args):
+        if json_out(t, args):
             return
         print(f"Transaction: {t['id']}")
         print(f"  Type:     {t.get('type')}")
@@ -115,7 +86,7 @@ def cmd_txn_get(args):
         print(f"  Date:     {fmt_date(t.get('transacted_at'))}")
         print(f"  Payment:  {t.get('payment_method', '-')} / {t.get('payment_detail', '-')}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_txn_create(args):
@@ -136,12 +107,12 @@ def cmd_txn_create(args):
         if args.tags:
             data["tags"] = [t.strip() for t in args.tags.split(",")]
         result = client.create_transaction(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Transaction created: {result['id']}")
         print(f"  {result.get('type')} | {fmt_amount(result.get('amount', 0))}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_txn_delete(args):
@@ -150,7 +121,7 @@ def cmd_txn_delete(args):
         client.delete_transaction(args.id)
         print(f"Transaction {args.id} deleted.")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +133,7 @@ def cmd_wallet_list(args):
     client = _client()
     try:
         result = client.list_wallets(include_inactive=args.include_inactive)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         print(f"Wallets ({len(items)} total)\n")
@@ -176,7 +147,7 @@ def cmd_wallet_list(args):
             )
         print(f"\n  Net worth: {fmt_amount(total_net)}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_wallet_create(args):
@@ -188,14 +159,14 @@ def cmd_wallet_create(args):
         if args.balance is not None:
             data["initial_balance"] = args.balance
         result = client.create_wallet(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Wallet created: {result['id']}")
         print(
             f"  {result['name']} | {result['type']} | {fmt_amount(result.get('current_balance', 0))}"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_wallet_sync(args):
@@ -206,7 +177,7 @@ def cmd_wallet_sync(args):
         if notes:
             data["notes"] = notes
         result = client.sync_wallet(args.wallet_id, data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         diff = float(result.get("difference", 0))
         diff_str = f"{diff:+,.0f}" if diff != 0 else "0 (matched)"
@@ -215,7 +186,7 @@ def cmd_wallet_sync(args):
         print(f"  Calculated balance: {fmt_amount(result.get('calculated_balance', 0))}")
         print(f"  Difference:         {diff_str}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +198,7 @@ def cmd_budget_list(args):
     client = _client()
     try:
         result = client.list_budgets(year_month=args.month)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         print(f"Budgets ({len(items)} total)\n")
@@ -236,7 +207,7 @@ def cmd_budget_list(args):
                 f"  {b.get('year_month', '?')}  budget: {fmt_amount(b.get('budget_amount', 0))}  id={b['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_budget_create(args):
@@ -246,11 +217,11 @@ def cmd_budget_create(args):
         if args.savings:
             data["savings_target"] = args.savings
         result = client.upsert_budget(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Budget set for {args.month}: {fmt_amount(args.amount)}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_budget_status(args):
@@ -258,7 +229,7 @@ def cmd_budget_status(args):
     try:
         month = args.month or datetime.now().strftime("%Y-%m")
         result = client.get_budget_status(month)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         budget = float(result.get("budget_amount", 0))
         spent = float(result.get("total_spent", 0))
@@ -269,7 +240,7 @@ def cmd_budget_status(args):
         if budget > 0 and spent > budget:
             print(f"\n  WARNING: Over budget by {fmt_amount(spent - budget)}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +253,7 @@ def cmd_sub_list(args):
     try:
         status = "active" if args.active_only else args.status
         result = client.list_subscriptions(status=status)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -294,7 +265,7 @@ def cmd_sub_list(args):
                 f"  next: {fmt_date(s.get('next_billing'))}  id={s['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_sub_create(args):
@@ -311,14 +282,14 @@ def cmd_sub_create(args):
         if args.category:
             data["category_id"] = args.category
         result = client.create_subscription(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Subscription created: {result['id']}")
         print(
             f"  {result['name']} | {fmt_amount(result['amount'])} / {result.get('billing_cycle')}"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -330,7 +301,7 @@ def cmd_inst_list(args):
     client = _client()
     try:
         result = client.list_installments(status=args.status)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -344,7 +315,7 @@ def cmd_inst_list(args):
                 f"  {paid}/{total_n}  per: {fmt_amount(p.get('installment_amount', 0))}  id={p['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_inst_create(args):
@@ -361,14 +332,14 @@ def cmd_inst_create(args):
         if args.category:
             data["category_id"] = args.category
         result = client.create_installment(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Installment plan created: {result['id']}")
         print(
             f"  {result['description']} | {fmt_amount(result['total_amount'])} / {result['num_installments']} periods"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +352,7 @@ def cmd_analytics_monthly(args):
     try:
         month = args.month or datetime.now().strftime("%Y-%m")
         result = client.monthly_summary(month)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         income = float(result.get("total_income", 0))
         expense = float(result.get("total_expense", 0))
@@ -395,14 +366,14 @@ def cmd_analytics_monthly(args):
             for c in categories:
                 print(f"    {c.get('icon', '')} {c['name']}: {fmt_amount(c['amount'])}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_analytics_trends(args):
     client = _client()
     try:
         result = client.monthly_trends(months=args.months)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         trends = result if isinstance(result, list) else result.get("trends", [])
         print(f"Spending Trends (past {args.months} months)\n")
@@ -415,7 +386,7 @@ def cmd_analytics_trends(args):
                 f"  {t['month']}  income: {fmt_amount(income):>12s}  expense: {fmt_amount(expense):>12s}  {bar}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +398,7 @@ def cmd_cat_list(args):
     client = _client()
     try:
         result = client.list_categories(flat=args.flat)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result if isinstance(result, list) else result.get("items", [])
         print(f"Categories ({len(items)} total)\n")
@@ -435,7 +406,7 @@ def cmd_cat_list(args):
             indent = "  " if c.get("parent_id") else ""
             print(f"  {indent}{c.get('icon', '')} {c['name']}  id={c['id'][:8]}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_cat_create(args):
@@ -447,13 +418,13 @@ def cmd_cat_create(args):
         if args.parent:
             data["parent_id"] = args.parent
         result = client.create_category(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(
             f"Category created: {result.get('icon', '')} {result['name']} (id={result['id'][:8]})"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -475,14 +446,14 @@ def cmd_transfer(args):
         if args.fee:
             data["fee"] = args.fee
         result = client.transfer(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print("Transfer completed.")
         print(
             f"  From: {args.from_wallet[:8]}  To: {args.to_wallet[:8]}  Amount: {fmt_amount(args.amount)}"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------

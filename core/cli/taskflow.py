@@ -29,68 +29,31 @@ Symlink: ln -sf ~/workshop/core/cli/taskflow.py ~/.local/bin/taskflow
 """
 
 import argparse
-import json
-import sys
 
+from cli.cli_helpers import err, fmt_date, json_out
 from cli.cli_utils import resolve_text_arg
-from cli.exit_codes import exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.taskflow import TaskflowClient
+from workshop.fmt_constants import TASKFLOW_PRIORITY_EMOJI, TASKFLOW_STATUS_EMOJI
 
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
-
-_PRIORITY_ICONS = {
-    "urgent": "🔴",
-    "high": "🟠",
-    "medium": "🟡",
-    "low": "🟢",
-}
-
-_STATUS_ICONS = {
-    "todo": "⬜",
-    "in_progress": "🔵",
-    "review": "🟣",
-    "done": "✅",
-    "blocked": "🚫",
-    "cancelled": "⬛",
-}
-
-
-def _json_out(data, args):
-    """Print JSON if --json flag is set. Returns True if printed."""
-    if args.json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-        return True
-    return False
-
-
-def _err(exc):
-    print(f"Error: {exc}", file=sys.stderr)
-    sys.exit(exit_code_for(exc))
 
 
 def _client():
     return TaskflowClient()
 
 
-def fmt_date(s):
-    """Format ISO date to YYYY-MM-DD."""
-    if not s:
-        return "n/a"
-    return str(s)[:10]
-
-
 def fmt_priority(p):
     """Format priority with icon."""
-    icon = _PRIORITY_ICONS.get(p, "")
+    icon = TASKFLOW_PRIORITY_EMOJI.get(p, "")
     return f"{icon} {p}" if icon else (p or "-")
 
 
 def fmt_status(s):
     """Format status with icon."""
-    icon = _STATUS_ICONS.get(s, "")
+    icon = TASKFLOW_STATUS_EMOJI.get(s, "")
     return f"{icon} {s}" if icon else (s or "-")
 
 
@@ -113,7 +76,7 @@ def cmd_task_list(args):
             page=1,
             page_size=50,
         )
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -122,20 +85,20 @@ def cmd_task_list(args):
             print("  (none)")
             return
         for t in items:
-            status = _STATUS_ICONS.get(t.get("status", ""), "?")
-            priority = _PRIORITY_ICONS.get(t.get("priority", ""), "")
+            status = TASKFLOW_STATUS_EMOJI.get(t.get("status", ""), "?")
+            priority = TASKFLOW_PRIORITY_EMOJI.get(t.get("priority", ""), "")
             due = fmt_date(t.get("due_date"))
             title = t.get("title", "")
             print(f"  {status} {priority} {title[:50]:<52s}  due: {due}  id={t['id'][:8]}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_task_get(args):
     client = _client()
     try:
         t = client.get_task(args.id)
-        if _json_out(t, args):
+        if json_out(t, args):
             return
         print(f"Task: {t['id']}")
         print(f"  Title:       {t.get('title')}")
@@ -155,7 +118,7 @@ def cmd_task_get(args):
         if desc:
             print(f"  Description: {desc[:120]}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_task_create(args):
@@ -180,7 +143,7 @@ def cmd_task_create(args):
         if args.parent:
             data["parent_id"] = args.parent
         result = client.create_task(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Task created: {result['id']}")
         print(
@@ -188,7 +151,7 @@ def cmd_task_create(args):
             f"  {result.get('title')}"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_task_update(args):
@@ -217,7 +180,7 @@ def cmd_task_update(args):
         if args.tags:
             data["tags"] = [t.strip() for t in args.tags.split(",")]
         result = client.update_task(args.id, data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Task updated: {result['id']}")
         print(
@@ -225,7 +188,7 @@ def cmd_task_update(args):
             f"  {result.get('title')}"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_task_delete(args):
@@ -234,14 +197,14 @@ def cmd_task_delete(args):
         client.delete_task(args.id)
         print(f"Task deleted: {args.id}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_task_subtasks(args):
     client = _client()
     try:
         result = client.list_subtasks(args.id, page=1, page_size=50)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -250,27 +213,27 @@ def cmd_task_subtasks(args):
             print("  (none)")
             return
         for t in items:
-            status = _STATUS_ICONS.get(t.get("status", ""), "?")
-            priority = _PRIORITY_ICONS.get(t.get("priority", ""), "")
+            status = TASKFLOW_STATUS_EMOJI.get(t.get("status", ""), "?")
+            priority = TASKFLOW_PRIORITY_EMOJI.get(t.get("priority", ""), "")
             due = fmt_date(t.get("due_date"))
             print(
                 f"  {status} {priority} {t.get('title', '')[:50]:<52s}"
                 f"  due: {due}  id={t['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_task_transition(args):
     client = _client()
     try:
         result = client.transition_status(args.id, status=args.status, comment=args.comment)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Task {args.id[:8]} transitioned to: {fmt_status(result.get('status'))}")
         print(f"  {result.get('title')}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +245,7 @@ def cmd_update_list(args):
     client = _client()
     try:
         result = client.list_updates(args.task_id, page=1, page_size=50)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -300,7 +263,7 @@ def cmd_update_list(args):
                 f"  id={u['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_update_add(args):
@@ -310,12 +273,12 @@ def cmd_update_add(args):
         if args.hours is not None:
             data["hours_logged"] = args.hours
         result = client.add_update(args.task_id, data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Update added: {result['id']}")
         print(f"  [{result.get('type')}]  {result.get('content', '')[:80]}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -327,47 +290,47 @@ def cmd_today(args):
     client = _client()
     try:
         items = client.get_today(space_id=None)
-        if _json_out(items, args):
+        if json_out(items, args):
             return
         print(f"Today's Tasks ({len(items)} tasks)\n")
         if not items:
             print("  (none)")
             return
         for t in items:
-            status = _STATUS_ICONS.get(t.get("status", ""), "?")
-            priority = _PRIORITY_ICONS.get(t.get("priority", ""), "")
+            status = TASKFLOW_STATUS_EMOJI.get(t.get("status", ""), "?")
+            priority = TASKFLOW_PRIORITY_EMOJI.get(t.get("priority", ""), "")
             print(f"  {status} {priority} {t.get('title', '')[:55]:<57s}  id={t['id'][:8]}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_upcoming(args):
     client = _client()
     try:
         items = client.get_upcoming(space_id=None, days=args.days)
-        if _json_out(items, args):
+        if json_out(items, args):
             return
         print(f"Upcoming Tasks — next {args.days} days ({len(items)} tasks)\n")
         if not items:
             print("  (none)")
             return
         for t in items:
-            status = _STATUS_ICONS.get(t.get("status", ""), "?")
-            priority = _PRIORITY_ICONS.get(t.get("priority", ""), "")
+            status = TASKFLOW_STATUS_EMOJI.get(t.get("status", ""), "?")
+            priority = TASKFLOW_PRIORITY_EMOJI.get(t.get("priority", ""), "")
             due = fmt_date(t.get("due_date"))
             print(
                 f"  {status} {priority} {t.get('title', '')[:50]:<52s}"
                 f"  due: {due}  id={t['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_progress(args):
     client = _client()
     try:
         p = client.get_progress(space_id=None)
-        if _json_out(p, args):
+        if json_out(p, args):
             return
         print("Task Progress Summary\n")
         total = p.get("total", 0)
@@ -389,7 +352,7 @@ def cmd_progress(args):
         if overdue:
             print(f"\n  ⚠️  Overdue:   {overdue}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -401,7 +364,7 @@ def cmd_trash_list(args):
     client = _client()
     try:
         result = client.list_trash(page=1, page_size=50)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -413,19 +376,19 @@ def cmd_trash_list(args):
             deleted = fmt_date(t.get("deleted_at"))
             print(f"  {t.get('title', '')[:55]:<57s}  deleted: {deleted}  id={t['id'][:8]}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_trash_restore(args):
     client = _client()
     try:
         result = client.restore_task(args.id)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Task restored: {result['id']}")
         print(f"  {fmt_status(result.get('status'))}  {result.get('title')}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
