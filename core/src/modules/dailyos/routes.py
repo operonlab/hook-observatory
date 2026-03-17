@@ -62,55 +62,53 @@ async def search_dailyos(
     """Search Daily OS plans and methods using Qdrant hybrid search with ILIKE fallback."""
     import logging
 
-    from sqlalchemy import or_, select
+    from sqlalchemy import and_, or_, select
 
-    from src.shared.qdrant_client import is_available as qdrant_available
-    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
-    from src.shared.search_types import SearchConfig
+    from src.shared.fallback_search import build_ilike_conditions
+    from src.shared.qdrant_search import search_with_fallback
 
     from .models import DailyPlan, Method
 
     logger = logging.getLogger(__name__)
 
     # --- Qdrant path ---
-    if qdrant_available():
-        config = SearchConfig(
-            top_k=top_k,
-            service_ids=["dailyos"],
-        )
-        results, _meta = await qdrant_hybrid_search(q, space_id, config)
+    results, _meta = await search_with_fallback(
+        q, space_id, "dailyos", top_k=top_k, entity_type_filter=entity_type
+    )
 
-        if results:
-            filtered = [r for r in results if entity_type is None or r.entity_type == entity_type]
-            if filtered:
-                return [
-                    DailyOSSearchResult(
-                        entity_type=r.entity_type,
-                        entity_id=r.entity_id,
-                        score=r.score,
-                        content_preview=r.content_preview,
-                        metadata=r.metadata,
-                    )
-                    for r in filtered
-                ]
+    if results:
+        return [
+            DailyOSSearchResult(
+                entity_type=r.entity_type,
+                entity_id=r.entity_id,
+                score=r.score,
+                content_preview=r.content_preview,
+                metadata=r.metadata,
+            )
+            for r in results
+        ]
 
-        logger.debug(
-            "Qdrant returned 0 results for dailyos space=%s query=%r — falling back to ILIKE",
-            space_id,
-            q,
-        )
+    logger.debug(
+        "Qdrant returned 0 results for dailyos space=%s query=%r — falling back to ILIKE",
+        space_id,
+        q,
+    )
 
     # --- ILIKE fallback ---
-    pattern = f"%{q}%"
     output: list[DailyOSSearchResult] = []
 
     if entity_type is None or entity_type == "plan":
+        plan_conditions = build_ilike_conditions(q, DailyPlan.reflection)
+        plan_filter = (
+            and_(*plan_conditions) if plan_conditions
+            else DailyPlan.reflection.ilike(f"%{q}%")
+        )
         stmt = (
             select(DailyPlan)
             .where(
                 DailyPlan.space_id == space_id,
                 DailyPlan.deleted_at.is_(None),
-                DailyPlan.reflection.ilike(pattern),
+                plan_filter,
             )
             .order_by(DailyPlan.updated_at.desc())
             .limit(top_k)
@@ -131,15 +129,17 @@ async def search_dailyos(
             )
 
     if entity_type is None or entity_type == "method":
+        method_conditions = build_ilike_conditions(q, Method.name, Method.description)
+        method_filter = or_(*method_conditions) if method_conditions else or_(
+            Method.name.ilike(f"%{q}%"),
+            Method.description.ilike(f"%{q}%"),
+        )
         stmt_m = (
             select(Method)
             .where(
                 Method.space_id == space_id,
                 Method.deleted_at.is_(None),
-                or_(
-                    Method.name.ilike(pattern),
-                    Method.description.ilike(pattern),
-                ),
+                method_filter,
             )
             .order_by(Method.updated_at.desc())
             .limit(top_k)

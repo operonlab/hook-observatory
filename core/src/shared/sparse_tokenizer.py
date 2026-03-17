@@ -14,6 +14,8 @@ import math
 import re
 from collections import Counter
 
+from .search_constants import SERVICE_AVGDL as _SERVICE_AVGDL
+
 logger = logging.getLogger(__name__)
 
 # Lazy-load jieba to avoid import overhead when not needed
@@ -52,15 +54,6 @@ _STOPWORDS = frozenset({
 # BM25 parameters
 _K1 = 1.5
 _B = 0.75
-
-# Per-service average document length (token count)
-_SERVICE_AVGDL: dict[str, int] = {
-    "memvault": 80,     # memory blocks are typically short
-    "intelflow": 500,   # reports are longer
-    "taskflow": 120,
-    "finance": 60,
-    "default": 200,
-}
 
 # Global IDF cache (loaded from Redis on first use)
 _global_idf: dict[int, float] | None = None

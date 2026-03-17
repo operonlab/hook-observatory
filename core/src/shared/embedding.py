@@ -12,10 +12,11 @@ import logging
 
 from . import embedding_cache, omlx_bridge
 from .chunking import ChunkingStrategy, FixedLengthChunking
+from .search_constants import EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_DIM = 1024  # Qwen3-Embedding-0.6B output dimension
+__all__ = ["EMBEDDING_DIM", "get_embedding", "get_embeddings_batch", "get_embeddings_chunked"]
 
 
 async def get_embedding(text: str, task_type: str | None = None) -> list[float] | None:

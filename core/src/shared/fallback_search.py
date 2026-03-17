@@ -161,16 +161,6 @@ def rrf_fuse_scores(
 
 
 # --- Per-service avg document length ---
-
-SERVICE_AVGDL: dict[str, int] = {
-    "memvault": 80,    # memory blocks are typically short
-    "intelflow": 500,  # reports are longer
-    "taskflow": 120,
-    "finance": 60,
-    "default": 200,
-}
-
-
-def get_avgdl(service: str) -> int:
-    """Get average document length for a service (for BM25 normalization)."""
-    return SERVICE_AVGDL.get(service, SERVICE_AVGDL["default"])
+# Re-exported from search_constants for backward compatibility.
+from .search_constants import SERVICE_AVGDL as SERVICE_AVGDL  # noqa: E402
+from .search_constants import get_avgdl as get_avgdl  # noqa: E402
