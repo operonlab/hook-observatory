@@ -23,12 +23,14 @@ async def lifespan(app: FastAPI):
         settings.validate_secret_key()
 
     # Import event subscribers so @event_bus.on decorators register handlers
+    import src.modules.capture.events  # auto-enrich on create
     import src.modules.dailyos.events
     import src.modules.finance.events
     import src.modules.invest.events
     import src.modules.memvault.events  # flywheel: block→KG, capture→KG, intelligence→memvault
     import src.modules.nodeflow.events  # registers @event_bus.on handlers
     import src.modules.notification.events
+    import src.modules.paper.events  # paper cache invalidation
     import src.modules.taskflow.events  # noqa: F401
 
     # Backend selection: switch to Redis Streams if configured
@@ -177,7 +179,9 @@ app.include_router(nodeflow_router, prefix="/api/nodeflow", tags=["nodeflow"])
 from src.modules.capture.routes import register_capture_sse_events  # noqa: E402
 from src.modules.capture.routes import router as capture_router  # noqa: E402
 from src.modules.dailyos.routes import router as dailyos_router  # noqa: E402
+from src.modules.paper.routes import router as paper_router  # noqa: E402
 
 app.include_router(capture_router, prefix="/api/captures", tags=["capture"])
 register_capture_sse_events()
 app.include_router(dailyos_router, prefix="/api/dailyos", tags=["dailyos"])
+app.include_router(paper_router, prefix="/api/paper", tags=["paper"])

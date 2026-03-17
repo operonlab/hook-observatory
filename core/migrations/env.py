@@ -7,7 +7,8 @@ from logging.config import fileConfig
 import src.modules.auth.models
 import src.modules.intelflow.models
 import src.modules.memvault.kg_models
-import src.modules.memvault.models  # noqa: F401
+import src.modules.memvault.models
+import src.modules.paper.models  # noqa: F401
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config

@@ -134,6 +134,17 @@ REGISTRY: dict[str, ModuleMapping] = {
             ),
         },
     ),
+    "paper": ModuleMapping(
+        service_id="paper",
+        entities={
+            "article": EntityMapping(
+                entity_type="article",
+                content_fields=["title", "abstract"],
+                tag_field="tags",
+                metadata_fields=["title", "arxiv_id", "doi", "year", "journal"],
+            ),
+        },
+    ),
 }
 
 
