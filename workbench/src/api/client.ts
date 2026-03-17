@@ -61,7 +61,7 @@ export function createCrudApi<T, C, U>(basePath: string) {
 /** Build URLSearchParams from object, skip undefined/null/empty. Auto-set page defaults. */
 export function buildParams(
   obj: Record<string, unknown>,
-  defaults?: Record<string, unknown>
+  defaults?: Record<string, unknown>,
 ): string {
   const qs = new URLSearchParams()
   const merged = { page: 1, page_size: 20, ...defaults, ...obj }
