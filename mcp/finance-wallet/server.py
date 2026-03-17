@@ -14,459 +14,356 @@ Configure in ~/.claude.json:
     }
 """
 
-import asyncio
 import os
 from asyncio import to_thread
 from typing import Any
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.server.fastmcp import FastMCP
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.finance import FinanceClient
 
-server = Server("workshop-finance-wallet")
+mcp = FastMCP("workshop-finance-wallet")
 client = FinanceClient()
-
-
-def text_result(text: str) -> list[TextContent]:
-    return [TextContent(type="text", text=text)]
 
 
 def fmt_amount(amount: float | int | str, currency: str = "TWD") -> str:
     return f"{currency} {float(amount):,.0f}"
 
 
-# ======================== Tool Definitions ========================
-
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [
-        Tool(
-            name="finance_manage_wallets",
-            description="錢包管理（列表/新增/編輯/停用）",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["list", "create", "update", "deactivate"],
-                    },
-                    "id": {"type": "string", "description": "錢包 ID（update/deactivate 時必填）"},
-                    "name": {"type": "string", "description": "錢包名稱"},
-                    "type": {
-                        "type": "string",
-                        "enum": ["bank_account", "credit_card", "cash", "e_wallet", "investment"],
-                        "description": "錢包類型",
-                    },
-                    "currency": {"type": "string", "default": "TWD"},
-                    "initial_balance": {"type": "number", "description": "初始餘額"},
-                    "credit_limit": {"type": "number", "description": "信用卡額度"},
-                    "icon": {"type": "string"},
-                    "color": {"type": "string"},
-                    "sort_order": {"type": "integer"},
-                    "is_private": {"type": "boolean", "default": False},
-                    "page": {"type": "integer", "default": 1, "description": "頁碼（list 時使用）"},
-                    "page_size": {
-                        "type": "integer",
-                        "default": 20,
-                        "minimum": 1,
-                        "maximum": 50,
-                        "description": "每頁筆數（list 時使用，上限 50）",
-                    },
-                },
-                "required": ["action"],
-            },
-        ),
-        Tool(
-            name="finance_sync_wallet",
-            description="同步錢包餘額，產生 snapshot（對帳用）",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "wallet_id": {"type": "string", "description": "錢包 ID"},
-                    "actual_balance": {"type": "number", "description": "使用者回報的實際餘額"},
-                    "snapshot_type": {
-                        "type": "string",
-                        "enum": ["reconciliation", "valuation"],
-                        "default": "reconciliation",
-                    },
-                    "notes": {"type": "string", "description": "備註"},
-                },
-                "required": ["wallet_id", "actual_balance"],
-            },
-        ),
-        Tool(
-            name="finance_reconcile",
-            description="錢包對帳摘要（各錢包系統餘額 vs 差額趨勢）",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "wallet_id": {"type": "string", "description": "指定錢包（空=全部）"},
-                },
-            },
-        ),
-        Tool(
-            name="finance_transfer",
-            description="錢包間轉帳",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "from_wallet_id": {"type": "string", "description": "來源錢包 ID"},
-                    "to_wallet_id": {"type": "string", "description": "目標錢包 ID"},
-                    "amount": {"type": "number", "description": "轉帳金額"},
-                    "description": {"type": "string", "description": "轉帳描述"},
-                    "fee": {"type": "number", "description": "手續費", "default": 0},
-                    "transacted_at": {"type": "string", "description": "轉帳時間（ISO 8601）"},
-                },
-                "required": ["from_wallet_id", "to_wallet_id", "amount"],
-            },
-        ),
-        Tool(
-            name="finance_add_installment",
-            description="新增分期付款計畫（自動產生 scheduled transactions）",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "description": {"type": "string", "description": "分期描述 (e.g. MacBook Pro)"},
-                    "total_amount": {"type": "number", "description": "總金額"},
-                    "num_installments": {"type": "integer", "description": "分期數 (3/6/12/24)"},
-                    "wallet_id": {"type": "string", "description": "扣款錢包 ID"},
-                    "payment_method": {"type": "string", "description": "付款方式"},
-                    "payment_detail": {"type": "string"},
-                    "merchant": {"type": "string"},
-                    "category_id": {"type": "string"},
-                    "start_date": {"type": "string", "description": "首期日期 (YYYY-MM-DD)"},
-                    "billing_day": {"type": "integer", "description": "每月扣款日 (1-31)"},
-                    "interest_rate": {"type": "number", "default": 0},
-                    "fee_type": {
-                        "type": "string",
-                        "enum": ["none", "interest", "fee_per_period", "total_fee"],
-                        "default": "none",
-                    },
-                    "fee_per_installment": {"type": "number", "default": 0},
-                    "is_private": {"type": "boolean", "default": False},
-                },
-                "required": [
-                    "description",
-                    "total_amount",
-                    "num_installments",
-                    "wallet_id",
-                    "payment_method",
-                    "start_date",
-                ],
-            },
-        ),
-        Tool(
-            name="finance_list_installments",
-            description="列出分期付款計畫",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "enum": ["active", "completed", "cancelled"],
-                    },
-                    "page": {"type": "integer", "default": 1},
-                    "page_size": {"type": "integer", "default": 20},
-                },
-            },
-        ),
-        Tool(
-            name="finance_installment_payoff",
-            description="分期提前還款（將所有剩餘期數標記為 completed）",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string", "description": "分期計畫 ID"},
-                },
-                "required": ["id"],
-            },
-        ),
-        Tool(
-            name="finance_upload_attachment",
-            description="上傳交易附件照片",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "transaction_id": {"type": "string", "description": "交易 ID"},
-                    "file_path": {"type": "string", "description": "本地檔案路徑"},
-                    "filename": {"type": "string", "description": "檔案名稱"},
-                    "content_type": {
-                        "type": "string",
-                        "default": "image/jpeg",
-                    },
-                },
-                "required": ["transaction_id", "file_path"],
-            },
-        ),
-    ]
-
-
-# ======================== Tool Handlers ========================
-
-
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    try:
-        match name:
-            case "finance_manage_wallets":
-                return await handle_manage_wallets(arguments)
-            case "finance_sync_wallet":
-                return await handle_sync_wallet(arguments)
-            case "finance_reconcile":
-                return await handle_reconcile(arguments)
-            case "finance_transfer":
-                return await handle_transfer(arguments)
-            case "finance_add_installment":
-                return await handle_add_installment(arguments)
-            case "finance_list_installments":
-                return await handle_list_installments(arguments)
-            case "finance_installment_payoff":
-                return await handle_installment_payoff(arguments)
-            case "finance_upload_attachment":
-                return await handle_upload_attachment(arguments)
-            case _:
-                return text_result(f"Unknown tool: {name}")
-    except (APIError, APIConnectionError) as e:
-        return text_result(f"Finance API error: {e}")
-    except Exception as e:
-        return text_result(f"Error: {type(e).__name__}: {e}")
-
-
 # ======================== Tool Implementations ========================
 
 
-async def handle_manage_wallets(args: dict) -> list[TextContent]:
-    action = args["action"]
+@mcp.tool()
+async def finance_manage_wallets(
+    action: str,
+    id: str = "",
+    name: str = "",
+    type: str = "",
+    currency: str = "TWD",
+    initial_balance: float | None = None,
+    credit_limit: float | None = None,
+    icon: str = "",
+    color: str = "",
+    sort_order: int | None = None,
+    is_private: bool = False,
+    page: int = 1,
+    page_size: int = 20,
+) -> str:
+    """錢包管理（列表/新增/編輯/停用）"""
+    try:
+        if action == "list":
+            page_size = min(page_size, 50)
+            result = await to_thread(client.list_wallets, page=page, page_size=page_size)
+            items = result if isinstance(result, list) else result.get("items", [])
+            total_count = result.get("total", len(items)) if isinstance(result, dict) else len(items)
+            if not items:
+                return "No wallets found."
+            lines = [f"# Wallets (showing {len(items)} of {total_count}, page {page})\n"]
+            total_net = 0
+            for w in items:
+                balance = float(w.get("current_balance", 0))
+                total_net += balance
+                icon_val = w.get("icon", "")
+                private = " 🔒" if w.get("is_private") else ""
+                credit = f" (limit: {fmt_amount(w['credit_limit'])})" if w.get("credit_limit") else ""
+                lines.append(
+                    f"  {icon_val} {w['name']}  {fmt_amount(balance)}  "
+                    f"[{w['type']}]{credit}{private}  id={w['id'][:8]}"
+                )
+            lines.append(f"\nNet worth (this page): {fmt_amount(total_net)}")
+            lines.append(f"total_count: {total_count}")
+            return "\n".join(lines)
 
-    if action == "list":
-        page = args.get("page", 1)
-        page_size = min(args.get("page_size", 20), 50)
-        result = await to_thread(client.list_wallets, page=page, page_size=page_size)
-        items = result if isinstance(result, list) else result.get("items", [])
-        total_count = result.get("total", len(items)) if isinstance(result, dict) else len(items)
-        if not items:
-            return text_result("No wallets found.")
-        lines = [f"# Wallets (showing {len(items)} of {total_count}, page {page})\n"]
-        total_net = 0
-        for w in items:
-            balance = float(w.get("current_balance", 0))
-            total_net += balance
-            icon = w.get("icon", "")
-            private = " 🔒" if w.get("is_private") else ""
-            credit = f" (limit: {fmt_amount(w['credit_limit'])})" if w.get("credit_limit") else ""
-            lines.append(
-                f"  {icon} {w['name']}  {fmt_amount(balance)}  "
-                f"[{w['type']}]{credit}{private}  id={w['id'][:8]}"
+        if action == "create":
+            body: dict[str, Any] = {"name": name, "type": type}
+            if currency:
+                body["currency"] = currency
+            if initial_balance is not None:
+                body["initial_balance"] = initial_balance
+            if credit_limit is not None:
+                body["credit_limit"] = credit_limit
+            if icon:
+                body["icon"] = icon
+            if color:
+                body["color"] = color
+            if sort_order is not None:
+                body["sort_order"] = sort_order
+            body["is_private"] = is_private
+            result = await to_thread(client.create_wallet, body)
+            return (
+                f"Wallet created.\n"
+                f"ID: {result['id']}\n"
+                f"Name: {result['name']} | Type: {result['type']} | Balance: {fmt_amount(result.get('current_balance', 0))}"
             )
-        lines.append(f"\nNet worth (this page): {fmt_amount(total_net)}")
-        lines.append(f"total_count: {total_count}")
-        return text_result("\n".join(lines))
 
-    if action == "create":
-        body: dict[str, Any] = {"name": args["name"], "type": args["type"]}
-        for field in (
-            "currency",
-            "initial_balance",
-            "credit_limit",
-            "icon",
-            "color",
-            "sort_order",
-            "is_private",
-        ):
-            if field in args:
-                body[field] = args[field]
-        result = await to_thread(client.create_wallet, body)
-        return text_result(
-            f"Wallet created.\n"
+        if action == "update":
+            body = {}
+            if name:
+                body["name"] = name
+            if icon:
+                body["icon"] = icon
+            if color:
+                body["color"] = color
+            if sort_order is not None:
+                body["sort_order"] = sort_order
+            if credit_limit is not None:
+                body["credit_limit"] = credit_limit
+            body["is_private"] = is_private
+            result = await to_thread(client.update_wallet, id, body)
+            return f"Wallet {id[:8]} updated: {result['name']}"
+
+        if action == "deactivate":
+            result = await to_thread(client.update_wallet, id, {"is_active": False})
+            return f"Wallet {id[:8]} deactivated."
+
+        return f"Unknown action: {action}"
+    except (APIError, APIConnectionError) as e:
+        return f"Finance API error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def finance_sync_wallet(
+    wallet_id: str,
+    actual_balance: float,
+    snapshot_type: str = "reconciliation",
+    notes: str = "",
+) -> str:
+    """同步錢包餘額，產生 snapshot（對帳用）"""
+    try:
+        body: dict[str, Any] = {"synced_balance": actual_balance}
+        if snapshot_type:
+            body["snapshot_type"] = snapshot_type
+        if notes:
+            body["notes"] = notes
+
+        result = await to_thread(client.sync_wallet, wallet_id, body)
+        diff = float(result.get("difference", 0))
+        diff_str = f"{diff:+,.0f}" if diff != 0 else "0"
+        return (
+            f"Wallet synced.\n"
+            f"Synced balance: {fmt_amount(result.get('synced_balance', 0))}\n"
+            f"Calculated balance: {fmt_amount(result.get('calculated_balance', 0))}\n"
+            f"Difference: {diff_str}\n"
+            f"Snapshot ID: {result.get('id', '-')}"
+        )
+    except (APIError, APIConnectionError) as e:
+        return f"Finance API error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def finance_reconcile(wallet_id: str = "") -> str:
+    """錢包對帳摘要（各錢包系統餘額 vs 差額趨勢）"""
+    try:
+        if wallet_id:
+            result = await to_thread(client.reconcile_wallet, wallet_id)
+        else:
+            result = await to_thread(client.list_wallets)
+        items = result if isinstance(result, list) else result.get("items", [])
+        if not items:
+            return "No reconciliation data available."
+        lines = ["# Reconciliation Summary\n"]
+        for w in items:
+            diff = float(w.get("difference", 0))
+            status = "OK" if abs(diff) < 1 else f"diff: {diff:+,.0f}"
+            lines.append(
+                f"  {w.get('wallet_name', w.get('name', '?'))}  "
+                f"balance: {fmt_amount(w.get('current_balance', 0))}  {status}"
+            )
+        return "\n".join(lines)
+    except (APIError, APIConnectionError) as e:
+        return f"Finance API error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def finance_transfer(
+    from_wallet_id: str,
+    to_wallet_id: str,
+    amount: float,
+    description: str = "",
+    fee: float = 0,
+    transacted_at: str = "",
+) -> str:
+    """錢包間轉帳"""
+    try:
+        body: dict[str, Any] = {
+            "from_wallet_id": from_wallet_id,
+            "to_wallet_id": to_wallet_id,
+            "amount": amount,
+        }
+        if description:
+            body["description"] = description
+        if fee:
+            body["fee"] = fee
+        if transacted_at:
+            body["transacted_at"] = transacted_at
+
+        await to_thread(client.transfer, body)
+        return (
+            f"Transfer completed.\n"
+            f"From: {from_wallet_id[:8]} → To: {to_wallet_id[:8]}\n"
+            f"Amount: {fmt_amount(amount)}"
+            + (f"\nFee: {fmt_amount(fee)}" if fee else "")
+        )
+    except (APIError, APIConnectionError) as e:
+        return f"Finance API error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def finance_add_installment(
+    description: str,
+    total_amount: float,
+    num_installments: int,
+    wallet_id: str,
+    payment_method: str,
+    start_date: str,
+    payment_detail: str = "",
+    merchant: str = "",
+    category_id: str = "",
+    billing_day: int | None = None,
+    interest_rate: float = 0,
+    fee_type: str = "none",
+    fee_per_installment: float = 0,
+    is_private: bool = False,
+) -> str:
+    """新增分期付款計畫（自動產生 scheduled transactions）"""
+    try:
+        body: dict[str, Any] = {
+            "description": description,
+            "total_amount": total_amount,
+            "num_installments": num_installments,
+            "wallet_id": wallet_id,
+            "payment_method": payment_method,
+            "start_date": start_date,
+        }
+        if payment_detail:
+            body["payment_detail"] = payment_detail
+        if merchant:
+            body["merchant"] = merchant
+        if category_id:
+            body["category_id"] = category_id
+        if billing_day is not None:
+            body["billing_day"] = billing_day
+        if interest_rate:
+            body["interest_rate"] = interest_rate
+        if fee_type and fee_type != "none":
+            body["fee_type"] = fee_type
+        if fee_per_installment:
+            body["fee_per_installment"] = fee_per_installment
+        body["is_private"] = is_private
+
+        result = await to_thread(client.create_installment, body)
+        per = float(result.get("installment_amount", 0))
+        return (
+            f"Installment plan created.\n"
             f"ID: {result['id']}\n"
-            f"Name: {result['name']} | Type: {result['type']} | Balance: {fmt_amount(result.get('current_balance', 0))}"
+            f"Description: {result['description']}\n"
+            f"Total: {fmt_amount(result['total_amount'])} -> {result['num_installments']} x {fmt_amount(per)}\n"
+            f"Start: {result['start_date']}"
         )
-
-    if action == "update":
-        wallet_id = args["id"]
-        body = {}
-        for field in ("name", "icon", "color", "sort_order", "credit_limit", "is_private"):
-            if field in args:
-                body[field] = args[field]
-        result = await to_thread(client.update_wallet, wallet_id, body)
-        return text_result(f"Wallet {wallet_id[:8]} updated: {result['name']}")
-
-    if action == "deactivate":
-        wallet_id = args["id"]
-        result = await to_thread(client.update_wallet, wallet_id, {"is_active": False})
-        return text_result(f"Wallet {wallet_id[:8]} deactivated.")
-
-    return text_result(f"Unknown action: {action}")
+    except (APIError, APIConnectionError) as e:
+        return f"Finance API error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
-async def handle_sync_wallet(args: dict) -> list[TextContent]:
-    wallet_id = args["wallet_id"]
-    body: dict[str, Any] = {"synced_balance": args["actual_balance"]}
-    if "snapshot_type" in args:
-        body["snapshot_type"] = args["snapshot_type"]
-    if "notes" in args:
-        body["notes"] = args["notes"]
-
-    result = await to_thread(client.sync_wallet, wallet_id, body)
-    diff = float(result.get("difference", 0))
-    diff_str = f"{diff:+,.0f}" if diff != 0 else "0"
-    return text_result(
-        f"Wallet synced.\n"
-        f"Synced balance: {fmt_amount(result.get('synced_balance', 0))}\n"
-        f"Calculated balance: {fmt_amount(result.get('calculated_balance', 0))}\n"
-        f"Difference: {diff_str}\n"
-        f"Snapshot ID: {result.get('id', '-')}"
-    )
-
-
-async def handle_reconcile(args: dict) -> list[TextContent]:
-    wallet_id = args.get("wallet_id")
-    if wallet_id:
-        result = await to_thread(client.reconcile_wallet, wallet_id)
-    else:
-        result = await to_thread(client.list_wallets)
-    items = result if isinstance(result, list) else result.get("items", [])
-    if not items:
-        return text_result("No reconciliation data available.")
-    lines = ["# Reconciliation Summary\n"]
-    for w in items:
-        diff = float(w.get("difference", 0))
-        status = "OK" if abs(diff) < 1 else f"diff: {diff:+,.0f}"
-        lines.append(
-            f"  {w.get('wallet_name', w.get('name', '?'))}  "
-            f"balance: {fmt_amount(w.get('current_balance', 0))}  {status}"
+@mcp.tool()
+async def finance_list_installments(
+    status: str = "",
+    page: int = 1,
+    page_size: int = 20,
+) -> str:
+    """列出分期付款計畫"""
+    try:
+        result = await to_thread(
+            client.list_installments,
+            status=status or None,
+            page=page,
+            page_size=page_size,
         )
-    return text_result("\n".join(lines))
+        items = result.get("items", [])
+        total = result.get("total", 0)
+        if not items:
+            return "No installment plans found."
+        lines = [f"# Installment Plans ({total} total)\n"]
+        for p in items:
+            status_icon = {"active": "O", "completed": "V", "cancelled": "X"}.get(
+                p.get("status", ""), "?"
+            )
+            paid = p.get("paid_count", 0)
+            total_n = p.get("num_installments", 0)
+            lines.append(
+                f"  [{status_icon}] {p['description']}  {fmt_amount(p['total_amount'])}  "
+                f"progress: {paid}/{total_n}  per: {fmt_amount(p.get('installment_amount', 0))}  "
+                f"id={p['id'][:8]}"
+            )
+        return "\n".join(lines)
+    except (APIError, APIConnectionError) as e:
+        return f"Finance API error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
-async def handle_transfer(args: dict) -> list[TextContent]:
-    body: dict[str, Any] = {
-        "from_wallet_id": args["from_wallet_id"],
-        "to_wallet_id": args["to_wallet_id"],
-        "amount": args["amount"],
-    }
-    for field in ("description", "fee", "transacted_at"):
-        if field in args:
-            body[field] = args[field]
-
-    result = await to_thread(client.transfer, body)
-    return text_result(
-        f"Transfer completed.\n"
-        f"From: {args['from_wallet_id'][:8]} → To: {args['to_wallet_id'][:8]}\n"
-        f"Amount: {fmt_amount(args['amount'])}"
-        + (f"\nFee: {fmt_amount(args['fee'])}" if args.get("fee") else "")
-    )
+@mcp.tool()
+async def finance_installment_payoff(id: str) -> str:
+    """分期提前還款（將所有剩餘期數標記為 completed）"""
+    try:
+        await to_thread(client.update_installment, id, {"status": "completed"})
+        return f"Installment {id[:8]} paid off. Status: completed"
+    except (APIError, APIConnectionError) as e:
+        return f"Finance API error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
-async def handle_add_installment(args: dict) -> list[TextContent]:
-    body: dict[str, Any] = {
-        "description": args["description"],
-        "total_amount": args["total_amount"],
-        "num_installments": args["num_installments"],
-        "wallet_id": args["wallet_id"],
-        "payment_method": args["payment_method"],
-        "start_date": args["start_date"],
-    }
-    for field in (
-        "payment_detail",
-        "merchant",
-        "category_id",
-        "billing_day",
-        "interest_rate",
-        "fee_type",
-        "fee_per_installment",
-        "is_private",
-    ):
-        if field in args:
-            body[field] = args[field]
-
-    result = await to_thread(client.create_installment, body)
-    per = float(result.get("installment_amount", 0))
-    return text_result(
-        f"Installment plan created.\n"
-        f"ID: {result['id']}\n"
-        f"Description: {result['description']}\n"
-        f"Total: {fmt_amount(result['total_amount'])} -> {result['num_installments']} x {fmt_amount(per)}\n"
-        f"Start: {result['start_date']}"
-    )
-
-
-async def handle_list_installments(args: dict) -> list[TextContent]:
-    result = await to_thread(
-        client.list_installments,
-        status=args.get("status"),
-        page=args.get("page", 1),
-        page_size=args.get("page_size", 20),
-    )
-    items = result.get("items", [])
-    total = result.get("total", 0)
-    if not items:
-        return text_result("No installment plans found.")
-    lines = [f"# Installment Plans ({total} total)\n"]
-    for p in items:
-        status_icon = {"active": "O", "completed": "V", "cancelled": "X"}.get(
-            p.get("status", ""), "?"
-        )
-        paid = p.get("paid_count", 0)
-        total_n = p.get("num_installments", 0)
-        lines.append(
-            f"  [{status_icon}] {p['description']}  {fmt_amount(p['total_amount'])}  "
-            f"progress: {paid}/{total_n}  per: {fmt_amount(p.get('installment_amount', 0))}  "
-            f"id={p['id'][:8]}"
-        )
-    return text_result("\n".join(lines))
-
-
-async def handle_installment_payoff(args: dict) -> list[TextContent]:
-    plan_id = args["id"]
-    result = await to_thread(client.update_installment, plan_id, {"status": "completed"})
-    return text_result(f"Installment {plan_id[:8]} paid off. Status: completed")
-
-
-async def handle_upload_attachment(args: dict) -> list[TextContent]:
+@mcp.tool()
+async def finance_upload_attachment(
+    transaction_id: str,
+    file_path: str,
+    filename: str = "",
+    content_type: str = "image/jpeg",
+) -> str:
+    """上傳交易附件照片"""
     # Attachment upload requires multipart — keep raw httpx for file upload
     import httpx
 
-    txn_id = args["transaction_id"]
-    file_path = args["file_path"]
-    filename = args.get("filename", os.path.basename(file_path))
-    content_type = args.get("content_type", "image/jpeg")
-
     if not os.path.exists(file_path):
-        return text_result(f"File not found: {file_path}")
+        return f"File not found: {file_path}"
+
+    resolved_filename = filename or os.path.basename(file_path)
 
     try:
         with open(file_path, "rb") as f:
             data = f.read()
-        files = {"file": (filename, data, content_type)}
+        files = {"file": (resolved_filename, data, content_type)}
         async with httpx.AsyncClient(timeout=60) as http:
             resp = await http.post(
-                f"{client.prefix}/transactions/{txn_id}/attachments",
+                f"{client.prefix}/transactions/{transaction_id}/attachments",
                 files=files,
                 params={"space_id": client.space_id},
             )
             resp.raise_for_status()
             result = resp.json()
     except httpx.ConnectError as e:
-        return text_result(f"Connection error uploading attachment: {e}")
+        return f"Connection error uploading attachment: {e}"
     except httpx.TimeoutException as e:
-        return text_result(f"Timeout uploading attachment: {e}")
+        return f"Timeout uploading attachment: {e}"
     except httpx.HTTPStatusError as e:
-        return text_result(f"Upload failed ({e.response.status_code}): {e.response.text[:200]}")
+        return f"Upload failed ({e.response.status_code}): {e.response.text[:200]}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
-    return text_result(f"Attachment uploaded.\nID: {result.get('id', '-')}\nFilename: {filename}")
+    return f"Attachment uploaded.\nID: {result.get('id', '-')}\nFilename: {resolved_filename}"
 
 
 # ======================== Main ========================
 
-
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run()
