@@ -404,6 +404,32 @@ async def pwa_icon_512_png():
     return FileResponse(BASE_DIR / "icon-512.png", media_type="image/png")
 
 
+# ── Tmux prefix detection ──
+
+_tmux_prefix_cache: str | None = None
+
+
+async def _get_tmux_prefix() -> str:
+    """Get tmux prefix key (e.g. 'C-b'). Cached after first call."""
+    global _tmux_prefix_cache
+    if _tmux_prefix_cache is not None:
+        return _tmux_prefix_cache
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux",
+            "show",
+            "-gv",
+            "prefix",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        _tmux_prefix_cache = stdout.decode().strip() or "C-b"
+    except Exception:
+        _tmux_prefix_cache = "C-b"
+    return _tmux_prefix_cache
+
+
 # ── WebSocket handler ──
 
 
@@ -593,12 +619,27 @@ async def ws_handler(websocket: WebSocket):
                 mods = data.get("modifiers", [])
                 ALLOWED_MODS = {"C", "M", "S", "Ctrl", "Alt", "Shift"}
                 if key:
+                    combo = key[:8]
                     if mods:
                         safe_mods = [m for m in mods if m in ALLOWED_MODS]
                         if safe_mods:
                             combo = "-".join(safe_mods) + "-" + key[:8]
-                        else:
-                            combo = key[:8]
+
+                    # Detect tmux prefix combo (C-b): use send-prefix so tmux
+                    # interprets the NEXT key as a prefix binding, not a pane key.
+                    prefix_key = await _get_tmux_prefix()
+                    if combo == prefix_key:
+                        # Send prefix to tmux (tmux intercepts it)
+                        await asyncio.create_subprocess_exec(
+                            "tmux",
+                            "send-prefix",
+                            "-t",
+                            target,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL,
+                        )
+                        ok = True
+                    elif mods and safe_mods:
                         ok = await send_keys(target, combo, literal=False)
                     elif len(key) == 1 and not mods:
                         ok = await send_keys(target, key, literal=True)
