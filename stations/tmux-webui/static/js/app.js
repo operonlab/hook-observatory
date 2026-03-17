@@ -542,8 +542,9 @@ function buildPaneEl(p) {
 }
 
 function setFocus(paneId) {
+  const isSwitch = S.focusedPane !== paneId;
   // Save current pane's input buffer before switching
-  if (S.focusedPane && S.focusedPane !== paneId) {
+  if (S.focusedPane && isSwitch) {
     S.paneInputs[S.focusedPane] = inputEl.value;
   }
   S.focusedPane = paneId;
@@ -555,13 +556,13 @@ function setFocus(paneId) {
     const toolName = toolKey ? ` [${TOOL_PROFILES[toolKey].name}]` : '';
     focusLabel.textContent = info ? `${info.window_name}:${info.pane}${toolName}` : paneId;
     updateToolState(toolKey);
-    // Restore this pane's input buffer
-    inputEl.value = S.paneInputs[paneId] || '';
-    inputEl.style.height = 'auto';
-    // Sync focus to tmux (select-pane) so tmux knows which pane is active
-    window.tmuxWs?.send({ type: 'focus', pane: paneId });
-    // Auto-focus input so user can type immediately after clicking a pane
-    inputEl.focus();
+    if (isSwitch) {
+      // Only on actual pane switch: restore input, sync tmux, focus
+      inputEl.value = S.paneInputs[paneId] || '';
+      inputEl.style.height = 'auto';
+      window.tmuxWs?.send({ type: 'focus', pane: paneId });
+      inputEl.focus();
+    }
     // Auto-resize tmux pane to match browser display cols/rows
     setTimeout(() => { if (window._fitPane) window._fitPane(paneId); }, 50);
   }
