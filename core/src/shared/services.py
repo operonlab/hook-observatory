@@ -232,6 +232,36 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
             page_size=p.page_size,
         )
 
+    async def list_by_tags(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        tags: list[str],
+        pagination: PaginationParams | None = None,
+    ) -> PaginatedResponse[ResponseT]:
+        """List entities matching ALL specified tags. Opt-in: requires model.tags column."""
+        p = pagination or PaginationParams()
+        base = select(self.model).where(
+            self.model.space_id == space_id,  # type: ignore[attr-defined]
+            self.model.tags.contains(tags),  # type: ignore[attr-defined]
+        )
+        if self._has_soft_delete():
+            base = base.where(self.model.deleted_at == None)  # noqa: E711
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+        q = (
+            base.order_by(self.model.created_at.desc())  # type: ignore[attr-defined]
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows: Sequence[ModelT] = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[ResponseT](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
+
     async def get(self, db: AsyncSession, entity_id: str) -> ModelT | None:
         instance = await db.get(self.model, entity_id)
         if instance is None:
