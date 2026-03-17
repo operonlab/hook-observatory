@@ -1,105 +1,116 @@
 /**
- * keys.js — Virtual keys + Ctrl combo mode (Blink Shell style)
- * V2: Added /, ., :, ; keys + improved Ctrl combo UX
+ * keys.js — Virtual keys with Modifier FSM (Blink Shell style)
+ *
+ * Modifier FSM:
+ *   IDLE ──tap──→ ARMED ──key──→ send combo → IDLE
+ *                   │               (auto-clear non-locked mods)
+ *                   ├──timeout(3s)──→ IDLE (flash cancel)
+ *                   ├──double-tap──→ LOCKED ──key──→ send combo → LOCKED
+ *                   │                  └──tap──→ IDLE
+ *                   └──tap again──→ IDLE (deactivate)
  */
 
 (function() {
   const extraKeysEl = document.getElementById('extra-keys');
   const arrowPad = document.getElementById('arrow-pad');
-  const activeModifiers = new Set();
-  const modLockTimers = {};
+  const inputEl = document.getElementById('input');
 
-  // ── Modifier keys (Ctrl/Alt/Cmd) ──
+  // ── Modifier FSM ──
+
+  const MOD_TIMEOUT = 3000; // Auto-expire armed modifiers after 3s
+  const DOUBLE_TAP_MS = 350;
+
+  // Per-modifier state: { state: 'idle'|'armed'|'locked', timer: null, lastTap: 0, btn: el }
+  const modState = {};
 
   document.querySelectorAll('.ek.mod').forEach(btn => {
-    let lastTap = 0;
+    const mod = btn.dataset.mod;
+    modState[mod] = { state: 'idle', timer: null, lastTap: 0, btn };
+
     btn.addEventListener('click', (e) => {
       e.preventDefault();
-      const mod = btn.dataset.mod;
+      const ms = modState[mod];
       const now = Date.now();
-      if (btn.classList.contains('locked')) {
-        btn.classList.remove('locked', 'active');
-        activeModifiers.delete(mod);
-      } else if (now - lastTap < 350 && btn.classList.contains('active')) {
-        // Double-tap → lock
-        btn.classList.add('locked');
-        clearTimeout(modLockTimers[mod]);
-      } else {
-        if (activeModifiers.has(mod)) {
-          activeModifiers.delete(mod);
-          btn.classList.remove('active');
-        } else {
-          activeModifiers.add(mod);
+
+      switch (ms.state) {
+        case 'idle':
+          // Activate → ARMED with timeout
+          ms.state = 'armed';
           btn.classList.add('active');
-        }
+          btn.classList.remove('locked');
+          clearTimeout(ms.timer);
+          ms.timer = setTimeout(() => {
+            // Auto-expire: ARMED → IDLE
+            ms.state = 'idle';
+            btn.classList.remove('active');
+            btn.classList.add('flash-cancel');
+            setTimeout(() => btn.classList.remove('flash-cancel'), 300);
+          }, MOD_TIMEOUT);
+          break;
+
+        case 'armed':
+          if (now - ms.lastTap < DOUBLE_TAP_MS) {
+            // Double-tap → LOCKED (no timeout)
+            clearTimeout(ms.timer);
+            ms.state = 'locked';
+            btn.classList.add('locked');
+          } else {
+            // Single tap again → deactivate → IDLE
+            clearTimeout(ms.timer);
+            ms.state = 'idle';
+            btn.classList.remove('active');
+          }
+          break;
+
+        case 'locked':
+          // Tap while locked → IDLE
+          ms.state = 'idle';
+          btn.classList.remove('active', 'locked');
+          break;
       }
-      lastTap = now;
+      ms.lastTap = now;
     });
   });
 
-  function clearModifiers() {
-    activeModifiers.clear();
-    document.querySelectorAll('.ek.mod').forEach(b => {
-      if (!b.classList.contains('locked')) b.classList.remove('active');
-    });
-  }
-
-  // ── Tmux Prefix Mode (Ctrl-b then next key within timeout) ──
-
-  let prefixActive = false;
-  let prefixTimer = null;
-  const PREFIX_TIMEOUT = 2000; // 2 seconds to press next key
-
-  function enterPrefixMode() {
-    prefixActive = true;
-    clearTimeout(prefixTimer);
-    // Visual indicator
-    const statusEl = document.getElementById('status');
-    if (statusEl) statusEl.dataset.prefix = 'active';
-    document.body.classList.add('tmux-prefix-active');
-    // Send Ctrl-b immediately
-    if (window.tmuxWs?.isConnected() && window.tmuxState.focusedPane) {
-      window.tmuxWs.send({
-        type: 'key',
-        pane: window.tmuxState.focusedPane,
-        key: 'b',
-        modifiers: ['C'],
-      });
+  function getActiveModifiers() {
+    const mods = [];
+    for (const [mod, ms] of Object.entries(modState)) {
+      if (ms.state === 'armed' || ms.state === 'locked') mods.push(mod);
     }
-    // Auto-expire after timeout
-    prefixTimer = setTimeout(() => {
-      prefixActive = false;
-      document.body.classList.remove('tmux-prefix-active');
-      if (statusEl) delete statusEl.dataset.prefix;
-    }, PREFIX_TIMEOUT);
+    return mods;
   }
+
+  function hasActiveModifiers() {
+    return Object.values(modState).some(ms => ms.state !== 'idle');
+  }
+
+  function clearArmedModifiers() {
+    // After sending a combo: armed → idle, locked stays locked
+    for (const [mod, ms] of Object.entries(modState)) {
+      if (ms.state === 'armed') {
+        clearTimeout(ms.timer);
+        ms.state = 'idle';
+        ms.btn.classList.remove('active');
+      }
+    }
+  }
+
+  function clearAllModifiers() {
+    for (const [mod, ms] of Object.entries(modState)) {
+      clearTimeout(ms.timer);
+      ms.state = 'idle';
+      ms.btn.classList.remove('active', 'locked');
+    }
+  }
+
+  // ── Send key with current modifiers ──
 
   function sendEk(key) {
     if (!window.tmuxWs || !window.tmuxWs.isConnected() || !window.tmuxState.focusedPane) {
       window.flashInputError?.('Not connected');
       return;
     }
-
-    // If prefix mode is active, send key directly (tmux already received Ctrl-b)
-    if (prefixActive) {
-      prefixActive = false;
-      clearTimeout(prefixTimer);
-      document.body.classList.remove('tmux-prefix-active');
-      const statusEl = document.getElementById('status');
-      if (statusEl) delete statusEl.dataset.prefix;
-      window.tmuxWs.send({
-        type: 'key',
-        pane: window.tmuxState.focusedPane,
-        key,
-        modifiers: [],
-      });
-      const pe = window.tmuxState.paneEls[window.tmuxState.focusedPane];
-      if (pe) pe.resetScroll();
-      clearModifiers();
-      return;
-    }
-
-    const mods = [...activeModifiers];
+    const mods = getActiveModifiers();
     window.tmuxWs.send({
       type: 'key',
       pane: window.tmuxState.focusedPane,
@@ -108,26 +119,48 @@
     });
     const pe = window.tmuxState.paneEls[window.tmuxState.focusedPane];
     if (pe) pe.resetScroll();
-    clearModifiers();
+    clearArmedModifiers(); // Armed → idle after send; locked stays
   }
 
-  // Expose prefix mode for external use
-  window.enterTmuxPrefix = enterPrefixMode;
-
-  // Expose for gestures.js
+  // Expose for gestures.js and other modules
   window.sendEk = sendEk;
+  window.hasActiveModifier = hasActiveModifiers;
 
-  // ── Prefix button ──
+  // ── Phone keyboard combo: intercept when modifier active ──
 
-  const prefixBtn = document.getElementById('prefix-btn');
-  if (prefixBtn) {
-    prefixBtn.addEventListener('click', (e) => {
+  if (inputEl) {
+    // Desktop/keydown path
+    inputEl.addEventListener('keydown', (e) => {
+      if (!hasActiveModifiers()) return;
+
+      const key = e.key;
+      if (!key) return;
+      // Allow single chars + special keys
+      if (key.length > 1 && !['Enter','Tab','Escape','Backspace','Delete'].includes(key)) return;
+
       e.preventDefault();
-      enterPrefixMode();
+      e.stopPropagation();
+      sendEk(key.length === 1 ? key : key);
+    });
+
+    // Mobile fallback: 'input' event for keyboards that skip keydown
+    let lastInputValue = '';
+    inputEl.addEventListener('focus', () => { lastInputValue = inputEl.value; });
+    inputEl.addEventListener('input', () => {
+      if (!hasActiveModifiers()) { lastInputValue = inputEl.value; return; }
+
+      const newVal = inputEl.value;
+      const inserted = newVal.slice(lastInputValue.length);
+      if (inserted.length >= 1) {
+        // Undo insertion, send as combo
+        inputEl.value = lastInputValue;
+        sendEk(inserted[0]);
+      }
+      lastInputValue = inputEl.value;
     });
   }
 
-  // ── Common extra keys + arrow buttons ──
+  // ── Extra key buttons ──
 
   document.querySelectorAll('.ek[data-ek]').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -151,56 +184,14 @@
     });
   });
 
-  // ── Phone keyboard combo: when modifier is active, intercept input keystrokes ──
-
-  const inputEl = document.getElementById('input');
-  if (inputEl) {
-    // Use 'beforeinput' to catch phone keyboard input before it enters the field
-    inputEl.addEventListener('keydown', (e) => {
-      if (activeModifiers.size === 0) return; // No modifier active — normal typing
-
-      // Single printable char or known key
-      const key = e.key;
-      if (!key || key.length > 1 && !['Enter','Tab','Escape','Backspace'].includes(key)) return;
-
-      // Intercept: send as combo key, don't type in input
-      e.preventDefault();
-      e.stopPropagation();
-
-      const mappedKey = key.length === 1 ? key : key;
-      sendEk(mappedKey); // sendEk applies activeModifiers and clears them
-    });
-
-    // Also handle 'input' event for mobile keyboards that don't fire keydown properly
-    let lastInputValue = '';
-    inputEl.addEventListener('focus', () => { lastInputValue = inputEl.value; });
-    inputEl.addEventListener('input', (e) => {
-      if (activeModifiers.size === 0) { lastInputValue = inputEl.value; return; }
-
-      // Mobile inserted a character while modifier active — intercept it
-      const newVal = inputEl.value;
-      const inserted = newVal.slice(lastInputValue.length);
-      if (inserted.length === 1) {
-        // Undo the insertion
-        inputEl.value = lastInputValue;
-        // Send as combo
-        sendEk(inserted);
-      }
-      lastInputValue = inputEl.value;
-    });
-  }
-
-  // Expose modifier state for other modules
-  window.hasActiveModifier = () => activeModifiers.size > 0;
-
   // ── Arrow Touchpad (shared logic for all .arrow-pad elements) ──
 
   function initArrowPad(pad) {
     if (!pad) return;
     const THRESHOLD = 18;
     const COOLDOWN = 150;
-    const REPEAT_DELAY = 400; // ms before repeat starts
-    const REPEAT_RATE = 120;  // ms between repeats
+    const REPEAT_DELAY = 400;
+    const REPEAT_RATE = 120;
     let tracking = false, lastX = 0, lastY = 0, dirClass = '', lastSendTime = 0;
     let currentKey = null, repeatTimer = null;
 
@@ -288,7 +279,6 @@
   function isTouch() { return matchMedia('(pointer:coarse)').matches; }
   function isPWA() { return matchMedia('(display-mode: standalone)').matches; }
 
-  // Auto-show on touch devices and PWA (tablet+); phone PWA relies on quick-actions
   function loadEkPref() {
     const isPhone = window.matchMedia('(max-width:600px)').matches;
     if (isPWA() && !isPhone) return true;
@@ -299,7 +289,6 @@
 
   extraKeysEl.classList.toggle('visible', loadEkPref());
 
-  // Mobile: start collapsed (compact quick-actions, hide extra keys)
   if (window.matchMedia('(max-width:600px)').matches) {
     const footerEl = document.querySelector('footer');
     if (footerEl) footerEl.classList.add('mobile-collapsed');
@@ -313,7 +302,6 @@
       const show = !extraKeysEl.classList.contains('visible');
       extraKeysEl.classList.toggle('visible', show);
       localStorage.setItem('tmux-webui-show-extra-keys', show ? '1' : '0');
-      // Remove mobile-collapsed when showing extra keys
       const footerEl = document.querySelector('footer');
       if (footerEl && show) footerEl.classList.remove('mobile-collapsed');
       else if (footerEl && !show && window.matchMedia('(max-width:600px)').matches) footerEl.classList.add('mobile-collapsed');
