@@ -1,10 +1,11 @@
 """Session Pipeline — orchestrates SessionEnd lifecycle stages.
 
 Stages (in order):
-    1. redact  — clean sensitive data from transcript
-    2. extract — memvault knowledge extraction (via extract_async.py)
-    3. archive — session-archiver scan + score
-    4. log     — observatory event logging
+    1. redact   — clean sensitive data from transcript
+    2. extract  — memvault knowledge extraction (via extract_async.py)
+    3. archive  — session-archiver scan + score
+    4. reflect  — quality scoring + context efficiency metrics
+    5. log      — observatory event logging
 
 Fail-safe: each stage is wrapped in try/except so failures don't abort the
 pipeline.  Exception: if redact FAILS, extract is skipped (never extract
@@ -69,7 +70,7 @@ class PipelineResult:
 
 
 class SessionPipelineClient:
-    """Orchestrates SessionEnd lifecycle: redact → extract → archive → log.
+    """Orchestrates SessionEnd lifecycle: redact → extract → archive → reflect → log.
 
     Each stage is fail-safe — if one stage fails the pipeline continues with
     the remaining stages, except that a redact failure causes extract to be
@@ -79,6 +80,7 @@ class SessionPipelineClient:
         projects_dir: Root dir for Claude projects (default ~/.claude/projects).
         scripts_dir:  memvault scripts directory.
         observatory_url: Hook Observatory base URL (default http://localhost:4100).
+        core_api_url: Core API base URL (default http://localhost:8801).
     """
 
     def __init__(
@@ -86,11 +88,15 @@ class SessionPipelineClient:
         projects_dir: str | None = None,
         scripts_dir: str | None = None,
         observatory_url: str | None = None,
+        core_api_url: str | None = None,
     ) -> None:
         self.projects_dir = projects_dir or os.path.expanduser("~/.claude/projects")
         self.scripts_dir = scripts_dir or os.path.expanduser("~/workshop/mcp/memvault/scripts")
         self.observatory_url = (
             observatory_url or os.environ.get("HOOK_OBS_URL", "http://localhost:4100")
+        ).rstrip("/")
+        self.core_api_url = (
+            core_api_url or os.environ.get("CORE_API_URL", "http://localhost:8801")
         ).rstrip("/")
 
     # ------------------------------------------------------------------
@@ -141,7 +147,11 @@ class SessionPipelineClient:
         archive_result = self._stage_archive(session_id)
         result.stages.append(archive_result)
 
-        # Stage 4 — log (pass full pipeline result so far)
+        # Stage 4 — reflect (quality scoring, always attempt)
+        reflect_result = self._stage_reflect(session_id, resolved_transcript, result)
+        result.stages.append(reflect_result)
+
+        # Stage 5 — log (pass full pipeline result so far)
         log_result = self._stage_log(session_id, result)
         result.stages.append(log_result)
 
@@ -180,6 +190,12 @@ class SessionPipelineClient:
             },
             {
                 "order": 4,
+                "name": "reflect",
+                "description": "Quality scoring + context efficiency metrics",
+                "fail_behavior": "pipeline continues",
+            },
+            {
+                "order": 5,
                 "name": "log",
                 "description": "Log pipeline execution to hook observatory",
                 "fail_behavior": "pipeline continues",
@@ -230,7 +246,7 @@ class SessionPipelineClient:
                     payload = json.dumps(
                         {"session_id": session_id, "transcript_path": transcript_path}
                     )
-                    proc = subprocess.run(
+                    proc = subprocess.run(  # noqa: S603
                         [str(script)],
                         input=payload,
                         capture_output=True,
@@ -281,7 +297,7 @@ class SessionPipelineClient:
                     stderr_fh = open(log_path, "a")
                 except OSError as e:
                     raise RuntimeError(f"failed to open extract log {log_path}: {e}") from e
-                proc = subprocess.Popen(
+                proc = subprocess.Popen(  # noqa: S603
                     [sys.executable, str(script)],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
@@ -321,6 +337,133 @@ class SessionPipelineClient:
             stage.success = False
             stage.error = str(exc)
             log.warning("archive stage error: %s", exc)
+        finally:
+            stage.duration_ms = int((time.monotonic() - t0) * 1000)
+        return stage
+
+    def _stage_reflect(
+        self,
+        session_id: str,
+        transcript_path: str | None,
+        pipeline_result: PipelineResult,
+    ) -> StageResult:
+        """Stage 4: Quality scoring + context efficiency metrics.
+
+        Parses the transcript JSONL with reflect_engine (pure-function, no LLM),
+        writes results to session_archiver DB, and optionally feeds high-quality
+        sessions back to memvault via HTTP (quality_score > 0.6).
+
+        Fail-safe: exceptions do not propagate; prior stages are unaffected.
+        """
+        t0 = time.monotonic()
+        stage = StageResult(name="reflect")
+        reflect_timeout_secs = 10
+        try:
+            # ------------------------------------------------------------------
+            # Import reflect_engine from stations/session-pipeline/
+            # ------------------------------------------------------------------
+            _engine_dir = os.path.expanduser("~/workshop/stations/session-pipeline")
+            if _engine_dir not in sys.path:
+                sys.path.insert(0, _engine_dir)
+
+            from reflect_engine import ReflectMetrics, analyze_transcript  # type: ignore[import]
+
+            # ------------------------------------------------------------------
+            # Analyze transcript (pure-function, no LLM)
+            # ------------------------------------------------------------------
+            if transcript_path:
+                metrics: ReflectMetrics = analyze_transcript(transcript_path, session_id)
+            else:
+                # No transcript available — create minimal metrics
+                from datetime import UTC, datetime
+
+                metrics = ReflectMetrics(
+                    session_id=session_id,
+                    outcome="unknown",
+                    quality_score=0.0,
+                    reflected_at=datetime.now(UTC).isoformat(),
+                )
+
+            # ------------------------------------------------------------------
+            # Count prior pipeline stage outcomes
+            # ------------------------------------------------------------------
+            stages_ok = sum(1 for s in pipeline_result.stages if s.success)
+            stages_fail = sum(1 for s in pipeline_result.stages if not s.success)
+            metrics.pipeline_stages_ok = stages_ok
+            metrics.pipeline_stages_fail = stages_fail
+
+            # ------------------------------------------------------------------
+            # Persist to DB via session-archiver config
+            # ------------------------------------------------------------------
+            db_written = False
+            try:
+                import sys as _sys
+
+                _archiver_src = os.path.expanduser(
+                    "~/workshop/stations/session-archiver/src"
+                )
+                if _archiver_src not in _sys.path:
+                    _sys.path.insert(0, _archiver_src)
+
+                from session_archiver.config import Config as ArchiverConfig  # type: ignore[import]
+                from session_archiver.db import upsert_reflection  # type: ignore[import]
+
+                archiver_cfg = ArchiverConfig()
+                db_written = upsert_reflection(archiver_cfg, metrics.to_dict())
+            except Exception as db_exc:
+                log.warning("reflect db write failed (non-fatal): %s", db_exc)
+
+            # ------------------------------------------------------------------
+            # Feed high-quality sessions back to memvault (quality_score > 0.6)
+            # ------------------------------------------------------------------
+            memvault_fed = False
+            if metrics.quality_score > 0.6:
+                try:
+                    import httpx
+
+                    resp = httpx.post(
+                        f"{self.core_api_url}/api/memvault/reflect",
+                        params={"session_id": session_id},
+                        timeout=reflect_timeout_secs,
+                    )
+                    if resp.status_code < 400:
+                        memvault_fed = True
+                        # Parse invariant/derived counts from response if available
+                        try:
+                            body = resp.json()
+                            metrics.invariant_count = body.get("invariant_count", 0)
+                            metrics.derived_count = body.get("derived_count", 0)
+                        except Exception:  # noqa: S110
+                            pass
+                    if memvault_fed and db_written:
+                        # Update reflection_fed flag in DB
+                        try:
+                            data = metrics.to_dict()
+                            data["reflection_fed"] = True
+                            data["invariant_count"] = metrics.invariant_count
+                            data["derived_count"] = metrics.derived_count
+                            upsert_reflection(archiver_cfg, data)  # type: ignore[possibly-undefined]
+                        except Exception:  # noqa: S110
+                            pass
+                    metrics.reflection_fed = memvault_fed
+                except Exception as mv_exc:
+                    log.info("memvault feed skipped (non-fatal): %s", mv_exc)
+
+            stage.details = {
+                "outcome": metrics.outcome,
+                "quality_score": metrics.quality_score,
+                "tool_success_rate": metrics.tool_success_rate,
+                "context_efficiency": metrics.context_efficiency,
+                "turn_count": metrics.turn_count,
+                "total_tokens": metrics.total_tokens,
+                "db_written": db_written,
+                "reflection_fed": metrics.reflection_fed,
+                "failure_patterns": metrics.failure_patterns,
+            }
+        except Exception as exc:
+            stage.success = False
+            stage.error = str(exc)
+            log.warning("reflect stage error: %s", exc)
         finally:
             stage.duration_ms = int((time.monotonic() - t0) * 1000)
         return stage
