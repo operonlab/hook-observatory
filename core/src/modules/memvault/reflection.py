@@ -9,13 +9,24 @@ At session end, analyze stored memories to extract:
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+# Pure functions delegated to shared G-R-C framework — re-exported for backwards compat.
+from src.shared.grc import classify_content as _classify_content
+from src.shared.grc import extract_key_sentence as _extract_key_sentence
+
+__all__ = [
+    "ReflectionResult",
+    "_classify_content",
+    "_extract_key_sentence",
+    "format_reflection_for_injection",
+    "reflect_on_session",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -28,88 +39,6 @@ class ReflectionResult:
     session_id: str = ""
     reflected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     block_count: int = 0
-
-
-# --- Pattern-based extraction (no LLM dependency) ---
-
-# Preferences: what the user/system always/never does, favors, or avoids
-_PREFERENCE_PATTERN = re.compile(
-    r"(偏好|喜歡|我比較喜歡|我覺得.*比較好|prefer|rather|instead of|always|never"
-    r"|一律|禁止|必須|鐵律|must|should|shouldn'?t)",
-    re.IGNORECASE,
-)
-
-# Workflows: step-by-step processes, migration paths, new approaches
-_WORKFLOW_PATTERN = re.compile(
-    r"(流程|步驟|流程改成|改用|從.*改成|新做法|pipeline|workflow"
-    r"|switch\s+to|migrate\s+to|先.*再.*然後|step\s*\d|phase\s*\d)",
-    re.IGNORECASE,
-)
-
-# Decisions: confirmed choices, rejected options, finalized direction
-_DECISION_PATTERN = re.compile(
-    r"(決定|決策|決定了|拍板|定案|最後選|decided|chose|confirmed|we'?ll\s+go\s+with"
-    r"|選擇|採用|rejected|不採用|棄用)",
-    re.IGNORECASE,
-)
-
-# Lessons: things learned the hard way, caveats, surprises
-_LESSON_PATTERN = re.compile(
-    r"(學到|教訓|踩坑|才知道|原來|注意|小心"
-    r"|lesson|learned|gotcha|turns?\s+out|caveat|pitfall)",
-    re.IGNORECASE,
-)
-
-# Rules: conventions, principles, strategies — stable behavioral patterns
-_RULE_PATTERN = re.compile(
-    r"(規則|慣例|以後|鐵律|convention|pattern|原則|principle|策略|strategy"
-    r"|must\s+always|never\s+again|禁止|一定要)",
-    re.IGNORECASE,
-)
-
-# Corrections/Updates: factual fixes, retractions, "actually it's X not Y"
-_CORRECTION_PATTERN = re.compile(
-    r"(不[是對]|搞錯|更正|其實是|correction|actually|wait.*wrong"
-    r"|之前說錯|should\s+be|not.*but\s+rather)",
-    re.IGNORECASE,
-)
-
-
-def _classify_content(content: str) -> str | None:
-    """Classify content into invariant/derived/correction categories."""
-    if _PREFERENCE_PATTERN.search(content):
-        return "invariant"
-    if _RULE_PATTERN.search(content):
-        return "invariant"
-    if _CORRECTION_PATTERN.search(content):
-        return "correction"
-    if _WORKFLOW_PATTERN.search(content):
-        return "derived"
-    if _DECISION_PATTERN.search(content):
-        return "derived"
-    if _LESSON_PATTERN.search(content):
-        return "derived"
-    return None
-
-
-def _extract_key_sentence(content: str) -> str:
-    """Extract the most informative sentence from content."""
-    # Split by Chinese/English sentence boundaries
-    sentences = re.split(r"[。.!\uff01?\n]", content)
-    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
-    if not sentences:
-        return content[:200]
-
-    # Prefer sentences with pattern markers
-    for s in sentences:
-        if _PREFERENCE_PATTERN.search(s) or _RULE_PATTERN.search(s):
-            return s
-    for s in sentences:
-        if _DECISION_PATTERN.search(s) or _LESSON_PATTERN.search(s):
-            return s
-
-    # Fallback: longest sentence (most informative)
-    return max(sentences, key=len)
 
 
 def reflect_on_session(
