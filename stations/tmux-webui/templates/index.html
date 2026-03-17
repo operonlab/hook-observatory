@@ -44,13 +44,14 @@
 
   <footer>
     <div class="footer-top">
-      <!-- Quick Actions: essentials only (Blink Shell style) -->
       <div class="quick-actions">
-        <button type="button" class="qbtn" data-key="Escape" title="Escape">Esc</button>
-        <button type="button" class="qbtn" data-key="Tab" title="Tab">Tab</button>
-        <button type="button" class="qbtn" data-key="C-c" title="Interrupt" style="color:var(--yellow)">C-c</button>
+        <button type="button" class="qbtn" data-key="Escape" title="Escape">Esc<span class="qico">&#x238B;</span></button>
+        <button type="button" class="qbtn" data-key="Tab" title="Tab">Tab<span class="qico">&#x21E5;</span></button>
+        <button type="button" class="qbtn" data-key="BTab" title="Shift+Tab">&#8679;Tab<span class="qico">&#x21E4;</span></button>
+        <button type="button" class="qbtn" data-key="C-c" title="Interrupt">C-c<span class="qico">&#x2303;</span></button>
+        <button type="button" class="qbtn" data-key="BSpace" title="Delete">Del<span class="qico">&#x232B;</span></button>
+        <button type="button" class="qbtn" data-key="Enter" title="Enter">Enter<span class="qico">&#x23CE;</span></button>
         <div class="arrow-pad arrow-pad-mini" id="quick-arrow-pad"><div class="arrow-pad-label">&#8982;</div></div>
-        <button type="button" class="qbtn" data-key="Enter" title="Enter">&#x23CE;</button>
         <button class="qbtn qbtn-ek-toggle" id="ek-toggle" title="Toggle extra keys">&#9776;</button>
       </div>
       <button class="exit-fullscreen" id="exit-fullscreen" title="Exit fullscreen">&#x26F6; exit</button>
