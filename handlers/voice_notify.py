@@ -17,6 +17,11 @@ Debounce:
 
 TTS fallback chain: Workshop TTS service → edge-tts CLI → macOS say
 Disable: CLAUDE_VOICE=0
+
+Three-guard state machine (prevents false "task done" announcements):
+  Guard 1: stop_hook_active — skip if hook is re-entrant
+  Guard 2: last_assistant_message content analysis — detect intermediate states
+  Guard 3: Event separation — SubagentStop plays sound effect, Stop plays TTS
 """
 
 from __future__ import annotations
@@ -29,6 +34,29 @@ import re
 import subprocess
 
 from .base import ALLOW, HOME, HookResult
+
+# --- Intermediate-state detection patterns ---
+# If the assistant's last message ends with these, it's NOT done yet.
+_INTERMEDIATE_PATTERNS = [
+    r"接下來",
+    r"下一步",
+    r"繼續\s*(處理|執行|進行)",
+    r"我(會|將|來|先)",
+    r"let me continue",
+    r"I'll now\b",
+    r"I will now\b",
+    r"next,?\s*I",
+    r"moving on to",
+    r"let me (?:check|read|look|fix|update|run)",
+    r"now (?:let me|I'll|I will)",
+]
+_INTERMEDIATE_RE = re.compile("|".join(_INTERMEDIATE_PATTERNS), re.IGNORECASE)
+
+# Sub-agent completion sound effect (macOS system sound)
+# Opt-in: set CLAUDE_SUBAGENT_SOUND=1 to enable Pop.aiff on SubagentStop
+_SUBAGENT_SOUND = "/System/Library/Sounds/Pop.aiff"
+_SUBAGENT_SOUND_ENABLED = os.environ.get("CLAUDE_SUBAGENT_SOUND", "0") == "1"
+_SUBAGENT_VOLUME = os.environ.get("CLAUDE_SUBAGENT_VOLUME", "0.3")
 
 # --- Configuration (env-overridable) ---
 TTS_URL = os.environ.get("CLAUDE_TTS_URL", "http://localhost:8841/api/tts/speak")
@@ -76,30 +104,42 @@ def _get_redis():
         return None
 
 
-def _debounce_ok(event_type: str) -> bool:
-    """Return True if this pane+event is allowed (not debounced).
+def _debounce_ok(event_type: str, session_id: str = "") -> bool:
+    """Two-layer debounce: per-event + shared completion cooldown.
 
-    Uses Redis SET NX EX: first call sets key and returns True,
-    subsequent calls within TTL return False (suppressed).
+    Layer 1 (per-event): same event type won't fire twice within TTL.
+    Layer 2 (completion cooldown): Stop/SubagentStop share a cooldown,
+        so a SubagentStop at T=0 suppresses a Stop at T=2.
+
+    Identity resolution: TMUX_PANE > session_id (from hook JSON) > ppid.
     """
     if DEBOUNCE_TTL <= 0:
         return True
 
-    pane_id = os.environ.get("TMUX_PANE", "")
-    if not pane_id:
-        # Non-tmux: debounce by session (PID of parent shell)
-        pane_id = f"pid-{os.getppid()}"
+    # Stable identity: prefer TMUX_PANE, fallback to session_id from hook JSON
+    ident = os.environ.get("TMUX_PANE", "")
+    if not ident:
+        ident = session_id or f"pid-{os.getppid()}"
 
     r = _get_redis()
     if not r:
         return True  # fail-open: Redis down → allow
 
-    key = f"tts:debounce:{pane_id}:{event_type}"
     try:
-        # SET key 1 NX EX ttl — returns True if set (first call), None if exists
-        return bool(r.set(key, 1, nx=True, ex=DEBOUNCE_TTL))
+        # Layer 1: per-event debounce (same event type won't double-fire)
+        key = f"tts:debounce:{ident}:{event_type}"
+        if not bool(r.set(key, 1, nx=True, ex=DEBOUNCE_TTL)):
+            return False
+
+        # Layer 2: shared completion cooldown (Stop + SubagentStop mutually exclusive)
+        if event_type in ("stop", "subagent_stop"):
+            cooldown_key = f"tts:cooldown:{ident}"
+            if not bool(r.set(cooldown_key, 1, nx=True, ex=DEBOUNCE_TTL)):
+                return False
     except Exception:
         return True  # fail-open
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +155,69 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         if _debounce_ok("ask"):
             _enqueue_tts(random.choice(_ASK_PHRASES))
     elif event_type == "Stop":
-        if _debounce_ok("stop"):
+        # Parse Stop event data for guard checks
+        data = _parse_event_data(raw_input)
+        session_id = data.get("session_id", "")
+
+        # Guard 0: skip non-Claude events (e.g. Gemini CLI AfterAgent mapped to Stop)
+        hook_name = data.get("hook_event_name", "")
+        if hook_name and hook_name != "Stop":
+            return ALLOW
+
+        # Guard 1: skip if stop hook is re-entrant (prevents infinite loops)
+        if data.get("stop_hook_active"):
+            return ALLOW
+
+        # Guard 2: check last_assistant_message for intermediate signals
+        last_msg = data.get("last_assistant_message", "")
+        if _is_intermediate(last_msg):
+            return ALLOW
+
+        if _debounce_ok("stop", session_id):
             _handle_stop()
+    elif event_type == "SubagentStop":
+        # Guard 3: sub-agent completion → subtle sound effect, not TTS
+        data = _parse_event_data(raw_input)
+        session_id = data.get("session_id", "")
+        if _debounce_ok("subagent_stop", session_id):
+            _play_sound_effect()
     return ALLOW
+
+
+def _parse_event_data(raw_input: str) -> dict:
+    """Parse raw JSON input from hook event. Fail-open: returns {} on error."""
+    try:
+        if raw_input and raw_input.strip():
+            return json.loads(raw_input)
+    except (json.JSONDecodeError, AttributeError):
+        pass
+    return {}
+
+
+def _is_intermediate(msg: str) -> bool:
+    """Detect if the last assistant message indicates work-in-progress, not completion.
+
+    Checks the tail of the message for patterns like "接下來", "let me continue",
+    "I'll now", etc. that signal the agent is still mid-task.
+    """
+    if not msg:
+        return False
+    # Only check the tail — completion signals appear at the end
+    tail = msg[-300:]
+    return bool(_INTERMEDIATE_RE.search(tail))
+
+
+def _play_sound_effect() -> None:
+    """Play a subtle macOS sound effect for sub-agent completion (non-blocking)."""
+    if not _SUBAGENT_SOUND_ENABLED:
+        return
+    if os.path.isfile(_SUBAGENT_SOUND):
+        subprocess.Popen(
+            ["afplay", "-v", _SUBAGENT_VOLUME, _SUBAGENT_SOUND],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 def _handle_stop() -> None:
