@@ -2,28 +2,22 @@
 
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from database import async_session, engine
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from models import Base, HookEvent
 from spool import SpoolDrainer
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from workshop.station_bootstrap import setup_logging
 
 from config import config
 from routes import router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("hook-observatory")
+logger = setup_logging("hook-observatory")
 
 _drainer: SpoolDrainer | None = None
 
