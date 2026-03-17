@@ -41,73 +41,68 @@ async def search_tasks(
     """Search tasks using Qdrant hybrid search with ILIKE fallback."""
     import logging
 
-    from sqlalchemy import select
+    from sqlalchemy import and_, select
 
-    from src.shared.qdrant_client import is_available as qdrant_available
-    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
+    from src.shared.fallback_search import build_ilike_conditions
+    from src.shared.qdrant_search import search_with_fallback
     from src.shared.rerank_utils import rerank_generic
-    from src.shared.search_types import SearchConfig
 
     from .models import Task
 
     logger = logging.getLogger(__name__)
 
     # --- Qdrant path ---
-    if qdrant_available():
-        config = SearchConfig(
-            top_k=top_k,
-            service_ids=["taskflow"],
+    results, _meta = await search_with_fallback(q, space_id, "taskflow", top_k=top_k)
+
+    if results:
+        entity_ids = [r.entity_id for r in results]
+        score_map = {r.entity_id: r.score for r in results}
+
+        stmt = select(Task).where(
+            Task.id.in_(entity_ids),
+            Task.space_id == space_id,
+            Task.deleted_at.is_(None),
         )
-        results, _meta = await qdrant_hybrid_search(q, space_id, config)
+        if status is not None:
+            stmt = stmt.where(Task.status == status)
+        if priority is not None:
+            stmt = stmt.where(Task.priority == priority)
 
-        if results:
-            entity_ids = [r.entity_id for r in results]
-            score_map = {r.entity_id: r.score for r in results}
-
-            stmt = select(Task).where(
-                Task.id.in_(entity_ids),
-                Task.space_id == space_id,
-                Task.deleted_at.is_(None),
+        rows = (await db.execute(stmt)).scalars().all()
+        id_to_task = {t.id: t for t in rows}
+        output = [
+            TaskSearchResult(
+                task=task_service.to_response(id_to_task[eid]),
+                score=score_map[eid],
             )
-            if status is not None:
-                stmt = stmt.where(Task.status == status)
-            if priority is not None:
-                stmt = stmt.where(Task.priority == priority)
+            for eid in entity_ids
+            if eid in id_to_task
+        ]
 
-            rows = (await db.execute(stmt)).scalars().all()
-            id_to_task = {t.id: t for t in rows}
-            output = [
-                TaskSearchResult(
-                    task=task_service.to_response(id_to_task[eid]),
-                    score=score_map[eid],
-                )
-                for eid in entity_ids
-                if eid in id_to_task
-            ]
+        # Cross-encoder reranking
+        if len(output) > 1:
+            output = await rerank_generic(
+                query=q,
+                results=output,
+                content_fn=lambda r: r.task.title if hasattr(r, "task") else "",
+                score_fn=lambda r: r.score,
+                set_score_fn=lambda r, s: setattr(r, "score", s),
+            )
 
-            # Cross-encoder reranking
-            if len(output) > 1:
-                output = await rerank_generic(
-                    query=q,
-                    results=output,
-                    content_fn=lambda r: r.task.title if hasattr(r, "task") else "",
-                    score_fn=lambda r: r.score,
-                    set_score_fn=lambda r, s: setattr(r, "score", s),
-                )
+        return output
 
-            return output
-
-        logger.debug(
-            "Qdrant returned 0 results for taskflow space=%s query=%r — falling back to ILIKE",
-            space_id,
-            q,
-        )
+    logger.debug(
+        "Qdrant returned 0 results for taskflow space=%s query=%r — falling back to ILIKE",
+        space_id,
+        q,
+    )
 
     # --- ILIKE fallback ---
-    pattern = f"%{q}%"
+    title_conditions = build_ilike_conditions(q, Task.title)
+    title_filter = and_(*title_conditions) if title_conditions else Task.title.ilike(f"%{q}%")
     stmt = select(Task).where(
         Task.space_id == space_id,
-        Task.title.ilike(pattern),
+        title_filter,
         Task.deleted_at.is_(None),
     )
     if status is not None:

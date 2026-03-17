@@ -346,3 +346,41 @@ def _entity_to_point_id(service_id: str, entity_id: str) -> str:
 
     namespace = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     return str(uuid.uuid5(namespace, f"{service_id}:{entity_id}"))
+
+
+async def search_with_fallback(
+    query: str,
+    space_id: str,
+    service_id: str,
+    *,
+    top_k: int = 20,
+    entity_type_filter: str | None = None,
+    tag_filter: list[str] | None = None,
+) -> tuple[list["SearchResult"], "SearchMetadata"]:
+    """Qdrant hybrid search with graceful ILIKE fallback signal.
+
+    Wraps hybrid_search() with availability check and entity_type filtering.
+    When Qdrant is unavailable or returns empty results, returns empty list
+    with meta.backend = "ilike_fallback" — caller should handle ILIKE themselves.
+
+    Returns:
+        (results, metadata) — results may be empty if fallback needed.
+    """
+    from .qdrant_client import is_available as qdrant_available
+
+    meta = SearchMetadata(backend="ilike_fallback")
+
+    if not qdrant_available():
+        return [], meta
+
+    config = SearchConfig(top_k=top_k, service_ids=[service_id], tag_filter=tag_filter)
+    results, meta = await hybrid_search(query, space_id, config)
+
+    if not results:
+        meta.backend = "ilike_fallback"
+        return [], meta
+
+    if entity_type_filter:
+        results = [r for r in results if r.entity_type == entity_type_filter]
+
+    return results, meta

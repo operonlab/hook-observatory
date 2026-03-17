@@ -83,9 +83,8 @@ async def search_finance(
 
     from sqlalchemy import or_, select
 
-    from src.shared.qdrant_client import is_available as qdrant_available
-    from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
-    from src.shared.search_types import SearchConfig
+    from src.shared.fallback_search import build_ilike_conditions
+    from src.shared.qdrant_search import search_with_fallback
 
     from .models import Subscription, Transaction
 
@@ -99,46 +98,43 @@ async def search_finance(
         )
 
     # --- Qdrant path ---
-    if qdrant_available():
-        config = SearchConfig(
-            top_k=top_k,
-            service_ids=["finance"],
-        )
-        results, _meta = await qdrant_hybrid_search(q, space_id, config)
+    results, _meta = await search_with_fallback(
+        q, space_id, "finance", top_k=top_k, entity_type_filter=entity_type
+    )
 
-        if results:
-            # Filter by entity_type if requested
-            if entity_type:
-                results = [r for r in results if r.entity_type == entity_type]
+    if results:
+        return [
+            FinanceSearchResult(
+                entity_type=r.entity_type,
+                entity_id=r.entity_id,
+                score=r.score,
+                content_preview=r.content_preview,
+                metadata=r.metadata,
+            )
+            for r in results
+        ]
 
-            return [
-                FinanceSearchResult(
-                    entity_type=r.entity_type,
-                    entity_id=r.entity_id,
-                    score=r.score,
-                    content_preview=r.content_preview,
-                    metadata=r.metadata,
-                )
-                for r in results
-            ]
-
-        logger.debug(
-            "Qdrant returned 0 results for finance space=%s query=%r — falling back to ILIKE",
-            space_id,
-            q,
-        )
+    logger.debug(
+        "Qdrant returned 0 results for finance space=%s query=%r — falling back to ILIKE",
+        space_id,
+        q,
+    )
 
     # --- ILIKE fallback ---
-    pattern = f"%{q}%"
     out: list[FinanceSearchResult] = []
 
     if entity_type is None or entity_type == "transaction":
+        txn_conditions = build_ilike_conditions(q, Transaction.description)
+        txn_filter = (
+            or_(*txn_conditions) if txn_conditions
+            else Transaction.description.ilike(f"%{q}%")
+        )
         txn_stmt = (
             select(Transaction)
             .where(
                 Transaction.space_id == space_id,
                 Transaction.deleted_at.is_(None),
-                Transaction.description.ilike(pattern),
+                txn_filter,
             )
             .order_by(Transaction.updated_at.desc())
             .limit(top_k)
@@ -160,15 +156,17 @@ async def search_finance(
             )
 
     if entity_type is None or entity_type == "subscription":
+        sub_conditions = build_ilike_conditions(q, Subscription.name, Subscription.notes)
+        sub_filter = or_(*sub_conditions) if sub_conditions else or_(
+            Subscription.name.ilike(f"%{q}%"),
+            Subscription.notes.ilike(f"%{q}%"),
+        )
         sub_stmt = (
             select(Subscription)
             .where(
                 Subscription.space_id == space_id,
                 Subscription.deleted_at.is_(None),
-                or_(
-                    Subscription.name.ilike(pattern),
-                    Subscription.notes.ilike(pattern),
-                ),
+                sub_filter,
             )
             .order_by(Subscription.updated_at.desc())
             .limit(top_k)
