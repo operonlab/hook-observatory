@@ -57,6 +57,19 @@ class SkillStatsResponse(BaseModel):
     common_errors: list[CommonError]
 
 
+class MonthlyTimeSaved(BaseModel):
+    month: str
+    total_saved_minutes: float
+    tasks_count: int
+
+
+class TimeSavedResponse(BaseModel):
+    total_saved_minutes: float
+    avg_saved_per_task: float | None
+    tasks_with_estimates: int
+    monthly_breakdown: list[MonthlyTimeSaved]
+
+
 class DemandStat(BaseModel):
     skill_name: str
     user_invocations: int  # /command direct calls (from intents)
@@ -87,6 +100,17 @@ async def global_stats(
     svc = TelemetryService(db)
     data = await svc.get_global_stats(category=category)
     return GlobalStatsResponse(**data)
+
+
+@router.get("/stats/time-saved")
+async def time_saved_stats(
+    period: str = Query(default="30d", description="Time period, e.g. 7d, 30d, 90d"),
+    db: AsyncSession = Depends(get_session),
+) -> TimeSavedResponse:
+    """Time-saved ROI stats: total/avg minutes saved across invocations with manual estimates."""
+    svc = TelemetryService(db)
+    data = await svc.get_time_saved_stats(period=period)
+    return TimeSavedResponse(**data)
 
 
 @router.get("/stats/demand")

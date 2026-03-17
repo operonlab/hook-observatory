@@ -449,6 +449,42 @@ def cmd_stats(args):
         _err(e)
 
 
+def cmd_time_saved(args):
+    """Show time-saved ROI summary."""
+    try:
+        with AnvilClient() as client:
+            result = client.get_time_saved_stats(period=args.period)
+            if args.json:
+                _json_out(result, True)
+            else:
+                tasks = result.get("tasks_with_estimates", 0)
+                total_min = result.get("total_saved_minutes", 0.0)
+                avg_min = result.get("avg_saved_per_task")
+                total_hours = total_min / 60.0
+
+                print(f"Time-Saved ROI ({args.period})")
+                print("=" * 50)
+                print(f"  Tasks with estimates : {tasks}")
+                print(f"  Total time saved     : {total_hours:.1f} hours ({total_min:.0f} min)")
+                if avg_min is not None:
+                    print(f"  Avg saved per task   : {avg_min:.1f} min")
+
+                monthly = result.get("monthly_breakdown", [])
+                if monthly:
+                    print()
+                    print("  Monthly Breakdown:")
+                    print(f"    {'Month':<10} {'Saved (min)':>12} {'Tasks':>6}")
+                    print("    " + "-" * 32)
+                    for m in monthly:
+                        print(
+                            f"    {m['month']:<10} "
+                            f"{m['total_saved_minutes']:>12.0f} "
+                            f"{m['tasks_count']:>6}"
+                        )
+    except AnvilError as e:
+        _err(e)
+
+
 def cmd_history(args):
     """Show evaluation history for a skill."""
     try:
@@ -609,6 +645,10 @@ def main():
     p.add_argument("--skill", help="Specific skill name")
     p.add_argument("--period", default="7d", help="Time period")
 
+    # time-saved
+    p = sub.add_parser("time-saved", parents=[common_parser], help="Show time-saved ROI summary")
+    p.add_argument("--period", default="30d", help="Time period, e.g. 7d, 30d, 90d")
+
     # history
     p = sub.add_parser("history", parents=[common_parser], help="Show evaluation history")
     p.add_argument("name", help="Skill name")
@@ -626,8 +666,8 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # Dispatch to handler
-    handler = globals().get(f"cmd_{args.command}")
+    # Dispatch to handler (normalize hyphens to underscores for function lookup)
+    handler = globals().get(f"cmd_{args.command.replace('-', '_')}")
     if handler:
         try:
             handler(args)

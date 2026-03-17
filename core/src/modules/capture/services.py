@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.shared.errors import BadRequestError, NotFoundError
+from src.shared.rerank_utils import rerank_generic
 
 from .models import Capture, CaptureEnrichment
 from .registry import get_adapter
@@ -26,6 +27,8 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+CONFIDENCE_THRESHOLD = 0.5
 
 
 class CaptureService:
@@ -246,7 +249,7 @@ class CaptureService:
         # ── Enrichment pipeline (optional, runs before reference resolution) ──
         adapter_strategies = getattr(adapter, "enrichment_strategies", None)
         if adapter_strategies:
-            from .strategies import DefaultsStrategy, EnrichmentPipeline
+            from .strategies import ConfidenceGateStrategy, DefaultsStrategy, EnrichmentPipeline
 
             pipeline = EnrichmentPipeline()
             pipeline.add(
@@ -257,6 +260,7 @@ class CaptureService:
             )
             for strategy in adapter_strategies:
                 pipeline.add(strategy)
+            pipeline.add(ConfidenceGateStrategy(threshold=CONFIDENCE_THRESHOLD))
 
             enrichment_result = await pipeline.run(
                 capture.payload,
@@ -270,6 +274,25 @@ class CaptureService:
                 enrichment_result.confidence,
                 enrichment_result.source,
             )
+
+            if enrichment_result.confidence < CONFIDENCE_THRESHOLD:
+                logger.warning(
+                    "Low confidence enrichment (%.2f) for capture %s, flagged for review",
+                    enrichment_result.confidence,
+                    capture_id,
+                )
+                capture.status = "needs_review"
+                await db.flush()
+                return CapturePromoteResult(
+                    success=False,
+                    capture_id=capture_id,
+                    missing_fields=missing,
+                    error=(
+                        f"Low enrichment confidence ({enrichment_result.confidence:.2f}), "
+                        "capture flagged for human review"
+                    ),
+                )
+
             enriched_payload = enrichment_result.payload
         else:
             enriched_payload = dict(capture.payload)
@@ -447,11 +470,28 @@ class CaptureService:
 
                     rows = (await db.execute(stmt)).scalars().all()
                     id_to_capture = {c.id: c for c in rows}
-                    return [
+                    results = [
                         (id_to_capture[eid], score_map[eid])
                         for eid in entity_ids
                         if eid in id_to_capture
                     ]
+
+                    # Cross-encoder reranking (only for Qdrant path with multiple results)
+                    if len(results) > 1:
+                        result_dicts = [
+                            {"capture": c, "score": s, "content": c.raw_input or ""}
+                            for c, s in results
+                        ]
+                        result_dicts = await rerank_generic(
+                            query=query,
+                            results=result_dicts,
+                            content_fn=lambda r: r["content"],
+                            score_fn=lambda r: r["score"],
+                            set_score_fn=lambda r, s: r.__setitem__("score", s),
+                        )
+                        results = [(r["capture"], r["score"]) for r in result_dicts]
+
+                    return results
 
                 logger.debug(
                     "Qdrant returned 0 results for capture space=%s query=%r"

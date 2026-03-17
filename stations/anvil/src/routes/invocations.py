@@ -32,6 +32,8 @@ class InvocationCreateRequest(BaseModel):
     tool_use_id: str | None = None
     timestamp: datetime | None = None
     category: str | None = None
+    manual_estimate_minutes: float | None = None
+    time_saved_minutes: float | None = None
 
 
 class InvocationResponse(BaseModel):
@@ -47,6 +49,8 @@ class InvocationResponse(BaseModel):
     payload: dict[str, Any] | None
     tool_use_id: str | None
     category: str
+    manual_estimate_minutes: float | None = None
+    time_saved_minutes: float | None = None
 
     model_config = {"from_attributes": True}
 

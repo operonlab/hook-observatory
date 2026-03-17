@@ -99,20 +99,27 @@ class EnrichmentPipeline:
         entity_type: str,
         context: dict[str, Any] | None = None,
     ) -> EnrichmentResult:
-        """Run all applicable strategies in sequence, threading payload forward."""
+        """Run all applicable strategies in sequence, threading payload forward.
+
+        The running ``min_confidence`` is injected into the context dict as
+        ``pipeline_confidence`` so post-processing strategies like
+        ``ConfidenceGateStrategy`` can inspect the accumulated confidence.
+        """
         current = dict(payload)
         all_metadata: dict[str, Any] = {}
         min_confidence = 1.0
         sources: list[str] = []
+        live_context: dict[str, Any] = dict(context) if context else {}
 
         for strategy in self._strategies:
             if not strategy.can_handle(module, entity_type):
                 continue
+            live_context["pipeline_confidence"] = min_confidence
             result = await strategy.enrich(
                 current,
                 module=module,
                 entity_type=entity_type,
-                context=context,
+                context=live_context,
             )
             current = result.payload
             min_confidence = min(min_confidence, result.confidence)
@@ -223,4 +230,151 @@ class DefaultsStrategy(EnrichmentStrategy):
             payload=enriched,
             confidence=1.0,
             source=self.name,
+        )
+
+
+class LLMEnrichmentStrategy(EnrichmentStrategy):
+    """LLM-powered enrichment using Claude Haiku for fuzzy NL input parsing.
+
+    Runs AFTER PatternMatch and Defaults — only fills fields still missing.
+    Uses tool_use for reliable structured output.
+    """
+
+    name = "llm_haiku"
+
+    def __init__(
+        self,
+        field_schema: dict[str, str],  # field_name -> description
+        *,
+        min_completeness: float = 0.8,  # skip LLM if already above this
+    ) -> None:
+        self._field_schema = field_schema
+        self._min_completeness = min_completeness
+
+    async def enrich(
+        self,
+        payload: dict[str, Any],
+        *,
+        module: str,
+        entity_type: str,
+        context: dict[str, Any] | None = None,
+    ) -> EnrichmentResult:
+        from datetime import date
+
+        # Skip if all tracked fields are already filled
+        missing = [k for k in self._field_schema if not payload.get(k)]
+        filled_ratio = (len(self._field_schema) - len(missing)) / max(len(self._field_schema), 1)
+        if filled_ratio >= self._min_completeness:
+            return EnrichmentResult(
+                payload=dict(payload), confidence=1.0, source=f"{self.name}(skipped)"
+            )
+
+        # Locate raw input text
+        ctx = context or {}
+        raw_input = (
+            ctx.get("raw_input") or payload.get("raw_text") or payload.get("description") or ""
+        )
+        if not raw_input:
+            return EnrichmentResult(
+                payload=dict(payload), confidence=1.0, source=f"{self.name}(skipped)"
+            )
+
+        # Build tool schema dynamically — only include missing fields
+        today = date.today().isoformat()
+        properties: dict[str, Any] = {
+            k: {"type": "string", "description": self._field_schema[k]} for k in missing
+        }
+        properties["confidence"] = {
+            "type": "number",
+            "description": "整體提取信心程度 0.0-1.0",
+        }
+
+        tool = {
+            "name": "extract_fields",
+            "description": "從輸入中提取結構化欄位",
+            "input_schema": {
+                "type": "object",
+                "properties": properties,
+                "required": ["confidence"],
+            },
+        }
+
+        system_prompt = (
+            "你是結構化資料提取器。從使用者的模糊中文/英文輸入中，提取以下欄位。\n"
+            "規則：\n"
+            "- 只填能從輸入明確或合理推斷的欄位\n"
+            "- 不確定的欄位不要填\n"
+            '- 金額請轉為數字（"一千五" → 1500）\n'
+            f'- 日期請轉為 ISO 格式（今天是 {today}，"昨天" → 計算實際日期）\n'
+            "- confidence 表示整體提取的信心程度"
+        )
+
+        # Lazy import to avoid import-time dependency
+        from src.shared.llm_haiku import haiku_extract
+
+        result = await haiku_extract(
+            user_message=raw_input,
+            tool=tool,
+            system=system_prompt,
+        )
+
+        if result is None:
+            return EnrichmentResult(
+                payload=dict(payload), confidence=1.0, source=f"{self.name}(skipped)"
+            )
+
+        enriched = dict(payload)
+        llm_confidence = float(result.pop("confidence", 0.7))
+
+        # Only fill missing fields — never overwrite existing non-empty values
+        filled: list[str] = []
+        for key, val in result.items():
+            if key in self._field_schema and not enriched.get(key) and val:
+                enriched[key] = val
+                filled.append(key)
+
+        return EnrichmentResult(
+            payload=enriched,
+            confidence=llm_confidence,
+            source=self.name,
+            metadata={"llm_filled_fields": filled},
+        )
+
+
+class ConfidenceGateStrategy(EnrichmentStrategy):
+    """Post-processing gate that flags low-confidence captures for human review.
+
+    Runs LAST in the pipeline. Inspects the accumulated ``pipeline_confidence``
+    from context and, when below the threshold, annotates the payload with
+    review markers so CaptureService can set status to ``needs_review``.
+    """
+
+    name = "confidence_gate"
+
+    def __init__(self, threshold: float = 0.5) -> None:
+        self._threshold = threshold
+
+    async def enrich(
+        self,
+        payload: dict[str, Any],
+        *,
+        module: str,
+        entity_type: str,
+        context: dict[str, Any] | None = None,
+    ) -> EnrichmentResult:
+        confidence: float = (context or {}).get("pipeline_confidence", 1.0)
+        enriched = dict(payload)
+
+        if confidence < self._threshold:
+            enriched["_needs_review"] = True
+            enriched["_confidence_reason"] = f"Low enrichment confidence: {confidence:.2f}"
+
+        return EnrichmentResult(
+            payload=enriched,
+            confidence=confidence,
+            source=self.name,
+            metadata={
+                "gate_threshold": self._threshold,
+                "gate_passed": confidence >= self._threshold,
+            },
         )

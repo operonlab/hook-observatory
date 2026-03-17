@@ -180,3 +180,55 @@ class TelemetryService:
             "daily_counts": daily_counts,
             "common_errors": common_errors,
         }
+
+    async def get_time_saved_stats(self, period: str = "30d") -> dict[str, Any]:
+        """ROI stats: total/avg time saved across invocations with manual estimates."""
+        period = period.strip().lower()
+        if period.endswith("d") and period[:-1].isdigit():
+            days = int(period[:-1])
+        else:
+            days = 30
+
+        summary = await self.db.execute(
+            text("""
+                SELECT
+                    COUNT(*) AS tasks_with_estimates,
+                    COALESCE(SUM(time_saved_minutes), 0) AS total_saved_minutes,
+                    AVG(time_saved_minutes) AS avg_saved_per_task
+                FROM anvil.invocations
+                WHERE manual_estimate_minutes IS NOT NULL
+                    AND timestamp > now() - make_interval(days => :days)
+            """),
+            {"days": days},
+        )
+        row = summary.one()
+
+        monthly_result = await self.db.execute(
+            text("""
+                SELECT
+                    to_char(date_trunc('month', timestamp), 'YYYY-MM') AS month,
+                    COALESCE(SUM(time_saved_minutes), 0) AS total_saved_minutes,
+                    COUNT(*) AS tasks_count
+                FROM anvil.invocations
+                WHERE manual_estimate_minutes IS NOT NULL
+                    AND timestamp > now() - make_interval(days => :days)
+                GROUP BY date_trunc('month', timestamp)
+                ORDER BY date_trunc('month', timestamp)
+            """),
+            {"days": days},
+        )
+        monthly_breakdown = [
+            {
+                "month": r.month,
+                "total_saved_minutes": float(r.total_saved_minutes or 0),
+                "tasks_count": r.tasks_count,
+            }
+            for r in monthly_result.all()
+        ]
+
+        return {
+            "total_saved_minutes": float(row.total_saved_minutes or 0),
+            "avg_saved_per_task": float(row.avg_saved_per_task) if row.avg_saved_per_task else None,
+            "tasks_with_estimates": row.tasks_with_estimates or 0,
+            "monthly_breakdown": monthly_breakdown,
+        }
