@@ -151,6 +151,48 @@
     });
   });
 
+  // ── Phone keyboard combo: when modifier is active, intercept input keystrokes ──
+
+  const inputEl = document.getElementById('input');
+  if (inputEl) {
+    // Use 'beforeinput' to catch phone keyboard input before it enters the field
+    inputEl.addEventListener('keydown', (e) => {
+      if (activeModifiers.size === 0) return; // No modifier active — normal typing
+
+      // Single printable char or known key
+      const key = e.key;
+      if (!key || key.length > 1 && !['Enter','Tab','Escape','Backspace'].includes(key)) return;
+
+      // Intercept: send as combo key, don't type in input
+      e.preventDefault();
+      e.stopPropagation();
+
+      const mappedKey = key.length === 1 ? key : key;
+      sendEk(mappedKey); // sendEk applies activeModifiers and clears them
+    });
+
+    // Also handle 'input' event for mobile keyboards that don't fire keydown properly
+    let lastInputValue = '';
+    inputEl.addEventListener('focus', () => { lastInputValue = inputEl.value; });
+    inputEl.addEventListener('input', (e) => {
+      if (activeModifiers.size === 0) { lastInputValue = inputEl.value; return; }
+
+      // Mobile inserted a character while modifier active — intercept it
+      const newVal = inputEl.value;
+      const inserted = newVal.slice(lastInputValue.length);
+      if (inserted.length === 1) {
+        // Undo the insertion
+        inputEl.value = lastInputValue;
+        // Send as combo
+        sendEk(inserted);
+      }
+      lastInputValue = inputEl.value;
+    });
+  }
+
+  // Expose modifier state for other modules
+  window.hasActiveModifier = () => activeModifiers.size > 0;
+
   // ── Arrow Touchpad (shared logic for all .arrow-pad elements) ──
 
   function initArrowPad(pad) {
