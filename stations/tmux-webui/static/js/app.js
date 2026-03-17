@@ -558,6 +558,8 @@ function setFocus(paneId) {
     // Restore this pane's input buffer
     inputEl.value = S.paneInputs[paneId] || '';
     inputEl.style.height = 'auto';
+    // Sync focus to tmux (select-pane) so tmux knows which pane is active
+    window.tmuxWs?.send({ type: 'focus', pane: paneId });
     // Auto-focus input so user can type immediately after clicking a pane
     inputEl.focus();
     // Auto-resize tmux pane to match browser display cols/rows

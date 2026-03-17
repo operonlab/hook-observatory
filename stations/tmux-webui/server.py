@@ -517,7 +517,7 @@ async def ws_handler(websocket: WebSocket):
                             timeout=5.0,
                         )
 
-            except (WebSocketDisconnect, RuntimeError, asyncio.TimeoutError):
+            except (TimeoutError, WebSocketDisconnect, RuntimeError):
                 break
             except Exception as exc:
                 logger.error("Poll error: %s", exc)
@@ -544,7 +544,7 @@ async def ws_handler(websocket: WebSocket):
                     websocket.send_json({"type": "ping", "ts": int(time.time())}),
                     timeout=5.0,
                 )
-            except (WebSocketDisconnect, RuntimeError, asyncio.TimeoutError):
+            except (TimeoutError, WebSocketDisconnect, RuntimeError):
                 break
             except Exception:
                 break
@@ -563,7 +563,18 @@ async def ws_handler(websocket: WebSocket):
             pane_id = data.get("pane", "0.0")
             target = f"{session}:{pane_id}"
 
-            if action == "input":
+            if action == "focus":
+                # Sync web focus to tmux — select the pane in tmux
+                await asyncio.create_subprocess_exec(
+                    "tmux",
+                    "select-pane",
+                    "-t",
+                    target,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+
+            elif action == "input":
                 text = data.get("text", "")
                 if text:
                     ok = await send_keys(target, text, literal=True)
