@@ -21,15 +21,10 @@ import argparse
 import json
 import sys
 
+from cli.cli_helpers import json_out, err, fmt_date
 from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.intelflow import IntelflowClient
-
-
-def _json_out(data, as_json=False):
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    return data
 
 
 def cmd_reports_list(args):
@@ -41,8 +36,7 @@ def cmd_reports_list(args):
             tag=args.tag,
             topic_id=args.topic,
         )
-        if args.json:
-            _json_out(result, True)
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -65,8 +59,7 @@ def cmd_reports_get(args):
     client = IntelflowClient()
     try:
         r = client.get_report(args.id)
-        if args.json:
-            _json_out(r, True)
+        if json_out(r, args):
             return
         print(f"Title: {r.get('title', '?')}")
         print(f"Query: {r.get('query', '-')}")
@@ -82,8 +75,7 @@ def cmd_reports_search(args):
     client = IntelflowClient()
     try:
         results = client.semantic_search(args.query, limit=args.limit)
-        if args.json:
-            _json_out(results, True)
+        if json_out(results, args):
             return
         if not results:
             print("No results found.")
@@ -103,8 +95,7 @@ def cmd_reports_check(args):
     client = IntelflowClient()
     try:
         result = client.check_duplicate(args.query, threshold=args.threshold)
-        if args.json:
-            _json_out(result, True)
+        if json_out(result, args):
             return
         if result.get("exists"):
             matches = result.get("matches", [])
@@ -136,8 +127,7 @@ def cmd_reports_create(args):
             tags=tags,
             skill_name=args.skill,
         )
-        if args.json:
-            _json_out(result, True)
+        if json_out(result, args):
             return
         print(f"Report created: {result.get('id', '?')}")
     except (APIError, APIConnectionError) as e:
@@ -149,8 +139,7 @@ def cmd_topics_list(args):
     client = IntelflowClient()
     try:
         result = client.list_topics(page_size=args.limit)
-        if args.json:
-            _json_out(result, True)
+        if json_out(result, args):
             return
         items = result.get("items", []) if isinstance(result, dict) else result
         print(f"Topics ({len(items)}):\n")
@@ -166,7 +155,7 @@ def cmd_topics_graph(args):
     client = IntelflowClient()
     try:
         graph = client.get_topic_graph()
-        _json_out(graph, True)
+        json_out(graph, True)
     except (APIError, APIConnectionError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -180,8 +169,7 @@ def cmd_briefings_list(args):
             date_to=args.date_to,
             page_size=args.limit,
         )
-        if args.json:
-            _json_out(result, True)
+        if json_out(result, args):
             return
         items = result.get("items", []) if isinstance(result, dict) else result
         print(f"Briefings ({len(items)}):\n")
@@ -198,8 +186,7 @@ def cmd_briefings_get(args):
     client = IntelflowClient()
     try:
         b = client.get_briefing(args.date, args.domain)
-        if args.json:
-            _json_out(b, True)
+        if json_out(b, args):
             return
         print(f"Date: {args.date}")
         print(f"Domain: {args.domain}")
@@ -214,8 +201,7 @@ def cmd_dashboard(args):
     client = IntelflowClient()
     try:
         d = client.get_dashboard()
-        if args.json:
-            _json_out(d, True)
+        if json_out(d, args):
             return
         print("Intelflow Dashboard")
         print("=" * 40)
@@ -230,8 +216,7 @@ def cmd_status(args):
     client = IntelflowClient()
     try:
         s = client.status()
-        _json_out(s, args.json)
-        if not args.json:
+        if not json_out(s, args):
             print(f"Status: {s.get('status', 'unknown')}")
     except (APIError, APIConnectionError) as e:
         print(f"Error: {e}", file=sys.stderr)

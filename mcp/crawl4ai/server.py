@@ -55,6 +55,7 @@ if str(_LIBS_SRC) not in sys.path:
     sys.path.insert(0, str(_LIBS_SRC))
 
 from workshop.crawl4ai_bridge import crawl_batch, crawl_url  # noqa: E402
+from workshop.mcp_helpers import mcp_error_handler  # noqa: E402
 
 mcp = FastMCP("crawl4ai")
 _md_gen = DefaultMarkdownGenerator()
@@ -96,60 +97,57 @@ def _build_scorer(
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_crawl(url: str, timeout: float = 60.0) -> str:
     """Crawl a URL using crawl4ai in isolated venv. Returns markdown content + metadata."""
-    try:
-        result = await crawl_url(url, timeout=timeout)
-        data = {
-            "url": result.url,
-            "success": result.success,
-            "title": result.title,
-            "markdown_length": len(result.markdown),
-            "markdown_preview": result.markdown[:2000],
-            "links_count": len(result.links),
-            "links": result.links[:20],
-            "metadata": result.metadata,
-            "error": result.error or None,
-        }
-        return json_text(data)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await crawl_url(url, timeout=timeout)
+    data = {
+        "url": result.url,
+        "success": result.success,
+        "title": result.title,
+        "markdown_length": len(result.markdown),
+        "markdown_preview": result.markdown[:2000],
+        "links_count": len(result.links),
+        "links": result.links[:20],
+        "metadata": result.metadata,
+        "error": result.error or None,
+    }
+    return json_text(data)
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_crawl_batch(
     urls: list[str], max_concurrent: int = 3, timeout: float = 60.0
 ) -> str:
     """Crawl multiple URLs concurrently. Returns list of results."""
-    try:
-        results = await crawl_batch(
-            urls,
-            max_concurrent=max_concurrent,
-            timeout=timeout,
-        )
-        data = [
-            {
-                "url": r.url,
-                "success": r.success,
-                "title": r.title,
-                "markdown_length": len(r.markdown),
-                "markdown_preview": r.markdown[:500],
-                "error": r.error or None,
-            }
-            for r in results
-        ]
-        summary = {
-            "total": len(data),
-            "succeeded": sum(1 for r in data if r["success"]),
-            "failed": sum(1 for r in data if not r["success"]),
-            "results": data,
+    results = await crawl_batch(
+        urls,
+        max_concurrent=max_concurrent,
+        timeout=timeout,
+    )
+    data = [
+        {
+            "url": r.url,
+            "success": r.success,
+            "title": r.title,
+            "markdown_length": len(r.markdown),
+            "markdown_preview": r.markdown[:500],
+            "error": r.error or None,
         }
-        return json_text(summary)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+        for r in results
+    ]
+    summary = {
+        "total": len(data),
+        "succeeded": sum(1 for r in data if r["success"]),
+        "failed": sum(1 for r in data if not r["success"]),
+        "results": data,
+    }
+    return json_text(summary)
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_chunk(
     text: str,
     strategy: str = "sentence",
@@ -157,22 +155,20 @@ async def crawl4ai_chunk(
     overlap: int = 100,
 ) -> str:
     """Chunk text for embedding using configurable strategies."""
-    try:
-        chunker = _build_chunker(strategy, chunk_size, overlap)
-        chunks = chunker.chunk(text)
-        return json_text(
-            {
-                "strategy": strategy,
-                "input_length": len(text),
-                "chunk_count": len(chunks),
-                "chunks": chunks,
-            }
-        )
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    chunker = _build_chunker(strategy, chunk_size, overlap)
+    chunks = chunker.chunk(text)
+    return json_text(
+        {
+            "strategy": strategy,
+            "input_length": len(text),
+            "chunk_count": len(chunks),
+            "chunks": chunks,
+        }
+    )
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_filter_urls(
     urls: list[str],
     domains: list[str] | None = None,
@@ -180,153 +176,142 @@ async def crawl4ai_filter_urls(
     dedup: bool = True,
 ) -> str:
     """Filter URLs through a configurable chain (domain allow-list, blocked paths, dedup)."""
-    try:
-        filters = []
-        if domains:
-            filters.append(DomainFilter(allowed_domains=domains))
-        if blocked_paths:
-            filters.append(PathPatternFilter(blocked_patterns=blocked_paths))
-        if dedup:
-            filters.append(DuplicateFilter())
-        chain = FilterChain(filters=filters)
-        passed = chain.apply_batch(urls)
-        stats = {f: str(s) for f, s in chain.stats_summary().items()}
-        return json_text(
-            {
-                "input_count": len(urls),
-                "passed_count": len(passed),
-                "passed": passed,
-                "filter_stats": stats,
-            }
-        )
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    filters = []
+    if domains:
+        filters.append(DomainFilter(allowed_domains=domains))
+    if blocked_paths:
+        filters.append(PathPatternFilter(blocked_patterns=blocked_paths))
+    if dedup:
+        filters.append(DuplicateFilter())
+    chain = FilterChain(filters=filters)
+    passed = chain.apply_batch(urls)
+    stats = {f: str(s) for f, s in chain.stats_summary().items()}
+    return json_text(
+        {
+            "input_count": len(urls),
+            "passed_count": len(passed),
+            "passed": passed,
+            "filter_stats": stats,
+        }
+    )
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_score_urls(
     urls: list[str],
     keywords: list[str] | None = None,
     authority_domains: list[str] | None = None,
 ) -> str:
     """Score and rank URLs by relevance using keyword, depth, authority, and freshness signals."""
-    try:
-        scorer = _build_scorer(keywords, authority_domains)
-        ranked = scorer.rank(urls)
-        return json_text(
-            {
-                "count": len(ranked),
-                "ranked": [{"url": u, "score": round(s, 4)} for u, s in ranked],
-            }
-        )
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    scorer = _build_scorer(keywords, authority_domains)
+    ranked = scorer.rank(urls)
+    return json_text(
+        {
+            "count": len(ranked),
+            "ranked": [{"url": u, "score": round(s, 4)} for u, s in ranked],
+        }
+    )
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_html_to_markdown(html: str, citations: bool = False) -> str:
     """Convert raw HTML to clean Markdown using Workshop-native parser."""
-    try:
-        result = _md_gen.convert(html, links_as_citations=citations)
-        return json_text(
-            {
-                "title": result.title,
-                "markdown": result.markdown,
-                "links_count": len(result.links),
-                "links": result.links[:50],
-            }
-        )
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = _md_gen.convert(html, links_as_citations=citations)
+    return json_text(
+        {
+            "title": result.title,
+            "markdown": result.markdown,
+            "links_count": len(result.links),
+            "links": result.links[:50],
+        }
+    )
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_analyze_url(
     url: str,
     chunk_strategy: str = "sentence",
     keywords: list[str] | None = None,
 ) -> str:
     """Full pipeline: crawl URL → convert to markdown → chunk → score self. Returns structured analysis."""
-    try:
-        if keywords is None:
-            keywords = []
+    if keywords is None:
+        keywords = []
 
-        # Step 1: Crawl
-        crawl_result = await crawl_url(url, timeout=60.0)
-        if not crawl_result.success:
-            return json_text(
-                {
-                    "url": url,
-                    "success": False,
-                    "error": crawl_result.error,
-                }
-            )
-
-        # Step 2: Chunk markdown
-        chunker = _build_chunker(chunk_strategy, 1000, 100)
-        chunks = chunker.chunk(crawl_result.markdown)
-
-        # Step 3: Score URL itself
-        scorer = _build_scorer(keywords, None)
-        url_score = scorer.score(url)
-
-        # Step 4: Score extracted links
-        links = crawl_result.links[:50]
-        scored_links = scorer.rank(links) if links else []
-
+    # Step 1: Crawl
+    crawl_result = await crawl_url(url, timeout=60.0)
+    if not crawl_result.success:
         return json_text(
             {
                 "url": url,
-                "success": True,
-                "title": crawl_result.title,
-                "url_score": round(url_score, 4),
-                "markdown_length": len(crawl_result.markdown),
-                "chunk_strategy": chunk_strategy,
-                "chunk_count": len(chunks),
-                "chunks_preview": chunks[:3],
-                "top_links": [
-                    {"url": u, "score": round(s, 4)} for u, s in scored_links[:10]
-                ],
-                "metadata": crawl_result.metadata,
+                "success": False,
+                "error": crawl_result.error,
             }
         )
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+
+    # Step 2: Chunk markdown
+    chunker = _build_chunker(chunk_strategy, 1000, 100)
+    chunks = chunker.chunk(crawl_result.markdown)
+
+    # Step 3: Score URL itself
+    scorer = _build_scorer(keywords, None)
+    url_score = scorer.score(url)
+
+    # Step 4: Score extracted links
+    links = crawl_result.links[:50]
+    scored_links = scorer.rank(links) if links else []
+
+    return json_text(
+        {
+            "url": url,
+            "success": True,
+            "title": crawl_result.title,
+            "url_score": round(url_score, 4),
+            "markdown_length": len(crawl_result.markdown),
+            "chunk_strategy": chunk_strategy,
+            "chunk_count": len(chunks),
+            "chunks_preview": chunks[:3],
+            "top_links": [
+                {"url": u, "score": round(s, 4)} for u, s in scored_links[:10]
+            ],
+            "metadata": crawl_result.metadata,
+        }
+    )
 
 
 @mcp.tool()
+@mcp_error_handler("Crawl4AI")
 async def crawl4ai_status() -> str:
     """Check crawl4ai venv availability and report module status."""
-    try:
-        venv_python, venv_ok = await asyncio.to_thread(_check_venv_path)
+    venv_python, venv_ok = await asyncio.to_thread(_check_venv_path)
 
-        proc = await asyncio.create_subprocess_exec(
-            str(venv_python),
-            "-c",
-            "import crawl4ai; print(crawl4ai.__version__)",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        version = stdout.decode().strip() if proc.returncode == 0 else None
+    proc = await asyncio.create_subprocess_exec(
+        str(venv_python),
+        "-c",
+        "import crawl4ai; print(crawl4ai.__version__)",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+    version = stdout.decode().strip() if proc.returncode == 0 else None
 
-        return json_text(
-            {
-                "venv_path": str(venv_python),
-                "venv_exists": venv_ok,
-                "crawl4ai_version": version,
-                "crawl4ai_available": version is not None,
-                "error": stderr.decode().strip()[-300:] if not version else None,
-                "shared_modules": {
-                    "chunking": "ok",
-                    "url_filter": "ok",
-                    "url_scorer": "ok",
-                    "markdown_gen": "ok",
-                },
-            }
-        )
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    return json_text(
+        {
+            "venv_path": str(venv_python),
+            "venv_exists": venv_ok,
+            "crawl4ai_version": version,
+            "crawl4ai_available": version is not None,
+            "error": stderr.decode().strip()[-300:] if not version else None,
+            "shared_modules": {
+                "chunking": "ok",
+                "url_filter": "ok",
+                "url_scorer": "ok",
+                "markdown_gen": "ok",
+            },
+        }
+    )
 
 
 if __name__ == "__main__":
