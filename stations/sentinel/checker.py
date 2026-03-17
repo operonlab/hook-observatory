@@ -152,6 +152,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:8080/dailyos/",
         expect_contains='<div id="root">',
     ),
+    LightCheck(
+        name="frontend-paper",
+        group="internal",
+        url="http://127.0.0.1:8080/paper/",
+        expect_contains='<div id="root">',
+    ),
     # ── external (stations) ──
     LightCheck(
         name="hook-observatory",
@@ -284,6 +290,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         group="internal",
         url="http://127.0.0.1:8080/dailyos/",
         playwright_code=_pw_module_check("dailyos"),
+    ),
+    DeepCheck(
+        name="frontend-paper-render",
+        group="internal",
+        url="http://127.0.0.1:8080/paper/",
+        playwright_code=_pw_module_check("paper"),
     ),
     # ── external (station HTML — body > *) ──
     DeepCheck(
@@ -480,6 +492,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "frontend-intelflow-render": "if",
         "frontend-briefing-render": "bf",
         "frontend-dailyos-render": "dos",
+        "frontend-paper-render": "paper",
         "hook-observatory-render": "hook",
         "agent-vista-render": "vista",
         "system-monitor-render": "sysm",

@@ -1,5 +1,7 @@
 """BaseCRUDService — generic CRUD with Template Method hooks, audit trail, and soft delete."""
 
+from __future__ import annotations
+
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
