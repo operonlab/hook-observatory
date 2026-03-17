@@ -255,6 +255,36 @@
       "enabled": true
     },
     {
+      "name": "ws-memvault-decay",
+      "label": "com.joneshong.scheduler.ws-memvault-decay",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_decay.py",
+      "schedule": { "calendar": { "Weekday": 0, "Hour": 4, "Minute": 0 } },
+      "description": "每週日 4AM: AttitudeFact confidence 指數衰減（半衰期按 category）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-memvault-tier",
+      "label": "com.joneshong.scheduler.ws-memvault-tier",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_tier.py",
+      "schedule": { "calendar": { "Hour": 3, "Minute": 30 } },
+      "description": "每日 3:30AM: 記憶 tier 遷移（hot→warm→cold→frozen）+ digest 摘要",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": false
+    },
+    {
+      "name": "ws-memvault-cleanup",
+      "label": "com.joneshong.scheduler.ws-memvault-cleanup",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_cleanup.py",
+      "schedule": { "calendar": { "Weekday": 1, "Hour": 4, "Minute": 30 } },
+      "description": "每週一 4:30AM: KG 矛盾掃描 + stale >90d triple hard-delete",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": false
+    },
+    {
       "name": "ws-paper-digest",
       "label": "com.joneshong.scheduler.ws-paper-digest",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_paper_digest.py",

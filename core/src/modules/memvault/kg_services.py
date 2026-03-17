@@ -26,7 +26,6 @@ from .kg_models import (
     ClusterTriple,
     SkillInvocation,
     Triple,
-    TripleEmbedding,
     WisdomNode,
 )
 from .kg_schemas import (
@@ -85,9 +84,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         return d
 
     def after_create(self, instance: Triple) -> None:
-        """Publish TRIPLE_INGESTED event and index to Qdrant (both fire-and-forget)."""
-        import asyncio
-
+        """Publish TRIPLE_INGESTED event (fire-and-forget)."""
         event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.TRIPLE_INGESTED,
@@ -101,51 +98,6 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                 user_id=instance.created_by,
             )
         )
-        # Index to Qdrant (best-effort, fire-and-forget)
-        asyncio.ensure_future(self._index_triple_to_qdrant(instance))  # noqa: RUF006
-
-    async def _index_triple_to_qdrant(self, instance: Triple) -> None:
-        """Index a triple to Qdrant. Best-effort — never raises."""
-        try:
-            from src.shared.qdrant_search import index_document
-            from src.shared.search_types import IndexDocument
-
-            content = f"{instance.subject} {instance.predicate} {instance.object}"
-            doc = IndexDocument(
-                service_id="memvault-triple",
-                entity_id=str(instance.id),
-                entity_type="triple",
-                space_id=str(instance.space_id),
-                content=content,
-                tags=[instance.subject, instance.predicate],
-                created_at=instance.created_at,
-            )
-            await index_document(doc)
-        except Exception:
-            logger.debug("Failed to index triple %s to Qdrant", instance.id, exc_info=True)
-
-    async def _batch_index_triples_to_qdrant(self, instances: list[Triple]) -> None:
-        """Batch index triples to Qdrant. Best-effort — never raises."""
-        try:
-            from src.shared.qdrant_search import index_documents_batch
-            from src.shared.search_types import IndexDocument
-
-            docs = [
-                IndexDocument(
-                    service_id="memvault-triple",
-                    entity_id=str(t.id),
-                    entity_type="triple",
-                    space_id=str(t.space_id),
-                    content=f"{t.subject} {t.predicate} {t.object}",
-                    tags=[t.subject, t.predicate],
-                    created_at=t.created_at,
-                )
-                for t in instances
-            ]
-            indexed = await index_documents_batch(docs)
-            logger.debug("Batch indexed %d/%d triples to Qdrant", indexed, len(instances))
-        except Exception:
-            logger.debug("Failed to batch index triples to Qdrant", exc_info=True)
 
     def to_response(self, instance: Triple) -> TripleResponse:
         """Map ORM instance to TripleResponse (embedding excluded)."""
@@ -207,10 +159,6 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             db.add(triple)
             try:
                 await db.flush()
-                # Write to embedding sub-table (Phase 2)
-                if embedding is not None:
-                    db.add(TripleEmbedding(triple_id=triple.id, embedding=embedding))
-                    await db.flush()
                 # Entity resolution (best-effort)
                 await entity_resolution_service.resolve_and_link_triple(db, space_id, triple)
                 # Detect and invalidate contradictions
@@ -250,10 +198,6 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                     source="memvault",
                 )
             )
-            # Batch index to Qdrant (best-effort, fire-and-forget)
-            import asyncio
-
-            asyncio.ensure_future(self._batch_index_triples_to_qdrant(created))  # noqa: RUF006
             # Post-ingest auto-merge (best-effort, >= 0.95 only)
             try:
                 merges = await entity_resolution_service.auto_merge(
@@ -308,48 +252,31 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         top_k: int = 10,
         threshold: float = 0.5,
     ) -> list[TripleResponse]:
-        """Legacy pgvector cosine distance search on triples.
+        """Vector similarity search on triples — Qdrant primary, pgvector legacy fallback."""
+        from src.shared.qdrant_client import is_available as qdrant_available
+        from src.shared.qdrant_search import vector_search
+        from src.shared.search_types import SearchConfig
 
-        Kept as fallback until callers pass query text to enable Qdrant hybrid search.
-        Callers (kg_routes.search_triples, cascade_recall_service) already compute embeddings
-        from query text — refactoring them to pass text directly would allow switching to
-        Qdrant hybrid_search. For now, pgvector path remains functional.
-
-        Tries triple_embeddings sub-table first (Phase 2);
-        falls back to inline triples.embedding.
-        """
-        # Phase 2 path: sub-table
-        distance = TripleEmbedding.embedding.cosine_distance(query_embedding)
-        q = (
-            select(Triple)
-            .join(TripleEmbedding, TripleEmbedding.triple_id == Triple.id)
-            .where(
-                Triple.space_id == space_id,
-                Triple.invalid_at.is_(None),
-                distance < (1 - threshold),
+        if qdrant_available():
+            config = SearchConfig(
+                top_k=top_k,
+                score_threshold=threshold,
+                service_ids=["memvault-triple"],
             )
-            .order_by(distance)
-            .limit(top_k)
-        )
-        rows = (await db.execute(q)).scalars().all()
-        if rows:
-            return [self.to_response(r) for r in rows]
+            results = await vector_search(query_embedding, space_id, config)
+            if results:
+                triple_ids = [r.entity_id for r in results]
+                q = select(Triple).where(
+                    Triple.id.in_(triple_ids),
+                    Triple.invalid_at.is_(None),
+                )
+                rows = (await db.execute(q)).scalars().all()
+                id_order = {eid: i for i, eid in enumerate(triple_ids)}
+                rows = sorted(rows, key=lambda r: id_order.get(str(r.id), 999))
+                return [self.to_response(r) for r in rows]
+            return []
 
-        # Fallback: inline embedding
-        distance = Triple.embedding.cosine_distance(query_embedding)
-        q = (
-            select(Triple)
-            .where(
-                Triple.space_id == space_id,
-                Triple.embedding.isnot(None),
-                Triple.invalid_at.is_(None),
-                distance < (1 - threshold),
-            )
-            .order_by(distance)
-            .limit(top_k)
-        )
-        rows = (await db.execute(q)).scalars().all()
-        return [self.to_response(r) for r in rows]
+        return []
 
     async def delete_by_id(self, db: AsyncSession, id: str) -> None:
         result = await db.execute(select(self.model).where(self.model.id == id))
@@ -359,8 +286,6 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         await db.delete(instance)
 
     async def update_by_id(self, db: AsyncSession, id: str, data: TripleCreate) -> Triple:
-        import asyncio
-
         result = await db.execute(select(self.model).where(self.model.id == id))
         instance = result.scalar_one_or_none()
         if not instance:
@@ -370,8 +295,6 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             d["predicate"] = normalize_predicate(d["predicate"])
         for key, val in d.items():
             setattr(instance, key, val)
-        # Re-index to Qdrant with updated content (best-effort)
-        asyncio.ensure_future(self._index_triple_to_qdrant(instance))  # noqa: RUF006
         return instance
 
     async def invalidate(
@@ -424,26 +347,36 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         if new_triple.embedding is None:
             return []
 
-        distance = Triple.embedding.cosine_distance(new_triple.embedding)
-        q = (
-            select(Triple)
-            .where(
-                Triple.space_id == space_id,
+        from src.shared.qdrant_client import is_available as qdrant_available
+        from src.shared.qdrant_search import vector_search
+        from src.shared.search_types import SearchConfig
+
+        if qdrant_available():
+            config = SearchConfig(
+                top_k=10,
+                score_threshold=similarity_threshold,
+                service_ids=["memvault-triple"],
+            )
+            results = await vector_search(new_triple.embedding, space_id, config)
+            if not results:
+                return []
+            triple_ids = [r.entity_id for r in results]
+            q = select(Triple).where(
+                Triple.id.in_(triple_ids),
                 Triple.id != new_triple.id,
                 Triple.invalid_at.is_(None),
                 Triple.subject == new_triple.subject,
                 Triple.predicate == new_triple.predicate,
-                Triple.embedding.isnot(None),
-                distance < (1 - similarity_threshold),
             )
-            .order_by(distance)
-            .limit(5)
-        )
-        candidates = (await db.execute(q)).scalars().all()
+            candidates = (await db.execute(q)).scalars().all()
+            return [
+                c
+                for c in candidates
+                if c.object.strip().lower() != new_triple.object.strip().lower()
+            ]
 
-        return [
-            c for c in candidates if c.object.strip().lower() != new_triple.object.strip().lower()
-        ]
+        # pgvector fallback removed — Triple.embedding column dropped in Qdrant migration.
+        return []
 
 
 # ======================== GraphTraversalService ========================
@@ -885,23 +818,28 @@ class AttitudeService:
         best_similarity: float = 0.0
 
         if new_embedding and current_facts:
-            # Use pgvector cosine_distance operator (<=>) to find closest fact
-            distance_col = AttitudeFact.embedding.cosine_distance(new_embedding).label("distance")
-            sim_q = (
-                select(AttitudeFact, distance_col)
-                .where(
-                    AttitudeFact.space_id == space_id,
-                    AttitudeFact.category == request.category,
-                    AttitudeFact.superseded_by.is_(None),
-                    AttitudeFact.embedding.isnot(None),
+            from src.shared.qdrant_client import is_available as qdrant_available
+            from src.shared.qdrant_search import vector_search
+            from src.shared.search_types import SearchConfig
+
+            if qdrant_available():
+                config = SearchConfig(
+                    top_k=1,
+                    score_threshold=0.0,
+                    service_ids=["memvault-attitude"],
                 )
-                .order_by(distance_col)
-                .limit(1)
-            )
-            row = (await db.execute(sim_q)).first()
-            if row:
-                best_fact = row.AttitudeFact
-                best_similarity = round(1.0 - float(row.distance), 4)
+                results = await vector_search(new_embedding, space_id, config)
+                if results:
+                    best_id = results[0].entity_id
+                    best_similarity = results[0].score
+                    for f in current_facts:
+                        if str(f.id) == best_id:
+                            best_fact = f
+                            break
+            else:
+                # pgvector fallback removed — embedding column dropped.
+                # best_fact / best_similarity remain None/0.0 → decision logic below treats as NEW.
+                pass
 
         # Decision logic
         if best_fact and best_similarity > 0.9:
