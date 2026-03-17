@@ -1,6 +1,13 @@
 #!/Users/joneshong/.local/bin/python3
 """pipeline -- Workshop Session Pipeline CLI.
 
+Stages (in order):
+    1. redact   — clean sensitive data from transcript
+    2. extract  — memvault knowledge extraction (background)
+    3. archive  — session-archiver scan + score
+    4. reflect  — quality scoring + context efficiency metrics
+    5. log      — observatory event logging
+
 Usage:
     pipeline run <session_id> [--transcript PATH]   Run full SessionEnd pipeline
     pipeline stages                                  List pipeline stages
