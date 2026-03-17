@@ -45,7 +45,7 @@ async def session_intel_stats(days: int = 30) -> str:
 
 
 @mcp.tool()
-async def session_intel_sessions(days: int = 7, project: str = None, limit: int = 20) -> str:
+async def session_intel_sessions(days: int = 7, project: str | None = None, limit: int = 20) -> str:
     """List recent Claude Code sessions with metadata. Returns session_id, project, size_bytes, message count, created_at, modified_at, and redaction count per session."""
     try:
         result = await asyncio.to_thread(
