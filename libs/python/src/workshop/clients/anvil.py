@@ -176,6 +176,7 @@ class AnvilClient:
         session_id: str | None = None,
         agent_model: str | None = None,
         payload: dict | None = None,
+        manual_estimate_minutes: float | None = None,
     ) -> dict:
         """Record an invocation event. POST /api/anvil/invocations"""
         body: dict[str, Any] = {
@@ -193,6 +194,8 @@ class AnvilClient:
             body["agent_model"] = agent_model
         if payload is not None:
             body["payload"] = payload
+        if manual_estimate_minutes is not None:
+            body["manual_estimate_minutes"] = manual_estimate_minutes
         return self._post("/api/anvil/invocations", body)
 
     def list_invocations(
@@ -212,6 +215,10 @@ class AnvilClient:
     def get_stats(self) -> dict:
         """Get aggregated stats (top skills, avg success, 7d trend). GET /api/anvil/stats"""
         return self._get("/api/anvil/stats")
+
+    def get_time_saved_stats(self, period: str = "30d") -> dict:
+        """Get time-saved ROI stats. GET /api/anvil/stats/time-saved"""
+        return self._get("/api/anvil/stats/time-saved", {"period": period})
 
     def get_skill_stats(self, name: str) -> dict:
         """Get per-skill stats. GET /api/anvil/stats/{name}"""

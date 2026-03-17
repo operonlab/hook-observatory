@@ -121,6 +121,8 @@ class Invocation(Base):
     session_id: Mapped[str | None] = mapped_column(String(100))
     agent_model: Mapped[str | None] = mapped_column(String(100))
     payload: Mapped[dict | None] = mapped_column(JSONB)
+    manual_estimate_minutes: Mapped[float | None] = mapped_column(Float)
+    time_saved_minutes: Mapped[float | None] = mapped_column(Float)
     tool_use_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
     category: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'skill'")
