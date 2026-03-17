@@ -139,3 +139,29 @@ class SearchMetadata(BaseModel):
 class EnhancedSearchResult(BaseModel):
     results: list[SemanticSearchResult]
     metadata: SearchMetadata | None = None
+
+
+# ======================== Reflection / Curate ========================
+
+
+class ReflectionResponse(BaseModel):
+    session_id: str
+    block_count: int
+    invariants: list[str]
+    derived: list[str]
+    corrections: list[str]
+    triples_created: int
+    triples_invalidated: int
+    reflected_at: str
+
+
+class CurateRequest(BaseModel):
+    confidence_threshold: float = Field(default=0.15, ge=0.0, le=1.0)
+    dry_run: bool = False
+
+
+class CurateResponse(BaseModel):
+    blocks_soft_deleted: int
+    triples_invalidated: int
+    orphan_triples_cleaned: int
+    dry_run: bool
