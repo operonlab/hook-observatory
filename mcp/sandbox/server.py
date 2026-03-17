@@ -22,6 +22,7 @@ from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
 from workshop.clients.sandbox import SandboxClient
+from workshop.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("sandbox-executor")
 client = SandboxClient()
@@ -89,6 +90,7 @@ def _format_result(result, description=None, max_output: int = 3000) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("Sandbox")
 async def sandbox_execute(
     language: str,
     code: str,
@@ -97,21 +99,16 @@ async def sandbox_execute(
     max_output: int = 3000,
 ) -> str:
     """Execute Python/JS code with auto-injected SDK helpers: http_get(), http_post(), read_file(), write_file(), output(). Use this to batch multiple operations into a single execution — read/write any file, call any HTTP endpoint, process data. Returns structured results via output(). Timeout: 30s default, 60s max."""
-    try:
-        max_output = min(max_output, 5000)
-        result = await to_thread(client.execute, code, language, timeout)
-        return _format_result(result, description or None, max_output=max_output)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    max_output = min(max_output, 5000)
+    result = await to_thread(client.execute, code, language, timeout)
+    return _format_result(result, description or None, max_output=max_output)
 
 
 @mcp.tool()
+@mcp_error_handler("Sandbox")
 async def sandbox_info(language: str = "python") -> str:
     """Show documentation for the sandbox SDK helpers (available functions, constraints, examples)."""
-    try:
-        return client.info(language)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    return client.info(language)
 
 
 # ======================== Main ========================

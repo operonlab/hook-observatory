@@ -19,7 +19,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.hook_observatory import HookObservatoryClient, HookObservatoryError
+from workshop.clients.hook_observatory import HookObservatoryClient
+from workshop.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("hook-observatory")
 client = HookObservatoryClient()
@@ -73,21 +74,18 @@ def _format_tools(tools: list) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("HookObservatory")
 async def hook_obs_stats(include_by_event: bool = True) -> str:
     """Get Hook Observatory summary stats: total events, today count, unique sessions, and event type breakdown. Use this to understand Claude Code hook activity patterns."""
-    try:
-        summary = await to_thread(client.summary)
-        by_event = None
-        if include_by_event:
-            by_event = await to_thread(client.stats_by_event)
-        return _format_stats(summary, by_event)
-    except HookObservatoryError as e:
-        return f"Hook Observatory error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    summary = await to_thread(client.summary)
+    by_event = None
+    if include_by_event:
+        by_event = await to_thread(client.stats_by_event)
+    return _format_stats(summary, by_event)
 
 
 @mcp.tool()
+@mcp_error_handler("HookObservatory")
 async def hook_obs_events(
     event_type: str | None = None,
     session_id: str | None = None,
@@ -95,34 +93,25 @@ async def hook_obs_events(
     limit: int = 20,
 ) -> str:
     """Query hook events with filters. Returns paginated event list with event_type, tool_name, session_id, payload, timestamp."""
-    try:
-        result = await to_thread(
-            client.list_events,
-            event_type=event_type,
-            session_id=session_id,
-            tool_name=tool_name,
-            limit=limit,
-        )
-        return _format_events(result)
-    except HookObservatoryError as e:
-        return f"Hook Observatory error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.list_events,
+        event_type=event_type,
+        session_id=session_id,
+        tool_name=tool_name,
+        limit=limit,
+    )
+    return _format_events(result)
 
 
 @mcp.tool()
+@mcp_error_handler("HookObservatory")
 async def hook_obs_tools(limit: int = 20) -> str:
     """Get tool usage ranking — which Claude Code tools are used most frequently. Useful for understanding workflow patterns."""
-    try:
-        tools = await to_thread(
-            client.stats_by_tool,
-            limit=limit,
-        )
-        return _format_tools(tools)
-    except HookObservatoryError as e:
-        return f"Hook Observatory error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    tools = await to_thread(
+        client.stats_by_tool,
+        limit=limit,
+    )
+    return _format_tools(tools)
 
 
 if __name__ == "__main__":

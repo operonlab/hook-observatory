@@ -16,12 +16,11 @@ Configure in ~/.claude.json:
     }
 """
 
-import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.intelflow import IntelflowClient
+from workshop.mcp_helpers import build_body, json_text, mcp_error_handler
 
 mcp = FastMCP("intelflow")
 client = IntelflowClient()
@@ -56,6 +55,7 @@ def _format_search(results) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("Intelflow")
 async def intelflow_reports(
     tag: str | None = None,
     topic_id: str | None = None,
@@ -63,38 +63,30 @@ async def intelflow_reports(
     page_size: int = 20,
 ) -> str:
     """List intelligence reports with optional filters (tag, topic)."""
-    try:
-        result = await to_thread(
-            client.list_reports,
-            page=page,
-            page_size=page_size,
-            tag=tag,
-            topic_id=topic_id,
-        )
-        return _format_reports(result)
-    except (APIError, APIConnectionError) as e:
-        return f"Intelflow error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.list_reports,
+        page=page,
+        page_size=page_size,
+        tag=tag,
+        topic_id=topic_id,
+    )
+    return _format_reports(result)
 
 
 @mcp.tool()
+@mcp_error_handler("Intelflow")
 async def intelflow_report_search(query: str, limit: int = 5) -> str:
     """Semantic search over intelligence reports."""
-    try:
-        result = await to_thread(
-            client.semantic_search,
-            query=query,
-            limit=limit,
-        )
-        return _format_search(result)
-    except (APIError, APIConnectionError) as e:
-        return f"Intelflow error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.semantic_search,
+        query=query,
+        limit=limit,
+    )
+    return _format_search(result)
 
 
 @mcp.tool()
+@mcp_error_handler("Intelflow")
 async def intelflow_report_create(
     title: str,
     query: str,
@@ -104,119 +96,96 @@ async def intelflow_report_create(
     skill_name: str | None = None,
 ) -> str:
     """Create a new intelligence report."""
-    try:
-        result = await to_thread(
-            client.create_report,
-            title=title,
-            query=query,
-            content=content,
-            tags=tags,
-            sources=sources,
-            skill_name=skill_name,
-        )
-        return f"Report created: **{result.get('title', '?')}** (id: {result.get('id', '?')[:12]})"
-    except (APIError, APIConnectionError) as e:
-        return f"Intelflow error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    body = build_body(
+        {"title": title, "query": query, "content": content},
+        tags=tags,
+        sources=sources,
+        skill_name=skill_name,
+    )
+    result = await to_thread(client.create_report, **body)
+    return f"Report created: **{result.get('title', '?')}** (id: {result.get('id', '?')[:12]})"
 
 
 @mcp.tool()
+@mcp_error_handler("Intelflow")
 async def intelflow_topics(page_size: int = 50) -> str:
     """List intelligence topics with report counts."""
-    try:
-        page_size = min(page_size, 100)
-        result = await to_thread(
-            client.list_topics,
-            page_size=page_size,
-        )
-        items = result.get("items", []) if isinstance(result, dict) else result
-        if not items:
-            return "No topics found."
-        lines = [f"**Topics** ({len(items)})\n"]
-        for t in items:
-            lines.append(f"- **{t.get('name', '?')}** ({t.get('report_count', 0)} reports)")
-        return "\n".join(lines)
-    except (APIError, APIConnectionError) as e:
-        return f"Intelflow error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    page_size = min(page_size, 100)
+    result = await to_thread(
+        client.list_topics,
+        page_size=page_size,
+    )
+    items = result.get("items", []) if isinstance(result, dict) else result
+    if not items:
+        return "No topics found."
+    lines = [f"**Topics** ({len(items)})\n"]
+    for t in items:
+        lines.append(f"- **{t.get('name', '?')}** ({t.get('report_count', 0)} reports)")
+    return "\n".join(lines)
 
 
 @mcp.tool()
+@mcp_error_handler("Intelflow")
 async def intelflow_topic_graph(max_nodes: int = 50) -> str:
     """Get topic relationship graph (nodes + edges)."""
-    try:
-        result = await to_thread(client.get_topic_graph)
-        if isinstance(result, dict):
-            nodes = result.get("nodes", [])
-            total_nodes = len(nodes)
-            if total_nodes > max_nodes:
-                kept_ids = {n.get("id") for n in nodes[:max_nodes]}
-                edges = result.get("edges", [])
-                total_edges = len(edges)
-                filtered_edges = [
-                    e
-                    for e in edges
-                    if e.get("source") in kept_ids and e.get("target") in kept_ids
-                ]
-                result = {
-                    "total_nodes": total_nodes,
-                    "total_edges": total_edges,
-                    "nodes": nodes[:max_nodes],
-                    "edges": filtered_edges,
-                    "truncated": True,
-                }
-        return json.dumps(result, ensure_ascii=False, indent=2, default=str)
-    except (APIError, APIConnectionError) as e:
-        return f"Intelflow error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.get_topic_graph)
+    if isinstance(result, dict):
+        nodes = result.get("nodes", [])
+        total_nodes = len(nodes)
+        if total_nodes > max_nodes:
+            kept_ids = {n.get("id") for n in nodes[:max_nodes]}
+            edges = result.get("edges", [])
+            total_edges = len(edges)
+            filtered_edges = [
+                e
+                for e in edges
+                if e.get("source") in kept_ids and e.get("target") in kept_ids
+            ]
+            result = {
+                "total_nodes": total_nodes,
+                "total_edges": total_edges,
+                "nodes": nodes[:max_nodes],
+                "edges": filtered_edges,
+                "truncated": True,
+            }
+    return json_text(result)
 
 
 @mcp.tool()
+@mcp_error_handler("Intelflow")
 async def intelflow_briefings(
     date_from: str | None = None,
     date_to: str | None = None,
     page_size: int = 20,
 ) -> str:
     """List daily briefings with optional date range filter."""
-    try:
-        result = await to_thread(
-            client.list_briefings,
-            date_from=date_from,
-            date_to=date_to,
-            page_size=page_size,
-        )
-        items = result.get("items", []) if isinstance(result, dict) else result
-        if not items:
-            return "No briefings found."
-        lines = [f"**Briefings** ({len(items)})\n"]
-        for b in items:
-            date = str(b.get("briefing_date", b.get("created_at", "")))[:10]
-            lines.append(f"- [{date}] {b.get('domain', '?')}")
-        return "\n".join(lines)
-    except (APIError, APIConnectionError) as e:
-        return f"Intelflow error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.list_briefings,
+        date_from=date_from,
+        date_to=date_to,
+        page_size=page_size,
+    )
+    items = result.get("items", []) if isinstance(result, dict) else result
+    if not items:
+        return "No briefings found."
+    lines = [f"**Briefings** ({len(items)})\n"]
+    for b in items:
+        date = str(b.get("briefing_date", b.get("created_at", "")))[:10]
+        lines.append(f"- [{date}] {b.get('domain', '?')}")
+    return "\n".join(lines)
 
 
 @mcp.tool()
+@mcp_error_handler("Intelflow")
 async def intelflow_dashboard(max_list_items: int = 10) -> str:
     """Get Intelflow dashboard summary (report counts, recent activity)."""
-    try:
-        result = await to_thread(client.get_dashboard)
-        if isinstance(result, dict):
-            for key, val in result.items():
-                if isinstance(val, list) and len(val) > max_list_items:
-                    result[key] = val[:max_list_items]
-                    result[f"{key}_total"] = len(val)
-        return json.dumps(result, ensure_ascii=False, indent=2, default=str)
-    except (APIError, APIConnectionError) as e:
-        return f"Intelflow error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.get_dashboard)
+    if isinstance(result, dict):
+        for key, val in result.items():
+            if isinstance(val, list) and len(val) > max_list_items:
+                result[key] = val[:max_list_items]
+                result[f"{key}_total"] = len(val)
+    return json_text(result)
 
 
 if __name__ == "__main__":

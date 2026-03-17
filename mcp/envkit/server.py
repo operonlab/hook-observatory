@@ -10,7 +10,8 @@ Usage (via .mcp.json):
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.envkit import EnvkitClient, EnvkitError
+from workshop.clients.envkit import EnvkitClient
+from workshop.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("envkit")
 client = EnvkitClient()
@@ -46,62 +47,46 @@ def _summarize_snapshot(yaml_text: str) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("Envkit")
 async def envkit_snapshot(output_file: str = "", summary: bool = True) -> str:
     """Take a full macOS environment snapshot -- captures Homebrew formulae/casks, Python packages, Node.js packages, shell config, Docker, apps, and CLI tools. Returns YAML output. Use summary=true (default) to get category counts + top items only."""
-    try:
-        result = await to_thread(client.snapshot, output_file or None)
-        if summary and not output_file and isinstance(result, str):
-            result = _summarize_snapshot(result)
-        elif isinstance(result, str) and len(result) > 5000:
-            result = result[:5000] + f"\n\n... (truncated, {len(result)} chars total)"
-        return result
-    except EnvkitError as e:
-        return f"Envkit error (rc={e.returncode}): {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.snapshot, output_file or None)
+    if summary and not output_file and isinstance(result, str):
+        result = _summarize_snapshot(result)
+    elif isinstance(result, str) and len(result) > 5000:
+        result = result[:5000] + f"\n\n... (truncated, {len(result)} chars total)"
+    return result
 
 
 @mcp.tool()
+@mcp_error_handler("Envkit")
 async def envkit_verify(snapshot_path: str) -> str:
     """Verify the current environment against a saved snapshot. Reports differences: added, removed, or version-changed packages."""
-    try:
-        result = await to_thread(client.verify, snapshot_path)
-        return result
-    except EnvkitError as e:
-        return f"Envkit error (rc={e.returncode}): {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.verify, snapshot_path)
+    return result
 
 
 @mcp.tool()
+@mcp_error_handler("Envkit")
 async def envkit_diff(file_a: str, file_b: str) -> str:
     """Compare two environment snapshots and show differences (added, removed, version changes across all categories)."""
-    try:
-        result = await to_thread(client.diff, file_a, file_b)
-        return result
-    except EnvkitError as e:
-        return f"Envkit error (rc={e.returncode}): {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.diff, file_a, file_b)
+    return result
 
 
 @mcp.tool()
+@mcp_error_handler("Envkit")
 async def envkit_list(category: str = "all", limit: int = 50) -> str:
     """List installed items by category. Categories: all, brew, cask, python, node, shell, docker, apps, cli."""
-    try:
-        result = await to_thread(client.list_items, category)
-        if isinstance(result, str):
-            lines = result.splitlines()
-            if len(lines) > limit:
-                result = (
-                    "\n".join(lines[:limit])
-                    + f"\n\n... ({len(lines)} lines total, showing {limit})"
-                )
-        return result
-    except EnvkitError as e:
-        return f"Envkit error (rc={e.returncode}): {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.list_items, category)
+    if isinstance(result, str):
+        lines = result.splitlines()
+        if len(lines) > limit:
+            result = (
+                "\n".join(lines[:limit])
+                + f"\n\n... ({len(lines)} lines total, showing {limit})"
+            )
+    return result
 
 
 if __name__ == "__main__":

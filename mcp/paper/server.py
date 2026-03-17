@@ -15,20 +15,15 @@ Configure in ~/.mcpproxy/mcp_config.json:
     }
 """
 
-import json
 from asyncio import to_thread
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.paper import PaperClient
+from workshop.mcp_helpers import build_body, json_text, mcp_error_handler
 
 mcp = FastMCP("paper")
 client = PaperClient()
-
-
-def json_text(data) -> str:
-    return json.dumps(data, ensure_ascii=False, indent=2, default=str)
 
 
 def _format_articles(result: dict) -> str:
@@ -105,6 +100,7 @@ def _format_digest(d: dict) -> str:
 
 
 @mcp.tool()
+@mcp_error_handler("Paper")
 async def paper_articles(
     category: Optional[str] = None,
     tag: Optional[str] = None,
@@ -114,40 +110,32 @@ async def paper_articles(
     page_size: int = 20,
 ) -> str:
     """List academic paper articles with optional filters (category, tag, relevance, cannibalize candidates)."""
-    try:
-        result = await to_thread(
-            client.list_articles,
-            page=page,
-            page_size=page_size,
-            category=category,
-            tag=tag,
-            relevance=relevance,
-            cannibalize_candidate=cannibalize_candidate,
-        )
-        return _format_articles(result)
-    except (APIError, APIConnectionError) as e:
-        return f"Paper error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.list_articles,
+        page=page,
+        page_size=page_size,
+        category=category,
+        tag=tag,
+        relevance=relevance,
+        cannibalize_candidate=cannibalize_candidate,
+    )
+    return _format_articles(result)
 
 
 @mcp.tool()
+@mcp_error_handler("Paper")
 async def paper_article_search(query: str, limit: int = 5) -> str:
     """Semantic search over academic papers. Returns ranked results with similarity scores."""
-    try:
-        result = await to_thread(
-            client.search,
-            query=query,
-            limit=limit,
-        )
-        return _format_search(result)
-    except (APIError, APIConnectionError) as e:
-        return f"Paper error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.search,
+        query=query,
+        limit=limit,
+    )
+    return _format_search(result)
 
 
 @mcp.tool()
+@mcp_error_handler("Paper")
 async def paper_article_create(
     title: str,
     abstract: Optional[str] = None,
@@ -160,63 +148,51 @@ async def paper_article_create(
     source_url: Optional[str] = None,
 ) -> str:
     """Create a new paper article entry with metadata."""
-    try:
-        result = await to_thread(
-            client.create_article,
-            title=title,
-            abstract=abstract,
-            arxiv_id=arxiv_id,
-            doi=doi,
-            year=year,
-            authors=authors,
-            categories=categories,
-            tags=tags,
-            source_url=source_url,
-        )
-        return f"Article created: **{result.get('title', '?')}** (id: {result.get('id', '?')})"
-    except (APIError, APIConnectionError) as e:
-        return f"Paper error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    body = build_body(
+        {"title": title},
+        abstract=abstract,
+        arxiv_id=arxiv_id,
+        doi=doi,
+        year=year,
+        authors=authors,
+        categories=categories,
+        tags=tags,
+        source_url=source_url,
+    )
+    result = await to_thread(client.create_article, **body)
+    return f"Article created: **{result.get('title', '?')}** (id: {result.get('id', '?')})"
 
 
 @mcp.tool()
+@mcp_error_handler("Paper")
 async def paper_article_detail(article_id: str) -> str:
     """Get full details of a paper article including metadata, abstract, and linked digest."""
-    try:
-        result = await to_thread(
-            client.get_article,
-            article_id=article_id,
-        )
-        return _format_article_detail(result)
-    except (APIError, APIConnectionError) as e:
-        return f"Paper error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.get_article,
+        article_id=article_id,
+    )
+    return _format_article_detail(result)
 
 
 @mcp.tool()
+@mcp_error_handler("Paper")
 async def paper_digest(article_id: str, generate: bool = False) -> str:
     """Get or generate a structured LLM digest for a paper (one-liner, key findings, relevance, actionable insight)."""
-    try:
-        if generate:
-            result = await to_thread(
-                client.trigger_digest,
-                article_id=article_id,
-            )
-        else:
-            result = await to_thread(
-                client.get_digest,
-                article_id=article_id,
-            )
-        return _format_digest(result)
-    except (APIError, APIConnectionError) as e:
-        return f"Paper error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    if generate:
+        result = await to_thread(
+            client.trigger_digest,
+            article_id=article_id,
+        )
+    else:
+        result = await to_thread(
+            client.get_digest,
+            article_id=article_id,
+        )
+    return _format_digest(result)
 
 
 @mcp.tool()
+@mcp_error_handler("Paper")
 async def paper_annotate(
     article_id: str,
     note: str,
@@ -224,39 +200,30 @@ async def paper_annotate(
     tags: Optional[list[str]] = None,
 ) -> str:
     """Add an annotation (note, highlight, question, synthesis, action-taken) to a paper article."""
-    try:
-        result = await to_thread(
-            client.create_annotation,
-            article_id=article_id,
-            note=note,
-            annotation_type=annotation_type,
-            tags=tags,
-        )
-        return (
-            f"Annotation added (type: {result.get('annotation_type', 'note')}, "
-            f"id: {result.get('id', '?')})"
-        )
-    except (APIError, APIConnectionError) as e:
-        return f"Paper error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(
+        client.create_annotation,
+        article_id=article_id,
+        note=note,
+        annotation_type=annotation_type,
+        tags=tags,
+    )
+    return (
+        f"Annotation added (type: {result.get('annotation_type', 'note')}, "
+        f"id: {result.get('id', '?')})"
+    )
 
 
 @mcp.tool()
+@mcp_error_handler("Paper")
 async def paper_dashboard(max_list_items: int = 10) -> str:
     """Get Paper module dashboard summary (article counts, relevance distribution, recent activity)."""
-    try:
-        result = await to_thread(client.get_dashboard)
-        if isinstance(result, dict):
-            for key, val in result.items():
-                if isinstance(val, list) and len(val) > max_list_items:
-                    result[key] = val[:max_list_items]
-                    result[f"{key}_total"] = len(val)
-        return json_text(result)
-    except (APIError, APIConnectionError) as e:
-        return f"Paper error: {e}"
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    result = await to_thread(client.get_dashboard)
+    if isinstance(result, dict):
+        for key, val in result.items():
+            if isinstance(val, list) and len(val) > max_list_items:
+                result[key] = val[:max_list_items]
+                result[f"{key}_total"] = len(val)
+    return json_text(result)
 
 
 if __name__ == "__main__":
