@@ -444,6 +444,30 @@ class MemvaultClient(BaseClient):
             },
         )
 
+    # ======================== Search Feedback ========================
+
+    def feedback(
+        self,
+        entity_id: str,
+        query: str,
+        signal: str = "positive",
+        feedback_source: str = "agent",
+    ) -> dict:
+        """Record explicit relevance feedback for a search result. POST /feedback"""
+        return self._post(
+            "/feedback",
+            {
+                "entity_id": entity_id,
+                "query": query,
+                "signal": signal,
+                "feedback_source": feedback_source,
+            },
+        )
+
+    def get_feedback(self, entity_id: str) -> dict:
+        """Get aggregated feedback for a block. GET /feedback/{id}"""
+        return self._get(f"/feedback/{entity_id}")
+
     # ======================== Convenience ========================
 
     def stats(self) -> dict:
