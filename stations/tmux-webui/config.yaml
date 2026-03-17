@@ -5,33 +5,17 @@ metrics_interval: 5.0
 capture_lines: 150
 theme: "catppuccin-mocha"
 
-extra_keys:
-  - "Ctrl"
-  - "Alt"
-  - "Cmd"
-  - "|"
-  - "Tab"
-  - "Esc"
-  - "|"
-  - "/"
-  - "."
-  - ":"
-  - ";"
-  - "|"
-  - "-"
-  - "_"
-  - "~"
-  - "|"
-  - "BSpace"
-
+# Quick Actions — always visible, absolute essentials
 quick_actions:
-  - label: "y"
-    key: "y"
-  - label: "n"
-    key: "n"
-  - label: "Ctrl+C"
-    key: "C-c"
-  - label: "Enter"
-    key: "Enter"
-  - label: "Esc"
-    key: "Escape"
+  - { label: "Esc", key: "Escape" }
+  - { label: "Tab", key: "Tab" }
+  - { label: "C-c", key: "C-c" }
+  - { label: "Enter", key: "Enter" }
+
+# Extra Keys — toggleable second row
+# Modifiers use FSM: tap=armed(3s), double-tap=locked
+# Shell chars: only ones hard to reach on mobile keyboard
+extra_keys:
+  modifiers: ["Ctrl", "Alt", "Cmd"]
+  controls: ["C-d", "C-z", "C-l", "⇧Tab"]
+  shell_chars: ["|", "~", "`", "\\"]

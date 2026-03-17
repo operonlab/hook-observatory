@@ -44,47 +44,37 @@
 
   <footer>
     <div class="footer-top">
+      <!-- Quick Actions: essentials only (Blink Shell style) -->
       <div class="quick-actions">
-        <button type="button" class="qbtn" data-key="Escape" title="Escape">Esc<span class="qico">&#x238B;</span></button>
-        <button type="button" class="qbtn" data-key="Tab" title="Tab">Tab<span class="qico">&#x21E5;</span></button>
-        <button type="button" class="qbtn" data-key="BTab" title="Shift+Tab">&#8679;Tab<span class="qico">&#x21E4;</span></button>
-        <button type="button" class="qbtn" data-key="C-c" title="Interrupt">C-c<span class="qico">&#x2303;</span></button>
-        <button type="button" class="qbtn" data-key="BSpace" title="Delete">Del<span class="qico">&#x232B;</span></button>
-        <button type="button" class="qbtn" data-key="Enter" title="Enter">Enter<span class="qico">&#x23CE;</span></button>
+        <button type="button" class="qbtn" data-key="Escape" title="Escape">Esc</button>
+        <button type="button" class="qbtn" data-key="Tab" title="Tab">Tab</button>
+        <button type="button" class="qbtn" data-key="C-c" title="Interrupt" style="color:var(--yellow)">C-c</button>
         <div class="arrow-pad arrow-pad-mini" id="quick-arrow-pad"><div class="arrow-pad-label">&#8982;</div></div>
+        <button type="button" class="qbtn" data-key="Enter" title="Enter">&#x23CE;</button>
         <button class="qbtn qbtn-ek-toggle" id="ek-toggle" title="Toggle extra keys">&#9776;</button>
       </div>
       <button class="exit-fullscreen" id="exit-fullscreen" title="Exit fullscreen">&#x26F6; exit</button>
       <span class="focused-label" id="focused-label">no pane</span>
     </div>
     <div class="extra-keys" id="extra-keys">
-      <!-- Modifier keys -->
-      <button class="ek mod" data-mod="C">&#x2303; Ctrl</button>
-      <button class="ek mod" data-mod="M">&#x2325; Alt</button>
-      <button class="ek mod" data-mod="S">&#x2318; Cmd</button>
+      <!-- Row 1: Modifiers (FSM: tap=armed, double-tap=locked) -->
+      <button class="ek mod" data-mod="C" title="Ctrl (tap=once, double-tap=lock)">Ctrl</button>
+      <button class="ek mod" data-mod="M" title="Alt/Option">Alt</button>
+      <button class="ek mod" data-mod="S" title="Cmd/Super">Cmd</button>
       <div class="ek-sep"></div>
-      <!-- Common keys -->
-      <button class="ek" data-ek="Tab">Tab</button>
+      <!-- Row 2: Control shortcuts -->
+      <button class="ek" data-ctrl="d" title="Ctrl+D (EOF/exit)" style="color:var(--red)">C-d</button>
+      <button class="ek" data-ctrl="z" title="Ctrl+Z (suspend)" style="color:var(--cyan)">C-z</button>
+      <button class="ek" data-ctrl="l" title="Ctrl+L (clear)" style="color:var(--green)">C-l</button>
+      <button class="ek" data-ek="BTab" title="Shift+Tab">⇧Tab</button>
       <div class="ek-sep"></div>
-      <!-- Dev chars (V2: added /, ., :, ;) -->
-      <button class="ek" data-ek="/" style="font-size:14px">/</button>
-      <button class="ek" data-ek="." style="font-size:14px">.</button>
-      <button class="ek" data-ek=":" style="font-size:14px">:</button>
-      <button class="ek" data-ek=";" style="font-size:14px">;</button>
+      <!-- Row 3: Shell chars (only ones hard to reach on mobile keyboard) -->
       <button class="ek" data-ek="|">|</button>
-      <button class="ek" data-ek="-">-</button>
-      <button class="ek" data-ek="_">_</button>
       <button class="ek" data-ek="~">~</button>
-      <button class="ek" data-ek="BSpace">&#9003;</button>
+      <button class="ek" data-ek="`">`</button>
+      <button class="ek" data-ek="\">\</button>
       <div class="ek-sep"></div>
-      <!-- Ctrl combos (standalone) -->
-      <button class="ek" data-ek="BTab" title="Shift+Tab" style="font-size:10px">⇧Tab</button>
-      <button class="ek" data-ctrl="c" title="Ctrl+C" style="color:var(--yellow);font-size:10px">C-c</button>
-      <button class="ek" data-ctrl="d" title="Ctrl+D" style="color:var(--red);font-size:10px">C-d</button>
-      <button class="ek" data-ctrl="z" title="Ctrl+Z" style="color:var(--cyan);font-size:10px">C-z</button>
-      <button class="ek" data-ctrl="l" title="Ctrl+L" style="color:var(--green);font-size:10px">C-l</button>
-      <div class="ek-sep"></div>
-      <!-- Arrow pad (swipe direction) -->
+      <!-- Arrow pad (swipe) -->
       <div class="arrow-pad" id="arrow-pad"><div class="arrow-pad-label">&#8982;</div></div>
     </div>
     <div class="ac-wrap">
