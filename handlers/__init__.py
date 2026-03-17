@@ -27,6 +27,7 @@ from . import (
     observability,
     pm_autopilot,
     relay_signal,
+    rtk_rewrite,
     sentinel_notify,
     session_pipeline,
     skill_security,
@@ -52,6 +53,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ("Bash", verify_commit.handle),
         ("Bash", bash_safety.handle),
         ("Bash", sentinel_notify.handle),
+        ("Bash", rtk_rewrite.handle),  # after safety — rewrite for token savings
         ("Write|Edit", skill_security.handle),
         (None, context_supervisor.handle),
         (None, observability.handle),
@@ -144,6 +146,7 @@ def dispatch(event_type: str, raw_input: str) -> str:
     reason = ""
     messages: list[str] = []
     passthrough_parts: list[str] = []
+    updated_input: dict | None = None
 
     for matcher, handler_fn in handlers:
         if not _matches(matcher, tool_name):
@@ -167,15 +170,38 @@ def dispatch(event_type: str, raw_input: str) -> str:
         if result.text:
             passthrough_parts.append(result.text)
 
+        if result.updated_input is not None:
+            updated_input = result.updated_input
+
     # --- Build output ---
     if event_type == "UserPromptSubmit" and passthrough_parts:
         return "\n".join(passthrough_parts)
 
-    output: dict = {}
+    # Block wins — no rewrite
+    if decision == "block":
+        output: dict = {"decision": decision}
+        if reason:
+            output["reason"] = reason
+        if messages:
+            output["message"] = "; ".join(messages)
+        return json.dumps(output)
+
+    # Rewrite — use hookSpecificOutput format
+    if updated_input is not None:
+        hook_output: dict = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+                "permissionDecisionReason": "RTK auto-rewrite",
+                "updatedInput": updated_input,
+            }
+        }
+        return json.dumps(hook_output)
+
+    # Normal case
+    output = {}
     if decision:
         output["decision"] = decision
-    if decision == "block" and reason:
-        output["reason"] = reason
     if messages:
         output["message"] = "; ".join(messages)
     return json.dumps(output)
