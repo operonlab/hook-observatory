@@ -1,4 +1,4 @@
-import { createCrudApi, request } from '@/api/client'
+import { buildParams, createCrudApi, request } from '@/api/client'
 import type { PaginatedResponse } from '@/types'
 import type {
   Budget,
@@ -52,15 +52,10 @@ export const transactionApi = {
     tag?: string
     search?: string
     status?: string
-  }) => {
-    const qs = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== '') qs.set(k, String(v))
-    }
-    if (!qs.has('page')) qs.set('page', '1')
-    if (!qs.has('page_size')) qs.set('page_size', '20')
-    return request<PaginatedResponse<Transaction>>(`/finance/transactions?${qs}`)
-  },
+  }) =>
+    request<PaginatedResponse<Transaction>>(
+      `/finance/transactions${buildParams(params as Record<string, unknown>)}`,
+    ),
 }
 
 export const categoryApi = {
