@@ -189,6 +189,9 @@ async def delete_block(
 # ======================== Semantic Search ========================
 
 
+_ROUTING_MIN_RESULTS = 2  # Minimum results before routing fallback triggers
+
+
 @router.get("/search", response_model=EnhancedSearchResult)
 async def search(
     q: str = Query(..., min_length=1, max_length=2000),
@@ -196,6 +199,7 @@ async def search(
     space_id: str = Query("default"),
     include_metadata: bool = Query(False, description="Include scoring metadata"),
     skip_adaptive: bool = Query(False, description="Force search even if adaptive says skip"),
+    skip_routing: bool = Query(False, description="Skip tag-based pre-filter for A/B testing"),
     scope: str | None = Query(
         None,
         description="Scope filter: global, session:{id}, user:{id}, type:{type}. Comma-separated.",
@@ -236,6 +240,10 @@ async def search(
     except Exception:
         embed_text = q  # fallback to original query
 
+    # Extract inferred domain tags for pre-filtering (safe fallback: empty = full search)
+    inferred_tags = expanded.inferred_tags if expanded else []
+    routing_tags = inferred_tags if (inferred_tags and not skip_routing) else None
+
     try:
         query_embedding = await get_embedding(embed_text, task_type="search_query")
     except Exception:
@@ -265,7 +273,7 @@ async def search(
             metadata=meta if include_metadata else None,
         )
 
-    # Try Qdrant hybrid search first, fall back to pgvector
+    # Qdrant hybrid search (primary backend)
     qdrant_result = await memory_block_service.qdrant_search(
         db,
         space_id,
@@ -275,15 +283,38 @@ async def search(
         scope=scope,
         date_from=date_from,
         date_to=date_to,
+        tags=routing_tags,
     )
+
+    # Routing fallback: if tag pre-filter produced sparse results, retry without tags
+    if qdrant_result is not None and routing_tags and len(qdrant_result[0]) < _ROUTING_MIN_RESULTS:
+        logger.debug(
+            "routing fallback: tags=%s produced %d results (< %d), retrying without tags",
+            routing_tags,
+            len(qdrant_result[0]),
+            _ROUTING_MIN_RESULTS,
+        )
+        qdrant_result = await memory_block_service.qdrant_search(
+            db,
+            space_id,
+            q,
+            query_embedding,
+            top_k=top_k,
+            scope=scope,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
     if qdrant_result is not None:
         results, meta = qdrant_result
+        meta.routing_tags = inferred_tags if inferred_tags else None
         return EnhancedSearchResult(
             results=results,
             metadata=meta if include_metadata else None,
         )
 
-    # Pass HyDE-expanded keywords to semantic_search for enriched keyword matching
+    # LEGACY FALLBACK: Qdrant unavailable — using pgvector semantic_search
+    logger.warning("Qdrant unavailable — using legacy pgvector path for search")
     hyde_keywords = getattr(expanded, "keywords", None) if expanded else None
 
     results, meta = await memory_block_service.semantic_search(
@@ -297,6 +328,7 @@ async def search(
         date_to=date_to,
         keywords=hyde_keywords,
     )
+    meta.routing_tags = inferred_tags if inferred_tags else None
 
     # G2: Sanitize results before returning (prevents injection via stored memories)
     for r in results:

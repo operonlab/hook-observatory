@@ -1,4 +1,5 @@
-const CACHE_NAME = "workshop-__CACHE_VERSION__";
+// Push-Only Service Worker — NO caching.
+// Rsbuild content-hashed assets + HTTP Cache-Control headers handle caching.
 
 // ── Web Push ──
 self.addEventListener("push", (event) => {
@@ -29,11 +30,8 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-// Push-Only: no cache strategy.
-// iOS Safari SW cache causes stale assets, POST interference, and cookie isolation bugs.
-// Rsbuild content-hashed assets + HTTP Cache-Control headers handle caching correctly.
 self.addEventListener("install", (event) => {
-  // Purge all caches from previous SW versions
+  // Purge ALL caches from any previous SW version
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.map((k) => caches.delete(k)))

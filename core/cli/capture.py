@@ -9,6 +9,7 @@ Usage:
     capture show <id> [--json]
     capture fill <id> --payload JSON [--json]
     capture promote <id> [--json]
+    capture enrich <id> [--json]
     capture delete <id>
     capture stats [--json]
     capture batch-promote <id1> <id2> ...
@@ -152,6 +153,22 @@ def cmd_fill(args):
         print(f"Still missing: {', '.join(missing)}")
     else:
         print("All fields complete — ready to promote!")
+
+
+def cmd_enrich(args):
+    c = _client()
+    try:
+        result = c.enrich(args.id)
+    except (APIConnectionError, APIError) as e:
+        _err(str(e))
+
+    if _json_out(result, args):
+        return
+
+    print(f"Enriched: {args.id}")
+    print(f"  Completeness: {_bar(result.get('completeness', 0))}")
+    filled = [k for k in result.get("payload", {}) if result["payload"][k]]
+    print(f"  Fields: {', '.join(filled)}")
 
 
 def cmd_promote(args):
@@ -316,6 +333,12 @@ def main():
     p_promote.add_argument("id")
     p_promote.add_argument("--json", action="store_true")
     p_promote.set_defaults(func=cmd_promote)
+
+    # enrich
+    p_enrich = sub.add_parser("enrich", help="Run LLM enrichment on a capture")
+    p_enrich.add_argument("id", help="Capture ID")
+    p_enrich.add_argument("--json", action="store_true", help="JSON output")
+    p_enrich.set_defaults(func=cmd_enrich)
 
     # delete
     p_del = sub.add_parser("delete", aliases=["rm"], help="Delete capture")

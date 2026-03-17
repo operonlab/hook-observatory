@@ -201,11 +201,12 @@ export const useMethodStore = create<MethodStore>()((set, get) => ({
   fetchPlan: async (date?: string) => {
     set({ planLoading: true, error: null })
     try {
+      const todayFallback = new Date().toISOString().slice(0, 10)
       const plan = date
         ? await planApi.forDate(date).catch(() => null)
         : await planApi.today().catch(() => null)
       set({
-        currentDate: date || plan?.plan_date || null,
+        currentDate: date || plan?.plan_date || todayFallback,
         currentPlan: plan,
         planItems: plan?.items || [],
       })

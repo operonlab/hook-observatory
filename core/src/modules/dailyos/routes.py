@@ -160,6 +160,18 @@ async def search_dailyos(
                 )
             )
 
+    # Cross-encoder reranking
+    from src.shared.rerank_utils import rerank_generic
+
+    if len(output) > 1:
+        output = await rerank_generic(
+            query=q,
+            results=output,
+            content_fn=lambda r: r.content_preview,
+            score_fn=lambda r: r.score,
+            set_score_fn=lambda r, s: setattr(r, "score", s),
+        )
+
     return output[:top_k]
 
 
@@ -415,9 +427,7 @@ async def get_plan_stats(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("dailyos.read"),
 ):
-    return await daily_plan_service.get_date_range_stats(
-        db, space_id, date_from, date_to, context
-    )
+    return await daily_plan_service.get_date_range_stats(db, space_id, date_from, date_to, context)
 
 
 @router.get("/plans/{plan_id}", response_model=DailyPlanResponse)

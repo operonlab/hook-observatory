@@ -14,12 +14,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.models import _uuid7_hex
 
 from .adapters import BaseCaptureAdapter
+from .strategies import LLMEnrichmentStrategy
 
 
 class PlanItemCaptureAdapter(BaseCaptureAdapter):
     module = "dailyos"
     entity_type = "plan_item"
     default_ttl_days = 7  # shorter TTL — plan items are time-sensitive
+
+    @property
+    def enrichment_strategies(self):
+        from .enrichment_config import ENRICHMENT_SCHEMAS
+
+        schema = ENRICHMENT_SCHEMAS.get(("dailyos", "plan_item"))
+        return [LLMEnrichmentStrategy(field_schema=schema)] if schema else []
 
     field_weights = {
         "title": 40,

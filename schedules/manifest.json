@@ -225,11 +225,31 @@
       "enabled": true
     },
     {
+      "name": "ws-relay-auto-standby",
+      "label": "com.joneshong.scheduler.ws-relay-auto-standby",
+      "command": "~/.local/bin/relay standby",
+      "schedule": { "interval": 120 },
+      "description": "每 2 分鐘: idle relay pane auto-standby（/exit Claude Code，保留 pane）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-memory-guardian",
       "label": "com.joneshong.scheduler.ws-memory-guardian",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memory_guardian.py",
       "schedule": { "interval": 60 },
       "description": "每 60 秒: 記憶體壓力防護 — P1 殺可犧牲 app, P2/P3 殺 Claude Code",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-capture-watchdog",
+      "label": "com.joneshong.scheduler.ws-capture-watchdog",
+      "command": "~/.local/bin/python3 ~/workshop/scripts/capture_watchdog.py",
+      "schedule": { "interval": 300 },
+      "description": "每 5 分鐘: Capture Haiku 常駐 watchdog — idle >30min 自動 recycle",
       "category": "workshop",
       "type": "periodic",
       "enabled": true

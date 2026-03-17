@@ -53,7 +53,6 @@ const SERVICE_DISPLAY = {
     rustfs:                     'RustFS (S3)',
     lgtm:                       'LGTM Stack',
     litellm:                    'LiteLLM Proxy',
-    omlx:                       'oMLX Embedding',
     // internal
     core:                       'Core API',
     gateway:                    'Gateway',

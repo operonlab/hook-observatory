@@ -24,7 +24,14 @@ from mcp.types import TextContent, Tool
 from workshop.clients.tmux_relay import TmuxRelayClient, TmuxRelayError
 
 server = Server("tmux-relay")
-client = TmuxRelayClient()
+_default_client = TmuxRelayClient(silent=True)
+
+
+def _client(model: str | None = None, silent: bool = True) -> TmuxRelayClient:
+    """Return a client with optional model/silent override."""
+    if model or not silent:
+        return TmuxRelayClient(model=model, silent=silent)
+    return _default_client
 
 
 def text_result(text: str) -> list[TextContent]:
@@ -61,6 +68,15 @@ async def list_tools() -> list[Tool]:
                         "default": 200,
                         "description": "Max lines of output to return",
                     },
+                    "model": {
+                        "type": "string",
+                        "description": "Claude Code model (e.g. haiku, sonnet). Cheaper models for simple tasks.",
+                    },
+                    "silent": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Suppress TTS voice notifications in relay pane",
+                    },
                 },
                 "required": ["command"],
             },
@@ -87,6 +103,15 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "default": 1,
                         "description": "Number of panes to dispatch to (for parallel tasks)",
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Claude Code model (e.g. haiku, sonnet). Cheaper models for simple tasks.",
+                    },
+                    "silent": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Suppress TTS voice notifications in relay pane",
                     },
                 },
                 "required": ["command"],
@@ -177,8 +202,9 @@ def _format_panes(panes) -> str:
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "relay_run":
+            c = _client(arguments.get("model"), arguments.get("silent", True))
             result = await to_thread(
-                client.run,
+                c.run,
                 command=arguments["command"],
                 timeout=arguments.get("timeout", 600),
                 max_lines=arguments.get("lines", 200),
@@ -186,8 +212,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return text_result(_format_relay_result(result))
 
         elif name == "relay_dispatch":
+            c = _client(arguments.get("model"), arguments.get("silent", True))
             dispatched = await to_thread(
-                client.dispatch,
+                c.dispatch,
                 command=arguments["command"],
                 timeout=arguments.get("timeout", 600),
                 count=arguments.get("count", 1),
@@ -195,21 +222,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return text_result(_format_dispatch(dispatched))
 
         elif name == "relay_list":
-            panes = await to_thread(client.list_panes)
+            panes = await to_thread(_default_client.list_panes)
             return text_result(_format_panes(panes))
 
         elif name == "relay_check":
             result = await to_thread(
-                client.check,
+                _default_client.check,
                 signal_file=arguments["signal_file"],
             )
             status = result.get("status", "unknown").upper()
             meta = result.get("meta", "")
-            return text_result(f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}")
+            return text_result(
+                f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}"
+            )
 
         elif name == "relay_result":
             result = await to_thread(
-                client.result,
+                _default_client.result,
                 signal_file=arguments["signal_file"],
                 max_lines=arguments.get("lines", 200),
             )

@@ -5,7 +5,7 @@
 ## 定位
 
 Workshop Core 的 `intelflow` 模組，整合三個現有系統：
-1. **research_report service**（V1：`~/Claude/services/research_report/`，已遷移）— 報告 CRUD + pgvector
+1. **research_report service**（V1：`~/Claude/services/research_report/`，已遷移）— 報告 CRUD + Qdrant
 2. **smart-search skill**（`~/.claude/skills/smart-search/`）— 多源搜尋引擎
 3. **daily-briefing skill**（`~/.claude/skills/daily-briefing/`）— 三 AI 分析師辯論
 
@@ -13,7 +13,7 @@ Workshop Core 的 `intelflow` 模組，整合三個現有系統：
 
 | 能力 | 說明 |
 |------|------|
-| **報告管理** | CRUD + 語意搜尋（pgvector 768d / 1536d） |
+| **報告管理** | CRUD + 語意搜尋（Qdrant 混合搜尋引擎） |
 | **查重** | 新搜尋前查詢已有相似報告，避免重複 |
 | **主題圖譜** | 自動提取主題 + 建立關聯圖（force-directed graph） |
 | **每日情報** | 三 AI 分析師獨立分析 + 交叉辯論 |
@@ -31,7 +31,7 @@ CREATE TABLE intelflow.reports (
     sources     JSONB DEFAULT '[]',       -- 來源 URL + 標題
     tags        TEXT[] DEFAULT '{}',
     skill_name  TEXT,                     -- 產生此報告的 skill（smart-search 等）
-    embedding   vector(768),              -- pgvector，Ollama nomic-embed-text
+    embedding   vector(768),              -- legacy storage, search via Qdrant
     space_id    UUID NOT NULL,
     created_at  TIMESTAMPTZ DEFAULT now(),
     updated_at  TIMESTAMPTZ DEFAULT now()
@@ -195,7 +195,7 @@ core/src/modules/intelflow/
 ├── schemas.py            ← Pydantic models
 ├── models.py             ← SQLAlchemy models
 ├── service.py            ← 業務邏輯（CRUD + 搜尋）
-├── search.py             ← pgvector 語意搜尋引擎
+├── search.py             ← Qdrant 混合搜尋引擎
 ├── topic_extractor.py    ← 自動主題提取 + 關聯圖
 ├── briefing_pipeline.py  ← 三分析師辯論管線
 └── events.py             ← 事件定義（intelflow.report.created 等）

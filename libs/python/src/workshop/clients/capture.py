@@ -58,6 +58,10 @@ class CaptureClient(BaseClient):
     def promote(self, capture_id: str) -> dict:
         return self._post(f"/{capture_id}/promote")
 
+    def enrich(self, capture_id: str) -> dict:
+        """Trigger LLM enrichment on a capture."""
+        return self._post(f"/{capture_id}/enrich")
+
     def delete(self, capture_id: str) -> None:
         self._delete(f"/{capture_id}")
 

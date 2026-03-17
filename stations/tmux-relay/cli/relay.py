@@ -12,6 +12,7 @@ Usage:
     relay spawn [--session S]
     relay context <pane> [--lines N]
     relay recycle <pane>
+    relay standby [<pane>]
     relay reaper
     relay cleanup [--threshold N]
     relay cache show|refresh|clear|ping
@@ -33,7 +34,9 @@ def _json_out(data, as_json=False):
 
 
 def cmd_run(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         result = client.run(
             command=args.command,
@@ -55,7 +58,9 @@ def cmd_run(args):
 
 
 def cmd_dispatch(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         dispatched = client.dispatch(
             command=args.command,
@@ -77,7 +82,9 @@ def cmd_dispatch(args):
 
 
 def cmd_check(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     result = client.check(args.signal_file)
     if args.json:
         _json_out(result, True)
@@ -89,7 +96,9 @@ def cmd_check(args):
 
 
 def cmd_result(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     result = client.result(args.signal_file, max_lines=args.lines)
     if args.json:
         _json_out(result.to_dict(), True)
@@ -106,7 +115,9 @@ def cmd_result(args):
 
 
 def cmd_list(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         panes = client.list_panes()
         if args.json:
@@ -125,7 +136,9 @@ def cmd_list(args):
 
 
 def cmd_status(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         st = client.status(args.pane)
         if args.json:
@@ -138,7 +151,9 @@ def cmd_status(args):
 
 
 def cmd_acquire(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         panes = client.acquire(count=args.count)
         if args.json:
@@ -152,7 +167,9 @@ def cmd_acquire(args):
 
 
 def cmd_spawn(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         pane = client.spawn(session=args.session)
         if args.json:
@@ -165,7 +182,9 @@ def cmd_spawn(args):
 
 
 def cmd_context(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         ctx = client.context(args.pane, lines=args.lines)
         if args.json:
@@ -178,7 +197,9 @@ def cmd_context(args):
 
 
 def cmd_recycle(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         result = client.recycle(args.pane)
         if args.json:
@@ -190,8 +211,32 @@ def cmd_recycle(args):
         sys.exit(1)
 
 
+def cmd_standby(args):
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
+    try:
+        if args.pane:
+            result = client.standby(args.pane)
+            if args.json:
+                _json_out({"pane": args.pane, "result": result}, True)
+            else:
+                print(f"{args.pane}: {result}")
+        else:
+            result = client.auto_standby()
+            if args.json:
+                _json_out({"result": result}, True)
+            else:
+                print(result)
+    except TmuxRelayError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_reaper(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         result = client.reaper()
         if args.json:
@@ -204,7 +249,9 @@ def cmd_reaper(args):
 
 
 def cmd_cleanup(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     try:
         result = client.cleanup(threshold=args.threshold)
         if args.json:
@@ -217,7 +264,9 @@ def cmd_cleanup(args):
 
 
 def cmd_cache(args):
-    client = TmuxRelayClient()
+    client = TmuxRelayClient(
+        model=getattr(args, "model", None), silent=getattr(args, "silent", False)
+    )
     sub = args.cache_action
 
     if sub == "ping":
@@ -280,6 +329,8 @@ def main():
         description="tmux-relay — async inter-pane delegation CLI",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--model", help="Claude Code model (e.g. haiku, sonnet)")
+    parser.add_argument("--silent", action="store_true", help="Suppress TTS in relay sessions")
     sub = parser.add_subparsers(dest="subcmd", required=True)
 
     # run
@@ -336,6 +387,13 @@ def main():
     p_recycle = sub.add_parser("recycle", help="Recycle a pane (/exit + restart)")
     p_recycle.add_argument("pane", help="Pane reference")
     p_recycle.set_defaults(func=cmd_recycle)
+
+    # standby
+    p_standby = sub.add_parser("standby", help="Standby: exit Claude Code, keep pane")
+    p_standby.add_argument(
+        "pane", nargs="?", default=None, help="Pane reference (omit for auto-sweep)"
+    )
+    p_standby.set_defaults(func=cmd_standby)
 
     # reaper
     p_reaper = sub.add_parser("reaper", help="Recycle excess idle panes")

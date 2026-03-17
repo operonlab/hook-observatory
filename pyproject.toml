@@ -53,6 +53,7 @@ ignore = [
 "stations/hook-observatory/handlers/sentinel_notify.py" = ["S110", "S310"]  # fail-open + localhost URL
 "stations/hook-observatory/handlers/session_pipeline.py" = ["S110", "S603"]  # fail-open + trusted subprocess
 "stations/hook-observatory/handlers/verify_commit.py" = ["S108"]  # /tmp state file
+"stations/hook-observatory/handlers/context_supervisor.py" = ["RUF001"]  # Chinese UI strings in notifications
 "stations/hook-observatory/handlers/voice_notify.py" = ["RUF001", "S108", "S110", "S310", "S311", "S603", "S607"]  # Chinese TTS + trusted subprocess + /tmp audio
 "scripts/workshop_services.py" = ["S603", "S607"]  # trusted service management subprocess calls
 "stations/sentinel/prompt_templates.py" = ["E501", "RUF001"]  # long prompt template strings + Chinese

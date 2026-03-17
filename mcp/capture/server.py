@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Capture MCP Server — progressive data enrichment for all modules.
 
-9 tools: capture (create), capture_list, capture_update, capture_promote, capture_stats,
-capture_delete, capture_batch_promote, capture_batch_fill, capture_enrichments.
+10 tools: capture (create), capture_list, capture_update, capture_promote, capture_stats,
+capture_delete, capture_batch_promote, capture_batch_fill, capture_enrichments, capture_enrich.
 Uses workshop.clients.capture SDK.
 
 Usage:
@@ -173,6 +173,17 @@ async def list_tools() -> list[Tool]:
                 "required": ["capture_id"],
             },
         ),
+        Tool(
+            name="capture_enrich",
+            description="觸發 LLM 豐富（Haiku 解析 raw_input 填補缺失欄位）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "capture_id": {"type": "string", "description": "Capture ID"},
+                },
+                "required": ["capture_id"],
+            },
+        ),
     ]
 
 
@@ -241,13 +252,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return text_result("\n".join(lines))
 
         elif name == "capture_promote":
-            result = await to_thread(
-                client.promote, capture_id=arguments["capture_id"]
-            )
+            result = await to_thread(client.promote, capture_id=arguments["capture_id"])
             if result.get("success"):
-                return text_result(
-                    f"Promoted! New record ID: {result['promoted_id']}"
-                )
+                return text_result(f"Promoted! New record ID: {result['promoted_id']}")
             else:
                 missing = result.get("missing_fields", [])
                 error = result.get("error", "Unknown error")
@@ -271,9 +278,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return text_result("Capture deleted.")
 
         elif name == "capture_batch_promote":
-            results = await to_thread(
-                client.batch_promote, capture_ids=arguments["capture_ids"]
-            )
+            results = await to_thread(client.batch_promote, capture_ids=arguments["capture_ids"])
             lines = [f"Batch promote: {len(results)} results"]
             for r in results:
                 cid = r.get("capture_id", r.get("id", "?"))[:12]
@@ -301,10 +306,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 lines.append(f"  {cid}...  {pct}%  {status_str}")
             return text_result("\n".join(lines))
 
+        elif name == "capture_enrich":
+            result = await to_thread(client.enrich, arguments["capture_id"])
+            return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+
         elif name == "capture_enrichments":
-            history = await to_thread(
-                client.enrichments, capture_id=arguments["capture_id"]
-            )
+            history = await to_thread(client.enrichments, capture_id=arguments["capture_id"])
             if not history:
                 return text_result("No enrichment history found.")
             lines = [f"Enrichment history ({len(history)} entries):"]
@@ -312,7 +319,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 agent = entry.get("agent_id", "unknown")
                 ts = str(entry.get("created_at", entry.get("timestamp", "")))[:19]
                 delta = entry.get("delta", {})
-                delta_str = ", ".join(f"{k}={v}" for k, v in delta.items()) if delta else "(no fields)"
+                delta_str = (
+                    ", ".join(f"{k}={v}" for k, v in delta.items()) if delta else "(no fields)"
+                )
                 lines.append(f"  {ts}  {agent}  {delta_str}")
             return text_result("\n".join(lines))
 

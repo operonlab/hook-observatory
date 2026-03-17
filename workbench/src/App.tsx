@@ -68,6 +68,7 @@ const InvestPage = React.lazy(() => import('./modules/invest/pages'))
 const MatchcorePage = React.lazy(() => import('./modules/matchcore/pages'))
 const NodeflowPage = React.lazy(() => import('./modules/nodeflow/pages'))
 const AnvilPage = React.lazy(() => import('./modules/anvil/pages'))
+const CapturePage = React.lazy(() => import('./modules/capture/pages'))
 const DailyosPage = React.lazy(() => import('./modules/dailyos/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
@@ -283,6 +284,18 @@ function AppRoutes() {
             <AppShell>
               <ModuleSuspense>
                 <AnvilPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/capture/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <CapturePage />
               </ModuleSuspense>
             </AppShell>
           </AuthGuard>

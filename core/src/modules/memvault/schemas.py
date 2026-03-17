@@ -133,6 +133,7 @@ class SearchMetadata(BaseModel):
     output_count: int = 0
     scope: str | None = None
     backend: str | None = None
+    routing_tags: list[str] | None = None  # NEW: inferred domain tags used for pre-filtering
 
 
 class EnhancedSearchResult(BaseModel):

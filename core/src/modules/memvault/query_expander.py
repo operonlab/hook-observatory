@@ -255,6 +255,106 @@ class ExpandedQuery:
     expanded_text: str  # For embedding (HyDE output or original)
     keywords: list[str] = field(default_factory=list)  # Extracted keywords for keyword search
     expansion_used: str = "passthrough"  # "hyde" | "keyword" | "passthrough"
+    inferred_tags: list[str] = field(default_factory=list)  # NEW: domain routing tags
+
+
+# ---------------------------------------------------------------------------
+# Domain tag inference for query routing
+# ---------------------------------------------------------------------------
+
+# Domain signal mapping for query routing
+# Each domain has 5-7 signal keywords; query must match >= 2 to activate pre-filter
+_DOMAIN_SIGNALS: dict[str, list[str]] = {
+    "finance": [
+        "報表",
+        "預算",
+        "帳單",
+        "訂閱",
+        "營收",
+        "支出",
+        "expense",
+        "budget",
+        "subscription",
+        "revenue",
+        "invoice",
+        "transaction",
+    ],
+    "devops": [
+        "docker",
+        "nginx",
+        "deploy",
+        "k8s",
+        "pipeline",
+        "伺服器",
+        "server",
+        "container",
+        "ci/cd",
+        "kubernetes",
+    ],
+    "ai": [
+        "llm",
+        "embedding",
+        "model",
+        "prompt",
+        "rag",
+        "向量",
+        "token",
+        "fine-tune",
+        "inference",
+        "語言模型",
+    ],
+    "frontend": [
+        "react",
+        "css",
+        "component",
+        "rsbuild",
+        "pnpm",
+        "layout",
+        "typescript",
+        "前端",
+        "ui",
+        "tailwind",
+    ],
+    "invest": [
+        "股票",
+        "etf",
+        "portfolio",
+        "殖利率",
+        "dividend",
+        "持股",
+        "投資",
+        "基金",
+        "報酬率",
+    ],
+    "planning": [
+        "排程",
+        "schedule",
+        "cronicle",
+        "每日",
+        "weekly",
+        "daily",
+        "todo",
+        "task",
+        "待辦",
+    ],
+}
+
+_MIN_SIGNAL_MATCH = 2  # Minimum signals to activate domain pre-filter
+
+
+def _infer_domain_tags(query: str) -> list[str]:
+    """Infer domain tags from query for pre-filtering.
+
+    Returns matching domain tags if >= _MIN_SIGNAL_MATCH signals found.
+    Returns empty list if uncertain (safe fallback to full search).
+    """
+    query_lower = query.lower()
+    matched = []
+    for domain, signals in _DOMAIN_SIGNALS.items():
+        count = sum(1 for s in signals if s.lower() in query_lower)
+        if count >= _MIN_SIGNAL_MATCH:
+            matched.append(domain)
+    return matched
 
 
 # ---------------------------------------------------------------------------
@@ -338,11 +438,13 @@ async def expand_query(query: str) -> ExpandedQuery:
     1. Check if expansion is needed (should_expand)
     2. If yes, try HyDE via local LLM (oMLX port 8000)
     3. Extract keywords regardless
-    4. Return ExpandedQuery
+    4. Infer domain tags for pre-filtering
+    5. Return ExpandedQuery
 
     Falls back to keyword-only expansion if LLM unavailable.
     """
     keywords = extract_keywords(query)
+    inferred_tags = _infer_domain_tags(query)
 
     if not should_expand(query):
         return ExpandedQuery(
@@ -350,6 +452,7 @@ async def expand_query(query: str) -> ExpandedQuery:
             expanded_text=query,
             keywords=keywords,
             expansion_used="passthrough",
+            inferred_tags=inferred_tags,
         )
 
     # Try HyDE via local LLM
@@ -373,6 +476,7 @@ async def expand_query(query: str) -> ExpandedQuery:
             expanded_text=hyde_text,
             keywords=merged_keywords[:8],
             expansion_used="hyde",
+            inferred_tags=inferred_tags,
         )
 
     # LLM unavailable — fall back to keyword-only expansion
@@ -382,6 +486,7 @@ async def expand_query(query: str) -> ExpandedQuery:
         expanded_text=query,
         keywords=keywords,
         expansion_used="keyword",
+        inferred_tags=inferred_tags,
     )
 
 

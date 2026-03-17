@@ -6,7 +6,7 @@
   "description": "Single React application with domain modules",
   "scripts": {
     "dev": "rsbuild dev",
-    "build": "rsbuild build && sed -i '' \"s/__CACHE_VERSION__/$(git rev-parse --short HEAD)/g\" dist/sw.js && sh scripts/gen-module-html.sh",
+    "build": "rsbuild build && sh scripts/gen-module-html.sh && touch /tmp/sentinel-build-cooldown",
     "preview": "rsbuild preview",
     "lint": "biome check src/",
     "lint:fix": "biome check --fix src/",

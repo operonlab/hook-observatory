@@ -450,9 +450,8 @@ async def generate_monthly_report(
     subscriptions = await _build_subscriptions_section(db, space_id, viewer_id)
 
     # AI suggestions placeholder
-    # TODO: Integrate Ollama (nomic-embed-text or llama) for spending pattern analysis
+    # TODO: Integrate oMLX for spending pattern analysis
     # Expected flow: embed category vectors -> cluster -> generate natural-language advice
-    # API endpoint: POST http://localhost:11434/api/generate
     ai_suggestions = ["AI 建議功能開發中"]
 
     report = {

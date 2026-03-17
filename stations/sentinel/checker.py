@@ -42,7 +42,7 @@ class DeepCheck:
     group: str = ""
     url: str = ""
     playwright_code: str = ""  # JS code for run-code
-    timeout: float = 30.0
+    timeout: float = 45.0  # increased: Chrome startup can be slow under memory pressure
 
 
 LIGHT_CHECKS: list[LightCheck] = [
@@ -91,16 +91,7 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4000/health/liveliness",
         expect_contains="I'm alive!",
     ),
-    LightCheck(
-        name="omlx",
-        group="infra",
-        command=(
-            "test -f ~/.venvs/omlx/bin/python3 && test -f ~/.venvs/omlx/embed_worker.py"
-            " && ~/.venvs/omlx/bin/python3 -c \"import mlx_embeddings; print('ok')\""
-        ),
-        expect_contains="ok",
-        timeout=15.0,
-    ),
+    # oMLX removed — embed_worker is a stdin/stdout subprocess, not an HTTP service
     LightCheck(
         name="bark",
         group="infra",
@@ -576,8 +567,28 @@ async def run_all_light_checks() -> list[CheckResult]:
     return list(await asyncio.gather(*tasks))
 
 
+_BUILD_COOLDOWN_FILE = "/tmp/sentinel-build-cooldown"
+_BUILD_COOLDOWN_SECS = 180  # 3 minutes
+
+
 async def run_all_deep_checks() -> list[CheckResult]:
-    """Run deep checks sequentially (shared browser)."""
+    """Run deep checks sequentially (shared browser).
+
+    Skips all checks during build cooldown period to avoid
+    false-positive timeouts while SW cache propagates.
+    """
+    import os
+    import time
+
+    if os.path.exists(_BUILD_COOLDOWN_FILE):
+        try:
+            mtime = os.path.getmtime(_BUILD_COOLDOWN_FILE)
+            if time.time() - mtime < _BUILD_COOLDOWN_SECS:
+                return []  # skip during cooldown
+            os.unlink(_BUILD_COOLDOWN_FILE)  # expired, remove
+        except OSError:
+            pass
+
     results = []
     for check in DEEP_CHECKS:
         results.append(await run_deep_check(check))

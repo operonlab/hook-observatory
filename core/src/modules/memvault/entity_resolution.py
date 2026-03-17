@@ -288,7 +288,20 @@ class EntityResolutionService:
         threshold: float = 0.92,
         limit: int = 50,
     ) -> list[tuple[EntityCanonicalResponse, EntityCanonicalResponse, float]]:
-        """Scan for potential merges via embedding similarity."""
+        """Scan for potential merges via embedding similarity.
+
+        LEGACY: Uses pgvector cosine_distance for point-to-point comparison.
+
+        TODO(qdrant): EntityCanonical records are not yet indexed in Qdrant.
+        Once entity indexing is implemented (service_id="memvault",
+        entity_type="entity_canonical"), replace the inner pgvector loop with
+        a Qdrant search per entity using:
+            hybrid_search(entity.canonical_name, space_id, SearchConfig(
+                top_k=3, score_threshold=threshold, service_ids=["memvault"],
+                entity_type_filter=["entity_canonical"],
+            ))
+        This will eliminate the O(n²) pgvector loop and improve scalability.
+        """
         q = select(EntityCanonical).where(
             EntityCanonical.space_id == space_id,
             EntityCanonical.deleted_at.is_(None),
@@ -299,6 +312,8 @@ class EntityResolutionService:
         candidates = []
         seen = set()
         for entity in entities:
+            # LEGACY pgvector path — cosine_distance per-entity comparison.
+            # Replace with Qdrant lookup once EntityCanonical is indexed.
             distance = EntityCanonical.embedding.cosine_distance(entity.embedding)
             sim_q = (
                 select(EntityCanonical, distance.label("dist"))

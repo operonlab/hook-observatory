@@ -316,6 +316,14 @@ def main() -> int:
 
     log(f"Scraped {len(text)} chars")
 
+    # Detect expired session — scraper returns login page instead of dashboard
+    if "Log In" in text and "Dashboard" in text and "Total Number" not in text:
+        log("ERROR: Alibaba Cloud session expired — got login page instead of dashboard")
+        log(
+            "ACTION: Re-authenticate at https://modelstudio.console.alibabacloud.com in Playwright master profile"
+        )
+        return 1
+
     data = parse_free_quota(text)
     if not data:
         log("ERROR: Failed to parse quota data from scraped text")
