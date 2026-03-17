@@ -20,90 +20,11 @@ Configure in ~/.claude.json:
 import json
 from asyncio import to_thread
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.server.fastmcp import FastMCP
 from workshop.clients.sandbox import SandboxClient
 
-server = Server("sandbox-executor")
+mcp = FastMCP("sandbox-executor")
 client = SandboxClient()
-
-
-def text_result(text: str) -> list[TextContent]:
-    return [TextContent(type="text", text=text)]
-
-
-# ======================== Tool Definitions ========================
-
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [
-        Tool(
-            name="sandbox_execute",
-            description=(
-                "Execute Python/JS code with auto-injected SDK helpers: "
-                "http_get(), http_post(), read_file(), write_file(), output(). "
-                "Use this to batch multiple operations into a single execution — "
-                "read/write any file, call any HTTP endpoint, process data. "
-                "Returns structured results via output(). "
-                "Timeout: 30s default, 60s max."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "language": {
-                        "type": "string",
-                        "enum": ["python", "javascript"],
-                        "description": "Programming language to execute",
-                    },
-                    "code": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": (
-                            "Code to execute in the sandbox. SDK helpers "
-                            "(http_get, http_post, read_file, write_file, output) "
-                            "are auto-injected."
-                        ),
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 60,
-                        "default": 30,
-                        "description": "Execution timeout in seconds (default: 30)",
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Brief description of what this code does (for logging)",
-                    },
-                    "max_output": {
-                        "type": "integer",
-                        "minimum": 500,
-                        "maximum": 5000,
-                        "default": 3000,
-                        "description": "Max chars for stdout truncation (default: 3000, max: 5000)",
-                    },
-                },
-                "required": ["language", "code"],
-            },
-        ),
-        Tool(
-            name="sandbox_info",
-            description="Show documentation for the sandbox SDK helpers (available functions, constraints, examples).",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "language": {
-                        "type": "string",
-                        "enum": ["python", "javascript"],
-                        "default": "python",
-                        "description": "Which language SDK to show docs for",
-                    },
-                },
-            },
-        ),
-    ]
 
 
 # ======================== Result Formatting ========================
@@ -164,41 +85,36 @@ def _format_result(result, description=None, max_output: int = 3000) -> str:
     return "\n".join(parts)
 
 
-# ======================== Tool Handler ========================
+# ======================== Tools ========================
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+@mcp.tool()
+async def sandbox_execute(
+    language: str,
+    code: str,
+    timeout: int = 30,
+    description: str = "",
+    max_output: int = 3000,
+) -> str:
+    """Execute Python/JS code with auto-injected SDK helpers: http_get(), http_post(), read_file(), write_file(), output(). Use this to batch multiple operations into a single execution — read/write any file, call any HTTP endpoint, process data. Returns structured results via output(). Timeout: 30s default, 60s max."""
     try:
-        if name == "sandbox_execute":
-            language = arguments.get("language", "python")
-            code = arguments.get("code", "")
-            timeout = arguments.get("timeout", 30)
-            description = arguments.get("description")
-            max_output = min(arguments.get("max_output", 3000), 5000)
-
-            result = await to_thread(client.execute, code, language, timeout)
-            return text_result(_format_result(result, description, max_output=max_output))
-
-        elif name == "sandbox_info":
-            language = arguments.get("language", "python")
-            return text_result(client.info(language))
-
-        return text_result(f"Unknown tool: {name}")
-
+        max_output = min(max_output, 5000)
+        result = await to_thread(client.execute, code, language, timeout)
+        return _format_result(result, description or None, max_output=max_output)
     except Exception as e:
-        return text_result(f"Unexpected error: {type(e).__name__}: {e}")
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def sandbox_info(language: str = "python") -> str:
+    """Show documentation for the sandbox SDK helpers (available functions, constraints, examples)."""
+    try:
+        return client.info(language)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 # ======================== Main ========================
 
-
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
-
-
 if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())
+    mcp.run()

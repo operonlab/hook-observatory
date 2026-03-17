@@ -15,161 +15,20 @@ Configure in ~/.mcpproxy/mcp_config.json:
     }
 """
 
-import asyncio
 import json
 from asyncio import to_thread
+from typing import Optional
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.server.fastmcp import FastMCP
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.paper import PaperClient
 
-server = Server("paper")
+mcp = FastMCP("paper")
 client = PaperClient()
-
-
-def text_result(text: str) -> list[TextContent]:
-    return [TextContent(type="text", text=text)]
 
 
 def json_text(data) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2, default=str)
-
-
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [
-        Tool(
-            name="paper_articles",
-            description="List academic paper articles with optional filters (category, tag, relevance, cannibalize candidates).",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "category": {"type": "string", "description": "Filter by arXiv category (e.g. cs.AI)"},
-                    "tag": {"type": "string", "description": "Filter by tag"},
-                    "relevance": {
-                        "type": "string",
-                        "enum": ["high", "medium", "low"],
-                        "description": "Filter by workshop relevance level",
-                    },
-                    "cannibalize_candidate": {
-                        "type": "boolean",
-                        "description": "If true, show only cannibalize candidates",
-                    },
-                    "page": {"type": "integer", "default": 1},
-                    "page_size": {"type": "integer", "default": 20},
-                },
-            },
-        ),
-        Tool(
-            name="paper_article_search",
-            description="Semantic search over academic papers. Returns ranked results with similarity scores.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query (natural language)"},
-                    "limit": {"type": "integer", "default": 5},
-                },
-                "required": ["query"],
-            },
-        ),
-        Tool(
-            name="paper_article_create",
-            description="Create a new paper article entry with metadata.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string", "description": "Paper title"},
-                    "abstract": {"type": "string", "description": "Paper abstract"},
-                    "arxiv_id": {"type": "string", "description": "arXiv identifier (e.g. 2401.12345)"},
-                    "doi": {"type": "string", "description": "DOI"},
-                    "year": {"type": "integer", "description": "Publication year"},
-                    "authors": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Author name list",
-                    },
-                    "categories": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "arXiv categories (e.g. cs.AI, cs.CL)",
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Tags for categorization",
-                    },
-                    "source_url": {"type": "string", "description": "Source URL"},
-                },
-                "required": ["title"],
-            },
-        ),
-        Tool(
-            name="paper_article_detail",
-            description="Get full details of a paper article including metadata, abstract, and linked digest.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "article_id": {"type": "string", "description": "Article ID (full UUID)"},
-                },
-                "required": ["article_id"],
-            },
-        ),
-        Tool(
-            name="paper_digest",
-            description="Get or generate a structured LLM digest for a paper (one-liner, key findings, relevance, actionable insight).",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "article_id": {"type": "string", "description": "Article ID (full UUID)"},
-                    "generate": {
-                        "type": "boolean",
-                        "default": False,
-                        "description": "If true, trigger digest generation (may take longer)",
-                    },
-                },
-                "required": ["article_id"],
-            },
-        ),
-        Tool(
-            name="paper_annotate",
-            description="Add an annotation (note, highlight, question, synthesis, action-taken) to a paper article.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "article_id": {"type": "string", "description": "Article ID (full UUID)"},
-                    "note": {"type": "string", "description": "Annotation text"},
-                    "annotation_type": {
-                        "type": "string",
-                        "enum": ["note", "highlight", "question", "synthesis", "action-taken"],
-                        "default": "note",
-                        "description": "Type of annotation",
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Tags for the annotation",
-                    },
-                },
-                "required": ["article_id", "note"],
-            },
-        ),
-        Tool(
-            name="paper_dashboard",
-            description="Get Paper module dashboard summary (article counts, relevance distribution, recent activity).",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "max_list_items": {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "Maximum items per list field in dashboard",
-                    },
-                },
-            },
-        ),
-    ]
 
 
 def _format_articles(result: dict) -> str:
@@ -245,104 +104,160 @@ def _format_digest(d: dict) -> str:
     return "\n".join(lines)
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+@mcp.tool()
+async def paper_articles(
+    category: Optional[str] = None,
+    tag: Optional[str] = None,
+    relevance: Optional[str] = None,
+    cannibalize_candidate: Optional[bool] = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> str:
+    """List academic paper articles with optional filters (category, tag, relevance, cannibalize candidates)."""
     try:
-        match name:
-            case "paper_articles":
-                result = await to_thread(
-                    client.list_articles,
-                    page=arguments.get("page", 1),
-                    page_size=arguments.get("page_size", 20),
-                    category=arguments.get("category"),
-                    tag=arguments.get("tag"),
-                    relevance=arguments.get("relevance"),
-                    cannibalize_candidate=arguments.get("cannibalize_candidate"),
-                )
-                return text_result(_format_articles(result))
-
-            case "paper_article_search":
-                result = await to_thread(
-                    client.search,
-                    query=arguments["query"],
-                    limit=arguments.get("limit", 5),
-                )
-                return text_result(_format_search(result))
-
-            case "paper_article_create":
-                result = await to_thread(
-                    client.create_article,
-                    title=arguments["title"],
-                    abstract=arguments.get("abstract"),
-                    arxiv_id=arguments.get("arxiv_id"),
-                    doi=arguments.get("doi"),
-                    year=arguments.get("year"),
-                    authors=arguments.get("authors"),
-                    categories=arguments.get("categories"),
-                    tags=arguments.get("tags"),
-                    source_url=arguments.get("source_url"),
-                )
-                return text_result(
-                    f"Article created: **{result.get('title', '?')}** (id: {result.get('id', '?')})"
-                )
-
-            case "paper_article_detail":
-                result = await to_thread(
-                    client.get_article,
-                    article_id=arguments["article_id"],
-                )
-                return text_result(_format_article_detail(result))
-
-            case "paper_digest":
-                article_id = arguments["article_id"]
-                if arguments.get("generate"):
-                    result = await to_thread(
-                        client.trigger_digest,
-                        article_id=article_id,
-                    )
-                else:
-                    result = await to_thread(
-                        client.get_digest,
-                        article_id=article_id,
-                    )
-                return text_result(_format_digest(result))
-
-            case "paper_annotate":
-                result = await to_thread(
-                    client.create_annotation,
-                    article_id=arguments["article_id"],
-                    note=arguments["note"],
-                    annotation_type=arguments.get("annotation_type", "note"),
-                    tags=arguments.get("tags"),
-                )
-                return text_result(
-                    f"Annotation added (type: {result.get('annotation_type', 'note')}, "
-                    f"id: {result.get('id', '?')})"
-                )
-
-            case "paper_dashboard":
-                result = await to_thread(client.get_dashboard)
-                max_list_items = arguments.get("max_list_items", 10)
-                if isinstance(result, dict):
-                    for key, val in result.items():
-                        if isinstance(val, list) and len(val) > max_list_items:
-                            result[key] = val[:max_list_items]
-                            result[f"{key}_total"] = len(val)
-                return text_result(json_text(result))
-
-            case _:
-                return text_result(f"Unknown tool: {name}")
-
+        result = await to_thread(
+            client.list_articles,
+            page=page,
+            page_size=page_size,
+            category=category,
+            tag=tag,
+            relevance=relevance,
+            cannibalize_candidate=cannibalize_candidate,
+        )
+        return _format_articles(result)
     except (APIError, APIConnectionError) as e:
-        return text_result(f"Paper error: {e}")
+        return f"Paper error: {e}"
     except Exception as e:
-        return text_result(f"Error: {type(e).__name__}: {e}")
+        return f"Error: {type(e).__name__}: {e}"
 
 
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+@mcp.tool()
+async def paper_article_search(query: str, limit: int = 5) -> str:
+    """Semantic search over academic papers. Returns ranked results with similarity scores."""
+    try:
+        result = await to_thread(
+            client.search,
+            query=query,
+            limit=limit,
+        )
+        return _format_search(result)
+    except (APIError, APIConnectionError) as e:
+        return f"Paper error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def paper_article_create(
+    title: str,
+    abstract: Optional[str] = None,
+    arxiv_id: Optional[str] = None,
+    doi: Optional[str] = None,
+    year: Optional[int] = None,
+    authors: Optional[list[str]] = None,
+    categories: Optional[list[str]] = None,
+    tags: Optional[list[str]] = None,
+    source_url: Optional[str] = None,
+) -> str:
+    """Create a new paper article entry with metadata."""
+    try:
+        result = await to_thread(
+            client.create_article,
+            title=title,
+            abstract=abstract,
+            arxiv_id=arxiv_id,
+            doi=doi,
+            year=year,
+            authors=authors,
+            categories=categories,
+            tags=tags,
+            source_url=source_url,
+        )
+        return f"Article created: **{result.get('title', '?')}** (id: {result.get('id', '?')})"
+    except (APIError, APIConnectionError) as e:
+        return f"Paper error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def paper_article_detail(article_id: str) -> str:
+    """Get full details of a paper article including metadata, abstract, and linked digest."""
+    try:
+        result = await to_thread(
+            client.get_article,
+            article_id=article_id,
+        )
+        return _format_article_detail(result)
+    except (APIError, APIConnectionError) as e:
+        return f"Paper error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def paper_digest(article_id: str, generate: bool = False) -> str:
+    """Get or generate a structured LLM digest for a paper (one-liner, key findings, relevance, actionable insight)."""
+    try:
+        if generate:
+            result = await to_thread(
+                client.trigger_digest,
+                article_id=article_id,
+            )
+        else:
+            result = await to_thread(
+                client.get_digest,
+                article_id=article_id,
+            )
+        return _format_digest(result)
+    except (APIError, APIConnectionError) as e:
+        return f"Paper error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def paper_annotate(
+    article_id: str,
+    note: str,
+    annotation_type: str = "note",
+    tags: Optional[list[str]] = None,
+) -> str:
+    """Add an annotation (note, highlight, question, synthesis, action-taken) to a paper article."""
+    try:
+        result = await to_thread(
+            client.create_annotation,
+            article_id=article_id,
+            note=note,
+            annotation_type=annotation_type,
+            tags=tags,
+        )
+        return (
+            f"Annotation added (type: {result.get('annotation_type', 'note')}, "
+            f"id: {result.get('id', '?')})"
+        )
+    except (APIError, APIConnectionError) as e:
+        return f"Paper error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def paper_dashboard(max_list_items: int = 10) -> str:
+    """Get Paper module dashboard summary (article counts, relevance distribution, recent activity)."""
+    try:
+        result = await to_thread(client.get_dashboard)
+        if isinstance(result, dict):
+            for key, val in result.items():
+                if isinstance(val, list) and len(val) > max_list_items:
+                    result[key] = val[:max_list_items]
+                    result[f"{key}_total"] = len(val)
+        return json_text(result)
+    except (APIError, APIConnectionError) as e:
+        return f"Paper error: {e}"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run()

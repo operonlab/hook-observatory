@@ -24,206 +24,77 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "libs", "python", "src"))
 
-import mcp.server.stdio
-import mcp.types as types
-from mcp.server import Server
+from mcp.server.fastmcp import FastMCP
 from workshop.clients.session_intelligence import SessionIntelligenceClient
 
-server = Server("workshop-session-intelligence")
+mcp = FastMCP("workshop-session-intelligence")
 _client = SessionIntelligenceClient()
 
 
-def _text(content: str) -> list[types.TextContent]:
-    return [types.TextContent(type="text", text=content)]
+# ======================== Tools ========================
 
 
-def _json_text(data) -> list[types.TextContent]:
-    return _text(json.dumps(data, ensure_ascii=False, default=str, indent=2))
-
-
-# ======================== Tool Definitions ========================
-
-
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
-    return [
-        types.Tool(
-            name="session_intel_stats",
-            description=(
-                "Aggregate Claude Code session statistics over the past N days. "
-                "Returns total sessions, messages, avg session length, size, "
-                "active projects count, sessions-by-day breakdown, and redaction stats."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "days": {
-                        "type": "integer",
-                        "default": 30,
-                        "description": "Look-back period in days (default: 30)",
-                    },
-                },
-            },
-        ),
-        types.Tool(
-            name="session_intel_sessions",
-            description=(
-                "List recent Claude Code sessions with metadata. "
-                "Returns session_id, project, size_bytes, message count, "
-                "created_at, modified_at, and redaction count per session."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "days": {
-                        "type": "integer",
-                        "default": 7,
-                        "description": "Look-back period in days (default: 7)",
-                    },
-                    "project": {
-                        "type": "string",
-                        "description": "Filter by project directory name (partial match, optional)",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Max sessions to return (default: 20, 0 = all)",
-                    },
-                },
-            },
-        ),
-        types.Tool(
-            name="session_intel_patterns",
-            description=(
-                "Detect usage patterns in Claude Code sessions. "
-                "Returns peak hours, avg daily sessions, common projects, "
-                "session length distribution, and redaction category hotspots."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "days": {
-                        "type": "integer",
-                        "default": 30,
-                        "description": "Look-back period in days (default: 30)",
-                    },
-                },
-            },
-        ),
-        types.Tool(
-            name="session_intel_trends",
-            description=(
-                "Weekly productivity trends for Claude Code usage. "
-                "Returns per-ISO-week metrics: sessions_count, total_messages, "
-                "avg_session_length, unique_projects, redactions_count."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "weeks": {
-                        "type": "integer",
-                        "default": 4,
-                        "description": "Number of weeks to analyze (default: 4)",
-                    },
-                },
-            },
-        ),
-        types.Tool(
-            name="session_intel_digest",
-            description=(
-                "Generate a weekly digest of Claude Code session activity. "
-                "Includes summary stats, top projects, notable sessions, "
-                "security report, and comparison vs previous week."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "week_offset": {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "0=current week, 1=last week, 2=two weeks ago, etc.",
-                    },
-                },
-            },
-        ),
-        types.Tool(
-            name="session_intel_security",
-            description=(
-                "Security-focused report on sensitive data detection across sessions. "
-                "Returns total redactions, category breakdown, daily trend, "
-                "most affected projects, and list of unprocessed sessions."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "days": {
-                        "type": "integer",
-                        "default": 30,
-                        "description": "Look-back period in days (default: 30)",
-                    },
-                },
-            },
-        ),
-    ]
-
-
-# ======================== Tool Handler ========================
-
-
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
+@mcp.tool()
+async def session_intel_stats(days: int = 30) -> str:
+    """Aggregate Claude Code session statistics over the past N days. Returns total sessions, messages, avg session length, size, active projects count, sessions-by-day breakdown, and redaction stats."""
     try:
-        if name == "session_intel_stats":
-            days = int(arguments.get("days", 30))
-            result = await asyncio.to_thread(_client.session_stats, days=days)
-            return _json_text(result)
-
-        elif name == "session_intel_sessions":
-            days = int(arguments.get("days", 7))
-            project = arguments.get("project") or None
-            limit = int(arguments.get("limit", 20))
-            result = await asyncio.to_thread(
-                _client.session_list, days=days, project=project, limit=limit
-            )
-            return _json_text(result)
-
-        elif name == "session_intel_patterns":
-            days = int(arguments.get("days", 30))
-            result = await asyncio.to_thread(_client.pattern_analysis, days=days)
-            return _json_text(result)
-
-        elif name == "session_intel_trends":
-            weeks = int(arguments.get("weeks", 4))
-            result = await asyncio.to_thread(_client.productivity_trends, weeks=weeks)
-            return _json_text(result)
-
-        elif name == "session_intel_digest":
-            week_offset = int(arguments.get("week_offset", 0))
-            result = await asyncio.to_thread(_client.weekly_digest, week_offset=week_offset)
-            return _json_text(result)
-
-        elif name == "session_intel_security":
-            days = int(arguments.get("days", 30))
-            result = await asyncio.to_thread(_client.security_report, days=days)
-            return _json_text(result)
-
-        return _text(f"Unknown tool: {name}")
-
-    except Exception as exc:
-        return _text(f"session-intelligence error [{name}]: {exc}")
+        result = await asyncio.to_thread(_client.session_stats, days=days)
+        return json.dumps(result, ensure_ascii=False, default=str, indent=2)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
-# ======================== Main ========================
-
-
-async def main() -> None:
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options(),
+@mcp.tool()
+async def session_intel_sessions(days: int = 7, project: str = None, limit: int = 20) -> str:
+    """List recent Claude Code sessions with metadata. Returns session_id, project, size_bytes, message count, created_at, modified_at, and redaction count per session."""
+    try:
+        result = await asyncio.to_thread(
+            _client.session_list, days=days, project=project or None, limit=limit
         )
+        return json.dumps(result, ensure_ascii=False, default=str, indent=2)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def session_intel_patterns(days: int = 30) -> str:
+    """Detect usage patterns in Claude Code sessions. Returns peak hours, avg daily sessions, common projects, session length distribution, and redaction category hotspots."""
+    try:
+        result = await asyncio.to_thread(_client.pattern_analysis, days=days)
+        return json.dumps(result, ensure_ascii=False, default=str, indent=2)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def session_intel_trends(weeks: int = 4) -> str:
+    """Weekly productivity trends for Claude Code usage. Returns per-ISO-week metrics: sessions_count, total_messages, avg_session_length, unique_projects, redactions_count."""
+    try:
+        result = await asyncio.to_thread(_client.productivity_trends, weeks=weeks)
+        return json.dumps(result, ensure_ascii=False, default=str, indent=2)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def session_intel_digest(week_offset: int = 0) -> str:
+    """Generate a weekly digest of Claude Code session activity. Includes summary stats, top projects, notable sessions, security report, and comparison vs previous week."""
+    try:
+        result = await asyncio.to_thread(_client.weekly_digest, week_offset=week_offset)
+        return json.dumps(result, ensure_ascii=False, default=str, indent=2)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
+
+
+@mcp.tool()
+async def session_intel_security(days: int = 30) -> str:
+    """Security-focused report on sensitive data detection across sessions. Returns total redactions, category breakdown, daily trend, most affected projects, and list of unprocessed sessions."""
+    try:
+        result = await asyncio.to_thread(_client.security_report, days=days)
+        return json.dumps(result, ensure_ascii=False, default=str, indent=2)
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run()
