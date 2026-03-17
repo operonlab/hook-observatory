@@ -233,6 +233,16 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "ws-paper-digest",
+      "label": "com.joneshong.scheduler.ws-paper-digest",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_paper_digest.py",
+      "schedule": { "calendar": { "Hour": 6, "Minute": 30 } },
+      "description": "每日 6:30AM: arXiv 論文抓取 → 去重 → 相關度評分 → Haiku digest → 蠶食候選標記；週一加跑 weekly rollup",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }
