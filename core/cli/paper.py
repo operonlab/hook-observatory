@@ -18,18 +18,12 @@ Symlink: ln -sf ~/workshop/core/cli/paper.py ~/.local/bin/paper
 """
 
 import argparse
-import json
 import sys
 
+from cli.cli_helpers import json_out, err, fmt_date
 from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.paper import PaperClient
-
-
-def _json_out(data, as_json=False):
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    return data
 
 
 def cmd_articles_list(args):

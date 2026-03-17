@@ -6,11 +6,11 @@ Full coverage of all Core API endpoints.
 """
 
 import argparse
-import json
 import os
 import sys
 from datetime import datetime
 
+from cli.cli_helpers import err, json_out
 from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.memvault import MemvaultClient
@@ -49,14 +49,6 @@ def fmt_dt(iso: str | None) -> str:
         return dt.strftime("%Y-%m-%d %H:%M")
     except (ValueError, AttributeError):
         return str(iso)
-
-
-def _json_out(data, args: argparse.Namespace) -> bool:
-    """Print JSON if --json flag is set. Returns True if printed."""
-    if args.json_output:
-        print(json.dumps(data, indent=2, ensure_ascii=False))
-        return True
-    return False
 
 
 def _parse_tags(raw: str | None) -> list[str] | None:

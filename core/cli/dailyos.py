@@ -34,11 +34,6 @@ from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.dailyos import DailyOSClient
 
 
-def _json_out(data, as_json=False):
-    if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    return data
-
 
 # ======================== Methods ========================
 
@@ -51,7 +46,7 @@ def cmd_methods_list(args):
             page_size=args.limit,
         )
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -73,7 +68,7 @@ def cmd_methods_get(args):
     try:
         m = client.get_method(args.id)
         if args.json:
-            _json_out(m, True)
+            json_out(m, True)
             return
         print(f"Name:        {m.get('name', '?')}")
         if m.get("name_zh"):
@@ -111,7 +106,7 @@ def cmd_methods_create(args):
             data["config"] = config
         result = client.create_method(data)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"✅ Method created: {result.get('id', '?')}")
         print(f"   name={result.get('name', '?')}  slug={result.get('slug', '?')}")
@@ -125,7 +120,7 @@ def cmd_methods_clone(args):
     try:
         result = client.clone_method(args.id)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"✅ Method cloned: {result.get('id', '?')}")
         print(f"   name={result.get('name', '?')}  slug={result.get('slug', '?')}")
@@ -152,7 +147,7 @@ def cmd_config_active(args):
     try:
         result = client.get_active_methods(context=args.context)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result if isinstance(result, list) else result.get("items", [])
         print(f"⚡ Active methods for context '{args.context}' ({len(items)}):\n")
@@ -178,7 +173,7 @@ def cmd_config_activate(args):
             overrides=overrides,
         )
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"✅ Method activated: selection_id={result.get('id', '?')}")
         m = result.get("method") or {}
@@ -216,7 +211,7 @@ def cmd_config_history(args):
     try:
         result = client.get_method_history(context=args.context, page_size=args.limit)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result.get("items", []) if isinstance(result, dict) else result
         print(f"🕓 Method history for context '{args.context}' ({len(items)}):\n")
@@ -244,7 +239,7 @@ def cmd_plans_list(args):
             date_to=args.date_to,
         )
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -268,7 +263,7 @@ def cmd_plans_today(args):
     try:
         p = client.get_today(context=args.context)
         if args.json:
-            _json_out(p, True)
+            json_out(p, True)
             return
         date = str(p.get("plan_date", "today"))
         status = p.get("status", "?")
@@ -293,7 +288,7 @@ def cmd_plans_get(args):
     try:
         p = client.get_plan(args.id)
         if args.json:
-            _json_out(p, True)
+            json_out(p, True)
             return
         date = str(p.get("plan_date", ""))[:10]
         status = p.get("status", "?")
@@ -324,7 +319,7 @@ def cmd_plans_update(args):
             sys.exit(1)
         result = client.update_plan(args.id, {"items": items})
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"✅ Plan updated: {args.id}")
         print(f"   items={len(result.get('items', []))}")
@@ -338,7 +333,7 @@ def cmd_plans_transition(args):
     try:
         result = client.transition_plan(args.id, status=args.status, comment=args.comment)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"✅ Plan transitioned: {args.id}")
         print(f"   status={result.get('status', args.status)}")
@@ -356,7 +351,7 @@ def cmd_status(args):
         active_methods = client.get_active_methods()
         today = client.get_today()
         if args.json:
-            _json_out({"active_methods": active_methods, "today": today}, True)
+            json_out({"active_methods": active_methods, "today": today}, True)
             return
         method_list = (
             active_methods if isinstance(active_methods, list) else active_methods.get("items", [])
@@ -386,7 +381,7 @@ def cmd_spans_list(args):
     try:
         result = client.list_spans(date_from=args.date_from, date_to=args.date_to)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result if isinstance(result, list) else result.get("items", [])
         print(f"📅 Activity Spans ({len(items)}):\n")
@@ -419,7 +414,7 @@ def cmd_spans_create(args):
             data["notes"] = notes
         result = client.create_span(data)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"✅ Span created: {result.get('id', '?')}")
         print(f"   {result.get('title')}  {result.get('start_date')} ~ {result.get('end_date')}")
@@ -433,7 +428,7 @@ def cmd_spans_get_for_date(args):
     try:
         result = client.get_spans_for_date(args.date)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         items = result if isinstance(result, list) else []
         print(f"📅 Spans for {args.date} ({len(items)}):\n")
@@ -462,7 +457,7 @@ def cmd_spans_update(args):
             data["is_active"] = args.active
         result = client.update_span(args.id, data)
         if args.json:
-            _json_out(result, True)
+            json_out(result, True)
             return
         print(f"✅ Span updated: {args.id}")
         print(f"   {result.get('title')}  {result.get('start_date')} ~ {result.get('end_date')}")

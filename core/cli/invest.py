@@ -20,30 +20,11 @@ Symlink: ln -sf ~/workshop/core/cli/invest.py ~/.local/bin/invest
 """
 
 import argparse
-import json
-import sys
 
+from cli.cli_helpers import err, fmt_date, json_out
 from cli.cli_utils import resolve_text_arg
-from cli.exit_codes import exit_code_for
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.invest import InvestClient
-
-# ---------------------------------------------------------------------------
-# Formatting helpers
-# ---------------------------------------------------------------------------
-
-
-def _json_out(data, args):
-    """Print JSON if --json flag is set. Returns True if printed."""
-    if args.json:
-        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-        return True
-    return False
-
-
-def _err(exc):
-    print(f"Error: {exc}", file=sys.stderr)
-    sys.exit(exit_code_for(exc))
 
 
 def _client():
@@ -67,13 +48,6 @@ def fmt_pct(v):
         return str(v)
 
 
-def fmt_date(s):
-    """Format ISO date to YYYY-MM-DD."""
-    if not s:
-        return "n/a"
-    return str(s)[:10]
-
-
 # ---------------------------------------------------------------------------
 # accounts
 # ---------------------------------------------------------------------------
@@ -83,7 +57,7 @@ def cmd_account_list(args):
     client = _client()
     try:
         result = client.list_accounts()
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -96,14 +70,14 @@ def cmd_account_list(args):
             currency = a.get("currency", "TWD")
             print(f"  {a['name']:<25s}  broker: {broker:<15s}  {currency}  id={a['id'][:8]}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_account_get(args):
     client = _client()
     try:
         a = client.get_account(args.id)
-        if _json_out(a, args):
+        if json_out(a, args):
             return
         print(f"Account: {a['id']}")
         print(f"  Name:     {a.get('name')}")
@@ -111,7 +85,7 @@ def cmd_account_get(args):
         print(f"  Currency: {a.get('currency', '-')}")
         print(f"  Notes:    {a.get('notes', '-')}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_account_create(args):
@@ -126,19 +100,19 @@ def cmd_account_create(args):
         if notes:
             data["notes"] = notes
         result = client.create_account(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Account created: {result['id']}")
         print(f"  {result['name']} | {result.get('broker', '-')} | {result.get('currency', 'TWD')}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_account_summary(args):
     client = _client()
     try:
         s = client.get_account_summary(args.id)
-        if _json_out(s, args):
+        if json_out(s, args):
             return
         print(f"Account Summary: {s.get('name')}  (id={s['id'][:8]})\n")
         print(f"  Market Value:  {fmt_amount(s.get('total_market_value', 0))}")
@@ -147,7 +121,7 @@ def cmd_account_summary(args):
         print(f"  Total Gain:    {gain_str}")
         print(f"  Positions:     {s.get('position_count', 0)}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +133,7 @@ def cmd_position_list(args):
     client = _client()
     try:
         result = client.list_positions(account_id=args.account)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -178,7 +152,7 @@ def cmd_position_list(args):
                 f"  id={p['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_position_create(args):
@@ -201,7 +175,7 @@ def cmd_position_create(args):
         if notes:
             data["notes"] = notes
         result = client.create_position(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Position created: {result['id']}")
         print(
@@ -209,14 +183,14 @@ def cmd_position_create(args):
             f"  avg_cost: {fmt_amount(result.get('avg_cost', 0))}"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_position_update_price(args):
     client = _client()
     try:
         result = client.update_position_price(args.id, args.price)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Position {args.id[:8]} price updated to {fmt_amount(args.price)}")
         gain = fmt_amount(result.get("unrealized_gain", 0))
@@ -224,7 +198,7 @@ def cmd_position_update_price(args):
         gain_str = f"{gain}  ({pct})"
         print(f"  Gain: {gain_str}")
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +210,7 @@ def cmd_trade_list(args):
     client = _client()
     try:
         result = client.list_trades(position_id=args.position)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         items = result.get("items", [])
         total = result.get("total", 0)
@@ -257,7 +231,7 @@ def cmd_trade_list(args):
                 f"  [{date}]  id={t['id'][:8]}"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 def cmd_trade_create(args):
@@ -280,7 +254,7 @@ def cmd_trade_create(args):
         if notes:
             data["notes"] = notes
         result = client.create_trade(data)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         print(f"Trade created: {result['id']}")
         print(
@@ -289,7 +263,7 @@ def cmd_trade_create(args):
             f"  total: {fmt_amount(result.get('total_amount', 0))}"
         )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +275,7 @@ def cmd_portfolio(args):
     client = _client()
     try:
         p = client.get_portfolio()
-        if _json_out(p, args):
+        if json_out(p, args):
             return
         print("Portfolio Summary\n")
         print(f"  Market Value:  {fmt_amount(p.get('total_market_value', 0))}")
@@ -320,7 +294,7 @@ def cmd_portfolio(args):
                     f"  gain: {fmt_pct(a.get('gain_pct', 0))}"
                 )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +307,7 @@ def cmd_quotes_refresh(args):
     try:
         symbols = [s.strip() for s in args.symbols.split(",")] if args.symbols else []
         result = client.refresh_quotes(symbols)
-        if _json_out(result, args):
+        if json_out(result, args):
             return
         quotes = result if isinstance(result, list) else []
         print(f"Quotes refreshed ({len(quotes)} symbols)\n")
@@ -347,7 +321,7 @@ def cmd_quotes_refresh(args):
                 f"  [{fmt_date(q.get('quoted_at'))}]"
             )
     except (APIError, APIConnectionError) as e:
-        _err(e)
+        err(e)
 
 
 # ---------------------------------------------------------------------------
