@@ -75,12 +75,41 @@ CREATE TABLE IF NOT EXISTS archive_log (
     created_at  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS session_reflections (
+    id              SERIAL PRIMARY KEY,
+    session_id      TEXT NOT NULL UNIQUE,
+    outcome         TEXT NOT NULL DEFAULT 'unknown',
+    quality_score   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_tokens    BIGINT NOT NULL DEFAULT 0,
+    user_tokens     BIGINT NOT NULL DEFAULT 0,
+    assistant_tokens BIGINT NOT NULL DEFAULT 0,
+    tool_call_count     INTEGER NOT NULL DEFAULT 0,
+    tool_success_count  INTEGER NOT NULL DEFAULT 0,
+    tool_error_count    INTEGER NOT NULL DEFAULT 0,
+    tool_success_rate   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    context_efficiency  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    turn_count      INTEGER NOT NULL DEFAULT 0,
+    duration_secs   INTEGER NOT NULL DEFAULT 0,
+    error_messages  TEXT[],
+    failure_patterns TEXT[],
+    reflection_fed  BOOLEAN NOT NULL DEFAULT FALSE,
+    invariant_count INTEGER NOT NULL DEFAULT 0,
+    derived_count   INTEGER NOT NULL DEFAULT 0,
+    pipeline_stages_ok  INTEGER NOT NULL DEFAULT 0,
+    pipeline_stages_fail INTEGER NOT NULL DEFAULT 0,
+    reflected_at    TEXT NOT NULL,
+    created_at      TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_tier ON sessions(tier);
 CREATE INDEX IF NOT EXISTS idx_sessions_score ON sessions(score DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_path);
 CREATE INDEX IF NOT EXISTS idx_sessions_last_ts ON sessions(last_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_archive_type ON sessions(archive_type);
-CREATE INDEX IF NOT EXISTS idx_se_embedding ON session_embeddings USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_se_embedding
+    ON session_embeddings USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_sr_outcome ON session_reflections(outcome);
+CREATE INDEX IF NOT EXISTS idx_sr_quality ON session_reflections(quality_score DESC);
 """
 
 
@@ -114,7 +143,7 @@ def _redact_url(url: str) -> str:
             prefix, rest = url.rsplit("@", 1)
             proto_user = prefix.rsplit(":", 1)[0]
             return f"{proto_user}:***@{rest}"
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     return "***"
 
@@ -559,6 +588,121 @@ def search_by_text(
 # ---------------------------------------------------------------------------
 # Summary update
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Reflection CRUD
+# ---------------------------------------------------------------------------
+
+
+def upsert_reflection(config: Config, data: dict) -> bool:
+    """Insert or update a session reflection record. Returns True on success."""
+    conn = get_connection(config)
+    if conn is None:
+        return False
+
+    now_iso = datetime.now(UTC).isoformat()
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO session_reflections (
+                    session_id, outcome, quality_score,
+                    total_tokens, user_tokens, assistant_tokens,
+                    tool_call_count, tool_success_count, tool_error_count,
+                    tool_success_rate, context_efficiency,
+                    turn_count, duration_secs,
+                    error_messages, failure_patterns,
+                    reflection_fed, invariant_count, derived_count,
+                    pipeline_stages_ok, pipeline_stages_fail,
+                    reflected_at, created_at
+                ) VALUES (
+                    %(session_id)s, %(outcome)s, %(quality_score)s,
+                    %(total_tokens)s, %(user_tokens)s, %(assistant_tokens)s,
+                    %(tool_call_count)s, %(tool_success_count)s, %(tool_error_count)s,
+                    %(tool_success_rate)s, %(context_efficiency)s,
+                    %(turn_count)s, %(duration_secs)s,
+                    %(error_messages)s, %(failure_patterns)s,
+                    %(reflection_fed)s, %(invariant_count)s, %(derived_count)s,
+                    %(pipeline_stages_ok)s, %(pipeline_stages_fail)s,
+                    %(reflected_at)s, %(created_at)s
+                )
+                ON CONFLICT (session_id) DO UPDATE SET
+                    outcome             = EXCLUDED.outcome,
+                    quality_score       = EXCLUDED.quality_score,
+                    total_tokens        = EXCLUDED.total_tokens,
+                    user_tokens         = EXCLUDED.user_tokens,
+                    assistant_tokens    = EXCLUDED.assistant_tokens,
+                    tool_call_count     = EXCLUDED.tool_call_count,
+                    tool_success_count  = EXCLUDED.tool_success_count,
+                    tool_error_count    = EXCLUDED.tool_error_count,
+                    tool_success_rate   = EXCLUDED.tool_success_rate,
+                    context_efficiency  = EXCLUDED.context_efficiency,
+                    turn_count          = EXCLUDED.turn_count,
+                    duration_secs       = EXCLUDED.duration_secs,
+                    error_messages      = EXCLUDED.error_messages,
+                    failure_patterns    = EXCLUDED.failure_patterns,
+                    reflection_fed      = EXCLUDED.reflection_fed,
+                    invariant_count     = EXCLUDED.invariant_count,
+                    derived_count       = EXCLUDED.derived_count,
+                    pipeline_stages_ok  = EXCLUDED.pipeline_stages_ok,
+                    pipeline_stages_fail = EXCLUDED.pipeline_stages_fail,
+                    reflected_at        = EXCLUDED.reflected_at
+                """,
+                {
+                    "session_id": data["session_id"],
+                    "outcome": data.get("outcome", "unknown"),
+                    "quality_score": data.get("quality_score", 0.0),
+                    "total_tokens": data.get("total_tokens", 0),
+                    "user_tokens": data.get("user_tokens", 0),
+                    "assistant_tokens": data.get("assistant_tokens", 0),
+                    "tool_call_count": data.get("tool_call_count", 0),
+                    "tool_success_count": data.get("tool_success_count", 0),
+                    "tool_error_count": data.get("tool_error_count", 0),
+                    "tool_success_rate": data.get("tool_success_rate", 0.0),
+                    "context_efficiency": data.get("context_efficiency", 0.0),
+                    "turn_count": data.get("turn_count", 0),
+                    "duration_secs": data.get("duration_secs", 0),
+                    "error_messages": data.get("error_messages") or [],
+                    "failure_patterns": data.get("failure_patterns") or [],
+                    "reflection_fed": data.get("reflection_fed", False),
+                    "invariant_count": data.get("invariant_count", 0),
+                    "derived_count": data.get("derived_count", 0),
+                    "pipeline_stages_ok": data.get("pipeline_stages_ok", 0),
+                    "pipeline_stages_fail": data.get("pipeline_stages_fail", 0),
+                    "reflected_at": data.get("reflected_at", now_iso),
+                    "created_at": now_iso,
+                },
+            )
+        log.debug("reflection_upserted", session_id=data["session_id"])
+        return True
+    except Exception:
+        log.warning("reflection_upsert_failed", session_id=data.get("session_id"), exc_info=True)
+        return False
+    finally:
+        conn.close()
+
+
+def get_reflection(config: Config, session_id: str) -> dict | None:
+    """Get a reflection record by session_id. Returns None if not found."""
+    conn = get_connection(config)
+    if conn is None:
+        return None
+
+    try:
+        with conn:
+            row = conn.execute(
+                "SELECT * FROM session_reflections WHERE session_id = %s",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+    except Exception:
+        log.warning("get_reflection_failed", session_id=session_id, exc_info=True)
+        return None
+    finally:
+        conn.close()
 
 
 def update_summary(config: Config, session_id: str, summary: str) -> bool:
