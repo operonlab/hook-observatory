@@ -165,3 +165,29 @@ class CurateResponse(BaseModel):
     triples_invalidated: int
     orphan_triples_cleaned: int
     dry_run: bool
+
+
+# ======================== Search Feedback ========================
+
+
+class SearchFeedbackCreate(BaseModel):
+    entity_id: str = Field(..., description="Block ID that was rated")
+    query: str = Field(..., min_length=1, max_length=2000, description="Original search query")
+    signal: str = Field(..., pattern="^(positive|negative)$", description="positive or negative")
+    feedback_source: str = Field(default="agent", pattern="^(agent|user|implicit)$")
+
+
+class SearchFeedbackResponse(BaseModel):
+    id: str
+    entity_id: str
+    query_hash: str
+    signal: str
+    feedback_source: str
+    created_at: datetime
+
+
+class FeedbackAggregateResponse(BaseModel):
+    entity_id: str
+    positive_count: int
+    negative_count: int
+    net_signal: int

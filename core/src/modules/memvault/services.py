@@ -8,7 +8,9 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select, text, update
+import logging
+
+from sqlalchemy import Integer, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
@@ -25,7 +27,8 @@ from src.shared.services import BaseCRUDService
 from src.shared.text_utils import is_cjk, is_cjk_dominant
 from src.shared.tier_config import get_threshold
 
-from .models import (
+from .models import (  # noqa: F401
+    SearchFeedback,
     EMBEDDING_DIM,
     BlockArchive,
     BlockEmbedding,
@@ -53,6 +56,8 @@ from .schemas import (
 )
 from .scopes import parse_scopes, scopes_to_filters
 from .scoring_pipeline import ScoringConfig, ScoringPipeline
+
+logger = logging.getLogger(__name__)
 
 # --- Greeting patterns (shared with noise_filter for should_search) ---
 
@@ -502,6 +507,15 @@ class MemoryBlockService(
             for emb_row in (await db.execute(emb_q)).scalars().all():
                 emb_map[emb_row.block_id] = list(emb_row.embedding)
 
+        # Fetch feedback aggregates for scoring pipeline (best-effort)
+        feedback_map: dict[str, int] = {}
+        try:
+            feedback_map = await search_feedback_service.get_bulk_aggregates(
+                db, list(block_map.keys())
+            )
+        except Exception:
+            logger.debug("Feedback aggregate fetch failed, skipping", exc_info=True)
+
         # Convert to scoring pipeline format
         scored_dicts = []
         for eid in entity_ids:
@@ -518,6 +532,7 @@ class MemoryBlockService(
                     "embedding": emb_map.get(eid),
                     "access_count": block.access_count or 0,
                     "last_accessed_at": block.last_accessed_at,
+                    "feedback_net": feedback_map.get(eid, 0),
                 }
             )
 
@@ -1170,9 +1185,90 @@ class ProfileScoreService:
         )
 
 
+# ======================== SearchFeedback Service ========================
+
+
+class SearchFeedbackService:
+    """Explicit relevance feedback for search results — enables closed-loop learning."""
+
+    async def record(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        entity_id: str,
+        query: str,
+        signal: str,
+        feedback_source: str = "agent",
+    ) -> SearchFeedback:
+        """Record a feedback signal for a search result."""
+        import hashlib
+
+        query_hash = hashlib.sha256(query.encode()).hexdigest()
+        fb = SearchFeedback(
+            space_id=space_id,
+            entity_id=entity_id,
+            query_hash=query_hash,
+            signal=signal,
+            feedback_source=feedback_source,
+        )
+        db.add(fb)
+        await db.flush()
+        await db.refresh(fb)
+        return fb
+
+    async def get_aggregate(
+        self, db: AsyncSession, entity_id: str
+    ) -> dict[str, int]:
+        """Get aggregated feedback counts for an entity.
+
+        Returns {"positive_count": N, "negative_count": M, "net_signal": N-M}.
+        """
+        q = select(
+            func.count().filter(SearchFeedback.signal == "positive").label("pos"),
+            func.count().filter(SearchFeedback.signal == "negative").label("neg"),
+        ).where(
+            SearchFeedback.entity_id == entity_id,
+            SearchFeedback.deleted_at == None,  # noqa: E711
+        )
+        row = (await db.execute(q)).one()
+        pos = row.pos or 0
+        neg = row.neg or 0
+        return {"positive_count": pos, "negative_count": neg, "net_signal": pos - neg}
+
+    async def get_bulk_aggregates(
+        self, db: AsyncSession, entity_ids: list[str]
+    ) -> dict[str, int]:
+        """Get net feedback signal for multiple entities in one query.
+
+        Returns {entity_id: net_signal, ...}. Missing entities have 0.
+        """
+        if not entity_ids:
+            return {}
+
+        q = (
+            select(
+                SearchFeedback.entity_id,
+                func.sum(
+                    func.cast(
+                        text("CASE WHEN signal = 'positive' THEN 1 ELSE -1 END"),
+                        Integer,
+                    )
+                ).label("net"),
+            )
+            .where(
+                SearchFeedback.entity_id.in_(entity_ids),
+                SearchFeedback.deleted_at == None,  # noqa: E711
+            )
+            .group_by(SearchFeedback.entity_id)
+        )
+        rows = (await db.execute(q)).all()
+        return {row.entity_id: int(row.net or 0) for row in rows}
+
+
 # ======================== Module-level singletons ========================
 
 memory_block_service = MemoryBlockService()
 tag_service = TagService()
 knowledge_domain_service = KnowledgeDomainService()
 profile_score_service = ProfileScoreService()
+search_feedback_service = SearchFeedbackService()
