@@ -44,11 +44,61 @@
     });
   }
 
+  // ── Tmux Prefix Mode (Ctrl-b then next key within timeout) ──
+
+  let prefixActive = false;
+  let prefixTimer = null;
+  const PREFIX_TIMEOUT = 2000; // 2 seconds to press next key
+
+  function enterPrefixMode() {
+    prefixActive = true;
+    clearTimeout(prefixTimer);
+    // Visual indicator
+    const statusEl = document.getElementById('status');
+    if (statusEl) statusEl.dataset.prefix = 'active';
+    document.body.classList.add('tmux-prefix-active');
+    // Send Ctrl-b immediately
+    if (window.tmuxWs?.isConnected() && window.tmuxState.focusedPane) {
+      window.tmuxWs.send({
+        type: 'key',
+        pane: window.tmuxState.focusedPane,
+        key: 'b',
+        modifiers: ['C'],
+      });
+    }
+    // Auto-expire after timeout
+    prefixTimer = setTimeout(() => {
+      prefixActive = false;
+      document.body.classList.remove('tmux-prefix-active');
+      if (statusEl) delete statusEl.dataset.prefix;
+    }, PREFIX_TIMEOUT);
+  }
+
   function sendEk(key) {
     if (!window.tmuxWs || !window.tmuxWs.isConnected() || !window.tmuxState.focusedPane) {
       window.flashInputError?.('Not connected');
       return;
     }
+
+    // If prefix mode is active, send key directly (tmux already received Ctrl-b)
+    if (prefixActive) {
+      prefixActive = false;
+      clearTimeout(prefixTimer);
+      document.body.classList.remove('tmux-prefix-active');
+      const statusEl = document.getElementById('status');
+      if (statusEl) delete statusEl.dataset.prefix;
+      window.tmuxWs.send({
+        type: 'key',
+        pane: window.tmuxState.focusedPane,
+        key,
+        modifiers: [],
+      });
+      const pe = window.tmuxState.paneEls[window.tmuxState.focusedPane];
+      if (pe) pe.resetScroll();
+      clearModifiers();
+      return;
+    }
+
     const mods = [...activeModifiers];
     window.tmuxWs.send({
       type: 'key',
@@ -61,8 +111,21 @@
     clearModifiers();
   }
 
+  // Expose prefix mode for external use
+  window.enterTmuxPrefix = enterPrefixMode;
+
   // Expose for gestures.js
   window.sendEk = sendEk;
+
+  // ── Prefix button ──
+
+  const prefixBtn = document.getElementById('prefix-btn');
+  if (prefixBtn) {
+    prefixBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      enterPrefixMode();
+    });
+  }
 
   // ── Common extra keys + arrow buttons ──
 
