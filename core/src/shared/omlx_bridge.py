@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 OMLX_VENV = Path.home() / ".venvs" / "omlx"
 WORKER_SCRIPT = OMLX_VENV / "embed_worker.py"
 PYTHON = OMLX_VENV / "bin" / "python3"
-EMBEDDING_DIM = 1024
+EMBEDDING_DIM: int = 1024  # re-declared; canonical value in search_constants.py
 
 _process: subprocess.Popen | None = None
 _lock = asyncio.Lock()
