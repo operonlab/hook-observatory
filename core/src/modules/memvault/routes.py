@@ -28,6 +28,7 @@ from .schemas import (
     MemoryBlockUpdate,
     ProfileScoreResponse,
     ProfileScoreUpdate,
+    SearchFeedbackCreate,
     SearchMetadata,
     SemanticSearchParams,  # noqa: F401 — available for future use
     TagResponse,
@@ -671,6 +672,53 @@ async def curate_memories(
     if not dry_run:
         await db.commit()
     return result
+
+
+# ======================== Search Feedback ========================
+
+
+@router.post("/feedback", status_code=201)
+async def record_feedback(
+    body: SearchFeedbackCreate,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Record explicit relevance feedback for a search result (positive/negative)."""
+    from .schemas import SearchFeedbackResponse
+    from .services import search_feedback_service
+
+    fb = await search_feedback_service.record(
+        db,
+        space_id=space_id,
+        entity_id=body.entity_id,
+        query=body.query,
+        signal=body.signal,
+        feedback_source=body.feedback_source,
+    )
+    await db.commit()
+    await db.refresh(fb)
+    return SearchFeedbackResponse(
+        id=fb.id,
+        entity_id=fb.entity_id,
+        query_hash=fb.query_hash,
+        signal=fb.signal,
+        feedback_source=fb.feedback_source,
+        created_at=fb.created_at,
+    )
+
+
+@router.get("/feedback/{entity_id}")
+async def get_feedback_aggregate(
+    entity_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Get aggregated feedback for a specific block."""
+    from .services import search_feedback_service
+
+    agg = await search_feedback_service.get_aggregate(db, entity_id)
+    return {"entity_id": entity_id, **agg}
 
 
 # ======================== Status ========================

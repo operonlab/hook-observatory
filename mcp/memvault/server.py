@@ -419,6 +419,30 @@ async def memvault_intelligence_ingest(
     )
 
 
+@mcp.tool()
+@mcp_error_handler("Memvault")
+async def memvault_feedback(
+    entity_id: str,
+    query: str,
+    signal: str = "positive",
+    feedback_source: str = "agent",
+) -> str:
+    """搜尋結果回饋：對 recall 結果標記 positive/negative，影響未來排名（closed-loop learning）"""
+    result = await to_thread(
+        client.feedback,
+        entity_id=entity_id,
+        query=query,
+        signal=signal,
+        feedback_source=feedback_source,
+    )
+    return (
+        f"Feedback recorded.\n"
+        f"Entity: {result.get('entity_id', '?')}\n"
+        f"Signal: {result.get('signal', '?')}\n"
+        f"Source: {result.get('feedback_source', '?')}"
+    )
+
+
 # ======================== Resources ========================
 
 
