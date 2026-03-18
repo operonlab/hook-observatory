@@ -177,6 +177,16 @@ export const APP_LIST: AppInfo[] = [
     externalUrl: '/apps/hook/',
   },
   {
+    id: 'session-channel',
+    name: 'Session 頻道',
+    description: '跨 Session 即時通訊、Redis Streams 訊息監控',
+    icon: '📢',
+    path: '/session-channel',
+    color: '#74c7ec',
+    status: 'external',
+    externalUrl: '/apps/channel/',
+  },
+  {
     id: 'tmux-webui',
     name: '終端遙控',
     description: 'tmux 遠端操控、多窗格管理、觸控優化',

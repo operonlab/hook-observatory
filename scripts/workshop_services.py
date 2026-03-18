@@ -63,6 +63,14 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/hook-observatory",
     },
     {
+        "name": "session-channel",
+        "type": "uvicorn",
+        "cmd": "/Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py",
+        "port": 4106,
+        "health": "http://127.0.0.1:4106/health",
+        "workdir": "/Users/joneshong/workshop/stations/session-channel",
+    },
+    {
         "name": "system-monitor",
         "type": "uvicorn",
         "cmd": (
