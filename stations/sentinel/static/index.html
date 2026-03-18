@@ -46,6 +46,16 @@
             </div>
         </header>
 
+        <!-- Tab Bar -->
+        <nav class="tab-bar">
+            <button class="tab-btn active" data-tab="status">服務監控</button>
+            <button class="tab-btn" data-tab="services">服務管理</button>
+            <button class="tab-btn" data-tab="guardian">Guardian</button>
+        </nav>
+
+        <!-- Tab: 服務監控 -->
+        <div class="tab-panel active" id="panel-status">
+
         <!-- Overall Banner -->
         <section class="banner-wrap anim-item" style="--i:0">
             <div id="overall-banner" class="banner banner--loading">
@@ -121,6 +131,82 @@
 
             </div>
         </div>
+
+        </div><!-- /panel-status -->
+
+        <!-- Tab: 服務管理 -->
+        <div class="tab-panel" id="panel-services">
+            <div class="tab-content">
+                <div class="panel">
+                    <div class="panel__header">
+                        <h2 class="panel__title">服務管理</h2>
+                        <span class="panel__count mono" id="mgmt-svc-count"></span>
+                    </div>
+                    <div class="svc-filter-row">
+                        <div class="svc-filter" id="mgmt-cat-filter">
+                            <button class="filter-btn active" data-cat="all">全部</button>
+                            <button class="filter-btn" data-cat="workshop">workshop</button>
+                            <button class="filter-btn" data-cat="jonathan">jonathan</button>
+                            <button class="filter-btn" data-cat="pulso">pulso</button>
+                            <button class="filter-btn" data-cat="infra">infra</button>
+                            <button class="filter-btn" data-cat="third-party">third-party</button>
+                        </div>
+                        <div class="svc-filter" id="mgmt-src-filter">
+                            <button class="filter-btn active" data-src="all">全部來源</button>
+                            <button class="filter-btn" data-src="plist">plist</button>
+                            <button class="filter-btn" data-src="launcher">launcher</button>
+                            <button class="filter-btn" data-src="docker">docker</button>
+                        </div>
+                    </div>
+                    <div class="svc-table-wrap">
+                        <table class="svc-table" id="mgmt-svc-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-expand"></th>
+                                    <th class="col-name">名稱</th>
+                                    <th class="col-type">類型</th>
+                                    <th class="col-schedule">排程</th>
+                                    <th class="col-status">狀態</th>
+                                    <th class="col-actions">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mgmt-svc-tbody">
+                                <tr><td colspan="6" class="empty-state"><span class="empty-state__text">載入中…</span></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /panel-services -->
+
+        <!-- Tab: Guardian -->
+        <div class="tab-panel" id="panel-guardian">
+            <div class="tab-content">
+                <div class="panel">
+                    <div class="panel__header">
+                        <h2 class="panel__title">Memory Guardian 日誌</h2>
+                        <button class="guardian-trigger-btn" id="guardian-trigger">手動觸發</button>
+                    </div>
+                    <div class="svc-table-wrap">
+                        <table class="svc-table" id="guardian-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-time">時間</th>
+                                    <th class="col-level">等級</th>
+                                    <th class="col-pressure">壓力值</th>
+                                    <th class="col-killed">終止數</th>
+                                    <th class="col-freed">釋放</th>
+                                    <th class="col-detail">詳情</th>
+                                </tr>
+                            </thead>
+                            <tbody id="guardian-tbody">
+                                <tr><td colspan="6" class="empty-state"><span class="empty-state__text">載入中…</span></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /panel-guardian -->
 
         <!-- Footer -->
         <footer class="footer">

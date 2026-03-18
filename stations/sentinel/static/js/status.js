@@ -376,6 +376,267 @@ function escHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
+// ══ Tab Switching ══
+
+let currentTab = 'status';
+let mgmtLoaded = false;
+let guardianLoaded = false;
+
+function setupTabs() {
+    const btns = document.querySelectorAll('.tab-btn');
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            if (tab === currentTab) return;
+
+            btns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById('panel-' + tab);
+            if (panel) panel.classList.add('active');
+
+            currentTab = tab;
+
+            // Lazy-load tab data
+            if (tab === 'services' && !mgmtLoaded) { fetchMgmtServices(); mgmtLoaded = true; }
+            if (tab === 'guardian' && !guardianLoaded) { fetchGuardian(); guardianLoaded = true; }
+        });
+    });
+}
+
+// ══ Service Management Tab ══
+
+let mgmtServicesData = [];
+let mgmtCatFilter = 'all';
+let mgmtSrcFilter = 'all';
+let mgmtExpandedRows = new Set();
+
+function mgmtStatusInfo(s) {
+    let cls = 'status-idle', label = '閒置';
+    if (s.status === 'running')  { cls = 'status-running';  label = '運行中'; }
+    else if (s.status === 'stopped')  { cls = 'status-stopped';  label = '已停止'; }
+    else if (s.status === 'disabled') { cls = 'status-disabled'; label = '已停用'; }
+    else if (s.status === 'unloaded') { cls = 'status-unloaded'; label = '未載入'; }
+    else if (s.status && s.status.startsWith('error')) { cls = 'status-error'; label = s.status; }
+    return { cls, label };
+}
+
+function mgmtSvcActions(s) {
+    if (s.source !== 'plist') return '';
+    const label = s.label;
+    const btns = [];
+    if (s.status === 'disabled' || s.status === 'unloaded') {
+        btns.push(`<button class="action-btn action-enable" onclick="mgmtSvcAction('${escHtml(label)}','enable')" title="啟用">▶</button>`);
+    }
+    if (s.status === 'running' || s.status === 'idle') {
+        btns.push(`<button class="action-btn action-restart" onclick="mgmtSvcAction('${escHtml(label)}','restart')" title="重啟">↻</button>`);
+        btns.push(`<button class="action-btn action-disable" onclick="mgmtSvcAction('${escHtml(label)}','disable')" title="停用">⏹</button>`);
+    }
+    return btns.join(' ');
+}
+
+function getFilteredMgmtServices() {
+    let filtered = mgmtServicesData;
+    if (mgmtCatFilter !== 'all') filtered = filtered.filter(s => s.category === mgmtCatFilter);
+    if (mgmtSrcFilter !== 'all') filtered = filtered.filter(s => s.source === mgmtSrcFilter);
+    return filtered;
+}
+
+function renderMgmtServicesTable() {
+    const tbody = document.getElementById('mgmt-svc-tbody');
+    if (!tbody) return;
+
+    const filtered = getFilteredMgmtServices();
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><span class="empty-state__text">無服務</span></td></tr>';
+        return;
+    }
+
+    let html = '';
+    for (const s of filtered) {
+        const typeLabels = { service: '常駐', periodic: '排程', oneshot: '單次', container: '容器' };
+        const typeLabel = typeLabels[s.type] || s.type;
+        const typeCls = `type-${s.type}`;
+        const { cls: statusCls, label: statusLabel } = mgmtStatusInfo(s);
+        const isExpanded = mgmtExpandedRows.has(s.label);
+        const chevron = isExpanded ? '▾' : '▸';
+        const pidInfo = s.pid ? ` <span style="color:var(--text-muted);font-size:0.62rem">PID ${s.pid}</span>` : '';
+        const srcBadge = `<span class="source-badge source-${s.source || 'plist'}">${s.source || 'plist'}</span>`;
+
+        html += `<tr class="svc-row ${isExpanded ? 'expanded' : ''}" data-label="${escHtml(s.label)}">
+            <td class="col-expand" onclick="mgmtToggleRow('${escHtml(s.label)}')">${chevron}</td>
+            <td>${escHtml(s.name)}${pidInfo} ${srcBadge}</td>
+            <td><span class="type-badge ${typeCls}">${typeLabel}</span></td>
+            <td style="font-family:var(--font-mono);font-size:0.68rem">${escHtml(s.schedule)}</td>
+            <td><span class="${statusCls}"><span class="status-dot"></span><span class="status-text">${statusLabel}</span></span></td>
+            <td class="actions-cell">${mgmtSvcActions(s)}</td>
+        </tr>`;
+
+        if (isExpanded) {
+            html += `<tr class="svc-detail-row"><td colspan="6">
+                <div class="svc-detail">
+                    <div class="svc-detail-grid">
+                        <div class="detail-item"><span class="detail-label">Label</span><span class="detail-value">${escHtml(s.label)}</span></div>
+                        <div class="detail-item"><span class="detail-label">指令</span><span class="detail-value mono-val">${escHtml(s.command || '—')}</span></div>
+                        <div class="detail-item"><span class="detail-label">說明</span><span class="detail-value">${escHtml(s.description || '—')}</span></div>
+                        <div class="detail-item"><span class="detail-label">日誌路徑</span><span class="detail-value mono-val">${escHtml(s.log_path || '—')}</span></div>
+                        ${s.port ? `<div class="detail-item"><span class="detail-label">Port</span><span class="detail-value">${s.port}</span></div>` : ''}
+                    </div>
+                    <div class="svc-log-preview" id="mgmt-log-${CSS.escape(s.label)}">
+                        <div class="log-header">
+                            <span>最近日誌</span>
+                            <button class="action-btn" onclick="mgmtFetchLogs('${escHtml(s.label)}')">刷新</button>
+                        </div>
+                        <pre class="log-content">點擊「刷新」載入日誌…</pre>
+                    </div>
+                </div>
+            </td></tr>`;
+        }
+    }
+    tbody.innerHTML = html;
+}
+
+function mgmtToggleRow(label) {
+    if (mgmtExpandedRows.has(label)) {
+        mgmtExpandedRows.delete(label);
+    } else {
+        mgmtExpandedRows.add(label);
+        setTimeout(() => mgmtFetchLogs(label), 50);
+    }
+    renderMgmtServicesTable();
+}
+
+async function mgmtFetchLogs(label) {
+    const logEl = document.getElementById('mgmt-log-' + CSS.escape(label));
+    if (!logEl) return;
+    const pre = logEl.querySelector('.log-content');
+    if (pre) pre.textContent = '載入中…';
+    const data = await fetchJSON(`/api/sentinel/sysmon/services/${encodeURIComponent(label)}/logs`);
+    if (pre) {
+        if (!data || data.error) {
+            pre.textContent = data?.error || '載入失敗';
+        } else if (data.lines && data.lines.length > 0) {
+            pre.textContent = data.lines.join('\n');
+        } else {
+            pre.textContent = '（無日誌內容）';
+        }
+    }
+}
+
+async function mgmtSvcAction(label, action) {
+    const data = await fetchJSON(`/api/sentinel/sysmon/services/${encodeURIComponent(label)}/${action}`);
+    if (data && data.status === 'ok') {
+        setTimeout(fetchMgmtServices, 1000);
+    } else {
+        alert(`操作失敗: ${data?.detail || '未知錯誤'}`);
+    }
+}
+
+// Override fetchJSON for POST actions
+async function postJSON(path) {
+    try {
+        const resp = await fetch(`${API_BASE}${path}`, { method: 'POST', credentials: 'include' });
+        if (resp.status === 401 || resp.status === 403) { window.location.href = LOGIN_URL; return null; }
+        if (!resp.ok) return null;
+        return await resp.json();
+    } catch { return null; }
+}
+
+// Re-define mgmtSvcAction to use POST
+mgmtSvcAction = async function(label, action) {
+    const data = await postJSON(`/api/sentinel/sysmon/services/${encodeURIComponent(label)}/${action}`);
+    if (data && data.status === 'ok') {
+        setTimeout(fetchMgmtServices, 1000);
+    } else {
+        alert(`操作失敗: ${data?.detail || '未知錯誤'}`);
+    }
+};
+
+async function fetchMgmtServices() {
+    const data = await fetchJSON('/api/sentinel/sysmon/services');
+    if (data) {
+        mgmtServicesData = data.services || [];
+        const countEl = document.getElementById('mgmt-svc-count');
+        if (countEl) countEl.textContent = `${mgmtServicesData.length} 個服務`;
+        renderMgmtServicesTable();
+    }
+}
+
+function setupMgmtFilters() {
+    const catFilter = document.getElementById('mgmt-cat-filter');
+    if (catFilter) {
+        catFilter.addEventListener('click', e => {
+            const btn = e.target.closest('.filter-btn');
+            if (!btn) return;
+            catFilter.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            mgmtCatFilter = btn.dataset.cat;
+            renderMgmtServicesTable();
+        });
+    }
+
+    const srcFilter = document.getElementById('mgmt-src-filter');
+    if (srcFilter) {
+        srcFilter.addEventListener('click', e => {
+            const btn = e.target.closest('.filter-btn');
+            if (!btn) return;
+            srcFilter.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            mgmtSrcFilter = btn.dataset.src;
+            renderMgmtServicesTable();
+        });
+    }
+}
+
+// ══ Guardian Tab ══
+
+function renderGuardianTable(data) {
+    const tbody = document.getElementById('guardian-tbody');
+    if (!tbody) return;
+
+    const entries = data.entries || [];
+    if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><span class="empty-state__text">無 Guardian 日誌</span></td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = entries.map(e => {
+        const levelCls = `level-${e.level}`;
+        const kills = e.kills || [];
+        const detail = kills.length > 0
+            ? kills.map(k => `${k.process} (${k.mem_mb}MB)`).join(', ')
+            : '—';
+        return `<tr>
+            <td style="font-family:var(--font-mono);font-size:0.68rem">${escHtml(e.timestamp)}</td>
+            <td><span class="level-badge ${levelCls}">${e.level}</span></td>
+            <td>${e.pressure_level}</td>
+            <td>${e.total_killed}</td>
+            <td>${e.freed_mb > 0 ? e.freed_mb + ' MB' : '—'}</td>
+            <td><span class="guardian-detail" title="${escHtml(detail)}">${escHtml(detail)}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+async function fetchGuardian() {
+    const data = await fetchJSON('/api/sentinel/sysmon/guardian');
+    if (data) renderGuardianTable(data);
+}
+
+function setupGuardianTrigger() {
+    const btn = document.getElementById('guardian-trigger');
+    if (btn) {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            btn.textContent = '執行中…';
+            await postJSON('/api/sentinel/sysmon/guardian/run');
+            await fetchGuardian();
+            btn.disabled = false;
+            btn.textContent = '手動觸發';
+        });
+    }
+}
+
 // ── Poll Loop ──
 
 async function refresh() {
@@ -472,5 +733,8 @@ function connectSSE() {
 
 // ── Init ──
 
+setupTabs();
+setupMgmtFilters();
+setupGuardianTrigger();
 refresh();   // Initial full load (status + uptime + incidents)
 connectSSE(); // Subscribe to real-time status updates via SSE
