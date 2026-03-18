@@ -10,7 +10,7 @@ interface LayerToggleProps {
   onChange: (layers: Set<GalaxyLayer>) => void
 }
 
-const LAYER_ORDER: GalaxyLayer[] = ['blocks', 'triples', 'clusters', 'wisdom']
+const LAYER_ORDER: GalaxyLayer[] = ['blocks', 'triples', 'communities', 'summaries']
 
 export default function LayerToggle({ layers, onChange }: LayerToggleProps) {
   const toggle = (layer: GalaxyLayer) => {

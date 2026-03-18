@@ -6,8 +6,8 @@ function hexToRgba(cssVar: string, alpha: number): string {
 }
 
 const LAYER_CONFIG: Record<string, { label: string; color: string }> = {
-  wisdom: { label: '智慧 (L2)', color: 'var(--peach)' },
-  clusters: { label: '群集 (L1)', color: 'var(--blue)' },
+  summaries: { label: '摘要 (L2)', color: 'var(--peach)' },
+  communities: { label: '社群 (L1)', color: 'var(--blue)' },
   triples: { label: '三元組 (L0)', color: 'var(--teal)' },
   blocks: { label: '記憶區塊', color: 'var(--text)' },
 }
@@ -66,8 +66,8 @@ function LayerSection({
                 color: 'var(--text)',
               }}
             >
-              {layerKey === 'wisdom' && item.wisdom}
-              {layerKey === 'clusters' && (
+              {layerKey === 'summaries' && item.summary}
+              {layerKey === 'communities' && (
                 <span>
                   <span className="font-medium">{item.name}</span>
                   <span className="ml-2 text-xs" style={{ color: 'var(--subtext0)' }}>
@@ -99,8 +99,8 @@ export default function CascadeSearchBar() {
   const [query, setQuery] = useState('')
   const { kg_cascadeResult, kg_loading, cascadeRecall, clearCascadeResult } = useMemvaultStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    wisdom: true,
-    clusters: true,
+    summaries: true,
+    communities: true,
     triples: false,
     blocks: false,
   })
@@ -118,7 +118,10 @@ export default function CascadeSearchBar() {
 
   const result = kg_cascadeResult
   const totalHits = result
-    ? result.wisdom.length + result.clusters.length + result.triples.length + result.blocks.length
+    ? result.summaries.length +
+      result.communities.length +
+      result.triples.length +
+      result.blocks.length
     : 0
 
   return (
@@ -178,7 +181,7 @@ export default function CascadeSearchBar() {
           </div>
 
           <div className="space-y-1">
-            {(['wisdom', 'clusters', 'triples', 'blocks'] as const).map((layer) => (
+            {(['summaries', 'communities', 'triples', 'blocks'] as const).map((layer) => (
               <LayerSection
                 key={layer}
                 layerKey={layer}

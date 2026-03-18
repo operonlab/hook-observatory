@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMemvaultStore } from '../stores'
-import type { Cluster, ClusterDetail, WisdomNode } from '../types'
+import type { Community, CommunityDetail, CommunitySummary } from '../types'
 import InfoTip from './InfoTip'
 
 function hexToRgba(cssVar: string, alpha: number): string {
@@ -70,28 +70,21 @@ function LayerHeader({
   )
 }
 
-// ── Wisdom Card (L2) ──
+// ── Community Summary Card (L2) ──
 
-function WisdomCard({
-  node,
+function CommunitySummaryCard({
+  summary,
   onExpand,
   expanded,
-  relatedClusters,
-  onClusterNav,
+  relatedCommunity,
+  onCommunityNav,
 }: {
-  node: WisdomNode
+  summary: CommunitySummary
   onExpand: () => void
   expanded: boolean
-  relatedClusters: Cluster[]
-  onClusterNav?: (clusterId: string) => void
+  relatedCommunity: Community | undefined
+  onCommunityNav?: (communityId: string) => void
 }) {
-  const confidenceColors: Record<string, string> = {
-    HIGH: 'var(--green)',
-    MEDIUM: 'var(--yellow)',
-    LOW: 'var(--red)',
-  }
-  const confColor = confidenceColors[node.confidence] ?? 'var(--subtext0)'
-
   return (
     <div
       className="rounded-xl border p-4 cursor-pointer transition-all duration-200"
@@ -108,61 +101,68 @@ function WisdomCard({
       }}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <span
-          className="rounded-full px-2 py-0.5 text-xs font-medium"
-          style={{
-            backgroundColor: hexToRgba(confColor, 0.18),
-            color: confColor,
-            border: `1px solid ${confColor}`,
-          }}
-        >
-          {node.confidence}
-        </span>
         <span className="text-xs shrink-0" style={{ color: 'var(--subtext0)' }}>
-          {node.evidence_count ?? 0} 證據
+          {summary.evidence_count ?? 0} 證據
         </span>
-      </div>
-
-      <p className="text-sm leading-relaxed mb-2" style={{ color: 'var(--text)' }}>
-        {node.wisdom}
-      </p>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs" style={{ color: 'var(--peach)' }}>
-          {node.bridge_entity}
-        </span>
-        {node.tags.length > 0 && (
-          <div className="flex gap-1 flex-wrap">
-            {node.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="rounded px-1.5 py-0.5 text-xs"
-                style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+        {summary.llm_model && (
+          <span
+            className="rounded px-1.5 py-0.5 text-xs"
+            style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
+          >
+            {summary.llm_model}
+          </span>
         )}
       </div>
 
-      {/* Expanded: show related clusters */}
+      <p className="text-sm leading-relaxed mb-2" style={{ color: 'var(--text)' }}>
+        {summary.summary}
+      </p>
+
+      {summary.tags.length > 0 && (
+        <div className="flex gap-1 flex-wrap">
+          {summary.tags.slice(0, 3).map((tag) => (
+            <span
+              key={tag}
+              className="rounded px-1.5 py-0.5 text-xs"
+              style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded: show key findings + related community */}
       {expanded && (
         <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: 'var(--surface0)' }}>
-          <p className="text-xs font-medium" style={{ color: 'var(--subtext0)' }}>
-            關聯群集 ({node.cluster_ids.length})
-          </p>
-          {relatedClusters.length > 0 ? (
-            relatedClusters.map((c) => (
+          {summary.key_findings.length > 0 && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
+                主要發現
+              </p>
+              <ul className="space-y-1">
+                {summary.key_findings.map((finding, i) => (
+                  <li key={i} className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>
+                    • {finding}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {relatedCommunity && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
+                所屬社群
+              </p>
               <div
-                key={c.id}
                 className="flex items-center justify-between text-xs px-2 py-2 rounded cursor-pointer transition-colors gap-2"
                 style={{ backgroundColor: hexToRgba('var(--blue)', 0.08) }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onClusterNav?.(c.id)
+                  onCommunityNav?.(relatedCommunity.id)
                 }}
-                title="點擊跳轉到此群集"
+                title="點擊跳轉到此社群"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span
@@ -177,48 +177,16 @@ function WisdomCard({
                       textDecorationStyle: 'dotted',
                     }}
                   >
-                    {c.name}
+                    {relatedCommunity.name}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span style={{ color: 'var(--subtext0)' }}>{c.size} 成員</span>
-                  <span
-                    className="rounded px-1 py-0.5"
-                    style={{
-                      backgroundColor:
-                        c.verdict === 'VERIFIED'
-                          ? hexToRgba('var(--green)', 0.15)
-                          : hexToRgba('var(--yellow)', 0.15),
-                      color: c.verdict === 'VERIFIED' ? 'var(--green)' : 'var(--yellow)',
-                    }}
-                  >
-                    {c.verdict}
-                  </span>
-                </div>
+                <span style={{ color: 'var(--subtext0)' }}>{relatedCommunity.size} 成員</span>
               </div>
-            ))
-          ) : node.cluster_ids.length > 0 ? (
-            <p className="text-xs" style={{ color: 'var(--subtext0)' }}>
-              {node.cluster_ids.length} 個群集 ID（尚未載入）
-            </p>
-          ) : (
-            <p className="text-xs" style={{ color: 'var(--subtext0)' }}>
-              無關聯群集
-            </p>
+            </div>
           )}
-          {node.verified && (
-            <span
-              className="inline-block rounded px-1.5 py-0.5 text-xs"
-              style={{
-                backgroundColor: hexToRgba('var(--green)', 0.15),
-                color: 'var(--green)',
-              }}
-            >
-              已驗證
-            </span>
-          )}
+
           <p className="text-xs" style={{ color: 'var(--subtext0)' }}>
-            {relativeTime(node.created_at)}
+            {relativeTime(summary.created_at)}
           </p>
         </div>
       )}
@@ -226,18 +194,18 @@ function WisdomCard({
   )
 }
 
-// ── Cluster Card (L1) ──
+// ── Community Card (L1) ──
 
-function ClusterCard({
-  cluster,
+function CommunityCard({
+  community,
   onExpand,
   expanded,
   detail,
 }: {
-  cluster: Cluster
+  community: Community
   onExpand: () => void
   expanded: boolean
-  detail: ClusterDetail | null
+  detail: CommunityDetail | null
 }) {
   return (
     <div
@@ -256,7 +224,7 @@ function ClusterCard({
     >
       <div className="flex items-start sm:items-center justify-between mb-2 gap-2">
         <span className="text-sm font-medium flex-1 min-w-0" style={{ color: 'var(--text)' }}>
-          {cluster.name}
+          {community.name}
         </span>
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
           <span
@@ -266,37 +234,36 @@ function ClusterCard({
               color: 'var(--blue)',
             }}
           >
-            {cluster.size} 成員
+            {community.size} 成員
           </span>
-          <span
-            className="rounded px-1.5 py-0.5 text-xs"
-            style={{
-              backgroundColor:
-                cluster.verdict === 'VERIFIED'
-                  ? hexToRgba('var(--green)', 0.15)
-                  : hexToRgba('var(--yellow)', 0.15),
-              color: cluster.verdict === 'VERIFIED' ? 'var(--green)' : 'var(--yellow)',
-            }}
-          >
-            {cluster.verdict}
-          </span>
+          {community.resolution_level !== undefined && (
+            <span
+              className="rounded px-1.5 py-0.5 text-xs"
+              style={{
+                backgroundColor: hexToRgba('var(--mauve)', 0.15),
+                color: 'var(--mauve)',
+              }}
+            >
+              L{community.resolution_level}
+            </span>
+          )}
         </div>
       </div>
 
-      {cluster.summary && (
+      {community.summary && (
         <p className="text-xs mb-2 line-clamp-2" style={{ color: 'var(--subtext1)' }}>
-          {cluster.summary}
+          {community.summary}
         </p>
       )}
 
       <div className="flex gap-1 flex-wrap">
-        {cluster.top_subjects.slice(0, 4).map((s) => (
+        {community.top_entities.slice(0, 4).map((e) => (
           <span
-            key={s}
+            key={e}
             className="rounded px-1.5 py-0.5 text-xs"
             style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
           >
-            {s}
+            {e}
           </span>
         ))}
       </div>
@@ -304,7 +271,7 @@ function ClusterCard({
       {/* Expanded: show detail */}
       {expanded && (
         <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: 'var(--surface0)' }}>
-          {cluster.summary && (
+          {community.summary && (
             <div>
               <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
                 摘要
@@ -313,18 +280,18 @@ function ClusterCard({
                 className="text-xs leading-relaxed whitespace-pre-wrap"
                 style={{ color: 'var(--text)' }}
               >
-                {cluster.summary}
+                {community.summary}
               </p>
             </div>
           )}
 
-          {cluster.top_predicates.length > 0 && (
+          {community.top_predicates.length > 0 && (
             <div>
               <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
                 常見關係
               </p>
               <div className="flex gap-1 flex-wrap">
-                {cluster.top_predicates.map((p) => (
+                {community.top_predicates.map((p) => (
                   <span
                     key={p}
                     className="rounded px-1.5 py-0.5 text-xs"
@@ -334,25 +301,6 @@ function ClusterCard({
                     }}
                   >
                     {p}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {cluster.top_objects.length > 0 && (
-            <div>
-              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
-                常見物件
-              </p>
-              <div className="flex gap-1 flex-wrap">
-                {cluster.top_objects.map((o) => (
-                  <span
-                    key={o}
-                    className="rounded px-1.5 py-0.5 text-xs"
-                    style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext1)' }}
-                  >
-                    {o}
                   </span>
                 ))}
               </div>
@@ -371,7 +319,6 @@ function ClusterCard({
                   className="text-xs px-2 py-1.5 rounded mb-1"
                   style={{ backgroundColor: 'var(--base)' }}
                 >
-                  {/* Mobile: stack vertically */}
                   <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                     <span style={{ color: 'var(--teal)' }}>{t.subject}</span>
                     <span style={{ color: 'var(--subtext0)' }}>&rarr;</span>
@@ -391,9 +338,38 @@ function ClusterCard({
             </div>
           )}
 
-          {cluster.generation_batch && (
+          {/* Child communities (if populated) */}
+          {detail && detail.children.length > 0 && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
+                子社群 ({detail.children.length})
+              </p>
+              <div className="flex gap-1 flex-wrap">
+                {detail.children.map((child) => (
+                  <span
+                    key={child.id}
+                    className="rounded px-1.5 py-0.5 text-xs"
+                    style={{
+                      backgroundColor: hexToRgba('var(--blue)', 0.1),
+                      color: 'var(--blue)',
+                    }}
+                  >
+                    {child.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {community.modularity_score !== null && community.modularity_score !== undefined && (
             <p className="text-xs" style={{ color: 'var(--subtext0)' }}>
-              生成批次：{cluster.generation_batch}
+              模組化分數：{community.modularity_score.toFixed(4)}
+            </p>
+          )}
+
+          {community.generation_batch && (
+            <p className="text-xs" style={{ color: 'var(--subtext0)' }}>
+              生成批次：{community.generation_batch}
             </p>
           )}
         </div>
@@ -549,35 +525,35 @@ function TripleTable() {
 
 export default function KgExplorerPanel() {
   const {
-    kg_wisdom,
-    kg_clusters,
-    kg_selectedCluster,
+    kg_summaries,
+    kg_communities,
+    kg_selectedCommunity,
     kg_triplesTotal,
     kg_loading,
-    fetchWisdom,
-    fetchClusters,
-    fetchClusterDetail,
+    fetchSummaries,
+    fetchCommunities,
+    fetchCommunityDetail,
   } = useMemvaultStore()
 
-  const [expandedWisdom, setExpandedWisdom] = useState<string | null>(null)
-  const [expandedCluster, setExpandedCluster] = useState<string | null>(null)
+  const [expandedSummary, setExpandedSummary] = useState<string | null>(null)
+  const [expandedCommunity, setExpandedCommunity] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
 
-  const clusterSectionRef = useRef<HTMLElement>(null)
+  const communitySectionRef = useRef<HTMLElement>(null)
 
   const isStale = useMemvaultStore((s) => s.isStale)
 
   useEffect(() => {
-    if (isStale('kg_wisdom')) fetchWisdom()
-    if (isStale('kg_clusters')) fetchClusters()
-  }, [fetchWisdom, fetchClusters, isStale])
+    if (isStale('kg_summaries')) fetchSummaries()
+    if (isStale('kg_communities')) fetchCommunities()
+  }, [fetchSummaries, fetchCommunities, isStale])
 
-  const handleClusterExpand = (id: string) => {
-    if (expandedCluster === id) {
-      setExpandedCluster(null)
+  const handleCommunityExpand = (id: string) => {
+    if (expandedCommunity === id) {
+      setExpandedCommunity(null)
     } else {
-      setExpandedCluster(id)
-      fetchClusterDetail(id)
+      setExpandedCommunity(id)
+      fetchCommunityDetail(id)
     }
   }
 
@@ -590,93 +566,93 @@ export default function KgExplorerPanel() {
     })
   }, [])
 
-  const handleClusterNav = useCallback(
-    (clusterId: string) => {
+  const handleCommunityNav = useCallback(
+    (communityId: string) => {
       setCollapsedSections((prev) => {
         const next = new Set(prev)
-        next.delete('clusters')
+        next.delete('communities')
         return next
       })
-      setExpandedCluster(clusterId)
-      fetchClusterDetail(clusterId)
+      setExpandedCommunity(communityId)
+      fetchCommunityDetail(communityId)
       setTimeout(() => {
-        clusterSectionRef.current?.scrollIntoView({
+        communitySectionRef.current?.scrollIntoView({
           behavior: 'smooth',
           block: 'start',
         })
       }, 100)
     },
-    [fetchClusterDetail],
+    [fetchCommunityDetail],
   )
 
   return (
     <div className="space-y-6">
-      {/* L2: Wisdom */}
+      {/* L2: Community Summaries */}
       <section>
         <LayerHeader
           color="var(--peach)"
-          label="智慧結晶 (L2)"
-          count={kg_wisdom.length}
+          label="社群摘要 (L2)"
+          count={kg_summaries.length}
           countUnit="條"
-          collapsed={collapsedSections.has('wisdom')}
-          onToggle={() => toggleSection('wisdom')}
-          info="智慧結晶是從多個知識群集中提煉出的高層洞察。每條智慧都跨越多個主題群集，代表跨領域的深層認知模式。信心等級（HIGH/MEDIUM/LOW）反映證據的充分程度。"
+          collapsed={collapsedSections.has('summaries')}
+          onToggle={() => toggleSection('summaries')}
+          info="社群摘要是從 Leiden 社群自動生成的高層洞察。每條摘要描述一個知識社群的主要主題與關鍵發現，由 LLM 自動生成。"
         />
 
-        {!collapsedSections.has('wisdom') &&
-          (kg_loading && kg_wisdom.length === 0 ? (
+        {!collapsedSections.has('summaries') &&
+          (kg_loading && kg_summaries.length === 0 ? (
             <div className="flex justify-center py-6">
               <div
                 className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
                 style={{ borderColor: 'var(--peach)', borderTopColor: 'transparent' }}
               />
             </div>
-          ) : kg_wisdom.length === 0 ? (
+          ) : kg_summaries.length === 0 ? (
             <p className="text-sm py-4" style={{ color: 'var(--subtext0)' }}>
-              尚未產生智慧結晶
+              尚未產生社群摘要
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {kg_wisdom.map((w) => (
-                <WisdomCard
-                  key={w.id}
-                  node={w}
-                  expanded={expandedWisdom === w.id}
-                  onExpand={() => setExpandedWisdom(expandedWisdom === w.id ? null : w.id)}
-                  relatedClusters={kg_clusters.filter((c) => w.cluster_ids.includes(c.id))}
-                  onClusterNav={handleClusterNav}
+              {kg_summaries.map((s) => (
+                <CommunitySummaryCard
+                  key={s.id}
+                  summary={s}
+                  expanded={expandedSummary === s.id}
+                  onExpand={() => setExpandedSummary(expandedSummary === s.id ? null : s.id)}
+                  relatedCommunity={kg_communities.find((c) => c.id === s.community_id)}
+                  onCommunityNav={handleCommunityNav}
                 />
               ))}
             </div>
           ))}
       </section>
 
-      {/* L1: Clusters */}
-      <section ref={clusterSectionRef}>
+      {/* L1: Communities */}
+      <section ref={communitySectionRef}>
         <LayerHeader
           color="var(--blue)"
-          label="知識群集 (L1)"
-          count={kg_clusters.length}
+          label="知識社群 (L1)"
+          count={kg_communities.length}
           countUnit="個"
-          collapsed={collapsedSections.has('clusters')}
-          onToggle={() => toggleSection('clusters')}
-          info="知識群集是由語意相近的三元組自動聚類而成的主題分組。每個群集包含一組相關的知識事實，並附有摘要、主要主題和驗證狀態（VERIFIED 表示已驗證，UNVERIFIED 表示待確認）。"
+          collapsed={collapsedSections.has('communities')}
+          onToggle={() => toggleSection('communities')}
+          info="知識社群是由 Leiden 演算法從三元組圖譜中自動偵測的主題群組。每個社群包含語意相近的知識節點，並附有摘要和層級資訊。"
         />
 
-        {!collapsedSections.has('clusters') &&
-          (kg_clusters.length === 0 ? (
+        {!collapsedSections.has('communities') &&
+          (kg_communities.length === 0 ? (
             <p className="text-sm py-4" style={{ color: 'var(--subtext0)' }}>
-              尚未產生知識群集
+              尚未產生知識社群
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {kg_clusters.map((c) => (
-                <ClusterCard
+              {kg_communities.map((c) => (
+                <CommunityCard
                   key={c.id}
-                  cluster={c}
-                  expanded={expandedCluster === c.id}
-                  onExpand={() => handleClusterExpand(c.id)}
-                  detail={expandedCluster === c.id ? kg_selectedCluster : null}
+                  community={c}
+                  expanded={expandedCommunity === c.id}
+                  onExpand={() => handleCommunityExpand(c.id)}
+                  detail={expandedCommunity === c.id ? kg_selectedCommunity : null}
                 />
               ))}
             </div>
@@ -692,7 +668,7 @@ export default function KgExplorerPanel() {
           countUnit="筆"
           collapsed={collapsedSections.has('triples')}
           onToggle={() => toggleSection('triples')}
-          info="三元組是知識圖譜的最小單位，格式為「主詞 → 關係 → 受詞」。每條三元組記錄一個具體的知識事實，由對話中自動提取。這些是所有上層結構（群集、智慧）的基礎資料。"
+          info="三元組是知識圖譜的最小單位，格式為「主詞 → 關係 → 受詞」。每條三元組記錄一個具體的知識事實，由對話中自動提取。這些是所有上層結構（社群、摘要）的基礎資料。"
         />
 
         {!collapsedSections.has('triples') && <TripleTable />}

@@ -240,12 +240,12 @@ export default function GalaxyPage() {
     selectBlock,
     selectedBlock,
     kg_triples,
-    kg_clusters,
-    kg_wisdom,
+    kg_communities,
+    kg_summaries,
     kg_galaxyLayers,
     fetchTriples,
-    fetchClusters,
-    fetchWisdom,
+    fetchCommunities,
+    fetchSummaries,
     setKgGalaxyLayers,
   } = useMemvaultStore()
 
@@ -254,8 +254,8 @@ export default function GalaxyPage() {
   const { nodes, links } = useGalaxy({
     blocks,
     triples: kg_triples,
-    clusters: kg_clusters,
-    wisdom: kg_wisdom,
+    communities: kg_communities,
+    summaries: kg_summaries,
     visibleLayers: kg_galaxyLayers,
   })
 
@@ -263,12 +263,12 @@ export default function GalaxyPage() {
 
   useEffect(() => {
     if (isStale('blocks')) fetchBlocks()
-    if (isStale('kg_clusters')) fetchClusters()
-    if (isStale('kg_wisdom')) fetchWisdom()
+    if (isStale('kg_communities')) fetchCommunities()
+    if (isStale('kg_summaries')) fetchSummaries()
     if (kg_galaxyLayers.has('triples') && isStale('kg_triples')) {
       fetchTriples(1)
     }
-  }, [fetchBlocks, fetchClusters, fetchWisdom, fetchTriples, kg_galaxyLayers, isStale])
+  }, [fetchBlocks, fetchCommunities, fetchSummaries, fetchTriples, kg_galaxyLayers, isStale])
 
   const handleNodeClick = useCallback(
     (node: GalaxyNode) => {

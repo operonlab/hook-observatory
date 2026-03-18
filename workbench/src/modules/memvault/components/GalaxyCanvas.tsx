@@ -37,9 +37,9 @@ function resolveColors() {
 function nodeSize(n: any): number {
   const layer = n.layer as GalaxyLayer
   switch (layer) {
-    case 'wisdom':
+    case 'summaries':
       return 4 + (n.confidence || 0.5) * 6
-    case 'clusters':
+    case 'communities':
       return 3
     case 'triples':
       return 1 + (n.confidence || 0.5) * 0.5
@@ -51,9 +51,9 @@ function nodeSize(n: any): number {
 function nodeColor(n: any, colors: ReturnType<typeof resolveColors>): string {
   const layer = n.layer as GalaxyLayer
   switch (layer) {
-    case 'wisdom':
+    case 'summaries':
       return colors.peach
-    case 'clusters':
+    case 'communities':
       return colors.blue
     case 'triples':
       return colors.teal
@@ -65,7 +65,7 @@ function nodeColor(n: any, colors: ReturnType<typeof resolveColors>): string {
 function _nodeOpacity(n: any): number {
   const layer = n.layer as GalaxyLayer
   switch (layer) {
-    case 'clusters':
+    case 'communities':
       return 0.35
     default:
       return 0.9

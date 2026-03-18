@@ -14,14 +14,14 @@ import type {
   BlockFilters,
   BrowserTab,
   CascadeRecallResult,
-  Cluster,
-  ClusterDetail,
+  Community,
+  CommunityDetail,
+  CommunitySummary,
   GalaxyLayer,
   SkillInvocation,
   SkillProficiency,
   Triple,
   ViewMode,
-  WisdomNode,
 } from '../types'
 
 const DEFAULT_FILTERS: BlockFilters = {
@@ -39,8 +39,8 @@ interface FetchedAt {
   blocks: number
   profile: number
   kg_triples: number
-  kg_clusters: number
-  kg_wisdom: number
+  kg_communities: number
+  kg_summaries: number
   kg_attitudes: number
   kg_skills: number
 }
@@ -49,8 +49,8 @@ const EMPTY_FETCHED_AT: FetchedAt = {
   blocks: 0,
   profile: 0,
   kg_triples: 0,
-  kg_clusters: 0,
-  kg_wisdom: 0,
+  kg_communities: 0,
+  kg_summaries: 0,
   kg_attitudes: 0,
   kg_skills: 0,
 }
@@ -79,9 +79,9 @@ interface MemvaultState {
   kg_triples: Triple[]
   kg_triplesTotal: number
   kg_triplesPage: number
-  kg_clusters: Cluster[]
-  kg_selectedCluster: ClusterDetail | null
-  kg_wisdom: WisdomNode[]
+  kg_communities: Community[]
+  kg_selectedCommunity: CommunityDetail | null
+  kg_summaries: CommunitySummary[]
   kg_attitudes: AttitudeFact[]
   kg_attitudeHistory: AttitudeFact[]
   kg_skills: SkillProficiency[]
@@ -97,7 +97,7 @@ interface MemvaultState {
   _fetchedAt: FetchedAt
 
   // SWR: memo caches for on-demand detail fetches
-  _clusterDetailCache: Record<string, ClusterDetail>
+  _communityDetailCache: Record<string, CommunityDetail>
   _skillHistoryCache: Record<string, SkillInvocation[]>
   _attitudeHistoryCache: Record<string, AttitudeFact[]>
 
@@ -122,9 +122,9 @@ interface MemvaultState {
   setKgActiveTab: (tab: BrowserTab) => void
   setKgGalaxyLayers: (layers: Set<GalaxyLayer>) => void
   fetchTriples: (page?: number) => Promise<void>
-  fetchClusters: () => Promise<void>
-  fetchClusterDetail: (id: string) => Promise<void>
-  fetchWisdom: () => Promise<void>
+  fetchCommunities: () => Promise<void>
+  fetchCommunityDetail: (id: string) => Promise<void>
+  fetchSummaries: () => Promise<void>
   fetchAttitudes: (category?: string) => Promise<void>
   fetchAttitudeHistory: (factId: string) => Promise<void>
   fetchSkillProficiency: () => Promise<void>
@@ -168,9 +168,9 @@ export const useMemvaultStore = create<MemvaultState>()(
       kg_triples: [],
       kg_triplesTotal: 0,
       kg_triplesPage: 1,
-      kg_clusters: [],
-      kg_selectedCluster: null,
-      kg_wisdom: [],
+      kg_communities: [],
+      kg_selectedCommunity: null,
+      kg_summaries: [],
       kg_attitudes: [],
       kg_attitudeHistory: [],
       kg_skills: [],
@@ -179,12 +179,12 @@ export const useMemvaultStore = create<MemvaultState>()(
 
       // KG UI
       kg_activeTab: 'blocks',
-      kg_galaxyLayers: new Set<GalaxyLayer>(['blocks', 'wisdom', 'clusters']),
+      kg_galaxyLayers: new Set<GalaxyLayer>(['blocks', 'summaries', 'communities']),
       kg_loading: false,
 
       // SWR
       _fetchedAt: { ...EMPTY_FETCHED_AT },
-      _clusterDetailCache: {},
+      _communityDetailCache: {},
       _skillHistoryCache: {},
       _attitudeHistoryCache: {},
 
@@ -348,51 +348,51 @@ export const useMemvaultStore = create<MemvaultState>()(
         }
       },
 
-      fetchClusters: async () => {
+      fetchCommunities: async () => {
         set({ kg_loading: true })
         try {
-          const clusters = await kgApi.listClusters()
+          const communities = await kgApi.listCommunities()
           set((s) => ({
-            kg_clusters: clusters,
-            _fetchedAt: { ...s._fetchedAt, kg_clusters: Date.now() },
+            kg_communities: communities,
+            _fetchedAt: { ...s._fetchedAt, kg_communities: Date.now() },
           }))
         } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch clusters' })
+          set({ error: err instanceof Error ? err.message : 'Failed to fetch communities' })
         } finally {
           set({ kg_loading: false })
         }
       },
 
-      fetchClusterDetail: async (id: string) => {
-        const cached = get()._clusterDetailCache[id]
+      fetchCommunityDetail: async (id: string) => {
+        const cached = get()._communityDetailCache[id]
         if (cached) {
-          set({ kg_selectedCluster: cached })
+          set({ kg_selectedCommunity: cached })
           return
         }
         set({ kg_loading: true })
         try {
-          const detail = await kgApi.getCluster(id)
+          const detail = await kgApi.getCommunity(id)
           set((s) => ({
-            kg_selectedCluster: detail,
-            _clusterDetailCache: { ...s._clusterDetailCache, [id]: detail },
+            kg_selectedCommunity: detail,
+            _communityDetailCache: { ...s._communityDetailCache, [id]: detail },
           }))
         } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch cluster detail' })
+          set({ error: err instanceof Error ? err.message : 'Failed to fetch community detail' })
         } finally {
           set({ kg_loading: false })
         }
       },
 
-      fetchWisdom: async () => {
+      fetchSummaries: async () => {
         set({ kg_loading: true })
         try {
-          const wisdom = await kgApi.listWisdom()
+          const summaries = await kgApi.listSummaries()
           set((s) => ({
-            kg_wisdom: wisdom,
-            _fetchedAt: { ...s._fetchedAt, kg_wisdom: Date.now() },
+            kg_summaries: summaries,
+            _fetchedAt: { ...s._fetchedAt, kg_summaries: Date.now() },
           }))
         } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch wisdom' })
+          set({ error: err instanceof Error ? err.message : 'Failed to fetch summaries' })
         } finally {
           set({ kg_loading: false })
         }
@@ -562,14 +562,14 @@ export const useMemvaultStore = create<MemvaultState>()(
         blocks: state.blocks,
         total: state.total,
         profile: state.profile,
-        kg_clusters: state.kg_clusters,
-        kg_wisdom: state.kg_wisdom,
+        kg_communities: state.kg_communities,
+        kg_summaries: state.kg_summaries,
         kg_triples: state.kg_triples,
         kg_triplesTotal: state.kg_triplesTotal,
         kg_attitudes: state.kg_attitudes,
         kg_skills: state.kg_skills,
         _fetchedAt: state._fetchedAt,
-        _clusterDetailCache: state._clusterDetailCache,
+        _communityDetailCache: state._communityDetailCache,
         _skillHistoryCache: state._skillHistoryCache,
         _attitudeHistoryCache: state._attitudeHistoryCache,
       }),

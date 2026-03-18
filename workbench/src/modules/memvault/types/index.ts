@@ -14,7 +14,7 @@ export interface BlockFilters {
 
 // ── Galaxy types ──
 
-export type GalaxyLayer = 'blocks' | 'triples' | 'clusters' | 'wisdom'
+export type GalaxyLayer = 'blocks' | 'triples' | 'communities' | 'summaries'
 
 export interface GalaxyNode {
   id: string
@@ -46,8 +46,8 @@ export const BLOCK_TYPE_CONFIG: Record<BlockType, { label: string; color: string
 export const KG_LAYER_CONFIG: Record<GalaxyLayer, { label: string; color: string }> = {
   blocks: { label: '區塊', color: 'var(--text)' },
   triples: { label: '三元組', color: 'var(--teal)' },
-  clusters: { label: '群集', color: 'var(--blue)' },
-  wisdom: { label: '智慧', color: 'var(--peach)' },
+  communities: { label: '社群', color: 'var(--blue)' },
+  summaries: { label: '摘要', color: 'var(--peach)' },
 }
 
 // ── KG API types (mirrors kg_schemas.py) ──
@@ -68,39 +68,39 @@ export interface Triple {
   topic: string | null
 }
 
-export interface Cluster {
+export interface Community {
   id: string
   space_id: string
-  created_by: string | null
-  created_at: string
-  updated_at: string
   name: string
+  resolution_level: number
   size: number
-  top_subjects: string[]
+  top_entities: string[]
   top_predicates: string[]
-  top_objects: string[]
   summary: string | null
-  verdict: string
+  parent_community_id: string | null
+  modularity_score: number | null
   generation_batch: string | null
-}
-
-export interface ClusterDetail extends Cluster {
-  triples: Triple[]
-}
-
-export interface WisdomNode {
-  id: string
-  space_id: string
-  created_by: string | null
   created_at: string
   updated_at: string
-  wisdom: string
-  confidence: string // HIGH/MEDIUM/LOW
-  bridge_entity: string
-  cluster_ids: string[]
+}
+
+export interface CommunityDetail extends Community {
+  triples: Triple[]
+  children: Community[]
+}
+
+export interface CommunitySummary {
+  id: string
+  space_id: string
+  community_id: string
+  summary: string
+  key_findings: string[]
+  representative_triples: string[]
   evidence_count: number | null
   tags: string[]
-  verified: boolean
+  llm_model: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface AttitudeFact {
@@ -142,9 +142,14 @@ export interface SkillInvocation {
 }
 
 export interface CascadeRecallResult {
-  wisdom: WisdomNode[]
-  clusters: Cluster[]
+  summaries: CommunitySummary[]
+  communities: Community[]
   triples: Triple[]
   blocks: any[]
   layers_searched: string[]
+  routing_intent?: string
+  routing_confidence?: number
+  confidence_score?: number
+  evaluation_verdict?: string
+  evaluation_metadata?: Record<string, any>
 }
