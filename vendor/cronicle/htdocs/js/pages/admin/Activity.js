@@ -23,7 +23,7 @@ Class.add( Page.Admin, {
 	
 	gosub_activity: function(args) {
 		// show activity log
-		app.setWindowTitle( (window._t ? _t('admin_activity.activity_log') : "Activity Log") );
+		app.setWindowTitle( _t('admin_activity.activity_log') );
 		
 		if (!args.offset) args.offset = 0;
 		if (!args.limit) args.limit = 25;
@@ -41,26 +41,26 @@ Class.add( Page.Admin, {
 		
 		html += this.getSidebarTabs( 'activity',
 			[
-				['activity', (window._t ? _t('admin_activity.activity_log') : "Activity Log")],
-				['conf_keys', "Configs"],
-				['secrets', "Secrets"],
-				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin_config_keys.configs')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
 		
 		this.events = [];
 		if (resp.rows) this.events = resp.rows;
 		
-		var cols = [(window._t ? _t('admin_activity.date_time') : 'Date/Time'), (window._t ? _t('admin_activity.type') : 'Type'), (window._t ? _t('admin_activity.description') : 'Description'), (window._t ? _t('admin_activity.username') : 'Username'), (window._t ? _t('admin_activity.ip_address') : 'IP Address'), (window._t ? _t('admin_activity.actions') : 'Actions')];
+		var cols = ['Date/Time', 'Type', 'Description', 'Username', 'IP Address', 'Actions'];
 		
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
 		html += '<div class="subtitle">';
-			html += (window._t ? _t('admin_activity.activity_log') : 'Activity Log');
+			html += _t('admin_activity.activity_log');
 			// html += '<div class="clear"></div>';
 		html += '</div>';
 		

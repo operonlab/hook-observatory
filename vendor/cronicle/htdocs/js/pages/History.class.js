@@ -30,22 +30,22 @@ Class.subclass( Page.Base, "Page.History", {
 	
 	gosub_history: function(args) {
 		// show history
-		app.setWindowTitle( (window._t ? _t('history.history') : "History") );
+		app.setWindowTitle( _t('history.history') );
 		
 		var html = '';
 		// html += '<div style="padding:5px 15px 15px 15px;">';
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
 		html += '<div class="subtitle">';
-			html += (window._t ? _t('history.all_completed_jobs') : 'All Completed Jobs');
+			html += _t('history.title');
 			// html += '<div class="subtitle_widget"><span class="link" onMouseUp="$P().refresh_user_list()"><b>Refresh</b></span></div>';
 			// html += '<div class="subtitle_widget"><i class="fa fa-search">&nbsp;</i><input type="text" id="fe_ul_search" size="15" placeholder="Find username..." style="border:0px;"/></div>';
 			var sorted_events = app.schedule.sort( function(a, b) {
 				return a.title.toLowerCase().localeCompare( b.title.toLowerCase() );
 			} );
-			html += `<div class="subtitle_widget"><a href="./db" ><b>${(window._t ? _t('history.event_dashboard') : 'Event Dashboard')}</b></a></div>`
-			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_eventlimit" class="subtitle_menu" onChange="$('#d_history_table').empty();$P().get_history()"  title="Show only last N occurences per event"><option value="">${(window._t ? _t('history.last_occurrences_all') : 'Last occurences (all)')}</option><option>1</option><option>2</option><option>3</option><option>5</option><option>10</option></select></div>`;
-			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_event" class="subtitle_menu" onChange="$P().jump_to_event_history()"><option value="">${(window._t ? _t('history.filter_by_event') : 'Filter by Event')}</option>${render_menu_options(sorted_events, "", false)}</select></div>`
+			html += `<div class="subtitle_widget"><a href="./db" ><b>Event Dashboard</b></a></div>`
+			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_eventlimit" class="subtitle_menu" onChange="$('#d_history_table').empty();$P().get_history()"  title="Show only last N occurences per event"><option value="">Last occurences (all)</option><option>1</option><option>2</option><option>3</option><option>5</option><option>10</option></select></div>`;
+			html += `<div class="subtitle_widget"><i class="fa fa-chevron-down">&nbsp;</i><select id="fe_hist_event" class="subtitle_menu" onChange="$P().jump_to_event_history()"><option value="">Filter by Event</option>${render_menu_options(sorted_events, "", false)}</select></div>`
 			html += '<div class="clear"></div>';
 		html += '</div>';
 		
@@ -92,7 +92,7 @@ Class.subclass( Page.Base, "Page.History", {
 			resp.rows = newRows
 		} //
 		
-		var cols = [(window._t ? _t('history.job_id') : 'Job ID'), (window._t ? _t('history.event_name') : 'Event Name'), (window._t ? _t('history.argument') : 'Argument'), (window._t ? _t('history.category') : 'Category'), (window._t ? _t('history.plugin') : 'Plugin'), (window._t ? _t('history.hostname') : 'Hostname'),  (window._t ? _t('history.result') : 'Result'), (window._t ? _t('history.start_date_time') : 'Start Date/Time'), (window._t ? _t('history.elapsed_time') : 'Elapsed Time')];
+		var cols = ['Job ID', _t('history.event_name'), 'Argument', 'Category', 'Plugin', _t('history.hostname'),  _t('history.result'), _t('history.start_time'), _t('history.elapsed')];
 		
 		var self = this;
 		var num_visible_items = 0;
@@ -170,14 +170,14 @@ Class.subclass( Page.Base, "Page.History", {
 	
 	gosub_error_history: function(args) {
 		// show history
-		app.setWindowTitle( (window._t ? _t('history.query_history') : "Query History") );
+		app.setWindowTitle( _t('history.query_history') );
 		
 		var html = '';
 		// html += '<div style="padding:5px 15px 15px 15px;">';
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
 		html += '<div class="subtitle">';
-			html += 'Query History';
+			html += _t('history.query_history');
 
 			html += '<div class="clear"></div>';
 		html += '</div>';
@@ -204,10 +204,10 @@ Class.subclass( Page.Base, "Page.History", {
 
 		html += this.getSidebarTabs( 'error_history',
 		[
-			['history', (window._t ? _t('history.all_completed') : "All Completed")],
+			['history', "All Completed"],
 			// ['event_history', "Event History"],
 			// ['event_stats', "Event Stats"],
-			['error_history', (window._t ? _t('history.query_history') : "Query History")],
+			['error_history', "Query History"],
 		]
 	    );
 		
@@ -217,7 +217,7 @@ Class.subclass( Page.Base, "Page.History", {
 		this.events = [];
 		if (resp.rows) this.events = resp.rows;
 
-		var cols = [(window._t ? _t('history.job_id') : 'Job ID'), (window._t ? _t('history.event_name') : 'Event Name'), (window._t ? _t('history.argument') : 'Argument'), (window._t ? _t('history.category') : 'Category'), (window._t ? _t('history.plugin') : 'Plugin'), (window._t ? _t('history.hostname') : 'Hostname'), (window._t ? _t('history.code') : 'Code'), (window._t ? _t('history.description') : 'Description'), (window._t ? _t('history.start_date_time') : 'Start Date/Time'), (window._t ? _t('history.elapsed_time') : 'Elapsed Time')];
+		var cols = ['Job ID', 'Event Name', 'Argument', 'Category', 'Plugin', 'Hostname', 'Code', 'Description', 'Start Date/Time', 'Elapsed Time'];
 		
 		var self = this;
 		var num_visible_items = 0;
@@ -314,16 +314,16 @@ Class.subclass( Page.Base, "Page.History", {
 	receive_event_stats: function(resp) {
 		// render event stats page
 		this.lastEventStatsResp = resp;
-		
+
 		var html = '';
 		var args = this.args;
 		var rows = this.rows = resp.rows;
-		
+
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) - 300) / 4 );
-		
+
 		var event = find_object( app.schedule, { id: args.id } ) || null;
-		if (!event) return app.doError((window._t ? _t('history.could_not_locate_event_in_schedule') : "Could not locate event in schedule: ") + args.id);
+		if (!event) return app.doError(_t('history.could_not_locate_event_in_schedule') + args.id);
 		
 		var cat = event.category ? find_object( app.categories, { id: event.category } ) : null;
 		var group = event.target ? find_object( app.server_groups, { id: event.target } ) : null;
@@ -334,15 +334,15 @@ Class.subclass( Page.Base, "Page.History", {
 			group.multiplex = 1;
 		}
 		
-		app.setWindowTitle( (window._t ? _t('history.event_stats') : "Event Stats: ") + event.title );
+		app.setWindowTitle( _t('history.event_stats') + event.title );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'event_stats',
 			[
-				['history', (window._t ? _t('history.all_completed') : "All Completed")],
-				['event_history&id=' + args.id, (window._t ? _t('history.event_history_label') : "Event History")],
-				['event_stats', (window._t ? _t('history.event_stats_label') : "Event Stats")],
-				['error_history', (window._t ? _t('history.query_history') : "Query History")],
+				['history', "All Completed"],				
+				['event_history&id=' + args.id, "Event History"],
+				['event_stats', "Event Stats"],
+				['error_history', "Query History"],
 			]
 		);
 		// html += '<div style="padding:20px 20px 30px 20px">';
@@ -818,9 +818,9 @@ Class.subclass( Page.Base, "Page.History", {
 		var col_width = Math.floor( ((size.width * 0.9) - 300) / 7 );
 		
 		var event = find_object( app.schedule, { id: args.id } ) || null;
-		if (!event) return app.doError((window._t ? _t('history.could_not_locate_event_in_schedule') : "Could not locate event in schedule: ") + args.id);
-		
-		app.setWindowTitle( (window._t ? _t('history.event_history') : "Event History: ") + event.title );
+		if (!event) return app.doError(_t('history.could_not_locate_event_in_schedule') + args.id);
+
+		app.setWindowTitle( _t('history.event_history') + event.title );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'event_history',
@@ -828,15 +828,15 @@ Class.subclass( Page.Base, "Page.History", {
 				['history', "All Completed"],
 				['event_history', "Event History"],
 				['event_stats&id=' + args.id, "Event Stats"],
-				['error_history', (window._t ? _t('history.query_history') : "Query History")],
+				['error_history', "Query History"],
 			]
 		);
 		html += '<div style="padding:20px 20px 30px 20px">';
 		
-		var cols = ['Job ID', 'Argument', (window._t ? _t('history.hostname') : 'Hostname'), (window._t ? _t('history.result') : 'Result'), 'Memo', 'Start Date/Time', 'Elapsed Time', 'Avg CPU', 'Avg Mem'];
+		var cols = ['Job ID', 'Argument', 'Hostname', 'Result', 'Memo', 'Start Date/Time', 'Elapsed Time', 'Avg CPU', 'Avg Mem'];
 		
 		html += '<div class="subtitle">';
-			html += 'Event History: ' + event.title;
+			html += _t('history.event_history') + event.title;
 			html += '<div class="clear"></div>';
 		html += '</div>';
 		

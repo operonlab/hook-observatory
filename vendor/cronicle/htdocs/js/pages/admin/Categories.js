@@ -5,7 +5,7 @@ Class.add( Page.Admin, {
 	gosub_categories: function(args) {
 		// show category list
 		this.div.removeClass('loading');
-		app.setWindowTitle( (window._t ? _t('admin_categories.categories') : "Categories") );
+		app.setWindowTitle( _t('admin_categories.categories') );
 		
 		var size = get_inner_window_size();
 		var col_width = Math.floor( ((size.width * 0.9) + 200) / 5 );
@@ -14,23 +14,23 @@ Class.add( Page.Admin, {
 		
 		html += this.getSidebarTabs( 'categories',
 			[
-				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
-				['secrets', "Secrets"],
-				['api_keys', "API Keys"],
-				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin_activity.activity_log')],
+				['conf_keys', _t('admin_config_keys.configs')],
+				['secrets', _t('admin_secrets.secrets')],
+				['api_keys', _t('admin_api_keys.api_keys')],
+				['categories', _t('admin_categories.categories')],
+				['plugins', _t('admin_plugins.plugins')],
+				['servers', _t('admin_servers.servers')],
+				['users', _t('admin_users.user_list')]
 			]
 		);
-		
+
 		var cols = ['Title', 'Description', 'Assigned Events', 'Max Concurrent', 'Actions'];
-		
+
 		html += '<div style="padding:20px 20px 30px 20px">';
-		
+
 		html += '<div class="subtitle">';
-			html += 'Event Categories';
+			html += _t('admin_categories.categories');
 			// html += '<div class="clear"></div>';
 		html += '</div>';
 		
@@ -74,7 +74,7 @@ Class.add( Page.Admin, {
 		
 		html += '<div style="height:30px;"></div>';
 		html += '<center><table><tr>';
-			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_category(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>Add Category...</div></td>';
+			html += '<td><div class="button" style="width:130px;" onMouseUp="$P().edit_category(-1)"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + _t('admin_categories.add_category') + '</div></td>';
 		html += '</tr></table></center>';
 		
 		html += '</div>'; // padding
@@ -98,24 +98,24 @@ Class.add( Page.Admin, {
 	gosub_new_category: function(args) {
 		// create new Category
 		var html = '';
-		app.setWindowTitle( (window._t ? _t('admin_categories.new_category') : "New Category") );
+		app.setWindowTitle( _t('admin_categories.new_category') );
 		this.div.removeClass('loading');
-		
+
 		html += this.getSidebarTabs( 'new_category',
 			[
-				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
-				['secrets', "Secrets"],
-				['api_keys', "API Keys"],
-				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
-				['new_category', (window._t ? _t('admin_categories.new_category') : "New Category")],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin_activity.activity_log')],
+				['conf_keys', _t('admin_config_keys.configs')],
+				['secrets', _t('admin_secrets.secrets')],
+				['api_keys', _t('admin_api_keys.api_keys')],
+				['categories', _t('admin_categories.categories')],
+				['new_category', _t('admin_categories.new_category')],
+				['plugins', _t('admin_plugins.plugins')],
+				['servers', _t('admin_servers.servers')],
+				['users', _t('admin_users.user_list')]
 			]
 		);
-		
-		html += '<div style="padding:20px;"><div class="subtitle">Add New Category</div></div>';
+
+		html += '<div style="padding:20px;"><div class="subtitle">' + _t('admin_categories.add_category') + '</div></div>';
 		
 		html += '<div style="padding:0px 20px 50px 20px">';
 		html += '<center><table style="margin:0;">';
@@ -134,10 +134,10 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">' + (window._t ? _t('admin_categories.cancel') : 'Cancel') + '</div></td>';
+				html += '<td><div class="button" style="width:120px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">' + _t('admin_categories.cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				
-				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_category()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_categories.add_category') : 'Add Category') + '</div></td>';
+
+				html += '<td><div class="button" style="width:120px;" onMouseUp="$P().do_new_category()"><i class="fa fa-plus-circle">&nbsp;&nbsp;</i>' + _t('admin_categories.add_category') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -173,7 +173,7 @@ Class.add( Page.Admin, {
 		
 		this.category = category;
 		
-		app.showProgress( 1.0, (window._t ? _t('admin_categories.creating_category') : "Creating category...") );
+		app.showProgress( 1.0, _t('admin_categories.creating_category') );
 		app.api.post( 'app/create_category', category, this.new_category_finish.bind(this) );
 	},
 	
@@ -186,7 +186,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=categories');
 		
 		setTimeout( function() {
-			app.showMessage('success', (window._t ? _t('admin_categories.the_new_category_was_created_successfull') : "The new category was created successfully."));
+			app.showMessage('success', _t('admin_categories.the_new_category_was_created_successfull'));
 		}, 150 );
 	},
 	
@@ -194,12 +194,12 @@ Class.add( Page.Admin, {
 		// edit existing Category
 		var html = '';
 		let category = find_object( app.categories, { id: args.id } );
-		if(!category) return app.doError((window._t ? _t('admin_categories.could_not_locate_category_with_id') : "Could not locate Category with ID: ") + args.id);
+		if(!category) return app.doError(_t('admin_categories.could_not_locate_category_with_id') + args.id);
 		let secret = find_object( app.secrets, { id: args.id } ) || {};
 
 		this.category = deep_copy_object( category )
 		
-		app.setWindowTitle( "Editing Category \"" + (category.title) + "\"" );
+		app.setWindowTitle( _t('admin_categories.editing_category') + category.title + '"' );
 		this.div.removeClass('loading');
 		
 		html += this.getSidebarTabs( 'edit_category',
@@ -208,8 +208,8 @@ Class.add( Page.Admin, {
 				['conf_keys', "Configs"],
 				['secrets', "Secrets"],
 				['api_keys', "API Keys"],
-				['categories', (window._t ? _t('admin_categories.categories') : "Categories")],
-				['edit_category', "Edit Category"],
+				['categories', "Categories"],
+				['edit_category', _t('admin_categories.editing_category').replace('\\', '')],
 				['plugins', "Plugins"],
 				['servers', "Servers"],
 				['users', "Users"]
@@ -230,11 +230,11 @@ Class.add( Page.Admin, {
 			html += '<div style="height:30px;"></div>';
 			
 			html += '<table><tr>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">' + (window._t ? _t('admin_categories.cancel') : 'Cancel') + '</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().cancel_category_edit()">' + _t('admin_categories.cancel') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_category_dialog()">' + (window._t ? _t('admin_categories.delete_category') : 'Delete Category...') + '</div></td>';
+				html += '<td><div class="button" style="width:130px; font-weight:normal;" onMouseUp="$P().show_delete_category_dialog()">' + _t('admin_categories.delete_category') + '</div></td>';
 				html += '<td width="50">&nbsp;</td>';
-				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_category()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_categories.save_changes') : 'Save Changes') + '</div></td>';
+				html += '<td><div class="button" style="width:130px;" onMouseUp="$P().do_save_category()"><i class="fa fa-floppy-o">&nbsp;&nbsp;</i>' + _t('admin_categories.save_changes') + '</div></td>';
 			html += '</tr></table>';
 			
 		html += '</td></tr>';
@@ -256,7 +256,7 @@ Class.add( Page.Admin, {
 		
 		this.category = category;
 		
-		app.showProgress( 1.0, (window._t ? _t('admin_categories.saving_category') : "Saving category...") );
+		app.showProgress( 1.0, _t('admin_categories.saving_category') );
 		app.api.post( 'app/update_category', category, this.save_category_finish.bind(this) );
 	},
 	
@@ -266,7 +266,7 @@ Class.add( Page.Admin, {
 		var category = this.category;
 		
 		app.hideProgress();
-		app.showMessage('success', (window._t ? _t('admin_categories.the_category_was_saved_successfully') : "The category was saved successfully."));
+		app.showMessage('success', _t('admin_categories.the_category_was_saved_successfully'));
 		window.scrollTo( 0, 0 );
 		
 		// copy active jobs to array
@@ -280,14 +280,14 @@ Class.add( Page.Admin, {
 		if (!category.enabled && jobs.length) {
 			app.confirm( '<span style="color:red">Abort Jobs</span>', "There " + ((jobs.length != 1) ? 'are' : 'is') + " currently still " + jobs.length + " active " + pluralize('job', jobs.length) + " using the disabled category <b>"+category.title+"</b>.  Do you want to abort " + ((jobs.length != 1) ? 'these' : 'it') + " now?", "Abort", function(result) {
 				if (result) {
-					app.showProgress( 1.0, (window._t ? _t('admin_categories.aborting') : "Aborting ") + pluralize('Job', jobs.length) + "..." );
+					app.showProgress( 1.0, _t('admin_categories.aborting') + pluralize('Job', jobs.length) + '...' );
 					app.api.post( 'app/abort_jobs', { category: category.id }, function(resp) {
 						app.hideProgress();
 						if (resp.count > 0) {
 							app.showMessage('success', "The " + pluralize('job', resp.count) + " " + ((resp.count != 1) ? 'were' : 'was') + " aborted successfully.");
 						}
 						else {
-							app.showMessage('warning', (window._t ? _t('admin_categories.no_jobs_were_aborted_it_is_likely_they_c') : "No jobs were aborted.  It is likely they completed while the dialog was up."));
+							app.showMessage('warning', _t('admin_categories.no_jobs_were_aborted_it_is_likely_they_c'));
 						}
 					} );
 				} // clicked Abort
@@ -304,13 +304,13 @@ Class.add( Page.Admin, {
 		// check for events first
 		var cat_events = find_objects( app.schedule, { category: cat.id } );
 		var num_events = cat_events.length;
-		if (num_events) return app.doError((window._t ? _t('admin_categories.sorry_you_cannot_delete_a_category_that_') : "Sorry, you cannot delete a category that has events assigned to it."));
+		if (num_events) return app.doError(_t('admin_categories.sorry_you_cannot_delete_a_category_that_'));
 		
 		// proceed with delete
 		var self = this;
 		app.confirm( '<span style="color:red">Delete Category</span>', "Are you sure you want to delete the category <b>"+cat.title+"</b>?  There is no way to undo this action.", "Delete", function(result) {
 			if (result) {
-				app.showProgress( 1.0, (window._t ? _t('admin_categories.deleting_category') : "Deleting Category...") );
+				app.showProgress( 1.0, _t('admin_categories.deleting_category') );
 				app.api.post( 'app/delete_category', cat, self.delete_category_finish.bind(self) );
 			}
 		} );
@@ -324,7 +324,7 @@ Class.add( Page.Admin, {
 		Nav.go('Admin?sub=categories', 'force');
 		
 		setTimeout( function() {
-			app.showMessage('success', "The category '"+self.category.title+"' was deleted successfully.");
+			app.showMessage('success', _t('admin_categories.the_category') + "'"+self.category.title+"' was deleted successfully.");
 		}, 150 );
 	},
 	
@@ -336,29 +336,29 @@ Class.add( Page.Admin, {
 		
 		// Internal ID
 		if (cat.id && this.isAdmin()) {
-			html += get_form_table_row( (window._t ? _t('admin_categories.category_id') : 'Category ID'), '<div style="font-size:14px;">' + cat.id + '</div>' );
-			html += get_form_table_caption( (window._t ? _t('admin_categories.the_internal_category_id_used_for_api_ca') : "The internal Category ID used for API calls.  This cannot be changed.") );
+			html += get_form_table_row( _t('admin_categories.category_id'), '<div style="font-size:14px;">' + cat.id + '</div>' );
+			html += get_form_table_caption( _t('admin_categories.the_internal_category_id_used_for_api_ca') );
 			html += get_form_table_spacer();
 		}
 		
 		// title
-		html += get_form_table_row((window._t ? _t('admin_categories.category_title') : 'Category Title:'), '<input type="text" id="fe_ec_title" size="25" value="'+escape_text_field_value(cat.title)+'"/>') + 
-			get_form_table_caption((window._t ? _t('admin_categories.enter_a_title_for_the_category_short_and') : "Enter a title for the category, short and sweet.")) + 
+		html += get_form_table_row(_t('admin_categories.category_title'), '<input type="text" id="fe_ec_title" size="25" value="'+escape_text_field_value(cat.title)+'"/>') + 
+			get_form_table_caption(_t('admin_categories.enter_a_title_for_the_category_short_and')) + 
 			get_form_table_spacer();
 		
 		// cat enabled
-		html += get_form_table_row( (window._t ? _t('admin_categories.active') : 'Active'), '<input type="checkbox" id="fe_ec_enabled" value="1" ' + (cat.enabled ? 'checked="checked"' : '') + '/><label for="fe_ec_enabled">Category Enabled</label>' );
-		html += get_form_table_caption( (window._t ? _t('admin_categories.select_whether_events_in_this_category_s') : "Select whether events in this category should be enabled or disabled in the schedule.") );
+		html += get_form_table_row( _t('admin_categories.active'), '<input type="checkbox" id="fe_ec_enabled" value="1" ' + (cat.enabled ? 'checked="checked"' : '') + '/><label for="fe_ec_enabled">Category Enabled</label>' );
+		html += get_form_table_caption( _t('admin_categories.select_whether_events_in_this_category_s') );
 		html += get_form_table_spacer();
 		
 		// description
-		html += get_form_table_row((window._t ? _t('admin_categories.description') : 'Description:'), '<textarea id="fe_ec_desc" style="width:500px; height:50px; resize:vertical;">'+escape_text_field_value(cat.description)+'</textarea>') + 
-			get_form_table_caption((window._t ? _t('admin_categories.optionally_enter_a_description_for_the_c') : "Optionally enter a description for the category.")) + 
+		html += get_form_table_row(_t('admin_categories.description'), '<textarea id="fe_ec_desc" style="width:500px; height:50px; resize:vertical;">'+escape_text_field_value(cat.description)+'</textarea>') + 
+			get_form_table_caption(_t('admin_categories.optionally_enter_a_description_for_the_c')) + 
 			get_form_table_spacer();
 		
 		// max concurrent
-		html += get_form_table_row((window._t ? _t('admin_categories.max_concurrent') : 'Max Concurrent:'), '<select id="fe_ec_max_children">' + render_menu_options([ [0,'No Limit'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 ], cat.max_children, true) + '</select>') + 
-			get_form_table_caption((window._t ? _t('admin_categories.select_the_maximum_number_of_jobs_allowe') : "Select the maximum number of jobs allowed to run concurrently in this category."));
+		html += get_form_table_row(_t('admin_categories.max_concurrent'), '<select id="fe_ec_max_children">' + render_menu_options([ [0,'No Limit'], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 ], cat.max_children, true) + '</select>') + 
+			get_form_table_caption(_t('admin_categories.select_the_maximum_number_of_jobs_allowe'));
 		html += get_form_table_spacer();
 		
 		// color
@@ -371,13 +371,13 @@ Class.add( Page.Admin, {
 		}
 		swatch_html += '<div class="clear"></div>';
 		
-		html += get_form_table_row( (window._t ? _t('admin_categories.highlight_color') : 'Highlight Color'), swatch_html );
-		html += get_form_table_caption( (window._t ? _t('admin_categories.optionally_select_a_highlight_color_for_') : "Optionally select a highlight color for the category, which will show on the schedule.") );
+		html += get_form_table_row( _t('admin_categories.highlight_color'), swatch_html );
+		html += get_form_table_caption( _t('admin_categories.optionally_select_a_highlight_color_for_') );
 		html += get_form_table_spacer();
 		
 		// default notification options
 		var notif_expanded = !!(cat.notify_success || cat.notify_fail || cat.web_hook);
-		html += get_form_table_row( (window._t ? _t('admin_categories.notification') : 'Notification'), 
+		html += get_form_table_row( _t('admin_categories.notification'), 
 			'<div style="font-size:13px;'+(notif_expanded ? 'display:none;' : '')+'"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Default Notification Options</span></div>' + 
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;'+(notif_expanded ? '' : 'display:none;')+'"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Default Notification Options</legend>' + 
 				'<div class="plugin_params_label">Default Email on Success:</div>' + 
@@ -390,12 +390,12 @@ Class.add( Page.Admin, {
 				'<div class="plugin_params_content"><input type="text" id="fe_ec_web_hook" size="60" value="'+escape_text_field_value(cat.web_hook)+'" placeholder="http://" spellcheck="false"/></div>' + 
 			'</fieldset>'
 		);
-		html += get_form_table_caption( "Optionally enter default e-mail addresses for notification, and/or a web hook URL.<br/>Note that events can override any of these notification settings." );
+		html += get_form_table_caption( _t('admin_categories.optionally_enter_default_email_addresses') );
 		html += get_form_table_spacer();
 		
 		// default resource limits
 		var res_expanded = !!(cat.memory_limit || cat.memory_sustain || cat.cpu_limit || cat.cpu_sustain || cat.log_max_size);
-		html += get_form_table_row( (window._t ? _t('admin_categories.limits') : 'Limits'), 
+		html += get_form_table_row( _t('admin_categories.limits'), 
 			'<div style="font-size:13px;'+(res_expanded ? 'display:none;' : '')+'"><span class="link addme" onMouseUp="$P().expand_fieldset($(this))"><i class="fa fa-plus-square-o">&nbsp;</i>Default Resource Limits</span></div>' + 
 			'<fieldset style="padding:10px 10px 0 10px; margin-bottom:5px;'+(res_expanded ? '' : 'display:none;')+'"><legend class="link addme" onMouseUp="$P().collapse_fieldset($(this))"><i class="fa fa-minus-square-o">&nbsp;</i>Default Resource Limits</legend>' + 
 				
@@ -427,11 +427,11 @@ Class.add( Page.Admin, {
 			'</fieldset>'
 		);
 		html += get_form_table_caption( 
-			"Optionally set default CPU load, memory usage and log size limits for the category.<br/>Note that events can override any of these limits."
+			_t('admin_categories.optionally_set_default_cpu_load_memory_u')
 		);
 		html += get_form_table_spacer();
 
-		html += get_form_table_row((window._t ? _t('admin_categories.graph') : 'Graph'),`<div>
+		html += get_form_table_row(_t('admin_categories.graph'),`<div>
 		<input type="color" id="fe_ec_gcolor" name="body"
 				value="${category.gcolor || '#3f7ed5'}">
 		 <label for="body">Group Color</label>
@@ -458,7 +458,7 @@ Class.add( Page.Admin, {
 		
 		category.title = $('#fe_ec_title').val();
 		if (!category.title.length) {
-			return app.badField('#fe_ec_title', (window._t ? _t('admin_categories.please_enter_a_title_for_the_category') : "Please enter a title for the category."));
+			return app.badField('#fe_ec_title', _t('admin_categories.please_enter_a_title_for_the_category'));
 		}
 		
 		category.gcolor = $("#fe_ec_gcolor").val();
@@ -472,12 +472,12 @@ Class.add( Page.Admin, {
 		// cpu limit
 		if ($('#fe_ec_cpu_enabled').is(':checked')) {
 			category.cpu_limit = parseInt( $('#fe_ec_cpu_limit').val() );
-			if (isNaN(category.cpu_limit)) return app.badField('fe_ec_cpu_limit', "Please enter an integer value for the CPU limit.");
-			if (category.cpu_limit < 0) return app.badField('fe_ec_cpu_limit', "Please enter a positive integer for the CPU limit.");
+			if (isNaN(category.cpu_limit)) return app.badField('fe_ec_cpu_limit', _t('admin_categories.please_enter_an_integer_value_for_the_cp'));
+			if (category.cpu_limit < 0) return app.badField('fe_ec_cpu_limit', _t('admin_categories.please_enter_a_positive_integer_for_the_'));
 			
 			category.cpu_sustain = parseInt( $('#fe_ec_cpu_sustain').val() ) * parseInt( $('#fe_ec_cpu_sustain_units').val() );
-			if (isNaN(category.cpu_sustain)) return app.badField('fe_ec_cpu_sustain', (window._t ? _t('admin_categories.please_enter_an_integer_value_for_the_cp') : "Please enter an integer value for the CPU sustain period."));
-			if (category.cpu_sustain < 0) return app.badField('fe_ec_cpu_sustain', "Please enter a positive integer for the CPU sustain period.");
+			if (isNaN(category.cpu_sustain)) return app.badField('fe_ec_cpu_sustain', _t('admin_categories.please_enter_an_integer_value_for_the_lo'));
+			if (category.cpu_sustain < 0) return app.badField('fe_ec_cpu_sustain', _t('admin_categories.please_enter_a_positive_integer_for_the_'));
 		}
 		else {
 			category.cpu_limit = 0;
@@ -487,12 +487,12 @@ Class.add( Page.Admin, {
 		// mem limit
 		if ($('#fe_ec_memory_enabled').is(':checked')) {
 			category.memory_limit = parseInt( $('#fe_ec_memory_limit').val() ) * parseInt( $('#fe_ec_memory_limit_units').val() );
-			if (isNaN(category.memory_limit)) return app.badField('fe_ec_memory_limit', "Please enter an integer value for the memory limit.");
-			if (category.memory_limit < 0) return app.badField('fe_ec_memory_limit', "Please enter a positive integer for the memory limit.");
+			if (isNaN(category.memory_limit)) return app.badField('fe_ec_memory_limit', _t('admin_categories.please_enter_an_integer_value_for_the_me'));
+			if (category.memory_limit < 0) return app.badField('fe_ec_memory_limit', _t('admin_categories.please_enter_a_positive_integer_for_the_'));
 			
 			category.memory_sustain = parseInt( $('#fe_ec_memory_sustain').val() ) * parseInt( $('#fe_ec_memory_sustain_units').val() );
-			if (isNaN(category.memory_sustain)) return app.badField('fe_ec_memory_sustain', (window._t ? _t('admin_categories.please_enter_an_integer_value_for_the_me') : "Please enter an integer value for the memory sustain period."));
-			if (category.memory_sustain < 0) return app.badField('fe_ec_memory_sustain', "Please enter a positive integer for the memory sustain period.");
+			if (isNaN(category.memory_sustain)) return app.badField('fe_ec_memory_sustain', _t('admin_categories.please_enter_an_integer_value_for_the_lo'));
+			if (category.memory_sustain < 0) return app.badField('fe_ec_memory_sustain', _t('admin_categories.please_enter_a_positive_integer_for_the_'));
 		}
 		else {
 			category.memory_limit = 0;
@@ -502,8 +502,8 @@ Class.add( Page.Admin, {
 		// job log file size limit
 		if ($('#fe_ec_log_enabled').is(':checked')) {
 			category.log_max_size = parseInt( $('#fe_ec_log_limit').val() ) * parseInt( $('#fe_ec_log_limit_units').val() );
-			if (isNaN(category.log_max_size)) return app.badField('fe_ec_log_limit', (window._t ? _t('admin_categories.please_enter_an_integer_value_for_the_lo') : "Please enter an integer value for the log size limit."));
-			if (category.log_max_size < 0) return app.badField('fe_ec_log_limit', (window._t ? _t('admin_categories.please_enter_a_positive_integer_for_the_') : "Please enter a positive integer for the log size limit."));
+			if (isNaN(category.log_max_size)) return app.badField('fe_ec_log_limit', _t('admin_categories.please_enter_an_integer_value_for_the_lo'));
+			if (category.log_max_size < 0) return app.badField('fe_ec_log_limit', _t('admin_categories.please_enter_a_positive_integer_for_the_'));
 		}
 		else {
 			category.log_max_size = 0;
