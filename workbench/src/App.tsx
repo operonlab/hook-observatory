@@ -56,23 +56,41 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
-const FinancePage = React.lazy(() => import('./modules/finance/pages'))
-const TaskflowPage = React.lazy(() => import('./modules/taskflow/pages'))
-const IdeagraphPage = React.lazy(() => import('./modules/ideagraph/pages'))
-const AdminPage = React.lazy(() => import('./modules/admin/pages'))
-const IntelflowPage = React.lazy(() => import('./modules/intelflow/pages'))
-const MemvaultPage = React.lazy(() => import('./modules/memvault/pages'))
-const SkillpathPage = React.lazy(() => import('./modules/skillpath/pages'))
-const WorkpoolPage = React.lazy(() => import('./modules/workpool/pages'))
-const InvestPage = React.lazy(() => import('./modules/invest/pages'))
-const MatchcorePage = React.lazy(() => import('./modules/matchcore/pages'))
-const NodeflowPage = React.lazy(() => import('./modules/nodeflow/pages'))
-const AnvilPage = React.lazy(() => import('./modules/anvil/pages'))
-const CapturePage = React.lazy(() => import('./modules/capture/pages'))
-const DailyosPage = React.lazy(() => import('./modules/dailyos/pages'))
-const BriefingPage = React.lazy(() => import('./modules/briefing/pages'))
-const NotificationPage = React.lazy(() => import('./modules/notification/pages'))
-const PaperPage = React.lazy(() => import('./modules/paper/pages'))
+/** Lazy import with automatic retry on ChunkLoadError (stale cache / network glitch). */
+function lazyRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+): React.LazyExoticComponent<T> {
+  return React.lazy(() =>
+    factory().catch(() => {
+      // Chunk failed — reload page once to get fresh assets
+      const key = 'chunk-retry'
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1')
+        window.location.reload()
+      }
+      // If already retried, surface the error to ErrorBoundary
+      return factory()
+    }),
+  )
+}
+
+const FinancePage = lazyRetry(() => import('./modules/finance/pages'))
+const TaskflowPage = lazyRetry(() => import('./modules/taskflow/pages'))
+const IdeagraphPage = lazyRetry(() => import('./modules/ideagraph/pages'))
+const AdminPage = lazyRetry(() => import('./modules/admin/pages'))
+const IntelflowPage = lazyRetry(() => import('./modules/intelflow/pages'))
+const MemvaultPage = lazyRetry(() => import('./modules/memvault/pages'))
+const SkillpathPage = lazyRetry(() => import('./modules/skillpath/pages'))
+const WorkpoolPage = lazyRetry(() => import('./modules/workpool/pages'))
+const InvestPage = lazyRetry(() => import('./modules/invest/pages'))
+const MatchcorePage = lazyRetry(() => import('./modules/matchcore/pages'))
+const NodeflowPage = lazyRetry(() => import('./modules/nodeflow/pages'))
+const AnvilPage = lazyRetry(() => import('./modules/anvil/pages'))
+const CapturePage = lazyRetry(() => import('./modules/capture/pages'))
+const DailyosPage = lazyRetry(() => import('./modules/dailyos/pages'))
+const BriefingPage = lazyRetry(() => import('./modules/briefing/pages'))
+const NotificationPage = lazyRetry(() => import('./modules/notification/pages'))
+const PaperPage = lazyRetry(() => import('./modules/paper/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
