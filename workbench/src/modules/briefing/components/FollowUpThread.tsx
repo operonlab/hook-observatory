@@ -8,11 +8,18 @@ interface FollowUpThreadProps {
   briefingId: string
   followUps: FollowUp[]
   onNewFollowUp?: (followUp: FollowUp) => void
+  onFollowUpUpdate?: (followUp: FollowUp) => void
 }
 
-export default function FollowUpThread({ briefingId, followUps, onNewFollowUp }: FollowUpThreadProps) {
+export default function FollowUpThread({
+  briefingId,
+  followUps,
+  onNewFollowUp,
+  onFollowUpUpdate,
+}: FollowUpThreadProps) {
   const [question, setQuestion] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [answeringIds, setAnsweringIds] = useState<Set<string>>(new Set())
 
   const handleSubmit = async () => {
     if (!question.trim() || submitting) return
@@ -21,6 +28,21 @@ export default function FollowUpThread({ briefingId, followUps, onNewFollowUp }:
       const result = await briefingApi.createFollowUp(briefingId, { question: question.trim() })
       setQuestion('')
       onNewFollowUp?.(result)
+
+      // Immediately trigger answer generation
+      setAnsweringIds((prev) => new Set(prev).add(result.id))
+      try {
+        const answered = await briefingApi.answerFollowUp(result.id)
+        onFollowUpUpdate?.(answered)
+      } catch {
+        // Answer generation failed silently; user can see "thinking..." state
+      } finally {
+        setAnsweringIds((prev) => {
+          const next = new Set(prev)
+          next.delete(result.id)
+          return next
+        })
+      }
     } catch {
       // error handled by store
     } finally {
@@ -50,28 +72,34 @@ export default function FollowUpThread({ briefingId, followUps, onNewFollowUp }:
       {/* Existing follow-ups */}
       {followUps.length > 0 && (
         <div className="divide-y" style={{ borderColor: 'var(--bf-border)' }}>
-          {followUps.map((fu) => (
-            <div key={fu.id} className="px-4 sm:px-5 py-3">
-              <div className="flex items-start gap-2 mb-2">
-                <span className="text-xs font-medium" style={{ color: 'var(--bf-accent)' }}>
-                  Q:
-                </span>
-                <span className="text-sm" style={{ color: 'var(--bf-text)' }}>
-                  {fu.question}
-                </span>
+          {followUps.map((fu) => {
+            const isAnswering = answeringIds.has(fu.id)
+            return (
+              <div key={fu.id} className="px-4 sm:px-5 py-3">
+                <div className="flex items-start gap-2 mb-2">
+                  <span className="text-xs font-medium" style={{ color: 'var(--bf-accent)' }}>
+                    Q:
+                  </span>
+                  <span className="text-sm" style={{ color: 'var(--bf-text)' }}>
+                    {fu.question}
+                  </span>
+                </div>
+                {fu.answer ? (
+                  <div className="ml-4">
+                    <MarkdownBlock content={fu.answer} />
+                  </div>
+                ) : (
+                  <div
+                    className="ml-4 flex items-center gap-2 text-xs"
+                    style={{ color: 'var(--bf-text-dim)' }}
+                  >
+                    <Loader2 size={12} className="animate-spin" />
+                    {isAnswering ? '思考中...' : '處理中...'}
+                  </div>
+                )}
               </div>
-              {fu.answer ? (
-                <div className="ml-4">
-                  <MarkdownBlock content={fu.answer} />
-                </div>
-              ) : (
-                <div className="ml-4 flex items-center gap-2 text-xs" style={{ color: 'var(--bf-text-dim)' }}>
-                  <Loader2 size={12} className="animate-spin" />
-                  處理中...
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -96,6 +124,7 @@ export default function FollowUpThread({ briefingId, followUps, onNewFollowUp }:
           disabled={submitting}
         />
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={!question.trim() || submitting}
           className="p-2 transition-colors disabled:opacity-30"

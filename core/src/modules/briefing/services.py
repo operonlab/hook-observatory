@@ -3,8 +3,11 @@
 This is the PUBLIC API of the briefing module.
 """
 
+import asyncio
 import logging
+import subprocess
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
@@ -91,6 +94,8 @@ class BriefingTopicService(
             prompt_template=instance.prompt_template,
             sources=instance.sources or [],
             schedule=instance.schedule,
+            search_config=instance.search_config or {},
+            topic_type=instance.topic_type or "news",
             subtopics=subtopics,
         )
 
@@ -180,51 +185,97 @@ class BriefingTopicService(
 
         defaults: list[dict[str, Any]] = [
             {
-                "name": "tech-trends",
-                "display_name": "科技趨勢",
-                "description": "追蹤最新科技發展、突破性技術與產業變革",
-                "schedule": "daily",
-                "priority": 1,
-            },
-            {
-                "name": "financial-markets",
-                "display_name": "金融市場",
+                "name": "finance",
+                "display_name": "全球金融市場",
                 "description": "全球金融市場動態、匯率、加密貨幣與投資趨勢",
                 "schedule": "daily",
+                "priority": 1,
+                "topic_type": "news",
+                "search_config": {
+                    "search_query_en": "global finance stock market",
+                    "focus_areas": (
+                        "股市動態、央行政策、利率走勢、外匯變動、大宗商品、加密貨幣、IPO、併購"
+                    ),
+                    "subreddits": "wallstreetbets OR investing OR stocks OR cryptocurrency",
+                },
+            },
+            {
+                "name": "ai",
+                "display_name": "AI國際局勢",
+                "description": "各國AI政策監管、模型發布與技術突破",
+                "schedule": "daily",
                 "priority": 2,
+                "topic_type": "news",
+                "search_config": {
+                    "search_query_en": "AI artificial intelligence regulation policy",
+                    "focus_areas": (
+                        "各國AI政策監管、模型發布、公司動態（OpenAI/Anthropic/Google/Meta/xAI）"  # noqa: RUF001
+                        "、AI安全倫理、就業影響"
+                    ),
+                    "subreddits": "MachineLearning OR artificial OR LocalLLaMA",
+                },
+            },
+            {
+                "name": "tech",
+                "display_name": "科技產業",
+                "description": "大型科技公司動態、半導體、新創融資與開源生態",
+                "schedule": "daily",
+                "priority": 3,
+                "topic_type": "news",
+                "search_config": {
+                    "search_query_en": "technology industry semiconductor",
+                    "focus_areas": (
+                        "大型科技公司動態、半導體（台積電/NVIDIA）、新創融資、雲端服務、開源生態"  # noqa: RUF001
+                    ),
+                    "subreddits": "technology OR programming OR startups",
+                },
+            },
+            {
+                "name": "geopolitics",
+                "display_name": "地緣政治",
+                "description": "台海局勢、中美競爭、俄烏戰爭與印太戰略",
+                "schedule": "daily",
+                "priority": 4,
+                "topic_type": "news",
+                "search_config": {
+                    "search_query_en": "geopolitics international relations",
+                    "focus_areas": "台海局勢、中美競爭、俄烏戰爭、中東局勢、印太戰略",
+                    "subreddits": "geopolitics OR worldnews OR taiwan",
+                },
             },
             {
                 "name": "weather",
-                "display_name": "天氣預報",
+                "display_name": "天氣概覽",
                 "description": "關注城市天氣預報與氣候變化",
                 "schedule": "daily",
-                "priority": 3,
-                "subtopics": [
-                    {"name": "土城", "parameters": {"location": "Tucheng, New Taipei"}},
-                    {"name": "高雄", "parameters": {"location": "Kaohsiung"}},
-                    {"name": "東京", "parameters": {"location": "Tokyo"}},
-                ],
-            },
-            {
-                "name": "industry-news",
-                "display_name": "產業動態",
-                "description": "各產業最新消息、併購、市場趨勢與競爭格局",
-                "schedule": "daily",
-                "priority": 4,
-            },
-            {
-                "name": "open-source",
-                "display_name": "開源社群",
-                "description": "開源專案更新、社群動態與重要 release",
-                "schedule": "daily",
                 "priority": 5,
+                "topic_type": "weather",
+                "search_config": {
+                    "cities": [
+                        {"name_en": "Tucheng", "name_cn": "土城"},
+                        {"name_en": "Kaohsiung", "name_cn": "高雄"},
+                        {"name_en": "Shanghai", "name_cn": "上海"},
+                        {"name_en": "Taichung", "name_cn": "台中"},
+                        {"name_en": "Yunlin", "name_cn": "雲林"},
+                    ],
+                    "content_priorities": ["一週天氣預報", "降雨機率", "空氣品質", "紫外線指數"],
+                },
             },
             {
-                "name": "ai-research",
-                "display_name": "AI 研究",
-                "description": "人工智慧最新研究論文、模型發布與技術突破",
+                "name": "devtools",
+                "display_name": "開發工具政策",
+                "description": "Claude Code/Gemini CLI/Codex CLI 政策與第三方工具相容性",
                 "schedule": "daily",
                 "priority": 6,
+                "topic_type": "news",
+                "search_config": {
+                    "search_query_en": "Claude Code Gemini CLI Codex CLI policy",
+                    "focus_areas": (
+                        "Claude Code/Anthropic ToS、Gemini CLI/Google API政策"
+                        "、Codex CLI/OpenAI政策、第三方工具相容性、MCP伺服器政策"
+                    ),
+                    "subreddits": "ClaudeAI OR ChatGPT OR LocalLLaMA",
+                },
             },
         ]
 
@@ -280,6 +331,7 @@ class AnalystService(
             avatar_url=instance.avatar_url,
             model_id=instance.model_id,
             system_prompt=instance.system_prompt,
+            cli_command=instance.cli_command,
             enabled=instance.enabled,
             priority=instance.priority,
         )
@@ -313,6 +365,7 @@ class AnalystService(
                 "color": "#c4a7e7",
                 "model_id": "claude-sonnet-4-6",
                 "system_prompt": "你是一位嚴謹的資深分析師，擅長深度分析與邏輯推理。",  # noqa: RUF001
+                "cli_command": "claude",
                 "priority": 1,
             },
             {
@@ -321,6 +374,7 @@ class AnalystService(
                 "color": "#9ccfd8",
                 "model_id": "o3",
                 "system_prompt": "你是一位注重數據和技術細節的分析師，擅長量化分析。",  # noqa: RUF001
+                "cli_command": "codex",
                 "priority": 2,
             },
             {
@@ -329,6 +383,7 @@ class AnalystService(
                 "color": "#f6c177",
                 "model_id": "gemini-2.5-flash",
                 "system_prompt": "你是一位善於提出不同觀點的分析師，擅長逆向思考。",  # noqa: RUF001
+                "cli_command": "gemini",
                 "priority": 3,
             },
         ]
@@ -547,15 +602,21 @@ class BriefingService:
         data: BriefingEntryCreate,
         user_id: str | None = None,
     ) -> BriefingEntryResponse:
-        # Validate entry phase against the latest existing phase for this briefing
+        # Validate entry phase: allow same phase (multiple entries per phase),
+        # allow forward transitions, prohibit phase regression.
         existing_q = select(BriefingEntry.phase).where(BriefingEntry.briefing_id == briefing_id)
         existing_phases = (await db.execute(existing_q)).scalars().all()
         if existing_phases:
             latest_phase = max(existing_phases, key=lambda p: self._PHASE_ORDER.get(p, -1))
-            validate_transition(EntryPhase, latest_phase, data.phase, entity_type="briefing_entry")
+            # Same phase is always OK (multiple entries per phase)
+            if data.phase != latest_phase:
+                validate_transition(
+                    EntryPhase, latest_phase, data.phase, entity_type="briefing_entry"
+                )
         else:
             # No entries yet — only the initial phase (raw) is valid
-            validate_transition(EntryPhase, "raw", data.phase, entity_type="briefing_entry")
+            if data.phase != "raw":
+                validate_transition(EntryPhase, "raw", data.phase, entity_type="briefing_entry")
         entry = BriefingEntry(
             briefing_id=briefing_id,
             space_id=space_id,
@@ -706,6 +767,72 @@ class FollowUpService:
         except Exception:
             logger.warning("Failed to publish FOLLOW_UP_ASKED event", exc_info=True)
         return self._to_response(fu)
+
+    async def answer_follow_up(
+        self,
+        db: AsyncSession,
+        follow_up_id: str,
+        space_id: str,
+    ) -> FollowUpResponse:
+        """Generate an LLM answer for a follow-up question."""
+        fu = await db.get(BriefingFollowUp, follow_up_id)
+        if not fu:
+            raise NotFoundError("Follow-up not found", code="briefing.follow_up_not_found")
+
+        # Gather context from the briefing's entries
+        entries_q = (
+            select(BriefingEntry)
+            .where(BriefingEntry.briefing_id == fu.briefing_id)
+            .order_by(BriefingEntry.phase, BriefingEntry.key)
+        )
+        entries = (await db.execute(entries_q)).scalars().all()
+        context_parts = []
+        for e in entries:
+            context_parts.append(f"[{e.phase}/{e.key}]\n{e.content}")
+        context = "\n\n---\n\n".join(context_parts)
+
+        prompt = (
+            f"以下是一份每日簡報的完整資料：\n\n{context}\n\n"  # noqa: RUF001
+            f"使用者提問：{fu.question}\n\n"  # noqa: RUF001
+            "請用繁體中文回答，簡潔扼要，引用上方資料中的具體內容。"  # noqa: RUF001
+        )
+
+        fu.status = "answering"
+        await db.flush()
+
+        try:
+            answer = await asyncio.to_thread(
+                self._run_claude_answer, prompt
+            )
+            fu.answer = answer
+            fu.status = "answered"
+        except Exception:
+            logger.warning("Failed to generate follow-up answer", exc_info=True)
+            fu.status = "failed"
+
+        await db.flush()
+        return self._to_response(fu)
+
+    @staticmethod
+    def _run_claude_answer(prompt: str) -> str:
+        """Run Claude CLI to generate follow-up answer (blocking)."""
+        import os
+        import re
+
+        env = os.environ.copy()
+        home = str(Path.home())
+        env["PATH"] = f"{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
+        env.pop("CLAUDECODE", None)
+
+        result = subprocess.run(  # noqa: S603
+            ["claude", "-p", prompt, "--model", "haiku"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=env,
+        )
+        ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\r")
+        return ansi_re.sub("", result.stdout).strip()
 
     def _to_response(self, fu: BriefingFollowUp) -> FollowUpResponse:
         return FollowUpResponse(

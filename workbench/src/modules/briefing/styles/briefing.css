@@ -105,13 +105,25 @@
 
 /* Debate bubble animation */
 @keyframes bf-slide-in-left {
-  from { opacity: 0; transform: translateX(-12px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes bf-slide-in-right {
-  from { opacity: 0; transform: translateX(12px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .bf-bubble-left {
@@ -120,4 +132,50 @@
 
 .bf-bubble-right {
   animation: bf-slide-in-right 0.3s ease-out;
+}
+
+/* ── Topic tab active state ── */
+.briefing button[style*="border-bottom: 2px solid"]:hover {
+  background-color: var(--bf-bg-elevated) !important;
+}
+
+/* ── Per-topic accent colors (available as data attributes) ── */
+[data-topic-accent="news"] {
+  --bf-topic-accent: #c9a962;
+}
+[data-topic-accent="tech"] {
+  --bf-topic-accent: #9ccfd8;
+}
+[data-topic-accent="weather"] {
+  --bf-topic-accent: #f6c177;
+}
+[data-topic-accent="finance"] {
+  --bf-topic-accent: #c4a7e7;
+}
+[data-topic-accent="digest"] {
+  --bf-topic-accent: #c9a962;
+}
+[data-topic-accent="politics"] {
+  --bf-topic-accent: #eb6f92;
+}
+[data-topic-accent="sports"] {
+  --bf-topic-accent: #31748f;
+}
+[data-topic-accent="health"] {
+  --bf-topic-accent: #4ade80;
+}
+
+/* ── Pulse animation for processing status ── */
+@keyframes bf-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.bf-status-pulse {
+  animation: bf-status-pulse 1.5s ease-in-out infinite;
 }
