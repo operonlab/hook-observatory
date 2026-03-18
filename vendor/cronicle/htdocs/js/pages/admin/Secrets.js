@@ -6,7 +6,7 @@ Class.add( Page.Admin, {
 		// show Config Key list
 		const self = this
 		let secret = this.secret
-		app.setWindowTitle((window._t ? _t('admin_secrets.secrets') : "Secrets"));		
+		app.setWindowTitle(_t('admin_secrets.secrets'));
 		self.div.addClass('loading');
 		self.secret = {};
 		self.secretId = args.id		
@@ -62,14 +62,14 @@ Class.add( Page.Admin, {
 		
 		html += this.getSidebarTabs( 'secrets',
 			[
-				['activity', "Activity Log"],
-				['conf_keys', "Configs"],
-				['secrets', (window._t ? _t('admin_secrets.secrets') : "Secrets")],
-				['api_keys', "API Keys"],
-				['categories', "Categories"],
-				['plugins', "Plugins"],
-				['servers', "Servers"],
-				['users', "Users"]
+				['activity', _t('admin.activity_log')],
+				['conf_keys', _t('admin.config_keys')],
+				['secrets', _t('admin.secrets')],
+				['api_keys', _t('admin.api_keys')],
+				['categories', _t('admin.categories')],
+				['plugins', _t('admin.plugins')],
+				['servers', _t('admin.servers')],
+				['users', _t('admin.users')]
 			]
 		);
 		
@@ -99,7 +99,7 @@ Class.add( Page.Admin, {
 		  <center><table><tr>
 		  <td><div id="env_enc_button" class="button" style="width:130px;" onMouseUp="$P().toggle_env_encryption()">${this.secret.encrypted ? 'Decrypt' : 'Encrypt'}</div></td>
 		  <td width="40">&nbsp;</td>
-		  <td><div class="button" style="width:130px;" onMouseUp="$P().update_secret()"><i class="fa fa-save">&nbsp;&nbsp;</i>' + (window._t ? _t('admin_secrets.save') : 'Save') + '</div></td>
+		  <td><div class="button" style="width:130px;" onMouseUp="$P().update_secret()"><i class="fa fa-save">&nbsp;&nbsp;</i>${_t('admin_secrets.save')}</div></td>
 		  </tr></table></center>		  
 		</div>
 		<script>$P().setSecretEditor("fe_ee_env_editor")</script>
@@ -119,14 +119,14 @@ Class.add( Page.Admin, {
 		let secret = this.secret
 		// secret.data = env_editor.getValue();
 		self.args = {id: secret.id}
-		app.showProgress(1.0, (window._t ? _t('admin_secrets.updating_secret_data') : "Updating Secret Data..."));
+		app.showProgress(1.0, _t('admin_secrets.updating_secret_data'));
 
 		let apiUrl = secret.virtual ? 'app/create_secret' : 'app/update_secret'
 		delete secret.virtual
 
 		app.api.post(apiUrl, secret, function (resp) {
 			app.hideProgress();
-			if (resp.code == 0) app.showMessage('success', (window._t ? _t('admin_secrets.secret_data_has_been_updated_successfull') : "Secret Data has been updated successfully."));
+			if (resp.code == 0) app.showMessage('success', _t('admin_secrets.secret_data_has_been_updated_successfull'));
 			
 		});
 		// self.gosub_secrets({id: secret.id})

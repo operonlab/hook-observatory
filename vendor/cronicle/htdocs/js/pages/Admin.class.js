@@ -1,5 +1,5 @@
-Class.subclass( Page.Base, "Page.Admin", {	
-	
+Class.subclass( Page.Base, "Page.Admin", {
+
 	usernames: null,
 	default_sub: 'activity',
 	
