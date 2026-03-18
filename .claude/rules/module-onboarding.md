@@ -8,7 +8,8 @@ Examples: briefing, finance, memvault, intelflow, notification
 
 | # | Item | File |
 |---|------|------|
-| 1 | App Launcher entry | `workbench/src/shared/constants/apps.ts` |
+| 1 | RBAC permissions | `core/src/modules/auth/permissions.py` → `ROLE_PERMISSIONS` (user + guest) |
+| 2 | App Launcher entry | `workbench/src/shared/constants/apps.ts` |
 | 2 | Sentinel light check (HTTP) | `stations/sentinel/checker.py` → `LIGHT_CHECKS` |
 | 3 | Sentinel deep check (Playwright) | `stations/sentinel/checker.py` → `DEEP_CHECKS` + `_short_names` |
 | 4 | Frontend build | `pnpm run build` in `workbench/` |

@@ -1,6 +1,6 @@
 {
   "$schema": "workshop-schedules-v2",
-  "description": "Unified schedule manifest — single source of truth for all scheduled jobs and daemons",
+  "description": "Unified schedule manifest — configuration template for all scheduled jobs and daemons, synced to Cronicle via seed_jobs.py",
   "jobs": [
     {
       "name": "ws-memvault-synthesis",
@@ -229,7 +229,17 @@
       "label": "com.joneshong.scheduler.ws-relay-auto-standby",
       "command": "~/.local/bin/relay standby",
       "schedule": { "interval": 120 },
-      "description": "每 2 分鐘: idle relay pane auto-standby（/exit Claude Code，保留 pane）",
+      "description": "每 2 分鐘: idle relay pane auto-standby（主窗口保留 shell，副窗口直接 kill）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-relay-reaper",
+      "label": "com.joneshong.scheduler.ws-relay-reaper",
+      "command": "~/.local/bin/relay reaper",
+      "schedule": { "interval": 300 },
+      "description": "每 5 分鐘: relay reaper — 清理 bare shell panes + 空窗口（不碰主窗口）",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
