@@ -614,6 +614,12 @@ class CommunityService:
         existing_community_ids = (
             select(Community.id).where(Community.space_id == space_id).scalar_subquery()
         )
+        # Delete in FK dependency order: summaries → triples → communities
+        await db.execute(
+            delete(CommunitySummary).where(
+                CommunitySummary.community_id.in_(existing_community_ids)
+            )
+        )
         await db.execute(
             delete(CommunityTriple).where(CommunityTriple.community_id.in_(existing_community_ids))
         )
