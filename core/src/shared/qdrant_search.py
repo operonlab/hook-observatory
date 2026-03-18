@@ -412,6 +412,33 @@ def _entity_to_point_id(service_id: str, entity_id: str) -> str:
     return str(uuid.uuid5(namespace, f"{service_id}:{entity_id}"))
 
 
+async def delete_by_service_and_space(service_id: str, space_id: str) -> int:
+    """Delete all Qdrant points matching a service_id + space_id filter.
+
+    Used for atomic re-indexing: delete old → upsert new.
+    Returns 1 on success, 0 if unavailable.
+    """
+    client = await qclient.get_client()
+    if client is None:
+        return 0
+
+    try:
+        await client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(key="service_id", match=MatchValue(value=service_id)),
+                    FieldCondition(key="space_id", match=MatchValue(value=space_id)),
+                ]
+            ),
+        )
+        logger.info("Deleted Qdrant points for service=%s space=%s", service_id, space_id)
+        return 1
+    except Exception as e:
+        logger.error("Failed to delete points for %s/%s: %s", service_id, space_id, e)
+        return 0
+
+
 async def search_with_fallback(
     query: str,
     space_id: str,

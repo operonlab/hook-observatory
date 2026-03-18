@@ -404,9 +404,20 @@ class MemvaultClient(BaseClient):
 
     # ======================== KG — Cascade Recall ========================
 
-    def cascade(self, query: str, top_k: int = 5) -> dict:
-        """KG cascade recall (L2 Summaries -> L1 Communities -> L0 Triples -> Blocks). GET /kg/recall"""
-        return self._get("/kg/recall", {"q": query, "top_k": top_k})
+    def cascade(
+        self,
+        query: str,
+        top_k: int = 5,
+        skip_routing: bool = False,
+        evaluate: str = "default",
+    ) -> dict:
+        """KG cascade recall (L2→L1→L0→Blocks). GET /kg/recall"""
+        params: dict = {"q": query, "top_k": top_k}
+        if skip_routing:
+            params["skip_routing"] = "true"
+        if evaluate != "default":
+            params["evaluate"] = evaluate
+        return self._get("/kg/recall", params)
 
     # ======================== KG — Maintenance ========================
 
