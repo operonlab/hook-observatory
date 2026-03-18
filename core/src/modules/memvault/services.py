@@ -4,11 +4,10 @@ This is the PUBLIC API of the memvault module.
 Other modules import from here, never from models.py.
 """
 
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
-
-import logging
 
 from sqlalchemy import Integer, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,14 +26,14 @@ from src.shared.services import BaseCRUDService
 from src.shared.text_utils import is_cjk, is_cjk_dominant
 from src.shared.tier_config import get_threshold
 
-from .models import (  # noqa: F401
-    SearchFeedback,
+from .models import (
     EMBEDDING_DIM,
     BlockArchive,
     BlockEmbedding,
     KnowledgeDomain,
     MemoryBlock,
     ProfileScore,
+    SearchFeedback,
     Tag,
 )
 from .noise_filter import QUARANTINE_TAG, check_noise, filter_results
@@ -458,7 +457,7 @@ class MemoryBlockService(
         from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
         from src.shared.search_types import SearchConfig as QdrantSearchConfig
 
-        if not qdrant_available():
+        if not await qdrant_available():
             return None
 
         meta = SearchMetadata(vector_used=True, scope=scope)

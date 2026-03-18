@@ -443,7 +443,7 @@ class CaptureService:
 
         # --- Qdrant path ---
         try:
-            if qdrant_available():
+            if await qdrant_available():
                 from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
                 from src.shared.search_types import SearchConfig
 

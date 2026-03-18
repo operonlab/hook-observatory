@@ -137,13 +137,13 @@ async def _qdrant_event_handler(event: Event) -> None:
         await _handle_delete(event, module, entity)
 
 
-def register_qdrant_handlers() -> None:
+async def register_qdrant_handlers() -> None:
     """Register Qdrant indexing handlers for all modules in the registry.
 
     Call this during application startup (after EventBus is ready).
     Only registers if Qdrant is available.
     """
-    if not is_available():
+    if not await is_available():
         logger.info("Qdrant unavailable — skipping indexer registration")
         return
 
@@ -166,6 +166,6 @@ async def startup() -> None:
     """
     collection_ok = await init_collection()
     if collection_ok:
-        register_qdrant_handlers()
+        await register_qdrant_handlers()
     else:
         logger.warning("Qdrant collection init failed — indexing disabled")

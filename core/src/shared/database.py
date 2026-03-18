@@ -12,6 +12,8 @@ engine = create_async_engine(
     echo=settings.debug,
     pool_pre_ping=True,  # Fixed in SA 2.0.30+ for psycopg3 async
     pool_recycle=1800,  # Recycle connections every 30 min to avoid AdminShutdown
+    pool_size=10,
+    max_overflow=10,
 )
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
