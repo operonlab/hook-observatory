@@ -55,6 +55,8 @@ class BriefingTopic(SpaceScopedModel):
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     sources: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     schedule: Mapped[str] = mapped_column(String(20), server_default=text("'daily'"))
+    search_config: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    topic_type: Mapped[str] = mapped_column(String(20), server_default=text("'news'"))
 
     # Relationships
     subtopics: Mapped[list["BriefingSubtopic"]] = relationship(
@@ -106,6 +108,7 @@ class BriefingAnalyst(SpaceScopedModel):
     avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cli_command: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     priority: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 

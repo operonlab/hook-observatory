@@ -37,8 +37,7 @@ export const briefingApi = {
       body: JSON.stringify(data),
     }),
 
-  deleteTopic: (id: string) =>
-    request<void>(`/briefing/topics/${id}`, { method: 'DELETE' }),
+  deleteTopic: (id: string) => request<void>(`/briefing/topics/${id}`, { method: 'DELETE' }),
 
   toggleTopic: (id: string) =>
     request<BriefingTopic>(`/briefing/topics/${id}/toggle`, { method: 'PATCH' }),
@@ -78,8 +77,7 @@ export const briefingApi = {
       body: JSON.stringify(data),
     }),
 
-  deleteAnalyst: (id: string) =>
-    request<void>(`/briefing/analysts/${id}`, { method: 'DELETE' }),
+  deleteAnalyst: (id: string) => request<void>(`/briefing/analysts/${id}`, { method: 'DELETE' }),
 
   toggleAnalyst: (id: string) =>
     request<Analyst>(`/briefing/analysts/${id}/toggle`, { method: 'PATCH' }),
@@ -87,15 +85,11 @@ export const briefingApi = {
   // ── Briefings (daily) ──
 
   listBriefings: (page = 1, pageSize = 20) =>
-    request<PaginatedResponse<Briefing>>(
-      `/briefing/daily?page=${page}&page_size=${pageSize}`,
-    ),
+    request<PaginatedResponse<Briefing>>(`/briefing/daily?page=${page}&page_size=${pageSize}`),
 
-  getBriefingsByDate: (date: string) =>
-    request<Briefing[]>(`/briefing/daily/${date}`),
+  getBriefingsByDate: (date: string) => request<Briefing[]>(`/briefing/daily/${date}`),
 
-  getDailySummary: (date: string) =>
-    request<DailySummary>(`/briefing/daily/${date}/summary`),
+  getDailySummary: (date: string) => request<DailySummary>(`/briefing/daily/${date}/summary`),
 
   getBriefingByDomain: (date: string, domain: string) =>
     request<Briefing>(`/briefing/daily/${date}/${domain}`),
@@ -117,4 +111,18 @@ export const briefingApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // ── Generation ──
+
+  triggerGeneration: () => request<{ status: string }>('/briefing/trigger', { method: 'POST' }),
+
+  getRunStatus: () =>
+    request<{
+      status: string
+      date: string
+      topics: { domain: string; status: string; id: string }[]
+    }>('/briefing/run-status'),
+
+  answerFollowUp: (followUpId: string) =>
+    request<FollowUp>(`/briefing/follow-ups/${followUpId}/answer`, { method: 'POST' }),
 }

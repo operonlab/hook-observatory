@@ -5,9 +5,10 @@ import ConclusionCard from '../components/ConclusionCard'
 import DateNavigator from '../components/DateNavigator'
 import FollowUpThread from '../components/FollowUpThread'
 import MarkdownBlock from '../components/MarkdownBlock'
-import { useAnalysts, useBriefingDetail, useTodaySummary } from '../hooks/useBriefing'
+import TopicTabs from '../components/TopicTabs'
+import { useAnalysts, useBriefingDetail, useTodaySummary, useTopics } from '../hooks/useBriefing'
 import { useBriefingStore } from '../stores'
-import type { FollowUp } from '../types'
+import type { Briefing, FollowUp } from '../types'
 
 const ANALYST_COLORS: Record<string, string> = {
   claude: '#c4a7e7',
@@ -108,34 +109,144 @@ function DebateEntry({
   )
 }
 
+/* ── Single Briefing Panel (used in tabbed view) ── */
+function BriefingPanel({
+  briefing,
+  getAnalystInfo,
+}: {
+  briefing: Briefing
+  getAnalystInfo: (key: string) => { label: string; color: string }
+}) {
+  const debateEntries: { key: string; content: string }[] = []
+  const analysisEntries: Record<string, string> = {}
+  const rawEntries: Record<string, string> = {}
+
+  if (briefing.entries?.length) {
+    for (const e of briefing.entries) {
+      if (e.phase === 'debate') debateEntries.push({ key: e.key, content: e.content })
+      else if (e.phase === 'analysis') analysisEntries[e.key] = e.content
+      else if (e.phase === 'raw') rawEntries[e.key] = e.content
+    }
+  } else {
+    if (briefing.raw_data) Object.assign(rawEntries, briefing.raw_data)
+    if (briefing.analyses) Object.assign(analysisEntries, briefing.analyses)
+    if (briefing.debate) debateEntries.push({ key: 'debate', content: briefing.debate })
+  }
+
+  const analysisKeys = Object.keys(analysisEntries).sort()
+  const rawKeys = Object.keys(rawEntries).sort()
+
+  return (
+    <div className="space-y-8">
+      {/* Conclusion */}
+      {briefing.conclusion && (
+        <ConclusionCard
+          content={briefing.conclusion}
+          confidence={(briefing.conclusion_meta?.confidence as number | null) ?? null}
+          consensusPoints={(briefing.conclusion_meta?.consensus_points as string[]) || []}
+          dissentPoints={
+            (briefing.conclusion_meta?.dissent_points as Record<string, unknown>[]) || []
+          }
+        />
+      )}
+
+      {/* Debate */}
+      {debateEntries.length > 0 && (
+        <section>
+          <div className="flex items-center gap-3 mb-6">
+            <MessageSquare size={14} style={{ color: 'var(--bf-accent)' }} />
+            <h2
+              className="text-lg"
+              style={{
+                fontFamily: 'var(--bf-font-display)',
+                color: 'var(--bf-text)',
+                fontWeight: 400,
+              }}
+            >
+              交叉辯論
+            </h2>
+            <div className="h-px flex-1" style={{ backgroundColor: 'var(--bf-border)' }} />
+          </div>
+          <div>
+            {debateEntries.map((entry, i) => {
+              const info = getAnalystInfo(entry.key)
+              return (
+                <DebateEntry
+                  key={`debate-${i}`}
+                  analystName={info.label}
+                  analystColor={info.color}
+                  content={entry.content}
+                />
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Analysis */}
+      {analysisKeys.length > 0 && (
+        <CollapsibleSection
+          title="分析師觀點"
+          icon={<Users size={14} style={{ color: 'var(--bf-text-tertiary)' }} />}
+          count={analysisKeys.length}
+        >
+          <div className="space-y-5 pt-4">
+            {analysisKeys.map((key) => {
+              const info = getAnalystInfo(key)
+              return (
+                <div key={key}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-1.5" style={{ backgroundColor: info.color }} />
+                    <span className="text-xs font-medium" style={{ color: info.color }}>
+                      {info.label}
+                    </span>
+                  </div>
+                  <div className="border-l-2 pl-4" style={{ borderColor: info.color }}>
+                    <MarkdownBlock content={analysisEntries[key]} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Raw */}
+      {rawKeys.length > 0 && (
+        <CollapsibleSection
+          title="原始資料"
+          icon={<Database size={14} style={{ color: 'var(--bf-text-tertiary)' }} />}
+          count={rawKeys.length}
+        >
+          <div className="space-y-5 pt-4">
+            {rawKeys.map((key) => (
+              <div key={key}>
+                <div
+                  className="text-[10px] uppercase tracking-widest mb-2"
+                  style={{ color: 'var(--bf-text-dim)' }}
+                >
+                  {key}
+                </div>
+                <MarkdownBlock content={rawEntries[key]} />
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+    </div>
+  )
+}
+
 /* ── Main Page ── */
 export default function TodayBriefing() {
   const { selectedDate, setSelectedDate } = useBriefingStore()
   const { summary, loading: summaryLoading } = useTodaySummary()
   const { briefings, loading: detailLoading } = useBriefingDetail(selectedDate)
   const { analysts } = useAnalysts()
+  const { topics } = useTopics()
   const navigate = useNavigate()
 
   const loading = summaryLoading || detailLoading
-
-  // Collect all entries across all briefings, flattened
-  const allDebateEntries: { key: string; content: string }[] = []
-  const allAnalysisEntries: Record<string, string> = {}
-  const allRawEntries: Record<string, string> = {}
-
-  for (const b of briefings) {
-    if (b.entries?.length) {
-      for (const e of b.entries) {
-        if (e.phase === 'debate') allDebateEntries.push({ key: e.key, content: e.content })
-        else if (e.phase === 'analysis') allAnalysisEntries[e.key] = e.content
-        else if (e.phase === 'raw') allRawEntries[e.key] = e.content
-      }
-    } else {
-      if (b.raw_data) Object.assign(allRawEntries, b.raw_data)
-      if (b.analyses) Object.assign(allAnalysisEntries, b.analyses)
-      if (b.debate) allDebateEntries.push({ key: 'debate', content: b.debate })
-    }
-  }
 
   const getAnalystInfo = (key: string) => {
     const analyst = analysts.find((a) => a.name === key)
@@ -145,11 +256,49 @@ export default function TodayBriefing() {
     }
   }
 
-  // Primary briefing for follow-up threading (prefer digest, fallback to first)
-  const primaryBriefing =
-    briefings.find((b) => b.domain === 'digest') ||
-    briefings.find((b) => (b.entries?.length ?? 0) > 0) ||
-    briefings[0]
+  // Determine if we should use tabbed view
+  const uniqueDomains = new Set(briefings.map((b) => b.domain))
+  const isLegacyMixed = briefings.length === 1 && briefings[0]?.domain === 'daily'
+  const useTabbed = briefings.length > 1 && uniqueDomains.size > 1 && !isLegacyMixed
+
+  // Tab state
+  const [activeTabIndex, setActiveTabIndex] = useState(0)
+
+  // Reset tab index when briefings change
+  useEffect(() => {
+    setActiveTabIndex(0)
+  }, [selectedDate])
+
+  // Active briefing for tabbed view
+  const activeBriefing = useTabbed ? briefings[activeTabIndex] : null
+
+  // For legacy mixed layout: collect all entries across all briefings
+  const allDebateEntries: { key: string; content: string }[] = []
+  const allAnalysisEntries: Record<string, string> = {}
+  const allRawEntries: Record<string, string> = {}
+
+  if (!useTabbed) {
+    for (const b of briefings) {
+      if (b.entries?.length) {
+        for (const e of b.entries) {
+          if (e.phase === 'debate') allDebateEntries.push({ key: e.key, content: e.content })
+          else if (e.phase === 'analysis') allAnalysisEntries[e.key] = e.content
+          else if (e.phase === 'raw') allRawEntries[e.key] = e.content
+        }
+      } else {
+        if (b.raw_data) Object.assign(allRawEntries, b.raw_data)
+        if (b.analyses) Object.assign(allAnalysisEntries, b.analyses)
+        if (b.debate) allDebateEntries.push({ key: 'debate', content: b.debate })
+      }
+    }
+  }
+
+  // Primary briefing for follow-up threading
+  const primaryBriefing = useTabbed
+    ? activeBriefing
+    : briefings.find((b) => b.domain === 'digest') ||
+      briefings.find((b) => (b.entries?.length ?? 0) > 0) ||
+      briefings[0]
 
   // Local follow-up state
   const [followUps, setFollowUps] = useState<FollowUp[]>([])
@@ -159,6 +308,10 @@ export default function TodayBriefing() {
 
   const handleNewFollowUp = (fu: FollowUp) => {
     setFollowUps((prev) => [...prev, fu])
+  }
+
+  const handleFollowUpUpdate = (updated: FollowUp) => {
+    setFollowUps((prev) => prev.map((fu) => (fu.id === updated.id ? updated : fu)))
   }
 
   if (loading && !summary && briefings.length === 0) {
@@ -188,7 +341,7 @@ export default function TodayBriefing() {
           <span className="text-xs" style={{ color: 'var(--bf-text-dim)' }}>
             {summary.domains.length} 領域
           </span>
-          {allDebateEntries.length > 0 && (
+          {!useTabbed && allDebateEntries.length > 0 && (
             <span className="text-xs" style={{ color: 'var(--bf-text-dim)' }}>
               {allDebateEntries.length} 辯論
             </span>
@@ -200,7 +353,7 @@ export default function TodayBriefing() {
           )}
           {summary.status && summary.status !== 'completed' && (
             <span
-              className="text-[10px] px-2 py-0.5 border animate-pulse"
+              className="text-[10px] px-2 py-0.5 border bf-status-pulse"
               style={{ borderColor: 'var(--bf-accent)', color: 'var(--bf-accent)' }}
             >
               {summary.status}
@@ -209,123 +362,144 @@ export default function TodayBriefing() {
         </div>
       )}
 
-      {/* Merged conclusion (top-level) */}
-      {summary?.merged_conclusion && (
-        <ConclusionCard
-          content={summary.merged_conclusion}
-          confidence={summary.confidence}
-          consensusPoints={summary.consensus_points}
-          dissentPoints={summary.dissent_points}
-        />
+      {/* ── TABBED VIEW ── */}
+      {useTabbed && (
+        <>
+          <TopicTabs
+            briefings={briefings}
+            topics={topics}
+            activeIndex={activeTabIndex}
+            onSelect={setActiveTabIndex}
+          />
+
+          {activeBriefing && (
+            <BriefingPanel briefing={activeBriefing} getAnalystInfo={getAnalystInfo} />
+          )}
+        </>
       )}
 
-      {/* Per-domain conclusions (fallback when no merged) */}
-      {!summary?.merged_conclusion &&
-        briefings.some((b) => b.conclusion) &&
-        briefings
-          .filter((b) => b.conclusion)
-          .map((b) => (
-            <div key={b.id}>
-              <div
-                className="text-[10px] uppercase tracking-widest mb-2"
-                style={{ color: 'var(--bf-text-dim)' }}
-              >
-                {b.domain}
-              </div>
-              <ConclusionCard
-                content={b.conclusion!}
-                confidence={(b.conclusion_meta?.confidence as number | null) ?? null}
-                consensusPoints={(b.conclusion_meta?.consensus_points as string[]) || []}
-                dissentPoints={
-                  (b.conclusion_meta?.dissent_points as Record<string, unknown>[]) || []
-                }
-              />
-            </div>
-          ))}
+      {/* ── LEGACY MIXED VIEW ── */}
+      {!useTabbed && briefings.length > 0 && (
+        <>
+          {/* Merged conclusion (top-level) */}
+          {summary?.merged_conclusion && (
+            <ConclusionCard
+              content={summary.merged_conclusion}
+              confidence={summary.confidence}
+              consensusPoints={summary.consensus_points}
+              dissentPoints={summary.dissent_points}
+            />
+          )}
 
-      {/* ── DEBATE (main content) ── */}
-      {allDebateEntries.length > 0 && (
-        <section>
-          <div className="flex items-center gap-3 mb-6">
-            <MessageSquare size={14} style={{ color: 'var(--bf-accent)' }} />
-            <h2
-              className="text-lg"
-              style={{
-                fontFamily: 'var(--bf-font-display)',
-                color: 'var(--bf-text)',
-                fontWeight: 400,
-              }}
-            >
-              交叉辯論
-            </h2>
-            <div className="h-px flex-1" style={{ backgroundColor: 'var(--bf-border)' }} />
-          </div>
-
-          <div>
-            {allDebateEntries.map((entry, i) => {
-              const info = getAnalystInfo(entry.key)
-              return (
-                <DebateEntry
-                  key={`debate-${i}`}
-                  analystName={info.label}
-                  analystColor={info.color}
-                  content={entry.content}
-                />
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ── ANALYSIS (collapsible) ── */}
-      {analysisKeys.length > 0 && (
-        <CollapsibleSection
-          title="分析師觀點"
-          icon={<Users size={14} style={{ color: 'var(--bf-text-tertiary)' }} />}
-          count={analysisKeys.length}
-        >
-          <div className="space-y-5 pt-4">
-            {analysisKeys.map((key) => {
-              const info = getAnalystInfo(key)
-              return (
-                <div key={key}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1.5 h-1.5" style={{ backgroundColor: info.color }} />
-                    <span className="text-xs font-medium" style={{ color: info.color }}>
-                      {info.label}
-                    </span>
+          {/* Per-domain conclusions (fallback when no merged) */}
+          {!summary?.merged_conclusion &&
+            briefings.some((b) => b.conclusion) &&
+            briefings
+              .filter((b) => b.conclusion)
+              .map((b) => (
+                <div key={b.id}>
+                  <div
+                    className="text-[10px] uppercase tracking-widest mb-2"
+                    style={{ color: 'var(--bf-text-dim)' }}
+                  >
+                    {b.domain}
                   </div>
-                  <div className="border-l-2 pl-4" style={{ borderColor: info.color }}>
-                    <MarkdownBlock content={allAnalysisEntries[key]} />
-                  </div>
+                  <ConclusionCard
+                    content={b.conclusion!}
+                    confidence={(b.conclusion_meta?.confidence as number | null) ?? null}
+                    consensusPoints={(b.conclusion_meta?.consensus_points as string[]) || []}
+                    dissentPoints={
+                      (b.conclusion_meta?.dissent_points as Record<string, unknown>[]) || []
+                    }
+                  />
                 </div>
-              )
-            })}
-          </div>
-        </CollapsibleSection>
-      )}
+              ))}
 
-      {/* ── RAW DATA (collapsible) ── */}
-      {rawKeys.length > 0 && (
-        <CollapsibleSection
-          title="原始資料"
-          icon={<Database size={14} style={{ color: 'var(--bf-text-tertiary)' }} />}
-          count={rawKeys.length}
-        >
-          <div className="space-y-5 pt-4">
-            {rawKeys.map((key) => (
-              <div key={key}>
-                <div
-                  className="text-[10px] uppercase tracking-widest mb-2"
-                  style={{ color: 'var(--bf-text-dim)' }}
+          {/* DEBATE */}
+          {allDebateEntries.length > 0 && (
+            <section>
+              <div className="flex items-center gap-3 mb-6">
+                <MessageSquare size={14} style={{ color: 'var(--bf-accent)' }} />
+                <h2
+                  className="text-lg"
+                  style={{
+                    fontFamily: 'var(--bf-font-display)',
+                    color: 'var(--bf-text)',
+                    fontWeight: 400,
+                  }}
                 >
-                  {key}
-                </div>
-                <MarkdownBlock content={allRawEntries[key]} />
+                  交叉辯論
+                </h2>
+                <div className="h-px flex-1" style={{ backgroundColor: 'var(--bf-border)' }} />
               </div>
-            ))}
-          </div>
-        </CollapsibleSection>
+
+              <div>
+                {allDebateEntries.map((entry, i) => {
+                  const info = getAnalystInfo(entry.key)
+                  return (
+                    <DebateEntry
+                      key={`debate-${i}`}
+                      analystName={info.label}
+                      analystColor={info.color}
+                      content={entry.content}
+                    />
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ANALYSIS */}
+          {analysisKeys.length > 0 && (
+            <CollapsibleSection
+              title="分析師觀點"
+              icon={<Users size={14} style={{ color: 'var(--bf-text-tertiary)' }} />}
+              count={analysisKeys.length}
+            >
+              <div className="space-y-5 pt-4">
+                {analysisKeys.map((key) => {
+                  const info = getAnalystInfo(key)
+                  return (
+                    <div key={key}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1.5 h-1.5" style={{ backgroundColor: info.color }} />
+                        <span className="text-xs font-medium" style={{ color: info.color }}>
+                          {info.label}
+                        </span>
+                      </div>
+                      <div className="border-l-2 pl-4" style={{ borderColor: info.color }}>
+                        <MarkdownBlock content={allAnalysisEntries[key]} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CollapsibleSection>
+          )}
+
+          {/* RAW DATA */}
+          {rawKeys.length > 0 && (
+            <CollapsibleSection
+              title="原始資料"
+              icon={<Database size={14} style={{ color: 'var(--bf-text-tertiary)' }} />}
+              count={rawKeys.length}
+            >
+              <div className="space-y-5 pt-4">
+                {rawKeys.map((key) => (
+                  <div key={key}>
+                    <div
+                      className="text-[10px] uppercase tracking-widest mb-2"
+                      style={{ color: 'var(--bf-text-dim)' }}
+                    >
+                      {key}
+                    </div>
+                    <MarkdownBlock content={allRawEntries[key]} />
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+          )}
+        </>
       )}
 
       {/* ── FOLLOW-UP ── */}
@@ -334,6 +508,7 @@ export default function TodayBriefing() {
           briefingId={primaryBriefing.id}
           followUps={followUps}
           onNewFollowUp={handleNewFollowUp}
+          onFollowUpUpdate={handleFollowUpUpdate}
         />
       )}
 
