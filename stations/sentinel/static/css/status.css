@@ -1136,6 +1136,109 @@ body {
 
 .incident-more a:hover { color: var(--accent); }
 
+/* ══ Pagination ══ */
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.pg-btn {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    padding: 4px 10px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: all var(--transition);
+    min-width: 28px;
+    text-align: center;
+}
+
+.pg-btn:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-hover);
+    border-color: var(--border);
+}
+
+.pg-btn--active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.pg-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.pg-dots {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    padding: 0 2px;
+}
+
+/* ══ Banner Incident Badge ══ */
+
+.banner__inc-badge {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    background: var(--yellow-bg);
+    color: var(--yellow);
+    border: 1px solid var(--yellow-border);
+    vertical-align: middle;
+}
+
+/* ══ Guardian Status ══ */
+
+.guardian-status {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.guardian-status--stale {
+    color: var(--yellow);
+}
+
+/* ══ Incident Service Select ══ */
+
+.inc-service-select {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.inc-service-select:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+    border-color: var(--border);
+}
+
+.inc-service-select:focus {
+    outline: none;
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
 /* ══ Empty State ══ */
 
 .empty-state {

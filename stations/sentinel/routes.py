@@ -192,18 +192,30 @@ async def resolve_operation(req: ResolveRequest, db: AsyncSession = Depends(get_
 async def list_incidents(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    status: str | None = Query(None),
+    service: str | None = Query(None),
     db: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_auth),
 ):
     try:
+        # Build base query with optional filters
+        base = select(Incident)
+        count_base = select(func.count()).select_from(Incident)
+
+        if status:
+            base = base.where(Incident.status == status)
+            count_base = count_base.where(Incident.status == status)
+        if service:
+            base = base.where(Incident.service == service)
+            count_base = count_base.where(Incident.service == service)
+
         # Count
-        count_result = await db.execute(select(func.count()).select_from(Incident))
+        count_result = await db.execute(count_base)
         total = count_result.scalar() or 0
 
         # Fetch
         result = await db.execute(
-            select(Incident)
-            .order_by(Incident.created_at.desc())
+            base.order_by(Incident.created_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

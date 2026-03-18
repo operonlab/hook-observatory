@@ -50,6 +50,7 @@
         <nav class="tab-bar">
             <button class="tab-btn active" data-tab="status">服務監控</button>
             <button class="tab-btn" data-tab="services">服務管理</button>
+            <button class="tab-btn" data-tab="incidents">事件日誌</button>
             <button class="tab-btn" data-tab="guardian">Guardian</button>
         </nav>
 
@@ -112,23 +113,6 @@
                     </div>
                 </section>
 
-                <!-- Recent Incidents -->
-                <section class="panel anim-item" style="--i:3">
-                    <div class="panel__header">
-                        <h2 class="panel__title">近期事件</h2>
-                    </div>
-                    <div id="incidents-container">
-                        <div class="empty-state">
-                            <div class="empty-state__icon">
-                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                    <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                            </div>
-                            <span class="empty-state__text">目前沒有事件記錄</span>
-                        </div>
-                    </div>
-                </section>
-
             </div>
         </div>
 
@@ -179,12 +163,44 @@
             </div>
         </div><!-- /panel-services -->
 
+        <!-- Tab: 事件日誌 -->
+        <div class="tab-panel" id="panel-incidents">
+            <div class="tab-content">
+                <div class="panel">
+                    <div class="panel__header">
+                        <h2 class="panel__title">事件日誌</h2>
+                        <span class="panel__count mono" id="incidents-total"></span>
+                    </div>
+                    <div class="svc-filter-row">
+                        <div class="svc-filter" id="inc-status-filter">
+                            <button class="filter-btn active" data-status="all">全部</button>
+                            <button class="filter-btn" data-status="investigating">調查中</button>
+                            <button class="filter-btn" data-status="repairing">修復中</button>
+                            <button class="filter-btn" data-status="resolved">已解決</button>
+                        </div>
+                        <div class="svc-filter" id="inc-service-filter">
+                            <select class="inc-service-select" id="inc-service-select">
+                                <option value="">全部服務</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="incidents-container">
+                        <div class="empty-state"><span class="empty-state__text">載入中…</span></div>
+                    </div>
+                    <div class="pagination" id="incidents-pagination"></div>
+                </div>
+            </div>
+        </div><!-- /panel-incidents -->
+
         <!-- Tab: Guardian -->
         <div class="tab-panel" id="panel-guardian">
             <div class="tab-content">
                 <div class="panel">
                     <div class="panel__header">
-                        <h2 class="panel__title">Memory Guardian 日誌</h2>
+                        <div>
+                            <h2 class="panel__title">Memory Guardian 日誌</h2>
+                            <span class="guardian-status mono" id="guardian-status"></span>
+                        </div>
                         <button class="guardian-trigger-btn" id="guardian-trigger">手動觸發</button>
                     </div>
                     <div class="svc-table-wrap">
