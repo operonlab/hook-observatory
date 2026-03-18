@@ -50,7 +50,14 @@ def create_grc_routes(
             db: AsyncSession = Depends(get_db),
             _user: dict = require_permission(read_permission),
         ) -> dict:
-            items = adapter.gather_items(scope_id, db=db)
+            # Optional async pre-fetch hook: if adapter defines fetch_blocks(),
+            # await it first and pass the result as blocks= kwarg to gather_items().
+            # This keeps gather_items() sync-compatible with the Protocol definition.
+            extra_kwargs: dict[str, Any] = {"db": db}
+            if hasattr(adapter, "fetch_blocks"):
+                blocks = await adapter.fetch_blocks(db, scope_id)
+                extra_kwargs["blocks"] = blocks
+            items = adapter.gather_items(scope_id, **extra_kwargs)
             result = adapter.reflect(items, scope_id)
 
             derived_count = 0

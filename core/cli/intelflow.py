@@ -21,7 +21,7 @@ import argparse
 import json
 import sys
 
-from cli.cli_helpers import json_out, err, fmt_date
+from cli.cli_helpers import json_out
 from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.intelflow import IntelflowClient

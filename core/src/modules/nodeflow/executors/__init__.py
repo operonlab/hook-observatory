@@ -5,6 +5,7 @@ from .base import BaseNodeExecutor
 from .condition import ConditionExecutor
 from .delay import DelayExecutor
 from .notify import NotifyExecutor
+from .rlm import RLMExecutor
 from .transform import TransformExecutor
 from .trigger import TriggerExecutor
 
@@ -15,6 +16,7 @@ EXECUTOR_MAP: dict[str, type[BaseNodeExecutor]] = {
     "transform": TransformExecutor,
     "notify": NotifyExecutor,
     "delay": DelayExecutor,
+    "rlm": RLMExecutor,
 }
 
 __all__ = [
@@ -24,6 +26,7 @@ __all__ = [
     "ConditionExecutor",
     "DelayExecutor",
     "NotifyExecutor",
+    "RLMExecutor",
     "TransformExecutor",
     "TriggerExecutor",
 ]

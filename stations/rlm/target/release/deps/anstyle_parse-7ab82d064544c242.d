@@ -1,0 +1,11 @@
+/Users/joneshong/workshop/stations/rlm/target/release/deps/anstyle_parse-7ab82d064544c242.d: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/params.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/mod.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/definitions.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/table.rs
+
+/Users/joneshong/workshop/stations/rlm/target/release/deps/libanstyle_parse-7ab82d064544c242.rlib: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/params.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/mod.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/definitions.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/table.rs
+
+/Users/joneshong/workshop/stations/rlm/target/release/deps/libanstyle_parse-7ab82d064544c242.rmeta: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/params.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/mod.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/definitions.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/table.rs
+
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/lib.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/params.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/mod.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/definitions.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/anstyle-parse-1.0.0/src/state/table.rs:
