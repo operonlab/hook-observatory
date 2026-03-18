@@ -73,9 +73,16 @@ class PaneInfo:
     pane_ref: str
     status: str  # idle | busy:relay | busy:active | busy:unknown | not-claude
     pane_id: str = ""
+    role: str = ""
+    task: str = ""
 
     def to_dict(self) -> dict[str, str]:
-        return {"pane_ref": self.pane_ref, "status": self.status, "pane_id": self.pane_id}
+        d = {"pane_ref": self.pane_ref, "status": self.status, "pane_id": self.pane_id}
+        if self.role:
+            d["role"] = self.role
+        if self.task:
+            d["task"] = self.task
+        return d
 
 
 # ======================== Client ========================
@@ -100,6 +107,7 @@ class TmuxRelayClient:
     STALE_PENDING_THRESHOLD = 1800
     INIT_TIMEOUT = 30
     INIT_POLL_INTERVAL = 2
+    CONTEXT_DIR = Path("/tmp/relay-context")
 
     # Detection patterns — heuristic text matching on terminal output.
     # These are fragile UX hints, not semantic analysis. May need updating
@@ -524,6 +532,8 @@ class TmuxRelayClient:
                         pane_ref=d["ref"],
                         status=d["status"],
                         pane_id=d.get("pane_id", ""),
+                        role=d.get("role", ""),
+                        task=d.get("task", ""),
                     )
                     for d in panes_data.values()
                 ]
@@ -560,12 +570,16 @@ class TmuxRelayClient:
         """Full cache rebuild from live tmux state -> Redis."""
         session = session or self._resolve_relay_session()
 
-        # Preserve last_command from existing cache before clearing
-        old_commands = {}
+        # Preserve semantic fields from existing cache before clearing
+        old_meta: dict[str, dict] = {}
         try:
             for k, v in self._cache.get_all_panes().items():
-                if v.get("last_command"):
-                    old_commands[k] = v["last_command"]
+                preserved = {}
+                for field in ("last_command", "role", "task"):
+                    if v.get(field):
+                        preserved[field] = v[field]
+                if preserved:
+                    old_meta[k] = preserved
         except Exception:
             pass
 
@@ -573,12 +587,15 @@ class TmuxRelayClient:
         self._cache.clear_panes()
         for p in panes:
             pane_safe = p.pane_id.replace("%", "")
+            meta = old_meta.get(pane_safe, {})
             self._cache.set_pane(
                 pane_safe,
                 p.pane_ref,
                 p.status,
                 p.pane_id,
-                last_command=old_commands.get(pane_safe, ""),
+                last_command=meta.get("last_command", ""),
+                role=meta.get("role", ""),
+                task=meta.get("task", ""),
             )
         self._cache.touch()
         return {"panes": len(panes)}
@@ -715,11 +732,39 @@ class TmuxRelayClient:
             raise TmuxRelayError("context", f"Cannot capture pane {pane}")
         return result
 
+    def _save_context(self, pane: str, pane_safe: str, reason: str = "") -> str | None:
+        """Capture pane context before shutdown, save to /tmp/relay-context/{pane_safe}.json."""
+        content = self._capture(pane, -30)
+        if not content:
+            return None
+        self.CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
+        cached = self._cache.get_pane(pane_safe)
+        data = {
+            "pane_safe": pane_safe,
+            "role": cached.get("role", "") if cached else "",
+            "task": cached.get("task", "") if cached else "",
+            "last_command": cached.get("last_command", "") if cached else "",
+            "context": content,
+            "reason": reason,
+            "saved_at": datetime.now(UTC).isoformat(),
+        }
+        path = self.CONTEXT_DIR / f"{pane_safe}.json"
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        return str(path)
+
     def standby(self, pane: str) -> str:
         """Put a pane into standby: /exit Claude Code, keep pane as bare shell."""
         cmd = self._display(pane, "#{pane_current_command}")
         if cmd and cmd.split("/")[-1] in self.SHELL_COMMANDS:
             return "already-standby"
+
+        # Save context before exit
+        pane_id_pre = self._display(pane, "#{pane_id}")
+        if pane_id_pre:
+            try:
+                self._save_context(pane, pane_id_pre.replace("%", ""), "standby")
+            except Exception:
+                pass
 
         self._send_keys(pane, "/exit")
         self._send_enter(pane)
@@ -788,6 +833,10 @@ class TmuxRelayClient:
                 # Non-primary: /exit then kill pane entirely
                 # Use pane_id (%XX) instead of pane_ref to avoid stale index after kills
                 target = p.pane_id or p.pane_ref
+                try:
+                    self._save_context(target, p.pane_id.replace("%", ""), "auto_standby")
+                except Exception:
+                    pass
                 self._send_keys(target, "/exit")
                 self._send_enter(target)
                 time.sleep(3)
@@ -911,6 +960,10 @@ class TmuxRelayClient:
                     continue
                 # Use pane_id (%XX) for stable targeting after prior kills
                 target = pane_id or pane_ref
+                try:
+                    self._save_context(target, pane_id.replace("%", ""), "reaper")
+                except Exception:
+                    pass
                 messages.append(f"Reaping Claude pane {target} (idle {idle_secs}s)")
                 self._send_keys(target, "/exit")
                 self._send_enter(target)
@@ -1242,6 +1295,8 @@ class TmuxRelayClient:
         command: str,
         timeout: int | None = None,
         max_lines: int = 200,
+        role: str = "",
+        task: str = "",
     ) -> RelayResult:
         """Blocking relay: acquire pane -> send command -> wait -> return result."""
         timeout = timeout or self.default_timeout
@@ -1252,12 +1307,24 @@ class TmuxRelayClient:
             raise TmuxRelayError("run", "Failed to acquire relay pane. Is tmux running?")
         pane = panes[0]
 
-        # 2. Recycle if busy
+        # 2. Write role/task metadata before execution
+        if role or task:
+            pane_id = self._display(pane, "#{pane_id}")
+            if pane_id:
+                try:
+                    self._cache.set_pane(
+                        pane_id.replace("%", ""), pane, "idle", pane_id,
+                        role=role, task=task,
+                    )
+                except Exception:
+                    pass
+
+        # 3. Recycle if busy
         st = self._pane_status(pane)
         if st.startswith("busy"):
             self.recycle(pane)
 
-        # 3. Execute relay
+        # 4. Execute relay
         result = self._relay_execute(
             source=pane,
             command=command,
@@ -1280,6 +1347,8 @@ class TmuxRelayClient:
         command: str,
         timeout: int | None = None,
         count: int = 1,
+        role: str = "",
+        task: str = "",
     ) -> list[dict[str, str]]:
         """Fire-and-forget dispatch. Returns list of {pane, signal_file, pid}.
 
@@ -1301,7 +1370,7 @@ class TmuxRelayClient:
 
             signal_file = f"/tmp/relay-py-{int(time.time() * 1000)}-{os.getpid()}.done"
 
-            # Cache: pre-mark as busy:relay
+            # Cache: pre-mark as busy:relay + role/task metadata
             pane_id_raw = self._display(pane, "#{pane_id}")
             if pane_id_raw:
                 try:
@@ -1311,6 +1380,8 @@ class TmuxRelayClient:
                         "busy:relay",
                         pane_id_raw,
                         signal_file=signal_file,
+                        role=role,
+                        task=task,
                     )
                 except Exception:
                     pass

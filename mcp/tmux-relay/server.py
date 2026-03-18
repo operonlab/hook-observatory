@@ -62,7 +62,15 @@ def _format_panes(panes) -> str:
     parts = ["### Relay Panes\n"]
     for p in panes:
         indicator = "🟢" if p.status == "idle" else "🔴"
-        parts.append(f"- {indicator} **{p.pane_ref}** — {p.status} ({p.pane_id})")
+        line = f"- {indicator} **{p.pane_ref}** — {p.status} ({p.pane_id})"
+        meta = []
+        if p.role:
+            meta.append(p.role)
+        if p.task:
+            meta.append(p.task)
+        if meta:
+            line += f" `[{' | '.join(meta)}]`"
+        parts.append(line)
     return "\n".join(parts)
 
 
@@ -75,34 +83,44 @@ async def relay_run(
     command: str,
     timeout: int = 600,
     lines: int = 200,
+    role: str = "",
+    task: str = "",
     model: str | None = None,
     silent: bool = True,
 ) -> str:
-    """Blocking relay: acquire pane → send command → wait for completion (event-driven via tmux wait-for, zero CPU) → return result. Use from a background Agent for true async. This is the PRIMARY tool."""
+    """Blocking relay: acquire pane → send command → wait for completion (event-driven via tmux wait-for, zero CPU) → return result. Use from a background Agent for true async. This is the PRIMARY tool. Optional role/task metadata annotates the pane for observability."""
     c = _client(model, silent)
     result = await to_thread(
         c.run,
         command=command,
         timeout=timeout,
         max_lines=lines,
+        role=role,
+        task=task,
     )
     return _format_relay_result(result)
+
+
 @mcp.tool()
 @mcp_error_handler("TmuxRelay")
 async def relay_dispatch(
     command: str,
     timeout: int = 600,
     count: int = 1,
+    role: str = "",
+    task: str = "",
     model: str | None = None,
     silent: bool = True,
 ) -> str:
-    """Low-level: fire-and-forget dispatch. Returns signal_file for manual polling via relay_check/relay_result. Prefer relay_run instead."""
+    """Low-level: fire-and-forget dispatch. Returns signal_file for manual polling via relay_check/relay_result. Prefer relay_run instead. Optional role/task metadata annotates the pane."""
     c = _client(model, silent)
     dispatched = await to_thread(
         c.dispatch,
         command=command,
         timeout=timeout,
         count=count,
+        role=role,
+        task=task,
     )
     return _format_dispatch(dispatched)
 @mcp.tool()
