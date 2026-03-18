@@ -489,7 +489,13 @@ function TripleTable() {
                   borderColor: 'var(--surface0)',
                 }}
               >
-                {/* Triple display — wraps on mobile */}
+                {/* Chinese display (if available) */}
+                {t.display_zh && (
+                  <p className="text-xs mb-1" style={{ color: 'var(--text)' }}>
+                    {t.display_zh}
+                  </p>
+                )}
+                {/* Triple SPO */}
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mb-1.5">
                   <span className="font-medium" style={{ color: 'var(--teal)' }}>
                     {t.subject}

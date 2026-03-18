@@ -92,6 +92,7 @@ class Triple(SpaceScopedModel):
     predicate: Mapped[str] = mapped_column(String(100))
     object: Mapped[str] = mapped_column(Text)
     topic: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    display_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Edge invalidation (Graphiti-inspired temporal validity)
     valid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

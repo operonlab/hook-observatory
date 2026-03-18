@@ -47,6 +47,7 @@ class TripleResponse(SpaceScopedResponse):
     source_session: str | None = None
     timestamp: datetime | None = None
     topic: str | None = None
+    display_zh: str | None = None
     # Edge invalidation
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
