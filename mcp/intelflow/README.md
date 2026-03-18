@@ -10,7 +10,7 @@
 
 | 工具 | Core API 端點 | 說明 |
 |------|--------------|------|
-| `intelflow_search` | `POST /api/intelflow/search` | 語意搜尋（pgvector） |
+| `intelflow_search` | `POST /api/intelflow/search` | 語意搜尋（Qdrant） |
 | `intelflow_check` | `POST /api/intelflow/search/check` | 查重（搜尋前檢查已有相似報告） |
 | `intelflow_save_report` | `POST /api/intelflow/reports` | 儲存搜尋報告 |
 | `intelflow_get_report` | `GET /api/intelflow/reports/:id` | 取得報告全文 |
@@ -33,7 +33,7 @@ smart-search Skill (Claude Code)
                                     ↓
                         POST /api/intelflow/reports
                                     ↓
-                        PostgreSQL + pgvector embedding
+                        PostgreSQL + Qdrant embedding
 ```
 
 smart-search Skill 負責**執行搜尋邏輯**，Intelflow MCP 負責**資料持久化與檢索**。

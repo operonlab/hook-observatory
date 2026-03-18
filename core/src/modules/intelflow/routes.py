@@ -195,7 +195,7 @@ async def search_reports(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("intelflow.read"),
 ):
-    results = await search_engine.semantic_search(
+    results = await search_engine.qdrant_search(
         db, space_id, body.query, limit=body.limit, threshold=body.threshold
     )
     # Record search session (non-critical — degrade gracefully on failure)
@@ -237,7 +237,10 @@ async def synthesize_reports(
     a consensus summary with source attribution and confidence score.
     """
     result = await synthesis_service.synthesize_reports_rlm(
-        db, space_id, body.topic, max_sources=body.max_sources,
+        db,
+        space_id,
+        body.topic,
+        max_sources=body.max_sources,
     )
     return SynthesizeResponse(**result)
 

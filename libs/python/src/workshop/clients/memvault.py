@@ -334,9 +334,9 @@ class MemvaultClient(BaseClient):
             params["tag"] = tag
         return self._get("/kg/summaries", params or None)
 
-    def regenerate_summaries(self, summary_nodes: list[dict], generated_at: str) -> dict:
+    def regenerate_summaries(self, summaries: list[dict], generated_at: str) -> dict:
         """Save regenerated community summary data. POST /kg/summaries/regenerate"""
-        body = {"summary_nodes": summary_nodes, "generated_at": generated_at}
+        body = {"summaries": summaries, "generated_at": generated_at}
         return self._post("/kg/summaries/regenerate", body)
 
     # ======================== KG — Attitudes ========================

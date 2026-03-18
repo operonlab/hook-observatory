@@ -199,7 +199,7 @@ scheduler.run_now("weekly")  # 立即執行
 
 | 服務 | 映像 | restart 策略 | 健康檢查 |
 |------|------|-------------|---------|
-| PostgreSQL | pgvector/pgvector:pg16 | `unless-stopped` | `pg_isready` 每 10 秒 |
+| PostgreSQL | postgres:16 | `unless-stopped` | `pg_isready` 每 10 秒 |
 | Redis | redis:7-alpine | `unless-stopped` | `redis-cli ping` 每 10 秒 |
 | LGTM | grafana/otel-lgtm | `unless-stopped` | — |
 | RustFS | zotio/rustfs | `unless-stopped` | — |

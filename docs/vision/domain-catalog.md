@@ -168,7 +168,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 - Link 驗證狀態（suggested / verified / rejected，AI 建議→人類驗證）
 - 精煉歷史追蹤（refinements 表，版本化 diff）
 - Galaxy 風格知識圖譜視覺化（D3.js force-directed，星星=Spark、星座線=Link）
-- pgvector 語意搜尋（跨所有 Spark 語意比對）
+- Qdrant 語意搜尋（跨所有 Spark 語意比對）
 - 跨模組事件轉 Spark（finance/taskflow/memvault 事件可轉入）
 - **MCP 拆分**：`workshop-ideagraph`（CRUD ~8 tools）+ `workshop-ideagraph-ai`（AI 輔助 ~5 tools）
 

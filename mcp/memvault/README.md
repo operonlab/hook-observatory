@@ -39,7 +39,7 @@ mcp/memvault/ (MCP Server, TypeScript)
 core/src/modules/memvault/ (FastAPI, Python)
     │
     ▼
-PostgreSQL (schema: memvault) + pgvector
+PostgreSQL (schema: memvault) + Qdrant 語意搜尋
 ```
 
 ## 目錄結構（規劃）

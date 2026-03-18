@@ -16,6 +16,3 @@ CREATE SCHEMA IF NOT EXISTS matchcore;
 
 -- Stations (standalone tools that need DB)
 CREATE SCHEMA IF NOT EXISTS sysmon;
-
--- Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;

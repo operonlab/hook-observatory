@@ -186,7 +186,7 @@ Skill 執行 → 產出結果
 
 ### 可復用的基礎設施
 - ✅ Memvault MCP Server（`mcp/memvault/`）
-- ✅ 語義搜尋（Ollama nomic-embed-text + pgvector）
+- ✅ 語義搜尋（MLX Qwen3-Embedding + Qdrant）
 - ✅ Tag 系統（已支援任意 tag）
 - ✅ Memvault Profile 工具
 - ✅ Core API（`/api/memvault/kg/*` 端點）

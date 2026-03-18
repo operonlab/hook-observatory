@@ -53,7 +53,7 @@ class SearchConfig:
 class SearchMetadata:
     """Metadata about the search operation."""
 
-    backend: str = "qdrant"  # "qdrant" or "pgvector_fallback"
+    backend: str = "qdrant"  # "qdrant" or "ilike_fallback"
     sparse_used: bool = False
     dense_used: bool = False
     total_candidates: int = 0

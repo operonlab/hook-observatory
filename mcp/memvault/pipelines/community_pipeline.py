@@ -28,9 +28,9 @@ CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
 MAX_TRIPLES_PER_FETCH = 20000
 
 RESOLUTIONS = {
-    0: 1.0,    # fine: many small communities
-    1: 0.3,    # medium
-    2: 0.05,   # coarse: few large themes
+    0: 1.0,  # fine: many small communities
+    1: 0.3,  # medium
+    2: 0.05,  # coarse: few large themes
 }
 
 JUDGMENT_PREDICATES = {"should", "should_NOT", "chosen_over"}
@@ -180,35 +180,86 @@ def build_entity_graph(rows: list[dict]):
     g.vs["name"] = entity_list
     g.es["weight"] = weights
 
-    print(
-        f"[Phase 2] Graph built: {len(entity_list)} entities, {len(edges)} edges"
-    )
+    print(f"[Phase 2] Graph built: {len(entity_list)} entities, {len(edges)} edges")
     return g, entity_to_idx
 
 
-# ── Phase 3: Run Leiden at 3 Resolution Levels ───────────────────────────────
-def run_leiden(g) -> dict[int, list[list[int]]]:
-    """Run Leiden community detection at each resolution level."""
+# ── Phase 3: Hierarchical Community Detection ────────────────────────────────
+MIN_COMPONENT_FOR_LEIDEN = 5  # Only run Leiden on components with >= 5 vertices
+
+
+def run_community_detection(g) -> dict[int, list[list[int]]]:
+    """Detect communities using connected components + Leiden subdivision.
+
+    Strategy adapted to sparse personal KG (many small disconnected components):
+      Level 0 (fine): Connected components >= 5 vertices → Leiden(res=1.0) sub-communities.
+                      Components 2-4 vertices → kept as-is.
+      Level 1 (medium): Leiden(res=0.3) on large components. Small components grouped.
+      Level 2 (coarse): Leiden(res=0.05) on large components. Everything else = one group.
+    """
+    components = g.connected_components()
+    comp_groups = {}  # comp_id → list of vertex indices
+    for v_idx, comp_id in enumerate(components.membership):
+        comp_groups.setdefault(comp_id, []).append(v_idx)
+
+    # Separate large vs small components
+    large_comps = {
+        cid: members
+        for cid, members in comp_groups.items()
+        if len(members) >= MIN_COMPONENT_FOR_LEIDEN
+    }
+    small_comps = {
+        cid: members
+        for cid, members in comp_groups.items()
+        if 2 <= len(members) < MIN_COMPONENT_FOR_LEIDEN
+    }
+
+    print(
+        f"  Components: {len(comp_groups)} total, "
+        f"{len(large_comps)} large (>={MIN_COMPONENT_FOR_LEIDEN}), "
+        f"{len(small_comps)} small (2-{MIN_COMPONENT_FOR_LEIDEN - 1})"
+    )
+
     results: dict[int, list[list[int]]] = {}
 
     for level, resolution in RESOLUTIONS.items():
-        partition = g.community_leiden(
-            objective_function="modularity",
-            resolution=resolution,
-            weights="weight",
-            n_iterations=3,
-        )
-        # Convert to list of member lists, skip singletons
-        communities = []
-        for members in partition:
-            if len(members) >= 2:
-                communities.append(list(members))
+        communities: list[list[int]] = []
+
+        # Leiden on each large component
+        for cid, members in large_comps.items():
+            sub = g.subgraph(members)
+            partition = sub.community_leiden(
+                objective_function="modularity",
+                resolution=resolution,
+                weights="weight",
+                n_iterations=5,
+            )
+            # Map back to global vertex indices
+            for comm_members in partition:
+                if len(comm_members) >= 2:
+                    global_members = [members[i] for i in comm_members]
+                    communities.append(global_members)
+
+        # Small components: include as-is at level 0, skip at higher levels
+        if level == 0:
+            for members in small_comps.values():
+                communities.append(members)
+
         results[level] = communities
 
-        modularity = g.modularity(partition, weights="weight")
+        # Calculate modularity on the full graph
+        # Build a membership vector for modularity calculation
+        membership = [0] * g.vcount()
+        for comm_idx, comm_members in enumerate(communities):
+            for v in comm_members:
+                membership[v] = comm_idx
+        try:
+            mod = g.modularity(membership, weights="weight")
+        except Exception:
+            mod = 0.0
         print(
             f"  Level {level} (res={resolution}): {len(communities)} communities, "
-            f"modularity={modularity:.4f}"
+            f"modularity={mod:.4f}"
         )
 
     return results
@@ -273,21 +324,9 @@ def _summarize_community(
     name_entities = top_subjects[:3] if top_subjects else entity_names[:3]
     name = _community_name(name_entities)
 
-    contexts = [
-        f"{t['s']} {t['p']} {t['o']}"
-        for t in triples
-        if t["p"] in CONTEXT_PREDICATES
-    ]
-    judgments = [
-        f"{t['s']} {t['p']} {t['o']}"
-        for t in triples
-        if t["p"] in JUDGMENT_PREDICATES
-    ]
-    results = [
-        f"{t['s']} {t['p']} {t['o']}"
-        for t in triples
-        if t["p"] in RESULT_PREDICATES
-    ]
+    contexts = [f"{t['s']} {t['p']} {t['o']}" for t in triples if t["p"] in CONTEXT_PREDICATES]
+    judgments = [f"{t['s']} {t['p']} {t['o']}" for t in triples if t["p"] in JUDGMENT_PREDICATES]
+    results = [f"{t['s']} {t['p']} {t['o']}" for t in triples if t["p"] in RESULT_PREDICATES]
 
     pattern_parts = []
     if contexts:
@@ -297,9 +336,7 @@ def _summarize_community(
     if results:
         pattern_parts.append("結果: " + "; ".join(results[:3]))
     summary = (
-        " → ".join(pattern_parts)
-        if pattern_parts
-        else f"Entities: {', '.join(entity_names[:5])}"
+        " → ".join(pattern_parts) if pattern_parts else f"Entities: {', '.join(entity_names[:5])}"
     )
 
     return {
@@ -364,9 +401,7 @@ def build_communities(
             if coarser_level in level_entity_maps and members:
                 # Vote: majority entity community at coarser level
                 coarser_map = level_entity_maps[coarser_level]
-                coarser_votes = Counter(
-                    coarser_map[m] for m in members if m in coarser_map
-                )
+                coarser_votes = Counter(coarser_map[m] for m in members if m in coarser_map)
                 if coarser_votes:
                     best_parent_idx = coarser_votes.most_common(1)[0][0]
                     parent_id = f"L{coarser_level}C{best_parent_idx}"
@@ -381,9 +416,7 @@ def build_communities(
             )
             all_communities.append(comm_dict)
 
-        print(
-            f"[Phase 4] Level {level}: {len(communities_at_level)} communities summarized"
-        )
+        print(f"[Phase 4] Level {level}: {len(communities_at_level)} communities summarized")
 
     return all_communities
 
@@ -436,7 +469,9 @@ def print_report(rows: list[dict], communities: list[dict]) -> None:
         print("\n  Top communities at Level 1 (medium):")
         for c in medium:
             name = c["name"]
-            print(f"  [{c['community_id']}] {name}  (size={c['size']}, entities={c['entity_count']})")
+            print(
+                f"  [{c['community_id']}] {name}  (size={c['size']}, entities={c['entity_count']})"
+            )
             preds = ", ".join(c["top_predicates"][:3])
             print(f"    Predicates : {preds}")
             summary = c["summary"]
@@ -476,7 +511,7 @@ def main() -> None:
 
     # Phase 3
     print("\n[Phase 3] Running Leiden community detection at 3 resolution levels ...")
-    leiden_results = run_leiden(g)
+    leiden_results = run_community_detection(g)
 
     # Phase 4
     print("\n[Phase 4] Building community data structures ...")

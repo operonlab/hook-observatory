@@ -542,7 +542,7 @@ CREATE INDEX idx_{table}_tags ON {schema}.{table} USING GIN(tags);
 | 檔案 | 內容 | 技術 |
 |------|----------|-----------|
 | `state_machine.py` | StateMachine 狀態轉換引擎 | 多型 + 宣告式規則 |
-| `embedding.py` | EmbeddingService (pgvector) | 封裝 + 策略模式 |
+| `embedding.py` | EmbeddingService (Qdrant + MLX) | 封裝 + 策略模式 |
 | `llm.py` | LLMService 抽象層 | 多型 (Provider ABC) |
 | `semantic_search.py` | SemanticSearchService | 泛型 + 組合 |
 | `report_generator.py` | ScheduledReportGenerator | 範本方法 |
@@ -566,30 +566,25 @@ CREATE INDEX idx_{table}_tags ON {schema}.{table} USING GIN(tags);
 
 > 跨模組的後端服務抽象。每個服務被 2+ 模組使用，統一放在 `core/src/shared/`。
 
-### 8.1 EmbeddingService — pgvector 向量服務
+### 8.1 EmbeddingService — Qdrant + MLX 向量服務
 
-統一管理向量生成與儲存，解決維度不一致問題：
+統一管理向量生成與語意搜尋，embedding 由 MLX 本地模型產生，向量索引與搜尋由 Qdrant 負責：
 
 ```python
-class EmbeddingService:
-    def __init__(self, provider: EmbeddingProvider, dimensions: int):
-        self.provider = provider       # ollama / openai / local
-        self.dimensions = dimensions   # 統一為 768d（Ollama nomic-embed-text）
-
-    async def embed(self, text: str) -> list[float]: ...
-    async def batch_embed(self, texts: list[str]) -> list[list[float]]: ...
-    async def similarity_search(self, query_vec, table, top_k=10, threshold=0.7): ...
+# core/src/shared/embedding.py — MLX-native Qwen3-Embedding via oMLX bridge
+async def get_embedding(text: str, task_type: str | None = None) -> list[float] | None: ...
+async def get_embeddings_batch(texts: list[str], task_type: str | None = None) -> list[list[float] | None]: ...
 ```
 
 **使用模組與維度規範**：
 
-| 模組 | 向量欄位 | 維度 | Provider |
-|------|---------|------|----------|
-| memvault | blocks.embedding | 768d | Ollama nomic-embed-text |
-| ideagraph | sparks.embedding | 768d | 同上（統一） |
-| intelflow | report_embeddings.embedding | 768d | 同上（統一） |
+| 模組 | Qdrant Collection | 維度 | Provider |
+|------|-------------------|------|----------|
+| memvault | workshop_memvault | 1024d | MLX Qwen3-Embedding-0.6B |
+| intelflow | workshop_intelflow | 1024d | 同上（統一） |
+| briefing | workshop_briefing | 1024d | 同上（統一） |
 
-> **決策**：統一使用 768d (Ollama nomic-embed-text)。若未來需要 1536d (OpenAI) 則透過 `EmbeddingProvider` 策略切換，不改介面。
+> **決策**：統一使用 1024d (MLX Qwen3-Embedding-0.6B)。Qdrant 提供混合搜尋（dense + sparse/BM25），取代原 pgvector 方案。
 
 ### 8.2 LLMService — LLM 抽象層
 
@@ -772,7 +767,7 @@ export const financeWidgets: DashboardWidget[] = [
 | **5** | 使用 Tags[] 標準化的模組 |
 | **3** | 使用 Tree Structure 的實體 |
 | **5** | 使用 LLMService 的模組 |
-| **3** | 使用 EmbeddingService (pgvector 768d) 的模組 |
+| **3** | 使用 EmbeddingService (Qdrant + MLX 1024d) 的模組 |
 | **3+** | 使用 BridgeAdapter 多型的 Bridge 平台 |
 | **3** | 使用 ForceGraph 視覺化的模組 |
 | **3+** | 使用 ChartKit 的模組 |

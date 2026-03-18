@@ -125,7 +125,7 @@ All backend services run in containers via OrbStack, not directly on macOS:
 
 | Container | Image | Purpose |
 |---|---|---|
-| **ws-infra-postgres-1** | `pgvector/pgvector:pg16` | Main database |
+| **ws-infra-postgres-1** | `postgres:16` | Main database |
 | **ws-infra-redis-1** | `redis:7-alpine` | Cache + Event Bus |
 | **ws-infra-lgtm-1** | `grafana/otel-lgtm:latest` | Observability (Grafana + LGTM) |
 | **ws-infra-rustfs-1** | `rustfs/rustfs:latest` | Object storage (S3-compatible) |

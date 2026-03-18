@@ -2,7 +2,7 @@
 
 Primary: mlx-embeddings Qwen3-Embedding-0.6B (1024d) via persistent subprocess worker.
 Graceful degradation: returns None when oMLX worker is unavailable.
-Used by memvault, intelflow, and briefing modules for pgvector semantic search.
+Used by memvault, intelflow, and briefing modules for Qdrant semantic search.
 
 Redis cache layer intercepts before omlx_bridge to avoid Lock contention
 under concurrent load (see embedding_cache.py for key format and TTL).

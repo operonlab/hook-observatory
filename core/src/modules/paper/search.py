@@ -1,9 +1,8 @@
-"""Paper semantic search engine — Qdrant hybrid -> pgvector -> ILIKE fallback + reranking.
+"""Paper semantic search engine — Qdrant hybrid search with ILIKE text fallback + reranking.
 
 Graceful degradation:
 1. Qdrant hybrid (dense + sparse) -> primary
-2. pgvector cosine similarity -> if Qdrant unavailable or returns empty
-3. ILIKE text search -> if embedding unavailable
+2. ILIKE text search -> if Qdrant unavailable or returns empty
 """
 
 import logging
@@ -11,7 +10,6 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.embedding import get_embedding
 from src.shared.fallback_search import build_ilike_conditions, score_text_match
 from src.shared.qdrant_client import is_available as qdrant_available
 from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
@@ -29,7 +27,7 @@ async def search_articles(
     space_id: str,
     request: SearchRequest,
 ) -> list[PaperSearchResult]:
-    """Search articles using Qdrant hybrid -> pgvector -> ILIKE fallback.
+    """Search articles using Qdrant hybrid -> ILIKE text fallback.
 
     Applies optional filters: categories, tags, year range.
     Results are reranked using cross-encoder for precision.
@@ -38,14 +36,14 @@ async def search_articles(
         results = await _qdrant_search(db, space_id, request)
         if results:
             return results
-        # Qdrant returned nothing — fall back to pgvector
+        # Qdrant returned nothing — fall back to ILIKE text search
         logger.debug(
-            "Qdrant returned 0 results for space=%s query=%r — falling back to pgvector",
+            "Qdrant returned 0 results for space=%s query=%r — falling back to ILIKE",
             space_id,
             request.query,
         )
 
-    return await _pgvector_search(db, space_id, request)
+    return await _ilike_fallback(db, space_id, request)
 
 
 async def _qdrant_search(
@@ -86,63 +84,6 @@ async def _qdrant_search(
     ]
 
     return await _rerank(request.query, search_results)
-
-
-async def _pgvector_search(
-    db: AsyncSession,
-    space_id: str,
-    request: SearchRequest,
-) -> list[PaperSearchResult]:
-    """Search via pgvector cosine similarity or ILIKE fallback."""
-    query_embedding = await get_embedding(request.query)
-
-    if query_embedding is None:
-        return await _ilike_fallback(db, space_id, request)
-
-    # Phase 2 path: sub-table ArticleEmbedding
-    results = await _search_via_subtable(db, space_id, query_embedding, request)
-
-    if not results:
-        # Fallback: inline embedding on Article
-        distance = Article.embedding.cosine_distance(query_embedding)
-        similarity = (1 - distance).label("similarity")
-
-        q = (
-            select(Article, similarity)
-            .where(
-                Article.space_id == space_id,
-                Article.embedding.isnot(None),
-                Article.deleted_at == None,  # noqa: E711
-                distance < (1 - request.threshold),
-            )
-            .order_by(distance)
-            .limit(request.limit)
-        )
-        q = _apply_filters(q, request)
-        rows = (await db.execute(q)).all()
-        results = [
-            PaperSearchResult(
-                article=_to_brief(row.Article),
-                score=round(float(row.similarity), 4),
-                digest_one_liner=row.Article.digest.one_liner if row.Article.digest else None,
-                workshop_relevance=row.Article.digest.workshop_relevance
-                if row.Article.digest
-                else None,
-            )
-            for row in rows
-        ]
-
-    return await _rerank(request.query, results)
-
-
-async def _search_via_subtable(
-    db: AsyncSession,
-    space_id: str,
-    query_embedding: list[float],
-    request: SearchRequest,
-) -> list[PaperSearchResult]:
-    """LEGACY — ArticleEmbedding table removed (Qdrant migration). Returns empty."""
-    return []
 
 
 async def _ilike_fallback(

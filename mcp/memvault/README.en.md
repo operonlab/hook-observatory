@@ -46,7 +46,7 @@ mcp/memvault/ (MCP Server, TypeScript)
 core/src/modules/memvault/ (FastAPI, Python)
     │
     ▼
-PostgreSQL (schema: memvault) + pgvector
+PostgreSQL (schema: memvault) + Qdrant semantic search
 ```
 
 ## Directory Structure (Plan)

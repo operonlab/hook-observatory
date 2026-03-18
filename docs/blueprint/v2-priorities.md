@@ -49,7 +49,7 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **smart-search** | 搜尋報告 (.md) | 主力。報告寫入 `intelflow.reports`，啟用 pgvector 語意搜尋 |
+| **smart-search** | 搜尋報告 (.md) | 主力。報告寫入 `intelflow.reports`，啟用 Qdrant 語意搜尋 |
 | **daily-briefing** | 三分析師情報 (HTML) | 併入。寫入 `intelflow.briefings`，保留辯論格式 |
 | **company-intel** | 公司調查報告 | 統一存入 `intelflow.reports`（tag: company-intel） |
 | **competitive-intel** | 競品分析報告 | 同上（tag: competitive-intel） |
@@ -61,7 +61,7 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 
 | Skill | 目前產出 | 整合方式 |
 |-------|---------|---------|
-| **memvault** (MCP) | 結構化記憶區塊 | 已遷移到 `memvault.blocks` + pgvector |
+| **memvault** (MCP) | 結構化記憶區塊 | 已遷移到 `memvault.blocks` + Qdrant |
 | **meeting-insights** | 溝通模式分析 | 分析結果作為 memvault block 寫入，追蹤溝通風格演變 |
 
 ### finance — 會計與財務（P5）
@@ -156,7 +156,7 @@ P4 (auth) ──────► P5 (finance) ──────► P6 (taskflow)
 
 1. **文件先行**：每個模組先有 README.md + API spec，再動手寫程式碼
 2. **整個重構，非搬運**：不是把 V1 程式碼搬到新目錄，而是根據 V2 架構原則重新設計
-3. **保留好設計**：V1 中驗證有效的設計（authlib OAuth、MCP 10 tools、pgvector）保留核心概念
+3. **保留好設計**：V1 中驗證有效的設計（authlib OAuth、MCP 10 tools、Qdrant）保留核心概念
 4. **MCP 介面不中斷**：重構後端不影響 Claude Code 的日常使用（MCP 工具名稱和行為保持一致）
 5. **漸進切換**：新舊系統並存過渡期，逐步切換端點，確保零停機
 6. **超過 10 tools 就拆 MCP**：遵循 AD-2 切分規則，保持單一 MCP Server 的 context 負擔合理
