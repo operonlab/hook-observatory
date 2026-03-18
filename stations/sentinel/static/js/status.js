@@ -141,7 +141,7 @@ function svgCheckCircle() {
 
 // ── Render: Overall Banner ──
 
-function renderBanner(data) {
+function renderBanner(data, activeIncData) {
     const el = document.getElementById('overall-banner');
     if (!data) {
         el.className = 'banner banner--major_outage';
@@ -150,7 +150,13 @@ function renderBanner(data) {
     }
     const status = data.status || 'all_operational';
     el.className = `banner banner--${status}`;
-    el.querySelector('.banner__text').textContent = STATUS_LABELS[status] || status;
+
+    const activeCount = activeIncData?.total || 0;
+    const badge = activeCount > 0
+        ? ` <span class="banner__inc-badge">${activeCount} 個進行中事件</span>`
+        : '';
+    el.querySelector('.banner__text').innerHTML =
+        escHtml(STATUS_LABELS[status] || status) + badge;
 }
 
 // ── Render: Service List (grouped) ──
@@ -381,6 +387,7 @@ function escHtml(str) {
 let currentTab = 'status';
 let mgmtLoaded = false;
 let guardianLoaded = false;
+let incidentsLoaded = false;
 
 function setupTabs() {
     const btns = document.querySelectorAll('.tab-btn');
@@ -400,6 +407,7 @@ function setupTabs() {
 
             // Lazy-load tab data
             if (tab === 'services' && !mgmtLoaded) { fetchMgmtServices(); mgmtLoaded = true; }
+            if (tab === 'incidents' && !incidentsLoaded) { fetchIncidents(); incidentsLoaded = true; }
             if (tab === 'guardian' && !guardianLoaded) { fetchGuardian(); guardianLoaded = true; }
         });
     });
@@ -620,7 +628,34 @@ function renderGuardianTable(data) {
 
 async function fetchGuardian() {
     const data = await fetchJSON('/api/sentinel/sysmon/guardian');
-    if (data) renderGuardianTable(data);
+    if (data) {
+        renderGuardianTable(data);
+        renderGuardianStatus(data);
+    }
+}
+
+function renderGuardianStatus(data) {
+    const el = document.getElementById('guardian-status');
+    if (!el) return;
+
+    if (!data.last_checked) {
+        el.textContent = '尚未檢查';
+        el.className = 'guardian-status mono';
+        return;
+    }
+
+    const checked = new Date(data.last_checked);
+    const diffMin = Math.floor((Date.now() - checked.getTime()) / 60000);
+    const level = data.current_level ?? '—';
+    const stale = diffMin > 5;
+
+    let timeText;
+    if (diffMin < 1) timeText = '剛才';
+    else if (diffMin < 60) timeText = `${diffMin} 分鐘前`;
+    else timeText = `${Math.floor(diffMin / 60)} 小時前`;
+
+    el.textContent = `最近檢查：${timeText}（記憶體 lv${level} ${data.current_status === 'ok' ? '正常' : '已處理'}）`;
+    el.className = `guardian-status mono${stale ? ' guardian-status--stale' : ''}`;
 }
 
 function setupGuardianTrigger() {
@@ -637,19 +672,144 @@ function setupGuardianTrigger() {
     }
 }
 
+// ══ Incidents Tab ══
+
+let incPage = 1;
+let incStatusFilter = '';
+let incServiceFilter = '';
+const INC_PAGE_SIZE = 15;
+
+async function fetchIncidents(page, statusF, serviceF) {
+    if (page !== undefined) incPage = page;
+    if (statusF !== undefined) incStatusFilter = statusF;
+    if (serviceF !== undefined) incServiceFilter = serviceF;
+
+    let url = `/api/sentinel/incidents?page=${incPage}&page_size=${INC_PAGE_SIZE}`;
+    if (incStatusFilter) url += `&status=${encodeURIComponent(incStatusFilter)}`;
+    if (incServiceFilter) url += `&service=${encodeURIComponent(incServiceFilter)}`;
+
+    const data = await fetchJSON(url);
+    if (data) renderIncidentsTab(data);
+}
+
+function renderIncidentsTab(data) {
+    const container = document.getElementById('incidents-container');
+    const totalEl = document.getElementById('incidents-total');
+    const paginationEl = document.getElementById('incidents-pagination');
+
+    if (totalEl) totalEl.textContent = `${data.total} 筆`;
+
+    // Populate service dropdown from items (once)
+    const sel = document.getElementById('inc-service-select');
+    if (sel && sel.options.length <= 1 && data.items.length > 0) {
+        const svcs = [...new Set(data.items.map(i => i.service))].sort();
+        for (const s of svcs) {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = SERVICE_DISPLAY[s] || s;
+            sel.appendChild(opt);
+        }
+    }
+
+    if (!data.items.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state__icon">${svgCheckCircle()}</div>
+                <span class="empty-state__text">目前沒有事件記錄</span>
+            </div>
+        `;
+        if (paginationEl) paginationEl.innerHTML = '';
+        return;
+    }
+
+    const listHtml = data.items.map((inc, i) => {
+        const statusLabel = INCIDENT_LABELS[inc.status] || inc.status;
+        const svcName = SERVICE_DISPLAY[inc.service] || inc.service;
+        const detailHtml = inc.detail
+            ? `<div class="incident__detail">${escHtml(inc.detail)}</div>`
+            : '';
+        const isLast = i === data.items.length - 1;
+        const connectorHtml = isLast ? '' : '<div class="incident__connector"></div>';
+
+        return `
+            <div class="incident">
+                <div class="incident__timeline-col">
+                    <div class="incident__dot incident__dot--${inc.status}"></div>
+                    ${connectorHtml}
+                </div>
+                <div class="incident__body">
+                    <div class="incident__top">
+                        <span class="incident__title">${escHtml(inc.title)}</span>
+                        <span class="incident__badge ibadge--${inc.status}">${statusLabel}</span>
+                    </div>
+                    <div class="incident__meta mono">
+                        <span>${escHtml(svcName)}</span>
+                        <span class="incident__meta-sep">·</span>
+                        <span>${formatTime(inc.created_at)}</span>
+                        ${inc.resolved_at ? `<span class="incident__meta-sep">·</span><span>解決於 ${formatTime(inc.resolved_at)}</span>` : ''}
+                    </div>
+                    ${detailHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `<div class="incident-list">${listHtml}</div>`;
+
+    // Pagination
+    if (paginationEl) {
+        const totalPages = Math.ceil(data.total / INC_PAGE_SIZE);
+        if (totalPages <= 1) {
+            paginationEl.innerHTML = '';
+            return;
+        }
+        let pgHtml = '';
+        pgHtml += `<button class="pg-btn" ${incPage <= 1 ? 'disabled' : ''} onclick="fetchIncidents(${incPage - 1})">‹</button>`;
+        for (let p = 1; p <= totalPages; p++) {
+            if (totalPages > 7 && Math.abs(p - incPage) > 2 && p !== 1 && p !== totalPages) {
+                if (p === 2 || p === totalPages - 1) pgHtml += '<span class="pg-dots">…</span>';
+                continue;
+            }
+            pgHtml += `<button class="pg-btn ${p === incPage ? 'pg-btn--active' : ''}" onclick="fetchIncidents(${p})">${p}</button>`;
+        }
+        pgHtml += `<button class="pg-btn" ${incPage >= totalPages ? 'disabled' : ''} onclick="fetchIncidents(${incPage + 1})">›</button>`;
+        paginationEl.innerHTML = pgHtml;
+    }
+}
+
+function setupIncidentFilters() {
+    const statusFilter = document.getElementById('inc-status-filter');
+    if (statusFilter) {
+        statusFilter.addEventListener('click', e => {
+            const btn = e.target.closest('.filter-btn');
+            if (!btn) return;
+            statusFilter.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const val = btn.dataset.status === 'all' ? '' : btn.dataset.status;
+            fetchIncidents(1, val);
+        });
+    }
+
+    const serviceSelect = document.getElementById('inc-service-select');
+    if (serviceSelect) {
+        serviceSelect.addEventListener('change', () => {
+            fetchIncidents(1, undefined, serviceSelect.value);
+        });
+    }
+}
+
 // ── Poll Loop ──
 
 async function refresh() {
-    const [statusData, uptimeData, incidentData] = await Promise.all([
+    const [statusData, uptimeData, activeIncData] = await Promise.all([
         fetchJSON('/api/sentinel/status'),
         fetchJSON('/api/sentinel/uptime?days=90'),
-        fetchJSON('/api/sentinel/incidents?page=1&page_size=10'),
+        fetchJSON('/api/sentinel/incidents?page=1&page_size=5&status=investigating'),
     ]);
 
-    renderBanner(statusData);
+    renderBanner(statusData, activeIncData);
     renderServices(statusData);
     renderTimelines(uptimeData);
-    renderIncidents(incidentData);
 
     // Update header timestamp
     const updateEl = document.getElementById('last-update');
@@ -705,7 +865,7 @@ function connectSSE() {
     es.addEventListener('status', (e) => {
         try {
             const data = JSON.parse(e.data);
-            renderBanner(data);
+            renderBanner(data, null);
             renderServices(data);
             // Update timestamp
             const updateEl = document.getElementById('last-update');
@@ -735,6 +895,7 @@ function connectSSE() {
 
 setupTabs();
 setupMgmtFilters();
+setupIncidentFilters();
 setupGuardianTrigger();
-refresh();   // Initial full load (status + uptime + incidents)
+refresh();   // Initial full load (status + uptime)
 connectSSE(); // Subscribe to real-time status updates via SSE

@@ -452,11 +452,17 @@ async def service_logs(label: str, lines: int = 50):
 
 @app.get("/guardian")
 async def guardian_log():
-    """Get memory guardian action log."""
-    from collector import collect_guardian_log
+    """Get memory guardian action log + heartbeat status."""
+    from collector import collect_guardian_log, collect_guardian_status
 
     entries = collect_guardian_log()
-    return {"entries": entries, "total": len(entries)}
+    status = collect_guardian_status()
+    result = {"entries": entries, "total": len(entries)}
+    if status:
+        result["last_checked"] = status.get("last_checked")
+        result["current_level"] = status.get("mem_level")
+        result["current_status"] = status.get("status")
+    return result
 
 
 @app.post("/guardian/run")

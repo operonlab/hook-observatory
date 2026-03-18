@@ -42,9 +42,7 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict:
 def run(cmd: str, timeout: int = 30) -> str:
     """Run a shell command, return stdout. Empty string on failure."""
     try:
-        r = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=timeout
-        )
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
         return r.stdout.strip()
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
@@ -204,9 +202,7 @@ def collect_disk(config: dict) -> dict:
         cap_match = re.search(r"Capacity Consumed:\s+(\d+)\s*B\b", line)
         if cap_match and vol_name:
             cap_bytes = int(cap_match.group(1))
-            volumes.append(
-                {"name": vol_name, "used_gb": round(cap_bytes / (1024**3), 1)}
-            )
+            volumes.append({"name": vol_name, "used_gb": round(cap_bytes / (1024**3), 1)})
             vol_name = ""
 
     volumes.sort(key=lambda v: v["used_gb"], reverse=True)
@@ -256,7 +252,7 @@ def _scan_top_dirs(home: Path, top_n: int = 10) -> list[dict]:
     entries = []
     # List immediate children
     q_home = shlex.quote(str(home))
-    children_out = run(f'ls -1d {q_home}/* {q_home}/.[!.]* 2>/dev/null')
+    children_out = run(f"ls -1d {q_home}/* {q_home}/.[!.]* 2>/dev/null")
     children = [p for p in children_out.splitlines() if p.strip()]
 
     # Run du on each child with a tight per-dir timeout (10s each)
@@ -295,9 +291,9 @@ def _scan_files(
     exclude_args = " ".join(f'-not -path "*/{shlex.quote(e)}/*"' for e in excludes)
     q_home = shlex.quote(str(home))
     cmd = (
-        f'find {q_home} {exclude_args} '
+        f"find {q_home} {exclude_args} "
         f"-type f -size +{min_mb}M -print0 "
-        f"2>/dev/null | awk 'BEGIN{{RS=\"\\0\"; ORS=\"\\0\"}} NR<=500' "
+        f'2>/dev/null | awk \'BEGIN{{RS="\\0"; ORS="\\0"}} NR<=500\' '
         f'| xargs -0 stat -f "%z %Sm %Sa %N" -t "%Y-%m-%d" 2>/dev/null'
     )
     # Allow up to 5 minutes for deep file scan (home dir can be huge)
@@ -315,9 +311,7 @@ def _scan_files(
         size_mb = round(size_b / (1024**2), 1)
         rel_path = path.replace(str(home), "~")
 
-        large.append(
-            {"path": rel_path, "size_mb": size_mb, "modified": mdate}
-        )
+        large.append({"path": rel_path, "size_mb": size_mb, "modified": mdate})
         if adate < cutoff_date:
             stale.append(
                 {
@@ -347,9 +341,7 @@ def _scan_caches(home: Path) -> list[dict]:
             parts = out.split("\t", 1)
             if parts and parts[0].isdigit():
                 size_gb = round(int(parts[0]) / (1024**2), 2)
-                result.append(
-                    {"path": str(d).replace(str(home), "~"), "size_gb": size_gb}
-                )
+                result.append({"path": str(d).replace(str(home), "~"), "size_gb": size_gb})
 
     # Homebrew cache
     brew_cache = run("brew --cache 2>/dev/null")
@@ -370,9 +362,7 @@ def _scan_caches(home: Path) -> list[dict]:
         out = run(f'du -sk "{trash}" 2>/dev/null')
         parts = out.split("\t", 1)
         if parts and parts[0].isdigit():
-            result.append(
-                {"path": "~/.Trash", "size_gb": round(int(parts[0]) / (1024**2), 2)}
-            )
+            result.append({"path": "~/.Trash", "size_gb": round(int(parts[0]) / (1024**2), 2)})
 
     result.sort(key=lambda x: x["size_gb"], reverse=True)
     return result
@@ -387,29 +377,19 @@ def collect_hardware(config: dict) -> dict:
     thresholds = config.get("thresholds", {})
     return {
         "cpu": _collect_cpu(
-            thresholds.get(
-                "cpu_avg_pct", {"warning": 70, "critical": 85, "danger": 95}
-            )
+            thresholds.get("cpu_avg_pct", {"warning": 70, "critical": 85, "danger": 95})
         ),
         "memory": _collect_memory(
-            thresholds.get(
-                "memory_pct", {"warning": 75, "critical": 85, "danger": 95}
-            )
+            thresholds.get("memory_pct", {"warning": 75, "critical": 85, "danger": 95})
         ),
         "swap": _collect_swap(
-            thresholds.get(
-                "swap_gb", {"warning": 2.0, "critical": 4.0, "danger": 8.0}
-            )
+            thresholds.get("swap_gb", {"warning": 2.0, "critical": 4.0, "danger": 8.0})
         ),
         "temperature": _collect_temperature(
-            thresholds.get(
-                "temperature_c", {"warning": 80, "critical": 95, "danger": 105}
-            )
+            thresholds.get("temperature_c", {"warning": 80, "critical": 95, "danger": 105})
         ),
         "battery": _collect_battery(
-            thresholds.get(
-                "battery_pct", {"warning": 30, "critical": 20, "danger": 10}
-            )
+            thresholds.get("battery_pct", {"warning": 30, "critical": 20, "danger": 10})
         ),
     }
 
@@ -592,9 +572,7 @@ def _collect_battery(thresholds: dict) -> dict:
     charging = "charging" in batt_out.lower() and "not charging" not in batt_out.lower()
 
     # Battery condition from system_profiler
-    sp_out = run(
-        'system_profiler SPPowerDataType 2>/dev/null | grep -E "Cycle Count|Condition"'
-    )
+    sp_out = run('system_profiler SPPowerDataType 2>/dev/null | grep -E "Cycle Count|Condition"')
     for line in sp_out.splitlines():
         if "Cycle Count" in line:
             m = re.search(r"(\d+)", line)
@@ -670,9 +648,7 @@ def collect_all(config: dict, *, disk: bool = True, hardware: bool = True) -> di
 def collect_top_processes(top_n: int = 3) -> list[dict]:
     """Get top processes by CPU + memory usage."""
     # ps sorted by CPU, grab top entries
-    out = run(
-        "ps -eo pid,pcpu,pmem,rss,comm -r 2>/dev/null | head -30"
-    )
+    out = run("ps -eo pid,pcpu,pmem,rss,comm -r 2>/dev/null | head -30")
     seen_names: dict[str, dict] = {}
     for line in out.splitlines()[1:]:  # skip header
         parts = line.split(None, 4)
@@ -721,103 +697,122 @@ def _load_registry() -> dict[str, dict]:
 
 
 def _parse_launcher_services() -> list[dict]:
-    """Parse workshop-services.sh SERVICES and DOCKER_CONTAINERS arrays."""
-    launcher_path = Path.home() / "workshop" / "scripts" / "workshop-services.sh"
+    """Parse workshop_services.py SERVICES and DOCKER_CONTAINERS using ast."""
+    import ast
+
+    launcher_path = Path.home() / "workshop" / "scripts" / "workshop_services.py"
     if not launcher_path.exists():
         return []
 
-    content = launcher_path.read_text()
+    try:
+        content = launcher_path.read_text()
+        tree = ast.parse(content)
+    except (OSError, SyntaxError):
+        return []
+
+    services_list = []
+    docker_list = []
+
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id == "SERVICES":
+                try:
+                    services_list = ast.literal_eval(node.value)
+                except (ValueError, TypeError):
+                    pass
+            elif isinstance(target, ast.Name) and target.id == "DOCKER_CONTAINERS":
+                try:
+                    docker_list = ast.literal_eval(node.value)
+                except (ValueError, TypeError):
+                    pass
+
     results = []
     log_base = "/opt/homebrew/var/log/workshop"
     pid_dir = "/opt/homebrew/var/run/workshop"
 
-    # Parse SERVICES array
-    in_services = False
-    in_docker = False
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("SERVICES=("):
-            in_services = True
+    for svc in services_list:
+        if not isinstance(svc, dict):
             continue
-        if stripped.startswith("DOCKER_CONTAINERS=("):
-            in_docker = True
-            continue
-        if stripped == ")":
-            in_services = False
-            in_docker = False
-            continue
+        name = svc.get("name", "")
+        port = svc.get("port")
+        cmd = svc.get("cmd", "")
+        svc_type = svc.get("type", "service")
 
-        if in_services and stripped.startswith('"') and "|" in stripped:
-            raw = stripped.strip('"').strip()
-            if raw.startswith("#"):
-                continue
-            parts = raw.split("|")
-            if len(parts) >= 6:
-                name, svc_type, cmd, port, health, workdir = parts[:6]
-                # Check PID file for running status
-                pid = None
-                pidfile = Path(pid_dir) / f"{name}.pid"
-                if pidfile.exists():
-                    try:
-                        candidate = int(pidfile.read_text().strip())
-                        check = subprocess.run(
-                            ["kill", "-0", str(candidate)],
-                            capture_output=True, timeout=2,
-                        )
-                        if check.returncode == 0:
-                            pid = candidate
-                    except (ValueError, subprocess.TimeoutExpired):
-                        pass
-                results.append({
-                    "name": name,
-                    "source": "launcher",
-                    "category": "workshop",
-                    "type": "service",
-                    "schedule": "常駐",
-                    "status": "running" if pid else "stopped",
-                    "pid": pid,
-                    "port": int(port) if port.isdigit() else None,
-                    "command": cmd.split("/")[-1] if "/" in cmd else cmd,
-                    "command_full": cmd,
-                    "log_path": f"{log_base}/{name}/",
-                    "description": f"Workshop 服務 ({svc_type}, port {port})",
-                })
-
-        if in_docker and stripped.startswith('"') and "|" in stripped:
-            raw = stripped.strip('"').strip()
-            if raw.startswith("#"):
-                continue
-            parts = raw.split("|")
-            if len(parts) >= 3:
-                name, port = parts[0], parts[1]
-                # Check Docker container status
-                state = run(
-                    f"docker inspect --format '{{{{.State.Status}}}}' {name} 2>/dev/null",
-                    timeout=5,
+        # Check PID file for running status
+        pid = None
+        pidfile = Path(pid_dir) / f"{name}.pid"
+        if pidfile.exists():
+            try:
+                candidate = int(pidfile.read_text().strip())
+                check = subprocess.run(
+                    ["kill", "-0", str(candidate)],
+                    capture_output=True,
+                    timeout=2,
                 )
-                pid = None
-                if state == "running":
-                    pid_str = run(
-                        f"docker inspect --format '{{{{.State.Pid}}}}' {name} 2>/dev/null",
-                        timeout=5,
-                    )
-                    if pid_str.isdigit():
-                        pid = int(pid_str)
-                results.append({
-                    "name": name.replace("ws-infra-", "").replace("-1", ""),
-                    "label": f"docker.{name}",
-                    "source": "docker",
-                    "category": "infra",
-                    "type": "container",
-                    "schedule": "常駐",
-                    "status": state if state else "unknown",
-                    "pid": pid,
-                    "port": int(port) if port.isdigit() else None,
-                    "command": f"docker:{name}",
-                    "command_full": f"docker start {name}",
-                    "log_path": None,
-                    "description": f"Docker 容器 (port {port})",
-                })
+                if check.returncode == 0:
+                    pid = candidate
+            except (ValueError, subprocess.TimeoutExpired, OSError):
+                pass
+
+        results.append(
+            {
+                "name": name,
+                "source": "launcher",
+                "category": "workshop",
+                "type": "service",
+                "schedule": "常駐",
+                "status": "running" if pid else "stopped",
+                "pid": pid,
+                "port": port,
+                "command": cmd.split("/")[-1].split(" ")[0]
+                if "/" in cmd
+                else cmd.split()[0]
+                if cmd
+                else "—",
+                "command_full": cmd,
+                "log_path": f"{log_base}/{name}/",
+                "description": f"Workshop 服務 ({svc_type}, port {port})",
+            }
+        )
+
+    for container in docker_list:
+        if not isinstance(container, dict):
+            continue
+        name = container.get("name", "")
+        port = container.get("port")
+
+        # Check Docker container status
+        state = run(
+            f"docker inspect --format '{{{{.State.Status}}}}' {name} 2>/dev/null",
+            timeout=5,
+        )
+        pid = None
+        if state == "running":
+            pid_str = run(
+                f"docker inspect --format '{{{{.State.Pid}}}}' {name} 2>/dev/null",
+                timeout=5,
+            )
+            if pid_str.isdigit():
+                pid = int(pid_str)
+
+        results.append(
+            {
+                "name": name.replace("ws-infra-", "").replace("-1", ""),
+                "label": f"docker.{name}",
+                "source": "docker",
+                "category": "infra",
+                "type": "container",
+                "schedule": "常駐",
+                "status": state if state else "unknown",
+                "pid": pid,
+                "port": port,
+                "command": f"docker:{name}",
+                "command_full": f"docker start {name}",
+                "log_path": None,
+                "description": f"Docker 容器 (port {port})",
+            }
+        )
 
     return results
 
@@ -909,7 +904,11 @@ def collect_services() -> list[dict]:
                 schedule = f"每 {start_interval // 86400} 天"
         elif start_cal:
             svc_type = "periodic"
-            cal = start_cal if isinstance(start_cal, dict) else (start_cal[0] if isinstance(start_cal, list) and start_cal else {})
+            cal = (
+                start_cal
+                if isinstance(start_cal, dict)
+                else (start_cal[0] if isinstance(start_cal, list) and start_cal else {})
+            )
             parts_cal = []
             if "Weekday" in cal:
                 days = ["日", "一", "二", "三", "四", "五", "六"]
@@ -945,22 +944,29 @@ def collect_services() -> list[dict]:
         log_path = _plist_log_path(plist)
         command = _short_command(plist)
 
-        name = label.replace("com.joneshong.", "").replace("com.pulso.", "").replace("com.workshop.", "").replace("homebrew.mxcl.", "")
+        name = (
+            label.replace("com.joneshong.", "")
+            .replace("com.pulso.", "")
+            .replace("com.workshop.", "")
+            .replace("homebrew.mxcl.", "")
+        )
 
-        services.append({
-            "label": label,
-            "name": name,
-            "category": category,
-            "type": svc_type,
-            "schedule": schedule,
-            "status": status,
-            "pid": pid,
-            "source": "plist",
-            "description": description,
-            "command": command,
-            "log_path": log_path,
-            "plist_path": str(plist_path),
-        })
+        services.append(
+            {
+                "label": label,
+                "name": name,
+                "category": category,
+                "type": svc_type,
+                "schedule": schedule,
+                "status": status,
+                "pid": pid,
+                "source": "plist",
+                "description": description,
+                "command": command,
+                "log_path": log_path,
+                "plist_path": str(plist_path),
+            }
+        )
 
     # --- Source 2: launcher services (workshop-services.sh) ---
     launcher_svcs = _parse_launcher_services()
@@ -1007,6 +1013,7 @@ def get_service_logs(label: str, lines: int = 50) -> dict:
             launcher_log = Path(f"/opt/homebrew/var/log/workshop/{reg['name']}")
             if launcher_log.is_dir():
                 from datetime import date
+
                 today = date.today().isoformat()
                 today_log = launcher_log / f"{today}.log"
                 if today_log.exists():
@@ -1019,6 +1026,7 @@ def get_service_logs(label: str, lines: int = 50) -> dict:
         launcher_log_dir = Path(f"/opt/homebrew/var/log/workshop/{name}")
         if launcher_log_dir.is_dir():
             from datetime import date
+
             today = date.today().isoformat()
             today_log = launcher_log_dir / f"{today}.log"
             if today_log.exists():
@@ -1042,6 +1050,17 @@ def get_service_logs(label: str, lines: int = 50) -> dict:
         }
     except OSError as e:
         return {"label": label, "log_path": str(log_path), "lines": [], "error": str(e)}
+
+
+def collect_guardian_status() -> dict | None:
+    """Read guardian-status.json for heartbeat/last-check info."""
+    status_path = Path.home() / ".claude" / "data" / "system-monitor" / "guardian-status.json"
+    if not status_path.exists():
+        return None
+    try:
+        return json.loads(status_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def collect_guardian_log(max_entries: int = 50) -> list[dict]:
@@ -1100,11 +1119,13 @@ def collect_guardian_log(max_entries: int = 50) -> list[dict]:
         # Kill line: KILL Chrome 分頁 PID 989 (302MB)
         kill_m = re.match(r"KILL\s+(.+?)\s+PID\s+(\d+)\s+\((\d+)MB\)", line)
         if kill_m and current_entry:
-            current_entry["kills"].append({
-                "process": kill_m.group(1),
-                "pid": int(kill_m.group(2)),
-                "mem_mb": int(kill_m.group(3)),
-            })
+            current_entry["kills"].append(
+                {
+                    "process": kill_m.group(1),
+                    "pid": int(kill_m.group(2)),
+                    "mem_mb": int(kill_m.group(3)),
+                }
+            )
 
     if current_entry:
         entries.append(current_entry)
@@ -1119,20 +1140,25 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="System Monitor V2 Collector")
     parser.add_argument(
-        "--hardware-only", action="store_true",
+        "--hardware-only",
+        action="store_true",
         help="Collect hardware metrics only (fast)",
     )
     parser.add_argument(
-        "--disk-only", action="store_true",
+        "--disk-only",
+        action="store_true",
         help="Collect disk metrics only",
     )
     parser.add_argument(
-        "--output", "-o", type=str,
+        "--output",
+        "-o",
+        type=str,
         help="Output file path (default: stdout)",
     )
     parser.add_argument("--config", type=str, help="Config file path")
     parser.add_argument(
-        "--compact", action="store_true",
+        "--compact",
+        action="store_true",
         help="Compact JSON output (no indentation)",
     )
     args = parser.parse_args()

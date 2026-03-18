@@ -63,7 +63,12 @@ _ENV = {**os.environ, "PATH": "/usr/sbin:/usr/bin:/bin:/sbin:" + os.environ.get(
 def _run(cmd: str) -> str:
     try:
         r = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=10, env=_ENV,
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=_ENV,
         )
         return r.stdout.strip()
     except Exception:
@@ -157,9 +162,7 @@ def _pid_alive(pid: int) -> bool:
 class MemoryGuardian:
     def __init__(self, config: dict | None = None):
         self.cfg = config if config is not None else _load_config()
-        self.log_dir = Path(
-            self.cfg.get("log_dir", "~/.claude/data/system-monitor")
-        ).expanduser()
+        self.log_dir = Path(self.cfg.get("log_dir", "~/.claude/data/system-monitor")).expanduser()
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.log_dir / "memory-guardian.log"
         self.lines: list[str] = []
@@ -186,6 +189,23 @@ class MemoryGuardian:
                 f.write(line + "\n")
             f.write("---\n")
 
+    def _write_status(self, mem_level: int, status: str):
+        """Always write guardian-status.json so the frontend can show heartbeat."""
+        status_path = self.log_dir / "guardian-status.json"
+        try:
+            status_path.write_text(
+                json.dumps(
+                    {
+                        "last_checked": datetime.now().isoformat(),
+                        "mem_level": mem_level,
+                        "status": status,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        except OSError:
+            pass
+
     def run(self) -> dict:
         """Execute memory guardian check. Returns summary dict."""
         mem_level = _get_mem_level()
@@ -208,6 +228,7 @@ class MemoryGuardian:
         }
 
         if mem_level > warn_th:
+            self._write_status(mem_level, "ok")
             return result
 
         ts = datetime.now().strftime("%m/%d %H:%M:%S")
@@ -229,12 +250,14 @@ class MemoryGuardian:
                     self._log(f"  KILL {label} PID {pid} ({mem_mb}MB)")
                     result["p1_killed"] += 1
                     result["p1_freed_mb"] += mem_mb
-                    result["kills"].append({
-                        "phase": "P1",
-                        "process": label,
-                        "pid": pid,
-                        "mem_mb": mem_mb,
-                    })
+                    result["kills"].append(
+                        {
+                            "phase": "P1",
+                            "process": label,
+                            "pid": pid,
+                            "mem_mb": mem_mb,
+                        }
+                    )
 
         self._log(f"  P1 result: killed={result['p1_killed']} freed={result['p1_freed_mb']}MB")
 
@@ -267,12 +290,14 @@ class MemoryGuardian:
                     if _kill_term(pid):
                         self._log(f"  P2 KILL Claude PID {pid} (idle CPU:{cpu}% MEM:{mem_mb}MB)")
                         result["p2_killed"] += 1
-                        result["kills"].append({
-                            "phase": "P2",
-                            "process": "Claude Code (idle)",
-                            "pid": pid,
-                            "mem_mb": mem_mb,
-                        })
+                        result["kills"].append(
+                            {
+                                "phase": "P2",
+                                "process": "Claude Code (idle)",
+                                "pid": pid,
+                                "mem_mb": mem_mb,
+                            }
+                        )
                 else:
                     # P3: busy → SIGTERM + grace + SIGKILL
                     if _kill_term(pid):
@@ -281,12 +306,14 @@ class MemoryGuardian:
                             f"grace={grace}s"
                         )
                         result["p3_killed"] += 1
-                        result["kills"].append({
-                            "phase": "P3",
-                            "process": "Claude Code (active)",
-                            "pid": pid,
-                            "mem_mb": mem_mb,
-                        })
+                        result["kills"].append(
+                            {
+                                "phase": "P3",
+                                "process": "Claude Code (active)",
+                                "pid": pid,
+                                "mem_mb": mem_mb,
+                            }
+                        )
                         # Fork a delayed force-kill
                         if os.fork() == 0:
                             time.sleep(grace)
@@ -307,6 +334,7 @@ class MemoryGuardian:
         result["status"] = "acted"
         result["total_killed"] = total_killed
 
+        self._write_status(mem_level, "acted")
         self._flush_log()
         return result
 
