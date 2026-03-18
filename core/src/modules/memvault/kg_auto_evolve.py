@@ -8,6 +8,7 @@ local LLM (oMLX), then feeds results into the existing TripleService pipeline.
 import asyncio
 import json
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -25,8 +26,8 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_LLM_URL = "http://localhost:8000/v1/chat/completions"
-_LLM_TIMEOUT = 8.0  # seconds — quick extraction, fall back on timeout
+_LLM_URL = os.environ.get("KG_AUTO_EVOLVE_LLM_URL", "http://127.0.0.1:4000/chat/completions")
+_LLM_TIMEOUT = 15.0  # seconds — LiteLLM proxy routes to external APIs, needs more time
 _MIN_CONTENT_LENGTH = 50
 _SKIP_BLOCK_TYPES = {"general"}  # too noisy for auto-extraction
 

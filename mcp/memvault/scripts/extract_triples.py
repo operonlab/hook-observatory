@@ -79,8 +79,8 @@ def parse_input() -> tuple:
             input_json = json.loads(sys.stdin.read())
         except json.JSONDecodeError:
             return "", ""
-        session_id = input_json.get("session_id", "").strip()
-        transcript_path = input_json.get("transcript_path", "").strip()
+        session_id = (input_json.get("session_id") or "").strip()
+        transcript_path = (input_json.get("transcript_path") or "").strip()
 
     return session_id, transcript_path
 
@@ -125,7 +125,37 @@ def extract_conversation(transcript_path: str) -> str:
         log(f"Error reading transcript: {e}")
         return ""
 
+    if not lines:
+        from collections import Counter
+
+        type_counts = Counter()
+        try:
+            with open(transcript_path, encoding="utf-8") as f:
+                for raw_line in f:
+                    raw_line = raw_line.strip()
+                    if not raw_line:
+                        continue
+                    try:
+                        entry = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        continue
+                    type_counts[entry.get("type", "?")] += 1
+        except Exception:
+            pass
+        if type_counts:
+            log(f"  entry types in transcript: {dict(type_counts)}")
+
     return "\n".join(lines)
+
+
+def _find_transcript(session_id: str) -> str | None:
+    """Try to locate the transcript JSONL for a given session_id."""
+    projects = Path.home() / ".claude" / "projects"
+    if not projects.exists():
+        return None
+    for candidate in projects.rglob(f"{session_id}.jsonl"):
+        return str(candidate)
+    return None
 
 
 def count_exchanges(conversation: str) -> tuple:
@@ -166,8 +196,15 @@ def http_post(url: str, data: bytes, timeout: int = 15) -> tuple:
 def main() -> None:
     session_id, transcript_path = parse_input()
 
-    if not session_id or not transcript_path:
-        log("Missing session_id or transcript_path, skipping.")
+    if not session_id:
+        sys.exit(0)
+
+    # Fallback: auto-detect transcript if path missing or file not found
+    if not transcript_path or not Path(transcript_path).is_file():
+        transcript_path = _find_transcript(session_id) or ""
+
+    if not transcript_path:
+        # Session JSONL not found anywhere — likely a subagent or already archived
         sys.exit(0)
 
     if not Path(transcript_path).is_file():
