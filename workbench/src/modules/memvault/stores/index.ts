@@ -558,13 +558,12 @@ export const useMemvaultStore = create<MemvaultState>()(
     }),
     {
       name: 'memvault-cache',
-      version: 2, // v2: clusters/wisdom → communities/summaries
-      migrate: () => ({}), // v1→v2: discard old cache entirely
+      version: 3,
+      migrate: () => ({}),
       partialize: (state) => ({
         blocks: state.blocks,
         total: state.total,
         profile: state.profile,
-        _fetchedAt: state._fetchedAt,
       }),
       // Set cannot be serialized to JSON — convert on storage
       storage: {
