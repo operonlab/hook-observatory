@@ -22,7 +22,7 @@ from src.shared.qdrant_client import is_available as qdrant_available
 from src.shared.qdrant_search import hybrid_search
 from src.shared.search_types import SearchConfig
 
-from .models import EMBEDDING_DIM, BlockEmbedding, MemoryBlock
+from .models import MemoryBlock
 
 logger = logging.getLogger(__name__)
 
@@ -147,27 +147,8 @@ async def find_similar_blocks(
         except Exception:
             logger.warning("Qdrant dedup search failed, falling back to pgvector", exc_info=True)
 
-    # --- pgvector fallback (legacy) ---
-    if len(embedding) != EMBEDDING_DIM:
-        return []
-
-    distance = BlockEmbedding.embedding.cosine_distance(embedding)
-    similarity = (1 - distance).label("similarity")
-
-    q = (
-        select(MemoryBlock.id, MemoryBlock.content, similarity)
-        .join(BlockEmbedding, BlockEmbedding.block_id == MemoryBlock.id)
-        .where(
-            MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at == None,  # noqa: E711
-            distance < (1 - threshold),
-        )
-        .order_by(distance)
-        .limit(limit)
-    )
-
-    rows = (await db.execute(q)).all()
-    return [(str(row[0]), str(row[1]), float(row[2])) for row in rows]
+    # --- pgvector fallback removed (BlockEmbedding table dropped in Qdrant migration) ---
+    return []
 
 
 def _content_overlap(a: str, b: str) -> float:

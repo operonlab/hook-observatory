@@ -1,15 +1,15 @@
 """create memvault search_feedback table
 
-Revision ID: a1b2c3d4e5f6
-Revises: z7r8s9t0u1v2
+Revision ID: h0i1j2k3l4m5
+Revises: g9h0i1j2k3l4
 Create Date: 2026-03-17
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "a1b2c3d4e5f6"
-down_revision = "z7r8s9t0u1v2"
+revision = "h0i1j2k3l4m5"
+down_revision = "g9h0i1j2k3l4"
 branch_labels = None
 depends_on = None
 

@@ -4,7 +4,6 @@ All tables live in the `briefing` PostgreSQL schema.
 Migrated from intelflow + new tables for analysts and follow-ups.
 """
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     Date,
@@ -22,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "briefing"
-EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B
+EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B — kept for reference
 
 BRIEFING_STATUSES = (
     "searching",
@@ -137,7 +136,6 @@ class Briefing(SpaceScopedModel):
     raw_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     analyses: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     debate: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     # Relationships
     topic: Mapped["BriefingTopic | None"] = relationship(lazy="selectin")
@@ -168,13 +166,6 @@ class BriefingEntry(SpaceScopedModel):
         Index("idx_be_briefing", "briefing_id"),
         Index("idx_be_phase", "phase"),
         UniqueConstraint("briefing_id", "phase", "key", name="uq_be_briefing_phase_key"),
-        Index(
-            "idx_be_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
         {"schema": SCHEMA},
     )
 
@@ -185,7 +176,6 @@ class BriefingEntry(SpaceScopedModel):
     phase: Mapped[str] = mapped_column(String(20))
     key: Mapped[str] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     meta: Mapped[dict | None] = mapped_column("metadata", JSONB, server_default=text("'{}'::jsonb"))
 
     # Relationships

@@ -129,10 +129,8 @@ async def create_report(
     try:
         embedding = await get_embedding(f"{instance.title} {instance.query}")
         if embedding:
-            instance.embedding = embedding
-            from .models import ReportEmbedding
-
-            db.add(ReportEmbedding(report_id=instance.id, embedding=embedding))
+            # Qdrant indexing handled by qdrant_search.index_document
+            pass
     except Exception:
         logger.warning("Failed to generate embedding for report %s", instance.id, exc_info=True)
     await db.commit()

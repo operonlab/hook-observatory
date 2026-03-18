@@ -3,7 +3,6 @@
 All tables live in the `intelflow` PostgreSQL schema.
 """
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Date,
     Float,
@@ -20,30 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "intelflow"
-EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B
-
-
-class ReportEmbedding(Base):
-    """Separated embedding vector for Report — allows independent lifecycle management."""
-
-    __tablename__ = "report_embeddings"
-    __table_args__ = (
-        Index(
-            "idx_report_emb_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        {"schema": SCHEMA},
-    )
-
-    report_id: Mapped[str] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.reports.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B — kept for reference
 
 
 # ======================== Reports ========================
@@ -56,21 +32,6 @@ class Report(SpaceScopedModel):
     __table_args__ = (
         Index("idx_reports_tags", "tags", postgresql_using="gin"),
         Index("idx_reports_created", "created_at"),
-        Index(
-            "idx_reports_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        Index(
-            "idx_reports_embedding_recent",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_where=text("created_at > now() - interval '180 days'"),
-        ),
         {"schema": SCHEMA},
     )
 
@@ -80,7 +41,6 @@ class Report(SpaceScopedModel):
     sources: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     skill_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     # Relationships
     topics: Mapped[list["Topic"]] = relationship(
@@ -99,20 +59,12 @@ class Topic(SpaceScopedModel):
     __tablename__ = "topics"
     __table_args__ = (
         Index("idx_topics_name", "space_id", "name", unique=True),
-        Index(
-            "idx_topics_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
         {"schema": SCHEMA},
     )
 
     name: Mapped[str] = mapped_column(Text)
     display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     # Relationships
     reports: Mapped[list["Report"]] = relationship(

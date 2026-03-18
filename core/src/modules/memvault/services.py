@@ -29,7 +29,6 @@ from src.shared.tier_config import get_threshold
 from .models import (
     EMBEDDING_DIM,
     BlockArchive,
-    BlockEmbedding,
     KnowledgeDomain,
     MemoryBlock,
     ProfileScore,
@@ -372,15 +371,10 @@ class MemoryBlockService(
         orm_map: dict[str, MemoryBlock] = {}
         emb_map: dict[str, list[float]] = {}
         if block_ids:
-            orm_q = (
-                select(MemoryBlock, BlockEmbedding.embedding)
-                .outerjoin(BlockEmbedding, BlockEmbedding.block_id == MemoryBlock.id)
-                .where(MemoryBlock.id.in_(block_ids))
-            )
-            for row in (await db.execute(orm_q)).all():
-                orm_map[row.MemoryBlock.id] = row.MemoryBlock
-                if row.embedding is not None:
-                    emb_map[row.MemoryBlock.id] = list(row.embedding)
+            orm_q = select(MemoryBlock).where(MemoryBlock.id.in_(block_ids))
+            for row in (await db.execute(orm_q)).scalars().all():
+                orm_map[row.id] = row
+            # BlockEmbedding table removed — embeddings now in Qdrant only
 
         # Convert to scoring pipeline format
         pipeline = ScoringPipeline(scoring_config)
@@ -501,10 +495,7 @@ class MemoryBlockService(
 
         # Fetch embeddings for scoring pipeline (P1 semantic_boost/MMR)
         emb_map: dict[str, list[float]] = {}
-        if entity_ids:
-            emb_q = select(BlockEmbedding).where(BlockEmbedding.block_id.in_(entity_ids))
-            for emb_row in (await db.execute(emb_q)).scalars().all():
-                emb_map[emb_row.block_id] = list(emb_row.embedding)
+        # BlockEmbedding table removed — embeddings now in Qdrant only
 
         # Fetch feedback aggregates for scoring pipeline (best-effort)
         feedback_map: dict[str, int] = {}
@@ -749,36 +740,8 @@ class MemoryBlockService(
         block_type: str | None,
         extra_filters: list | None = None,
     ) -> list[SemanticSearchResult]:
-        """Search using the block_embeddings sub-table (Phase 2)."""
-        distance = BlockEmbedding.embedding.cosine_distance(query_embedding)
-        similarity = (1 - distance).label("similarity")
-
-        q = (
-            select(MemoryBlock, similarity)
-            .join(BlockEmbedding, BlockEmbedding.block_id == MemoryBlock.id)
-            .where(
-                MemoryBlock.space_id == space_id,
-                MemoryBlock.embedding.isnot(None),
-                distance < (1 - threshold),
-            )
-            .order_by(distance)
-            .limit(top_k)
-        )
-        if tags:
-            q = q.where(MemoryBlock.tags.contains(tags))
-        if block_type:
-            q = q.where(MemoryBlock.block_type == block_type)
-        for f in extra_filters or []:
-            q = q.where(f)
-
-        rows = (await db.execute(q)).all()
-        return [
-            SemanticSearchResult(
-                block=self.to_response(row.MemoryBlock),
-                score=round(float(row.similarity), 4),
-            )
-            for row in rows
-        ]
+        """LEGACY — BlockEmbedding table removed (Qdrant migration). Returns empty."""
+        return []
 
     async def _search_via_inline(
         self,
@@ -1045,12 +1008,7 @@ class MemoryBlockService(
         if result.rowcount == 0:
             raise NotFoundError("Block not found", code="memvault.block_not_found")
 
-        # Upsert into sub-table
-        existing = await db.get(BlockEmbedding, block_id)
-        if existing:
-            existing.embedding = embedding
-        else:
-            db.add(BlockEmbedding(block_id=block_id, embedding=embedding))
+        # BlockEmbedding sub-table removed (Qdrant migration) — inline embedding only
 
 
 # ======================== Tag Service ========================
@@ -1215,9 +1173,7 @@ class SearchFeedbackService:
         await db.refresh(fb)
         return fb
 
-    async def get_aggregate(
-        self, db: AsyncSession, entity_id: str
-    ) -> dict[str, int]:
+    async def get_aggregate(self, db: AsyncSession, entity_id: str) -> dict[str, int]:
         """Get aggregated feedback counts for an entity.
 
         Returns {"positive_count": N, "negative_count": M, "net_signal": N-M}.
@@ -1234,9 +1190,7 @@ class SearchFeedbackService:
         neg = row.neg or 0
         return {"positive_count": pos, "negative_count": neg, "net_signal": pos - neg}
 
-    async def get_bulk_aggregates(
-        self, db: AsyncSession, entity_ids: list[str]
-    ) -> dict[str, int]:
+    async def get_bulk_aggregates(self, db: AsyncSession, entity_ids: list[str]) -> dict[str, int]:
         """Get net feedback signal for multiple entities in one query.
 
         Returns {entity_id: net_signal, ...}. Missing entities have 0.

@@ -142,10 +142,6 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             topic = batch.topic or item.topic
             timestamp = batch.timestamp or item.timestamp
 
-            # Best-effort embedding
-            embedding_text = f"{subject} {predicate} {object_text}"
-            embedding = await get_embedding(embedding_text)
-
             triple = Triple(
                 space_id=space_id,
                 source_session=batch.session_id,
@@ -154,8 +150,8 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                 object=object_text,
                 topic=topic,
                 timestamp=timestamp,
-                embedding=embedding,
             )
+            # embedding column removed (Qdrant migration) — indexed via Qdrant after flush
             db.add(triple)
             try:
                 await db.flush()
@@ -344,39 +340,40 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
 
         Same subject + same predicate + high embedding similarity + different object.
         """
-        if new_triple.embedding is None:
-            return []
-
+        # embedding column removed from Triple (Qdrant migration) — use Qdrant vector search
         from src.shared.qdrant_client import is_available as qdrant_available
         from src.shared.qdrant_search import vector_search
         from src.shared.search_types import SearchConfig
 
-        if await qdrant_available():
-            config = SearchConfig(
-                top_k=10,
-                score_threshold=similarity_threshold,
-                service_ids=["memvault-triple"],
-            )
-            results = await vector_search(new_triple.embedding, space_id, config)
-            if not results:
-                return []
-            triple_ids = [r.entity_id for r in results]
-            q = select(Triple).where(
-                Triple.id.in_(triple_ids),
-                Triple.id != new_triple.id,
-                Triple.invalid_at.is_(None),
-                Triple.subject == new_triple.subject,
-                Triple.predicate == new_triple.predicate,
-            )
-            candidates = (await db.execute(q)).scalars().all()
-            return [
-                c
-                for c in candidates
-                if c.object.strip().lower() != new_triple.object.strip().lower()
-            ]
+        if not await qdrant_available():
+            return []
 
-        # pgvector fallback removed — Triple.embedding column dropped in Qdrant migration.
-        return []
+        # Get embedding for contradiction detection via text
+        embedding_text = f"{new_triple.subject} {new_triple.predicate} {new_triple.object}"
+        embedding = await get_embedding(embedding_text)
+        if embedding is None:
+            return []
+
+        config = SearchConfig(
+            top_k=10,
+            score_threshold=similarity_threshold,
+            service_ids=["memvault-triple"],
+        )
+        results = await vector_search(embedding, space_id, config)
+        if not results:
+            return []
+        triple_ids = [r.entity_id for r in results]
+        q = select(Triple).where(
+            Triple.id.in_(triple_ids),
+            Triple.id != new_triple.id,
+            Triple.invalid_at.is_(None),
+            Triple.subject == new_triple.subject,
+            Triple.predicate == new_triple.predicate,
+        )
+        candidates = (await db.execute(q)).scalars().all()
+        return [
+            c for c in candidates if c.object.strip().lower() != new_triple.object.strip().lower()
+        ]
 
 
 # ======================== GraphTraversalService ========================
@@ -810,7 +807,6 @@ class AttitudeService:
             AttitudeFact.space_id == space_id,
             AttitudeFact.category == request.category,
             AttitudeFact.superseded_by.is_(None),
-            AttitudeFact.embedding.isnot(None),
         )
         current_facts = (await db.execute(q)).scalars().all()
 

@@ -18,7 +18,6 @@ from src.events.bus import Event, event_bus
 from src.events.types import MemvaultEvents
 from src.shared.text_utils import is_cjk
 
-from .embedding import get_embedding
 from .kg_models import EntityCanonical, Triple
 from .kg_schemas import EntityCanonicalResponse, EntityMergeResult, EntityResolutionStats
 
@@ -102,12 +101,11 @@ class EntityResolutionService:
         if raw_text != normalized:
             aliases.append(raw_text)
 
-        embedding = await get_embedding(normalized)
+        # embedding column removed (Qdrant migration)
         entity = EntityCanonical(
             space_id=space_id,
             canonical_name=normalized,
             aliases=aliases,
-            embedding=embedding,
             entity_type=entity_type,
         )
         db.add(entity)
@@ -290,60 +288,12 @@ class EntityResolutionService:
     ) -> list[tuple[EntityCanonicalResponse, EntityCanonicalResponse, float]]:
         """Scan for potential merges via embedding similarity.
 
-        LEGACY: Uses pgvector cosine_distance for point-to-point comparison.
-
-        TODO(qdrant): EntityCanonical records are not yet indexed in Qdrant.
-        Once entity indexing is implemented (service_id="memvault",
-        entity_type="entity_canonical"), replace the inner pgvector loop with
-        a Qdrant search per entity using:
-            hybrid_search(entity.canonical_name, space_id, SearchConfig(
-                top_k=3, score_threshold=threshold, service_ids=["memvault"],
-                entity_type_filter=["entity_canonical"],
-            ))
-        This will eliminate the O(n²) pgvector loop and improve scalability.
+        NOTE: pgvector path removed — EntityCanonical.embedding column dropped in Qdrant migration.
+        TODO(qdrant): Implement via Qdrant once EntityCanonical records are indexed
+        (service_id="memvault", entity_type="entity_canonical"). Use hybrid_search per entity
+        with top_k=3, score_threshold=threshold to replace the former O(n²) loop.
         """
-        q = select(EntityCanonical).where(
-            EntityCanonical.space_id == space_id,
-            EntityCanonical.deleted_at.is_(None),
-            EntityCanonical.embedding.isnot(None),
-        )
-        entities = (await db.execute(q)).scalars().all()
-
-        candidates = []
-        seen = set()
-        for entity in entities:
-            # LEGACY pgvector path — cosine_distance per-entity comparison.
-            # Replace with Qdrant lookup once EntityCanonical is indexed.
-            distance = EntityCanonical.embedding.cosine_distance(entity.embedding)
-            sim_q = (
-                select(EntityCanonical, distance.label("dist"))
-                .where(
-                    EntityCanonical.space_id == space_id,
-                    EntityCanonical.id != entity.id,
-                    EntityCanonical.deleted_at.is_(None),
-                    EntityCanonical.embedding.isnot(None),
-                    distance < (1 - threshold),
-                )
-                .order_by(distance)
-                .limit(3)
-            )
-            rows = (await db.execute(sim_q)).all()
-            for row in rows:
-                pair_key = tuple(sorted([entity.id, row.EntityCanonical.id]))
-                if pair_key not in seen:
-                    seen.add(pair_key)
-                    similarity = round(1.0 - float(row.dist), 4)
-                    candidates.append(
-                        (
-                            self.to_response(entity),
-                            self.to_response(row.EntityCanonical),
-                            similarity,
-                        )
-                    )
-            if len(candidates) >= limit:
-                break
-
-        return candidates[:limit]
+        return []
 
     async def auto_merge(
         self,

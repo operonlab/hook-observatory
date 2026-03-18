@@ -18,7 +18,7 @@ from src.shared.qdrant_search import hybrid_search as qdrant_hybrid_search
 from src.shared.rerank_utils import rerank_generic
 from src.shared.search_types import SearchConfig as QdrantSearchConfig
 
-from .models import Article, ArticleEmbedding
+from .models import Article
 from .schemas import ArticleBrief, PaperSearchResult, SearchRequest
 
 logger = logging.getLogger(__name__)
@@ -141,34 +141,8 @@ async def _search_via_subtable(
     query_embedding: list[float],
     request: SearchRequest,
 ) -> list[PaperSearchResult]:
-    """Search using the article_embeddings sub-table."""
-    distance = ArticleEmbedding.embedding.cosine_distance(query_embedding)
-    similarity = (1 - distance).label("similarity")
-
-    q = (
-        select(Article, similarity)
-        .join(ArticleEmbedding, ArticleEmbedding.article_id == Article.id)
-        .where(
-            Article.space_id == space_id,
-            Article.deleted_at == None,  # noqa: E711
-            distance < (1 - request.threshold),
-        )
-        .order_by(distance)
-        .limit(request.limit)
-    )
-    q = _apply_filters(q, request)
-    rows = (await db.execute(q)).all()
-    return [
-        PaperSearchResult(
-            article=_to_brief(row.Article),
-            score=round(float(row.similarity), 4),
-            digest_one_liner=row.Article.digest.one_liner if row.Article.digest else None,
-            workshop_relevance=row.Article.digest.workshop_relevance
-            if row.Article.digest
-            else None,
-        )
-        for row in rows
-    ]
+    """LEGACY — ArticleEmbedding table removed (Qdrant migration). Returns empty."""
+    return []
 
 
 async def _ilike_fallback(

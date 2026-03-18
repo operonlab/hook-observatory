@@ -21,7 +21,7 @@ from src.shared.rerank_utils import rerank_generic
 from src.shared.search_types import SearchConfig as QdrantSearchConfig
 from src.shared.tier_config import get_threshold
 
-from .models import Report, ReportArchive, ReportEmbedding
+from .models import Report, ReportArchive
 from .schemas import (
     ReportBrief,
     SearchCheckResponse,
@@ -187,32 +187,11 @@ async def _search_via_subtable(
     limit: int,
     threshold: float,
 ) -> list[SemanticSearchResult]:
-    """LEGACY pgvector search using the report_embeddings sub-table (Phase 2).
+    """LEGACY pgvector search — ReportEmbedding table removed (Qdrant migration).
 
-    Part of the legacy pgvector fallback path — only called from semantic_search().
+    Returns empty so the caller falls through to inline embedding or text search.
     """
-    distance = ReportEmbedding.embedding.cosine_distance(query_embedding)
-    similarity = (1 - distance).label("similarity")
-
-    q = (
-        select(Report, similarity)
-        .join(ReportEmbedding, ReportEmbedding.report_id == Report.id)
-        .where(
-            Report.space_id == space_id,
-            distance < (1 - threshold),
-        )
-        .order_by(distance)
-        .limit(limit)
-    )
-
-    rows = (await db.execute(q)).all()
-    return [
-        SemanticSearchResult(
-            report=_to_brief(row.Report),
-            score=round(float(row.similarity), 4),
-        )
-        for row in rows
-    ]
+    return []
 
 
 async def _warm_tier_search(

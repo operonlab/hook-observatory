@@ -15,7 +15,6 @@ dependencies = [
     "email-validator>=2.0",
     "sqlalchemy[asyncio]>=2.0",
     "alembic>=1.14",
-    "pgvector>=0.3",
     "uuid-utils>=0.9",
     "argon2-cffi>=23.1",
     "authlib>=1.3",
