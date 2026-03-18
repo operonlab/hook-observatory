@@ -34,7 +34,7 @@ async def search_articles(
     Applies optional filters: categories, tags, year range.
     Results are reranked using cross-encoder for precision.
     """
-    if qdrant_available():
+    if await qdrant_available():
         results = await _qdrant_search(db, space_id, request)
         if results:
             return results

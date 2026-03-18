@@ -48,7 +48,7 @@ async def qdrant_search(
 
     Empty results from Qdrant are returned as-is (not forwarded to legacy pgvector).
     """
-    if not qdrant_available():
+    if not await qdrant_available():
         logger.warning("Qdrant unavailable — using legacy pgvector search for intelflow")
         return await semantic_search(
             db,
