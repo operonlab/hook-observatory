@@ -165,6 +165,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4100/",
     ),
     LightCheck(
+        name="session-channel",
+        group="external",
+        url="http://127.0.0.1:4106/health",
+    ),
+    LightCheck(
         name="agent-vista",
         group="external",
         url="http://127.0.0.1:8840/",
@@ -302,6 +307,12 @@ DEEP_CHECKS: list[DeepCheck] = [
         name="hook-observatory-render",
         group="external",
         url="http://127.0.0.1:8080/apps/hook/",
+        playwright_code=_PW_BODY_CHECK,
+    ),
+    DeepCheck(
+        name="session-channel-render",
+        group="external",
+        url="http://127.0.0.1:8080/apps/channel/",
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
@@ -494,6 +505,7 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "frontend-dailyos-render": "dos",
         "frontend-paper-render": "paper",
         "hook-observatory-render": "hook",
+        "session-channel-render": "ch",
         "agent-vista-render": "vista",
         "system-monitor-render": "sysm",
         "tmux-webui-render": "tmux",

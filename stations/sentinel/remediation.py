@@ -33,6 +33,7 @@ PNPM = "/opt/homebrew/Cellar/node@22/22.22.0/lib/node_modules/corepack/shims/pnp
 SIMPLE_RESTART_MAP: dict[str, str] = {
     "core": "core",
     "hook-observatory": "hook-observatory",
+    "session-channel": "session-channel",
     "system-monitor": "system-monitor",
     "agent-metrics": "agent-metrics",
     "agent-vista": "agent-vista",
