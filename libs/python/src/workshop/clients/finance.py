@@ -13,16 +13,9 @@ Usage:
 
 from typing import Any
 
-from ._base import BaseClient
+from ._base import APIError, BaseClient
 
-
-class FinanceError(Exception):
-    """Raised on Finance API errors."""
-
-    def __init__(self, status_code: int, detail: str):
-        self.status_code = status_code
-        self.detail = detail
-        super().__init__(f"Finance error {status_code}: {detail}")
+FinanceError = APIError
 
 
 class FinanceClient(BaseClient):

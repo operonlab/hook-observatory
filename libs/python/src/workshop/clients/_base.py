@@ -24,12 +24,13 @@ logger = logging.getLogger(__name__)
 
 
 class APIError(Exception):
-    """Raised when the Core API returns a non-2xx response."""
+    """Raised on API errors from any Workshop module or station."""
 
-    def __init__(self, status_code: int, detail: str):
+    def __init__(self, status_code: int, detail: str, module: str = "unknown"):
         self.status_code = status_code
         self.detail = detail
-        super().__init__(f"API error {status_code}: {detail}")
+        self.module = module
+        super().__init__(f"{module} error {status_code}: {detail}")
 
 
 class APIConnectionError(Exception):

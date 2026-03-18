@@ -225,15 +225,26 @@ class TmuxRelayClient:
     # Pane detection helpers
     # ================================================================
 
+    # Claude Code reports its semver as pane_current_command (e.g. "2.1.78")
+    _SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+")
+
     def _is_claude_pane(self, pane: str) -> bool:
-        """Check if a pane is running Claude Code."""
+        """Check if a pane is running Claude Code.
+
+        Primary: pane_current_command (lightweight, no capture needed).
+        Fallback: capture-pane content check (heavy, only when primary is ambiguous).
+        """
         cmd = self._display(pane, "#{pane_current_command}")
         if cmd:
             if "claude" in cmd:
                 return True
-            # Bare shell = definitely not Claude Code (❯ prompt overlaps with zsh)
+            # Bare shell = definitely not Claude Code
             if cmd.split("/")[-1] in self.SHELL_COMMANDS:
                 return False
+            # Claude Code reports semver as process name (e.g. "2.1.78")
+            if self._SEMVER_PATTERN.match(cmd):
+                return True
+        # Fallback: capture pane content (heavy — only for ambiguous cases)
         content = self._capture(pane, -8)
         if content and self.CLAUDE_INDICATORS.search(content):
             return True
@@ -374,6 +385,43 @@ class TmuxRelayClient:
             if self._count_panes_in_window(target) < self.MAX_PANES_PER_WINDOW:
                 return target
         return None
+
+    def _is_primary_window(self, window_name: str) -> bool:
+        """Check if window is the primary ⚡relay (never kill)."""
+        return window_name == self.RELAY_WINDOW_PREFIX
+
+    def _list_all_relay_panes(self, session: str) -> list[dict]:
+        """List ALL panes in relay windows (including bare shells).
+
+        Unlike list_panes(), this does NOT filter by _is_claude_pane().
+        Returns list of {pane_ref, pane_id, is_claude, window_name}.
+        """
+        result = []
+        for wname in self._list_relay_windows(session):
+            raw = self._tmux_ok(
+                "list-panes",
+                "-t",
+                f"{session}:{wname}",
+                "-F",
+                "#{pane_index} #{pane_id}",
+            )
+            if not raw:
+                continue
+            for line in raw.splitlines():
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                idx, pane_id = parts[0], parts[1]
+                pane_ref = f"{session}:{wname}.{idx}"
+                result.append(
+                    {
+                        "pane_ref": pane_ref,
+                        "pane_id": pane_id,
+                        "is_claude": self._is_claude_pane(pane_ref),
+                        "window_name": wname,
+                    }
+                )
+        return result
 
     def _find_reusable_pane(self, session: str) -> str | None:
         """Find a non-Claude pane in relay windows that can be reused."""
@@ -692,11 +740,22 @@ class TmuxRelayClient:
 
         return "standby"
 
+    def _window_name_from_pane_ref(self, pane_ref: str) -> str:
+        """Extract window name from pane_ref (e.g. 'default:⚡relay-2.3' → '⚡relay-2')."""
+        if ":" not in pane_ref:
+            return ""
+        return pane_ref.split(":")[1].rsplit(".", 1)[0]
+
     def auto_standby(self, session: str | None = None) -> str:
-        """One-shot sweep: standby panes idle longer than AUTO_STANDBY_IDLE_TIMEOUT."""
+        """One-shot sweep: standby panes idle longer than AUTO_STANDBY_IDLE_TIMEOUT.
+
+        Primary window (⚡relay): /exit Claude → keep bare shell (reusable).
+        Non-primary windows: /exit Claude → kill pane → kill window if empty.
+        """
         session = session or self._resolve_relay_session()
         now = int(time.time())
         standby_count = 0
+        killed_count = 0
 
         for p in self.list_panes(session):
             if p.status != "idle":
@@ -706,12 +765,50 @@ class TmuxRelayClient:
                 self._touch_idle_ts(p.pane_id)
                 continue
             idle_secs = now - ts
-            if idle_secs >= self.AUTO_STANDBY_IDLE_TIMEOUT:
+            if idle_secs < self.AUTO_STANDBY_IDLE_TIMEOUT:
+                continue
+
+            # Live confirmation before acting (cache might be stale)
+            live_status = self._pane_status_live(
+                p.pane_id or p.pane_ref, p.pane_id.replace("%", "")
+            )
+            if live_status != "idle":
+                # Actually busy — reset idle countdown
+                self._clear_idle_ts(p.pane_id)
+                continue
+
+            wname = self._window_name_from_pane_ref(p.pane_ref)
+
+            if self._is_primary_window(wname):
+                # Primary: just standby (keep bare shell for reuse)
                 self.standby(p.pane_ref)
                 self._clear_idle_ts(p.pane_id)
                 standby_count += 1
+            else:
+                # Non-primary: /exit then kill pane entirely
+                # Use pane_id (%XX) instead of pane_ref to avoid stale index after kills
+                target = p.pane_id or p.pane_ref
+                self._send_keys(target, "/exit")
+                self._send_enter(target)
+                time.sleep(3)
+                self._tmux_ok("kill-pane", "-t", target)
+                self._clear_idle_ts(p.pane_id)
+                try:
+                    self._cache.remove_pane(p.pane_id.replace("%", ""))
+                except Exception:
+                    pass
+                killed_count += 1
 
-        return f"Standby: {standby_count} pane(s)"
+        # Clean up empty non-primary windows
+        if killed_count > 0:
+            for wname in self._list_relay_windows(session):
+                if self._is_primary_window(wname):
+                    continue
+                n = self._count_panes_in_window(f"{session}:{wname}")
+                if n == 0:
+                    self._tmux_ok("kill-window", "-t", f"{session}:{wname}")
+
+        return f"Standby: {standby_count}, Killed: {killed_count}"
 
     def recycle(self, pane: str) -> str:
         """Recycle a pane: /exit -> restart Claude Code."""
@@ -747,13 +844,43 @@ class TmuxRelayClient:
         raise TmuxRelayError("recycle", f"Claude Code restart timeout after recycle in {pane}")
 
     def reaper(self, session: str | None = None) -> str:
-        """One-shot sweep: recycle excess idle panes."""
-        session = session or self._resolve_relay_session()
-        now = int(time.time())
+        """One-shot sweep: reap excess idle Claude panes + zombie bare shells.
 
+        Phase 1: Kill excess idle Claude panes (existing logic).
+        Phase 2: Kill bare shell panes in non-primary windows.
+        Phase 3: Kill empty non-primary windows.
+        """
+        session = session or self._resolve_relay_session()
+
+        # Non-blocking acquire lock to prevent race with spawn/acquire
+        lock_fd = open(self._ACQUIRE_LOCK, "w")
+        lock_acquired = False
+        for _ in range(5):
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_acquired = True
+                break
+            except BlockingIOError:
+                time.sleep(2)
+        if not lock_acquired:
+            lock_fd.close()
+            return "Skipped: acquire lock held (spawn/acquire in progress)"
+
+        try:
+            return self._reaper_locked(session)
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+
+    def _reaper_locked(self, session: str) -> str:
+        """Reaper logic (must be called with acquire lock held)."""
+        now = int(time.time())
+        messages = []
+
+        # === Phase 1: Reap excess idle Claude panes ===
         all_panes = self.list_panes(session)
         total = len(all_panes)
-        idle_panes: list[tuple[str, str, int]] = []  # (pane_ref, pane_id, idle_secs)
+        idle_panes: list[tuple[str, str, int]] = []
 
         for p in all_panes:
             if p.status == "idle":
@@ -764,49 +891,69 @@ class TmuxRelayClient:
                 idle_secs = now - ts
                 idle_panes.append((p.pane_ref, p.pane_id, idle_secs))
 
-        if not idle_panes:
-            return f"No idle relay panes to reap. Total: {total}"
-
-        # Sort by idle_secs descending (reap longest-idle first)
         idle_panes.sort(key=lambda x: x[2], reverse=True)
 
         reaped = 0
-        messages = []
         for pane_ref, pane_id, idle_secs in idle_panes:
             should_reap = False
-
-            # Condition 1: Over soft limit
             if (total - reaped) > self.MAX_TOTAL_PANES:
                 should_reap = True
-
-            # Condition 2: Idle beyond standby timeout AND total > half capacity
             if idle_secs >= self.IDLE_STANDBY_TIMEOUT and (total - reaped) > (
                 self.MAX_TOTAL_PANES // 2
             ):
                 should_reap = True
 
             if should_reap:
-                messages.append(f"Reaping {pane_ref} (idle {idle_secs}s)...")
-                self._send_keys(pane_ref, "/exit")
-                self._send_enter(pane_ref)
+                # Live confirmation before reaping (cache might be stale)
+                live_status = self._pane_status_live(pane_id or pane_ref, pane_id.replace("%", ""))
+                if live_status != "idle":
+                    self._clear_idle_ts(pane_id)
+                    continue
+                # Use pane_id (%XX) for stable targeting after prior kills
+                target = pane_id or pane_ref
+                messages.append(f"Reaping Claude pane {target} (idle {idle_secs}s)")
+                self._send_keys(target, "/exit")
+                self._send_enter(target)
                 time.sleep(3)
-                self._tmux_ok("kill-pane", "-t", pane_ref)
+                self._tmux_ok("kill-pane", "-t", target)
                 self._clear_idle_ts(pane_id)
-                # Cache: remove reaped pane
                 try:
                     self._cache.remove_pane(pane_id.replace("%", ""))
                 except Exception:
                     pass
                 reaped += 1
 
-        # Clean up empty relay windows
+        # === Phase 2: Kill bare shell panes in non-primary windows ===
+        bare_killed = 0
+        for p in self._list_all_relay_panes(session):
+            if self._is_primary_window(p["window_name"]):
+                continue
+            if not p["is_claude"]:
+                # Use pane_id for stable targeting
+                target = p["pane_id"] or p["pane_ref"]
+                messages.append(f"Killing bare shell {target}")
+                self._tmux_ok("kill-pane", "-t", target)
+                pane_safe = p["pane_id"].replace("%", "")
+                self._clear_idle_ts(p["pane_id"])
+                try:
+                    self._cache.remove_pane(pane_safe)
+                except Exception:
+                    pass
+                bare_killed += 1
+
+        # === Phase 3: Kill empty non-primary windows ===
         for wname in self._list_relay_windows(session):
+            if self._is_primary_window(wname):
+                continue
             n = self._count_panes_in_window(f"{session}:{wname}")
             if n == 0:
                 self._tmux_ok("kill-window", "-t", f"{session}:{wname}")
                 messages.append(f"Killed empty window {wname}")
 
-        messages.append(f"Reaped {reaped} pane(s). Remaining: {total - reaped}")
+        messages.append(
+            f"Summary: reaped {reaped} Claude, killed {bare_killed} bare shell. "
+            f"Remaining Claude: {total - reaped}"
+        )
         return "\n".join(messages)
 
     def cleanup(self, threshold: int | None = None) -> str:
@@ -990,7 +1137,7 @@ class TmuxRelayClient:
                 Path(signal_file).write_text(
                     f"TIMEOUT after {timeout}s waiting for command completion in {source}"
                 )
-                # Cache: mark pane as idle + result as timeout
+                # Cache: mark pane as idle + result as timeout + start idle countdown
                 try:
                     self._cache.set_pane(pane_safe, source, "idle", pane_id)
                     self._cache.set_result(
@@ -998,6 +1145,7 @@ class TmuxRelayClient:
                     )
                 except Exception:
                     pass
+                self._touch_idle_ts(pane_id)
                 return RelayResult(
                     pane=source,
                     signal_file=signal_file,
@@ -1054,7 +1202,7 @@ class TmuxRelayClient:
                 f"timestamp={ts}\n"
             )
 
-            # Cache: mark pane idle + cache result
+            # Cache: mark pane idle + cache result + start idle countdown
             try:
                 self._cache.set_pane(pane_safe, source, "idle", pane_id)
                 self._cache.set_result(
@@ -1066,6 +1214,8 @@ class TmuxRelayClient:
                 )
             except Exception:
                 pass
+            # Start idle countdown immediately (don't wait for auto_standby to discover)
+            self._touch_idle_ts(pane_id)
 
             return RelayResult(
                 pane=source,
@@ -1131,7 +1281,11 @@ class TmuxRelayClient:
         timeout: int | None = None,
         count: int = 1,
     ) -> list[dict[str, str]]:
-        """Fire-and-forget dispatch. Returns list of {pane, signal_file, pid}."""
+        """Fire-and-forget dispatch. Returns list of {pane, signal_file, pid}.
+
+        Uses os.fork() so each relay execution runs in an independent child
+        process that survives the parent exiting (critical for CLI usage).
+        """
         timeout = timeout or self.default_timeout
         panes = self.acquire(count)
         dispatched = []
@@ -1161,26 +1315,34 @@ class TmuxRelayClient:
                 except Exception:
                     pass
 
-            # Run relay in background thread
-            t = threading.Thread(
-                target=self._relay_execute,
-                kwargs={
-                    "source": pane,
-                    "command": command,
-                    "timeout": timeout,
-                    "signal_file": signal_file,
-                    "no_forward": True,
-                },
-                daemon=True,
-            )
-            t.start()
+            # Fork child process for relay execution (survives parent exit)
+            child_pid = os.fork()
+            if child_pid == 0:
+                # Child: detach from parent session, reconnect Redis, run relay
+                try:
+                    os.setsid()
+                except OSError:
+                    pass
+                # Reconnect Redis in child (shared socket after fork = corruption)
+                self._cache = RelayCacheManager()
+                try:
+                    self._relay_execute(
+                        source=pane,
+                        command=command,
+                        timeout=timeout,
+                        signal_file=signal_file,
+                        no_forward=True,
+                    )
+                except Exception:
+                    pass
+                os._exit(0)
 
+            # Parent: record child PID and continue
             dispatched.append(
                 {
                     "pane": pane,
                     "signal_file": signal_file,
-                    "pid": str(os.getpid()),
-                    "thread": t.name,
+                    "pid": str(child_pid),
                 }
             )
 

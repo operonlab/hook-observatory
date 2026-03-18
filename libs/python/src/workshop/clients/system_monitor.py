@@ -27,14 +27,9 @@ from typing import Any
 
 import httpx
 
+from ._base import APIError
 
-class SystemMonitorError(Exception):
-    """Raised when the System Monitor API returns a non-2xx response."""
-
-    def __init__(self, status_code: int, detail: str):
-        self.status_code = status_code
-        self.detail = detail
-        super().__init__(f"SystemMonitor error {status_code}: {detail}")
+SystemMonitorError = APIError
 
 
 class SystemMonitorClient:
@@ -71,13 +66,16 @@ class SystemMonitorClient:
             resp.raise_for_status()
             return resp
         except httpx.ConnectError:
-            raise SystemMonitorError(
+            raise APIError(
                 0,
                 f"Cannot connect to System Monitor at {self.base_url}. "
                 "Start server: cd stations/system-monitor && uv run python api.py",
+                module="system_monitor",
             ) from None
         except httpx.HTTPStatusError as e:
-            raise SystemMonitorError(e.response.status_code, e.response.text[:500]) from e
+            raise APIError(
+                e.response.status_code, e.response.text[:500], module="system_monitor"
+            ) from e
 
     def _get(self, path: str, params: dict | None = None) -> Any:
         filtered = {k: v for k, v in params.items() if v is not None} if params else None
