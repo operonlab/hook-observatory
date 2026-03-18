@@ -252,9 +252,14 @@ function CommunityCard({
         </div>
       </div>
 
-      {(llmSummary || community.summary) && (
+      {llmSummary && (
         <p className="text-xs mb-2 line-clamp-2" style={{ color: 'var(--subtext1)' }}>
-          {llmSummary || community.summary}
+          {llmSummary}
+        </p>
+      )}
+      {!llmSummary && community.summary && (
+        <p className="text-xs mb-2 line-clamp-2" style={{ color: 'var(--overlay0)' }}>
+          {community.summary}
         </p>
       )}
 
@@ -276,11 +281,11 @@ function CommunityCard({
           {community.summary && (
             <div>
               <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
-                摘要
+                結構分析
               </p>
               <p
                 className="text-xs leading-relaxed whitespace-pre-wrap"
-                style={{ color: 'var(--text)' }}
+                style={{ color: 'var(--overlay0)' }}
               >
                 {community.summary}
               </p>
