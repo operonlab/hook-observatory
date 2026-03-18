@@ -305,36 +305,39 @@ class MemvaultClient(BaseClient):
             params["predicates"] = predicates
         return self._get("/kg/traverse", params)
 
-    # ======================== KG — Clusters ========================
+    # ======================== KG — Communities ========================
 
-    def list_clusters(self) -> list:
-        """List KG clusters. GET /kg/clusters"""
-        return self._get("/kg/clusters")
+    def list_communities(self, resolution_level: int | None = None) -> list:
+        """List KG communities. GET /kg/communities"""
+        params: dict = {}
+        if resolution_level is not None:
+            params["resolution_level"] = resolution_level
+        return self._get("/kg/communities", params or None)
 
-    def get_cluster(self, cluster_id: str) -> dict:
-        """Get cluster detail with members. GET /kg/clusters/{id}"""
-        return self._get(f"/kg/clusters/{cluster_id}")
+    def get_community(self, community_id: str) -> dict:
+        """Get community detail with members. GET /kg/communities/{id}"""
+        return self._get(f"/kg/communities/{community_id}")
 
-    def regenerate_clusters(self, clusters: list[dict], generated_at: str) -> dict:
-        """Save regenerated cluster data. POST /kg/clusters/regenerate"""
-        body = {"clusters": clusters, "generated_at": generated_at}
-        return self._post("/kg/clusters/regenerate", body)
+    def regenerate_communities(self, communities: list[dict], generated_at: str) -> dict:
+        """Save regenerated community data. POST /kg/communities/regenerate"""
+        body = {"communities": communities, "generated_at": generated_at}
+        return self._post("/kg/communities/regenerate", body)
 
-    # ======================== KG — Wisdom ========================
+    # ======================== KG — Community Summaries ========================
 
-    def wisdom(self, confidence: str | None = None, tag: str | None = None) -> list:
-        """List wisdom nodes. GET /kg/wisdom"""
+    def list_summaries(self, confidence: str | None = None, tag: str | None = None) -> list:
+        """List community summaries. GET /kg/summaries"""
         params: dict = {}
         if confidence:
             params["confidence"] = confidence
         if tag:
             params["tag"] = tag
-        return self._get("/kg/wisdom", params or None)
+        return self._get("/kg/summaries", params or None)
 
-    def regenerate_wisdom(self, wisdom_nodes: list[dict], generated_at: str) -> dict:
-        """Save regenerated wisdom data. POST /kg/wisdom/regenerate"""
-        body = {"wisdom_nodes": wisdom_nodes, "generated_at": generated_at}
-        return self._post("/kg/wisdom/regenerate", body)
+    def regenerate_summaries(self, summary_nodes: list[dict], generated_at: str) -> dict:
+        """Save regenerated community summary data. POST /kg/summaries/regenerate"""
+        body = {"summary_nodes": summary_nodes, "generated_at": generated_at}
+        return self._post("/kg/summaries/regenerate", body)
 
     # ======================== KG — Attitudes ========================
 
@@ -402,7 +405,7 @@ class MemvaultClient(BaseClient):
     # ======================== KG — Cascade Recall ========================
 
     def cascade(self, query: str, top_k: int = 5) -> dict:
-        """KG cascade recall (L2 Wisdom -> L1 Clusters -> L0 Triples -> Blocks). GET /kg/recall"""
+        """KG cascade recall (L2 Summaries -> L1 Communities -> L0 Triples -> Blocks). GET /kg/recall"""
         return self._get("/kg/recall", {"q": query, "top_k": top_k})
 
     # ======================== KG — Maintenance ========================
