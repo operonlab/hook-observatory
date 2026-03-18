@@ -226,7 +226,7 @@ def run_community_detection(g) -> dict[int, list[list[int]]]:
         communities: list[list[int]] = []
 
         # Leiden on each large component
-        for cid, members in large_comps.items():
+        for _cid, members in large_comps.items():
             sub = g.subgraph(members)
             partition = sub.community_leiden(
                 objective_function="modularity",

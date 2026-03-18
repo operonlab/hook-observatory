@@ -106,13 +106,13 @@ async def memvault_profile(rebuild: bool = False) -> str:
 @mcp.tool()
 @mcp_error_handler("Memvault")
 async def memvault_kg_community_summaries(
-    tag: str = "",
+    resolution_level: int | None = None,
     limit: int = 20,
 ) -> str:
-    """查詢 Community Summaries（Leiden 社群的 LLM 預生成摘要，L2 層）"""
+    """查詢 Community Summaries（Leiden 社群的 LLM 預生成摘要，L2 層）。resolution_level: 0=fine, 1=medium, 2=coarse"""
     result = await to_thread(
         client.list_summaries,
-        tag=tag or None,
+        resolution_level=resolution_level,
     )
     if not result:
         return "No community summaries found. Run synthesis pipeline first."
