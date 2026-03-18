@@ -1,0 +1,103 @@
+/* Paper — Academic Research Theme
+   Scoped under .paper to avoid conflicts with global Catppuccin theme */
+
+.paper {
+  /* Backgrounds */
+  --pp-bg: #0a0a0a;
+  --pp-bg-elevated: #141414;
+  --pp-bg-surface: #1a1a1a;
+  --pp-border: #2a2a2a;
+
+  /* Brand accent — scholarly blue */
+  --pp-accent: #89b4fa;
+  --pp-accent-alpha: rgba(137, 180, 250, 0.2);
+
+  /* Text hierarchy */
+  --pp-text: #ffffff;
+  --pp-text-secondary: #b0b0b0;
+  --pp-text-tertiary: #848484;
+  --pp-text-muted: #6a6a6a;
+  --pp-text-dim: #4a4a4a;
+  --pp-text-on-accent: #0a0a0a;
+
+  /* Status colors */
+  --pp-status-digested: #a6e3a1;
+  --pp-status-digested-bg: #1a2a1a;
+  --pp-status-pending: #fab387;
+  --pp-status-pending-bg: #2a1f1a;
+  --pp-status-reviewed: #cba6f7;
+  --pp-status-reviewed-bg: #1f1a2a;
+
+  /* Relevance score colors */
+  --pp-score-high: #4ade80;
+  --pp-score-high-bg: #1a2a1a;
+  --pp-score-mid: #facc15;
+  --pp-score-mid-bg: #2a2a1a;
+  --pp-score-low: #f87171;
+  --pp-score-low-bg: #2a1a1a;
+
+  /* Typography */
+  --pp-font-display: "Cormorant Garamond", Georgia, serif;
+  --pp-font-ui: "Inter", system-ui, sans-serif;
+  --pp-font-mono: "JetBrains Mono", monospace;
+
+  /* Apply base styles */
+  background-color: var(--pp-bg);
+  color: var(--pp-text);
+  font-family: var(--pp-font-ui);
+  min-height: 100%;
+}
+
+/* Zero border-radius across all paper elements */
+.paper *,
+.paper *::before,
+.paper *::after {
+  border-radius: 0;
+}
+
+/* Scrollbar styling */
+.paper ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.paper ::-webkit-scrollbar-track {
+  background: var(--pp-bg);
+}
+
+.paper ::-webkit-scrollbar-thumb {
+  background: var(--pp-border);
+}
+
+.paper ::-webkit-scrollbar-thumb:hover {
+  background: var(--pp-text-tertiary);
+}
+
+/* ─── RWD: Mobile layout ─── */
+
+.paper {
+  overflow-x: hidden;
+}
+
+.paper-bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (max-width: 767px) {
+  .paper > main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.paper pre {
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre;
+  word-break: normal;
+}
+
+.paper article p {
+  line-height: 1.75;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}

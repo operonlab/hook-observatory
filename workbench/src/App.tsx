@@ -72,6 +72,7 @@ const CapturePage = React.lazy(() => import('./modules/capture/pages'))
 const DailyosPage = React.lazy(() => import('./modules/dailyos/pages'))
 const BriefingPage = React.lazy(() => import('./modules/briefing/pages'))
 const NotificationPage = React.lazy(() => import('./modules/notification/pages'))
+const PaperPage = React.lazy(() => import('./modules/paper/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
@@ -334,6 +335,18 @@ function AppRoutes() {
             <AppShell>
               <ModuleSuspense>
                 <NotificationPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/paper/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <PaperPage />
               </ModuleSuspense>
             </AppShell>
           </AuthGuard>

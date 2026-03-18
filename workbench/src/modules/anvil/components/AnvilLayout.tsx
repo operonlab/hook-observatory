@@ -1,10 +1,12 @@
-import { Activity, BarChart3, History, Shield } from 'lucide-react'
+import { Activity, BarChart3, Globe, History, PieChart, Shield } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import '../styles/anvil.css'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: '總覽', icon: BarChart3, path: '/anvil' },
+  { id: 'stats', label: '使用統計', icon: PieChart, path: '/anvil/stats' },
   { id: 'runs', label: '執行紀錄', icon: History, path: '/anvil/runs' },
+  { id: 'catalog', label: 'Skill Galaxy', icon: Globe, path: '/anvil/catalog' },
   { id: 'health', label: '健康狀態', icon: Activity, path: '/anvil/health' },
   { id: 'security', label: '安全報告', icon: Shield, path: '/anvil/security' },
 ] as const

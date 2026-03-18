@@ -137,6 +137,15 @@ export const APP_LIST: AppInfo[] = [
     status: 'available',
   },
   {
+    id: 'paper',
+    name: '論文研究',
+    description: '學術論文管理、自動摘要、研究管線',
+    icon: '📄',
+    path: '/paper',
+    color: '#89b4fa',
+    status: 'available',
+  },
+  {
     id: 'agent-metrics',
     name: 'Agent 儀表板',
     description: 'LLM 用量追蹤、配額監控、模型成本分析',
@@ -233,8 +242,7 @@ export const APP_LIST: AppInfo[] = [
     icon: '🔨',
     path: '/anvil',
     color: '#fab387',
-    status: 'external',
-    externalUrl: '/apps/anvil/',
+    status: 'available',
   },
   {
     id: 'scheduler',
