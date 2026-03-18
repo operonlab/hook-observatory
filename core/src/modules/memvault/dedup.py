@@ -117,7 +117,7 @@ async def find_similar_blocks(
     Fallback: pgvector cosine_distance query (always kept for reliability).
     """
     # --- Qdrant path (primary) ---
-    if content and qdrant_available():
+    if content and await qdrant_available():
         try:
             config = SearchConfig(
                 top_k=limit,
