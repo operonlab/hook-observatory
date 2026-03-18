@@ -203,7 +203,9 @@ async def get_trends(
     points = []
     for run in runs:
         total = run.total_skills or 1
-        pass_rate = ((run.test_passed or 0) / total) * 100 if total > 0 else 0
+        pass_rate = (
+            (((run.test_passed or 0) + (run.test_partial or 0)) / total) * 100 if total > 0 else 0
+        )
         sec_rate = ((run.sec_clean or 0) / total) * 100 if total > 0 else 0
         points.append(
             TrendPoint(

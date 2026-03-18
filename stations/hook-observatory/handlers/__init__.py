@@ -21,7 +21,6 @@ from . import (
     claudemd_suggest,
     cleanup_versions,
     context_inject,
-    context_supervisor,
     external,
     memory_sync,
     observability,
@@ -29,11 +28,16 @@ from . import (
     relay_signal,
     rtk_rewrite,
     sentinel_notify,
+    session_channel,
+    session_namer,
     session_pipeline,
     skill_security,
     verify_commit,
     verify_completion,
     voice_notify,
+)
+from . import (
+    context_supervisor as context_supervisor,
 )
 from .base import ALLOW, HookResult
 
@@ -55,7 +59,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ("Bash", sentinel_notify.handle),
         ("Bash", rtk_rewrite.handle),  # after safety — rewrite for token savings
         ("Write|Edit", skill_security.handle),
-        (None, context_supervisor.handle),
+        # context_supervisor: disabled — concept good, scoring inaccurate
         (None, observability.handle),
     ],
     "PostToolUse": [
@@ -65,14 +69,16 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ("Bash", pm_autopilot.handle),
         (None, anvil_telemetry.handle),
         ("Skill", external.skill_tracker),
-        (None, context_supervisor.handle),
+        # context_supervisor: disabled
         (None, observability.handle),
     ],
     "Stop": [
+        (None, session_namer.handle),
         (None, relay_signal.handle),
+        (None, session_channel.handle),
         (None, pm_autopilot.handle),
         (None, voice_notify.handle),
-        (None, context_supervisor.handle),
+        # context_supervisor: disabled
         (None, observability.handle),
     ],
     "Notification": [
@@ -83,18 +89,20 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "UserPromptSubmit": [
-        (None, context_supervisor.handle),
+        # context_supervisor: disabled
         (None, external.recall),
+        (None, session_namer.handle_color_hint),
         (None, anvil_telemetry.handle),
         (None, observability.handle),
     ],
     "SessionStart": [
         (None, external.sync_login),
         (None, anvil_telemetry.handle),
+        (None, session_channel.handle),
         (None, claudemd_suggest.handle),
         (None, cleanup_versions.handle),
         (None, pm_autopilot.handle),
-        (None, context_supervisor.handle),
+        # context_supervisor: disabled
         (None, observability.handle),
     ],
     "SubagentStart": [
@@ -107,7 +115,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "PreCompact": [
-        (None, context_supervisor.handle),
+        # context_supervisor: disabled
         (None, external.progressive_extract),
         (None, observability.handle),
     ],
