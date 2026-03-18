@@ -139,6 +139,7 @@ class Community(SpaceScopedModel):
     top_entities: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     top_predicates: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     parent_community_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey(f"{SCHEMA}.communities.id"), nullable=True
     )

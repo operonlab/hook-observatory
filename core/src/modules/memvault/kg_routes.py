@@ -229,6 +229,26 @@ async def regenerate_communities(
     return {"saved": saved, "generation_batch": generation_batch}
 
 
+@router.post("/communities/{community_id}/description", status_code=200)
+async def update_community_description(
+    community_id: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a community's description_zh field."""
+    from sqlalchemy import select
+
+    from .kg_models import Community
+
+    result = await db.execute(select(Community).where(Community.id == community_id))
+    community = result.scalar_one_or_none()
+    if not community:
+        raise NotFoundError("Community not found", code="memvault.community_not_found")
+    community.description_zh = body.get("description_zh", "")
+    await db.commit()
+    return {"id": community_id, "description_zh": community.description_zh}
+
+
 # ======================== Community Summaries ========================
 
 
@@ -377,8 +397,12 @@ async def cascade_recall(
     db: AsyncSession = Depends(get_db),
 ):
     return await cascade_recall_service.recall(
-        db, space_id, q, top_k=top_k,
-        skip_routing=skip_routing, evaluate=evaluate,
+        db,
+        space_id,
+        q,
+        top_k=top_k,
+        skip_routing=skip_routing,
+        evaluate=evaluate,
     )
 
 

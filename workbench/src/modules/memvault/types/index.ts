@@ -77,6 +77,7 @@ export interface Community {
   top_entities: string[]
   top_predicates: string[]
   summary: string | null
+  description_zh: string | null
   parent_community_id: string | null
   modularity_score: number | null
   generation_batch: string | null
