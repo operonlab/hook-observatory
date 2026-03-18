@@ -1,19 +1,20 @@
-"""Memvault Knowledge Graph ORM models — Triples, Clusters, Wisdom, Attitudes, Skills.
+"""Memvault Knowledge Graph ORM models — Triples, Communities, Summaries, Attitudes, Skills.
 
-Knowledge Graph layers:
-  L0 — Triple      : raw subject-predicate-object facts extracted from sessions
-  L1 — Cluster     : GMM-clustered triple groups with summary/verdict
-  L2 — WisdomNode  : cross-cluster insight bridges (high-level learnings)
-  Attitude Layer   — AttitudeFact : versioned attitude/belief facts
-  Skill Layer      — SkillInvocation : per-session skill usage records
+Knowledge Graph layers (GraphRAG / HiRAG inspired):
+  L0 — Triple           : raw subject-predicate-object facts (graph edges)
+  L0 — EntityCanonical  : deduplicated entity nodes (graph vertices)
+  L1 — Community        : Leiden graph communities at multiple resolution levels
+  L2 — CommunitySummary : pre-generated LLM summaries per community
+  Attitude Layer        — AttitudeFact : versioned attitude/belief facts
+  Skill Layer           — SkillInvocation : per-session skill usage records
 
+References: GraphRAG (2404.16130), HiRAG (2503.10150), LeanRAG (2508.10391)
 All tables live in the `memvault` PostgreSQL schema.
 """
 
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -110,70 +111,94 @@ class Triple(SpaceScopedModel):
 
 
 # ---------------------------------------------------------------------------
-# L1 — Cluster
+# L1 — Community (Leiden graph community detection)
 # ---------------------------------------------------------------------------
 
 
-class Cluster(SpaceScopedModel):
-    """A GMM-derived cluster grouping related triples (Knowledge L1)."""
+class Community(SpaceScopedModel):
+    """A graph community of densely interconnected entities (Knowledge L1).
 
-    __tablename__ = "clusters"
-    __table_args__ = ({"schema": SCHEMA},)
+    Detected via Leiden algorithm on the entity co-occurrence graph.
+    Multiple resolution levels form a hierarchy:
+      Level 0 = fine-grained (~100-200 communities)
+      Level 1 = medium (~20-40)
+      Level 2 = coarse (~5-10 top-level themes)
+    """
 
-    name: Mapped[str] = mapped_column(String(200))
-    size: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    top_subjects: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    top_predicates: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    top_objects: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # "情境→判斷→結果" pattern
-    verdict: Mapped[str] = mapped_column(String(20), server_default=text("'UNVERIFIED'"))
-    generation_batch: Mapped[str | None] = mapped_column(String(32), nullable=True)
-
-
-# ---------------------------------------------------------------------------
-# L1 — ClusterTriple (M2M)
-# ---------------------------------------------------------------------------
-
-
-class ClusterTriple(SpaceScopedModel):
-    """Many-to-many join between Cluster and Triple with GMM posterior confidence."""
-
-    __tablename__ = "cluster_triples"
+    __tablename__ = "communities"
     __table_args__ = (
-        Index("idx_cluster_triples_cluster", "cluster_id"),
-        Index("idx_cluster_triples_triple", "triple_id"),
+        Index("idx_communities_level", "resolution_level"),
+        Index("idx_communities_parent", "parent_community_id"),
         {"schema": SCHEMA},
     )
 
-    cluster_id: Mapped[str] = mapped_column(
-        String(32), ForeignKey(f"{SCHEMA}.clusters.id"), nullable=False
+    name: Mapped[str] = mapped_column(String(300))
+    resolution_level: Mapped[int] = mapped_column(Integer)  # 0=fine, 1=medium, 2=coarse
+    size: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    entity_ids: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    top_entities: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    top_predicates: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parent_community_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.communities.id"), nullable=True
+    )
+    generation_batch: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    modularity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# L1 — CommunityTriple (M2M: community ↔ triple membership)
+# ---------------------------------------------------------------------------
+
+
+class CommunityTriple(SpaceScopedModel):
+    """Maps triples to their community (hard partition from Leiden)."""
+
+    __tablename__ = "community_triples"
+    __table_args__ = (
+        Index("idx_community_triples_community", "community_id"),
+        Index("idx_community_triples_triple", "triple_id"),
+        {"schema": SCHEMA},
+    )
+
+    community_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.communities.id"), nullable=False
     )
     triple_id: Mapped[str] = mapped_column(
         String(32), ForeignKey(f"{SCHEMA}.triples.id"), nullable=False
     )
-    confidence: Mapped[float | None] = mapped_column(
-        Float, nullable=True
-    )  # GMM posterior probability
 
 
 # ---------------------------------------------------------------------------
-# L2 — WisdomNode
+# L2 — CommunitySummary (pre-generated LLM summaries)
 # ---------------------------------------------------------------------------
 
 
-class WisdomNode(SpaceScopedModel):
-    """A cross-cluster insight that bridges multiple clusters (Knowledge L2)."""
+class CommunitySummary(SpaceScopedModel):
+    """Pre-generated LLM summary for a community (Knowledge L2).
 
-    __tablename__ = "wisdom_nodes"
-    __table_args__ = ({"schema": SCHEMA},)
+    Generated daily during synthesis. One summary per community.
+    Queried directly by CascadeRecall (zero LLM latency at recall time).
+    """
 
-    wisdom: Mapped[str] = mapped_column(Text)
-    confidence: Mapped[str] = mapped_column(String(20))  # HIGH / MEDIUM / LOW
-    bridge_entity: Mapped[str] = mapped_column(String(200))
-    cluster_ids: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    __tablename__ = "community_summaries"
+    __table_args__ = (
+        Index("idx_community_summaries_community", "community_id"),
+        {"schema": SCHEMA},
+    )
+
+    community_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.communities.id"), nullable=False
+    )
+    summary: Mapped[str] = mapped_column(Text)
+    key_findings: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    representative_triples: Mapped[list[str] | None] = mapped_column(
+        ARRAY(Text), nullable=True
+    )  # top 3-5 triple texts
     evidence_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    verified: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    generation_batch: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 # ---------------------------------------------------------------------------

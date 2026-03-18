@@ -1,4 +1,4 @@
-"""Memvault KG Services — Triple, Cluster, Wisdom, Attitude, Skill, CascadeRecall.
+"""Memvault KG Services — Triple, Community, CommunitySummary, Attitude, Skill, CascadeRecall.
 
 This is the public KG API of the memvault module.
 Other modules import from here, never from kg_models.py.
@@ -22,11 +22,11 @@ from .entity_resolution import entity_resolution_service, normalize_entity_text
 from .kg_config import normalize_predicate
 from .kg_models import (
     AttitudeFact,
-    Cluster,
-    ClusterTriple,
+    Community,
+    CommunityTriple,
+    CommunitySummary,
     SkillInvocation,
     Triple,
-    WisdomNode,
 )
 from .kg_schemas import (
     AttitudeEvolveRequest,
@@ -34,8 +34,9 @@ from .kg_schemas import (
     AttitudeFactCreate,
     AttitudeFactResponse,
     CascadeRecallResult,
-    ClusterDetail,
-    ClusterResponse,
+    CommunityDetail,
+    CommunityResponse,
+    CommunitySummaryResponse,
     GraphEdge,
     GraphNode,
     GraphTraversalResult,
@@ -45,7 +46,6 @@ from .kg_schemas import (
     TripleBatchCreate,
     TripleCreate,
     TripleResponse,
-    WisdomNodeResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -516,112 +516,134 @@ class GraphTraversalService:
         )
 
 
-# ======================== ClusterService ========================
+# ======================== CommunityService ========================
 
 
-class ClusterService:
-    """Manage L1 Cluster records (standalone — no BaseCRUD)."""
+class CommunityService:
+    """Manage L1 Community records (standalone — no BaseCRUD)."""
 
-    def to_response(self, instance: Cluster) -> ClusterResponse:
-        """Map ORM Cluster to ClusterResponse."""
-        return ClusterResponse(
+    def to_response(self, instance: Community) -> CommunityResponse:
+        """Map ORM Community to CommunityResponse."""
+        return CommunityResponse(
             id=instance.id,
             space_id=instance.space_id,
             created_by=instance.created_by,
             created_at=instance.created_at,
             updated_at=instance.updated_at,
             name=instance.name,
+            resolution_level=instance.resolution_level,
             size=instance.size,
-            top_subjects=instance.top_subjects or [],
+            top_entities=instance.top_entities or [],
             top_predicates=instance.top_predicates or [],
-            top_objects=instance.top_objects or [],
             summary=instance.summary,
-            verdict=instance.verdict,
+            parent_community_id=instance.parent_community_id,
+            modularity_score=instance.modularity_score,
             generation_batch=instance.generation_batch,
         )
 
-    async def list_clusters(self, db: AsyncSession, space_id: str) -> list[ClusterResponse]:
-        """List all clusters for a space, ordered by size descending."""
-        q = select(Cluster).where(Cluster.space_id == space_id).order_by(Cluster.size.desc())
+    async def list_communities(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        resolution_level: int | None = None,
+    ) -> list[CommunityResponse]:
+        """List all communities for a space, ordered by size descending.
+
+        Optionally filtered by resolution_level (0=fine, 1=medium, 2=coarse).
+        """
+        q = select(Community).where(Community.space_id == space_id).order_by(Community.size.desc())
+        if resolution_level is not None:
+            q = q.where(Community.resolution_level == resolution_level)
         rows = (await db.execute(q)).scalars().all()
         return [self.to_response(r) for r in rows]
 
-    async def get_cluster_detail(self, db: AsyncSession, cluster_id: str) -> ClusterDetail | None:
-        """Get a cluster with its member triples via cluster_triples join."""
-        cluster = await db.get(Cluster, cluster_id)
-        if not cluster:
+    async def get_community_detail(
+        self, db: AsyncSession, community_id: str
+    ) -> CommunityDetail | None:
+        """Get a community with its member triples and children communities."""
+        community = await db.get(Community, community_id)
+        if not community:
             return None
 
-        # Fetch member triples via join
+        # Fetch member triples via community_triples join
         q = (
             select(Triple)
-            .join(ClusterTriple, ClusterTriple.triple_id == Triple.id)
-            .where(ClusterTriple.cluster_id == cluster_id)
-            .order_by(ClusterTriple.confidence.desc())
+            .join(CommunityTriple, CommunityTriple.triple_id == Triple.id)
+            .where(CommunityTriple.community_id == community_id)
         )
         triple_rows = (await db.execute(q)).scalars().all()
         triple_svc = triple_service  # use module-level singleton
 
-        return ClusterDetail(
-            id=cluster.id,
-            space_id=cluster.space_id,
-            created_by=cluster.created_by,
-            created_at=cluster.created_at,
-            updated_at=cluster.updated_at,
-            name=cluster.name,
-            size=cluster.size,
-            top_subjects=cluster.top_subjects or [],
-            top_predicates=cluster.top_predicates or [],
-            top_objects=cluster.top_objects or [],
-            summary=cluster.summary,
-            verdict=cluster.verdict,
-            generation_batch=cluster.generation_batch,
+        # Fetch children communities
+        children_q = select(Community).where(
+            Community.parent_community_id == community_id,
+            Community.space_id == community.space_id,
+        )
+        children_rows = (await db.execute(children_q)).scalars().all()
+
+        return CommunityDetail(
+            id=community.id,
+            space_id=community.space_id,
+            created_by=community.created_by,
+            created_at=community.created_at,
+            updated_at=community.updated_at,
+            name=community.name,
+            resolution_level=community.resolution_level,
+            size=community.size,
+            top_entities=community.top_entities or [],
+            top_predicates=community.top_predicates or [],
+            summary=community.summary,
+            parent_community_id=community.parent_community_id,
+            modularity_score=community.modularity_score,
+            generation_batch=community.generation_batch,
             triples=[triple_svc.to_response(t) for t in triple_rows],
+            children=[self.to_response(c) for c in children_rows],
         )
 
-    async def save_clusters(
+    async def save_communities(
         self,
         db: AsyncSession,
         space_id: str,
-        clusters_data: list[dict],
+        communities_data: list[dict],
     ) -> int:
-        """Atomically replace all clusters for a space with fresh GMM results.
+        """Atomically replace all communities for a space with fresh Leiden results.
 
-        Deletes existing clusters and cluster_triples, inserts new ones.
-        Returns count of clusters saved.
+        Deletes existing community_triples then communities, inserts new ones.
+        Returns count of communities saved.
         """
-        # Delete existing cluster_triples then clusters for this space
-        existing_cluster_ids = (
-            select(Cluster.id).where(Cluster.space_id == space_id).scalar_subquery()
+        existing_community_ids = (
+            select(Community.id).where(Community.space_id == space_id).scalar_subquery()
         )
         await db.execute(
-            delete(ClusterTriple).where(ClusterTriple.cluster_id.in_(existing_cluster_ids))
+            delete(CommunityTriple).where(
+                CommunityTriple.community_id.in_(existing_community_ids)
+            )
         )
-        await db.execute(delete(Cluster).where(Cluster.space_id == space_id))
+        await db.execute(delete(Community).where(Community.space_id == space_id))
 
         saved = 0
-        for c in clusters_data:
-            cluster = Cluster(
+        for c in communities_data:
+            community = Community(
                 space_id=space_id,
                 name=c.get("name", ""),
+                resolution_level=c.get("resolution_level", 0),
                 size=c.get("size", 0),
-                top_subjects=c.get("top_subjects"),
+                entity_ids=c.get("entity_ids"),
+                top_entities=c.get("top_entities"),
                 top_predicates=c.get("top_predicates"),
-                top_objects=c.get("top_objects"),
                 summary=c.get("summary"),
-                verdict=c.get("verdict", "UNVERIFIED"),
+                parent_community_id=c.get("parent_community_id"),
+                modularity_score=c.get("modularity_score"),
                 generation_batch=c.get("generation_batch"),
             )
-            db.add(cluster)
+            db.add(community)
             await db.flush()
 
-            for member in c.get("members", []):
-                # member = {"triple_id": ..., "confidence": ...}
-                ct = ClusterTriple(
+            for triple_id in c.get("triple_ids", []):
+                ct = CommunityTriple(
                     space_id=space_id,
-                    cluster_id=cluster.id,
-                    triple_id=member["triple_id"],
-                    confidence=member.get("confidence"),
+                    community_id=community.id,
+                    triple_id=triple_id,
                 )
                 db.add(ct)
 
@@ -639,76 +661,79 @@ class ClusterService:
         return saved
 
 
-# ======================== WisdomService ========================
+# ======================== CommunitySummaryService ========================
 
 
-class WisdomService:
-    """Manage L2 WisdomNode records (standalone)."""
+class CommunitySummaryService:
+    """Manage L2 CommunitySummary records (standalone)."""
 
-    def to_response(self, instance: WisdomNode) -> WisdomNodeResponse:
-        """Map ORM WisdomNode to WisdomNodeResponse."""
-        return WisdomNodeResponse(
+    def to_response(self, instance: CommunitySummary) -> CommunitySummaryResponse:
+        """Map ORM CommunitySummary to CommunitySummaryResponse."""
+        return CommunitySummaryResponse(
             id=instance.id,
             space_id=instance.space_id,
             created_by=instance.created_by,
             created_at=instance.created_at,
             updated_at=instance.updated_at,
-            wisdom=instance.wisdom,
-            confidence=instance.confidence,
-            bridge_entity=instance.bridge_entity,
-            cluster_ids=instance.cluster_ids or [],
+            community_id=instance.community_id,
+            summary=instance.summary,
+            key_findings=instance.key_findings or [],
+            representative_triples=instance.representative_triples or [],
             evidence_count=instance.evidence_count,
             tags=instance.tags or [],
-            verified=instance.verified,
+            llm_model=instance.llm_model,
         )
 
-    async def list_wisdoms(
+    async def list_summaries(
         self,
         db: AsyncSession,
         space_id: str,
-        confidence_min: str | None = None,
-        tag: str | None = None,
-    ) -> list[WisdomNodeResponse]:
-        """List wisdom nodes, optionally filtered by confidence level or tag."""
-        q = select(WisdomNode).where(WisdomNode.space_id == space_id)
+        resolution_level: int | None = None,
+    ) -> list[CommunitySummaryResponse]:
+        """List community summaries for a space.
 
-        if confidence_min is not None:
-            # Order: HIGH > MEDIUM > LOW — filter by minimum level
-            level_order = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
-            min_rank = level_order.get(confidence_min.upper(), 1)
-            allowed = [k for k, v in level_order.items() if v >= min_rank]
-            q = q.where(WisdomNode.confidence.in_(allowed))
-
-        if tag is not None:
-            q = q.where(WisdomNode.tags.contains([tag]))
+        Optionally filtered by the resolution_level of the parent community.
+        """
+        if resolution_level is not None:
+            q = (
+                select(CommunitySummary)
+                .join(Community, Community.id == CommunitySummary.community_id)
+                .where(
+                    CommunitySummary.space_id == space_id,
+                    Community.resolution_level == resolution_level,
+                )
+            )
+        else:
+            q = select(CommunitySummary).where(CommunitySummary.space_id == space_id)
 
         rows = (await db.execute(q)).scalars().all()
         return [self.to_response(r) for r in rows]
 
-    async def save_wisdoms(
+    async def save_summaries(
         self,
         db: AsyncSession,
         space_id: str,
-        wisdoms_data: list[dict],
+        summaries_data: list[dict],
     ) -> int:
-        """Atomically replace all wisdom nodes for a space.
+        """Atomically replace all community summaries for a space.
 
-        Deletes existing wisdom_nodes, inserts new ones.
+        Deletes existing community_summaries, inserts new ones.
         Returns count saved.
         """
-        await db.execute(delete(WisdomNode).where(WisdomNode.space_id == space_id))
+        await db.execute(delete(CommunitySummary).where(CommunitySummary.space_id == space_id))
 
         saved = 0
-        for w in wisdoms_data:
-            node = WisdomNode(
+        for s in summaries_data:
+            node = CommunitySummary(
                 space_id=space_id,
-                wisdom=w["wisdom"],
-                confidence=w.get("confidence", "MEDIUM"),
-                bridge_entity=w.get("bridge_entity", ""),
-                cluster_ids=w.get("cluster_ids", []),
-                evidence_count=w.get("evidence_count"),
-                tags=w.get("tags"),
-                verified=w.get("verified", False),
+                community_id=s["community_id"],
+                summary=s["summary"],
+                key_findings=s.get("key_findings"),
+                representative_triples=s.get("representative_triples"),
+                evidence_count=s.get("evidence_count"),
+                tags=s.get("tags"),
+                llm_model=s.get("llm_model"),
+                generation_batch=s.get("generation_batch"),
             )
             db.add(node)
             saved += 1
@@ -1127,7 +1152,7 @@ class SkillTrackingService:
 
 
 class CascadeRecallService:
-    """Multi-layer recall: L2 (wisdom) → L1 (clusters) → L0 (triples) → blocks."""
+    """Multi-layer recall: L2 (community summaries) → L1 (communities) → L0 (triples) → blocks."""
 
     async def recall(
         self,
@@ -1148,34 +1173,37 @@ class CascadeRecallService:
         query_embedding = await get_embedding(query)
         pattern = f"%{query}%"
 
-        # --- L2: Wisdom nodes (text ILIKE — no embeddings on wisdom_nodes) ---
-        wisdom_q = (
-            select(WisdomNode)
+        # --- L2: CommunitySummary (summary ILIKE) ---
+        summary_q = (
+            select(CommunitySummary)
             .where(
-                WisdomNode.space_id == space_id,
-                WisdomNode.wisdom.ilike(pattern),
+                CommunitySummary.space_id == space_id,
+                CommunitySummary.summary.ilike(pattern),
             )
             .limit(top_k)
         )
-        wisdom_rows = (await db.execute(wisdom_q)).scalars().all()
-        if wisdom_rows:
-            result.wisdom = [wisdom_service.to_response(r) for r in wisdom_rows]
-            result.layers_searched.append("wisdom")
+        summary_rows = (await db.execute(summary_q)).scalars().all()
+        if summary_rows:
+            result.summaries = [community_summary_service.to_response(r) for r in summary_rows]
+            result.layers_searched.append("summaries")
 
-        # --- L1: Clusters (summary ILIKE) ---
-        cluster_q = (
-            select(Cluster)
+        # --- L1: Communities (summary + name ILIKE) ---
+        community_q = (
+            select(Community)
             .where(
-                Cluster.space_id == space_id,
-                Cluster.summary.ilike(pattern),
+                Community.space_id == space_id,
+                (
+                    Community.summary.ilike(pattern)
+                    | Community.name.ilike(pattern)
+                ),
             )
-            .order_by(Cluster.size.desc())
+            .order_by(Community.size.desc())
             .limit(top_k)
         )
-        cluster_rows = (await db.execute(cluster_q)).scalars().all()
-        if cluster_rows:
-            result.clusters = [cluster_service.to_response(r) for r in cluster_rows]
-            result.layers_searched.append("clusters")
+        community_rows = (await db.execute(community_q)).scalars().all()
+        if community_rows:
+            result.communities = [community_service.to_response(r) for r in community_rows]
+            result.layers_searched.append("communities")
 
         # --- L0: Triples (semantic or text) ---
         if query_embedding:
@@ -1303,8 +1331,8 @@ class ConfidenceDecayService:
 # ======================== Module-level singletons ========================
 
 triple_service = TripleService()
-cluster_service = ClusterService()
-wisdom_service = WisdomService()
+community_service = CommunityService()
+community_summary_service = CommunitySummaryService()
 attitude_service = AttitudeService()
 skill_tracking_service = SkillTrackingService()
 cascade_recall_service = CascadeRecallService()

@@ -19,9 +19,11 @@ from .kg_schemas import (
     AttitudeFactCreate,
     AttitudeFactResponse,
     CascadeRecallResult,
-    ClusterDetail,
-    ClusterRegenerateRequest,
-    ClusterResponse,
+    CommunityDetail,
+    CommunityRegenerateRequest,
+    CommunityResponse,
+    CommunitySummaryResponse,
+    CommunitySummaryRegenerateRequest,
     EntityCanonicalResponse,
     EntityMergeRequest,
     EntityMergeResult,
@@ -34,18 +36,16 @@ from .kg_schemas import (
     TripleCreate,
     TripleInvalidateRequest,
     TripleResponse,
-    WisdomNodeResponse,
-    WisdomRegenerateRequest,
 )
 from .kg_services import (
     attitude_service,
     cascade_recall_service,
-    cluster_service,
+    community_service,
+    community_summary_service,
     confidence_decay_service,
     graph_traversal_service,
     skill_tracking_service,
     triple_service,
-    wisdom_service,
 )
 
 router = APIRouter(prefix="/kg", tags=["memvault-kg"])
@@ -165,49 +165,50 @@ async def invalidate_triple(
     return triple_service.to_response(instance)
 
 
-# ======================== Clusters ========================
+# ======================== Communities ========================
 
 
-@router.get("/clusters", response_model=list[ClusterResponse])
-async def list_clusters(
+@router.get("/communities", response_model=list[CommunityResponse])
+async def list_communities(
     space_id: str = Query("default"),
+    resolution_level: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    return await cluster_service.list_clusters(db, space_id)
+    return await community_service.list_communities(db, space_id, resolution_level=resolution_level)
 
 
-@router.get("/clusters/{cluster_id}", response_model=ClusterDetail)
-async def get_cluster(
-    cluster_id: str,
+@router.get("/communities/{community_id}", response_model=CommunityDetail)
+async def get_community(
+    community_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    detail = await cluster_service.get_cluster_detail(db, cluster_id)
+    detail = await community_service.get_community_detail(db, community_id)
     if not detail:
-        raise NotFoundError("Cluster not found", code="memvault.cluster_not_found")
+        raise NotFoundError("Community not found", code="memvault.community_not_found")
     return detail
 
 
-@router.post("/clusters/regenerate", status_code=200)
-async def regenerate_clusters(
-    body: ClusterRegenerateRequest,
+@router.post("/communities/regenerate", status_code=200)
+async def regenerate_communities(
+    body: CommunityRegenerateRequest,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Accept cluster data from cluster_pipeline.py and save atomically.
+    """Accept community data from community_pipeline.py and save atomically.
 
     Converts pipeline format (triples with id) to service format (members with triple_id).
     """
-    clusters_for_service = []
+    communities_for_service = []
     generation_batch = body.generated_at
 
-    for c in body.clusters:
+    for c in body.communities:
         members = []
         for t in c.get("triples", []):
             triple_id = t.get("id", "")
             if triple_id:
                 members.append({"triple_id": triple_id, "confidence": None})
 
-        clusters_for_service.append(
+        communities_for_service.append(
             {
                 "name": c.get("name", ""),
                 "size": c.get("size", 0),
@@ -221,32 +222,33 @@ async def regenerate_clusters(
             }
         )
 
-    saved = await cluster_service.save_clusters(db, space_id, clusters_for_service)
+    saved = await community_service.save_communities(db, space_id, communities_for_service)
     await db.commit()
     return {"saved": saved, "generation_batch": generation_batch}
 
 
-# ======================== Wisdom ========================
+# ======================== Community Summaries ========================
 
 
-@router.get("/wisdom", response_model=list[WisdomNodeResponse])
-async def list_wisdom(
+@router.get("/summaries", response_model=list[CommunitySummaryResponse])
+async def list_summaries(
     space_id: str = Query("default"),
     confidence: str | None = Query(None),
     tag: str | None = Query(None),
+    resolution_level: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    return await wisdom_service.list_wisdoms(db, space_id, confidence_min=confidence, tag=tag)
+    return await community_summary_service.list_summaries(db, space_id, confidence_min=confidence, tag=tag)
 
 
-@router.post("/wisdom/regenerate", status_code=200)
-async def regenerate_wisdom(
-    body: WisdomRegenerateRequest,
+@router.post("/summaries/regenerate", status_code=200)
+async def regenerate_summaries(
+    body: CommunitySummaryRegenerateRequest,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Accept wisdom data from wisdom_pipeline.py and save atomically."""
-    saved = await wisdom_service.save_wisdoms(db, space_id, body.wisdom_nodes)
+    """Accept community summary data from community_summary_pipeline.py and save atomically."""
+    saved = await community_summary_service.save_summaries(db, space_id, body.summary_nodes)
     await db.commit()
     return {"saved": saved, "generated_at": body.generated_at}
 
