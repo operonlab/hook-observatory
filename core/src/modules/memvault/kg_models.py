@@ -12,7 +12,6 @@ All tables live in the `memvault` PostgreSQL schema.
 
 from datetime import datetime
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -28,33 +27,9 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.shared.models import Base, SpaceScopedModel
+from src.shared.models import SpaceScopedModel
 
-from .models import EMBEDDING_DIM, SCHEMA
-
-
-class TripleEmbedding(Base):
-    """Separated embedding vector for Triple — allows independent lifecycle management."""
-
-    __tablename__ = "triple_embeddings"
-    __table_args__ = (
-        Index(
-            "idx_triple_emb_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        {"schema": SCHEMA},
-    )
-
-    triple_id: Mapped[str] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.triples.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
-
+from .models import SCHEMA
 
 # ---------------------------------------------------------------------------
 # L0 — Triple
@@ -68,13 +43,6 @@ class EntityCanonical(SpaceScopedModel):
     __table_args__ = (
         Index("idx_ec_canonical_name", "space_id", "canonical_name"),
         Index("idx_ec_entity_type", "entity_type"),
-        Index(
-            "idx_ec_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
         Index("idx_ec_aliases", "aliases", postgresql_using="gin"),
         UniqueConstraint(
             "space_id",
@@ -86,7 +54,6 @@ class EntityCanonical(SpaceScopedModel):
 
     canonical_name: Mapped[str] = mapped_column(String(500))
     aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     entity_type: Mapped[str] = mapped_column(
         String(50), server_default=text("'concept'")
     )  # concept | tool | person | org | language
@@ -106,21 +73,6 @@ class Triple(SpaceScopedModel):
             "idx_triples_valid",
             "space_id",
             postgresql_where=text("invalid_at IS NULL"),
-        ),
-        Index(
-            "idx_triples_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        Index(
-            "idx_triples_embedding_recent",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_where=text("created_at > now() - interval '90 days'"),
         ),
         UniqueConstraint(
             "space_id",
@@ -155,7 +107,6 @@ class Triple(SpaceScopedModel):
     canonical_object_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey(f"{SCHEMA}.entity_canonicals.id"), nullable=True
     )
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -241,13 +192,6 @@ class AttitudeFact(SpaceScopedModel):
             "space_id",
             postgresql_where=text("superseded_by IS NULL"),
         ),
-        Index(
-            "idx_attitude_facts_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
         {"schema": SCHEMA},
     )
 
@@ -266,7 +210,6 @@ class AttitudeFact(SpaceScopedModel):
         ForeignKey(f"{SCHEMA}.attitude_facts.id"),
         nullable=True,
     )
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
 
 # ---------------------------------------------------------------------------

@@ -5,15 +5,14 @@ All tables live in the `memvault` PostgreSQL schema.
 
 from datetime import datetime
 
-from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import DateTime, Float, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "memvault"
-EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B
+EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B — kept for services/dedup consumers
 
 
 class MemoryBlock(SpaceScopedModel):
@@ -24,21 +23,6 @@ class MemoryBlock(SpaceScopedModel):
         Index("idx_blocks_tags", "tags", postgresql_using="gin"),
         Index("idx_blocks_type", "block_type"),
         Index("idx_blocks_session", "source_session"),
-        Index(
-            "idx_blocks_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        Index(
-            "idx_blocks_embedding_recent",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_where=text("created_at > now() - interval '90 days'"),
-        ),
         {"schema": SCHEMA},
     )
 
@@ -48,36 +32,12 @@ class MemoryBlock(SpaceScopedModel):
         String(50), server_default=text("'general'")
     )  # knowledge | skill | attitude | general
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     # G6: Access tracking — increment on each retrieval for effective half-life computation
     access_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     last_accessed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-
-
-class BlockEmbedding(Base):
-    """Separated embedding vector for MemoryBlock — allows independent lifecycle management."""
-
-    __tablename__ = "block_embeddings"
-    __table_args__ = (
-        Index(
-            "idx_block_emb_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        {"schema": SCHEMA},
-    )
-
-    block_id: Mapped[str] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.blocks.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
 
 
 class BlockArchive(Base):

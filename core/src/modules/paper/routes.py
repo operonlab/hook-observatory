@@ -34,7 +34,7 @@ from src.shared.errors import BadRequestError, ConflictError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from . import search as search_engine
-from .models import Article, ArticleEmbedding, Digest
+from .models import Article, Digest
 from .schemas import (
     AnnotationCreate,
     AnnotationResponse,
@@ -128,7 +128,7 @@ async def create_article(
         embedding = await get_embedding(embed_text)
         if embedding:
             instance.embedding = embedding
-            db.add(ArticleEmbedding(article_id=instance.id, embedding=embedding))
+            # ArticleEmbedding table removed (Qdrant migration)
     except Exception:
         logger.warning("Failed to generate embedding for article %s", instance.id, exc_info=True)
 
@@ -180,7 +180,9 @@ async def search_articles(
 # ======================== Digest ========================
 
 
-async def _bg_generate_digest(article_id: str, space_id: str, model_name: str | None = None) -> None:
+async def _bg_generate_digest(
+    article_id: str, space_id: str, model_name: str | None = None
+) -> None:
     """Background task: generate (or regenerate) digest for one article.
 
     Pulls a fresh DB session, calls generate_digest(), then upserts the result.
@@ -204,7 +206,9 @@ async def _bg_generate_digest(article_id: str, space_id: str, model_name: str | 
                 arxiv_id=article.arxiv_id,
             )
             if digest_data is None:
-                logger.warning("_bg_generate_digest: generate_digest returned None for %s", article_id)
+                logger.warning(
+                    "_bg_generate_digest: generate_digest returned None for %s", article_id
+                )
                 return
 
             now = datetime.now(UTC)
@@ -488,7 +492,7 @@ async def fetch_arxiv_paper(
         embedding = await get_embedding(embed_text)
         if embedding:
             instance.embedding = embedding
-            db.add(ArticleEmbedding(article_id=instance.id, embedding=embedding))
+            # ArticleEmbedding table removed (Qdrant migration)
     except Exception:
         logger.warning("fetch/arxiv: embedding failed for %s", arxiv_id, exc_info=True)
 

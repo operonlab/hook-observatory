@@ -1,11 +1,10 @@
-"""Paper ORM models — articles, digests, annotations, citations, embeddings.
+"""Paper ORM models — articles, digests, annotations, citations.
 
 All tables live in the `paper` PostgreSQL schema.
 """
 
 from datetime import datetime
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     DateTime,
     Float,
@@ -23,32 +22,6 @@ from src.shared.models import Base, SpaceScopedModel
 
 SCHEMA = "paper"
 EMBEDDING_DIM = 1024  # mlx-embeddings Qwen3-Embedding-0.6B
-
-
-# ======================== Article Embedding ========================
-
-
-class ArticleEmbedding(Base):
-    """Separated embedding vector for Article — allows independent lifecycle management."""
-
-    __tablename__ = "article_embeddings"
-    __table_args__ = (
-        Index(
-            "idx_article_emb_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        {"schema": SCHEMA},
-    )
-
-    article_id: Mapped[str] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.articles.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
 
 
 # ======================== Article ========================
@@ -79,13 +52,6 @@ class Article(SpaceScopedModel):
         Index("idx_articles_categories", "categories", postgresql_using="gin"),
         Index("idx_articles_year", "year"),
         Index("idx_articles_created", "created_at"),
-        Index(
-            "idx_articles_embedding",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
         {"schema": SCHEMA},
     )
 
@@ -108,8 +74,7 @@ class Article(SpaceScopedModel):
     full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     s3_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Inline embedding (Phase 2 uses sub-table ArticleEmbedding)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    # Embedding removed — Qdrant handles search vectors
 
     # Relationships
     digest: Mapped["Digest | None"] = relationship(
