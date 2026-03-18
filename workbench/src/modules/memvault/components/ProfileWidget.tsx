@@ -83,11 +83,14 @@ function KgStatsRow({ label, count, color }: { label: string; count: number; col
 }
 
 export default function ProfileWidget({ profile, loading = false }: ProfileWidgetProps) {
-  const { kg_wisdom, kg_clusters, kg_triples, kg_triplesTotal, kg_attitudes, recalculateProfile } =
+  const { kg_summaries, kg_communities, kg_triplesTotal, kg_attitudes, recalculateProfile } =
     useMemvaultStore()
 
   const hasKgData =
-    kg_wisdom.length > 0 || kg_clusters.length > 0 || kg_triplesTotal > 0 || kg_attitudes.length > 0
+    kg_summaries.length > 0 ||
+    kg_communities.length > 0 ||
+    kg_triplesTotal > 0 ||
+    kg_attitudes.length > 0
 
   return (
     <div
@@ -101,7 +104,7 @@ export default function ProfileWidget({ profile, loading = false }: ProfileWidge
           </h2>
           <InfoTip
             text={
-              'KAS 分數以對數尺度計算，滿分 100：\n\nK（知識）= 三元組數量基礎分（100個≈50, 2000個≈70）+ 群集加成（每個+2, 上限15）+ 智慧結晶加成（每個+2, 上限15）\nA（態度）= 活躍態度數量基礎分（上限60）+ 平均信心度加成（上限40）\nS（技能）= 調用次數基礎分（上限50）+ 技能多樣性（每種+2, 上限25）+ 成功率加成（上限25）\n\n知識圖譜三層架構：\nL0 三元組 — 從對話萃取的「主詞→謂詞→受詞」事實\nL1 知識群集 — 語義相近三元組自動聚合成主題群\nL2 智慧結晶 — 跨群集歸納的高層洞見與策略\n\n點擊「重新計算」從最新 KG 數據刷新。'
+              'KAS 分數以對數尺度計算，滿分 100：\n\nK（知識）= 三元組數量基礎分（100個≈50, 2000個≈70）+ 社群加成（每個+2, 上限15）+ 社群摘要加成（每個+2, 上限15）\nA（態度）= 活躍態度數量基礎分（上限60）+ 平均信心度加成（上限40）\nS（技能）= 調用次數基礎分（上限50）+ 技能多樣性（每種+2, 上限25）+ 成功率加成（上限25）\n\n知識圖譜三層架構：\nL0 三元組 — 從對話萃取的「主詞→謂詞→受詞」事實\nL1 知識社群 — Leiden 演算法自動偵測的主題群組\nL2 社群摘要 — LLM 自動生成的社群洞察與關鍵發現\n\n點擊「重新計算」從最新 KG 數據刷新。'
             }
           />
         </div>
@@ -160,8 +163,8 @@ export default function ProfileWidget({ profile, loading = false }: ProfileWidge
           </p>
           {/* Mobile: 2-column grid for compact display */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:block sm:space-y-1.5">
-            <KgStatsRow label="智慧結晶" count={kg_wisdom.length} color="var(--peach)" />
-            <KgStatsRow label="知識群集" count={kg_clusters.length} color="var(--blue)" />
+            <KgStatsRow label="社群摘要" count={kg_summaries.length} color="var(--peach)" />
+            <KgStatsRow label="知識社群" count={kg_communities.length} color="var(--blue)" />
             <KgStatsRow label="三元組" count={kg_triplesTotal} color="var(--teal)" />
             <KgStatsRow label="態度" count={kg_attitudes.length} color="var(--mauve)" />
           </div>

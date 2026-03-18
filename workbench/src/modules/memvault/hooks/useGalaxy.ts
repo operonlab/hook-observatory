@@ -1,16 +1,29 @@
 import { useMemo } from 'react'
 import type { MemoryBlock } from '@/types'
-import type { Cluster, GalaxyLayer, GalaxyLink, GalaxyNode, Triple, WisdomNode } from '../types'
+import type {
+  Community,
+  CommunitySummary,
+  GalaxyLayer,
+  GalaxyLink,
+  GalaxyNode,
+  Triple,
+} from '../types'
 
 interface UseGalaxyOptions {
   blocks: MemoryBlock[]
   triples: Triple[]
-  clusters: Cluster[]
-  wisdom: WisdomNode[]
+  communities: Community[]
+  summaries: CommunitySummary[]
   visibleLayers: Set<GalaxyLayer>
 }
 
-export function useGalaxy({ blocks, triples, clusters, wisdom, visibleLayers }: UseGalaxyOptions) {
+export function useGalaxy({
+  blocks,
+  triples,
+  communities,
+  summaries,
+  visibleLayers,
+}: UseGalaxyOptions) {
   const nodes: GalaxyNode[] = useMemo(() => {
     const result: GalaxyNode[] = []
 
@@ -39,33 +52,32 @@ export function useGalaxy({ blocks, triples, clusters, wisdom, visibleLayers }: 
       }
     }
 
-    if (visibleLayers.has('clusters')) {
-      for (const c of clusters) {
+    if (visibleLayers.has('communities')) {
+      for (const c of communities) {
         result.push({
           id: c.id,
           label: c.name,
           type: 'knowledge',
           confidence: 0.7,
-          layer: 'clusters',
+          layer: 'communities',
         })
       }
     }
 
-    if (visibleLayers.has('wisdom')) {
-      for (const w of wisdom) {
-        const conf = w.confidence === 'HIGH' ? 0.9 : w.confidence === 'MEDIUM' ? 0.6 : 0.3
+    if (visibleLayers.has('summaries')) {
+      for (const s of summaries) {
         result.push({
-          id: w.id,
-          label: w.wisdom.slice(0, 50),
+          id: s.id,
+          label: s.summary.slice(0, 50),
           type: 'knowledge',
-          confidence: conf,
-          layer: 'wisdom',
+          confidence: 0.85,
+          layer: 'summaries',
         })
       }
     }
 
     return result
-  }, [blocks, triples, clusters, wisdom, visibleLayers])
+  }, [blocks, triples, communities, summaries, visibleLayers])
 
   const links: GalaxyLink[] = useMemo(() => {
     const result: GalaxyLink[] = []
@@ -87,23 +99,21 @@ export function useGalaxy({ blocks, triples, clusters, wisdom, visibleLayers }: 
       }
     }
 
-    // Wisdom → Cluster links
-    if (visibleLayers.has('wisdom') && visibleLayers.has('clusters')) {
-      for (const w of wisdom) {
-        for (const cid of w.cluster_ids) {
-          if (nodeIds.has(cid)) {
-            result.push({
-              source: w.id,
-              target: cid,
-              strength: 0.8,
-            })
-          }
+    // Summary → Community links
+    if (visibleLayers.has('summaries') && visibleLayers.has('communities')) {
+      for (const s of summaries) {
+        if (nodeIds.has(s.community_id)) {
+          result.push({
+            source: s.id,
+            target: s.community_id,
+            strength: 0.8,
+          })
         }
       }
     }
 
     return result
-  }, [nodes, blocks, wisdom, visibleLayers])
+  }, [nodes, blocks, summaries, visibleLayers])
 
   return { nodes, links }
 }

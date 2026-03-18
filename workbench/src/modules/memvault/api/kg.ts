@@ -3,12 +3,12 @@ import type { PaginatedResponse } from '@/types'
 import type {
   AttitudeFact,
   CascadeRecallResult,
-  Cluster,
-  ClusterDetail,
+  Community,
+  CommunityDetail,
+  CommunitySummary,
   SkillInvocation,
   SkillProficiency,
   Triple,
-  WisdomNode,
 } from '../types'
 
 const BASE = '/memvault/kg'
@@ -34,21 +34,21 @@ export const kgApi = {
   searchTriples: (q: string, topK = 10): Promise<Triple[]> =>
     request<Triple[]>(`${BASE}/triples/search?q=${encodeURIComponent(q)}&top_k=${topK}`),
 
-  // ── Clusters ──
+  // ── Communities ──
 
-  listClusters: (): Promise<Cluster[]> => request<Cluster[]>(`${BASE}/clusters`),
+  listCommunities: (): Promise<Community[]> => request<Community[]>(`${BASE}/communities`),
 
-  getCluster: (id: string): Promise<ClusterDetail> =>
-    request<ClusterDetail>(`${BASE}/clusters/${id}`),
+  getCommunity: (id: string): Promise<CommunityDetail> =>
+    request<CommunityDetail>(`${BASE}/communities/${id}`),
 
-  // ── Wisdom ──
+  // ── Summaries ──
 
-  listWisdom: (confidence?: string, tag?: string): Promise<WisdomNode[]> => {
+  listSummaries: (resolution_level?: number, tag?: string): Promise<CommunitySummary[]> => {
     const params = new URLSearchParams()
-    if (confidence) params.set('confidence', confidence)
+    if (resolution_level !== undefined) params.set('resolution_level', String(resolution_level))
     if (tag) params.set('tag', tag)
     const qs = params.toString()
-    return request<WisdomNode[]>(`${BASE}/wisdom${qs ? `?${qs}` : ''}`)
+    return request<CommunitySummary[]>(`${BASE}/summaries${qs ? `?${qs}` : ''}`)
   },
 
   // ── Attitudes ──
