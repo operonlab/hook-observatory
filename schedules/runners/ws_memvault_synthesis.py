@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-ws_memvault_synthesis.py — Daily 4AM knowledge graph synthesis
+ws_memvault_synthesis.py — Daily knowledge graph synthesis
 
-Pipeline (sequential, each step depends on the previous):
-  1. cluster_pipeline.py  — re-cluster all triples (GMM)
-  2. wisdom_pipeline.py   — synthesize cross-cluster wisdom (requires clusters)
-  3. confidence_decay_pipeline.py — decay stale attitude confidence (independent)
-  4. attitude_pipeline.py --all   — digest accumulated corrections
-  5. Tag sync + domain auto-promotion (threshold >= 10)
-  6. Reset triple counter (for threshold-based triggering)
+Pipeline (sequential):
+  1. synthesis_runner.py — Leiden community detection + LLM summaries (3 levels)
+     (also triggers Qdrant auto-indexing for L1/L2 via save_communities/save_summaries)
+  2. confidence_decay_pipeline.py — decay stale attitude confidence
+  3. attitude_pipeline.py --all   — digest accumulated corrections
+  4. Tag sync + domain auto-promotion (threshold >= 10)
+  5. Reset triple counter (for threshold-based triggering)
 
 Logs: ~/workshop/outputs/memvault/logs/synthesis.log
 """
@@ -51,6 +51,8 @@ def check_memory_pressure() -> bool:
 HOME = Path.home()
 PIPELINES_DIR = HOME / "workshop/mcp/memvault/pipelines"
 PYTHON = HOME / ".local/bin/python3"
+UV = "/opt/homebrew/bin/uv"
+CORE_PROJECT = HOME / "workshop/core"
 LOG_DIR = HOME / "workshop/outputs/memvault/logs"
 LOG_FILE = LOG_DIR / "synthesis.log"
 CORRECTIONS_DIR = HOME / "workshop/outputs/memvault/corrections"
@@ -121,39 +123,42 @@ def main() -> None:
 
     log("========== Daily synthesis started ==========")
 
-    # Step 1: Cluster pipeline (GMM re-clustering)
-    log("Step 1/6: cluster_pipeline.py")
-    if run_pipeline("cluster_pipeline.py"):
+    # Step 1: Leiden community detection + LLM summaries (synthesis_runner.py)
+    # This also triggers Qdrant auto-indexing for L1 communities and L2 summaries
+    log("Step 1/5: synthesis_runner.py (Leiden + summaries)")
+    synthesis_cmd = [
+        str(UV),
+        "run",
+        "--project",
+        str(CORE_PROJECT),
+        str(PIPELINES_DIR / "synthesis_runner.py"),
+    ]
+    with open(LOG_FILE, "a") as f:
+        result = subprocess.run(synthesis_cmd, stdout=f, stderr=f, timeout=900)
+    if result.returncode == 0:
         log("Step 1 OK")
     else:
-        log("Step 1 FAILED — continuing anyway")
+        log(f"Step 1 FAILED (exit {result.returncode}) — continuing anyway")
 
-    # Step 2: Wisdom pipeline (depends on fresh clusters)
-    log("Step 2/6: wisdom_pipeline.py (timeout=600s)")
-    if run_pipeline("wisdom_pipeline.py", ["--timeout", "600"]):
+    # Step 2: Confidence decay (independent of communities)
+    log("Step 2/5: confidence_decay_pipeline.py")
+    if run_pipeline("confidence_decay_pipeline.py"):
         log("Step 2 OK")
     else:
         log("Step 2 FAILED — continuing anyway")
 
-    # Step 3: Confidence decay (independent of clusters/wisdom)
-    log("Step 3/6: confidence_decay_pipeline.py")
-    if run_pipeline("confidence_decay_pipeline.py"):
-        log("Step 3 OK")
-    else:
-        log("Step 3 FAILED — continuing anyway")
-
-    # Step 4: Attitude pipeline — digest all accumulated corrections
-    log("Step 4/6: attitude_pipeline.py --all")
+    # Step 3: Attitude pipeline — digest all accumulated corrections
+    log("Step 3/5: attitude_pipeline.py --all")
     if CORRECTIONS_DIR.is_dir():
         if run_pipeline("attitude_pipeline.py", ["--input", str(CORRECTIONS_DIR), "--all"]):
-            log("Step 4 OK")
+            log("Step 3 OK")
         else:
-            log("Step 4 FAILED — continuing anyway")
+            log("Step 3 FAILED — continuing anyway")
     else:
-        log("Step 4 SKIP — no corrections directory")
+        log("Step 3 SKIP — no corrections directory")
 
-    # Step 5: Tag sync + domain auto-promotion
-    log("Step 5/6: Tag sync + domain promotion")
+    # Step 4: Tag sync + domain auto-promotion
+    log("Step 4/5: Tag sync + domain promotion")
 
     # Tag sync via POST
     try:
@@ -193,10 +198,10 @@ def main() -> None:
                 promoted += 1
 
     log(f"  Domains promoted: {promoted} new (threshold >= {DOMAIN_THRESHOLD})")
-    log("Step 5 OK")
+    log("Step 4 OK")
 
-    # Step 6: Reset triple counter
-    log("Step 6/6: Reset triple counter")
+    # Step 5: Reset triple counter
+    log("Step 5/5: Reset triple counter")
     COUNTER_FILE.write_text("0\n")
     log("Triple counter reset to 0")
 
