@@ -29,14 +29,9 @@ from typing import Any
 
 import httpx
 
+from ._base import APIError
 
-class AnvilError(Exception):
-    """Raised when the Anvil API returns a non-2xx response."""
-
-    def __init__(self, status_code: int, detail: str):
-        self.status_code = status_code
-        self.detail = detail
-        super().__init__(f"Anvil error {status_code}: {detail}")
+AnvilError = APIError
 
 
 class AnvilClient:
@@ -73,13 +68,14 @@ class AnvilClient:
             resp.raise_for_status()
             return resp
         except httpx.ConnectError:
-            raise AnvilError(
+            raise APIError(
                 0,
                 f"Cannot connect to Anvil at {self.base_url}. "
                 "Start server: cd stations/anvil && uv run python main.py",
+                module="anvil",
             ) from None
         except httpx.HTTPStatusError as e:
-            raise AnvilError(e.response.status_code, e.response.text[:500]) from e
+            raise APIError(e.response.status_code, e.response.text[:500], module="anvil") from e
 
     def _get(self, path: str, params: dict | None = None) -> Any:
         filtered = {k: v for k, v in params.items() if v is not None} if params else None
