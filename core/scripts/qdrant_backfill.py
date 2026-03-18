@@ -177,7 +177,7 @@ async def main():
     parser.add_argument("--space-id", help="Only backfill this space (default: all)")
     args = parser.parse_args()
 
-    if not is_available():
+    if not await is_available():
         logger.error("Qdrant is not available. Start Qdrant first.")
         sys.exit(1)
 
