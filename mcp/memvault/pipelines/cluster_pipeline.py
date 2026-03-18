@@ -30,7 +30,7 @@ OMLX_WORKER = Path.home() / ".venvs/omlx/embed_worker.py"
 EMBED_CHUNK_SIZE = 100
 BIC_RANGE_MIN = 3
 BIC_RANGE_MAX = 25
-MAX_TRIPLES_PER_FETCH = 5000
+MAX_TRIPLES_PER_FETCH = 20000
 
 
 # ── HTTP helpers (stdlib only, no external deps) ───────────────────────────────
