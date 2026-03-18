@@ -61,7 +61,7 @@ class MemvaultClient(BaseClient):
         Accepted fields: content, block_type, tags, source_session.
         """
         body = {k: v for k, v in fields.items() if v is not None}
-        return self._patch(f"/blocks/{block_id}", body)
+        return self._put(f"/blocks/{block_id}", body)
 
     def delete_block(self, block_id: str) -> None:
         """Delete a memory block. DELETE /blocks/{id}"""

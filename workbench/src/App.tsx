@@ -70,6 +70,8 @@ const NodeflowPage = React.lazy(() => import('./modules/nodeflow/pages'))
 const AnvilPage = React.lazy(() => import('./modules/anvil/pages'))
 const CapturePage = React.lazy(() => import('./modules/capture/pages'))
 const DailyosPage = React.lazy(() => import('./modules/dailyos/pages'))
+const BriefingPage = React.lazy(() => import('./modules/briefing/pages'))
+const NotificationPage = React.lazy(() => import('./modules/notification/pages'))
 
 function ModuleSuspense({ children }: { children: React.ReactNode }) {
   return (
@@ -308,6 +310,30 @@ function AppRoutes() {
             <AppShell>
               <ModuleSuspense>
                 <DailyosPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/briefing/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <BriefingPage />
+              </ModuleSuspense>
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/notification/*"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ModuleSuspense>
+                <NotificationPage />
               </ModuleSuspense>
             </AppShell>
           </AuthGuard>

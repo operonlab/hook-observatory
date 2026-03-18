@@ -130,7 +130,7 @@ class PaperClient(BaseClient):
         model_name: str | None = None,
         force: bool = False,
     ) -> dict:
-        """Trigger (or re-trigger) digest generation for an article. POST /articles/{id}/digest
+        """Trigger digest generation for an article. POST /articles/{id}/digest/trigger
 
         Args:
             article_id: Article UUID.
@@ -142,11 +142,11 @@ class PaperClient(BaseClient):
             body["model_name"] = model_name
         if force:
             body["force"] = True
-        return self._post(f"/articles/{article_id}/digest", body)
+        return self._post(f"/articles/{article_id}/digest/trigger", body)
 
     def redigest(
         self,
-        model_name: str,
+        model_name: str | None = None,
         relevance_filter: str | None = None,
     ) -> dict:
         """Batch re-generate digests with a specific model. POST /digest/redigest
