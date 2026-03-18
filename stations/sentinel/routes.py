@@ -1,13 +1,16 @@
-"""Sentinel API routes — 11 endpoints."""
+"""Sentinel API routes — 18 endpoints (11 sentinel + 7 sysmon proxy)."""
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 
+import httpx
 from auth import require_auth
 from database import get_session, persist
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse
 from models import ActiveOperation, Incident, Subscription
 from schemas import (
     ActiveOperationResponse,
@@ -30,6 +33,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
+log = logging.getLogger("sentinel")
+
+SYSMON_BASE = "http://127.0.0.1:9526"
 
 # Will be injected by main.py at startup
 _engine = None
@@ -407,3 +413,64 @@ async def sse_events(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── Sysmon Proxy Routes (auth required) ──
+# Proxy to system-monitor (port 9526) for service management + guardian
+
+
+async def _proxy_get(path: str) -> JSONResponse:
+    """Proxy a GET request to sysmon."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(f"{SYSMON_BASE}/{path}")
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+    except Exception as e:
+        log.warning("sysmon proxy error: %s %s", path, e)
+        return JSONResponse(content={"error": str(e)}, status_code=502)
+
+
+async def _proxy_post(path: str) -> JSONResponse:
+    """Proxy a POST request to sysmon."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{SYSMON_BASE}/{path}")
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+    except Exception as e:
+        log.warning("sysmon proxy error: %s %s", path, e)
+        return JSONResponse(content={"error": str(e)}, status_code=502)
+
+
+@router.get("/api/sentinel/sysmon/services")
+async def proxy_services(_user: dict = Depends(require_auth)):
+    return await _proxy_get("services")
+
+
+@router.post("/api/sentinel/sysmon/services/{label:path}/enable")
+async def proxy_svc_enable(label: str, _user: dict = Depends(require_auth)):
+    return await _proxy_post(f"services/{label}/enable")
+
+
+@router.post("/api/sentinel/sysmon/services/{label:path}/disable")
+async def proxy_svc_disable(label: str, _user: dict = Depends(require_auth)):
+    return await _proxy_post(f"services/{label}/disable")
+
+
+@router.post("/api/sentinel/sysmon/services/{label:path}/restart")
+async def proxy_svc_restart(label: str, _user: dict = Depends(require_auth)):
+    return await _proxy_post(f"services/{label}/restart")
+
+
+@router.get("/api/sentinel/sysmon/services/{label:path}/logs")
+async def proxy_svc_logs(label: str, _user: dict = Depends(require_auth)):
+    return await _proxy_get(f"services/{label}/logs")
+
+
+@router.get("/api/sentinel/sysmon/guardian")
+async def proxy_guardian(_user: dict = Depends(require_auth)):
+    return await _proxy_get("guardian")
+
+
+@router.post("/api/sentinel/sysmon/guardian/run")
+async def proxy_guardian_run(_user: dict = Depends(require_auth)):
+    return await _proxy_post("guardian/run")
