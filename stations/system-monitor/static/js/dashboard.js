@@ -29,10 +29,6 @@ let autoRefresh = true;
 let refreshTimer = null;
 let historyChart = null;
 let currentTab = "overview";
-let servicesData = [];
-let currentCatFilter = "all";
-let currentSrcFilter = "all";
-let expandedRows = new Set();
 
 // ─── Helpers ───
 
@@ -119,8 +115,6 @@ function setupTabs() {
       currentTab = tab;
 
       // Lazy-load tab data
-      if (tab === "services") fetchServices();
-      if (tab === "guardian") fetchGuardian();
       if (tab === "disk") fetchDiskSummary();
       if (tab === "reports") fetchReports();
     });
@@ -387,210 +381,6 @@ function renderTopProcesses(procs) {
     .join("");
 }
 
-// ─── Services Tab ───
-
-function renderServices(data) {
-  servicesData = data.services || [];
-  const countEl = document.getElementById("svc-count");
-  if (countEl) countEl.textContent = `(${servicesData.length})`;
-  renderServicesTable();
-}
-
-function getFilteredServices() {
-  let filtered = servicesData;
-  if (currentCatFilter !== "all") {
-    filtered = filtered.filter((s) => s.category === currentCatFilter);
-  }
-  if (currentSrcFilter !== "all") {
-    filtered = filtered.filter((s) => s.source === currentSrcFilter);
-  }
-  return filtered;
-}
-
-function statusInfo(s) {
-  let cls = "status-idle", label = "閒置";
-  if (s.status === "running") { cls = "status-running"; label = "運行中"; }
-  else if (s.status === "stopped") { cls = "status-stopped"; label = "已停止"; }
-  else if (s.status === "disabled") { cls = "status-disabled"; label = "已停用"; }
-  else if (s.status === "unloaded") { cls = "status-unloaded"; label = "未載入"; }
-  else if (s.status && s.status.startsWith("error")) { cls = "status-error"; label = s.status; }
-  return { cls, label };
-}
-
-function svcActions(s) {
-  // Only plist services can be controlled via launchctl
-  if (s.source !== "plist") return "";
-  const label = s.label;
-  const btns = [];
-  if (s.status === "disabled" || s.status === "unloaded") {
-    btns.push(`<button class="action-btn action-enable" onclick="svcAction('${esc(label)}','enable')" title="啟用">▶</button>`);
-  }
-  if (s.status === "running" || s.status === "idle") {
-    btns.push(`<button class="action-btn action-restart" onclick="svcAction('${esc(label)}','restart')" title="重啟">↻</button>`);
-    btns.push(`<button class="action-btn action-disable" onclick="svcAction('${esc(label)}','disable')" title="停用">⏹</button>`);
-  }
-  return btns.join(" ");
-}
-
-function renderServicesTable() {
-  const tbody = document.getElementById("svc-tbody");
-  if (!tbody) return;
-
-  const filtered = getFilteredServices();
-  if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">無服務</td></tr>';
-    return;
-  }
-
-  let html = "";
-  for (const s of filtered) {
-    const typeCls = `type-${s.type}`;
-    const typeLabels = { service: "常駐", periodic: "排程", oneshot: "單次", container: "容器" };
-    const typeLabel = typeLabels[s.type] || s.type;
-    const { cls: statusCls, label: statusLabel } = statusInfo(s);
-    const isExpanded = expandedRows.has(s.label);
-    const chevron = isExpanded ? "▾" : "▸";
-    const pidInfo = s.pid ? ` <span style="color:var(--subtext0);font-size:0.65rem">PID ${s.pid}</span>` : "";
-    const srcBadge = `<span class="source-badge source-${s.source || 'plist'}">${s.source || 'plist'}</span>`;
-
-    html += `<tr class="svc-row ${isExpanded ? 'expanded' : ''}" data-label="${esc(s.label)}">
-      <td class="col-expand" onclick="toggleRow('${esc(s.label)}')">${chevron}</td>
-      <td>${esc(s.name)}${pidInfo} ${srcBadge}</td>
-      <td><span class="type-badge ${typeCls}">${typeLabel}</span></td>
-      <td>${esc(s.schedule)}</td>
-      <td><span class="${statusCls}"><span class="status-dot"></span><span class="status-text">${statusLabel}</span></span></td>
-      <td class="actions-cell">${svcActions(s)}</td>
-    </tr>`;
-
-    if (isExpanded) {
-      html += `<tr class="svc-detail-row"><td colspan="6">
-        <div class="svc-detail">
-          <div class="svc-detail-grid">
-            <div class="detail-item"><span class="detail-label">Label</span><span class="detail-value">${esc(s.label)}</span></div>
-            <div class="detail-item"><span class="detail-label">指令</span><span class="detail-value mono">${esc(s.command || '—')}</span></div>
-            <div class="detail-item"><span class="detail-label">說明</span><span class="detail-value">${esc(s.description || '—')}</span></div>
-            <div class="detail-item"><span class="detail-label">日誌路徑</span><span class="detail-value mono">${esc(s.log_path || '—')}</span></div>
-            ${s.port ? `<div class="detail-item"><span class="detail-label">Port</span><span class="detail-value">${s.port}</span></div>` : ''}
-          </div>
-          <div class="svc-log-preview" id="log-${CSS.escape(s.label)}">
-            <div class="log-header">
-              <span>最近日誌</span>
-              <button class="action-btn" onclick="fetchServiceLogs('${esc(s.label)}')">刷新</button>
-            </div>
-            <pre class="log-content">點擊「刷新」載入日誌…</pre>
-          </div>
-        </div>
-      </td></tr>`;
-    }
-  }
-  tbody.innerHTML = html;
-}
-
-function toggleRow(label) {
-  if (expandedRows.has(label)) {
-    expandedRows.delete(label);
-  } else {
-    expandedRows.add(label);
-    // Auto-fetch logs on expand
-    setTimeout(() => fetchServiceLogs(label), 50);
-  }
-  renderServicesTable();
-}
-
-async function fetchServiceLogs(label) {
-  const logEl = document.getElementById("log-" + CSS.escape(label));
-  if (!logEl) return;
-  const pre = logEl.querySelector(".log-content");
-  if (pre) pre.textContent = "載入中…";
-  try {
-    const data = await fetch(`services/${encodeURIComponent(label)}/logs?lines=20`).then((r) => r.json());
-    if (pre) {
-      if (data.error) {
-        pre.textContent = data.error;
-      } else if (data.lines && data.lines.length > 0) {
-        pre.textContent = data.lines.join("\n");
-      } else {
-        pre.textContent = "（無日誌內容）";
-      }
-    }
-  } catch (err) {
-    if (pre) pre.textContent = "載入失敗: " + err.message;
-  }
-}
-
-async function svcAction(label, action) {
-  try {
-    const res = await fetch(`services/${encodeURIComponent(label)}/${action}`, { method: "POST" });
-    const data = await res.json();
-    if (data.status === "ok") {
-      // Refresh after short delay for launchctl to settle
-      setTimeout(fetchServices, 1000);
-    } else {
-      alert(`操作失敗: ${data.detail || '未知錯誤'}`);
-    }
-  } catch (err) {
-    alert(`操作失敗: ${err.message}`);
-  }
-}
-
-function setupServiceFilter() {
-  const filter = document.getElementById("svc-filter");
-  if (filter) {
-    filter.addEventListener("click", (e) => {
-      const btn = e.target.closest(".filter-btn");
-      if (!btn) return;
-      filter.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentCatFilter = btn.dataset.cat;
-      renderServicesTable();
-    });
-  }
-
-  const srcFilter = document.getElementById("svc-source-filter");
-  if (srcFilter) {
-    srcFilter.addEventListener("click", (e) => {
-      const btn = e.target.closest(".filter-btn");
-      if (!btn) return;
-      srcFilter.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentSrcFilter = btn.dataset.src;
-      renderServicesTable();
-    });
-  }
-}
-
-// ─── Guardian Tab ───
-
-function renderGuardian(data) {
-  const tbody = document.getElementById("guardian-tbody");
-  if (!tbody) return;
-
-  const entries = data.entries || [];
-  if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">無 Guardian 日誌</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = entries
-    .map((e) => {
-      const levelCls = `level-${e.level}`;
-      const kills = e.kills || [];
-      const detail = kills.length > 0
-        ? kills.map((k) => `${k.process} (${k.mem_mb}MB)`).join(", ")
-        : "—";
-
-      return `<tr>
-        <td>${esc(e.timestamp)}</td>
-        <td><span class="level-badge ${levelCls}">${e.level}</span></td>
-        <td>${e.pressure_level}</td>
-        <td>${e.total_killed}</td>
-        <td>${e.freed_mb > 0 ? e.freed_mb + " MB" : "—"}</td>
-        <td><span class="guardian-detail" title="${esc(detail)}">${esc(detail)}</span></td>
-      </tr>`;
-    })
-    .join("");
-}
-
 // ─── Data Fetching ───
 
 async function fetchAll() {
@@ -609,24 +399,6 @@ async function fetchAll() {
     if (alertsRes.status === "fulfilled") renderAlerts(alertsRes.value);
   } catch (err) {
     console.error("Fetch error:", err);
-  }
-}
-
-async function fetchServices() {
-  try {
-    const data = await fetch("services").then((r) => r.json());
-    renderServices(data);
-  } catch (err) {
-    console.error("Services fetch error:", err);
-  }
-}
-
-async function fetchGuardian() {
-  try {
-    const data = await fetch("guardian").then((r) => r.json());
-    renderGuardian(data);
-  } catch (err) {
-    console.error("Guardian fetch error:", err);
   }
 }
 
@@ -945,7 +717,6 @@ function disconnectSSE() {
 document.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   setupToggle();
-  setupServiceFilter();
   setupReportFilter();
   fetchAll();
   connectSSE();
