@@ -7,10 +7,11 @@ Full coverage of all Core API endpoints.
 
 import argparse
 import os
+import json
 import sys
 from datetime import datetime
 
-from cli.cli_helpers import err, json_out
+from cli.cli_helpers import json_out
 from cli.cli_utils import resolve_text_arg
 from workshop.clients._base import APIConnectionError, APIError
 from workshop.clients.memvault import MemvaultClient
@@ -73,7 +74,7 @@ def cmd_recall(client: MemvaultClient, args: argparse.Namespace) -> None:
         date_from=getattr(args, "since", None),
         date_to=getattr(args, "before", None),
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     results = data if isinstance(data, list) else data.get("results", data.get("blocks", []))
@@ -105,7 +106,7 @@ def cmd_extract(client: MemvaultClient, args: argparse.Namespace) -> None:
         tags=tags,
         source_session=args.session,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     block_id = data.get("id", data.get("block_id", "?"))
@@ -121,7 +122,7 @@ def cmd_extract(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Display aggregate memory statistics."""
     data = client.stats()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     blocks_data = data["blocks"]
@@ -165,7 +166,7 @@ def cmd_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_profile(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Display the KAS profile."""
     data = client.profile(rebuild=args.rebuild)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     kas = data.get("kas", data.get("scores", {}))
@@ -193,7 +194,7 @@ def cmd_profile(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_cascade(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Knowledge-graph cascade recall."""
     data = client.cascade(args.query, top_k=args.top_k)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     wisdom = data.get("wisdom", [])
@@ -249,28 +250,28 @@ def cmd_cascade(client: MemvaultClient, args: argparse.Namespace) -> None:
         print("  No cascade results found.")
 
 
-def cmd_wisdom(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """List wisdom nodes from the knowledge graph."""
-    data = client.wisdom(confidence=args.confidence, tag=args.tag)
-    if _json_out(data, args):
+def cmd_summaries(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """List community summary nodes from the knowledge graph."""
+    data = client.list_summaries(confidence=args.confidence, tag=args.tag)
+    if json_out(data, args):
         return
 
-    nodes = data if isinstance(data, list) else data.get("wisdom", data.get("nodes", []))
+    nodes = data if isinstance(data, list) else data.get("summaries", data.get("nodes", []))
 
     if not nodes:
         if not args.quiet:
-            print("  No wisdom nodes found.")
+            print("  No community summary nodes found.")
         return
 
     if args.quiet:
         for n in nodes:
-            print(n.get("wisdom", n.get("insight", n.get("content", ""))))
+            print(n.get("summary", n.get("insight", n.get("content", ""))))
         return
 
-    print("  Wisdom Nodes")
+    print("  Community Summaries")
     print("  " + "-" * 50)
     for i, n in enumerate(nodes, 1):
-        text = n.get("wisdom", n.get("insight", n.get("content", "?")))
+        text = n.get("summary", n.get("insight", n.get("content", "?")))
         conf = n.get("confidence", "?")
         bridge = n.get("bridge_entity", n.get("bridge", ""))
         evidence = n.get("evidence_count", n.get("evidence", "?"))
@@ -284,7 +285,7 @@ def cmd_wisdom(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_attitude(client: MemvaultClient, args: argparse.Namespace) -> None:
     """List active attitude facts."""
     data = client.attitudes(category=args.category)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     attitudes = data if isinstance(data, list) else data.get("attitudes", data.get("facts", []))
@@ -314,7 +315,7 @@ def cmd_attitude(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_health(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Check API connectivity."""
     healthy = client.health()
-    if _json_out({"status": "healthy" if healthy else "unhealthy", "url": client.base_url}, args):
+    if json_out({"status": "healthy" if healthy else "unhealthy", "url": client.base_url}, args):
         return
 
     if not healthy:
@@ -340,7 +341,7 @@ def cmd_blocks(client: MemvaultClient, args: argparse.Namespace) -> None:
         tag=args.tag,
         block_type=args.type,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     items = data.get("items", [])
@@ -372,7 +373,7 @@ def cmd_blocks(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_block_get(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Get a single block by ID."""
     data = client.get_block(args.block_id)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -405,7 +406,7 @@ def cmd_block_update(client: MemvaultClient, args: argparse.Namespace) -> None:
         sys.exit(1)
 
     data = client.update_block(args.block_id, **fields)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -417,7 +418,7 @@ def cmd_block_update(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_block_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Delete a memory block."""
     client.delete_block(args.block_id)
-    if _json_out({"deleted": args.block_id}, args):
+    if json_out({"deleted": args.block_id}, args):
         return
     if not args.quiet:
         print(f"  Block deleted: {args.block_id}")
@@ -431,7 +432,7 @@ def cmd_block_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_tags(client: MemvaultClient, args: argparse.Namespace) -> None:
     """List all tags."""
     data = client.list_tags()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     tags = data if isinstance(data, list) else data.get("tags", [])
@@ -455,7 +456,7 @@ def cmd_tags(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_tags_sync(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Sync tag counts."""
     data = client.sync_tags()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     synced = data.get("synced", "?")
@@ -473,7 +474,7 @@ def cmd_tags_sync(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_domains(client: MemvaultClient, args: argparse.Namespace) -> None:
     """List knowledge domains."""
     data = client.list_domains(page=args.page, page_size=args.page_size)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     items = data.get("items", [])
@@ -498,7 +499,7 @@ def cmd_domains(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_domain_create(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Create a knowledge domain."""
     data = client.create_domain(args.name, description=resolve_text_arg(args.description))
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -516,7 +517,7 @@ def cmd_domain_update(client: MemvaultClient, args: argparse.Namespace) -> None:
     if description:
         fields["description"] = description
     data = client.update_domain(args.domain_id, **fields)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -538,7 +539,7 @@ def cmd_triples(client: MemvaultClient, args: argparse.Namespace) -> None:
         page=args.page,
         page_size=args.page_size,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     items = data.get("items", [])
@@ -569,7 +570,7 @@ def cmd_triples(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_triple_search(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Semantic search over triples."""
     data = client.search_triples(args.query, top_k=args.top_k)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     results = data if isinstance(data, list) else data.get("results", [])
@@ -586,27 +587,27 @@ def cmd_triple_search(client: MemvaultClient, args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Command handlers — NEW: Clusters
+# Command handlers — NEW: Communities
 # ---------------------------------------------------------------------------
 
 
-def cmd_clusters(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """List KG clusters."""
-    data = client.list_clusters()
-    if _json_out(data, args):
+def cmd_communities(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """List KG communities."""
+    data = client.list_communities()
+    if json_out(data, args):
         return
 
-    clusters = data if isinstance(data, list) else data.get("clusters", [])
-    if not clusters:
+    communities = data if isinstance(data, list) else data.get("communities", [])
+    if not communities:
         if not args.quiet:
-            print("  No clusters found.")
+            print("  No communities found.")
         return
 
     if not args.quiet:
-        print(f"  Clusters ({len(clusters)} total)")
+        print(f"  Communities ({len(communities)} total)")
         print("  " + "-" * 50)
 
-    for c in clusters:
+    for c in communities:
         cid = c.get("id", "?")[:12]
         name = c.get("name", c.get("label", "?"))
         size = c.get("size", "?")
@@ -618,10 +619,10 @@ def cmd_clusters(client: MemvaultClient, args: argparse.Namespace) -> None:
             print(f"  {cid}  {name} (size: {size}){verdict_str}")
 
 
-def cmd_cluster_get(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Get cluster detail."""
-    data = client.get_cluster(args.cluster_id)
-    if _json_out(data, args):
+def cmd_community_get(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Get community detail."""
+    data = client.get_community(args.community_id)
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -653,7 +654,7 @@ def cmd_cluster_get(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_attitude_history(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Get attitude fact evolution history."""
     data = client.attitude_history(args.fact_id)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     facts = data if isinstance(data, list) else data.get("history", [])
@@ -688,7 +689,7 @@ def cmd_attitude_history(client: MemvaultClient, args: argparse.Namespace) -> No
 def cmd_skill_history(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Get invocation history for a skill."""
     data = client.skill_history(args.skill_name, limit=args.limit)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     invocations = data if isinstance(data, list) else data.get("invocations", [])
@@ -726,7 +727,7 @@ def cmd_frozen(client: MemvaultClient, args: argparse.Namespace) -> None:
         block_type=args.type,
         tag=args.tag,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     items = data.get("items", [])
@@ -760,7 +761,7 @@ def cmd_frozen(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_thaw(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Thaw a frozen block."""
     data = client.thaw_frozen(args.block_id)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     content = data.get("content", "")
@@ -787,7 +788,7 @@ def cmd_thaw(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_status(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Module status."""
     data = client.status()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -801,7 +802,7 @@ def cmd_status(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_recalculate(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Recalculate KAS profile from KG data."""
     data = client.recalculate_profile()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -820,7 +821,7 @@ def cmd_recalculate(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_decay(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Apply confidence decay to attitude facts."""
     data = client.apply_decay()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     checked = data.get("checked", "?")
@@ -834,7 +835,7 @@ def cmd_decay(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_backfill(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Backfill missing embeddings."""
     data = client.backfill_embeddings(batch_size=args.batch_size)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     triples = data.get("triples", {})
@@ -855,7 +856,7 @@ def cmd_backfill(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_sync_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Show sync/extraction statistics."""
     data = client.sync_stats()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -870,7 +871,7 @@ def cmd_sync_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_sync_scan(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Trigger a sync scan for new memories."""
     data = client.sync_scan()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -887,7 +888,7 @@ def cmd_sync_scan(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_skill_proficiency(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Show skill proficiency ranking."""
     data = client.skill_proficiency()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     skills = data if isinstance(data, list) else data.get("skills", [])
@@ -919,7 +920,7 @@ def cmd_triple_create(client: MemvaultClient, args: argparse.Namespace) -> None:
         confidence=args.confidence,
         source_session=args.session,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -932,7 +933,7 @@ def cmd_triple_create(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_triple_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Delete a KG triple."""
     client.delete_triple(args.triple_id)
-    if _json_out({"deleted": args.triple_id}, args):
+    if json_out({"deleted": args.triple_id}, args):
         return
     if not args.quiet:
         print(f"  Triple deleted: {args.triple_id}")
@@ -945,7 +946,7 @@ def cmd_attitude_create(client: MemvaultClient, args: argparse.Namespace) -> Non
         args.category,
         confidence=args.confidence,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -962,7 +963,7 @@ def cmd_attitude_evolve(client: MemvaultClient, args: argparse.Namespace) -> Non
         args.category,
         source_session=args.session,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     op = data.get("operation", "?")
@@ -977,7 +978,7 @@ def cmd_attitude_evolve(client: MemvaultClient, args: argparse.Namespace) -> Non
 def cmd_attitude_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Delete an attitude fact."""
     client.delete_attitude(args.fact_id)
-    if _json_out({"deleted": args.fact_id}, args):
+    if json_out({"deleted": args.fact_id}, args):
         return
     if not args.quiet:
         print(f"  Attitude deleted: {args.fact_id}")
@@ -990,7 +991,7 @@ def cmd_profile_upsert(client: MemvaultClient, args: argparse.Namespace) -> None
         attitude_score=args.attitude,
         skill_score=args.skill,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
 
     if args.quiet:
@@ -1066,8 +1067,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("query", help="Search query")
     p.add_argument("--top-k", type=int, default=5, help="Number of results (default: 5)")
 
-    # wisdom
-    p = sub.add_parser("wisdom", parents=[common], help="List wisdom nodes")
+    # summaries
+    p = sub.add_parser("summaries", parents=[common], help="List community summary nodes")
     p.add_argument(
         "--confidence",
         choices=["HIGH", "MEDIUM", "LOW"],
@@ -1133,12 +1134,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("query", help="Search query")
     p.add_argument("--top-k", type=int, default=10, help="Number of results (default: 10)")
 
-    # ---- NEW: KG Clusters ----
+    # ---- NEW: KG Communities ----
 
-    sub.add_parser("clusters", parents=[common], help="List KG clusters")
+    sub.add_parser("communities", parents=[common], help="List KG communities")
 
-    p = sub.add_parser("cluster", parents=[common], help="Get cluster detail")
-    p.add_argument("cluster_id", help="Cluster ID")
+    p = sub.add_parser("community", parents=[common], help="Get community detail")
+    p.add_argument("community_id", help="Community ID")
 
     # ---- NEW: Attitude extended ----
 
@@ -1305,7 +1306,7 @@ def cmd_triple_invalidate(client: MemvaultClient, args: argparse.Namespace) -> N
         reason=args.reason,
         replacement_id=getattr(args, "replacement", None),
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     print(f"  Triple {args.triple_id} invalidated (reason: {args.reason})")
 
@@ -1317,7 +1318,7 @@ def cmd_entities(client: MemvaultClient, args: argparse.Namespace) -> None:
         page=args.page,
         page_size=args.page_size,
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     items = data.get("items", [])
     total = data.get("total", len(items))
@@ -1338,7 +1339,7 @@ def cmd_entities(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_entity_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Entity resolution statistics."""
     data = client.entity_stats()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     print("  Entity Resolution Stats")
     print(f"  {'─' * 30}")
@@ -1351,7 +1352,7 @@ def cmd_entity_stats(client: MemvaultClient, args: argparse.Namespace) -> None:
 def cmd_entity_merge(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Merge two entities."""
     data = client.merge_entities(args.primary_id, args.secondary_id)
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     print(f"  Merged → {data.get('canonical_name', '?')}")
     print(f"  Aliases: {', '.join(data.get('aliases', []))}")
@@ -1364,7 +1365,7 @@ def cmd_entity_merge_candidates(client: MemvaultClient, args: argparse.Namespace
         threshold=getattr(args, "threshold", 0.92),
         limit=getattr(args, "limit", 50),
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     if not data:
         print("  No merge candidates found.")
@@ -1383,7 +1384,7 @@ def cmd_entity_merge_candidates(client: MemvaultClient, args: argparse.Namespace
 def cmd_entity_backfill(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Backfill entity resolution for unresolved triples."""
     data = client.backfill_entity_resolution()
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     resolved = data.get("resolved", 0)
     total = data.get("total_unresolved", 0)
@@ -1403,7 +1404,7 @@ def cmd_entity_auto_merge(
             "max_merges": args.max_merges,
         },
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     merged = data.get("merged", 0)
     print(f"  Auto-merged: {merged} entity pairs")
@@ -1422,7 +1423,7 @@ def cmd_traverse(client: MemvaultClient, args: argparse.Namespace) -> None:
         predicates=getattr(args, "predicates", None),
         max_results=getattr(args, "max_results", 200),
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
@@ -1447,7 +1448,7 @@ def cmd_session_context(client: MemvaultClient, args: argparse.Namespace) -> Non
             "space_id": args.space_id,
         },
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     s = data.get("summary", {})
     print(f"  Session: {data.get('source_session', '?')}")
@@ -1474,7 +1475,7 @@ def cmd_intelligence_ingest(client: MemvaultClient, args: argparse.Namespace) ->
             "content": resolve_text_arg(args.content),
         },
     )
-    if _json_out(data, args):
+    if json_out(data, args):
         return
     print(f"  Status: {data.get('status', '?')}")
     print(f"  Type: {data.get('digest_type', '?')}")
@@ -1488,7 +1489,7 @@ COMMAND_MAP = {
     "stats": cmd_stats,
     "profile": cmd_profile,
     "cascade": cmd_cascade,
-    "wisdom": cmd_wisdom,
+    "summaries": cmd_summaries,
     "attitude": cmd_attitude,
     "health": cmd_health,
     # Blocks CRUD
@@ -1506,9 +1507,9 @@ COMMAND_MAP = {
     # KG Triples
     "triples": cmd_triples,
     "triple-search": cmd_triple_search,
-    # KG Clusters
-    "clusters": cmd_clusters,
-    "cluster": cmd_cluster_get,
+    # KG Communities
+    "communities": cmd_communities,
+    "community": cmd_community_get,
     # Attitude extended
     "attitude-history": cmd_attitude_history,
     # Skill history

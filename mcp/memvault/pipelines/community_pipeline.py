@@ -1,0 +1,497 @@
+#!/usr/bin/env python3
+"""community_pipeline.py — Memvault V2 Knowledge Graph: Leiden Community Detection Pipeline
+
+Fetches all triples from Core API, builds an entity co-occurrence graph,
+runs Leiden community detection at 3 resolution levels, and POSTs community
+results back to Core API.
+
+Usage:
+    python3 community_pipeline.py [--space-id default] [--dry-run]
+    ~/.local/bin/python3 community_pipeline.py
+
+Dependencies: igraph (python-igraph), leidenalg
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from collections import Counter
+from datetime import datetime
+from urllib.parse import urlencode
+
+# ── Configuration ──────────────────────────────────────────────────────────────
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+MAX_TRIPLES_PER_FETCH = 20000
+
+RESOLUTIONS = {
+    0: 1.0,    # fine: many small communities
+    1: 0.3,    # medium
+    2: 0.05,   # coarse: few large themes
+}
+
+JUDGMENT_PREDICATES = {"should", "should_NOT", "chosen_over"}
+RESULT_PREDICATES = {"improves", "fixes", "enables", "prevents"}
+CONTEXT_PREDICATES = {"causes", "requires", "depends_on", "uses"}
+
+
+# ── HTTP helpers (stdlib only, no external deps) ──────────────────────────────
+def http_get(url: str, params: dict | None = None) -> dict:
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:200]
+        print(f"[error] GET {url} → HTTP {e.code}: {body}", file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"[error] GET {url} → {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def http_post(url: str, body: dict, params: dict | None = None) -> dict:
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body_txt = e.read().decode("utf-8", errors="replace")[:200]
+        print(f"[error] POST {url} → HTTP {e.code}: {body_txt}", file=sys.stderr)
+        return {"error": e.code}
+    except urllib.error.URLError as e:
+        print(f"[error] POST {url} → {e}", file=sys.stderr)
+        return {"error": str(e)}
+
+
+# ── Phase 1: Fetch Triples from Core API (paginated) ─────────────────────────
+def fetch_triples(space_id: str) -> list[dict]:
+    url = f"{CORE_API}/api/memvault/kg/triples"
+    page_size = 100
+    page = 1
+    rows: list[dict] = []
+    total = None
+
+    print(f"[Phase 1] Fetching triples from {url} (space={space_id}) ...")
+
+    while True:
+        params = {"space_id": space_id, "page_size": page_size, "page": page}
+        data = http_get(url, params)
+
+        items = data.get("items", []) if isinstance(data, dict) else data
+        if total is None:
+            total = data.get("total", 0) if isinstance(data, dict) else len(items)
+
+        if not items:
+            break
+
+        for item in items:
+            s = (item.get("s") or item.get("subject") or "").strip()
+            p = (item.get("p") or item.get("predicate") or "").strip()
+            o = (item.get("o") or item.get("object") or "").strip()
+            if s and p and o:
+                rows.append(
+                    {
+                        "id": item.get("id", ""),
+                        "s": s,
+                        "p": p,
+                        "o": o,
+                        "text": f"{s} {p} {o}",
+                        "session_id": item.get("session_id", ""),
+                        "topic": item.get("topic", ""),
+                        "tags": item.get("tags", []),
+                    }
+                )
+
+        if len(items) < page_size:
+            break
+        if len(rows) >= MAX_TRIPLES_PER_FETCH:
+            break
+        page += 1
+
+    print(f"[Phase 1] Loaded {len(rows)} triples (API total: {total})")
+    return rows
+
+
+# ── Phase 2: Build Entity Co-occurrence Graph ─────────────────────────────────
+def ensure_igraph() -> None:
+    """Install igraph if not present."""
+    try:
+        import igraph  # noqa: F401
+    except ImportError:
+        print("[Phase 2] igraph not found — installing via uv...")
+        result = subprocess.run(
+            [
+                "/opt/homebrew/bin/uv",
+                "pip",
+                "install",
+                "igraph",
+                "leidenalg",
+                "--python",
+                sys.executable,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"[error] Failed to install igraph:\n{result.stderr}", file=sys.stderr)
+            sys.exit(1)
+        print("[Phase 2] igraph + leidenalg installed.")
+
+
+def build_entity_graph(rows: list[dict]):
+    """Build undirected graph: entities as vertices, co-occurrence in triples as edges."""
+    import igraph as ig
+
+    entities: set[str] = set()
+    for r in rows:
+        entities.add(r["s"])
+        entities.add(r["o"])
+
+    entity_list = sorted(entities)
+    entity_to_idx = {e: i for i, e in enumerate(entity_list)}
+
+    # Build edges: subject-object pairs from each triple
+    edge_counts: dict[tuple[int, int], int] = {}
+    for r in rows:
+        s_idx = entity_to_idx[r["s"]]
+        o_idx = entity_to_idx[r["o"]]
+        if s_idx != o_idx:
+            edge = (min(s_idx, o_idx), max(s_idx, o_idx))
+            edge_counts[edge] = edge_counts.get(edge, 0) + 1
+
+    edges = list(edge_counts.keys())
+    weights = [edge_counts[e] for e in edges]
+
+    g = ig.Graph(n=len(entity_list), edges=edges, directed=False)
+    g.vs["name"] = entity_list
+    g.es["weight"] = weights
+
+    print(
+        f"[Phase 2] Graph built: {len(entity_list)} entities, {len(edges)} edges"
+    )
+    return g, entity_to_idx
+
+
+# ── Phase 3: Run Leiden at 3 Resolution Levels ───────────────────────────────
+def run_leiden(g) -> dict[int, list[list[int]]]:
+    """Run Leiden community detection at each resolution level."""
+    results: dict[int, list[list[int]]] = {}
+
+    for level, resolution in RESOLUTIONS.items():
+        partition = g.community_leiden(
+            objective_function="modularity",
+            resolution=resolution,
+            weights="weight",
+            n_iterations=3,
+        )
+        # Convert to list of member lists, skip singletons
+        communities = []
+        for members in partition:
+            if len(members) >= 2:
+                communities.append(list(members))
+        results[level] = communities
+
+        modularity = g.modularity(partition, weights="weight")
+        print(
+            f"  Level {level} (res={resolution}): {len(communities)} communities, "
+            f"modularity={modularity:.4f}"
+        )
+
+    return results
+
+
+# ── Phase 4: Build Community Data Structures ──────────────────────────────────
+def _community_name(entity_names: list[str]) -> str:
+    """Build a community name from its top 3 entities."""
+    top3 = entity_names[:3]
+    return " + ".join(top3)
+
+
+def _map_triples_to_community(
+    rows: list[dict],
+    entity_to_idx: dict[str, int],
+    entity_to_community: dict[int, int],
+) -> dict[int, list[dict]]:
+    """Map each triple to a community: use subject's community (fallback to object's)."""
+    buckets: dict[int, list[dict]] = {}
+    unassigned = 0
+
+    for r in rows:
+        s_idx = entity_to_idx.get(r["s"])
+        o_idx = entity_to_idx.get(r["o"])
+
+        comm_id = None
+        if s_idx is not None and s_idx in entity_to_community:
+            comm_id = entity_to_community[s_idx]
+        elif o_idx is not None and o_idx in entity_to_community:
+            comm_id = entity_to_community[o_idx]
+
+        if comm_id is None:
+            unassigned += 1
+            continue
+
+        buckets.setdefault(comm_id, []).append(r)
+
+    if unassigned:
+        print(f"  [warn] {unassigned} triples unassigned (singleton entities)")
+
+    return buckets
+
+
+def _summarize_community(
+    comm_id: int,
+    comm_idx: int,
+    level: int,
+    entity_names: list[str],
+    triples: list[dict],
+    parent_id: str | None = None,
+) -> dict:
+    """Build community summary dict from its member triples."""
+    subjects = Counter(t["s"] for t in triples)
+    predicates = Counter(t["p"] for t in triples)
+    objects = Counter(t["o"] for t in triples)
+
+    top_subjects = [s for s, _ in subjects.most_common(5)]
+    top_predicates = [p for p, _ in predicates.most_common(5)]
+    top_objects = [o for o, _ in objects.most_common(5)]
+
+    # Community name: top 3 entities by frequency in subject position
+    name_entities = top_subjects[:3] if top_subjects else entity_names[:3]
+    name = _community_name(name_entities)
+
+    contexts = [
+        f"{t['s']} {t['p']} {t['o']}"
+        for t in triples
+        if t["p"] in CONTEXT_PREDICATES
+    ]
+    judgments = [
+        f"{t['s']} {t['p']} {t['o']}"
+        for t in triples
+        if t["p"] in JUDGMENT_PREDICATES
+    ]
+    results = [
+        f"{t['s']} {t['p']} {t['o']}"
+        for t in triples
+        if t["p"] in RESULT_PREDICATES
+    ]
+
+    pattern_parts = []
+    if contexts:
+        pattern_parts.append("情境: " + "; ".join(contexts[:3]))
+    if judgments:
+        pattern_parts.append("判斷: " + "; ".join(judgments[:3]))
+    if results:
+        pattern_parts.append("結果: " + "; ".join(results[:3]))
+    summary = (
+        " → ".join(pattern_parts)
+        if pattern_parts
+        else f"Entities: {', '.join(entity_names[:5])}"
+    )
+
+    return {
+        "community_id": f"L{level}C{comm_idx}",
+        "name": name,
+        "resolution_level": level,
+        "size": len(triples),
+        "entity_count": len(entity_names),
+        "top_entities": entity_names[:10],
+        "top_subjects": top_subjects,
+        "top_predicates": top_predicates,
+        "top_objects": top_objects,
+        "triples": [
+            {
+                "s": t["s"],
+                "p": t["p"],
+                "o": t["o"],
+                "id": t.get("id", ""),
+                "session_id": t.get("session_id", ""),
+            }
+            for t in triples
+        ],
+        "summary": summary,
+        "parent_community_id": parent_id,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def build_communities(
+    rows: list[dict],
+    g,
+    leiden_results: dict[int, list[list[int]]],
+    entity_to_idx: dict[str, int],
+) -> list[dict]:
+    """Build community data structures across all resolution levels."""
+    idx_to_entity = {v: k for k, v in entity_to_idx.items()}
+    all_communities: list[dict] = []
+
+    # Track entity→community mapping per level for parent-child linking
+    level_entity_maps: dict[int, dict[int, int]] = {}
+
+    for level in sorted(leiden_results.keys()):
+        communities_at_level = leiden_results[level]
+        entity_to_community: dict[int, int] = {}
+
+        for comm_idx, members in enumerate(communities_at_level):
+            for member_idx in members:
+                entity_to_community[member_idx] = comm_idx
+
+        level_entity_maps[level] = entity_to_community
+
+        # Map triples to communities
+        triple_buckets = _map_triples_to_community(rows, entity_to_idx, entity_to_community)
+
+        for comm_idx, members in enumerate(communities_at_level):
+            entity_names = sorted(idx_to_entity[m] for m in members if m in idx_to_entity)
+            triples = triple_buckets.get(comm_idx, [])
+
+            # Determine parent at next coarser level
+            parent_id = None
+            coarser_level = level + 1
+            if coarser_level in level_entity_maps and members:
+                # Vote: majority entity community at coarser level
+                coarser_map = level_entity_maps[coarser_level]
+                coarser_votes = Counter(
+                    coarser_map[m] for m in members if m in coarser_map
+                )
+                if coarser_votes:
+                    best_parent_idx = coarser_votes.most_common(1)[0][0]
+                    parent_id = f"L{coarser_level}C{best_parent_idx}"
+
+            comm_dict = _summarize_community(
+                comm_id=comm_idx,
+                comm_idx=comm_idx,
+                level=level,
+                entity_names=entity_names,
+                triples=triples,
+                parent_id=parent_id,
+            )
+            all_communities.append(comm_dict)
+
+        print(
+            f"[Phase 4] Level {level}: {len(communities_at_level)} communities summarized"
+        )
+
+    return all_communities
+
+
+# ── Phase 5: POST to Core API ─────────────────────────────────────────────────
+def save_communities(communities: list[dict], space_id: str, dry_run: bool) -> bool:
+    url = f"{CORE_API}/api/memvault/kg/communities/regenerate"
+    payload = {
+        "space_id": space_id,
+        "communities": communities,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "n_communities": len(communities),
+        "resolution_levels": list(RESOLUTIONS.keys()),
+    }
+
+    if dry_run:
+        print(f"\n[Phase 5] DRY RUN — would POST {len(communities)} communities to {url}")
+        print(json.dumps(payload, ensure_ascii=False, indent=2)[:1000])
+        return True
+
+    print(f"\n[Phase 5] POSTing {len(communities)} communities to Core API ...")
+    result = http_post(url, payload, params={"space_id": space_id})
+    if "error" in result:
+        print(f"[Phase 5] Core API save failed: {result}", file=sys.stderr)
+        return False
+
+    print("[Phase 5] Communities saved to Core API")
+    return True
+
+
+def print_report(rows: list[dict], communities: list[dict]) -> None:
+    print("\n" + "=" * 60)
+    print("  Memvault — Leiden Community Detection Pipeline Report")
+    print("=" * 60)
+    print(f"  Total triples     : {len(rows)}")
+    print(f"  Total communities : {len(communities)}")
+    for level in sorted(RESOLUTIONS.keys()):
+        level_comms = [c for c in communities if c["resolution_level"] == level]
+        res = RESOLUTIONS[level]
+        print(f"  Level {level} (res={res:4.2f})  : {len(level_comms)} communities")
+    print("=" * 60)
+
+    # Show top 5 largest communities at medium level (level 1)
+    medium = sorted(
+        [c for c in communities if c["resolution_level"] == 1],
+        key=lambda c: c["size"],
+        reverse=True,
+    )[:5]
+    if medium:
+        print("\n  Top communities at Level 1 (medium):")
+        for c in medium:
+            name = c["name"]
+            print(f"  [{c['community_id']}] {name}  (size={c['size']}, entities={c['entity_count']})")
+            preds = ", ".join(c["top_predicates"][:3])
+            print(f"    Predicates : {preds}")
+            summary = c["summary"]
+            print(f"    Summary    : {summary[:100]}{'...' if len(summary) > 100 else ''}")
+    print("\n" + "=" * 60)
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Memvault community pipeline — Leiden graph community detection"
+    )
+    parser.add_argument("--space-id", default=os.environ.get("MEMVAULT_SPACE_ID", "default"))
+    parser.add_argument("--dry-run", action="store_true", help="Print results without saving")
+    args = parser.parse_args()
+
+    print("Memvault — community_pipeline.py")
+    print(f"Core API : {CORE_API}")
+    print(f"Space ID : {args.space_id}\n")
+
+    # Ensure igraph is available
+    ensure_igraph()
+
+    # Phase 1
+    rows = fetch_triples(args.space_id)
+    if len(rows) < 5:
+        print(f"[skip] Only {len(rows)} triples — need at least 5 to detect communities.")
+        sys.exit(0)
+
+    # Phase 2
+    print("\n[Phase 2] Building entity co-occurrence graph ...")
+    g, entity_to_idx = build_entity_graph(rows)
+
+    if g.ecount() == 0:
+        print("[skip] Graph has no edges — cannot run community detection.")
+        sys.exit(0)
+
+    # Phase 3
+    print("\n[Phase 3] Running Leiden community detection at 3 resolution levels ...")
+    leiden_results = run_leiden(g)
+
+    # Phase 4
+    print("\n[Phase 4] Building community data structures ...")
+    communities = build_communities(rows, g, leiden_results, entity_to_idx)
+    print(f"[Phase 4] Total: {len(communities)} communities across {len(RESOLUTIONS)} levels")
+
+    # Report + Phase 5
+    print_report(rows, communities)
+    ok = save_communities(communities, args.space_id, args.dry_run)
+    if not ok:
+        print("\n[warn] Failed to save communities to Core API", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\nDone. {len(communities)} communities saved.")
+
+
+if __name__ == "__main__":
+    main()
