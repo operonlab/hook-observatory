@@ -58,37 +58,39 @@ class TripleResponse(SpaceScopedResponse):
     # embedding intentionally excluded from response
 
 
-# ======================== Cluster ========================
+# ======================== Community ========================
 
 
-class ClusterResponse(SpaceScopedResponse):
+class CommunityResponse(SpaceScopedResponse):
     name: str
+    resolution_level: int
     size: int
-    top_subjects: list[str] = []
+    top_entities: list[str] = []
     top_predicates: list[str] = []
-    top_objects: list[str] = []
     summary: str | None = None
-    verdict: str = "UNVERIFIED"
+    parent_community_id: str | None = None
+    modularity_score: float | None = None
     generation_batch: str | None = None
 
 
-class ClusterDetail(ClusterResponse):
-    """Cluster with its member triples."""
+class CommunityDetail(CommunityResponse):
+    """Community with its member triples and children communities."""
 
     triples: list[TripleResponse] = []
+    children: list["CommunityResponse"] = []
 
 
-# ======================== Wisdom ========================
+# ======================== CommunitySummary ========================
 
 
-class WisdomNodeResponse(SpaceScopedResponse):
-    wisdom: str
-    confidence: str  # HIGH/MEDIUM/LOW
-    bridge_entity: str
-    cluster_ids: list[str] = []
+class CommunitySummaryResponse(SpaceScopedResponse):
+    community_id: str
+    summary: str
+    key_findings: list[str] = []
+    representative_triples: list[str] = []
     evidence_count: int | None = None
     tags: list[str] = []
-    verified: bool = False
+    llm_model: str | None = None
 
 
 # ======================== Attitude ========================
@@ -167,18 +169,18 @@ class SkillProficiencyResponse(BaseModel):
 # ======================== Pipeline Regenerate ========================
 
 
-class ClusterRegenerateRequest(BaseModel):
-    """Payload from cluster_pipeline.py — atomic cluster replacement."""
+class CommunityRegenerateRequest(BaseModel):
+    """Payload from community_pipeline.py — atomic community replacement."""
 
-    clusters: list[dict]
+    communities: list[dict]
     generated_at: str | None = None
-    n_clusters: int | None = None
+    resolution_level: int | None = None
 
 
-class WisdomRegenerateRequest(BaseModel):
-    """Payload from wisdom_pipeline.py — atomic wisdom replacement."""
+class CommunitySummaryRegenerateRequest(BaseModel):
+    """Payload from community_summary_pipeline.py — atomic summary replacement."""
 
-    wisdom_nodes: list[dict]
+    summaries: list[dict]
     generated_at: str | None = None
 
 
@@ -188,8 +190,8 @@ class WisdomRegenerateRequest(BaseModel):
 class CascadeRecallResult(BaseModel):
     """Multi-layer recall result."""
 
-    wisdom: list[WisdomNodeResponse] = []  # L2
-    clusters: list[ClusterResponse] = []  # L1
+    summaries: list[CommunitySummaryResponse] = []  # L2
+    communities: list[CommunityResponse] = []  # L1
     triples: list[TripleResponse] = []  # L0
     blocks: list = []  # existing blocks (import MemoryBlockResponse if needed)
     layers_searched: list[str] = []  # which layers returned results

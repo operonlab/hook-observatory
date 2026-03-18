@@ -105,8 +105,8 @@ class MemvaultEvents:
     # KG events
     TRIPLE_INGESTED = "memvault.triple.ingested"
     TRIPLE_BATCH_INGESTED = "memvault.triple.batch_ingested"
-    CLUSTER_REGENERATED = "memvault.cluster.regenerated"
-    WISDOM_REGENERATED = "memvault.wisdom.regenerated"
+    COMMUNITY_REGENERATED = "memvault.community.regenerated"
+    COMMUNITY_SUMMARY_REGENERATED = "memvault.community_summary.regenerated"
     ATTITUDE_EVOLVED = "memvault.attitude.evolved"
     SKILL_INVOKED = "memvault.skill.invoked"
     TRIPLE_INVALIDATED = "memvault.triple.invalidated"
