@@ -662,7 +662,62 @@ class CommunityService:
                 source="memvault",
             )
         )
+
+        # Index communities to Qdrant for semantic search (best-effort)
+        await _index_communities_to_qdrant(db, space_id)
+
         return saved
+
+
+async def _index_communities_to_qdrant(db: AsyncSession, space_id: str) -> None:
+    """Batch index L1 communities into Qdrant after save_communities()."""
+    try:
+        from src.shared.qdrant_search import (
+            delete_by_service_and_space,
+            index_documents_batch,
+        )
+        from src.shared.search_types import IndexDocument
+
+        # Atomic: delete old → upsert new
+        await delete_by_service_and_space("memvault-community", space_id)
+
+        communities = (
+            await db.execute(
+                select(Community).where(Community.space_id == space_id)
+            )
+        ).scalars().all()
+
+        if not communities:
+            return
+
+        docs = []
+        for c in communities:
+            top_entities = (c.top_entities or [])[:10]
+            top_predicates = (c.top_predicates or [])[:5]
+            content_parts = [c.name]
+            if c.summary:
+                content_parts.append(c.summary)
+            if top_entities:
+                content_parts.append(f"Entities: {', '.join(top_entities)}")
+            if top_predicates:
+                content_parts.append(f"Predicates: {', '.join(top_predicates)}")
+
+            docs.append(IndexDocument(
+                service_id="memvault-community",
+                entity_id=str(c.id),
+                entity_type="community",
+                space_id=space_id,
+                content="\n".join(content_parts),
+                tags=top_entities[:5],
+                created_at=c.created_at,
+            ))
+
+        indexed = await index_documents_batch(docs)
+        logger.info(
+            "Indexed %d/%d communities to Qdrant for space=%s", indexed, len(docs), space_id,
+        )
+    except Exception as e:
+        logger.warning("Failed to index communities to Qdrant (non-fatal): %s", e)
 
 
 # ======================== CommunitySummaryService ========================
@@ -751,7 +806,53 @@ class CommunitySummaryService:
                 source="memvault",
             )
         )
+
+        # Index summaries to Qdrant for semantic search (best-effort)
+        await _index_summaries_to_qdrant(db, space_id)
+
         return saved
+
+
+async def _index_summaries_to_qdrant(db: AsyncSession, space_id: str) -> None:
+    """Batch index L2 community summaries into Qdrant after save_summaries()."""
+    try:
+        from src.shared.qdrant_search import (
+            delete_by_service_and_space,
+            index_documents_batch,
+        )
+        from src.shared.search_types import IndexDocument
+
+        await delete_by_service_and_space("memvault-summary", space_id)
+
+        summaries = (
+            await db.execute(
+                select(CommunitySummary).where(CommunitySummary.space_id == space_id)
+            )
+        ).scalars().all()
+
+        if not summaries:
+            return
+
+        docs = []
+        for s in summaries:
+            content_parts = [s.summary]
+            if s.key_findings:
+                content_parts.extend(s.key_findings)
+
+            docs.append(IndexDocument(
+                service_id="memvault-summary",
+                entity_id=str(s.id),
+                entity_type="community_summary",
+                space_id=space_id,
+                content="\n".join(content_parts),
+                tags=s.tags or [],
+                created_at=s.created_at,
+            ))
+
+        indexed = await index_documents_batch(docs)
+        logger.info("Indexed %d/%d summaries to Qdrant for space=%s", indexed, len(docs), space_id)
+    except Exception as e:
+        logger.warning("Failed to index summaries to Qdrant (non-fatal): %s", e)
 
 
 # ======================== AttitudeService ========================
@@ -1156,7 +1257,13 @@ class SkillTrackingService:
 
 
 class CascadeRecallService:
-    """Multi-layer recall: L2 (community summaries) → L1 (communities) → L0 (triples) → blocks."""
+    """Multi-layer recall: L2 (community summaries) → L1 (communities) → L0 (triples) → blocks.
+
+    Integrates:
+      - Phase 1: Qdrant semantic search for L1/L2 with ILIKE fallback
+      - Phase 2: Adaptive query router for layer selection
+      - Phase 3: CRAG evaluator for result quality assessment
+    """
 
     async def recall(
         self,
@@ -1164,21 +1271,179 @@ class CascadeRecallService:
         space_id: str,
         query: str,
         top_k: int = 5,
+        skip_routing: bool = False,
+        evaluate: str = "default",
     ) -> CascadeRecallResult:
         """Cascade recall across all KG layers plus memory blocks.
 
-        Attempts semantic search when embeddings are available; falls back to
-        ILIKE text search otherwise.
+        Args:
+            skip_routing: If True, search all layers (bypass query router).
+            evaluate: CRAG evaluation depth — "default" (Layer A+B), "deep" (+Haiku),
+                      "rlm" (+RLM query decomposition), "none" (skip evaluation).
         """
-        # Lazy import to avoid circular dependency
         from .services import memory_block_service
 
         result = CascadeRecallResult()
         query_embedding = await get_embedding(query)
         pattern = f"%{query}%"
 
-        # --- L2: CommunitySummary (summary ILIKE) ---
-        summary_q = (
+        # --- Phase 2: Query Router — determine which layers to search ---
+        layer_plan = None
+        if not skip_routing:
+            try:
+                from .query_router import classify_query
+                layer_plan = classify_query(query)
+                result.routing_intent = layer_plan.intent.value
+                result.routing_confidence = layer_plan.confidence
+            except Exception as e:
+                logger.warning("Query router failed (searching all layers): %s", e)
+
+        # Helper: check if a layer should be searched
+        def _should_search(layer: str) -> bool:
+            if layer_plan is None:
+                return True  # no routing → search all
+            return layer_plan.layers.get(layer, "SKIP") != "SKIP"
+
+        def _search_mode(layer: str) -> str:
+            if layer_plan is None:
+                return "HYBRID"
+            return layer_plan.layers.get(layer, "SKIP")
+
+        # --- L2: CommunitySummary (Qdrant semantic → ILIKE fallback) ---
+        if _should_search("summaries"):
+            summary_rows = await self._search_summaries_semantic(
+                db, space_id, query, top_k, _search_mode("summaries")
+            )
+            if not summary_rows:
+                summary_rows = await self._search_summaries_ilike(db, space_id, pattern, top_k)
+            if summary_rows:
+                result.summaries = [community_summary_service.to_response(r) for r in summary_rows]
+                result.layers_searched.append("summaries")
+
+        # --- L1: Communities (Qdrant semantic → ILIKE fallback) ---
+        if _should_search("communities"):
+            community_rows = await self._search_communities_semantic(
+                db, space_id, query, top_k, _search_mode("communities")
+            )
+            if not community_rows:
+                community_rows = await self._search_communities_ilike(db, space_id, pattern, top_k)
+            if community_rows:
+                result.communities = [community_service.to_response(r) for r in community_rows]
+                result.layers_searched.append("communities")
+
+        # --- L0: Triples (semantic or text) ---
+        if _should_search("triples"):
+            if query_embedding:
+                triple_results = await triple_service.semantic_search(
+                    db, space_id, query_embedding, top_k=top_k
+                )
+            else:
+                triple_q = (
+                    select(Triple)
+                    .where(
+                        Triple.space_id == space_id,
+                        (
+                            Triple.subject.ilike(pattern)
+                            | Triple.object.ilike(pattern)
+                            | Triple.topic.ilike(pattern)
+                        ),
+                    )
+                    .limit(top_k)
+                )
+                triple_rows = (await db.execute(triple_q)).scalars().all()
+                triple_results = [triple_service.to_response(r) for r in triple_rows]
+
+            if triple_results:
+                result.triples = triple_results
+                result.layers_searched.append("triples")
+
+        # --- Blocks: semantic or text search ---
+        if _should_search("blocks"):
+            if query_embedding:
+                search_results, _meta = await memory_block_service.semantic_search(
+                    db, space_id, query_embedding, top_k=top_k
+                )
+                blocks = [sr.block for sr in search_results]
+            else:
+                search_results = await memory_block_service.text_search(
+                    db, space_id, query, top_k=top_k
+                )
+                blocks = [sr.block for sr in search_results]
+
+            if blocks:
+                result.blocks = blocks
+                result.layers_searched.append("blocks")
+
+        # --- Phase 2: Empty-result retry with full scan ---
+        if (
+            layer_plan is not None
+            and not skip_routing
+            and not result.layers_searched
+        ):
+            logger.info("Routed recall returned empty — retrying with full scan")
+            return await self.recall(
+                db, space_id, query, top_k=top_k,
+                skip_routing=True, evaluate=evaluate,
+            )
+
+        # --- Phase 3: CRAG Evaluator ---
+        if evaluate != "none":
+            try:
+                from .crag_evaluator import CRAGEvaluator
+                evaluator = CRAGEvaluator()
+                evaluation = await evaluator.evaluate(query, result, evaluate=evaluate)
+                result.confidence_score = evaluation.confidence_score
+                result.evaluation_verdict = evaluation.verdict.value
+                result.evaluation_metadata = evaluation.metadata
+            except Exception as e:
+                logger.warning("CRAG evaluation failed (non-fatal): %s", e)
+
+        return result
+
+    # --- L2 semantic search helpers ---
+
+    async def _search_summaries_semantic(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query: str,
+        top_k: int,
+        mode: str,
+    ) -> list[CommunitySummary]:
+        """Search L2 summaries via Qdrant. Returns ORM objects."""
+        if mode == "ILIKE":
+            return []  # caller will use ILIKE path
+
+        try:
+            from src.shared.qdrant_search import search_with_fallback
+            results, meta = await search_with_fallback(
+                query, space_id, "memvault-summary", top_k=top_k,
+            )
+            if meta.backend == "ilike_fallback" or not results:
+                return []
+            # Fetch ORM objects by IDs
+            ids = [r.entity_id for r in results]
+            rows = (
+                await db.execute(
+                    select(CommunitySummary).where(CommunitySummary.id.in_(ids))
+                )
+            ).scalars().all()
+            # Preserve Qdrant ranking order
+            id_order = {eid: i for i, eid in enumerate(ids)}
+            rows.sort(key=lambda r: id_order.get(str(r.id), 999))
+            return list(rows)
+        except Exception as e:
+            logger.debug("L2 Qdrant search failed, falling back to ILIKE: %s", e)
+            return []
+
+    async def _search_summaries_ilike(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        pattern: str,
+        top_k: int,
+    ) -> list[CommunitySummary]:
+        q = (
             select(CommunitySummary)
             .where(
                 CommunitySummary.space_id == space_id,
@@ -1186,13 +1451,50 @@ class CascadeRecallService:
             )
             .limit(top_k)
         )
-        summary_rows = (await db.execute(summary_q)).scalars().all()
-        if summary_rows:
-            result.summaries = [community_summary_service.to_response(r) for r in summary_rows]
-            result.layers_searched.append("summaries")
+        return list((await db.execute(q)).scalars().all())
 
-        # --- L1: Communities (summary + name ILIKE) ---
-        community_q = (
+    # --- L1 semantic search helpers ---
+
+    async def _search_communities_semantic(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query: str,
+        top_k: int,
+        mode: str,
+    ) -> list[Community]:
+        """Search L1 communities via Qdrant. Returns ORM objects."""
+        if mode == "ILIKE":
+            return []
+
+        try:
+            from src.shared.qdrant_search import search_with_fallback
+            results, meta = await search_with_fallback(
+                query, space_id, "memvault-community", top_k=top_k,
+            )
+            if meta.backend == "ilike_fallback" or not results:
+                return []
+            ids = [r.entity_id for r in results]
+            rows = (
+                await db.execute(
+                    select(Community).where(Community.id.in_(ids))
+                )
+            ).scalars().all()
+            id_order = {eid: i for i, eid in enumerate(ids)}
+            rows.sort(key=lambda r: id_order.get(str(r.id), 999))
+            return list(rows)
+        except Exception as e:
+            logger.debug("L1 Qdrant search failed, falling back to ILIKE: %s", e)
+            return []
+
+    async def _search_communities_ilike(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        pattern: str,
+        top_k: int,
+    ) -> list[Community]:
+        q = (
             select(Community)
             .where(
                 Community.space_id == space_id,
@@ -1201,53 +1503,7 @@ class CascadeRecallService:
             .order_by(Community.size.desc())
             .limit(top_k)
         )
-        community_rows = (await db.execute(community_q)).scalars().all()
-        if community_rows:
-            result.communities = [community_service.to_response(r) for r in community_rows]
-            result.layers_searched.append("communities")
-
-        # --- L0: Triples (semantic or text) ---
-        if query_embedding:
-            triple_results = await triple_service.semantic_search(
-                db, space_id, query_embedding, top_k=top_k
-            )
-        else:
-            triple_q = (
-                select(Triple)
-                .where(
-                    Triple.space_id == space_id,
-                    (
-                        Triple.subject.ilike(pattern)
-                        | Triple.object.ilike(pattern)
-                        | Triple.topic.ilike(pattern)
-                    ),
-                )
-                .limit(top_k)
-            )
-            triple_rows = (await db.execute(triple_q)).scalars().all()
-            triple_results = [triple_service.to_response(r) for r in triple_rows]
-
-        if triple_results:
-            result.triples = triple_results
-            result.layers_searched.append("triples")
-
-        # --- Blocks: semantic or text search ---
-        if query_embedding:
-            search_results, _meta = await memory_block_service.semantic_search(
-                db, space_id, query_embedding, top_k=top_k
-            )
-            blocks = [sr.block for sr in search_results]
-        else:
-            search_results = await memory_block_service.text_search(
-                db, space_id, query, top_k=top_k
-            )
-            blocks = [sr.block for sr in search_results]
-
-        if blocks:
-            result.blocks = blocks
-            result.layers_searched.append("blocks")
-
-        return result
+        return list((await db.execute(q)).scalars().all())
 
 
 # ======================== Confidence Decay ========================
