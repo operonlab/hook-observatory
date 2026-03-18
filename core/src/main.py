@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
     import src.modules.capture.events  # auto-enrich on create
     import src.modules.dailyos.events
     import src.modules.finance.events
+    import src.modules.intelflow.events  # cache invalidation
     import src.modules.invest.events
     import src.modules.memvault.events  # flywheel: block→KG, capture→KG, intelligence→memvault
     import src.modules.nodeflow.events  # registers @event_bus.on handlers

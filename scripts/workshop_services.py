@@ -71,6 +71,17 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/session-channel",
     },
     {
+        "name": "sentinel",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/sentinel/.venv/bin/python3"
+            " -m uvicorn main:app --host 127.0.0.1 --port 4101"
+        ),
+        "port": 4101,
+        "health": "http://127.0.0.1:4101/health",
+        "workdir": "/Users/joneshong/workshop/stations/sentinel",
+    },
+    {
         "name": "system-monitor",
         "type": "uvicorn",
         "cmd": (
