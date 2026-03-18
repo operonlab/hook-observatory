@@ -1,17 +1,23 @@
-"""Notify executor — publishes a notification event."""
+"""Notify executor — publishes a push notification via Redis Pub/Sub."""
 
+import json
 from typing import Any
 
-from src.events.bus import Event, event_bus
+from src.shared.redis import get_redis
 
 from .base import BaseNodeExecutor, ExecutionContext, ExecutionResult
+
+_PUSH_CHANNEL = "workshop:push"
 
 
 class NotifyExecutor(BaseNodeExecutor):
     async def execute(
         self, config: dict[str, Any], ctx: ExecutionContext
     ) -> ExecutionResult:
-        """Publish a notification via EventBus.
+        """Publish a notification to Redis workshop:push channel.
+
+        The notification module's redis_push_listener picks this up and
+        delivers it via Web Push to subscribed clients.
 
         Config schema:
             {
@@ -24,18 +30,18 @@ class NotifyExecutor(BaseNodeExecutor):
         message = _resolve(config.get("message", ""), ctx.input_data)
         level = config.get("level", "info")
 
-        await event_bus.publish(Event(
-            type="system.notification.created",
-            data={
-                "title": title,
-                "message": message,
-                "level": level,
-                "source": "nodeflow",
-                "flow_run_id": ctx.flow_run_id,
-            },
-            source="nodeflow",
-            user_id=ctx.user_id,
-        ))
+        payload = {
+            "category": "nodeflow",
+            "title": title,
+            "body": message,
+            "url": "/apps/nodeflow/",
+            "tag": f"nodeflow-{ctx.flow_run_id}",
+            "severity": level,
+            "user_id": ctx.user_id,
+        }
+
+        r = get_redis()
+        await r.publish(_PUSH_CHANNEL, json.dumps(payload, ensure_ascii=False))
 
         return ExecutionResult(data={"notified": True, "title": title})
 

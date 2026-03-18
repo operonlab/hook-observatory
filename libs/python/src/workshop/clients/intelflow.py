@@ -1,6 +1,9 @@
 """Intelflow API client — full coverage of Core API endpoints.
 
-Covers: Reports, Search, Topics, Briefing Topics, Briefings, Dashboard, Frozen Tier.
+Covers: Reports, Search, Topics, Dashboard, Frozen Tier.
+
+Note: Briefing-related methods have been moved to BriefingClient.
+    from workshop.clients.briefing import BriefingClient
 
 Usage:
     from workshop.clients.intelflow import IntelflowClient
@@ -132,83 +135,6 @@ class IntelflowClient(BaseClient):
     def get_topic_graph(self) -> dict:
         """Get topic relationship graph. GET /topics/graph"""
         return self._get("/topics/graph")
-
-    # ======================== Briefing Topics (Management) ========================
-
-    def list_briefing_topics(
-        self,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> dict:
-        """List briefing topics. GET /briefings/topics"""
-        return self._get("/briefings/topics", {"page": page, "page_size": page_size})
-
-    def create_briefing_topic(self, name: str, **fields) -> dict:
-        """Create a briefing topic. POST /briefings/topics"""
-        body: dict = {"name": name}
-        body.update({k: v for k, v in fields.items() if v is not None})
-        return self._post("/briefings/topics", body)
-
-    def update_briefing_topic(self, topic_id: str, **fields) -> dict:
-        """Update a briefing topic. PUT /briefings/topics/{id}"""
-        body = {k: v for k, v in fields.items() if v is not None}
-        return self._put(f"/briefings/topics/{topic_id}", body)
-
-    def delete_briefing_topic(self, topic_id: str) -> None:
-        """Delete a briefing topic. DELETE /briefings/topics/{id}"""
-        self._delete(f"/briefings/topics/{topic_id}")
-
-    def toggle_briefing_topic(self, topic_id: str) -> dict:
-        """Toggle a briefing topic on/off. PATCH /briefings/topics/{id}/toggle"""
-        return self._patch(f"/briefings/topics/{topic_id}/toggle")
-
-    def add_subtopic(self, topic_id: str, name: str, **fields) -> dict:
-        """Add a subtopic. POST /briefings/topics/{id}/subtopics"""
-        body: dict = {"name": name}
-        body.update({k: v for k, v in fields.items() if v is not None})
-        return self._post(f"/briefings/topics/{topic_id}/subtopics", body)
-
-    def update_subtopic(self, topic_id: str, subtopic_id: str, **fields) -> dict:
-        """Update a subtopic. PUT /briefings/topics/{id}/subtopics/{sid}"""
-        body = {k: v for k, v in fields.items() if v is not None}
-        return self._put(f"/briefings/topics/{topic_id}/subtopics/{subtopic_id}", body)
-
-    def delete_subtopic(self, topic_id: str, subtopic_id: str) -> None:
-        """Delete a subtopic. DELETE /briefings/topics/{id}/subtopics/{sid}"""
-        self._delete(f"/briefings/topics/{topic_id}/subtopics/{subtopic_id}")
-
-    # ======================== Briefings ========================
-
-    def list_briefings(
-        self,
-        date_from: str | None = None,
-        date_to: str | None = None,
-        topic_id: str | None = None,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> dict:
-        """List briefings. GET /briefings"""
-        params: dict = {"page": page, "page_size": page_size}
-        if date_from:
-            params["date_from"] = date_from
-        if date_to:
-            params["date_to"] = date_to
-        if topic_id:
-            params["topic_id"] = topic_id
-        return self._get("/briefings", params)
-
-    def get_briefings_by_date(self, target_date: str) -> list:
-        """Get briefings for a specific date. GET /briefings/{date}"""
-        return self._get(f"/briefings/{target_date}")
-
-    def get_briefing(self, target_date: str, domain: str) -> dict:
-        """Get a specific briefing by date and domain. GET /briefings/{date}/{domain}"""
-        return self._get(f"/briefings/{target_date}/{domain}")
-
-    def create_briefing(self, **fields) -> dict:
-        """Create a briefing. POST /briefings"""
-        body = {k: v for k, v in fields.items() if v is not None}
-        return self._post("/briefings", body)
 
     # ======================== Dashboard ========================
 

@@ -515,7 +515,6 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         "anvil-render": "anvl",
         "capture-console-render": "cap",
         "cronicle-render": "cron",
-        "browser-bridge-render": "bbrg",
     }
     session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
     start = time.monotonic()

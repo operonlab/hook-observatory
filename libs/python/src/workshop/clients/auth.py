@@ -85,4 +85,4 @@ class AuthClient(BaseClient):
         params = {}
         if redirect:
             params["redirect"] = redirect
-        return self._get(f"/oauth/{provider}", params or None)
+        return self._get(f"/login/{provider}", params or None)

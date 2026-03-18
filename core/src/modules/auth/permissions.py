@@ -32,6 +32,12 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "capture.write",
         "dailyos.read",
         "dailyos.write",
+        "briefing.read",
+        "briefing.write",
+        "nodeflow.read",
+        "nodeflow.write",
+        "paper.read",
+        "paper.write",
         "plugin.use",
         "profile.read",
         "profile.write",
@@ -44,6 +50,9 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "memvault.read",
         "capture.read",
         "dailyos.read",
+        "briefing.read",
+        "nodeflow.read",
+        "paper.read",
     ],
 }
 

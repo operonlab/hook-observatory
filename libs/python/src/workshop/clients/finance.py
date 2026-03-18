@@ -203,10 +203,6 @@ class FinanceClient(BaseClient):
 
     # ======================== Summary / Analytics ========================
 
-    def get_summary(self, month: str | None = None) -> dict:
-        """Get monthly summary overview. GET /summary"""
-        return self._get("/summary", {"month": month} if month else None)
-
     def monthly_summary(self, year_month: str) -> dict:
         """Get monthly summary. GET /summary/{year_month}"""
         return self._get(f"/summary/{year_month}")
@@ -214,51 +210,6 @@ class FinanceClient(BaseClient):
     def monthly_trends(self, months: int = 6) -> list[dict]:
         """Get multi-month spending trends. GET /insights"""
         return self._get("/insights", {"months": months})
-
-    def get_category_breakdown(
-        self, month: str | None = None, category_id: str | None = None
-    ) -> list[dict] | dict:
-        """Get category spending breakdown. GET /summary/categories"""
-        params = {}
-        if month:
-            params["month"] = month
-        if category_id:
-            params["category_id"] = category_id
-        return self._get("/summary/categories", params or None)
-
-    def get_monthly_report(self, year_month: str) -> dict:
-        """Get monthly report. GET /reports/{year_month}"""
-        return self._get(f"/reports/{year_month}")
-
-    def generate_monthly_report(self, year_month: str, regenerate: bool = False) -> dict:
-        """Generate monthly report. POST /reports/{year_month}"""
-        return self._post(f"/reports/{year_month}", {"regenerate": regenerate})
-
-    def subscription_forecast(self, months: int = 3) -> dict:
-        """Get subscription future payment forecast. GET /subscriptions/forecast"""
-        return self._get("/subscriptions/forecast", {"months": months})
-
-    def installment_forecast(self, months: int = 6) -> dict:
-        """Get installment future payment forecast. GET /installments/forecast"""
-        return self._get("/installments/forecast", {"months": months})
-
-    def export_data(
-        self,
-        data_type: str,
-        format: str = "csv",
-        month: str | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        include_archived: bool = False,
-    ) -> "httpx.Response":
-        """Export data (raw response for content-type inspection). GET /export/{data_type}"""
-
-        params = self._params(
-            {"format": format, "month": month, "start_date": start_date, "end_date": end_date}
-        )
-        if include_archived:
-            params["include_archived"] = "true"
-        return self._request("GET", f"/export/{data_type}", params=params, timeout=60)
 
     # ======================== Trash ========================
 
