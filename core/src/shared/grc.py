@@ -139,6 +139,135 @@ class SupportsGenerate(Protocol):
         ...
 
 
+@runtime_checkable
+class SupportsRLMReflect(Protocol):
+    """Module can use RLM (Recursive Language Model) for deep reflection.
+
+    Extends the standard reflect pattern with multi-step LLM reasoning.
+    Modules implement gather_items() and optionally override rlm_reflect().
+    """
+
+    def gather_items(self, scope_id: str, **kwargs: Any) -> list[GenerateItem]:
+        """Collect items to reflect upon."""
+        ...
+
+    def rlm_reflect(
+        self,
+        items: list[GenerateItem],
+        scope_id: str,
+        **kwargs: Any,
+    ) -> ReflectResult:
+        """Reflect on items using RLM engine. Default via rlm_reflect_default()."""
+        ...
+
+
+# ─── RLM Reflect Default Implementation ─────────────────────────────
+
+
+def rlm_reflect_default(
+    items: list[GenerateItem],
+    module: str,
+    scope_id: str,
+    *,
+    model: str = "grok-4-fast",
+    max_iterations: int = 10,
+    api_base: str = "http://localhost:4000/v1",
+    api_key: str = "sk-litellm-local-dev",
+) -> ReflectResult:
+    """Default RLM-powered reflect implementation that modules can reuse.
+
+    Takes gather_items output and uses RLM to:
+      1. Summarize items
+      2. Detect patterns
+      3. Identify anomalies
+      4. Suggest curation actions
+
+    Returns a ReflectResult compatible with existing G-R-C pipelines.
+    """
+    from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+    if not items:
+        return ReflectResult(module=module, scope_id=scope_id)
+
+    # Build context from items
+    context_lines = []
+    for item in items:
+        meta = ", ".join(f"{k}={v}" for k, v in item.metadata.items()) if item.metadata else ""
+        context_lines.append(f"[{item.id}] {item.content[:500]}" + (f" ({meta})" if meta else ""))
+
+    context = "\n".join(context_lines)
+
+    prompt = (
+        f"You are analyzing {len(items)} items from the '{module}' module (scope: {scope_id}).\n\n"
+        "Tasks:\n"
+        "1. SUMMARIZE: What are the main themes across these items?\n"
+        "2. PATTERNS: What recurring patterns do you see?\n"
+        "3. ANOMALIES: Any outliers, contradictions, or quality issues?\n"
+        "4. CURATION: Which items should be flagged, merged, demoted, or archived? Why?\n\n"
+        "Return a structured analysis with clear sections for each task.\n"
+        "Use FINAL() when done."
+    )
+
+    config = RLMConfig(
+        model=model,
+        max_iterations=max_iterations,
+        api_base=api_base,
+        api_key=api_key,
+    )
+    engine = RLMEngine(config)
+    result = engine.completion(prompt=prompt, context=context)
+
+    # Parse RLM response into ReflectResult fields
+    response = result.response
+    insights, anomalies, corrections = _parse_rlm_reflect_response(response)
+
+    return ReflectResult(
+        module=module,
+        scope_id=scope_id,
+        items_analyzed=len(items),
+        insights=insights,
+        anomalies=anomalies,
+        corrections=corrections,
+        metrics={
+            "rlm_iterations": float(result.iterations),
+            "rlm_time_secs": round(result.execution_time_secs, 2),
+            "rlm_llm_calls": float(result.usage.total_calls),
+            "rlm_status": 1.0 if result.status == "ok" else 0.0,
+        },
+    )
+
+
+def _parse_rlm_reflect_response(
+    response: str,
+) -> tuple[list[str], list[str], list[str]]:
+    """Extract insights, anomalies, and corrections from RLM response text."""
+    insights: list[str] = []
+    anomalies: list[str] = []
+    corrections: list[str] = []
+
+    current: list[str] | None = None
+    for line in response.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lower = stripped.lower()
+        if any(kw in lower for kw in ("summar", "pattern", "theme", "insight")):
+            current = insights
+        elif any(kw in lower for kw in ("anomal", "outlier", "issue", "quality")):
+            current = anomalies
+        elif any(kw in lower for kw in ("curat", "flag", "merge", "demot", "archiv", "action")):
+            current = corrections
+        elif current is not None and (
+            stripped.startswith("-") or stripped.startswith("•") or stripped[0].isdigit()
+        ):
+            # Strip bullet markers
+            text = stripped.lstrip("-•*0123456789.) ").strip()
+            if text:
+                current.append(text)
+
+    return insights, anomalies, corrections
+
+
 # ─── Content Classification (extracted from memvault/reflection.py) ──
 
 
