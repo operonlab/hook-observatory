@@ -142,3 +142,25 @@ class TimelineEntry(BaseModel):
 
 class TimelineResponse(BaseModel):
     entries: list[TimelineEntry] = []
+
+
+# ======================== Synthesis ========================
+
+
+class SynthesizeRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=500)
+    max_sources: int = Field(default=10, ge=1, le=50)
+
+
+class SynthesizeSourceMeta(BaseModel):
+    id: str
+    title: str
+    skill_name: str | None = None
+    created_at: datetime | None = None
+
+
+class SynthesizeResponse(BaseModel):
+    consensus: str
+    conflicts: list[str] = []
+    sources: list[SynthesizeSourceMeta] = []
+    confidence: float = 0.5
