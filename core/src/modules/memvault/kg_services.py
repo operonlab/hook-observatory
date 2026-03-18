@@ -23,8 +23,8 @@ from .kg_config import normalize_predicate
 from .kg_models import (
     AttitudeFact,
     Community,
-    CommunityTriple,
     CommunitySummary,
+    CommunityTriple,
     SkillInvocation,
     Triple,
 )
@@ -615,9 +615,7 @@ class CommunityService:
             select(Community.id).where(Community.space_id == space_id).scalar_subquery()
         )
         await db.execute(
-            delete(CommunityTriple).where(
-                CommunityTriple.community_id.in_(existing_community_ids)
-            )
+            delete(CommunityTriple).where(CommunityTriple.community_id.in_(existing_community_ids))
         )
         await db.execute(delete(Community).where(Community.space_id == space_id))
 
@@ -653,7 +651,7 @@ class CommunityService:
 
         event_bus.publish_fire_and_forget(
             Event(
-                type=MemvaultEvents.CLUSTER_REGENERATED,
+                type=MemvaultEvents.COMMUNITY_REGENERATED,
                 data={"space_id": space_id, "count": saved},
                 source="memvault",
             )
@@ -742,7 +740,7 @@ class CommunitySummaryService:
 
         event_bus.publish_fire_and_forget(
             Event(
-                type=MemvaultEvents.WISDOM_REGENERATED,
+                type=MemvaultEvents.COMMUNITY_SUMMARY_REGENERATED,
                 data={"space_id": space_id, "count": saved},
                 source="memvault",
             )
@@ -1192,10 +1190,7 @@ class CascadeRecallService:
             select(Community)
             .where(
                 Community.space_id == space_id,
-                (
-                    Community.summary.ilike(pattern)
-                    | Community.name.ilike(pattern)
-                ),
+                (Community.summary.ilike(pattern) | Community.name.ilike(pattern)),
             )
             .order_by(Community.size.desc())
             .limit(top_k)

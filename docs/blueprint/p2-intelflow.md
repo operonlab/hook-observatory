@@ -18,7 +18,7 @@ Smart Search 已有兩個元件：
 | `research_report` Service | `~/workshop/core/src/modules/intelflow/`（V1: `~/Claude/services/research_report/`） | 已遷移至 Core Module |
 
 **已有的好東西**：
-- PostgreSQL + pgvector（schema `workshop_research`，768d Ollama embedding）
+- PostgreSQL + Qdrant（schema `workshop_research`，768d Ollama embedding）
 - 完整 REST API（CRUD + semantic search + topic graph + dashboard）
 - 前端 Research Hub（port 3005）
 - 52 個 .md fallback 檔案待回填
@@ -45,7 +45,7 @@ V1（已遷移）：
   core/src/modules/intelflow/             (Core Module)
   ├── schema: intelflow                   (PostgreSQL)
   │   ├── reports          — 搜尋/研究報告
-  │   ├── report_embeddings — pgvector 向量（768d / 1536d）
+  │   ├── report_embeddings — Qdrant 向量（768d / 1536d）
   │   ├── topics           — 主題分類
   │   ├── topic_relations  — 主題關聯圖
   │   ├── briefings        — 每日情報彙整
@@ -64,7 +64,7 @@ V1（已遷移）：
 ```
 smart-search Skill (Claude Code)
     │
-    ├── Pre-Search: POST /api/intelflow/search/check  ← 查重（pgvector 相似度）
+    ├── Pre-Search: POST /api/intelflow/search/check  ← 查重（Qdrant 相似度）
     │
     ├── 執行搜尋（DeepWiki / Context7 / Perplexity / 9 平台社群）
     │
@@ -109,7 +109,7 @@ V1 的三 AI 辯論模式整合到 intelflow 模組：
 
 ```
 workbench/src/modules/intelflow/      ← Intelflow UI（報告瀏覽、主題圖譜、情報總覽）
-core/src/modules/intelflow/           ← Intelflow 後端（API + DB + pgvector + 提煉）
+core/src/modules/intelflow/           ← Intelflow 後端（API + DB + Qdrant + 提煉）
 mcp/intelflow/                        ← MCP Adapter（供 Claude Code 直接操作）
 ```
 

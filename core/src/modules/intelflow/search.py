@@ -1,6 +1,6 @@
-"""Intelflow semantic search engine — Qdrant hybrid search (primary) with legacy pgvector fallback.
+"""Intelflow semantic search engine — Qdrant hybrid search (primary) with ILIKE text fallback.
 
-Graceful degradation: falls back to ILIKE text search when oMLX is unavailable.
+Graceful degradation: Qdrant -> ILIKE text search (when Qdrant unavailable).
 """
 
 import logging
@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.embedding import get_embedding
 from src.shared.fallback_search import (
     SERVICE_AVGDL,
     build_ilike_conditions,
@@ -43,19 +42,16 @@ async def qdrant_search(
 ) -> list[SemanticSearchResult]:
     """Search using Qdrant hybrid (dense + sparse).
 
-    Falls back to semantic_search() only when:
-    - Qdrant is unavailable (not running / connection error)
-
-    Empty results from Qdrant are returned as-is (not forwarded to legacy pgvector).
+    Falls back to ILIKE text search when Qdrant is unavailable.
+    Empty results from Qdrant are returned as-is (not forwarded to fallback).
     """
     if not await qdrant_available():
-        logger.warning("Qdrant unavailable — using legacy pgvector search for intelflow")
-        return await semantic_search(
+        logger.warning("Qdrant unavailable — using ILIKE text search fallback for intelflow")
+        return await _text_search_fallback(
             db,
             space_id,
             query,
             limit,
-            threshold,
             include_archived,
             include_warm,
         )
@@ -68,26 +64,31 @@ async def qdrant_search(
     results, _meta = await qdrant_hybrid_search(query, space_id, config)
 
     if not results:
-        # Qdrant available but found no matches — return empty (not pgvector fallback)
+        # Qdrant available but found no matches — return empty (no further fallback)
         logger.debug("Qdrant returned 0 results for space=%s query=%r", space_id, query)
         return []
 
     # Convert Qdrant SearchResult → intelflow SemanticSearchResult
-    # title and query are stored in Qdrant payload via metadata_fields (index_registry)
-    return [
-        SemanticSearchResult(
-            report=ReportBrief(
-                id=r.entity_id,
-                title=r.metadata.get("title", ""),
-                query=r.metadata.get("query", ""),
-                tags=r.tags,
-                skill_name=r.metadata.get("skill_name", ""),
-                created_at=None,
-            ),
-            score=r.score,
+    # Qdrant payload has created_at but may lack title/query — hydrate from DB
+    entity_ids = [r.entity_id for r in results]
+    score_map = {r.entity_id: r.score for r in results}
+
+    stmt = select(Report).where(Report.id.in_(entity_ids))
+    rows = (await db.execute(stmt)).scalars().all()
+    report_map = {str(r.id): r for r in rows}
+
+    hydrated = []
+    for eid in entity_ids:
+        report = report_map.get(eid)
+        if not report:
+            continue
+        hydrated.append(
+            SemanticSearchResult(
+                report=_to_brief(report),
+                score=score_map[eid],
+            )
         )
-        for r in results
-    ]
+    return hydrated
 
 
 async def semantic_search(
@@ -99,64 +100,19 @@ async def semantic_search(
     include_archived: bool = False,
     include_warm: bool = True,
 ) -> list[SemanticSearchResult]:
-    """LEGACY pgvector search path.
+    """Text search with warm-tier augmentation and cross-encoder reranking.
 
-    Only used as emergency fallback when Qdrant infrastructure is unavailable.
-    Primary search should go through qdrant_search().
-
-    Tries report_embeddings sub-table first (Phase 2);
-    falls back to inline reports.embedding.
-
-    When include_warm=True (default), augments with warm-tier
-    text search (score x 0.7) for reports between hot_days and
-    warm_days age that no longer have HNSW indexes.
+    Delegates to ILIKE text search, augments with warm tier,
+    then reranks via cross-encoder. pgvector path removed (Qdrant migration).
     """
-    query_embedding = await get_embedding(query)
-    if query_embedding is None:
-        return await _text_search_fallback(
-            db,
-            space_id,
-            query,
-            limit,
-            include_archived,
-            include_warm,
-        )
-
-    # Phase 2 path: sub-table
-    results = await _search_via_subtable(
+    results = await _text_search_fallback(
         db,
         space_id,
-        query_embedding,
+        query,
         limit,
-        threshold,
+        include_archived,
+        include_warm,
     )
-
-    if not results:
-        # Fallback: inline embedding
-        distance = Report.embedding.cosine_distance(
-            query_embedding,
-        )
-        similarity = (1 - distance).label("similarity")
-
-        q = (
-            select(Report, similarity)
-            .where(
-                Report.space_id == space_id,
-                Report.embedding.isnot(None),
-                distance < (1 - threshold),
-            )
-            .order_by(distance)
-            .limit(limit)
-        )
-
-        rows = (await db.execute(q)).all()
-        results = [
-            SemanticSearchResult(
-                report=_to_brief(row.Report),
-                score=round(float(row.similarity), 4),
-            )
-            for row in rows
-        ]
 
     # Warm tier: text-based augmentation for older reports
     if include_warm and len(results) < limit:
@@ -178,20 +134,6 @@ async def semantic_search(
     )
 
     return results
-
-
-async def _search_via_subtable(
-    db: AsyncSession,
-    space_id: str,
-    query_embedding: list[float],
-    limit: int,
-    threshold: float,
-) -> list[SemanticSearchResult]:
-    """LEGACY pgvector search — ReportEmbedding table removed (Qdrant migration).
-
-    Returns empty so the caller falls through to inline embedding or text search.
-    """
-    return []
 
 
 async def _warm_tier_search(
@@ -242,33 +184,8 @@ async def check_duplicate(
     threshold: float = 0.85,
 ) -> SearchCheckResponse:
     """Check if a similar report already exists (deduplication)."""
-    query_embedding = await get_embedding(query)
-    if query_embedding is None:
-        # Cannot check without embeddings — assume no match
-        return SearchCheckResponse(exists=False, matches=[])
-
-    distance = Report.embedding.cosine_distance(query_embedding)
-    similarity = (1 - distance).label("similarity")
-
-    q = (
-        select(Report, similarity)
-        .where(
-            Report.space_id == space_id,
-            Report.embedding.isnot(None),
-            distance < (1 - threshold),
-        )
-        .order_by(distance)
-        .limit(5)
-    )
-
-    rows = (await db.execute(q)).all()
-    matches = [
-        SearchMatchResult(
-            report=_to_brief(row.Report),
-            score=round(float(row.similarity), 4),
-        )
-        for row in rows
-    ]
+    results = await qdrant_search(db, space_id, query, limit=5, threshold=threshold)
+    matches = [SearchMatchResult(report=r.report, score=r.score) for r in results]
     return SearchCheckResponse(exists=len(matches) > 0, matches=matches)
 
 

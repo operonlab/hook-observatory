@@ -201,7 +201,9 @@ def _call_deepseek(triples_text: str, api_key: str) -> dict:
         except RuntimeError as e:
             if attempt == LLM_RETRY_COUNT:
                 raise
-            print(f"  [warn] DeepSeek attempt {attempt} failed: {e} — retrying ...", file=sys.stderr)
+            print(
+                f"  [warn] DeepSeek attempt {attempt} failed: {e} — retrying ...", file=sys.stderr
+            )
             time.sleep(LLM_RETRY_DELAY * attempt)
 
 
@@ -222,33 +224,46 @@ def generate_summaries(
         name = community.get("name", comm_id)
         print(f"  [{idx}/{total}] {comm_id}: {name[:50]}", end=" ... ", flush=True)
 
-        # Use embedded triples first; fall back to API fetch
+        # Use embedded triples first; fall back to community metadata
         triples = _triples_from_community_record(community)
         if not triples:
-            triples = fetch_community_triples(comm_id, space_id)
+            # Build pseudo-triples from community metadata
+            top_entities = community.get("top_entities", [])
+            top_preds = community.get("top_predicates", [])
+            rule_summary = community.get("summary", "")
+            if top_entities or rule_summary:
+                triples = [
+                    {"s": e, "p": p, "o": ""} for e in top_entities[:5] for p in top_preds[:3]
+                ]
+                if rule_summary:
+                    triples.insert(0, {"s": name, "p": "description", "o": rule_summary})
 
         if not triples:
             print("(skip: no triples)")
-            summaries.append({
-                "community_id": comm_id,
-                "summary": "(無三元組，跳過摘要)",
-                "key_findings": [],
-                "generated_at": datetime.now().isoformat(timespec="seconds"),
-                "skipped": True,
-            })
+            summaries.append(
+                {
+                    "community_id": comm_id,
+                    "summary": "(無三元組，跳過摘要)",
+                    "key_findings": [],
+                    "generated_at": datetime.now().isoformat(timespec="seconds"),
+                    "skipped": True,
+                }
+            )
             continue
 
         triples_text = _build_triple_text(triples)
 
         if dry_run:
             print("(dry-run)")
-            summaries.append({
-                "community_id": comm_id,
-                "summary": f"[DRY RUN] {len(triples)} triples in community '{name}'",
-                "key_findings": ["(dry run — no LLM called)"],
-                "generated_at": datetime.now().isoformat(timespec="seconds"),
-                "skipped": False,
-            })
+            summaries.append(
+                {
+                    "community_id": comm_id,
+                    "summary": f"[DRY RUN] {len(triples)} triples in community '{name}'",
+                    "key_findings": ["(dry run — no LLM called)"],
+                    "generated_at": datetime.now().isoformat(timespec="seconds"),
+                    "skipped": False,
+                }
+            )
             continue
 
         try:
@@ -258,23 +273,27 @@ def generate_summaries(
             if isinstance(key_findings, str):
                 key_findings = [key_findings]
             print(f"ok ({len(summary_text)} chars)")
-            summaries.append({
-                "community_id": comm_id,
-                "summary": summary_text,
-                "key_findings": key_findings,
-                "generated_at": datetime.now().isoformat(timespec="seconds"),
-                "skipped": False,
-            })
+            summaries.append(
+                {
+                    "community_id": comm_id,
+                    "summary": summary_text,
+                    "key_findings": key_findings,
+                    "generated_at": datetime.now().isoformat(timespec="seconds"),
+                    "skipped": False,
+                }
+            )
         except RuntimeError as e:
             print(f"FAILED: {e}", file=sys.stderr)
-            summaries.append({
-                "community_id": comm_id,
-                "summary": f"(摘要失敗: {e})",
-                "key_findings": [],
-                "generated_at": datetime.now().isoformat(timespec="seconds"),
-                "skipped": True,
-                "error": str(e),
-            })
+            summaries.append(
+                {
+                    "community_id": comm_id,
+                    "summary": f"(摘要失敗: {e})",
+                    "key_findings": [],
+                    "generated_at": datetime.now().isoformat(timespec="seconds"),
+                    "skipped": True,
+                    "error": str(e),
+                }
+            )
 
     succeeded = sum(1 for s in summaries if not s.get("skipped"))
     print(f"[Phase 3] Done: {succeeded}/{total} summaries generated")
@@ -332,7 +351,9 @@ def main() -> None:
         description="Memvault community summary pipeline — LLM summarization via DeepSeek V3"
     )
     parser.add_argument("--space-id", default=os.environ.get("MEMVAULT_SPACE_ID", "default"))
-    parser.add_argument("--dry-run", action="store_true", help="Print results without calling LLM or saving")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print results without calling LLM or saving"
+    )
     parser.add_argument(
         "--level",
         type=int,

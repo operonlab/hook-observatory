@@ -26,7 +26,7 @@ def _serialize_value(value: Any) -> Any:
         return str(value)
     if isinstance(value, (datetime, date)):
         return value.isoformat()
-    # numpy arrays from pgvector — skip large vectors to avoid audit log bloat
+    # numpy arrays from embeddings — skip large vectors to avoid audit log bloat
     if hasattr(value, "tolist"):
         items = value.tolist()
         if len(items) > 32:

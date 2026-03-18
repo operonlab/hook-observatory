@@ -6,8 +6,8 @@ Full coverage of all Core API endpoints.
 """
 
 import argparse
-import os
 import json
+import os
 import sys
 from datetime import datetime
 
@@ -197,34 +197,36 @@ def cmd_cascade(client: MemvaultClient, args: argparse.Namespace) -> None:
     if json_out(data, args):
         return
 
-    wisdom = data.get("wisdom", [])
-    clusters = data.get("clusters", [])
+    summaries = data.get("summaries", [])
+    communities = data.get("communities", [])
     triples = data.get("triples", [])
     blocks = data.get("blocks", [])
 
     if args.quiet:
-        for w in wisdom:
-            print(f"W: {w.get('wisdom', w.get('insight', w.get('content', '')))[:120]}")
+        for s in summaries:
+            print(f"S: {s.get('summary', '')[:120]}")
         for b in blocks:
             print(f"B: {b.get('content', '')[:120]}")
         return
 
-    if wisdom:
-        print("  L2 - Wisdom")
+    if summaries:
+        print("  L2 - Community Summaries")
         print("  " + "-" * 40)
-        for w in wisdom:
-            text = w.get("wisdom", w.get("insight", w.get("content", "?")))
-            conf = w.get("confidence", "?")
-            print(f"    [{conf}] {truncate(text, 200)}")
+        for s in summaries:
+            text = s.get("summary", "?")
+            print(f"    {truncate(text, 200)}")
+            for f in s.get("key_findings", [])[:2]:
+                print(f"      • {truncate(f, 150)}")
         print()
 
-    if clusters:
-        print("  L1 - Clusters")
+    if communities:
+        print("  L1 - Communities")
         print("  " + "-" * 40)
-        for c in clusters:
-            label = c.get("label", c.get("name", "?"))
-            size = c.get("size", c.get("count", "?"))
-            print(f"    {label} (size: {size})")
+        for c in communities:
+            name = c.get("name", "?")
+            size = c.get("size", "?")
+            level = c.get("resolution_level", "?")
+            print(f"    [L{level}] {name} (size: {size})")
         print()
 
     if triples:
@@ -246,38 +248,41 @@ def cmd_cascade(client: MemvaultClient, args: argparse.Namespace) -> None:
             print(f"    ({btype}) {truncate(content, 200)}")
         print()
 
-    if not any([wisdom, clusters, triples, blocks]):
+    if not any([summaries, communities, triples, blocks]):
         print("  No cascade results found.")
 
 
 def cmd_summaries(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """List community summary nodes from the knowledge graph."""
-    data = client.list_summaries(confidence=args.confidence, tag=args.tag)
+    """List community summaries from the knowledge graph."""
+    data = client.list_summaries(tag=args.tag)
     if json_out(data, args):
         return
 
-    nodes = data if isinstance(data, list) else data.get("summaries", data.get("nodes", []))
+    nodes = data if isinstance(data, list) else data.get("summaries", [])
 
     if not nodes:
         if not args.quiet:
-            print("  No community summary nodes found.")
+            print("  No community summaries found.")
         return
 
     if args.quiet:
         for n in nodes:
-            print(n.get("summary", n.get("insight", n.get("content", ""))))
+            print(n.get("summary", ""))
         return
 
     print("  Community Summaries")
     print("  " + "-" * 50)
     for i, n in enumerate(nodes, 1):
-        text = n.get("summary", n.get("insight", n.get("content", "?")))
-        conf = n.get("confidence", "?")
-        bridge = n.get("bridge_entity", n.get("bridge", ""))
-        evidence = n.get("evidence_count", n.get("evidence", "?"))
-        print(f"  {i}. [{conf}] {truncate(text, 200)}")
-        if bridge:
-            print(f"     Bridge: {bridge}")
+        text = n.get("summary", "?")
+        comm_id = n.get("community_id", "?")
+        evidence = n.get("evidence_count", "?")
+        print(f"  {i}. [{comm_id}] {truncate(text, 200)}")
+        findings = n.get("key_findings", [])
+        for f in findings[:3]:
+            print(f"     • {truncate(f, 150)}")
+        tags = n.get("tags", [])
+        if tags:
+            print(f"     Tags: {', '.join(tags)}")
         print(f"     Evidence: {evidence}")
         print()
 
@@ -1068,13 +1073,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--top-k", type=int, default=5, help="Number of results (default: 5)")
 
     # summaries
-    p = sub.add_parser("summaries", parents=[common], help="List community summary nodes")
-    p.add_argument(
-        "--confidence",
-        choices=["HIGH", "MEDIUM", "LOW"],
-        default=None,
-        help="Filter by confidence level",
-    )
+    p = sub.add_parser("summaries", parents=[common], help="List community summaries")
     p.add_argument("--tag", default=None, help="Filter by tag")
 
     # attitude

@@ -22,8 +22,8 @@ from .kg_schemas import (
     CommunityDetail,
     CommunityRegenerateRequest,
     CommunityResponse,
-    CommunitySummaryResponse,
     CommunitySummaryRegenerateRequest,
+    CommunitySummaryResponse,
     EntityCanonicalResponse,
     EntityMergeRequest,
     EntityMergeResult,
@@ -202,23 +202,25 @@ async def regenerate_communities(
     generation_batch = body.generated_at
 
     for c in body.communities:
-        members = []
+        triple_ids = []
         for t in c.get("triples", []):
             triple_id = t.get("id", "")
             if triple_id:
-                members.append({"triple_id": triple_id, "confidence": None})
+                triple_ids.append(triple_id)
 
         communities_for_service.append(
             {
                 "name": c.get("name", ""),
+                "resolution_level": c.get("resolution_level", 0),
                 "size": c.get("size", 0),
-                "top_subjects": c.get("top_subjects"),
+                "entity_ids": c.get("entity_ids"),
+                "top_entities": c.get("top_entities"),
                 "top_predicates": c.get("top_predicates"),
-                "top_objects": c.get("top_objects"),
                 "summary": c.get("summary"),
-                "verdict": c.get("verdict", "UNVERIFIED"),
+                "parent_community_id": c.get("parent_community_id"),
+                "modularity_score": c.get("modularity_score"),
                 "generation_batch": generation_batch,
-                "members": members,
+                "triple_ids": triple_ids,
             }
         )
 
@@ -238,7 +240,9 @@ async def list_summaries(
     resolution_level: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    return await community_summary_service.list_summaries(db, space_id, confidence_min=confidence, tag=tag)
+    return await community_summary_service.list_summaries(
+        db, space_id, confidence_min=confidence, tag=tag
+    )
 
 
 @router.post("/summaries/regenerate", status_code=200)
@@ -248,7 +252,7 @@ async def regenerate_summaries(
     db: AsyncSession = Depends(get_db),
 ):
     """Accept community summary data from community_summary_pipeline.py and save atomically."""
-    saved = await community_summary_service.save_summaries(db, space_id, body.summary_nodes)
+    saved = await community_summary_service.save_summaries(db, space_id, body.summaries)
     await db.commit()
     return {"saved": saved, "generated_at": body.generated_at}
 

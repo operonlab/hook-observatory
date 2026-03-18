@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Memvault MCP Server — Slim adapter — 8 tools + 2 resources. Uses workshop.clients.memvault SDK.
+"""Memvault MCP Server — Slim adapter — 15 tools + 2 resources. Uses workshop.clients.memvault SDK.
 
 Usage:
     python3 mcp/memvault/server.py
@@ -105,37 +105,36 @@ async def memvault_profile(rebuild: bool = False) -> str:
 
 @mcp.tool()
 @mcp_error_handler("Memvault")
-async def memvault_kg_wisdom(
-    confidence: str = "",
+async def memvault_kg_community_summaries(
     tag: str = "",
     limit: int = 20,
 ) -> str:
-    """查詢 Wisdom nodes（跨 cluster 提煉的高層洞見）"""
+    """查詢 Community Summaries（Leiden 社群的 LLM 預生成摘要，L2 層）"""
     result = await to_thread(
-        client.wisdom,
-        confidence=confidence or None,
+        client.list_summaries,
         tag=tag or None,
     )
     if not result:
-        return "No wisdom nodes found."
+        return "No community summaries found. Run synthesis pipeline first."
 
     total = len(result)
     items = result[:limit]
 
-    wisdom_text = "\n\n---\n\n".join(
-        f"**[{w['confidence']}]** {w['wisdom']}\n"
-        f"Bridge: {w['bridge_entity']} | Evidence: {w.get('evidence_count', '?')}"
-        + (f"\nTags: {', '.join(w.get('tags', []))}" if w.get("tags") else "")
-        for w in items
+    summaries_text = "\n\n---\n\n".join(
+        f"**Community:** {s.get('community_id', '?')}\n"
+        f"{s.get('summary', '(no summary)')}\n"
+        f"Key findings: {', '.join(s.get('key_findings', []))}"
+        + (f"\nTags: {', '.join(s.get('tags', []))}" if s.get("tags") else "")
+        for s in items
     )
     truncated = f" (showing {limit} of {total})" if total > limit else ""
-    return f"# Wisdom Nodes ({total} total{truncated})\n\n{wisdom_text}"
+    return f"# Community Summaries ({total} total{truncated})\n\n{summaries_text}"
 
 
 @mcp.tool()
 @mcp_error_handler("Memvault")
 async def memvault_kg_cascade_recall(query: str, top_k: int = 5) -> str:
-    """四層 Cascade Recall：L2 Wisdom → L1 Clusters → L0 Triples → Blocks"""
+    """四層 Cascade Recall：L2 CommunitySummary → L1 Community → L0 Triples → Blocks"""
     result = await to_thread(client.cascade, query, top_k=top_k)
     layers = result.get("layers_searched", [])
 
@@ -145,18 +144,22 @@ async def memvault_kg_cascade_recall(query: str, top_k: int = 5) -> str:
         "",
     ]
 
-    wisdom = result.get("wisdom", [])
-    if wisdom:
-        parts.append(f"## L2 Wisdom ({len(wisdom)})")
-        for w in wisdom:
-            parts.append(f"  [{w['confidence']}] {w['wisdom']}")
+    summaries = result.get("summaries", [])
+    if summaries:
+        parts.append(f"## L2 Community Summaries ({len(summaries)})")
+        for s in summaries:
+            parts.append(f"  {s.get('summary', '?')}")
+            findings = s.get("key_findings", [])
+            if findings:
+                parts.append(f"    Findings: {'; '.join(findings[:3])}")
         parts.append("")
 
-    clusters = result.get("clusters", [])
-    if clusters:
-        parts.append(f"## L1 Clusters ({len(clusters)})")
-        for c in clusters:
-            parts.append(f"  {c['name']} (size: {c['size']})")
+    communities = result.get("communities", [])
+    if communities:
+        parts.append(f"## L1 Communities ({len(communities)})")
+        for c in communities:
+            level = c.get("resolution_level", "?")
+            parts.append(f"  [L{level}] {c['name']} (size: {c['size']})")
         parts.append("")
 
     triples = result.get("triples", [])
@@ -174,7 +177,7 @@ async def memvault_kg_cascade_recall(query: str, top_k: int = 5) -> str:
             parts.append(f"  [{b.get('block_type', '?')}] {content}...")
         parts.append("")
 
-    if not (wisdom or clusters or triples or blocks):
+    if not (summaries or communities or triples or blocks):
         parts.append("No results found across all layers.")
 
     return "\n".join(parts)

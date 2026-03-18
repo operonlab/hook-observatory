@@ -287,17 +287,14 @@ class MemoryBlockService(
         date_to: datetime | None = None,
         keywords: list[str] | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
-        """Vector similarity search — LEGACY pgvector path.
+        """Text-based fallback search (keyword + warm tier).
 
         Only used as emergency fallback when Qdrant infrastructure is unavailable.
         Primary search should go through qdrant_search().
 
-        Tries block_embeddings sub-table first (Phase 2 path);
-        falls back to inline blocks.embedding for backward compat.
-
-        When include_warm=True (default), augments results with
-        warm-tier text search (score x 0.7) for blocks between
-        hot_days and warm_days age that no longer have HNSW indexes.
+        pgvector embedding columns were removed in Qdrant migration g9h0i1j2k3l4,
+        so this method no longer performs vector similarity — it relies on
+        PostgreSQL keyword search (tsvector / ILIKE) and warm-tier text search.
 
         Returns (results, metadata) tuple.
         """
@@ -307,30 +304,20 @@ class MemoryBlockService(
                 code="memvault.invalid_embedding_dim",
             )
 
-        meta = SearchMetadata(vector_used=True, scope=scope)
+        meta = SearchMetadata(vector_used=False, scope=scope)
 
         # Defense ⑦: Parse scope and build extra filters
         extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
 
-        # Time range pre-filters (shrink candidate set before vector search)
+        # Time range pre-filters
         if date_from:
             extra_filters.append(MemoryBlock.created_at >= date_from)
         if date_to:
             extra_filters.append(MemoryBlock.created_at <= date_to)
 
-        # Phase B1: Run vector search + keyword search sequentially
-        # (async SQLAlchemy session does not support concurrent queries)
-        vector_results = await self._vector_search_combined(
-            db,
-            space_id,
-            query_embedding,
-            top_k,
-            threshold,
-            tags,
-            block_type,
-            extra_filters=extra_filters,
-        )
+        results: list[SemanticSearchResult] = []
 
+        # Keyword search (tsvector for English, ILIKE for CJK)
         if query:
             keyword_results = await self._keyword_search(
                 db,
@@ -343,10 +330,7 @@ class MemoryBlockService(
                 keywords=keywords,
             )
             meta.keyword_used = True
-            # RRF Fusion
-            results = await self._rrf_fuse(vector_results, keyword_results)
-        else:
-            results = vector_results
+            results = keyword_results
 
         # Warm tier: text-based augmentation for older blocks
         if include_warm and query and len(results) < top_k:
@@ -364,17 +348,13 @@ class MemoryBlockService(
         # Phase A1 + A2: Noise filter on results + Scoring Pipeline
         results, _ = filter_results(results)
 
-        # Fetch ORM rows for access tracking (G6) + embeddings (P1 semantic_boost/MMR)
-        # SemanticSearchResult.block is MemoryBlockResponse (Pydantic), not ORM model,
-        # so access_count/last_accessed_at/embedding don't survive serialization.
+        # Fetch ORM rows for access tracking (G6)
         block_ids = [r.block.id for r in results]
         orm_map: dict[str, MemoryBlock] = {}
-        emb_map: dict[str, list[float]] = {}
         if block_ids:
             orm_q = select(MemoryBlock).where(MemoryBlock.id.in_(block_ids))
             for row in (await db.execute(orm_q)).scalars().all():
                 orm_map[row.id] = row
-            # BlockEmbedding table removed — embeddings now in Qdrant only
 
         # Convert to scoring pipeline format
         pipeline = ScoringPipeline(scoring_config)
@@ -385,7 +365,7 @@ class MemoryBlockService(
                 "content": r.block.content,
                 "created_at": r.block.created_at,
                 "confidence": r.block.confidence,
-                "embedding": emb_map.get(r.block.id),
+                "embedding": None,
                 "access_count": getattr(orm_map.get(r.block.id), "access_count", 0) or 0,
                 "last_accessed_at": getattr(orm_map.get(r.block.id), "last_accessed_at", None),
             }
@@ -466,7 +446,7 @@ class MemoryBlockService(
         qdrant_results, qdrant_meta = await qdrant_hybrid_search(query, space_id, config)
 
         if not qdrant_results:
-            # Qdrant is available but found nothing — return empty results (NOT pgvector fallback)
+            # Qdrant is available but found nothing — return empty results
             meta.backend = "qdrant"
             meta.input_count = 0
             meta.output_count = 0

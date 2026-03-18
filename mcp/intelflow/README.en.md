@@ -17,7 +17,7 @@ Provides an MCP interface for the Intelflow module, allowing Claude Code to dire
 
 | Tool | Core API Endpoint | Description |
 |------|--------------|------|
-| `intelflow_search` | `POST /api/intelflow/search` | Semantic search (pgvector) |
+| `intelflow_search` | `POST /api/intelflow/search` | Semantic search (Qdrant) |
 | `intelflow_check` | `POST /api/intelflow/search/check` | Deduplication (check for existing similar reports before searching) |
 | `intelflow_save_report` | `POST /api/intelflow/reports` | Save search report |
 | `intelflow_get_report` | `GET /api/intelflow/reports/:id` | Get full report text |
@@ -40,7 +40,7 @@ smart-search Skill (Claude Code)
                                     ↓
                         POST /api/intelflow/reports
                                     ↓
-                        PostgreSQL + pgvector embedding
+                        PostgreSQL + Qdrant embedding
 ```
 
 The smart-search Skill is responsible for **executing the search logic**, while the Intelflow MCP is responsible for **data persistence and retrieval**.

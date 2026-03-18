@@ -119,7 +119,7 @@ EnvKit 的三個核心任務：
 
 | 容器 | 映像檔 | 用途 |
 |------|--------|------|
-| **ws-infra-postgres-1** | `pgvector/pgvector:pg16` | 主資料庫 |
+| **ws-infra-postgres-1** | `postgres:16` | 主資料庫 |
 | **ws-infra-redis-1** | `redis:7-alpine` | Cache + Event Bus |
 | **ws-infra-lgtm-1** | `grafana/otel-lgtm:latest` | Observability (Grafana + LGTM) |
 | **ws-infra-rustfs-1** | `rustfs/rustfs:latest` | 物件儲存 (S3-compatible) |
