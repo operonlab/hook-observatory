@@ -235,13 +235,11 @@ async def regenerate_communities(
 @router.get("/summaries", response_model=list[CommunitySummaryResponse])
 async def list_summaries(
     space_id: str = Query("default"),
-    confidence: str | None = Query(None),
-    tag: str | None = Query(None),
     resolution_level: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     return await community_summary_service.list_summaries(
-        db, space_id, confidence_min=confidence, tag=tag
+        db, space_id, resolution_level=resolution_level
     )
 
 

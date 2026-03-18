@@ -325,11 +325,11 @@ class MemvaultClient(BaseClient):
 
     # ======================== KG — Community Summaries ========================
 
-    def list_summaries(self, confidence: str | None = None, tag: str | None = None) -> list:
+    def list_summaries(self, resolution_level: int | None = None, tag: str | None = None) -> list:
         """List community summaries. GET /kg/summaries"""
         params: dict = {}
-        if confidence:
-            params["confidence"] = confidence
+        if resolution_level is not None:
+            params["resolution_level"] = resolution_level
         if tag:
             params["tag"] = tag
         return self._get("/kg/summaries", params or None)
