@@ -29,6 +29,8 @@ from .schemas import (
     SearchCheckResponse,
     SearchRequest,
     SemanticSearchResult,
+    SynthesizeRequest,
+    SynthesizeResponse,
     TimelineResponse,
     TopicCreate,
     TopicGraphResponse,
@@ -38,6 +40,7 @@ from .services import (
     dashboard_service,
     report_service,
     search_session_service,
+    synthesis_service,
     topic_service,
 )
 
@@ -218,6 +221,27 @@ async def check_duplicate(
     _user: dict = require_permission("intelflow.read"),
 ):
     return await search_engine.check_duplicate(db, space_id, body.query, threshold=body.threshold)
+
+
+# ======================== Synthesis ========================
+
+
+@router.post("/synthesize", response_model=SynthesizeResponse)
+async def synthesize_reports(
+    body: SynthesizeRequest,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("intelflow.read"),
+):
+    """Synthesize multiple reports on a topic using RLM engine.
+
+    Extracts facts from each source, detects conflicts, and produces
+    a consensus summary with source attribution and confidence score.
+    """
+    result = await synthesis_service.synthesize_reports_rlm(
+        db, space_id, body.topic, max_sources=body.max_sources,
+    )
+    return SynthesizeResponse(**result)
 
 
 # ======================== Topics ========================

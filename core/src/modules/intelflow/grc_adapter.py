@@ -1,7 +1,7 @@
 """IntelflowGRCAdapter — Reflect + Curate adapter for feed/report quality.
 
 Implements SupportsReflect + SupportsCurate to:
-  - Reflect: analyze report relevance distribution per topic
+  - Reflect: analyze report relevance distribution per topic + RLM topic clustering
   - Curate: archive low-value reports (low relevance + zero reads + age > 30d)
 
 The fetch_blocks() async hook is detected by grc_routes.py via hasattr(),
@@ -10,6 +10,7 @@ called before gather_items() to pre-fetch DB data in async context.
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -25,6 +26,8 @@ from src.shared.grc import (
     ReflectResult,
     three_guard_filter,
 )
+
+logger = logging.getLogger(__name__)
 
 LOOKBACK_DAYS = 30
 LOW_RELEVANCE_THRESHOLD = 0.4
@@ -237,7 +240,151 @@ class IntelflowGRCAdapter:
                     f"No new reports from feed/skill '{skill}' in {NO_FEED_ANOMALY_DAYS} days"
                 )
 
+        # RLM-powered topic clustering analysis (best-effort, never blocks reflect)
+        if len(topic_counts) >= 3:
+            rlm_insights = self._rlm_topic_clustering(
+                topic_counts, topic_relevances, skill_counts,
+            )
+            if rlm_insights:
+                result.insights.extend(rlm_insights.get("insights", []))
+                result.anomalies.extend(rlm_insights.get("anomalies", []))
+                if rlm_insights.get("metrics"):
+                    result.metrics.update(rlm_insights["metrics"])
+
         return result
+
+    # ── RLM Topic Clustering ──────────────────────────────────────────
+
+    def _rlm_topic_clustering(
+        self,
+        topic_counts: dict[str, int],
+        topic_relevances: dict[str, list[float]],
+        skill_counts: dict[str, int],
+    ) -> dict[str, Any] | None:
+        """Use RLM to analyze topic clusters, identify high-value feeds and gaps.
+
+        Returns dict with keys: insights, anomalies, metrics.
+        Falls back to None on any failure.
+        """
+        try:
+            from src.shared.rlm_engine import RLMConfig, RLMEngine
+        except ImportError:
+            return None
+
+        # Build topic summary as context
+        topic_summary_lines = []
+        for topic, count in sorted(topic_counts.items(), key=lambda x: -x[1]):
+            rels = topic_relevances.get(topic, [])
+            avg_r = sum(rels) / len(rels) if rels else 0.0
+            topic_summary_lines.append(
+                f"- {topic}: {count} reports, avg_relevance={avg_r:.2f}"
+            )
+
+        skill_summary_lines = [
+            f"- {s}: {c} reports"
+            for s, c in sorted(skill_counts.items(), key=lambda x: -x[1])
+        ]
+
+        context = (
+            f"=== Topic Distribution (last {LOOKBACK_DAYS} days) ===\n"
+            + "\n".join(topic_summary_lines)
+            + "\n\n=== Skill/Feed Distribution ===\n"
+            + "\n".join(skill_summary_lines)
+        )
+
+        config = RLMConfig(
+            model="grok-4-fast",
+            sub_model="grok-4-fast",
+            max_iterations=8,
+            max_timeout_secs=120.0,
+            api_base="http://localhost:4000/v1",
+            api_key="sk-litellm-local-dev",
+        )
+        engine = RLMEngine(config)
+
+        prompt = (
+            "Analyze this intelligence feed's topic and skill distribution.\n\n"
+            "Identify:\n"
+            "1. Topic clusters — which topics are semantically related and could be merged?\n"
+            "2. High-value feeds — which topics/skills produce the most relevant content?\n"
+            "3. Stale or low-value feeds — which should be pruned or deprioritized?\n"
+            "4. Topic gaps — what areas seem underrepresented given the existing coverage?\n\n"
+            "Return a JSON object with keys:\n"
+            "- clusters: list of {name: str, topics: list[str]} for proposed merges\n"
+            "- high_value: list of topic names that are high-value\n"
+            "- stale: list of topic names that should be pruned\n"
+            "- gaps: list of suggested topic areas to add\n"
+            "Use FINAL_VAR to return the JSON string."
+        )
+
+        try:
+            result = engine.completion(prompt=prompt, context=context)
+        except Exception as e:
+            logger.warning("RLM topic clustering failed: %s", e)
+            return None
+
+        return self._parse_clustering_result(result.response)
+
+    def _parse_clustering_result(self, response: str) -> dict[str, Any] | None:
+        """Parse RLM clustering response into insights/anomalies/metrics."""
+        import json
+        import re
+
+        data = None
+        try:
+            data = json.loads(response)
+        except (json.JSONDecodeError, ValueError):
+            json_match = re.search(r"\{.*\"clusters\".*\}", response, re.DOTALL)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group())
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        if not data:
+            return None
+
+        insights: list[str] = []
+        anomalies: list[str] = []
+        metrics: dict[str, float] = {}
+
+        # Topic clusters
+        clusters = data.get("clusters", [])
+        if clusters:
+            metrics["rlm_cluster_count"] = float(len(clusters))
+            for cluster in clusters[:5]:
+                name = cluster.get("name", "unnamed")
+                topics = cluster.get("topics", [])
+                if len(topics) >= 2:
+                    insights.append(
+                        f"[RLM] Topic cluster '{name}': "
+                        f"{', '.join(topics[:5])} — consider merging"
+                    )
+
+        # High-value feeds
+        high_value = data.get("high_value", [])
+        if high_value:
+            insights.append(
+                f"[RLM] High-value topics: {', '.join(high_value[:5])}"
+            )
+
+        # Stale feeds
+        stale = data.get("stale", [])
+        if stale:
+            for topic in stale[:3]:
+                anomalies.append(
+                    f"[RLM] Topic '{topic}' identified as stale — consider pruning"
+                )
+
+        # Topic gaps
+        gaps = data.get("gaps", [])
+        if gaps:
+            insights.append(
+                f"[RLM] Coverage gaps: {', '.join(gaps[:5])} — consider adding feeds"
+            )
+            metrics["rlm_gap_count"] = float(len(gaps))
+
+        return {"insights": insights, "anomalies": anomalies, "metrics": metrics}
 
     # ── SupportsCurate ─────────────────────────────────────────────────
 
