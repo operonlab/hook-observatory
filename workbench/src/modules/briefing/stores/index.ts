@@ -34,6 +34,13 @@ interface BriefingState {
   analystsLoading: boolean
   analystsFetchedAt: number
 
+  // Run status
+  runStatus: {
+    status: string
+    date: string
+    topics: { domain: string; status: string; id: string }[]
+  } | null
+
   // Global
   error: string | null
 
@@ -49,6 +56,7 @@ interface BriefingState {
 
   fetchTopics: () => Promise<void>
   fetchAnalysts: () => Promise<void>
+  fetchRunStatus: () => Promise<void>
 }
 
 function todayStr() {
@@ -79,6 +87,8 @@ export const useBriefingStore = create<BriefingState>()(
       analysts: [],
       analystsLoading: false,
       analystsFetchedAt: 0,
+
+      runStatus: null,
 
       error: null,
 
@@ -148,6 +158,15 @@ export const useBriefingStore = create<BriefingState>()(
           set({ analystsLoading: false })
         }
       },
+
+      fetchRunStatus: async () => {
+        try {
+          const result = await briefingApi.getRunStatus()
+          set({ runStatus: result })
+        } catch (err) {
+          console.error('fetchRunStatus failed:', err)
+        }
+      },
     }),
     {
       name: 'briefing-cache',
@@ -162,6 +181,7 @@ export const useBriefingStore = create<BriefingState>()(
         topicsFetchedAt: state.topicsFetchedAt,
         analysts: state.analysts,
         analystsFetchedAt: state.analystsFetchedAt,
+        runStatus: state.runStatus,
       }),
     },
   ),

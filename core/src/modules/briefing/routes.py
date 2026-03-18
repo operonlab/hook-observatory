@@ -1,8 +1,10 @@
 """Briefing API routes — /api/briefing/*"""
 
+import subprocess
 from datetime import date
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -386,6 +388,82 @@ async def create_follow_up(
     result = await follow_up_service.create_follow_up(db, briefing_id, space_id, body)
     await db.commit()
     return result
+
+
+@router.post(
+    "/follow-ups/{follow_up_id}/answer",
+    response_model=FollowUpResponse,
+)
+async def answer_follow_up(
+    follow_up_id: str,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.write"),
+):
+    result = await follow_up_service.answer_follow_up(db, follow_up_id, space_id)
+    await db.commit()
+    return result
+
+
+# ======================== Trigger / Run Status ========================
+
+
+@router.post("/trigger", status_code=202)
+async def trigger_generation(
+    background_tasks: BackgroundTasks,
+    _user: dict = require_permission("briefing.write"),
+):
+    """Trigger daily briefing generation via run.py subprocess."""
+    import os
+
+    run_py = Path.home() / ".claude" / "scripts" / "daily-briefing" / "run.py"
+    if not run_py.exists():
+        raise NotFoundError("run.py not found", code="briefing.run_script_not_found")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{Path.home()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
+
+    def _run():
+        subprocess.Popen(  # noqa: S603
+            [str(Path.home() / ".local/bin/python3"), str(run_py)],
+            env=env,
+            start_new_session=True,
+        )
+
+    background_tasks.add_task(_run)
+    return {"status": "triggered"}
+
+
+@router.get("/run-status")
+async def get_run_status(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("briefing.read"),
+):
+    """Infer current run status from today's briefing records."""
+    today = date.today()
+    briefings = await briefing_service.get_by_date(db, space_id, today)
+    if not briefings:
+        return {"status": "idle", "date": today.isoformat(), "topics": []}
+
+    statuses = [b.status for b in briefings]
+    if all(s == "completed" for s in statuses):
+        overall = "completed"
+    elif any(s == "failed" for s in statuses):
+        overall = "failed"
+    elif any(s in ("searching", "analyzing", "debating", "synthesizing") for s in statuses):
+        overall = "running"
+    else:
+        overall = "idle"
+
+    return {
+        "status": overall,
+        "date": today.isoformat(),
+        "topics": [
+            {"domain": b.domain, "status": b.status, "id": b.id}
+            for b in briefings
+        ],
+    }
 
 
 # ======================== Frozen ========================

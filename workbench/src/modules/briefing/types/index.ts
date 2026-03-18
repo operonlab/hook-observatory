@@ -1,5 +1,14 @@
 import type { BaseEntity } from '@/types'
 
+// Search Config
+export interface SearchConfig {
+  search_query_en?: string
+  focus_areas?: string
+  subreddits?: string
+  cities?: { name_en: string; name_cn: string }[]
+  content_priorities?: string[]
+}
+
 // Analyst
 export interface Analyst extends BaseEntity {
   name: string
@@ -8,6 +17,7 @@ export interface Analyst extends BaseEntity {
   avatar_url: string | null
   model_id: string | null
   system_prompt: string | null
+  cli_command: string | null
   enabled: boolean
   priority: number
 }
@@ -18,14 +28,16 @@ export interface AnalystCreate {
   color?: string
   model_id?: string
   system_prompt?: string
+  cli_command?: string
 }
 
 export interface AnalystUpdate {
   display_name?: string
   color?: string
-  avatar_url?: string
-  model_id?: string
-  system_prompt?: string
+  avatar_url?: string | null
+  model_id?: string | null
+  system_prompt?: string | null
+  cli_command?: string | null
   enabled?: boolean
   priority?: number
 }
@@ -48,6 +60,8 @@ export interface BriefingTopic extends BaseEntity {
   prompt_template: string | null
   sources: Record<string, unknown>[]
   schedule: string
+  topic_type: string
+  search_config: SearchConfig
   subtopics: BriefingSubtopic[]
 }
 
@@ -60,6 +74,8 @@ export interface BriefingTopicCreate {
   prompt_template?: string
   sources?: Record<string, unknown>[]
   schedule?: string
+  topic_type?: string
+  search_config?: SearchConfig
 }
 
 export interface BriefingTopicUpdate {
@@ -70,6 +86,8 @@ export interface BriefingTopicUpdate {
   prompt_template?: string
   sources?: Record<string, unknown>[]
   schedule?: string
+  topic_type?: string
+  search_config?: SearchConfig
 }
 
 export interface BriefingSubtopicCreate {

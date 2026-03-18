@@ -18,6 +18,8 @@ class BriefingTopicCreate(BaseModel):
     prompt_template: str | None = None
     sources: list[dict] = Field(default_factory=list)
     schedule: str = "daily"
+    search_config: dict = Field(default_factory=dict)
+    topic_type: str = "news"
 
 
 class BriefingTopicUpdate(BaseModel):
@@ -28,6 +30,8 @@ class BriefingTopicUpdate(BaseModel):
     prompt_template: str | None = None
     sources: list[dict] | None = None
     schedule: str | None = None
+    search_config: dict | None = None
+    topic_type: str | None = None
 
 
 class BriefingSubtopicResponse(SpaceScopedResponse):
@@ -46,6 +50,8 @@ class BriefingTopicResponse(SpaceScopedResponse):
     prompt_template: str | None = None
     sources: list[dict] = []
     schedule: str = "daily"
+    search_config: dict = {}
+    topic_type: str = "news"
     subtopics: list[BriefingSubtopicResponse] = []
 
 
@@ -73,6 +79,7 @@ class AnalystCreate(BaseModel):
     color: str = "#c4a7e7"
     model_id: str | None = None
     system_prompt: str | None = None
+    cli_command: str | None = None
 
 
 class AnalystUpdate(BaseModel):
@@ -81,6 +88,7 @@ class AnalystUpdate(BaseModel):
     avatar_url: str | None = None
     model_id: str | None = None
     system_prompt: str | None = None
+    cli_command: str | None = None
     enabled: bool | None = None
     priority: int | None = None
 
@@ -92,6 +100,7 @@ class AnalystResponse(SpaceScopedResponse):
     avatar_url: str | None = None
     model_id: str | None = None
     system_prompt: str | None = None
+    cli_command: str | None = None
     enabled: bool = True
     priority: int = 0
 
