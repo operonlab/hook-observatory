@@ -1,6 +1,7 @@
 """FastAPI web app for auto-survey — people CRUD + run trigger + status."""
 
 import threading
+import time as _time
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .config import settings
 from .db import engine, get_session, init_db
 from .models import Base, DailyRun, Person, Question, Submission, Survey
 
@@ -24,9 +26,41 @@ def _ensure_db():
     Base.metadata.create_all(engine)
 
 
+def _scheduler_loop():
+    """Check every 30s if a 'scheduled' run should start (execution_hour reached)."""
+    while True:
+        now = datetime.now()
+        if now.hour >= settings.execution_hour:
+            db = get_session()
+            try:
+                run = (
+                    db.query(DailyRun)
+                    .filter(DailyRun.run_date == date.today(), DailyRun.status == "scheduled")
+                    .first()
+                )
+                if run:
+                    run.status = "running"
+                    run.updated_at = datetime.now(timezone.utc)
+                    db.commit()
+                    run_id = str(run.id)
+                    attend = run.attend_url
+                    quiz = run.quiz_url
+                    threading.Thread(
+                        target=_execute_pipeline_bg,
+                        args=(run_id, attend, quiz),
+                        daemon=True,
+                    ).start()
+            except Exception:
+                pass
+            finally:
+                db.close()
+        _time.sleep(30)
+
+
 @app.on_event("startup")
 def startup():
     _ensure_db()
+    threading.Thread(target=_scheduler_loop, daemon=True).start()
 
 
 # ── Schemas ──────────────────────────────────────────────
@@ -178,13 +212,17 @@ def create_run(data: RunRequest):
     try:
         today = date.today()
         existing = db.query(DailyRun).filter(DailyRun.run_date == today).first()
-        if existing and existing.status in ("running", "completed"):
+        if existing and existing.status in ("running", "completed", "scheduled"):
             raise HTTPException(409, f"Today's run already {existing.status}")
+
+        # Time gate: before execution_hour → schedule, after → run immediately
+        now = datetime.now()
+        new_status = "scheduled" if now.hour < settings.execution_hour else "running"
 
         if existing:
             existing.attend_url = data.attend_url
             existing.quiz_url = data.quiz_url
-            existing.status = "running"
+            existing.status = new_status
             existing.updated_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(existing)
@@ -194,22 +232,22 @@ def create_run(data: RunRequest):
                 run_date=today,
                 attend_url=data.attend_url,
                 quiz_url=data.quiz_url,
-                status="running",
+                status=new_status,
             )
             db.add(run)
             db.commit()
             db.refresh(run)
 
-        # Execute pipeline in background thread
-        run_id = str(run.id)
-        attend = data.attend_url
-        quiz = data.quiz_url
-        thread = threading.Thread(
-            target=_execute_pipeline_bg,
-            args=(run_id, attend, quiz),
-            daemon=True,
-        )
-        thread.start()
+        # Only execute immediately if past execution_hour
+        if new_status == "running":
+            run_id = str(run.id)
+            attend = data.attend_url
+            quiz = data.quiz_url
+            threading.Thread(
+                target=_execute_pipeline_bg,
+                args=(run_id, attend, quiz),
+                daemon=True,
+            ).start()
 
         return _run_out(run)
     finally:

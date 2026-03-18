@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     playwright_cli: str = "npx @playwright/cli"
     pw_profile_dir: str = ""  # empty = use temp APFS clone
 
+    execution_hour: int = 14  # execute after this hour; before → scheduled
+
     web_port: int = 4102
     bark_device_key: str = "gx7KnK5f8iAKuqNLWzy5hP"
     bark_server: str = "http://localhost:8090"

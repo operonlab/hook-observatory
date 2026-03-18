@@ -110,7 +110,7 @@ def notify_check():
         today = date.today()
         daily = db.query(DailyRun).filter(DailyRun.run_date == today).first()
 
-        if daily and daily.status in ("running", "completed"):
+        if daily and daily.status in ("running", "completed", "scheduled"):
             click.echo(f"[auto-survey] Today already {daily.status}, skipping notification.")
             return
 
