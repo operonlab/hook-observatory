@@ -53,6 +53,8 @@ class RelayCacheManager:
         pane_id: str = "",
         signal_file: str = "",
         last_command: str = "",
+        role: str = "",
+        task: str = "",
     ) -> None:
         """HSET relay:panes <pane_safe> + update cache_ts"""
         data = {
@@ -63,13 +65,15 @@ class RelayCacheManager:
         }
         if signal_file:
             data["signal_file"] = signal_file
-        if last_command:
-            data["last_command"] = last_command
-        else:
-            # Preserve existing last_command if not overwriting
-            existing = self.get_pane(pane_safe)
-            if existing and existing.get("last_command"):
-                data["last_command"] = existing["last_command"]
+
+        # Preserve existing values for fields not explicitly provided
+        existing = self.get_pane(pane_safe)
+        for field, val in (("last_command", last_command), ("role", role), ("task", task)):
+            if val:
+                data[field] = val
+            elif existing and existing.get(field):
+                data[field] = existing[field]
+
         self._r.hset(PANES_KEY, pane_safe, json.dumps(data))
         self.touch()
 

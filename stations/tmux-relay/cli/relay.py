@@ -2,8 +2,8 @@
 """relay — tmux-relay CLI.
 
 Usage:
-    relay run <command> [--timeout N] [--lines N]
-    relay dispatch <command> [--timeout N] [--count N]
+    relay run <command> [--timeout N] [--lines N] [--role R] [--task T]
+    relay dispatch <command> [--timeout N] [--count N] [--role R] [--task T]
     relay check <signal_file>
     relay result <signal_file> [--lines N]
     relay list
@@ -11,6 +11,7 @@ Usage:
     relay acquire [N]
     relay spawn [--session S]
     relay context <pane> [--lines N]
+    relay context-history [pane]
     relay recycle <pane>
     relay standby [<pane>]
     relay reaper
@@ -23,6 +24,7 @@ Symlink: ln -sf ~/workshop/stations/tmux-relay/cli/relay.py ~/.local/bin/relay
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from workshop.clients.tmux_relay import TmuxRelayClient, TmuxRelayError
 
@@ -42,6 +44,8 @@ def cmd_run(args):
             command=args.command,
             timeout=args.timeout,
             max_lines=args.lines,
+            role=getattr(args, "role", "") or "",
+            task=getattr(args, "task", "") or "",
         )
         if args.json:
             _json_out(result.to_dict(), True)
@@ -66,6 +70,8 @@ def cmd_dispatch(args):
             command=args.command,
             timeout=args.timeout,
             count=args.count,
+            role=getattr(args, "role", "") or "",
+            task=getattr(args, "task", "") or "",
         )
         if args.json:
             _json_out(dispatched, True)
@@ -129,7 +135,15 @@ def cmd_list(args):
             print(f"Relay panes ({len(panes)}):\n")
             for p in panes:
                 indicator = "●" if p.status == "idle" else "◌"
-                print(f"  {indicator} {p.pane_ref:30s} {p.status:15s} {p.pane_id}")
+                line = f"  {indicator} {p.pane_ref:30s} {p.status:15s} {p.pane_id}"
+                meta_parts = []
+                if p.role:
+                    meta_parts.append(p.role)
+                if p.task:
+                    meta_parts.append(p.task)
+                if meta_parts:
+                    line += f"  [{' | '.join(meta_parts)}]"
+                print(line)
     except TmuxRelayError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -263,6 +277,55 @@ def cmd_cleanup(args):
         sys.exit(1)
 
 
+def cmd_context_history(args):
+    ctx_dir = Path("/tmp/relay-context")
+    if args.pane:
+        # Show specific pane context
+        path = ctx_dir / f"{args.pane}.json"
+        if not path.exists():
+            print(f"No saved context for pane '{args.pane}'.", file=sys.stderr)
+            sys.exit(1)
+        data = json.loads(path.read_text())
+        if args.json:
+            _json_out(data, True)
+        else:
+            print(f"Pane: {data.get('pane_safe', '?')}")
+            if data.get("role"):
+                print(f"Role: {data['role']}")
+            if data.get("task"):
+                print(f"Task: {data['task']}")
+            print(f"Reason: {data.get('reason', '?')}")
+            print(f"Saved: {data.get('saved_at', '?')}")
+            if data.get("last_command"):
+                print(f"Last command: {data['last_command']}")
+            print(f"\n--- Context ---\n{data.get('context', '')}")
+    else:
+        # List all saved contexts
+        if not ctx_dir.exists():
+            print("No saved contexts.")
+            return
+        files = sorted(ctx_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if not files:
+            print("No saved contexts.")
+            return
+        if args.json:
+            entries = [json.loads(f.read_text()) for f in files]
+            _json_out(entries, True)
+        else:
+            print(f"Saved contexts ({len(files)}):\n")
+            for f in files:
+                data = json.loads(f.read_text())
+                role = data.get("role", "")
+                task = data.get("task", "")
+                meta = f" [{role}]" if role else ""
+                if task:
+                    meta += f" {task}"
+                pane_s = data.get("pane_safe", "?")
+                reason = data.get("reason", "?")
+                saved = data.get("saved_at", "?")
+                print(f"  {pane_s:12s} {reason:15s} {saved}{meta}")
+
+
 def cmd_cache(args):
     client = TmuxRelayClient(
         model=getattr(args, "model", None), silent=getattr(args, "silent", False)
@@ -338,6 +401,8 @@ def main():
     p_run.add_argument("command", help="Command/prompt to send")
     p_run.add_argument("--timeout", type=int, default=600)
     p_run.add_argument("--lines", type=int, default=200, help="Max output lines")
+    p_run.add_argument("--role", default="", help="Semantic role (e.g. researcher, test-runner)")
+    p_run.add_argument("--task", default="", help="Task description")
     p_run.set_defaults(func=cmd_run)
 
     # dispatch
@@ -345,6 +410,8 @@ def main():
     p_dispatch.add_argument("command", help="Command/prompt to send")
     p_dispatch.add_argument("--timeout", type=int, default=600)
     p_dispatch.add_argument("--count", type=int, default=1, help="Number of panes")
+    p_dispatch.add_argument("--role", default="", help="Semantic role")
+    p_dispatch.add_argument("--task", default="", help="Task description")
     p_dispatch.set_defaults(func=cmd_dispatch)
 
     # check
@@ -382,6 +449,11 @@ def main():
     p_context.add_argument("pane", help="Pane reference")
     p_context.add_argument("--lines", type=int, default=30, help="Lines to capture")
     p_context.set_defaults(func=cmd_context)
+
+    # context-history
+    p_ctx_hist = sub.add_parser("context-history", help="List or read saved shutdown contexts")
+    p_ctx_hist.add_argument("pane", nargs="?", default=None, help="Pane safe ID (omit to list all)")
+    p_ctx_hist.set_defaults(func=cmd_context_history)
 
     # recycle
     p_recycle = sub.add_parser("recycle", help="Recycle a pane (/exit + restart)")
