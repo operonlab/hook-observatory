@@ -114,15 +114,13 @@ class ScoringMetadata:
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors."""
-    if not a or not b or len(a) != len(b):
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
+    """Compute cosine similarity between two vectors.
+
+    Delegates to shared scoring_stages.cosine_similarity.
+    """
+    from src.shared.scoring_stages import cosine_similarity
+
+    return cosine_similarity(a, b)
 
 
 class ScoringPipeline:
@@ -217,15 +215,14 @@ class ScoringPipeline:
         return results
 
     def _apply_recency(self, results: list[dict], now: datetime) -> list[dict]:
-        for r in results:
-            created_at = r.get("created_at")
-            if created_at:
-                age_days = max((now - created_at).total_seconds() / 86400, 0)
-                boost = 1.0 + self.config.recency_weight * math.exp(
-                    -age_days / self.config.recency_half_life
-                )
-                r["score"] *= boost
-        return results
+        from src.shared.scoring_stages import apply_recency_boost
+
+        return apply_recency_boost(
+            results,
+            half_life_days=self.config.recency_half_life,
+            weight=self.config.recency_weight,
+            now=now,
+        )
 
     def _apply_importance(self, results: list[dict]) -> list[dict]:
         for r in results:
@@ -269,20 +266,19 @@ class ScoringPipeline:
         - Division by 3 controls sensitivity (3 signals for ~70% of max effect)
         """
         for r in results:
-            net = r.get("feedback_net", 0)
-            if net == 0:
+            net = r.get("feedback_net") or 0  # handles None and missing key safely
+            if not net:
                 continue
             r["score"] *= 1.0 + self.config.feedback_weight * math.tanh(net / 3.0)
         return results
 
     def _apply_length_norm(self, results: list[dict]) -> list[dict]:
-        for r in results:
-            content = r.get("content", "")
-            content_len = max(len(content), 1)
-            ratio = content_len / self.config.length_anchor
-            # Use abs(log2) to penalize both very short and very long content
-            r["score"] *= 1.0 / (1.0 + 0.3 * abs(math.log2(ratio)))
-        return results
+        from src.shared.scoring_stages import apply_length_normalization
+
+        return apply_length_normalization(
+            results,
+            anchor_length=self.config.length_anchor,
+        )
 
     def _apply_time_decay(self, results: list[dict]) -> list[dict]:
         """Weibull decay with G6 access reinforcement.
@@ -361,7 +357,9 @@ class ScoringPipeline:
         return results
 
     def _apply_min_score(self, results: list[dict]) -> list[dict]:
-        return [r for r in results if r["score"] >= self.config.min_score]
+        from src.shared.scoring_stages import apply_min_score_filter
+
+        return apply_min_score_filter(results, min_score=self.config.min_score)
 
     def _apply_noise_filter(self, results: list[dict]) -> list[dict]:
         clean = []

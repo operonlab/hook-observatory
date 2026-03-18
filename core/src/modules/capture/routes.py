@@ -47,7 +47,7 @@ def _check_owner(capture, user: dict) -> None:
         raise ForbiddenError("Not the owner of this capture", code="capture.forbidden")
 
 
-@router.post("", response_model=CaptureResponse, status_code=201)
+@router.post("/", response_model=CaptureResponse, status_code=201)
 async def create_capture(
     data: CaptureCreate,
     space_id: str = Query("default"),
@@ -62,7 +62,7 @@ async def create_capture(
     return capture_service.to_response(capture)
 
 
-@router.get("", response_model=PaginatedResponse[CaptureResponse])
+@router.get("/", response_model=PaginatedResponse[CaptureResponse])
 async def list_captures(
     space_id: str = Query("default"),
     module: str | None = None,

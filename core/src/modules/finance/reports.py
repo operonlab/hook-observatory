@@ -475,3 +475,146 @@ async def generate_monthly_report(
     )
 
     return report
+
+
+# ── RLM-powered Monthly Insights ─────────────────────────────────────────────
+
+
+async def generate_monthly_insights_rlm(
+    db: AsyncSession,
+    space_id: str,
+    year_month: str,
+    viewer_id: str | None = None,
+) -> dict:
+    """Generate AI-powered monthly financial insights using RLM engine.
+
+    Performs recursive trend analysis, anomaly detection, and generates
+    a natural language narrative report with recommendations.
+
+    Falls back to a basic summary dict on any RLM failure.
+
+    Args:
+        db: Async database session.
+        space_id: The space to analyze.
+        year_month: Target month in 'YYYY-MM' format.
+        viewer_id: Current user ID for privacy filtering.
+
+    Returns:
+        Dict with keys: trends, anomalies, narrative, recommendations, metadata.
+    """
+    import json as _json
+
+    from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+    logger.info("generating_monthly_insights_rlm", space_id=space_id, year_month=year_month)
+
+    # Gather raw report data as context for RLM
+    report = await generate_monthly_report(db, space_id, year_month, viewer_id)
+
+    # Also fetch previous 3 months for trend analysis
+    prev_months_data: list[dict] = []
+    ym = year_month
+    for _ in range(3):
+        ym = _prev_year_month(ym)
+        prev_ie = await _income_expense_for_month(db, space_id, ym, viewer_id)
+        if prev_ie:
+            prev_months_data.append(
+                {
+                    "year_month": ym,
+                    "total_income": _dec(prev_ie["total_income"]),
+                    "total_expense": _dec(prev_ie["total_expense"]),
+                    "net": _dec(prev_ie["net"]),
+                    "transaction_count": prev_ie["transaction_count"],
+                }
+            )
+
+    context_data = {
+        "current_report": report,
+        "historical_months": prev_months_data,
+    }
+    context_str = _json.dumps(context_data, ensure_ascii=False, indent=2, default=str)
+
+    prompt = (
+        f"分析 {year_month} 的月度財務數據，提供以下四個部分的深度洞察：\n\n"
+        "1. **trends**: 分析各分類的消費趨勢（與前幾月比較），找出增減明顯的分類\n"
+        "2. **anomalies**: 偵測異常消費（單筆大額、分類支出激增、預算超支等）\n"
+        "3. **narrative**: 用自然語言撰寫一段完整的月度財務敘述報告（繁體中文）\n"
+        "4. **recommendations**: 提供具體、可執行的理財建議\n\n"
+        "以 JSON 格式回覆：\n"
+        '{"trends": [...], "anomalies": [...], "narrative": "...", "recommendations": [...]}\n\n'
+        "FINAL() 包住你的 JSON 結果。"
+    )
+
+    config = RLMConfig(
+        model="grok-4-fast",
+        sub_model="haiku",
+        max_iterations=5,
+        max_timeout_secs=60.0,
+        api_base="http://localhost:4000/v1",
+        api_key="sk-litellm-local-dev",
+        max_depth=2,
+    )
+    engine = RLMEngine(config)
+
+    fallback = {
+        "trends": [],
+        "anomalies": [],
+        "narrative": f"{year_month} 月度財務洞察生成失敗，請查看基礎報告。",
+        "recommendations": [],
+        "metadata": {"status": "fallback", "year_month": year_month},
+    }
+
+    try:
+        result = engine.completion(prompt=prompt, context=context_str)
+
+        if result.status != "ok":
+            logger.warning(
+                "rlm_insights_non_ok",
+                status=result.status,
+                iterations=result.iterations,
+            )
+            fallback["metadata"]["rlm_status"] = result.status
+            return fallback
+
+        # Parse RLM response as JSON
+        import re as _re
+
+        raw = result.response
+        # Strip markdown code fences if present
+        raw = _re.sub(r"```(?:json)?\s*", "", raw)
+        raw = _re.sub(r"```\s*", "", raw)
+
+        match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not match:
+            logger.warning("rlm_insights_no_json", raw_preview=raw[:300])
+            fallback["metadata"]["raw_response"] = raw[:500]
+            return fallback
+
+        insights = _json.loads(match.group())
+
+        result_dict = {
+            "trends": insights.get("trends", []),
+            "anomalies": insights.get("anomalies", []),
+            "narrative": insights.get("narrative", ""),
+            "recommendations": insights.get("recommendations", []),
+            "metadata": {
+                "status": "ok",
+                "year_month": year_month,
+                "rlm_iterations": result.iterations,
+                "rlm_time_secs": round(result.execution_time_secs, 2),
+                "rlm_calls": result.usage.total_calls,
+            },
+        }
+
+        logger.info(
+            "monthly_insights_rlm_generated",
+            space_id=space_id,
+            year_month=year_month,
+            iterations=result.iterations,
+            time_secs=round(result.execution_time_secs, 2),
+        )
+        return result_dict
+
+    except Exception:
+        logger.exception("rlm_insights_error", space_id=space_id, year_month=year_month)
+        return fallback
