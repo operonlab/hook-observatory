@@ -6,9 +6,9 @@ Runs the full daily synthesis pipeline:
   2. Community Summary (DeepSeek V3) — generates LLM summaries for each level
 
 Usage:
-    ~/.local/bin/python3 mcp/memvault/pipelines/synthesis_runner.py
-    ~/.local/bin/python3 mcp/memvault/pipelines/synthesis_runner.py --dry-run
-    ~/.local/bin/python3 mcp/memvault/pipelines/synthesis_runner.py --skip-summaries
+    python3 mcp/memvault/pipelines/synthesis_runner.py
+    python3 mcp/memvault/pipelines/synthesis_runner.py --dry-run
+    python3 mcp/memvault/pipelines/synthesis_runner.py --skip-summaries
 
 Environment:
     CORE_API_URL      — defaults to http://localhost:8801
@@ -23,7 +23,9 @@ import sys
 import time
 from datetime import datetime
 
-PYTHON = os.path.expanduser("~/.local/bin/python3")
+UV = "/opt/homebrew/bin/uv"
+WORKSHOP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+CORE_PROJECT = os.path.join(WORKSHOP_ROOT, "core")
 PIPELINE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARY_LEVELS = [1, 0, 2]  # medium first (most useful), then fine, then coarse
 
@@ -77,9 +79,12 @@ def main() -> None:
 
     results: list[tuple[str, bool, float]] = []
 
-    # Step 1: Community Detection (Leiden)
+    # Step 1: Community Detection (Leiden) — needs igraph from core venv
     community_cmd = [
-        PYTHON,
+        UV,
+        "run",
+        "--project",
+        CORE_PROJECT,
         os.path.join(PIPELINE_DIR, "community_pipeline.py"),
         "--space-id",
         args.space_id,
@@ -100,7 +105,10 @@ def main() -> None:
         for level in args.levels:
             level_name = {0: "fine", 1: "medium", 2: "coarse"}[level]
             summary_cmd = [
-                PYTHON,
+                UV,
+                "run",
+                "--project",
+                CORE_PROJECT,
                 os.path.join(PIPELINE_DIR, "community_summary_pipeline.py"),
                 "--space-id",
                 args.space_id,
