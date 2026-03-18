@@ -66,6 +66,7 @@ export interface Triple {
   source_session: string | null
   timestamp: string | null
   topic: string | null
+  display_zh: string | null
 }
 
 export interface Community {
