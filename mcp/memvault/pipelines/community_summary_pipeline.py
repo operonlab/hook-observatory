@@ -238,6 +238,8 @@ def generate_summaries(
                 if rule_summary:
                     triples.insert(0, {"s": name, "p": "description", "o": rule_summary})
 
+        evidence = community.get("size", len(triples))
+
         if not triples:
             print("(skip: no triples)")
             summaries.append(
@@ -245,6 +247,7 @@ def generate_summaries(
                     "community_id": comm_id,
                     "summary": "(無三元組，跳過摘要)",
                     "key_findings": [],
+                    "evidence_count": 0,
                     "generated_at": datetime.now().isoformat(timespec="seconds"),
                     "skipped": True,
                 }
@@ -260,6 +263,7 @@ def generate_summaries(
                     "community_id": comm_id,
                     "summary": f"[DRY RUN] {len(triples)} triples in community '{name}'",
                     "key_findings": ["(dry run — no LLM called)"],
+                    "evidence_count": evidence,
                     "generated_at": datetime.now().isoformat(timespec="seconds"),
                     "skipped": False,
                 }
@@ -278,6 +282,7 @@ def generate_summaries(
                     "community_id": comm_id,
                     "summary": summary_text,
                     "key_findings": key_findings,
+                    "evidence_count": evidence,
                     "generated_at": datetime.now().isoformat(timespec="seconds"),
                     "skipped": False,
                 }
@@ -289,6 +294,7 @@ def generate_summaries(
                     "community_id": comm_id,
                     "summary": f"(摘要失敗: {e})",
                     "key_findings": [],
+                    "evidence_count": evidence,
                     "generated_at": datetime.now().isoformat(timespec="seconds"),
                     "skipped": True,
                     "error": str(e),
@@ -307,7 +313,6 @@ def save_summaries(summaries: list[dict], space_id: str, dry_run: bool) -> bool:
         "space_id": space_id,
         "summaries": summaries,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "n_summaries": len(summaries),
     }
 
     if dry_run:

@@ -201,11 +201,13 @@ function CommunityCard({
   onExpand,
   expanded,
   detail,
+  llmSummary,
 }: {
   community: Community
   onExpand: () => void
   expanded: boolean
   detail: CommunityDetail | null
+  llmSummary?: string
 }) {
   return (
     <div
@@ -250,9 +252,9 @@ function CommunityCard({
         </div>
       </div>
 
-      {community.summary && (
+      {(llmSummary || community.summary) && (
         <p className="text-xs mb-2 line-clamp-2" style={{ color: 'var(--subtext1)' }}>
-          {community.summary}
+          {llmSummary || community.summary}
         </p>
       )}
 
@@ -646,15 +648,19 @@ export default function KgExplorerPanel() {
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {kg_communities.map((c) => (
-                <CommunityCard
-                  key={c.id}
-                  community={c}
-                  expanded={expandedCommunity === c.id}
-                  onExpand={() => handleCommunityExpand(c.id)}
-                  detail={expandedCommunity === c.id ? kg_selectedCommunity : null}
-                />
-              ))}
+              {kg_communities.map((c) => {
+                const relatedSummary = kg_summaries.find((s) => s.community_id === c.id)
+                return (
+                  <CommunityCard
+                    key={c.id}
+                    community={c}
+                    expanded={expandedCommunity === c.id}
+                    onExpand={() => handleCommunityExpand(c.id)}
+                    detail={expandedCommunity === c.id ? kg_selectedCommunity : null}
+                    llmSummary={relatedSummary?.summary}
+                  />
+                )
+              })}
             </div>
           ))}
       </section>

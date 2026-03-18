@@ -558,20 +558,13 @@ export const useMemvaultStore = create<MemvaultState>()(
     }),
     {
       name: 'memvault-cache',
+      version: 2, // v2: clusters/wisdom → communities/summaries
+      migrate: () => ({}), // v1→v2: discard old cache entirely
       partialize: (state) => ({
         blocks: state.blocks,
         total: state.total,
         profile: state.profile,
-        kg_communities: state.kg_communities,
-        kg_summaries: state.kg_summaries,
-        kg_triples: state.kg_triples,
-        kg_triplesTotal: state.kg_triplesTotal,
-        kg_attitudes: state.kg_attitudes,
-        kg_skills: state.kg_skills,
         _fetchedAt: state._fetchedAt,
-        _communityDetailCache: state._communityDetailCache,
-        _skillHistoryCache: state._skillHistoryCache,
-        _attitudeHistoryCache: state._attitudeHistoryCache,
       }),
       // Set cannot be serialized to JSON — convert on storage
       storage: {
