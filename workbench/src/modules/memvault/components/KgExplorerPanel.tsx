@@ -252,32 +252,51 @@ function CommunityCard({
         </div>
       </div>
 
-      {llmSummary && (
+      {/* Collapsed: truncated preview */}
+      {!expanded && (llmSummary || community.summary) && (
         <p className="text-xs mb-2 line-clamp-2" style={{ color: 'var(--subtext1)' }}>
-          {llmSummary}
-        </p>
-      )}
-      {!llmSummary && community.summary && (
-        <p className="text-xs mb-2 line-clamp-2" style={{ color: 'var(--overlay0)' }}>
-          {community.summary}
+          {llmSummary || community.summary}
         </p>
       )}
 
-      <div className="flex gap-1 flex-wrap">
-        {community.top_entities.slice(0, 4).map((e) => (
-          <span
-            key={e}
-            className="rounded px-1.5 py-0.5 text-xs"
-            style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
-          >
-            {e}
-          </span>
-        ))}
-      </div>
+      {!expanded && (
+        <div className="flex gap-1 flex-wrap">
+          {community.top_entities.slice(0, 4).map((e) => (
+            <span
+              key={e}
+              className="rounded px-1.5 py-0.5 text-xs"
+              style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
+            >
+              {e}
+            </span>
+          ))}
+          {community.top_entities.length > 4 && (
+            <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
+              +{community.top_entities.length - 4}
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* Expanded: show detail */}
+      {/* Expanded: full detail, no truncation */}
       {expanded && (
-        <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: 'var(--surface0)' }}>
+        <div className="mt-3 pt-3 border-t space-y-3" style={{ borderColor: 'var(--surface0)' }}>
+          {/* LLM 白話文摘要（完整） */}
+          {llmSummary && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--peach)' }}>
+                白話摘要
+              </p>
+              <p
+                className="text-xs leading-relaxed whitespace-pre-wrap"
+                style={{ color: 'var(--text)' }}
+              >
+                {llmSummary}
+              </p>
+            </div>
+          )}
+
+          {/* 規則式結構分析（完整） */}
           {community.summary && (
             <div>
               <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
@@ -292,10 +311,31 @@ function CommunityCard({
             </div>
           )}
 
+          {/* 全部 Entities */}
+          {community.top_entities.length > 0 && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
+                實體 ({community.top_entities.length})
+              </p>
+              <div className="flex gap-1 flex-wrap">
+                {community.top_entities.map((e) => (
+                  <span
+                    key={e}
+                    className="rounded px-1.5 py-0.5 text-xs"
+                    style={{ backgroundColor: 'var(--surface0)', color: 'var(--subtext0)' }}
+                  >
+                    {e}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 全部 Predicates */}
           {community.top_predicates.length > 0 && (
             <div>
               <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
-                常見關係
+                常見關係 ({community.top_predicates.length})
               </p>
               <div className="flex gap-1 flex-wrap">
                 {community.top_predicates.map((p) => (
