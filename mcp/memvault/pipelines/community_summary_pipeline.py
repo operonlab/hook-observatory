@@ -350,6 +350,39 @@ def print_report(summaries: list[dict]) -> None:
     print("\n" + "=" * 60)
 
 
+# ── Phase 5: Backfill description_zh to L1 Communities ────────────────────────
+def backfill_description_zh(summaries: list[dict], dry_run: bool) -> None:
+    """Write LLM summary back to each community's description_zh field."""
+    succeeded = [s for s in summaries if not s.get("skipped") and s.get("summary")]
+    if not succeeded:
+        print("\n[Phase 5] No summaries to backfill.")
+        return
+
+    print(f"\n[Phase 5] Writing description_zh to {len(succeeded)} communities ...")
+
+    ok_count = 0
+    for s in succeeded:
+        comm_id = s["community_id"]
+        if dry_run:
+            continue
+
+        url = f"{CORE_API}/api/memvault/kg/communities/{comm_id}/description"
+        payload = {"description_zh": s["summary"]}
+        try:
+            result = http_post(url, payload)
+            if "error" not in result:
+                ok_count += 1
+            else:
+                print(f"  [warn] Failed to update {comm_id}: {result}", file=sys.stderr)
+        except Exception as e:
+            print(f"  [warn] Failed to update {comm_id}: {e}", file=sys.stderr)
+
+    if dry_run:
+        print(f"[Phase 5] DRY RUN — would update {len(succeeded)} communities")
+    else:
+        print(f"[Phase 5] Updated {ok_count}/{len(succeeded)} communities")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -393,6 +426,9 @@ def main() -> None:
     if not ok:
         print("\n[warn] Failed to save summaries to Core API", file=sys.stderr)
         sys.exit(1)
+
+    # Phase 5: Write description_zh back to L1 communities
+    backfill_description_zh(summaries, args.dry_run)
 
     succeeded = sum(1 for s in summaries if not s.get("skipped"))
     print(f"\nDone. {succeeded}/{len(summaries)} summaries saved.")

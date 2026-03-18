@@ -201,14 +201,13 @@ function CommunityCard({
   onExpand,
   expanded,
   detail,
-  llmSummary,
 }: {
   community: Community
   onExpand: () => void
   expanded: boolean
   detail: CommunityDetail | null
-  llmSummary?: string
 }) {
+  const descZh = community.description_zh
   return (
     <div
       className="rounded-xl border p-4 cursor-pointer transition-all duration-200"
@@ -253,9 +252,9 @@ function CommunityCard({
       </div>
 
       {/* Collapsed: truncated preview */}
-      {!expanded && (llmSummary || community.summary) && (
+      {!expanded && (descZh || community.summary) && (
         <p className="text-xs mb-2 line-clamp-2" style={{ color: 'var(--subtext1)' }}>
-          {llmSummary || community.summary}
+          {descZh || community.summary}
         </p>
       )}
 
@@ -282,7 +281,7 @@ function CommunityCard({
       {expanded && (
         <div className="mt-3 pt-3 border-t space-y-3" style={{ borderColor: 'var(--surface0)' }}>
           {/* LLM 白話文摘要（完整） */}
-          {llmSummary && (
+          {descZh && (
             <div>
               <p className="text-xs font-medium mb-1" style={{ color: 'var(--peach)' }}>
                 白話摘要
@@ -291,7 +290,7 @@ function CommunityCard({
                 className="text-xs leading-relaxed whitespace-pre-wrap"
                 style={{ color: 'var(--text)' }}
               >
-                {llmSummary}
+                {descZh}
               </p>
             </div>
           )}
@@ -693,19 +692,15 @@ export default function KgExplorerPanel() {
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {kg_communities.map((c) => {
-                const relatedSummary = kg_summaries.find((s) => s.community_id === c.id)
-                return (
-                  <CommunityCard
-                    key={c.id}
-                    community={c}
-                    expanded={expandedCommunity === c.id}
-                    onExpand={() => handleCommunityExpand(c.id)}
-                    detail={expandedCommunity === c.id ? kg_selectedCommunity : null}
-                    llmSummary={relatedSummary?.summary}
-                  />
-                )
-              })}
+              {kg_communities.map((c) => (
+                <CommunityCard
+                  key={c.id}
+                  community={c}
+                  expanded={expandedCommunity === c.id}
+                  onExpand={() => handleCommunityExpand(c.id)}
+                  detail={expandedCommunity === c.id ? kg_selectedCommunity : null}
+                />
+              ))}
             </div>
           ))}
       </section>

@@ -68,6 +68,7 @@ class CommunityResponse(SpaceScopedResponse):
     top_entities: list[str] = []
     top_predicates: list[str] = []
     summary: str | None = None
+    description_zh: str | None = None
     parent_community_id: str | None = None
     modularity_score: float | None = None
     generation_batch: str | None = None

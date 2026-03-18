@@ -682,10 +682,10 @@ async def _index_communities_to_qdrant(db: AsyncSession, space_id: str) -> None:
         await delete_by_service_and_space("memvault-community", space_id)
 
         communities = (
-            await db.execute(
-                select(Community).where(Community.space_id == space_id)
-            )
-        ).scalars().all()
+            (await db.execute(select(Community).where(Community.space_id == space_id)))
+            .scalars()
+            .all()
+        )
 
         if not communities:
             return
@@ -695,6 +695,8 @@ async def _index_communities_to_qdrant(db: AsyncSession, space_id: str) -> None:
             top_entities = (c.top_entities or [])[:10]
             top_predicates = (c.top_predicates or [])[:5]
             content_parts = [c.name]
+            if c.description_zh:
+                content_parts.append(c.description_zh)
             if c.summary:
                 content_parts.append(c.summary)
             if top_entities:
@@ -702,19 +704,24 @@ async def _index_communities_to_qdrant(db: AsyncSession, space_id: str) -> None:
             if top_predicates:
                 content_parts.append(f"Predicates: {', '.join(top_predicates)}")
 
-            docs.append(IndexDocument(
-                service_id="memvault-community",
-                entity_id=str(c.id),
-                entity_type="community",
-                space_id=space_id,
-                content="\n".join(content_parts),
-                tags=top_entities[:5],
-                created_at=c.created_at,
-            ))
+            docs.append(
+                IndexDocument(
+                    service_id="memvault-community",
+                    entity_id=str(c.id),
+                    entity_type="community",
+                    space_id=space_id,
+                    content="\n".join(content_parts),
+                    tags=top_entities[:5],
+                    created_at=c.created_at,
+                )
+            )
 
         indexed = await index_documents_batch(docs)
         logger.info(
-            "Indexed %d/%d communities to Qdrant for space=%s", indexed, len(docs), space_id,
+            "Indexed %d/%d communities to Qdrant for space=%s",
+            indexed,
+            len(docs),
+            space_id,
         )
     except Exception as e:
         logger.warning("Failed to index communities to Qdrant (non-fatal): %s", e)
@@ -825,10 +832,14 @@ async def _index_summaries_to_qdrant(db: AsyncSession, space_id: str) -> None:
         await delete_by_service_and_space("memvault-summary", space_id)
 
         summaries = (
-            await db.execute(
-                select(CommunitySummary).where(CommunitySummary.space_id == space_id)
+            (
+                await db.execute(
+                    select(CommunitySummary).where(CommunitySummary.space_id == space_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         if not summaries:
             return
@@ -839,15 +850,17 @@ async def _index_summaries_to_qdrant(db: AsyncSession, space_id: str) -> None:
             if s.key_findings:
                 content_parts.extend(s.key_findings)
 
-            docs.append(IndexDocument(
-                service_id="memvault-summary",
-                entity_id=str(s.id),
-                entity_type="community_summary",
-                space_id=space_id,
-                content="\n".join(content_parts),
-                tags=s.tags or [],
-                created_at=s.created_at,
-            ))
+            docs.append(
+                IndexDocument(
+                    service_id="memvault-summary",
+                    entity_id=str(s.id),
+                    entity_type="community_summary",
+                    space_id=space_id,
+                    content="\n".join(content_parts),
+                    tags=s.tags or [],
+                    created_at=s.created_at,
+                )
+            )
 
         indexed = await index_documents_batch(docs)
         logger.info("Indexed %d/%d summaries to Qdrant for space=%s", indexed, len(docs), space_id)
@@ -1292,6 +1305,7 @@ class CascadeRecallService:
         if not skip_routing:
             try:
                 from .query_router import classify_query
+
                 layer_plan = classify_query(query)
                 result.routing_intent = layer_plan.intent.value
                 result.routing_confidence = layer_plan.confidence
@@ -1375,21 +1389,22 @@ class CascadeRecallService:
                 result.layers_searched.append("blocks")
 
         # --- Phase 2: Empty-result retry with full scan ---
-        if (
-            layer_plan is not None
-            and not skip_routing
-            and not result.layers_searched
-        ):
+        if layer_plan is not None and not skip_routing and not result.layers_searched:
             logger.info("Routed recall returned empty — retrying with full scan")
             return await self.recall(
-                db, space_id, query, top_k=top_k,
-                skip_routing=True, evaluate=evaluate,
+                db,
+                space_id,
+                query,
+                top_k=top_k,
+                skip_routing=True,
+                evaluate=evaluate,
             )
 
         # --- Phase 3: CRAG Evaluator ---
         if evaluate != "none":
             try:
                 from .crag_evaluator import CRAGEvaluator
+
                 evaluator = CRAGEvaluator()
                 evaluation = await evaluator.evaluate(query, result, evaluate=evaluate)
                 result.confidence_score = evaluation.confidence_score
@@ -1416,18 +1431,22 @@ class CascadeRecallService:
 
         try:
             from src.shared.qdrant_search import search_with_fallback
+
             results, meta = await search_with_fallback(
-                query, space_id, "memvault-summary", top_k=top_k,
+                query,
+                space_id,
+                "memvault-summary",
+                top_k=top_k,
             )
             if meta.backend == "ilike_fallback" or not results:
                 return []
             # Fetch ORM objects by IDs
             ids = [r.entity_id for r in results]
             rows = (
-                await db.execute(
-                    select(CommunitySummary).where(CommunitySummary.id.in_(ids))
-                )
-            ).scalars().all()
+                (await db.execute(select(CommunitySummary).where(CommunitySummary.id.in_(ids))))
+                .scalars()
+                .all()
+            )
             # Preserve Qdrant ranking order
             id_order = {eid: i for i, eid in enumerate(ids)}
             rows.sort(key=lambda r: id_order.get(str(r.id), 999))
@@ -1469,17 +1488,19 @@ class CascadeRecallService:
 
         try:
             from src.shared.qdrant_search import search_with_fallback
+
             results, meta = await search_with_fallback(
-                query, space_id, "memvault-community", top_k=top_k,
+                query,
+                space_id,
+                "memvault-community",
+                top_k=top_k,
             )
             if meta.backend == "ilike_fallback" or not results:
                 return []
             ids = [r.entity_id for r in results]
             rows = (
-                await db.execute(
-                    select(Community).where(Community.id.in_(ids))
-                )
-            ).scalars().all()
+                (await db.execute(select(Community).where(Community.id.in_(ids)))).scalars().all()
+            )
             id_order = {eid: i for i, eid in enumerate(ids)}
             rows.sort(key=lambda r: id_order.get(str(r.id), 999))
             return list(rows)
