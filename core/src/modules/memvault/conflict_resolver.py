@@ -300,3 +300,151 @@ async def resolve_conflict(
         result.reason,
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# RLM-enhanced conflict resolution
+# ---------------------------------------------------------------------------
+
+_RLM_CONFIDENCE_THRESHOLD = 0.7  # Trigger RLM when Haiku confidence below this
+
+
+def _run_rlm_conflict(new_content: str, existing_content: str, block_type: str) -> ConflictResult:
+    """Run RLM conflict resolution synchronously (called via asyncio.to_thread).
+
+    RLM recursively: (1) extracts claims from both blocks, (2) analyzes
+    semantic relationship, (3) produces merged content if applicable.
+    """
+    from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+    config = RLMConfig(
+        model="grok-4-fast",
+        api_base="http://localhost:4000/v1",
+        api_key="sk-litellm-local-dev",
+        max_iterations=5,
+        max_timeout_secs=60,
+    )
+    engine = RLMEngine(config)
+
+    prompt = (
+        "You are a memory conflict arbitrator. Two memory blocks may overlap, contradict, "
+        "or complement each other.\n\n"
+        "Your task:\n"
+        "1. Extract distinct claims from EACH block\n"
+        "2. Analyze the semantic relationship (complementary, contradictory, temporal update)\n"
+        "3. Decide: merge / supersede / coexist\n"
+        "4. If merge: produce combined content that preserves all non-redundant information\n\n"
+        "Return ONLY valid JSON (no markdown fences):\n"
+        '{"decision": "merge|supersede|coexist", '
+        '"confidence": <float 0-1>, '
+        '"reason": "<explanation>", '
+        '"merged_content": "<combined text or null>"}'
+    )
+
+    context = (
+        f"Block type: {block_type}\n\n"
+        f"EXISTING memory:\n{existing_content}\n\n"
+        f"NEW memory:\n{new_content}"
+    )
+
+    result = engine.completion(prompt=prompt, context=context)
+
+    if result.status != "ok":
+        raise RuntimeError(f"RLM returned status={result.status}")
+
+    raw = result.response.strip()
+    # Strip markdown fences
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    parsed = json.loads(raw)
+
+    decision_str = str(parsed.get("decision", "coexist")).lower()
+    try:
+        decision = ConflictDecision(decision_str)
+    except ValueError:
+        decision = ConflictDecision.COEXIST
+
+    confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.5))))
+    reason = str(parsed.get("reason", "RLM arbitration"))
+    merged_content: str | None = (
+        parsed.get("merged_content") if decision == ConflictDecision.MERGE else None
+    )
+
+    return ConflictResult(
+        decision=decision,
+        confidence=confidence,
+        reason=f"rlm: {reason}",
+        merged_content=merged_content or None,
+    )
+
+
+async def resolve_conflict_rlm(
+    new_content: str,
+    existing_content: str,
+    existing_block_id: str,
+    block_type: str = "knowledge",
+    similarity: float = 0.0,
+) -> ConflictResult:
+    """RLM-enhanced conflict resolution — escalates from Haiku when confidence < 0.7.
+
+    Flow:
+      1. Run standard resolve_conflict() (Haiku via oMLX)
+      2. If confidence >= 0.7, return as-is
+      3. If confidence < 0.7, escalate to RLM for deeper recursive analysis
+      4. On RLM failure, return the original Haiku result
+
+    Same signature as resolve_conflict() for drop-in use.
+    """
+    import asyncio
+
+    # Step 1: Run standard Haiku resolution
+    haiku_result = await resolve_conflict(
+        new_content=new_content,
+        existing_content=existing_content,
+        existing_block_id=existing_block_id,
+        block_type=block_type,
+        similarity=similarity,
+    )
+
+    # Step 2: Gate — only escalate on low confidence
+    if haiku_result.confidence >= _RLM_CONFIDENCE_THRESHOLD:
+        logger.debug(
+            "resolve_conflict_rlm: haiku conf=%.2f >= %.2f, keeping (block_id=%s)",
+            haiku_result.confidence,
+            _RLM_CONFIDENCE_THRESHOLD,
+            existing_block_id,
+        )
+        return haiku_result
+
+    # Step 3: Escalate to RLM
+    logger.info(
+        "resolve_conflict_rlm: haiku confidence=%.2f < %.2f, escalating to RLM (block_id=%s)",
+        haiku_result.confidence,
+        _RLM_CONFIDENCE_THRESHOLD,
+        existing_block_id,
+    )
+
+    try:
+        rlm_result = await asyncio.to_thread(
+            _run_rlm_conflict, new_content, existing_content, block_type
+        )
+        logger.info(
+            "conflict_resolved(rlm): block_id=%s decision=%s confidence=%.2f reason=%r",
+            existing_block_id,
+            rlm_result.decision,
+            rlm_result.confidence,
+            rlm_result.reason,
+        )
+        return rlm_result
+
+    except Exception as exc:
+        logger.warning(
+            "RLM conflict resolution failed — using haiku result (block_id=%s): %s",
+            existing_block_id,
+            exc,
+        )
+        return haiku_result

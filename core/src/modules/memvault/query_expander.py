@@ -580,6 +580,119 @@ def _fallback_cjk_tokenize(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# RLM-enhanced query expansion
+# ---------------------------------------------------------------------------
+
+_RLM_MIN_RESULTS_THRESHOLD = 3  # Trigger RLM iteration if fewer results than this
+
+
+async def expand_query_rlm(
+    query: str,
+    initial_result_count: int = 0,
+) -> ExpandedQuery:
+    """RLM-enhanced query expansion — generates multiple hypothetical perspectives.
+
+    Flow:
+      1. Run standard expand_query() (single-shot HyDE)
+      2. If initial_result_count >= 3, return as-is
+      3. If < 3 results, escalate to RLM for recursive multi-perspective expansion
+      4. On RLM failure, return standard HyDE result
+
+    Args:
+        query: The user's search query.
+        initial_result_count: Number of results from initial retrieval (0 = unknown).
+
+    Returns:
+        ExpandedQuery with potentially richer expanded_text and keywords.
+    """
+    import asyncio
+
+    # Step 1: Run standard HyDE
+    hyde_result = await expand_query(query)
+
+    # Step 2: Gate — only escalate if few results
+    if initial_result_count >= _RLM_MIN_RESULTS_THRESHOLD:
+        logger.debug(
+            "expand_query_rlm: %d results >= %d, keeping hyde result",
+            initial_result_count,
+            _RLM_MIN_RESULTS_THRESHOLD,
+        )
+        return hyde_result
+
+    # Step 3: Escalate to RLM
+    logger.info(
+        "expand_query_rlm: %d results < %d, escalating to RLM for query=%r",
+        initial_result_count,
+        _RLM_MIN_RESULTS_THRESHOLD,
+        query,
+    )
+
+    try:
+        rlm_result = await asyncio.to_thread(_run_rlm_expansion, query)
+        if rlm_result:
+            # Merge keywords from both sources
+            merged_kw = list(hyde_result.keywords)
+            seen = set(hyde_result.keywords)
+            for kw in extract_keywords(rlm_result):
+                if kw not in seen:
+                    merged_kw.append(kw)
+                    seen.add(kw)
+
+            return ExpandedQuery(
+                original=query,
+                expanded_text=rlm_result,
+                keywords=merged_kw[:10],
+                expansion_used="rlm",
+                inferred_tags=hyde_result.inferred_tags,
+            )
+    except Exception as exc:
+        logger.warning("RLM query expansion failed — using hyde result: %s", exc)
+
+    return hyde_result
+
+
+def _run_rlm_expansion(query: str) -> str | None:
+    """Run RLM query expansion synchronously (called via asyncio.to_thread).
+
+    RLM generates multiple hypothetical memory entries from different perspectives,
+    then synthesizes them into a single rich query representation.
+    """
+    from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+    config = RLMConfig(
+        model="grok-4-fast",
+        api_base="http://localhost:4000/v1",
+        api_key="sk-litellm-local-dev",
+        max_iterations=5,
+        max_timeout_secs=60,
+    )
+    engine = RLMEngine(config)
+
+    prompt = (
+        "You are a memory retrieval assistant. The user's query returned too few results. "
+        "Generate a SINGLE enriched hypothetical memory entry that would match this query.\n\n"
+        "Strategy:\n"
+        "1. Consider what the user might be looking for from multiple angles\n"
+        "2. Think about different phrasings, related concepts, and synonyms\n"
+        "3. Consider both English and Chinese terminology if relevant\n"
+        "4. Synthesize into one concise hypothetical memory (3-5 sentences)\n\n"
+        "Return ONLY the hypothetical memory text. Match the language of the query."
+    )
+
+    result = engine.completion(prompt=prompt, context=f"Query: {query}")
+
+    if result.status != "ok":
+        logger.warning("RLM expansion returned status=%s", result.status)
+        return None
+
+    text = result.response.strip()
+    if not text or len(text) < 10:
+        return None
+
+    return text
+
+
 async def _call_local_llm(prompt: str, max_tokens: int = 200) -> str | None:
     """Call oMLX local LLM for query expansion. Returns None on failure.
 

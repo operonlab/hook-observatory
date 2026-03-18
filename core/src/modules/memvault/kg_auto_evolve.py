@@ -170,6 +170,133 @@ async def extract_triples_from_content(
 
 
 # ---------------------------------------------------------------------------
+# RLM-enhanced triple extraction
+# ---------------------------------------------------------------------------
+
+_RLM_CONTENT_THRESHOLD = 500  # Only use RLM for content longer than this
+
+
+def _run_rlm_triple_extraction(content: str, block_type: str) -> list[dict[str, str]]:
+    """Run RLM triple extraction synchronously (called via asyncio.to_thread).
+
+    For complex/long content, RLM recursively:
+    1. Segments content into thematic chunks
+    2. Extracts triples from each chunk
+    3. Performs entity resolution across chunks (dedup similar subjects/objects)
+    4. Returns unified triple set
+    """
+    from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+    config = RLMConfig(
+        model="grok-4-fast",
+        api_base="http://localhost:4000/v1",
+        api_key="sk-litellm-local-dev",
+        max_iterations=5,
+        max_timeout_secs=60,
+    )
+    engine = RLMEngine(config)
+
+    predicate_hint = _PREDICATE_HINTS.get(block_type, _DEFAULT_PREDICATE_HINT)
+
+    prompt = (
+        "You are a knowledge graph triple extractor analyzing a complex memory block.\n\n"
+        "Your task:\n"
+        "1. Identify all distinct entities (subjects and objects) in the text\n"
+        "2. Resolve entity aliases (e.g., 'RLM' and 'Recursive Language Model' are the same)\n"
+        "3. Extract factual subject-predicate-object triples\n"
+        "4. Assign a short topic (≤5 words) to each triple\n\n"
+        f"APPROVED PREDICATES:\n{_PREDICATE_LIST_TEXT}\n\n"
+        f"EXTRACTION GUIDANCE: {predicate_hint}\n\n"
+        "ONLY use predicates from the approved list above.\n"
+        "Extract 3-10 high-quality triples. Do not hallucinate.\n\n"
+        "Return ONLY a JSON array. Each element: "
+        '{"subject": "...", "predicate": "...", "object": "...", "topic": "..."}'
+    )
+
+    result = engine.completion(prompt=prompt, context=f"TEXT:\n{content}")
+
+    if result.status != "ok":
+        raise RuntimeError(f"RLM returned status={result.status}")
+
+    raw = result.response.strip()
+    # Strip markdown fences
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    triples_raw: list[dict[str, Any]] = json.loads(raw)
+
+    # Validate and filter using same logic as extract_triples_from_content
+    valid: list[dict[str, str]] = []
+    for t in triples_raw:
+        if not isinstance(t, dict):
+            continue
+        subj = str(t.get("subject", "")).strip()
+        pred = str(t.get("predicate", "")).strip()
+        obj = str(t.get("object", "")).strip()
+        topic = str(t.get("topic", "")).strip() or None
+
+        if not (subj and pred and obj):
+            continue
+
+        canonical = normalize_predicate(pred)
+        if canonical not in VALID_PREDICATES:
+            logger.debug("RLM: skipping unknown predicate %r (normalized: %r)", pred, canonical)
+            continue
+
+        valid.append(
+            {
+                "subject": subj,
+                "predicate": canonical,
+                "object": obj,
+                "topic": topic,
+            }
+        )
+
+    return valid
+
+
+async def extract_triples_rlm(
+    content: str,
+    block_type: str,
+) -> list[dict[str, str]]:
+    """RLM-enhanced triple extraction — for complex content > 500 chars.
+
+    Flow:
+      1. If content <= 500 chars, delegate to extract_triples_from_content()
+      2. If content > 500 chars, use RLM for recursive entity resolution
+      3. On RLM failure, fallback to extract_triples_from_content()
+
+    Same return type as extract_triples_from_content().
+    """
+    import asyncio
+
+    # Gate: simple content uses existing method
+    if len(content) <= _RLM_CONTENT_THRESHOLD:
+        return await extract_triples_from_content(content, block_type)
+
+    logger.info(
+        "extract_triples_rlm: content len=%d > %d, using RLM (block_type=%s)",
+        len(content),
+        _RLM_CONTENT_THRESHOLD,
+        block_type,
+    )
+
+    try:
+        triples = await asyncio.to_thread(_run_rlm_triple_extraction, content, block_type)
+        logger.info(
+            "extract_triples_rlm: %d triples extracted via RLM (block_type=%s)",
+            len(triples),
+            block_type,
+        )
+        return triples
+
+    except Exception as exc:
+        logger.warning("RLM triple extraction failed — falling back to oMLX: %s", exc)
+        return await extract_triples_from_content(content, block_type)
+
+
+# ---------------------------------------------------------------------------
 # KG evolution orchestration
 # ---------------------------------------------------------------------------
 
