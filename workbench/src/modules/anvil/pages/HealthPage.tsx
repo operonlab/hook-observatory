@@ -29,7 +29,9 @@ export default function HealthPage() {
 
   const passRate =
     latestRun.total_skills > 0
-      ? ((latestRun.test_passed / latestRun.total_skills) * 100).toFixed(1)
+      ? (((latestRun.test_passed + latestRun.test_partial) / latestRun.total_skills) * 100).toFixed(
+          1,
+        )
       : '0'
 
   return (
@@ -56,7 +58,7 @@ export default function HealthPage() {
           {passRate}%
         </div>
         <div className="text-sm" style={{ color: 'var(--av-text-muted)' }}>
-          整體通過率 ({latestRun.test_passed}/{latestRun.total_skills})
+          整體通過率 ({latestRun.test_passed + latestRun.test_partial}/{latestRun.total_skills})
         </div>
       </div>
 

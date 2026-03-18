@@ -25,7 +25,7 @@ export default function RunsPage() {
 
   const passRate = (r: LifecycleRun) => {
     const total = r.total_skills || 1
-    return `${((r.test_passed / total) * 100).toFixed(0)}%`
+    return `${(((r.test_passed + r.test_partial) / total) * 100).toFixed(0)}%`
   }
 
   return (
@@ -98,7 +98,19 @@ export default function RunsPage() {
                   <td className="py-3 pr-4" style={{ color: 'var(--av-text-secondary)' }}>
                     {TRIGGER_LABELS[run.trigger]}
                   </td>
-                  <td className="py-3 pr-4" style={{ color: 'var(--av-pass)' }}>
+                  <td
+                    className="py-3 pr-4"
+                    style={{
+                      color:
+                        run.total_skills === 0
+                          ? 'var(--av-text-muted)'
+                          : (run.test_passed + run.test_partial) / run.total_skills >= 0.8
+                            ? 'var(--av-pass)'
+                            : (run.test_passed + run.test_partial) / run.total_skills >= 0.6
+                              ? 'var(--av-warn)'
+                              : 'var(--av-fail)',
+                    }}
+                  >
                     {passRate(run)}
                   </td>
                   <td className="py-3 pr-4" style={{ color: 'var(--av-text)' }}>
