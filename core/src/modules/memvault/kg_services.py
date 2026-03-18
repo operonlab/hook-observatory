@@ -257,7 +257,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         from src.shared.qdrant_search import vector_search
         from src.shared.search_types import SearchConfig
 
-        if qdrant_available():
+        if await qdrant_available():
             config = SearchConfig(
                 top_k=top_k,
                 score_threshold=threshold,
@@ -351,7 +351,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         from src.shared.qdrant_search import vector_search
         from src.shared.search_types import SearchConfig
 
-        if qdrant_available():
+        if await qdrant_available():
             config = SearchConfig(
                 top_k=10,
                 score_threshold=similarity_threshold,
@@ -822,7 +822,7 @@ class AttitudeService:
             from src.shared.qdrant_search import vector_search
             from src.shared.search_types import SearchConfig
 
-            if qdrant_available():
+            if await qdrant_available():
                 config = SearchConfig(
                     top_k=1,
                     score_threshold=0.0,

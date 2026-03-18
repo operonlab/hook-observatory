@@ -1,6 +1,6 @@
-"""oMLX embedding bridge — persistent subprocess for MLX-native embeddings.
+"""Jina Reranker v3 MLX bridge — persistent subprocess for cross-encoder reranking.
 
-Manages a long-running mlx-embeddings worker process (Qwen3-Embedding-0.6B, 1024d).
+Manages a long-running rerank worker process (Jina Reranker v3, 0.6B params).
 The worker loads the model once and serves requests via stdin/stdout JSON lines.
 Falls back gracefully: returns None when worker is unavailable.
 """
@@ -9,23 +9,33 @@ import asyncio
 import json
 import logging
 import subprocess
+import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 OMLX_VENV = Path.home() / ".venvs" / "omlx"
-WORKER_SCRIPT = OMLX_VENV / "embed_worker.py"
+WORKER_SCRIPT = OMLX_VENV / "rerank_worker.py"
 PYTHON = OMLX_VENV / "bin" / "python3"
-EMBEDDING_DIM: int = 1024  # re-declared; canonical value in search_constants.py
 
 _process: subprocess.Popen | None = None
 _startup_lock = asyncio.Lock()  # protects worker process startup
-_io_lock = asyncio.Lock()       # protects stdin/stdout I/O atomicity
+_io_lock = asyncio.Lock()  # protects stdin/stdout I/O atomicity
 _ready = False
 
 
+def _drain_stderr(proc: subprocess.Popen) -> None:
+    """Consume stderr to prevent pipe buffer deadlock."""
+    try:
+        for line in proc.stderr:
+            if line.strip():
+                logger.debug("rerank worker stderr: %s", line.rstrip())
+    except Exception:  # noqa: S110 — stderr drain; pipe closure is expected
+        pass
+
+
 async def _ensure_worker() -> bool:
-    """Start the worker process if not running."""
+    """Start the rerank worker process if not running."""
     global _process, _ready
 
     async with _startup_lock:
@@ -33,7 +43,7 @@ async def _ensure_worker() -> bool:
             return True
 
         if not PYTHON.exists() or not WORKER_SCRIPT.exists():
-            logger.warning("oMLX venv or worker not found at %s", OMLX_VENV)
+            logger.warning("oMLX venv or rerank worker not found at %s", OMLX_VENV)
             return False
 
         try:
@@ -46,25 +56,31 @@ async def _ensure_worker() -> bool:
                 bufsize=1,
             )
             loop = asyncio.get_event_loop()
-            line = await loop.run_in_executor(None, _process.stdout.readline)
+            line = await asyncio.wait_for(
+                loop.run_in_executor(None, _process.stdout.readline),
+                timeout=60,  # Model load can take a few seconds
+            )
             if not line:
-                logger.warning("oMLX worker produced no output")
+                logger.warning("Rerank worker produced no output")
                 _process.kill()
                 _process = None
                 return False
 
+            # Drain stderr in background to prevent pipe buffer deadlock
+            threading.Thread(target=_drain_stderr, args=(_process,), daemon=True).start()
+
             status = json.loads(line.strip())
             if status.get("status") == "ready":
                 _ready = True
-                logger.info("oMLX embedding worker ready: %s", status.get("model"))
+                logger.info("Rerank worker ready: %s", status.get("model"))
                 return True
 
-            logger.warning("oMLX worker unexpected status: %s", status)
+            logger.warning("Rerank worker unexpected status: %s", status)
             _process.kill()
             _process = None
             return False
         except Exception as e:
-            logger.warning("Failed to start oMLX worker: %s", e)
+            logger.warning("Failed to start rerank worker: %s", e)
             if _process:
                 try:
                     _process.kill()
@@ -100,60 +116,54 @@ async def _send_request(request: dict) -> dict | None:
                 loop.run_in_executor(None, _process.stdout.readline),
                 timeout=30,
             )
+
             if not response_line:
-                logger.warning("oMLX worker returned empty response")
+                logger.warning("Rerank worker returned empty response")
                 _ready = False
                 return None
 
-            return json.loads(response_line.strip())
-        except Exception as e:
-            logger.warning("oMLX bridge error: %s", e)
+            result = json.loads(response_line.strip())
+            if "error" in result:
+                logger.warning("Rerank worker error: %s", result["error"])
+                return None
+
+            return result
+
+        except TimeoutError:
+            logger.warning("Rerank worker request timed out")
             _ready = False
             if _process:
                 try:
                     _process.kill()
                 except ProcessLookupError:
                     pass
-            _process = None
+                _process = None
+            return None
+        except Exception:
+            logger.exception("Rerank bridge communication error")
+            _ready = False
             return None
 
 
-async def embed_texts(texts: list[str], task_type: str | None = None) -> list[list[float] | None]:
-    """Embed multiple texts. Returns list of embeddings (or None per failed text)."""
-    if not texts:
+async def rerank(
+    query: str,
+    documents: list[str],
+    top_n: int | None = None,
+) -> list[dict] | None:
+    """Rerank documents using Jina cross-encoder.
+
+    Returns list of {"index": int, "score": float} sorted by relevance,
+    or None if worker is unavailable.
+    """
+    if not documents:
         return []
 
-    response = await _send_request({"texts": texts, "task_type": task_type})
+    request = {"query": query, "documents": documents}
+    if top_n is not None:
+        request["top_n"] = top_n
 
-    if response is None or "error" in response:
-        if response:
-            logger.warning("oMLX embedding error: %s", response.get("error"))
-        return [None] * len(texts)
+    result = await _send_request(request)
+    if result is None:
+        return None
 
-    embeddings = response.get("embeddings", [])
-    results: list[list[float] | None] = []
-    for i in range(len(texts)):
-        if i < len(embeddings) and embeddings[i] and len(embeddings[i]) == EMBEDDING_DIM:
-            results.append(embeddings[i])
-        else:
-            results.append(None)
-    return results
-
-
-async def embed_single(text: str, task_type: str | None = None) -> list[float] | None:
-    """Embed a single text."""
-    results = await embed_texts([text], task_type=task_type)
-    return results[0] if results else None
-
-
-async def shutdown():
-    """Gracefully shutdown the worker process."""
-    global _process, _ready
-    if _process and _process.poll() is None:
-        try:
-            _process.stdin.close()
-            _process.wait(timeout=5)
-        except Exception:
-            _process.kill()
-    _process = None
-    _ready = False
+    return result.get("scores")

@@ -6,6 +6,7 @@ hybrid_search, delete_document, search_across_services.
 Falls back to None/empty results when Qdrant is unavailable.
 """
 
+import asyncio
 import logging
 import time
 
@@ -48,18 +49,18 @@ _PAYLOAD_INDEXES = {
 
 async def init_collection() -> bool:
     """Create the workshop collection with dense + sparse vectors if it doesn't exist."""
-    client = qclient.get_client()
+    client = await qclient.get_client()
     if client is None:
         logger.warning("Qdrant unavailable — skipping collection init")
         return False
 
     try:
-        collections = [c.name for c in client.get_collections().collections]
+        collections = [c.name for c in (await client.get_collections()).collections]
         if COLLECTION_NAME in collections:
             logger.info("Collection %s already exists", COLLECTION_NAME)
             return True
 
-        client.create_collection(
+        await client.create_collection(
             collection_name=COLLECTION_NAME,
             vectors_config={
                 "dense": VectorParams(
@@ -77,7 +78,7 @@ async def init_collection() -> bool:
 
         # Create payload indexes for efficient filtering
         for field_name, field_type in _PAYLOAD_INDEXES.items():
-            client.create_payload_index(
+            await client.create_payload_index(
                 collection_name=COLLECTION_NAME,
                 field_name=field_name,
                 field_schema=field_type,
@@ -92,7 +93,7 @@ async def init_collection() -> bool:
 
 async def index_document(doc: IndexDocument) -> bool:
     """Index a single document: embed + tokenize + upsert to Qdrant."""
-    client = qclient.get_client()
+    client = await qclient.get_client()
     if client is None:
         return False
 
@@ -132,7 +133,7 @@ async def index_document(doc: IndexDocument) -> bool:
             payload=payload,
         )
 
-        client.upsert(collection_name=COLLECTION_NAME, points=[point])
+        await client.upsert(collection_name=COLLECTION_NAME, points=[point])
         return True
     except Exception as e:
         logger.error("Failed to index document %s/%s: %s", doc.service_id, doc.entity_id, e)
@@ -141,7 +142,7 @@ async def index_document(doc: IndexDocument) -> bool:
 
 async def index_documents_batch(docs: list[IndexDocument]) -> int:
     """Index multiple documents in batch. Returns count of successfully indexed."""
-    client = qclient.get_client()
+    client = await qclient.get_client()
     if client is None or not docs:
         return 0
 
@@ -184,7 +185,7 @@ async def index_documents_batch(docs: list[IndexDocument]) -> int:
             # Upsert in batches of 100
             for i in range(0, len(points), 100):
                 batch = points[i : i + 100]
-                client.upsert(collection_name=COLLECTION_NAME, points=batch)
+                await client.upsert(collection_name=COLLECTION_NAME, points=batch)
 
         return len(points)
     except Exception as e:
@@ -202,7 +203,7 @@ async def hybrid_search(
     meta = SearchMetadata()
     start = time.monotonic()
 
-    client = qclient.get_client()
+    client = await qclient.get_client()
     if client is None:
         meta.backend = "pgvector_fallback"
         return [], meta
@@ -225,21 +226,12 @@ async def hybrid_search(
 
         query_filter = Filter(must=must_conditions)
 
-        # Generate query vectors
+        # Generate query vectors — start embedding as task, do sparse while waiting
         prefetch_list = []
 
+        embedding_task = None
         if config.use_dense:
-            query_embedding = await get_embedding(query, task_type="search_query")
-            if query_embedding:
-                prefetch_list.append(
-                    Prefetch(
-                        query=query_embedding,
-                        using="dense",
-                        limit=config.top_k * 3,
-                        filter=query_filter,
-                    )
-                )
-                meta.dense_used = True
+            embedding_task = asyncio.create_task(get_embedding(query, task_type="search_query"))
 
         if config.use_sparse:
             # Use first service_id for per-service avgdl if filtering single service
@@ -261,11 +253,24 @@ async def hybrid_search(
                 )
                 meta.sparse_used = True
 
+        if embedding_task is not None:
+            query_embedding = await embedding_task
+            if query_embedding:
+                prefetch_list.append(
+                    Prefetch(
+                        query=query_embedding,
+                        using="dense",
+                        limit=config.top_k * 3,
+                        filter=query_filter,
+                    )
+                )
+                meta.dense_used = True
+
         if not prefetch_list:
             return [], meta
 
         # Execute hybrid query with RRF fusion
-        results = client.query_points(
+        results = await client.query_points(
             collection_name=COLLECTION_NAME,
             prefetch=prefetch_list,
             query=FusionQuery(fusion=Fusion.RRF),
@@ -305,15 +310,74 @@ async def hybrid_search(
         return [], meta
 
 
+async def vector_search(
+    query_embedding: list[float],
+    space_id: str,
+    config: SearchConfig,
+) -> list[SearchResult]:
+    """Dense-only vector search with pre-computed embedding.
+
+    Use when the caller already has an embedding vector and doesn't need
+    BM25/sparse search. Returns empty list if Qdrant is unavailable.
+    """
+    client = await qclient.get_client()
+    if client is None:
+        return []
+
+    try:
+        # Build filter
+        must_conditions = [
+            FieldCondition(key="space_id", match=MatchValue(value=space_id)),
+        ]
+        if config.service_ids:
+            must_conditions.append(
+                FieldCondition(key="service_id", match=MatchAny(any=config.service_ids))
+            )
+        if config.tag_filter:
+            must_conditions.append(
+                FieldCondition(key="tags", match=MatchAny(any=config.tag_filter))
+            )
+
+        response = await client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_embedding,
+            using="dense",
+            query_filter=Filter(must=must_conditions),
+            limit=config.top_k,
+            with_payload=True,
+        )
+
+        search_results = []
+        for point in response.points:
+            payload = point.payload or {}
+            score = point.score or 0.0
+            if config.score_threshold and score < config.score_threshold:
+                continue
+            search_results.append(
+                SearchResult(
+                    entity_id=payload.get("entity_id", ""),
+                    service_id=payload.get("service_id", ""),
+                    entity_type=payload.get("entity_type", ""),
+                    score=score,
+                    content_preview=payload.get("content_preview", ""),
+                    tags=payload.get("tags", []),
+                )
+            )
+        return search_results
+    except Exception as e:
+        logger.error("Qdrant vector_search failed: %s", e)
+        return []
+
+
 async def delete_document(service_id: str, entity_id: str) -> bool:
     """Delete a document from Qdrant by service_id + entity_id."""
-    client = qclient.get_client()
+    client = await qclient.get_client()
     if client is None:
         return False
 
     try:
         point_id = _entity_to_point_id(service_id, entity_id)
-        client.delete(
+        await client.delete(
             collection_name=COLLECTION_NAME,
             points_selector=[point_id],
         )
@@ -370,7 +434,7 @@ async def search_with_fallback(
 
     meta = SearchMetadata(backend="ilike_fallback")
 
-    if not qdrant_available():
+    if not await qdrant_available():
         return [], meta
 
     config = SearchConfig(top_k=top_k, service_ids=[service_id], tag_filter=tag_filter)

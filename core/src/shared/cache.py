@@ -52,9 +52,16 @@ async def cache_delete_pattern(pattern: str) -> int:
     try:
         r = get_redis()
         deleted = 0
+        batch: list[str] = []
         async for key in r.scan_iter(match=pattern, count=100):
-            await r.delete(key)
-            deleted += 1
+            batch.append(key)
+            if len(batch) >= 100:
+                await r.unlink(*batch)
+                deleted += len(batch)
+                batch = []
+        if batch:
+            await r.unlink(*batch)
+            deleted += len(batch)
         return deleted
     except Exception:
         logger.debug("cache_delete_pattern failed for %s", pattern, exc_info=True)
