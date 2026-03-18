@@ -57,16 +57,14 @@ _DIGEST_TOOL: dict = {
             "one_liner": {
                 "type": "string",
                 "description": (
-                    "One sentence (max 120 chars) summarizing "
-                    "the paper's core contribution"
+                    "One sentence (max 120 chars) summarizing the paper's core contribution"
                 ),
             },
             "key_findings": {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": (
-                    "3-5 concrete, specific findings from "
-                    "the paper (not vague statements)"
+                    "3-5 concrete, specific findings from the paper (not vague statements)"
                 ),
             },
             "workshop_relevance": {
@@ -149,7 +147,7 @@ async def generate_digest(
         Confidence gate: if confidence < 0.5, the digest is still returned
         (caller decides whether to persist) but marked as low-confidence.
     """
-    from core.src.shared.llm_haiku import haiku_extract
+    from src.shared.llm_haiku import haiku_extract
 
     paper_id = arxiv_id or title[:40]
 
@@ -243,6 +241,165 @@ Extract a structured digest for Workshop relevance. Be concrete and specific."""
     return digest
 
 
+# ── RLM-enhanced digest generation ──────────────────────────────────────────
+
+_RLM_CONFIDENCE_THRESHOLD = 0.7
+
+_RLM_DECOMPOSE_PROMPT = """\
+Analyze this academic paper for Workshop (a personal modular monolith platform) relevance.
+
+Recursively decompose into these dimensions:
+1. **Problem**: What specific problem does this paper solve? Break into sub-problems.
+2. **Solution**: What is the proposed approach? Identify novel techniques vs known methods.
+3. **Evidence**: What experiments/benchmarks support the claims? Quantify improvements.
+4. **Limitations**: What are the explicit and implicit limitations?
+5. **Workshop Relevance**: Map findings to Workshop modules — which modules benefit, how?
+
+Workshop modules: memvault (semantic search, knowledge graph, pgvector), \
+intelflow (RSS, briefings), capture (NL intake, LLM enrichment), \
+paper (this module), taskflow (quests, tasks), ideagraph (sparks, idea links), \
+finance (transactions, budgets), invest (portfolio), \
+dailyos (daily planning, marvin AI), notification, auth, admin.
+
+Tech stack: Python 3.12 / FastAPI / PostgreSQL + pgvector / Redis / \
+React 19 / MLX embeddings (1024d Qwen3).
+
+After decomposition, produce a JSON object with these exact keys:
+- one_liner (str, max 120 chars)
+- key_findings (list of 3-5 str)
+- workshop_relevance ("high" / "medium" / "low")
+- applicable_modules (list of str)
+- actionable_insight (str, start with a verb)
+- effort_estimate (str: "0.5d" / "1d" / "2d" / "3d" / "1w" / "2w" / "")
+- confidence (float 0.0-1.0, reassessed after decomposition)
+
+Return ONLY the JSON object via FINAL().
+"""
+
+
+async def generate_digest_rlm(
+    title: str,
+    abstract: str,
+    arxiv_id: str | None = None,
+) -> dict | None:
+    """Generate a deeper digest using RLM recursive decomposition.
+
+    Triggered when standard Haiku digest confidence < 0.7.
+    Decomposes: problem → solution → evidence → limitations → Workshop relevance.
+    Reassesses confidence after decomposition.
+
+    Returns same schema as generate_digest() for compatibility.
+    """
+    import json
+
+    from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+    paper_id = arxiv_id or title[:40]
+    logger.info("digest_generator_rlm: starting RLM digest for %s", paper_id)
+
+    config = RLMConfig(
+        model="grok-4-fast",
+        sub_model="grok-4-fast",
+        max_iterations=5,
+        max_timeout_secs=60.0,
+        max_depth=2,
+        api_base="http://localhost:4000/v1",
+        api_key="sk-litellm-local-dev",
+        compaction=False,
+    )
+    engine = RLMEngine(config)
+
+    context = f"Title: {title}\n\nAbstract:\n{abstract}"
+
+    try:
+        result = engine.completion(prompt=_RLM_DECOMPOSE_PROMPT, context=context)
+    except Exception:
+        logger.warning("digest_generator_rlm: RLM engine failed for %s", paper_id, exc_info=True)
+        return None
+
+    if result.status != "ok" or not result.response:
+        logger.warning("digest_generator_rlm: non-ok status=%s for %s", result.status, paper_id)
+        return None
+
+    # Parse JSON from RLM response
+    raw = result.response.strip()
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        lines = [ln for ln in lines if not ln.strip().startswith("```")]
+        raw = "\n".join(lines)
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        # Try to extract JSON object from the response
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            try:
+                data = json.loads(raw[start:end])
+            except json.JSONDecodeError:
+                logger.warning("digest_generator_rlm: cannot parse JSON for %s", paper_id)
+                return None
+        else:
+            logger.warning("digest_generator_rlm: no JSON found for %s", paper_id)
+            return None
+
+    # Validate required fields
+    required = [
+        "one_liner",
+        "key_findings",
+        "workshop_relevance",
+        "applicable_modules",
+        "actionable_insight",
+        "effort_estimate",
+        "confidence",
+    ]
+    missing = [f for f in required if f not in data]
+    if missing:
+        logger.warning("digest_generator_rlm: missing fields %s for %s", missing, paper_id)
+        return None
+
+    # Coerce and validate
+    confidence = max(0.0, min(1.0, float(data.get("confidence", 0.0))))
+
+    key_findings = data.get("key_findings", [])
+    if isinstance(key_findings, str):
+        key_findings = [key_findings]
+    key_findings = [str(f) for f in key_findings[:5]]
+
+    applicable_modules = data.get("applicable_modules", [])
+    if isinstance(applicable_modules, str):
+        applicable_modules = [applicable_modules]
+    applicable_modules = [str(m) for m in applicable_modules]
+
+    workshop_relevance = data.get("workshop_relevance", "low")
+    if workshop_relevance not in ("high", "medium", "low"):
+        workshop_relevance = "low"
+
+    digest = {
+        "one_liner": str(data.get("one_liner", ""))[:200],
+        "key_findings": key_findings,
+        "workshop_relevance": workshop_relevance,
+        "applicable_modules": applicable_modules,
+        "actionable_insight": str(data.get("actionable_insight", ""))[:500],
+        "effort_estimate": str(data.get("effort_estimate", ""))[:10],
+        "confidence": confidence,
+        "model_used": f"rlm-{config.model}",
+    }
+
+    logger.info(
+        "digest_generator_rlm: digest ready for %s — relevance=%s confidence=%.2f "
+        "iterations=%d time=%.1fs",
+        paper_id,
+        digest["workshop_relevance"],
+        digest["confidence"],
+        result.iterations,
+        result.execution_time_secs,
+    )
+    return digest
+
+
 def _resolve_model_name() -> str:
     """Resolve the actual model name used by the Haiku tmux capture window.
 
@@ -250,7 +407,7 @@ def _resolve_model_name() -> str:
     Falls back to a sentinel string if parsing fails.
     """
     try:
-        from core.src.shared import llm_haiku
+        from src.shared import llm_haiku
 
         cmd = llm_haiku._CLAUDE_CMD
         # cmd is like: "CLAUDE_VOICE=0 claude --dangerously-skip-permissions --model haiku"
@@ -258,7 +415,7 @@ def _resolve_model_name() -> str:
         for i, part in enumerate(parts):
             if part == "--model" and i + 1 < len(parts):
                 return f"claude-{parts[i + 1]}"
-    except Exception:  # noqa: S110
+    except Exception:
         pass
     return _UNKNOWN_MODEL
 
@@ -301,6 +458,22 @@ async def generate_digests_batch(
             abstract=paper["abstract"],
             arxiv_id=paper.get("arxiv_id"),
         )
+
+        # RLM fallback: if Haiku confidence < 0.7, try deeper decomposition
+        if digest is not None and digest["confidence"] < _RLM_CONFIDENCE_THRESHOLD:
+            logger.info(
+                "digest_generator: confidence %.2f < %.2f for %s, trying RLM",
+                digest["confidence"],
+                _RLM_CONFIDENCE_THRESHOLD,
+                paper.get("arxiv_id") or paper["title"][:40],
+            )
+            rlm_digest = await generate_digest_rlm(
+                title=paper["title"],
+                abstract=paper["abstract"],
+                arxiv_id=paper.get("arxiv_id"),
+            )
+            if rlm_digest is not None and rlm_digest["confidence"] > digest["confidence"]:
+                digest = rlm_digest
 
         enriched = dict(paper)
         if digest is not None:

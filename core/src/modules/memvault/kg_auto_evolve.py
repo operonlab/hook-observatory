@@ -26,8 +26,9 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_LLM_URL = os.environ.get("KG_AUTO_EVOLVE_LLM_URL", "http://127.0.0.1:4000/chat/completions")
-_LLM_TIMEOUT = 15.0  # seconds — LiteLLM proxy routes to external APIs, needs more time
+_LLM_URL = os.environ.get("KG_AUTO_EVOLVE_LLM_URL", "https://api.deepseek.com/chat/completions")
+_LLM_API_KEY = os.environ.get("KG_AUTO_EVOLVE_API_KEY", os.environ.get("DEEPSEEK_API_KEY", ""))
+_LLM_TIMEOUT = 20.0  # seconds — external API call
 _MIN_CONTENT_LENGTH = 50
 _SKIP_BLOCK_TYPES = {"general"}  # too noisy for auto-extraction
 
@@ -97,7 +98,7 @@ async def extract_triples_from_content(
     user_prompt = f"TEXT:\n{content}\n\nExtract triples as JSON array:"
 
     payload = {
-        "model": "default",
+        "model": os.environ.get("KG_AUTO_EVOLVE_MODEL", "deepseek-chat"),
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -107,8 +108,11 @@ async def extract_triples_from_content(
     }
 
     try:
+        headers = {}
+        if _LLM_API_KEY:
+            headers["Authorization"] = f"Bearer {_LLM_API_KEY}"
         async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-            response = await client.post(_LLM_URL, json=payload)
+            response = await client.post(_LLM_URL, json=payload, headers=headers)
             response.raise_for_status()
 
         result = response.json()
