@@ -372,9 +372,14 @@ async def cascade_recall(
     q: str = Query(..., min_length=1, max_length=2000),
     top_k: int = Query(5, ge=1, le=20),
     space_id: str = Query("default"),
+    skip_routing: bool = Query(False, description="Bypass query router, search all layers"),
+    evaluate: str = Query("default", pattern="^(default|deep|rlm|none)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    return await cascade_recall_service.recall(db, space_id, q, top_k=top_k)
+    return await cascade_recall_service.recall(
+        db, space_id, q, top_k=top_k,
+        skip_routing=skip_routing, evaluate=evaluate,
+    )
 
 
 # ======================== Confidence Decay ========================

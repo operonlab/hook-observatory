@@ -78,6 +78,46 @@ def _row_to_attitude_doc(row) -> IndexDocument:
     )
 
 
+def _row_to_community_doc(row) -> IndexDocument:
+    parts = [row.name]
+    if row.summary:
+        parts.append(row.summary)
+    if row.top_entities:
+        # top_entities is a JSONB array
+        entities = row.top_entities if isinstance(row.top_entities, list) else []
+        if entities:
+            parts.append(f"Entities: {', '.join(entities[:10])}")
+    if row.top_predicates:
+        predicates = row.top_predicates if isinstance(row.top_predicates, list) else []
+        if predicates:
+            parts.append(f"Predicates: {', '.join(predicates[:5])}")
+    return IndexDocument(
+        service_id="memvault-community",
+        entity_id=str(row.id),
+        entity_type="community",
+        space_id=str(row.space_id),
+        content="\n".join(parts),
+        tags=(row.top_entities or [])[:5] if isinstance(row.top_entities, list) else [],
+        created_at=row.created_at if isinstance(row.created_at, datetime) else None,
+    )
+
+
+def _row_to_summary_doc(row) -> IndexDocument:
+    parts = [row.summary]
+    if row.key_findings:
+        findings = row.key_findings if isinstance(row.key_findings, list) else []
+        parts.extend(findings)
+    return IndexDocument(
+        service_id="memvault-summary",
+        entity_id=str(row.id),
+        entity_type="community_summary",
+        space_id=str(row.space_id),
+        content="\n".join(parts),
+        tags=row.tags if isinstance(row.tags, list) else [],
+        created_at=row.created_at if isinstance(row.created_at, datetime) else None,
+    )
+
+
 async def _index_in_batches(
     docs: list[IndexDocument],
     label: str,
@@ -104,7 +144,7 @@ async def main() -> None:
     print(f"Database: {DATABASE_URL.split('@')[-1]}")
 
     # 1. Init Qdrant collection
-    print("\n[1/3] Initialising Qdrant collection...")
+    print("\n[1/5] Initialising Qdrant collection...")
     ok = await init_collection()
     if not ok:
         print("ERROR: Qdrant unavailable. Aborting.")
@@ -112,7 +152,7 @@ async def main() -> None:
     print("      Collection ready.")
 
     # 2. Fetch KG records (sync engine — simpler, no asyncpg needed)
-    print("\n[2/3] Fetching KG records...")
+    print("\n[2/5] Fetching KG records...")
     engine = create_engine(DATABASE_URL, echo=False)
     with engine.connect() as conn:
         triple_rows = conn.execute(
@@ -127,23 +167,37 @@ async def main() -> None:
                 " FROM memvault.attitude_facts WHERE superseded_by IS NULL ORDER BY created_at"
             )
         ).fetchall()
+        community_rows = conn.execute(
+            text(
+                "SELECT id, space_id, name, summary, top_entities, top_predicates, created_at"
+                " FROM memvault.communities ORDER BY created_at"
+            )
+        ).fetchall()
+        summary_rows = conn.execute(
+            text(
+                "SELECT id, space_id, summary, key_findings, tags, created_at"
+                " FROM memvault.community_summaries ORDER BY created_at"
+            )
+        ).fetchall()
     engine.dispose()
 
     print(f"      Found {len(triple_rows)} valid triples")
     print(f"      Found {len(attitude_rows)} active attitudes")
+    print(f"      Found {len(community_rows)} communities (L1)")
+    print(f"      Found {len(summary_rows)} community summaries (L2)")
 
-    if not triple_rows and not attitude_rows:
+    if not any([triple_rows, attitude_rows, community_rows, summary_rows]):
         print("\nNothing to index. Done.")
         return
 
     triple_docs = [_row_to_triple_doc(r) for r in triple_rows]
     attitude_docs = [_row_to_attitude_doc(r) for r in attitude_rows]
+    community_docs = [_row_to_community_doc(r) for r in community_rows]
+    summary_docs = [_row_to_summary_doc(r) for r in summary_rows]
 
-    # 3. Index in batches
-    print(f"\n[3/3] Indexing into Qdrant (batch_size={BATCH_SIZE})...")
-
-    t_idx = 0
-    a_idx = 0
+    # 3. Index triples + attitudes
+    print(f"\n[3/5] Indexing triples + attitudes (batch_size={BATCH_SIZE})...")
+    t_idx = a_idx = 0
     if triple_docs:
         print(f"\n  --- Triples ({len(triple_docs)}) ---")
         t_idx = await _index_in_batches(triple_docs, "triples")
@@ -151,10 +205,26 @@ async def main() -> None:
         print(f"\n  --- Attitudes ({len(attitude_docs)}) ---")
         a_idx = await _index_in_batches(attitude_docs, "attitudes")
 
+    # 4. Index communities (L1)
+    print(f"\n[4/5] Indexing communities L1 ({len(community_docs)})...")
+    c_idx = 0
+    if community_docs:
+        c_idx = await _index_in_batches(community_docs, "communities")
+
+    # 5. Index community summaries (L2)
+    print(f"\n[5/5] Indexing community summaries L2 ({len(summary_docs)})...")
+    s_idx = 0
+    if summary_docs:
+        s_idx = await _index_in_batches(summary_docs, "summaries")
+
     # Summary
-    total_ok = t_idx + a_idx
-    total_all = len(triple_docs) + len(attitude_docs)
+    total_ok = t_idx + a_idx + c_idx + s_idx
+    total_all = len(triple_docs) + len(attitude_docs) + len(community_docs) + len(summary_docs)
     print(f"\n=== Summary: {total_ok}/{total_all} indexed ===")
+    print(f"  Triples: {t_idx}/{len(triple_docs)}")
+    print(f"  Attitudes: {a_idx}/{len(attitude_docs)}")
+    print(f"  Communities (L1): {c_idx}/{len(community_docs)}")
+    print(f"  Summaries (L2): {s_idx}/{len(summary_docs)}")
     if total_ok < total_all:
         print(f"  WARNING: {total_all - total_ok} failed")
     print("Done.")
