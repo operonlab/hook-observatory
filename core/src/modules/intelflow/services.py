@@ -492,9 +492,194 @@ class DashboardService:
         )
 
 
+# ======================== Synthesis Service ========================
+
+
+class SynthesisService:
+    """RLM-powered multi-source report synthesis."""
+
+    async def synthesize_reports_rlm(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        topic: str,
+        max_sources: int = 10,
+    ) -> dict[str, Any]:
+        """Synthesize reports on a topic using RLM engine.
+
+        Flow:
+          1. Fetch reports matching topic (by topic name or tag)
+          2. llm_query_batched extracts key facts from each source
+          3. REPL detects conflicts between sources
+          4. llm_query produces consensus summary with source attribution
+
+        Returns dict with keys: consensus, conflicts, sources, confidence.
+        """
+        import asyncio
+
+        from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+        # 1. Fetch reports matching the topic
+        reports = await self._fetch_topic_reports(db, space_id, topic, max_sources)
+        if not reports:
+            return {
+                "consensus": f"No reports found for topic '{topic}'.",
+                "conflicts": [],
+                "sources": [],
+                "confidence": 0.0,
+            }
+
+        # 2. Build context chunks and source metadata
+        source_chunks: list[str] = []
+        source_meta: list[dict[str, Any]] = []
+        for idx, r in enumerate(reports):
+            source_chunks.append(
+                f"[SOURCE {idx + 1}] Title: {r.title}\n"
+                f"Query: {r.query}\n"
+                f"Content:\n{r.content[:5000]}"
+            )
+            source_meta.append({
+                "id": r.id,
+                "title": r.title,
+                "skill_name": r.skill_name,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            })
+
+        context = "\n\n---\n\n".join(source_chunks)
+
+        # 3. Run RLM synthesis (synchronous engine → run in executor)
+        config = RLMConfig(
+            model="grok-4-fast",
+            sub_model="grok-4-fast",
+            max_iterations=8,
+            max_timeout_secs=120.0,
+            api_base="http://localhost:4000/v1",
+            api_key="sk-litellm-local-dev",
+        )
+        engine = RLMEngine(config)
+
+        prompt = (
+            f"Synthesize the following {len(reports)} reports about '{topic}'.\n\n"
+            "Steps:\n"
+            "1. Use llm_query_batched to extract 3-5 key facts from each source\n"
+            "2. Compare facts across sources — identify any conflicts or contradictions\n"
+            "3. Produce a consensus summary with source attribution [SOURCE N]\n"
+            "4. Rate overall confidence (0.0-1.0) based on source agreement\n\n"
+            "Return a JSON object with keys: consensus (str), conflicts (list of str), "
+            "confidence (float).\n"
+            "Use FINAL_VAR to return the JSON string."
+        )
+
+        try:
+            result = await asyncio.to_thread(
+                engine.completion, prompt=prompt, context=context,
+            )
+        except Exception as e:
+            logger.warning("RLM synthesis failed for topic '%s': %s", topic, e)
+            return {
+                "consensus": f"Synthesis failed: {e}",
+                "conflicts": [],
+                "sources": source_meta,
+                "confidence": 0.0,
+            }
+
+        # 4. Parse RLM result
+        return self._parse_synthesis_result(result.response, source_meta)
+
+    async def _fetch_topic_reports(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        topic: str,
+        max_sources: int,
+    ) -> list[Any]:
+        """Fetch reports matching topic by topic name or tag."""
+        from .models import Report, ReportTopic, Topic
+
+        # Try by topic name first
+        topic_row = (
+            await db.execute(
+                select(Topic).where(
+                    Topic.space_id == space_id,
+                    Topic.name == topic.lower(),
+                )
+            )
+        ).scalar_one_or_none()
+
+        if topic_row:
+            q = (
+                select(Report)
+                .join(ReportTopic, Report.id == ReportTopic.report_id)
+                .where(
+                    ReportTopic.topic_id == topic_row.id,
+                    Report.deleted_at.is_(None),
+                )
+                .order_by(Report.created_at.desc())
+                .limit(max_sources)
+            )
+            reports = list((await db.execute(q)).scalars().all())
+            if reports:
+                return reports
+
+        # Fallback: match by tag
+        q = (
+            select(Report)
+            .where(
+                Report.space_id == space_id,
+                Report.tags.contains([topic.lower()]),
+                Report.deleted_at.is_(None),
+            )
+            .order_by(Report.created_at.desc())
+            .limit(max_sources)
+        )
+        return list((await db.execute(q)).scalars().all())
+
+    def _parse_synthesis_result(
+        self, response: str, source_meta: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Parse RLM response into structured synthesis result."""
+        import json
+        import re
+
+        # Try parsing whole response as JSON
+        try:
+            data = json.loads(response)
+            return {
+                "consensus": data.get("consensus", response),
+                "conflicts": data.get("conflicts", []),
+                "sources": source_meta,
+                "confidence": float(data.get("confidence", 0.5)),
+            }
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Try extracting JSON object from response text
+        json_match = re.search(r"\{.*\"consensus\".*\}", response, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group())
+                return {
+                    "consensus": data.get("consensus", response),
+                    "conflicts": data.get("conflicts", []),
+                    "sources": source_meta,
+                    "confidence": float(data.get("confidence", 0.5)),
+                }
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # Fallback: use raw response as consensus
+        return {
+            "consensus": response,
+            "conflicts": [],
+            "sources": source_meta,
+            "confidence": 0.5,
+        }
+
+
 # ======================== Module-level singletons ========================
 
 report_service = ReportService()
 topic_service = TopicService()
 search_session_service = SearchSessionService()
 dashboard_service = DashboardService()
+synthesis_service = SynthesisService()
