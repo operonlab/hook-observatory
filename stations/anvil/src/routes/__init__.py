@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from routes.catalog import router as catalog_router
 from routes.corrections import router as corrections_router
 from routes.evaluations import router as evaluations_router
 from routes.health import router as health_router
@@ -23,3 +24,4 @@ router.include_router(stats_router, tags=["stats"])
 router.include_router(evaluations_router, tags=["evaluations"])
 router.include_router(corrections_router, tags=["corrections"])
 router.include_router(lifecycle_router, tags=["lifecycle"])
+router.include_router(catalog_router, tags=["catalog"])

@@ -79,6 +79,23 @@ class Skill(Base):
     io_schema: Mapped[dict | None] = mapped_column(JSONB)
     health_score: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'active'"))
+    domain: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default=text("'general'")
+    )
+    strengths: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    pain_point: Mapped[str | None] = mapped_column(Text)
+    triggers: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    tools: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    body_lines: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    resources: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    guide: Mapped[str | None] = mapped_column(Text)
+    health_details: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -324,3 +341,25 @@ class LifecycleRun(Base):
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     errors: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+
+
+class SkillEdge(Base):
+    """Directed relationship between two skills in the knowledge graph."""
+
+    __tablename__ = "skill_edges"
+    __table_args__ = (
+        Index("idx_skill_edges_source", "source"),
+        Index("idx_skill_edges_target", "target"),
+        {"schema": "anvil"},
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    source: Mapped[str] = mapped_column(String(200), nullable=False)
+    target: Mapped[str] = mapped_column(String(200), nullable=False)
+    edge_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    strength: Mapped[float] = mapped_column(Float, nullable=False, server_default=text("0.5"))
+    description: Mapped[str | None] = mapped_column(Text)

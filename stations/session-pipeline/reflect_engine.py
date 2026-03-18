@@ -16,9 +16,12 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+
+sys.path.insert(0, "/Users/joneshong/workshop/core")
 
 # ---------------------------------------------------------------------------
 # Failure-pattern regexes (deterministic, no LLM)
@@ -30,9 +33,13 @@ _FAILURE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("timeout", re.compile(r"timed? ?out|timeout|deadline exceeded", re.I)),
     ("import_error", re.compile(r"importerror|modulenotfounderror|cannot import", re.I)),
     ("file_not_found", re.compile(r"no such file|filenotfounderror|path does not exist", re.I)),
-    ("connection_error", re.compile(
-        r"connection refused|connection error|failed to connect", re.I,
-    )),
+    (
+        "connection_error",
+        re.compile(
+            r"connection refused|connection error|failed to connect",
+            re.I,
+        ),
+    ),
     ("syntax_error", re.compile(r"syntaxerror|invalid syntax", re.I)),
     ("rate_limit", re.compile(r"rate.?limit|too many requests|429", re.I)),
     ("context_overflow", re.compile(r"context.?length|token.?limit|max.?tokens.*exceed", re.I)),
@@ -359,25 +366,15 @@ def calculate_quality_score(stats: TranscriptStats) -> tuple[str, float]:
     """
     # Derived rates
     total_calls = stats.tool_call_count
-    tool_success_rate = (
-        stats.tool_success_count / total_calls if total_calls > 0 else 1.0
-    )
-    error_rate = (
-        stats.tool_error_count / total_calls if total_calls > 0 else 0.0
-    )
+    tool_success_rate = stats.tool_success_count / total_calls if total_calls > 0 else 1.0
+    error_rate = stats.tool_error_count / total_calls if total_calls > 0 else 0.0
     context_efficiency = (
-        stats.assistant_text_tokens / stats.total_tokens
-        if stats.total_tokens > 0
-        else 0.0
+        stats.assistant_text_tokens / stats.total_tokens if stats.total_tokens > 0 else 0.0
     )
     context_efficiency = min(1.0, context_efficiency)
 
     # Outcome classification
-    if (
-        stats.turn_count == 0
-        or stats.user_message_count == 0
-        or error_rate > _FAILURE_ERROR_RATE
-    ):
+    if stats.turn_count == 0 or stats.user_message_count == 0 or error_rate > _FAILURE_ERROR_RATE:
         outcome = "failure"
     elif error_rate > _PARTIAL_ERROR_RATE or tool_success_rate < _PARTIAL_TOOL_SUCCESS_RATE:
         outcome = "partial"
@@ -413,6 +410,96 @@ def extract_failure_patterns(stats: TranscriptStats) -> list[str]:
     return found
 
 
+def classify_failures_rlm(
+    error_messages: list[str],
+    failure_patterns: list[str],
+    timeout: int = 45,
+) -> dict | None:
+    """Semantic failure classification using RLM engine.
+
+    Only call when len(error_messages) > 5 — small sessions use regex.
+    Returns {"categories": [{"name", "count", "root_cause", "suggested_fix"}]}
+    or None on failure (caller should use extract_failure_patterns instead).
+    """
+    if len(error_messages) <= 5:
+        return None
+
+    # Build context from error messages
+    error_context = "\n".join(f"[Error {i + 1}] {msg}" for i, msg in enumerate(error_messages))
+    if failure_patterns:
+        error_context += "\n\nRegex-detected patterns: " + ", ".join(failure_patterns)
+
+    prompt = (
+        "Analyze these error messages from a Claude Code session and classify them.\n\n"
+        "Output ONLY valid JSON:\n"
+        "{\n"
+        '  "categories": [\n'
+        "    {\n"
+        '      "name": "category name (e.g. permission_denied, network_error, syntax_error)",\n'
+        '      "count": <number of errors in this category>,\n'
+        '      "root_cause": "likely root cause (1 sentence)",\n'
+        '      "suggested_fix": "actionable fix suggestion (1 sentence)"\n'
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Rules:\n"
+        "- Group similar errors into categories\n"
+        "- Use snake_case for category names\n"
+        "- Be specific about root causes, not generic\n"
+        "- Limit to max 10 categories\n"
+        "- Output ONLY the JSON object, no markdown"
+    )
+
+    try:
+        from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+        engine = RLMEngine(
+            RLMConfig(
+                model="grok-4-fast",
+                max_iterations=5,
+                max_timeout_secs=timeout,
+                api_base="http://localhost:4000/v1",
+                api_key="sk-litellm-local-dev",
+            )
+        )
+        result = engine.completion(prompt=prompt, context=error_context)
+
+        if result.status != "ok" or not result.response:
+            return None
+
+        # Parse JSON from response
+        raw = result.response.strip()
+        json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not json_match:
+            return None
+
+        data = json.loads(json_match.group())
+
+        if "categories" not in data or not isinstance(data["categories"], list):
+            return None
+
+        # Validate and sanitize categories
+        clean_cats = []
+        for cat in data["categories"][:10]:
+            if not isinstance(cat, dict):
+                continue
+            clean_cats.append(
+                {
+                    "name": str(cat.get("name", "unknown"))[:50],
+                    "count": int(cat.get("count", 1)),
+                    "root_cause": str(cat.get("root_cause", ""))[:200],
+                    "suggested_fix": str(cat.get("suggested_fix", ""))[:200],
+                }
+            )
+
+        return {"categories": clean_cats} if clean_cats else None
+
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return None
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -435,13 +522,9 @@ def analyze_transcript(jsonl_path: str | Path, session_id: str = "") -> ReflectM
     failure_patterns = extract_failure_patterns(stats)
 
     total_calls = stats.tool_call_count
-    tool_success_rate = (
-        stats.tool_success_count / total_calls if total_calls > 0 else 1.0
-    )
+    tool_success_rate = stats.tool_success_count / total_calls if total_calls > 0 else 1.0
     context_efficiency = (
-        stats.assistant_text_tokens / stats.total_tokens
-        if stats.total_tokens > 0
-        else 0.0
+        stats.assistant_text_tokens / stats.total_tokens if stats.total_tokens > 0 else 0.0
     )
     context_efficiency = min(1.0, context_efficiency)
 

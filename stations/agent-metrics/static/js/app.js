@@ -46,6 +46,14 @@ async function refreshUsage() {
   }
 
   // LiteLLM 模型 (5 欄: 供應商 | 儲值 | 剩餘 | 已用 | 使用率) + 累計總額
+  const PROVIDER_DASHBOARDS = {
+    minimax: "https://platform.minimax.io/user-center/payment/balance",
+    moonshot: "https://platform.moonshot.ai/console/account",
+    zhipu: "https://z.ai/manage-apikey/billing",
+    deepseek: "https://platform.deepseek.com/usage",
+    dashscope: "https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=dashboard#/model-usage/free-quota",
+    xai: "https://console.x.ai/team/f0ca6117-e73f-4fec-b5ab-4391eb612200/billing",
+  };
   const lBody = document.getElementById("litellm-model-tbody");
   if (lBody && byModel.litellm_models) {
     if (!byModel.litellm_models.length) {
@@ -53,12 +61,14 @@ async function refreshUsage() {
     } else {
       const rows = byModel.litellm_models.map(m => {
         const name = m.name || m.model;
+        const dashUrl = PROVIDER_DASHBOARDS[name];
+        const link = dashUrl ? ` <a href="${dashUrl}" target="_blank" rel="noopener" style="font-size:0.7rem;color:var(--blue);text-decoration:none;opacity:0.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">↗</a>` : "";
         const deposit = m.total != null ? fmt$(m.total) : "—";
         const spent = m.spent || m.used_usd || m.cost_usd || 0;
         const remaining = m.remaining != null ? fmt$(m.remaining) : "—";
         const pct = m.pct != null ? m.pct + "%" : "—";
         const note = m.note ? ` <span style="font-size:0.65rem;color:var(--subtext0)">${m.note}</span>` : "";
-        return `<tr><td>${name}${note}</td><td style="text-align:right">${deposit}</td><td style="text-align:right">${remaining}</td><td style="text-align:right;color:var(--peach)">${fmt$(spent)}</td><td style="text-align:right">${pct}</td></tr>`;
+        return `<tr><td>${name}${link}${note}</td><td style="text-align:right">${deposit}</td><td style="text-align:right">${remaining}</td><td style="text-align:right;color:var(--peach)">${fmt$(spent)}</td><td style="text-align:right">${pct}</td></tr>`;
       });
       const totalDeposit = byModel.litellm_models.reduce((s, m) => s + (m.total || 0), 0);
       const totalRemaining = byModel.litellm_models.reduce((s, m) => s + (m.remaining || 0), 0);

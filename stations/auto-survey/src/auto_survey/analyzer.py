@@ -76,7 +76,10 @@ def _parse_answers(raw: str) -> dict[str, str]:
 def analyze_quiz(db: Session, survey: Survey) -> dict[str, str]:
     """Analyze quiz questions and store correct answers. Returns answer map."""
     questions = (
-        db.query(Question).filter(Question.survey_id == survey.id).order_by(Question.subject_id).all()
+        db.query(Question)
+        .filter(Question.survey_id == survey.id)
+        .order_by(Question.subject_id)
+        .all()
     )
     if not questions:
         return {}
@@ -97,6 +100,111 @@ def analyze_quiz(db: Session, survey: Survey) -> dict[str, str]:
     db.commit()
 
     return answers
+
+
+def analyze_quiz_rlm(db: Session, survey: Survey) -> dict:
+    """Enhanced quiz analysis using RLM engine.
+
+    Performs topic grouping, cross-validation between questions,
+    and generates justifications for each answer.
+
+    Falls back to basic analyze_quiz() on failure.
+
+    Returns:
+        Dict with keys: answers, topic_groups, justifications, cross_validation.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, "/Users/joneshong/workshop/core")
+
+    from src.shared.rlm_engine import RLMConfig, RLMEngine
+
+    questions = (
+        db.query(Question)
+        .filter(Question.survey_id == survey.id)
+        .order_by(Question.subject_id)
+        .all()
+    )
+    if not questions:
+        return {"answers": {}, "topic_groups": [], "justifications": {}, "cross_validation": []}
+
+    # Build context: all questions with options
+    q_data = []
+    for q in questions:
+        q_data.append(
+            {
+                "subject_id": q.subject_id,
+                "question_text": q.question_text,
+                "options": q.options,
+                "current_answer": q.correct_answer or "",
+            }
+        )
+
+    context_str = json.dumps(q_data, ensure_ascii=False, indent=2)
+
+    prompt = (
+        "你是測驗分析專家。請對以下測驗題目進行深度分析：\n\n"
+        "1. **answers**: 分析每題正確答案 {subject_id: answer_text}\n"
+        "2. **topic_groups**: 將題目按主題分組 [{topic: str, subject_ids: [str]}]\n"
+        "3. **justifications**: 每題的答案理由 {subject_id: justification_text}\n"
+        "4. **cross_validation**: 交叉驗證——找出題目之間可能矛盾或互相佐證的關係 "
+        "[{subjects: [str], relationship: str, note: str}]\n\n"
+        "以 JSON 格式回覆完整結果。FINAL() 包住你的 JSON。"
+    )
+
+    config = RLMConfig(
+        model="haiku",
+        sub_model="haiku",
+        max_iterations=5,
+        max_timeout_secs=60.0,
+        max_depth=2,
+    )
+    engine = RLMEngine(config)
+
+    fallback = {
+        "answers": analyze_quiz(db, survey),
+        "topic_groups": [],
+        "justifications": {},
+        "cross_validation": [],
+        "_fallback": True,
+    }
+
+    try:
+        result = engine.completion(prompt=prompt, context=context_str)
+
+        if result.status != "ok":
+            return fallback
+
+        raw = result.response
+        raw = re.sub(r"```(?:json)?\s*", "", raw)
+        raw = re.sub(r"```\s*", "", raw)
+
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return fallback
+
+        data = json.loads(match.group())
+
+        answers = data.get("answers", {})
+        # Normalize answers from list format if needed
+        if isinstance(answers, list):
+            answers = {a["subject_id"]: a["answer"] for a in answers if "subject_id" in a}
+
+        # Persist answers to DB
+        for q in questions:
+            if q.subject_id in answers:
+                q.correct_answer = answers[q.subject_id]
+        db.commit()
+
+        return {
+            "answers": answers,
+            "topic_groups": data.get("topic_groups", []),
+            "justifications": data.get("justifications", {}),
+            "cross_validation": data.get("cross_validation", []),
+        }
+
+    except Exception:
+        return fallback
 
 
 def reanalyze_wrong(db: Session, survey: Survey, wrong_subjects: list[str]) -> dict[str, str]:
