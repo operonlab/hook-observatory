@@ -11,20 +11,30 @@ Endpoints:
   GET/POST  /articles/{id}/annotations       — list/create annotations
   GET       /dashboard                       — stats
   GET       /status                          — health check
+  POST      /digest/redigest                 — batch re-generate digests
+  POST      /fetch/arxiv                     — import single paper from arXiv
 """
 
+import asyncio
 import logging
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db, require_permission
 from src.shared.embedding import get_embedding
-from src.shared.errors import ConflictError, NotFoundError
+from src.shared.errors import BadRequestError, ConflictError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from . import search as search_engine
-from .models import ArticleEmbedding
+from .models import Article, ArticleEmbedding, Digest
 from .schemas import (
     AnnotationCreate,
     AnnotationResponse,
@@ -170,6 +180,53 @@ async def search_articles(
 # ======================== Digest ========================
 
 
+async def _bg_generate_digest(article_id: str, space_id: str, model_name: str | None = None) -> None:
+    """Background task: generate (or regenerate) digest for one article.
+
+    Pulls a fresh DB session, calls generate_digest(), then upserts the result.
+    model_name is informational — actual model is resolved inside digest_generator.
+    """
+    from src.shared.database import async_session_factory
+
+    from .digest_generator import generate_digest
+    from .schemas import DigestCreate
+
+    try:
+        async with async_session_factory() as db:
+            article = await article_service.get(db, article_id)
+            if not article or not article.abstract:
+                logger.warning("_bg_generate_digest: article %s missing or no abstract", article_id)
+                return
+
+            digest_data = await generate_digest(
+                title=article.title,
+                abstract=article.abstract,
+                arxiv_id=article.arxiv_id,
+            )
+            if digest_data is None:
+                logger.warning("_bg_generate_digest: generate_digest returned None for %s", article_id)
+                return
+
+            now = datetime.now(UTC)
+            create = DigestCreate(
+                paper_id=article_id,
+                one_liner=digest_data.get("one_liner"),
+                key_findings=digest_data.get("key_findings", []),
+                workshop_relevance=digest_data.get("workshop_relevance"),
+                applicable_modules=digest_data.get("applicable_modules", []),
+                actionable_insight=digest_data.get("actionable_insight"),
+                effort_estimate=digest_data.get("effort_estimate"),
+                confidence=digest_data.get("confidence"),
+                model_used=digest_data.get("model_used"),
+                generated_at=now,
+            )
+            await digest_service.upsert(db, space_id, article_id, create)
+            await db.commit()
+            logger.info("_bg_generate_digest: digest saved for article %s", article_id)
+    except Exception:
+        logger.exception("_bg_generate_digest: failed for article %s", article_id)
+
+
 @router.get("/articles/{article_id}/digest", response_model=DigestResponse)
 async def get_digest(
     article_id: str,
@@ -253,6 +310,191 @@ async def create_annotation(
     await db.commit()
     await db.refresh(instance)
     return annotation_service.to_response(instance)
+
+
+# ======================== Batch Redigest ========================
+
+
+class RedigestRequest(BaseModel):
+    model_name: str | None = None
+    relevance_filter: str | None = None  # "high" | "medium" | "low" | null
+
+
+@router.post("/digest/redigest", status_code=202)
+async def batch_redigest(
+    body: RedigestRequest,
+    background_tasks: BackgroundTasks,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("paper.write"),
+):
+    """Batch re-generate digests for articles, optionally filtered by existing digest relevance.
+
+    Queues background digest regeneration for each article that has an abstract.
+    If relevance_filter is set, only articles whose existing digest matches that
+    workshop_relevance level are included.
+
+    Returns 202 with the count of queued items.
+    """
+    if body.relevance_filter is not None:
+        # Only articles that already have a digest with matching relevance
+        q = (
+            select(Article)
+            .join(Digest, Digest.paper_id == Article.id)
+            .where(
+                Article.space_id == space_id,
+                Article.deleted_at == None,  # noqa: E711
+                Article.abstract != None,  # noqa: E711
+                Digest.workshop_relevance == body.relevance_filter,
+                Digest.deleted_at == None,  # noqa: E711
+            )
+        )
+    else:
+        # All articles with an abstract
+        q = select(Article).where(
+            Article.space_id == space_id,
+            Article.deleted_at == None,  # noqa: E711
+            Article.abstract != None,  # noqa: E711
+        )
+
+    rows = (await db.execute(q)).scalars().all()
+    queued = 0
+    for article in rows:
+        background_tasks.add_task(_bg_generate_digest, article.id, space_id, body.model_name)
+        queued += 1
+
+    return {
+        "status": "queued",
+        "queued_count": queued,
+        "relevance_filter": body.relevance_filter,
+        "message": f"Digest regeneration queued for {queued} articles.",
+    }
+
+
+# ======================== Single arXiv Import ========================
+
+
+class ArxivFetchRequest(BaseModel):
+    arxiv_url_or_id: str
+
+
+def _extract_arxiv_id(raw: str) -> str | None:
+    """Extract bare arXiv ID from a URL or bare ID string.
+
+    Handles:
+      - "2401.12345"
+      - "2401.12345v2"
+      - "https://arxiv.org/abs/2401.12345"
+      - "https://arxiv.org/abs/2401.12345v2"
+      - "http://export.arxiv.org/abs/2401.12345"
+    """
+    raw = raw.strip()
+    # Try to extract from URL path
+    match = re.search(r"/abs/([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)", raw)
+    if match:
+        arxiv_id = match.group(1)
+    elif re.fullmatch(r"[0-9]{4}\.[0-9]{4,5}(?:v\d+)?", raw):
+        arxiv_id = raw
+    else:
+        return None
+    # Strip version suffix for dedup key
+    return arxiv_id.rsplit("v", 1)[0] if re.search(r"v\d+$", arxiv_id) else arxiv_id
+
+
+def _fetch_single_arxiv_sync(arxiv_id: str) -> bytes | None:
+    """Synchronous fetch of a single arXiv paper from the Atom API."""
+    params = urllib.parse.urlencode({"id_list": arxiv_id})
+    url = f"http://export.arxiv.org/api/query?{params}"
+    logger.debug("fetch/arxiv: GET %s", url)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Workshop/1.0 (paper module)"})  # noqa: S310
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            return resp.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        logger.error("fetch/arxiv: HTTP error — %s", exc)
+        return None
+
+
+@router.post("/fetch/arxiv", response_model=ArticleResponse, status_code=201)
+async def fetch_arxiv_paper(
+    body: ArxivFetchRequest,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("paper.write"),
+):
+    """Import a single paper from arXiv by URL or bare arXiv ID.
+
+    Fetches metadata from the arXiv Atom API, deduplicates by arxiv_id,
+    and creates an Article record. Returns the created article.
+    """
+    from .arxiv_fetcher import _parse_feed
+
+    arxiv_id = _extract_arxiv_id(body.arxiv_url_or_id)
+    if not arxiv_id:
+        raise BadRequestError(
+            f"Cannot parse arXiv ID from: {body.arxiv_url_or_id!r}",
+            code="paper.invalid_arxiv_id",
+        )
+
+    # Dedup check
+    existing = await article_service.get_by_arxiv_id(db, arxiv_id)
+    if existing:
+        raise ConflictError(
+            f"Article with arxiv_id={arxiv_id} already exists",
+            code="paper.arxiv_id_conflict",
+        )
+
+    # Fetch from arXiv API (network I/O in thread)
+    xml_bytes = await asyncio.to_thread(_fetch_single_arxiv_sync, arxiv_id)
+    if xml_bytes is None:
+        raise BadRequestError(
+            f"Failed to fetch arXiv paper {arxiv_id} — network error",
+            code="paper.arxiv_fetch_failed",
+        )
+
+    papers = _parse_feed(xml_bytes)
+    if not papers:
+        raise NotFoundError(
+            f"arXiv ID {arxiv_id} not found or returned no results",
+            code="paper.arxiv_not_found",
+        )
+
+    paper = papers[0]
+
+    # Build published year
+    year = None
+    published_str = paper.get("published", "")
+    if published_str:
+        try:
+            year = datetime.fromisoformat(published_str).year
+        except (ValueError, AttributeError):
+            pass
+
+    create = ArticleCreate(
+        title=paper["title"],
+        abstract=paper.get("abstract") or None,
+        arxiv_id=paper.get("arxiv_id"),
+        year=year,
+        authors=[{"name": a} for a in paper.get("authors", [])],
+        categories=paper.get("categories", []),
+        pdf_url=paper.get("pdf_url") or None,
+        source_url=paper.get("source_url") or None,
+    )
+    instance = await article_service.create(db, space_id, create)
+
+    # Generate embedding (best-effort)
+    try:
+        embed_text = f"{instance.title} {instance.abstract or ''}"
+        embedding = await get_embedding(embed_text)
+        if embedding:
+            instance.embedding = embedding
+            db.add(ArticleEmbedding(article_id=instance.id, embedding=embedding))
+    except Exception:
+        logger.warning("fetch/arxiv: embedding failed for %s", arxiv_id, exc_info=True)
+
+    await db.commit()
+    await db.refresh(instance)
+    return article_service.to_response(instance)
 
 
 # ======================== Dashboard ========================
