@@ -133,16 +133,36 @@ async def memvault_kg_community_summaries(
 
 @mcp.tool()
 @mcp_error_handler("Memvault")
-async def memvault_kg_cascade_recall(query: str, top_k: int = 5) -> str:
-    """四層 Cascade Recall：L2 CommunitySummary → L1 Community → L0 Triples → Blocks"""
-    result = await to_thread(client.cascade, query, top_k=top_k)
+async def memvault_kg_cascade_recall(
+    query: str,
+    top_k: int = 5,
+    skip_routing: bool = False,
+    evaluate: str = "default",
+) -> str:
+    """Adaptive Cascade Recall：Query Router → L2/L1 Semantic + L0 Triples + Blocks → CRAG Evaluation"""
+    result = await to_thread(
+        client.cascade, query, top_k=top_k,
+        skip_routing=skip_routing, evaluate=evaluate,
+    )
     layers = result.get("layers_searched", [])
 
     parts: list[str] = [
         f'# Cascade Recall: "{query}"',
         f"Layers searched: {', '.join(layers) or 'none'}",
-        "",
     ]
+
+    # Routing metadata
+    routing_intent = result.get("routing_intent")
+    if routing_intent:
+        parts.append(f"Routing: {routing_intent} (confidence: {result.get('routing_confidence', '?'):.2f})")
+
+    # CRAG metadata
+    verdict = result.get("evaluation_verdict")
+    confidence = result.get("confidence_score")
+    if verdict:
+        parts.append(f"Quality: {verdict} (confidence: {confidence:.2f})")
+
+    parts.append("")
 
     summaries = result.get("summaries", [])
     if summaries:

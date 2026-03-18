@@ -195,6 +195,13 @@ class CascadeRecallResult(BaseModel):
     triples: list[TripleResponse] = []  # L0
     blocks: list = []  # existing blocks (import MemoryBlockResponse if needed)
     layers_searched: list[str] = []  # which layers returned results
+    # Phase 2: Query routing metadata
+    routing_intent: str | None = None
+    routing_confidence: float | None = None
+    # Phase 3: CRAG evaluation metadata
+    confidence_score: float | None = None
+    evaluation_verdict: str | None = None
+    evaluation_metadata: dict | None = None
 
 
 # ======================== Triple Invalidation ========================
