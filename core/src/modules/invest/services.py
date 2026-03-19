@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.events.types import InvestEvents
 from src.shared.errors import BadRequestError, NotFoundError
+from src.shared.query_helpers import scoped_query
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
@@ -160,8 +161,7 @@ class PositionService(BaseCRUDService[Position, PositionCreate, PositionUpdate, 
         account_id: str | None = None,
     ) -> PaginatedResponse[PositionResponse]:
         p = pagination or PaginationParams()
-        base = select(Position).where(Position.space_id == space_id)
-        base = _soft_delete_filter(base, Position)
+        base = scoped_query(Position, space_id)
         if account_id:
             base = base.where(Position.account_id == account_id)
 

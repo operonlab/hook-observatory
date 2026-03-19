@@ -4,12 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { dashboardApi } from '../api'
 import type { Task, TaskProgressStats } from '../types'
 import { PRIORITY_CONFIG, SOURCE_CONFIG, STATUS_CONFIG } from '../types'
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
-}
+import { fmtDate } from '../../../shared/utils/formatting'
 
 function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const status = STATUS_CONFIG[task.status]
@@ -53,7 +48,7 @@ function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
         {task.due_date && (
           <span className="text-[11px]" style={{ color: 'var(--tf-text-muted)' }}>
             <Clock size={10} className="inline mr-0.5" />
-            {formatDate(task.due_date)}
+            {fmtDate(task.due_date)}
           </span>
         )}
       </div>
