@@ -17,7 +17,7 @@ from collections.abc import Callable
 from typing import Any
 
 from src.events.bus import EventBus, event_bus
-from src.events.types import CaptureEvents, MemvaultEvents
+from src.events.types import CaptureEvents, MemvaultEvents, SessionIntelligenceEvents
 from src.shared.database import async_session_factory
 from src.shared.reactive import (
     ConditionalOp,
@@ -138,6 +138,29 @@ class BlockFetchOp:
                 ctx["source_session"] = block.source_session or f"block:{block.id}"
                 ctx["block_id"] = str(block.id)
             # block 不存在 → tags 不注入 → TagCooccurrenceOp 產生空 triples → observer skip
+        return ctx
+
+
+class DigestToBlockOp:
+    """Operator: digest event data → normalized block fields for storage."""
+
+    name = "digest_to_block"
+    input_keys = ("content",)
+    output_keys = ("space_id", "block_type", "tags", "source_session")
+
+    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        digest_type = ctx.get("digest_type", "weekly")
+        period = ctx.get("period", "")
+        extra_tags = ctx.get("tags", [])
+        if isinstance(extra_tags, str):
+            extra_tags = [extra_tags]
+
+        ctx["space_id"] = ctx.get("space_id") or "default"
+        ctx["block_type"] = "knowledge"
+        ctx["tags"] = list(
+            dict.fromkeys(["intelligence", "digest", digest_type, *extra_tags])
+        )
+        ctx["source_session"] = f"intelligence:{digest_type}:{period}"
         return ctx
 
 
@@ -289,4 +312,66 @@ def wire_capture_promotion_flow(
         )
 
     observer = FunctionObserver(_capture_kg_write_handler, name="capture_to_kg")
+    return piped.subscribe(observer)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Flow 3: intelligence.digest → memvault block (cross-module pipe)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def wire_intelligence_digest_flow(
+    bus: EventBus | None = None,
+) -> Subscription:
+    """Cross-module pipe: intelligence.digest.completed → memvault block storage.
+
+    DigestToBlockOp → Observer(create MemoryBlock)
+    """
+    _bus = bus or event_bus
+
+    digest_op = DigestToBlockOp()
+    piped = _bus.channel(SessionIntelligenceEvents.DIGEST_COMPLETED).pipe(digest_op)
+
+    # compile() pre-flight
+    check = Pipeline(name="intelligence_digest").pipe(digest_op)
+    missing = check.compile(initial_keys={"content", "space_id", "digest_type", "period", "tags"})
+    if missing:
+        logger.error("intelligence digest flow compile failed: %s", missing)
+
+    async def _digest_store_handler(ctx: dict[str, Any]) -> None:
+        """Observer: create MemoryBlock from intelligence digest."""
+        content = ctx.get("content", "")
+        if not content:
+            return
+
+        space_id = ctx.get("space_id", "default")
+
+        try:
+            async with async_session_factory() as db:
+                from .schemas import MemoryBlockCreate
+                from .services import memory_block_service
+
+                block_data = MemoryBlockCreate(
+                    content=content,
+                    block_type=ctx.get("block_type", "knowledge"),
+                    tags=ctx.get("tags", []),
+                    source_session=ctx.get("source_session", ""),
+                )
+                await memory_block_service.create(db, space_id, block_data)
+                await db.commit()
+                logger.info(
+                    "flywheel.intelligence_to_memvault",
+                    extra={
+                        "digest_type": ctx.get("digest_type"),
+                        "period": ctx.get("period"),
+                        "space_id": space_id,
+                    },
+                )
+        except Exception:
+            logger.warning(
+                "flywheel.intelligence_to_memvault_failed",
+                exc_info=True,
+            )
+
+    observer = FunctionObserver(_digest_store_handler, name="digest_to_block")
     return piped.subscribe(observer)
