@@ -84,8 +84,6 @@ ATTITUDE_CATEGORIES = [
     "system_feedback",
 ]
 
-CLUSTER_VERDICTS = ["UNVERIFIED", "VERIFIED", "OUTDATED"]
-WISDOM_CONFIDENCE_LEVELS = ["HIGH", "MEDIUM", "LOW"]
 SKILL_OUTCOMES = ["success", "failure", "partial", "unknown"]
 ATTITUDE_OPERATIONS = ["ADD", "UPDATE", "NOOP"]
 

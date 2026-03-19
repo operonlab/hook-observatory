@@ -109,6 +109,11 @@ class Triple(SpaceScopedModel):
     canonical_object_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey(f"{SCHEMA}.entity_canonicals.id"), nullable=True
     )
+    # Access tracking (populated by CascadeRecall)
+    access_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +151,11 @@ class Community(SpaceScopedModel):
     )
     generation_batch: Mapped[str | None] = mapped_column(String(32), nullable=True)
     modularity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Access tracking (populated by CascadeRecall)
+    access_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 # ---------------------------------------------------------------------------
