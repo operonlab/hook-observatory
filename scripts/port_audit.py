@@ -43,7 +43,7 @@ EXPECTED_PORTS: dict[int, str] = {
     8850: "filebrowser",
     3100: "lgtm",
     8090: "bark",
-    9080: "ntfy",
+    # 9080: "ntfy",  # disabled
     6333: "qdrant",
     # Nginx
     8080: "nginx",
