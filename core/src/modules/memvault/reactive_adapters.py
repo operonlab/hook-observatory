@@ -18,6 +18,7 @@ from typing import Any
 
 from src.events.bus import EventBus, event_bus
 from src.events.types import MemvaultEvents
+from src.shared.database import async_session_factory
 from src.shared.reactive import (
     FunctionObserver,
     Subscription,
@@ -119,21 +120,17 @@ class TagCooccurrenceOp:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-_active_subscription: Subscription | None = None
-
-
 def wire_memory_creation_flow(
     bus: EventBus | None = None,
-    max_concurrent: int = 3,
 ) -> Subscription:
-    """Memory Creation Flow: channel -> pipe(operators) -> observer.
+    """Memory Creation Flow: channel -> pipe(operators) -> observer -> KG write.
 
     1. Subject      - event_bus.channel(MEMORY_STORED)
     2. Observable   - channel.pipe(NoiseGateOp, TagCooccurrenceOp)
     3. Operator     - NoiseGateOp + TagCooccurrenceOp
-    4. Observer     - FunctionObserver(kg_triple_log_handler)
-    5. Scheduler    - EmbeddingScheduler(max_concurrent)
-    6. Subscription - piped.subscribe(observer), unsubscribe on shutdown
+    4. Observer     - FunctionObserver(_kg_ingest_handler) — writes KG triples
+    5. Scheduler    - EmbeddingScheduler (available for future observer use)
+    6. Subscription - piped.subscribe(observer), auto-cleaned by EventBus.stop()
     """
     _bus = bus or event_bus
 
@@ -144,12 +141,9 @@ def wire_memory_creation_flow(
     # Channel + pipe
     piped = _bus.channel(MemvaultEvents.MEMORY_STORED).pipe(noise_gate, tag_cooccurrence)
 
-    # Scheduler (available for future use by observer internals)
-    EmbeddingScheduler(max_concurrent)  # reserved for future observer use
-
-    # Observer
+    # Observer — writes KG triples (moved from events.py on_memory_stored_extract_triples)
     async def _kg_ingest_handler(ctx: dict[str, Any]) -> None:
-        """Process piped context: skip noise, log triples."""
+        """Process piped context: skip noise, write co-occurrence triples to KG."""
         if ctx.get("is_noise"):
             logger.debug("reactive.noise_gated", extra={"reason": ctx.get("noise_reason")})
             return
@@ -158,28 +152,38 @@ def wire_memory_creation_flow(
         if not triple_dicts:
             return
 
-        for triple in triple_dicts:
-            logger.info("reactive.triple_extracted", extra={"triple": triple})
+        space_id = ctx.get("space_id")
+        if not space_id:
+            return
+
+        source_session = ctx.get("source_session") or f"block:{ctx.get('block_id', 'unknown')}"
+
+        try:
+            async with async_session_factory() as db:
+                from .kg_schemas import TripleBatchCreate, TripleCreate
+                from .kg_services import triple_service
+
+                batch = TripleBatchCreate(
+                    session_id=source_session,
+                    triples=[TripleCreate(**t) for t in triple_dicts],
+                )
+                result = await triple_service.batch_ingest(db, space_id, batch)
+                await db.commit()
+                logger.info(
+                    "reactive.block_to_kg",
+                    extra={
+                        "block_id": ctx.get("block_id"),
+                        "triples_created": result.get("ingested", 0),
+                    },
+                )
+        except Exception:
+            logger.warning(
+                "reactive.block_to_kg_failed",
+                extra={"block_id": ctx.get("block_id")},
+                exc_info=True,
+            )
 
     observer = FunctionObserver(_kg_ingest_handler, name="kg_triple_ingest")
 
     # Subscription
     return piped.subscribe(observer)
-
-
-def init_reactive_flow() -> None:
-    """Initialize reactive flow (called by events.py)."""
-    global _active_subscription
-    if _active_subscription is not None:
-        return
-    _active_subscription = wire_memory_creation_flow()
-    logger.info("memvault.reactive_flow.initialized")
-
-
-def shutdown_reactive_flow() -> None:
-    """Shutdown reactive flow (called by events.py)."""
-    global _active_subscription
-    if _active_subscription is not None:
-        _active_subscription.unsubscribe()
-        _active_subscription = None
-        logger.info("memvault.reactive_flow.shutdown")
