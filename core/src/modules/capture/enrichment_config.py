@@ -9,10 +9,13 @@ on any field, RLM recursively decomposes the input to resolve ambiguity.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from src.modules.capture.strategies import EnrichmentResult, EnrichmentStrategy
+from src.shared.llm_json import parse_llm_json
+from src.shared.rlm_engine import RLMConfig, RLMEngine
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +90,18 @@ class RLMEnrichmentStrategy(EnrichmentStrategy):
         self._field_schema = field_schema
         self._confidence_threshold = confidence_threshold
         self._ambiguity_threshold = ambiguity_threshold
+        self._engine = RLMEngine(
+            RLMConfig(
+                model="grok-4-fast",
+                sub_model="grok-4-fast",
+                max_iterations=5,
+                max_timeout_secs=60.0,
+                max_depth=1,
+                api_base="http://localhost:4000/v1",
+                api_key="sk-litellm-local-dev",
+                compaction=False,
+            )
+        )
 
     def can_handle(self, module: str, entity_type: str) -> bool:
         return (module, entity_type) in ENRICHMENT_SCHEMAS
@@ -158,24 +173,10 @@ class RLMEnrichmentStrategy(EnrichmentStrategy):
             "用 FINAL() 回傳。"
         )
 
-        import json
-
-        from src.shared.rlm_engine import RLMConfig, RLMEngine
-
-        config = RLMConfig(
-            model="grok-4-fast",
-            sub_model="grok-4-fast",
-            max_iterations=5,
-            max_timeout_secs=60.0,
-            max_depth=1,
-            api_base="http://localhost:4000/v1",
-            api_key="sk-litellm-local-dev",
-            compaction=False,
-        )
-        engine = RLMEngine(config)
-
         try:
-            result = engine.completion(prompt=rlm_prompt, context=raw_input)
+            result = await asyncio.to_thread(
+                self._engine.completion, prompt=rlm_prompt, context=raw_input
+            )
         except Exception:
             logger.warning(
                 "rlm_enrichment: engine failed for %s.%s", module, entity_type, exc_info=True
@@ -193,27 +194,8 @@ class RLMEnrichmentStrategy(EnrichmentStrategy):
                 source=f"{self.name}(error)",
             )
 
-        # Parse JSON response
-        raw = result.response.strip()
-        if raw.startswith("```"):
-            lines = raw.split("\n")
-            lines = [ln for ln in lines if not ln.strip().startswith("```")]
-            raw = "\n".join(lines)
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            start = raw.find("{")
-            end = raw.rfind("}") + 1
-            if start >= 0 and end > start:
-                try:
-                    data = json.loads(raw[start:end])
-                except json.JSONDecodeError:
-                    data = None
-            else:
-                data = None
-
-        if data is None:
+        data = parse_llm_json(result.response)
+        if not isinstance(data, dict):
             return EnrichmentResult(
                 payload=dict(payload),
                 confidence=pipeline_confidence,
