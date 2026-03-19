@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -24,8 +25,6 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 T_contra = TypeVar("T_contra", contravariant=True)
-A = TypeVar("A")
-B = TypeVar("B")
 
 
 # ─── 1. Observable ───────────────────────────────────────────────────────────
@@ -334,7 +333,7 @@ class ParallelOp:
         return tuple(sorted(keys))
 
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        tasks = [op(dict(ctx)) for op in self._ops]
+        tasks = [op(copy.deepcopy(ctx)) for op in self._ops]
         results = await asyncio.gather(*tasks)
         merged = dict(ctx)
         for result in results:
