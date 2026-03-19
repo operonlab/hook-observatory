@@ -119,6 +119,7 @@
 		}
 	},
 	"WebServer": {
+		"http_bind_address": "127.0.0.1",
 		"http_port": 4105,
 		"http_htdocs_dir": "htdocs",
 		"http_max_upload_size": 104857600,

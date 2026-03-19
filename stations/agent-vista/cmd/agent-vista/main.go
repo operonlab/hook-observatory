@@ -38,6 +38,7 @@ func main() {
 	watchFiles := flag.String("watch", "", "comma-separated transcript files to watch (for testing)")
 	dbURL := flag.String("db", "", "PostgreSQL DSN for layout persistence (overrides config, e.g. postgres://user:pass@localhost/dbname?sslmode=disable)")
 	redisURL := flag.String("redis", "", "Redis URL for agent state persistence (overrides config, e.g. redis://localhost:6379/0)")
+	host := flag.String("host", "", "bind address (overrides config)")
 	verbose := flag.Bool("verbose", false, "verbose logging (overrides config)")
 	showVersion := flag.Bool("version", false, "show version and exit")
 	flag.Parse()
@@ -62,6 +63,8 @@ func main() {
 	// CLI flags override config values (only when explicitly set)
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
+		case "host":
+			cfg.Host = *host
 		case "port":
 			cfg.Port = *port
 		case "verbose":
@@ -92,7 +95,7 @@ func main() {
 	}
 
 	// HTTP/WS server (create early so tracker is available for event callback)
-	addr := fmt.Sprintf(":%d", cfg.Port)
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	srv := server.New(b, addr, cfg.Verbose, frontendFS)
 	tracker := srv.Tracker()
 
