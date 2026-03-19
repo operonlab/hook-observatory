@@ -1,15 +1,16 @@
+import { useNavigate } from 'react-router-dom'
 import type { Wallet } from '../types'
 import { fmtAmt, WALLET_TYPE_CONFIG } from '../types'
 import PrivacyToggle from './PrivacyToggle'
 
 interface WalletCardProps {
   wallet: Wallet
-  onEdit?: (wallet: Wallet) => void
   onPrivacyToggle?: (wallet: Wallet) => void
   onDelete?: (wallet: Wallet) => void
 }
 
-export default function WalletCard({ wallet, onEdit, onPrivacyToggle, onDelete }: WalletCardProps) {
+export default function WalletCard({ wallet, onPrivacyToggle, onDelete }: WalletCardProps) {
+  const navigate = useNavigate()
   const cfg = WALLET_TYPE_CONFIG[wallet.type]
   const isNegative = wallet.current_balance < 0
 
@@ -27,7 +28,7 @@ export default function WalletCard({ wallet, onEdit, onPrivacyToggle, onDelete }
         e.currentTarget.style.borderColor = 'var(--fn-border)'
       }}
     >
-      <button type="button" onClick={() => onEdit?.(wallet)} className="w-full text-left">
+      <button type="button" onClick={() => navigate(`/finance/wallets/${wallet.id}`)} className="w-full text-left">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">{wallet.icon || cfg.icon}</span>

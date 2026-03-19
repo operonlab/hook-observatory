@@ -64,6 +64,28 @@ class FinanceClient(BaseClient):
         """Get net worth history. GET /wallets/net-worth"""
         return self._get("/wallets/net-worth")
 
+    # ======================== Snapshots ========================
+
+    def list_snapshots(self, wallet_id: str, page: int = 1, page_size: int = 20) -> dict:
+        """List snapshot history for a wallet. GET /wallets/{id}/snapshots"""
+        return self._get(f"/wallets/{wallet_id}/snapshots", {"page": page, "page_size": page_size})
+
+    def snapshot_diff(self, wallet_id: str, from_v: int, to_v: int) -> dict:
+        """Get diff between two snapshot versions. GET /wallets/{id}/snapshots/diff"""
+        return self._get(f"/wallets/{wallet_id}/snapshots/diff", {"from_v": from_v, "to_v": to_v})
+
+    def gap_analysis(self, wallet_id: str, from_v: int, to_v: int) -> dict:
+        """Run gap analysis between two versions. GET /wallets/{id}/snapshots/gap-analysis"""
+        return self._get(f"/wallets/{wallet_id}/snapshots/gap-analysis", {"from_v": from_v, "to_v": to_v})
+
+    def create_global_snapshot(self) -> dict:
+        """Create global snapshot for all active wallets. POST /wallets/global-snapshot"""
+        return self._post("/wallets/global-snapshot")
+
+    def list_global_snapshots(self, page: int = 1, page_size: int = 20) -> dict:
+        """List global snapshot batches. GET /wallets/global-snapshots"""
+        return self._get("/wallets/global-snapshots", {"page": page, "page_size": page_size})
+
     # ======================== Categories ========================
 
     def list_categories(

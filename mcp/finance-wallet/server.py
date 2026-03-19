@@ -155,6 +155,99 @@ async def finance_reconcile(wallet_id: str = "") -> str:
 
 @mcp.tool()
 @mcp_error_handler("Finance")
+async def finance_snapshot_history(
+    wallet_id: str,
+    page: int = 1,
+    page_size: int = 20,
+) -> str:
+    """錢包快照歷史（版本時間軸）"""
+    result = await to_thread(client.list_snapshots, wallet_id, page=page, page_size=page_size)
+    items = result.get("items", [])
+    total = result.get("total", 0)
+    if not items:
+        return "No snapshots found for this wallet."
+    lines = [f"# Snapshot History ({total} total)\n"]
+    for s in items:
+        diff = float(s.get("difference", 0))
+        diff_str = f"  diff: {diff:+,.0f}" if abs(diff) >= 1 else ""
+        batch = " [global]" if s.get("batch_id") else ""
+        lines.append(
+            f"  v{s.get('version', '?')}  {fmt_amount(s.get('synced_balance', 0))}"
+            f"  [{s.get('synced_at', '?')}]{batch}{diff_str}"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+@mcp_error_handler("Finance")
+async def finance_snapshot_diff(
+    wallet_id: str,
+    from_version: int,
+    to_version: int,
+) -> str:
+    """RPG 式差分比較（兩個快照版本間的餘額變化）"""
+    result = await to_thread(client.snapshot_diff, wallet_id, from_version, to_version)
+    delta = float(result.get("balance_delta", 0))
+    pct = result.get("delta_pct", 0)
+    arrow = "▲" if delta > 0 else "▼" if delta < 0 else "─"
+    return (
+        f"# Snapshot Diff: v{from_version} → v{to_version}\n\n"
+        f"From:   {fmt_amount(result.get('from_synced_balance', 0))}\n"
+        f"To:     {fmt_amount(result.get('to_synced_balance', 0))}\n"
+        f"Delta:  {arrow} {fmt_amount(abs(delta))} ({pct:+.1f}%)\n"
+        f"Period: {result.get('period_days', 0)} days"
+    )
+
+
+@mcp.tool()
+@mcp_error_handler("Finance")
+async def finance_gap_analysis(
+    wallet_id: str,
+    from_version: int,
+    to_version: int,
+) -> str:
+    """夾擊對帳：快照差分 vs 交易累加 → 找出缺口"""
+    result = await to_thread(client.gap_analysis, wallet_id, from_version, to_version)
+    gap = float(result.get("gap", 0))
+    reconciled = result.get("is_reconciled", False)
+    status = "RECONCILED" if reconciled else f"GAP: {fmt_amount(abs(gap))}"
+    txns = result.get("transactions", [])
+    lines = [
+        f"# Gap Analysis: v{from_version} → v{to_version}\n",
+        f"Snapshot delta:  {fmt_amount(result.get('snapshot_delta', 0))}",
+        f"Transaction sum: {fmt_amount(result.get('transaction_sum', 0))}",
+        f"Gap:             {fmt_amount(gap)}",
+        f"Status:          {status}",
+    ]
+    if txns:
+        lines.append(f"\nTransactions in period ({len(txns)}):")
+        for t in txns[:10]:
+            icon = {"income": "+", "expense": "-", "transfer": "~"}.get(t.get("type", ""), "?")
+            desc = t.get("description") or t.get("merchant") or "-"
+            lines.append(f"  {icon} {fmt_amount(t.get('amount', 0))}  {desc[:40]}")
+        if len(txns) > 10:
+            lines.append(f"  ... and {len(txns) - 10} more")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+@mcp_error_handler("Finance")
+async def finance_global_snapshot() -> str:
+    """全域快照 — 所有 active 錢包一次存檔（RPG 存檔點）"""
+    result = await to_thread(client.create_global_snapshot)
+    batch_id = result.get("batch_id", "?")
+    count = result.get("snapshot_count", 0)
+    net = float(result.get("total_net_worth", 0))
+    return (
+        f"Global snapshot created.\n"
+        f"Batch ID: {batch_id}\n"
+        f"Wallets:  {count}\n"
+        f"Net worth: {fmt_amount(net)}"
+    )
+
+
+@mcp.tool()
+@mcp_error_handler("Finance")
 async def finance_transfer(
     from_wallet_id: str,
     to_wallet_id: str,
