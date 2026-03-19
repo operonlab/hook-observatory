@@ -1,12 +1,18 @@
 """In-process async event bus. Swappable to Redis Streams."""
 
+from __future__ import annotations
+
 import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.events.backends.base import EventBackend, Handler, _current_trace_id, current_trace_id
+from src.shared.reactive import Subscription
+
+if TYPE_CHECKING:
+    from src.events.channel import EventChannel
 
 # Re-export Handler so callers can import it from here if needed
 __all__ = ["Event", "EventBus", "current_trace_id", "event_bus"]
@@ -70,45 +76,43 @@ class Event:
 class EventBus:
     """Thin facade that delegates all operations to the active EventBackend.
 
-    The public API is identical to the original in-process EventBus so all
-    existing ``event_bus.on()``, ``event_bus.publish()``, and
-    ``event_bus.subscribe()`` call-sites require zero changes.
+    Public subscription API: ``event_bus.channel(event_type)`` only.
     """
 
     def __init__(self, backend: EventBackend | None = None) -> None:
-        # Lazy import to avoid circular imports at module load time
         if backend is None:
             from src.events.backends.memory import InMemoryBackend
 
             backend = InMemoryBackend()
         self._backend: EventBackend = backend
+        self._channels: dict[str, EventChannel] = {}
+        self._tracked_subs: list[Subscription] = []
 
     # ------------------------------------------------------------------ configuration
 
     def set_backend(self, backend: EventBackend) -> None:
-        """Switch the active backend.
-
-        Must be called **before** ``start()``.  Any handlers already registered
-        via ``subscribe()`` or ``on()`` will have been mirrored onto the new
-        backend if the previous backend forwarded them (which :class:`RedisStreamsBackend`
-        does automatically).  If you swap from a plain :class:`InMemoryBackend` use
-        ``_copy_handlers`` to replicate existing subscriptions.
-        """
+        """Switch the active backend. Must be called before start()."""
         self._backend = backend
 
-    # ------------------------------------------------------------------ registration
+    # ------------------------------------------------------------------ channel API
 
-    def subscribe(self, event_type: str, handler: Handler) -> None:
-        self._backend.subscribe(event_type, handler)
+    def channel(self, event_type: str) -> EventChannel:
+        """Return the EventChannel for the given event type (cached)."""
+        if event_type not in self._channels:
+            from src.events.channel import EventChannel
 
-    def on(self, event_type: str):
-        """Decorator: ``@event_bus.on("auth.user.registered")``"""
+            self._channels[event_type] = EventChannel(event_type, self)
+        return self._channels[event_type]
 
-        def decorator(fn: Handler):
-            self.subscribe(event_type, fn)
-            return fn
+    # ------------------------------------------------------------------ internal
 
-        return decorator
+    def _subscribe_internal(self, event_type: str, handler: Handler) -> Subscription:
+        """Internal: register handler on backend and return Subscription."""
+        return self._backend.subscribe(event_type, handler)
+
+    def _track(self, sub: Subscription) -> None:
+        """Track a Subscription for automatic cleanup on stop()."""
+        self._tracked_subs.append(sub)
 
     def use(self, middleware: Callable) -> None:
         self._backend.use_middleware(middleware)
@@ -122,10 +126,7 @@ class EventBus:
             _log.warning("EventBus.publish failed for %s", event.type, exc_info=True)
 
     def publish_fire_and_forget(self, event: Event) -> None:
-        """Schedule event publish without awaiting. Safe for sync hooks (after_create etc.).
-
-        Logs exceptions instead of swallowing them silently.
-        """
+        """Schedule event publish without awaiting. Safe for sync hooks (after_create etc.)."""
         import asyncio
 
         def _on_done(fut: asyncio.Future) -> None:
@@ -145,6 +146,10 @@ class EventBus:
         await self._backend.start()
 
     async def stop(self) -> None:
+        for sub in self._tracked_subs:
+            if not sub.closed:
+                sub.unsubscribe()
+        self._tracked_subs.clear()
         await self._backend.stop()
 
 

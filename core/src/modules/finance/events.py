@@ -35,7 +35,6 @@ register_invalidation(
 )
 
 
-@event_bus.on(InvestEvents.VALUATION_UPDATED)
 async def on_invest_valuation_updated(event: Event) -> None:
     """When invest valuation updates, sync linked finance wallet balances.
 
@@ -80,3 +79,6 @@ async def on_invest_valuation_updated(event: Event) -> None:
         except Exception:
             await db.rollback()
             logger.exception("invest_valuation_sync_failed", space_id=space_id)
+
+
+event_bus.channel(InvestEvents.VALUATION_UPDATED).subscribe_handler(on_invest_valuation_updated)
