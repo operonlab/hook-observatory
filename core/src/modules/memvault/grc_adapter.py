@@ -3,16 +3,18 @@
 Implements SupportsReflect + SupportsCurate + SupportsGenerate protocols from
 src.shared.grc for the memvault module.
 
-Usage:
-- Used by runners, cross-module orchestrators, or future GRC pipeline integrations.
-- Does NOT replace the existing /reflect and /curate HTTP routes — those remain
-  in routes.py with memvault-specific response fields (triples_created, formatted, etc.).
+Registered as standard GRC routes via create_grc_routes() in __init__.py.
+Provides /reflect and /curate endpoints with GRC standard response format.
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.grc import (
     CurateAction,
@@ -27,15 +29,52 @@ from src.shared.grc import (
 
 logger = logging.getLogger(__name__)
 
+# How far back fetch_blocks looks (days)
+_FETCH_BLOCKS_DAYS = 30
+
 
 class MemvaultGRCAdapter:
     """Memvault G-R-C adapter — implements SupportsReflect + SupportsCurate + SupportsGenerate.
 
-    Route layer keeps its memvault-specific HTTP responses. This adapter provides
-    a generic G-R-C interface for cross-module orchestration and runner use.
+    Registered via create_grc_routes() in __init__.py. Provides standard GRC
+    /reflect and /curate endpoints for cross-module orchestration and runners.
     """
 
     module = "memvault"
+
+    # ======================== Pre-fetch ========================
+
+    async def fetch_blocks(self, db: AsyncSession, scope_id: str) -> list[dict]:
+        """Pre-fetch recent MemoryBlocks for GRC analysis.
+
+        Called by grc_routes reflect/curate endpoints before gather_items().
+        Returns dicts with fields needed by gather_items() and identify_candidates().
+        """
+        from .models import MemoryBlock
+
+        cutoff = datetime.now(UTC) - timedelta(days=_FETCH_BLOCKS_DAYS)
+        q = (
+            select(MemoryBlock)
+            .where(
+                MemoryBlock.space_id == scope_id,
+                MemoryBlock.deleted_at.is_(None),
+                MemoryBlock.created_at >= cutoff,
+            )
+            .order_by(MemoryBlock.created_at.desc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [
+            {
+                "id": str(r.id),
+                "content": r.content,
+                "block_type": r.block_type,
+                "tags": r.tags or [],
+                "confidence": r.confidence,
+                "access_count": r.access_count,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
 
     # ======================== SupportsGenerate ========================
 
@@ -230,11 +269,9 @@ class MemvaultGRCAdapter:
             )
             try:
                 res = await db.execute(stmt)
-                await db.commit()
                 result.applied_count = res.rowcount
             except Exception:
                 logger.exception("MemvaultGRCAdapter.apply_actions: soft-delete failed")
-                await db.rollback()
                 result.error_count = len(soft_delete_ids)
 
         other_actions = [a for a in actions if a.action != "soft_delete"]
