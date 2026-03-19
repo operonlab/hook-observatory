@@ -20,6 +20,7 @@ interface ParsedCapture {
 
 interface EnrichmentChatProps {
   selectedCapture: Capture | null
+  moduleFilter: string | null
   onCaptureCreated: () => void
   onUpdate: (id: string, payload: Record<string, unknown>) => Promise<void>
   onPromote: (id: string) => Promise<CapturePromoteResult>
@@ -230,8 +231,18 @@ function handleWsMessage(
   }
 }
 
+const MODULE_LABELS: Record<string, string> = {
+  finance: '記帳',
+  taskflow: '任務',
+  invest: '投資',
+  dailyos: '日程',
+  intelflow: '情報',
+  ideagraph: '靈感',
+}
+
 export default function EnrichmentChat({
   selectedCapture,
+  moduleFilter,
   onCaptureCreated,
   onUpdate,
   onPromote,
@@ -296,7 +307,7 @@ export default function EnrichmentChat({
     }
   }, [])
 
-  // Focus effect when selected capture changes
+  // Focus effect when selected capture changes (dedup: skip if last msg is same capture)
   useEffect(() => {
     if (selectedCapture) {
       const payload = selectedCapture.payload
@@ -305,18 +316,23 @@ export default function EnrichmentChat({
         (payload.title as string) ||
         selectedCapture.raw_input ||
         ''
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'system',
-          content: `已選取：[${selectedCapture.module}/${selectedCapture.entity_type}] ${desc}\n完整度：${Math.round(selectedCapture.completeness * 100)}%${
-            selectedCapture.missing_fields.length > 0
-              ? `\n缺少：${selectedCapture.missing_fields.join(', ')}`
-              : ''
-          }`,
-          timestamp: Date.now(),
-        },
-      ])
+      const tag = `[${selectedCapture.module}/${selectedCapture.entity_type}] ${desc}`
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (last?.role === 'system' && last.content.includes(tag)) return prev
+        return [
+          ...prev,
+          {
+            role: 'system',
+            content: `已選取：${tag}\n完整度：${Math.round(selectedCapture.completeness * 100)}%${
+              selectedCapture.missing_fields.length > 0
+                ? `\n缺少：${selectedCapture.missing_fields.join(', ')}`
+                : ''
+            }`,
+            timestamp: Date.now(),
+          },
+        ]
+      })
     }
   }, [selectedCapture?.id])
 
@@ -344,15 +360,22 @@ export default function EnrichmentChat({
           }
         : null
 
+      // Add module hint prefix when a tab is selected (no capture selected)
+      let prefixedText = text.trim()
+      if (!selectedCapture && moduleFilter) {
+        const label = MODULE_LABELS[moduleFilter] ?? moduleFilter
+        prefixedText = `[模組: ${moduleFilter} (${label})] ${prefixedText}`
+      }
+
       wsRef.current.send(
         JSON.stringify({
           type: 'message',
-          text: text.trim(),
+          text: prefixedText,
           context,
         }),
       )
     },
-    [selectedCapture],
+    [selectedCapture, moduleFilter],
   )
 
   const handleSubmit = (e: React.FormEvent) => {

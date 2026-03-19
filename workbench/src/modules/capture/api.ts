@@ -42,7 +42,7 @@ export const captureApi = {
     if (params?.status) qs.set('status', params.status)
     if (params?.limit) qs.set('limit', String(params.limit))
     const q = qs.toString()
-    return request<PaginatedResponse<Capture>>(`/captures${q ? `?${q}` : ''}`).then(
+    return request<PaginatedResponse<Capture>>(`/captures/${q ? `?${q}` : ''}`).then(
       (res) => res.items,
     )
   },
@@ -55,7 +55,7 @@ export const captureApi = {
     payload: Record<string, unknown>
     raw_input?: string
   }) =>
-    request<Capture>('/captures', {
+    request<Capture>('/captures/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
