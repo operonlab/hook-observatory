@@ -96,11 +96,9 @@ export default function SnapshotTimeline({ walletId, onSelectVersions }: Props) 
         {snapshots.map((snap, idx) => {
           const isGlobal = !!snap.batch_id
           const isSelected = selected.has(snap.version)
-          const diff = snap.synced_balance - snap.calculated_balance
+          const diff = snap.difference
           const prevSnap = idx < snapshots.length - 1 ? snapshots[idx + 1] : null
-          const balanceChange = prevSnap
-            ? snap.synced_balance - prevSnap.synced_balance
-            : 0
+          const balanceChange = prevSnap ? snap.synced_balance - prevSnap.synced_balance : 0
 
           return (
             <button

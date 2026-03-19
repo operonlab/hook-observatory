@@ -21,7 +21,10 @@ export default function WalletDetailPage() {
 
   useEffect(() => {
     if (!walletId) return
-    walletApi.get(walletId).then(setWallet).catch(() => navigate('/finance/wallets'))
+    walletApi
+      .get(walletId)
+      .then(setWallet)
+      .catch(() => navigate('/finance/wallets'))
   }, [walletId, navigate])
 
   if (!wallet) {
@@ -119,8 +122,8 @@ export default function WalletDetailPage() {
         ))}
       </div>
 
-      {/* Tab Content */}
-      {tab === 'timeline' && (
+      {/* Tab Content — use CSS display to prevent remount/refetch */}
+      <div style={{ display: tab === 'timeline' ? 'block' : 'none' }}>
         <SnapshotTimeline
           walletId={wallet.id}
           onSelectVersions={(from, to) => {
@@ -128,21 +131,21 @@ export default function WalletDetailPage() {
             setTab('diff')
           }}
         />
-      )}
-      {tab === 'diff' && (
+      </div>
+      <div style={{ display: tab === 'diff' ? 'block' : 'none' }}>
         <SnapshotDiffPanel
           walletId={wallet.id}
           initialFrom={selectedVersions?.[0]}
           initialTo={selectedVersions?.[1]}
         />
-      )}
-      {tab === 'gap' && (
+      </div>
+      <div style={{ display: tab === 'gap' ? 'block' : 'none' }}>
         <GapAnalysisPanel
           walletId={wallet.id}
           initialFrom={selectedVersions?.[0]}
           initialTo={selectedVersions?.[1]}
         />
-      )}
+      </div>
 
       {showForm && (
         <WalletForm

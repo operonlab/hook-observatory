@@ -123,7 +123,72 @@ async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decima
     )
 
 
-# ======================== Period Delta Helper ========================
+# ======================== Balance Calculation Helpers ========================
+
+
+async def _calc_balance_components(
+    db: AsyncSession,
+    wallet_id: str,
+    from_time: datetime | None = None,
+    to_time: datetime | None = None,
+) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    """Compute balance components for a wallet, optionally within a time range.
+
+    Returns (income_sum, expense_sum, transfer_in, fee_sum).
+    Net delta = income - expense + transfer_in - fee.
+    """
+    from sqlalchemy import case, literal_column
+
+    txn_filter = [
+        Transaction.wallet_id == wallet_id,
+        Transaction.status == "completed",
+        Transaction.deleted_at == None,  # noqa: E711
+    ]
+    if from_time is not None:
+        txn_filter.append(Transaction.transacted_at > from_time)
+    if to_time is not None:
+        txn_filter.append(Transaction.transacted_at <= to_time)
+
+    # Single aggregation query with CASE WHEN
+    agg_q = select(
+        func.coalesce(
+            func.sum(
+                case((Transaction.type == "income", Transaction.amount), else_=literal_column("0"))
+            ),
+            0,
+        ).label("income"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (Transaction.type.in_(["expense", "transfer"]), Transaction.amount),
+                    else_=literal_column("0"),
+                )
+            ),
+            0,
+        ).label("expense"),
+        func.coalesce(func.sum(Transaction.fee), 0).label("fees"),
+    ).where(*txn_filter)
+    row = (await db.execute(agg_q)).one()
+
+    # Transfer-in is a separate query (different wallet_id column)
+    transfer_filter = [
+        Transaction.transfer_to_wallet_id == wallet_id,
+        Transaction.type == "transfer",
+        Transaction.status == "completed",
+        Transaction.deleted_at == None,  # noqa: E711
+    ]
+    if from_time is not None:
+        transfer_filter.append(Transaction.transacted_at > from_time)
+    if to_time is not None:
+        transfer_filter.append(Transaction.transacted_at <= to_time)
+
+    transfer_in = (
+        await db.execute(
+            select(func.coalesce(func.sum(Transaction.amount), 0)).where(*transfer_filter)
+        )
+    ).scalar_one()
+
+    return Decimal(str(row.income)), Decimal(str(row.expense)), transfer_in, Decimal(str(row.fees))
 
 
 async def _compute_period_delta(
@@ -132,6 +197,12 @@ async def _compute_period_delta(
     """Compute net balance change from transactions in a time period.
     Returns (net_delta, transaction_list).
     """
+    income, expense, transfer_in, fees = await _calc_balance_components(
+        db, wallet_id, from_time, to_time
+    )
+    net_delta = income - expense + transfer_in - fees
+
+    # Get transaction list
     txn_filter = [
         Transaction.wallet_id == wallet_id,
         Transaction.status == "completed",
@@ -139,40 +210,15 @@ async def _compute_period_delta(
         Transaction.transacted_at > from_time,
         Transaction.transacted_at <= to_time,
     ]
-
-    income_sum = (await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0))
-        .where(*txn_filter, Transaction.type == "income")
-    )).scalar_one()
-
-    expense_sum = (await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0))
-        .where(*txn_filter, Transaction.type.in_(["expense", "transfer"]))
-    )).scalar_one()
-
-    transfer_in = (await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0))
-        .where(
-            Transaction.transfer_to_wallet_id == wallet_id,
-            Transaction.type == "transfer",
-            Transaction.status == "completed",
-            Transaction.deleted_at == None,  # noqa: E711
-            Transaction.transacted_at > from_time,
-            Transaction.transacted_at <= to_time,
+    txns = (
+        (
+            await db.execute(
+                select(Transaction).where(*txn_filter).order_by(Transaction.transacted_at)
+            )
         )
-    )).scalar_one()
-
-    fee_sum = (await db.execute(
-        select(func.coalesce(func.sum(Transaction.fee), 0))
-        .where(*txn_filter)
-    )).scalar_one()
-
-    net_delta = income_sum - expense_sum + transfer_in - fee_sum
-
-    # Get transaction list
-    txns = (await db.execute(
-        select(Transaction).where(*txn_filter).order_by(Transaction.transacted_at)
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return net_delta, txns
 
@@ -267,10 +313,13 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         calculated = wallet.current_balance
 
         # Determine next version for this wallet
-        max_version = (await db.execute(
-            select(func.coalesce(func.max(WalletSnapshot.version), 0))
-            .where(WalletSnapshot.wallet_id == wallet_id)
-        )).scalar_one()
+        max_version = (
+            await db.execute(
+                select(func.coalesce(func.max(WalletSnapshot.version), 0)).where(
+                    WalletSnapshot.wallet_id == wallet_id
+                )
+            )
+        ).scalar_one()
         next_version = max_version + 1
 
         snapshot = WalletSnapshot(
@@ -309,23 +358,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         except Exception:
             logger.warning("Failed to publish WALLET_SYNCED event", exc_info=True)
 
-        return WalletSnapshotResponse(
-            id=snapshot.id,
-            space_id=snapshot.space_id,
-            created_by=snapshot.created_by,
-            created_at=snapshot.created_at,
-            updated_at=snapshot.updated_at,
-            wallet_id=snapshot.wallet_id,
-            synced_balance=snapshot.synced_balance,
-            calculated_balance=snapshot.calculated_balance,
-            difference=snapshot.synced_balance - snapshot.calculated_balance,
-            snapshot_type=snapshot.snapshot_type,
-            notes=snapshot.notes,
-            synced_at=snapshot.synced_at,
-            version=snapshot.version,
-            batch_id=snapshot.batch_id,
-            metadata_json=snapshot.metadata_json,
-        )
+        return self._snapshot_to_response(snapshot)
 
     async def reconcile(
         self,
@@ -338,55 +371,18 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         if not wallet:
             raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
 
-        # Calculate balance from initial + sum of all completed transactions
-        # Only count non-deleted transactions
-        txn_filter = [
-            Transaction.wallet_id == wallet_id,
-            Transaction.status == "completed",
-        ]
-        txn_filter.append(Transaction.deleted_at == None)  # noqa: E711
+        income, expense, transfer_in, fees = await _calc_balance_components(db, wallet_id)
+        calculated = wallet.initial_balance + income - expense + transfer_in - fees
 
-        income_sum = (
+        txn_count = (
             await db.execute(
-                select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                    *txn_filter,
-                    Transaction.type == "income",
-                )
-            )
-        ).scalar_one()
-
-        expense_sum = (
-            await db.execute(
-                select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                    *txn_filter,
-                    Transaction.type.in_(["expense", "transfer"]),
-                )
-            )
-        ).scalar_one()
-
-        # Transfers into this wallet
-        transfer_in = (
-            await db.execute(
-                select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                    Transaction.transfer_to_wallet_id == wallet_id,
-                    Transaction.type == "transfer",
+                select(func.count()).where(
+                    Transaction.wallet_id == wallet_id,
                     Transaction.status == "completed",
                     Transaction.deleted_at == None,  # noqa: E711
                 )
             )
         ).scalar_one()
-
-        fee_sum = (
-            await db.execute(
-                select(func.coalesce(func.sum(Transaction.fee), 0)).where(
-                    *txn_filter,
-                )
-            )
-        ).scalar_one()
-
-        calculated = wallet.initial_balance + income_sum - expense_sum + transfer_in - fee_sum
-
-        txn_count = (await db.execute(select(func.count()).where(*txn_filter))).scalar_one()
 
         await event_bus.publish(
             Event(
@@ -464,6 +460,40 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             page_size=p.page_size,
         )
 
+    async def _get_snapshot_pair(
+        self,
+        db: AsyncSession,
+        wallet_id: str,
+        from_v: int,
+        to_v: int,
+    ) -> tuple[WalletSnapshot, WalletSnapshot]:
+        """Fetch two snapshot versions in a single query with soft-delete filter."""
+        rows = (
+            (
+                await db.execute(
+                    select(WalletSnapshot).where(
+                        WalletSnapshot.wallet_id == wallet_id,
+                        WalletSnapshot.version.in_([from_v, to_v]),
+                        WalletSnapshot.deleted_at == None,  # noqa: E711
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        snap_map = {s.version: s for s in rows}
+        if from_v not in snap_map:
+            raise NotFoundError(
+                f"Snapshot version {from_v} not found",
+                code="finance.snapshot_not_found",
+            )
+        if to_v not in snap_map:
+            raise NotFoundError(
+                f"Snapshot version {to_v} not found",
+                code="finance.snapshot_not_found",
+            )
+        return snap_map[from_v], snap_map[to_v]
+
     async def diff_snapshots(
         self,
         db: AsyncSession,
@@ -472,29 +502,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         to_v: int,
     ) -> SnapshotDiffResponse:
         """Compute diff between two snapshot versions."""
-        from_snap = (await db.execute(
-            select(WalletSnapshot).where(
-                WalletSnapshot.wallet_id == wallet_id,
-                WalletSnapshot.version == from_v,
-            )
-        )).scalar_one_or_none()
-        if not from_snap:
-            raise NotFoundError(
-                f"Snapshot version {from_v} not found",
-                code="finance.snapshot_not_found",
-            )
-
-        to_snap = (await db.execute(
-            select(WalletSnapshot).where(
-                WalletSnapshot.wallet_id == wallet_id,
-                WalletSnapshot.version == to_v,
-            )
-        )).scalar_one_or_none()
-        if not to_snap:
-            raise NotFoundError(
-                f"Snapshot version {to_v} not found",
-                code="finance.snapshot_not_found",
-            )
+        from_snap, to_snap = await self._get_snapshot_pair(db, wallet_id, from_v, to_v)
 
         balance_delta = to_snap.synced_balance - from_snap.synced_balance
         delta_pct = (
@@ -525,42 +533,17 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         to_v: int,
     ) -> GapAnalysisResponse:
         """Sandwich reconciliation: snapshot delta vs transaction sum."""
-        from_snap = (await db.execute(
-            select(WalletSnapshot).where(
-                WalletSnapshot.wallet_id == wallet_id,
-                WalletSnapshot.version == from_v,
-            )
-        )).scalar_one_or_none()
-        if not from_snap:
-            raise NotFoundError(
-                f"Snapshot version {from_v} not found",
-                code="finance.snapshot_not_found",
-            )
-
-        to_snap = (await db.execute(
-            select(WalletSnapshot).where(
-                WalletSnapshot.wallet_id == wallet_id,
-                WalletSnapshot.version == to_v,
-            )
-        )).scalar_one_or_none()
-        if not to_snap:
-            raise NotFoundError(
-                f"Snapshot version {to_v} not found",
-                code="finance.snapshot_not_found",
-            )
+        from_snap, to_snap = await self._get_snapshot_pair(db, wallet_id, from_v, to_v)
 
         snapshot_delta = to_snap.synced_balance - from_snap.synced_balance
         transaction_sum, txns = await _compute_period_delta(
             db, wallet_id, from_snap.synced_at, to_snap.synced_at
         )
         gap = snapshot_delta - transaction_sum
-        gap_pct = (
-            float(gap / snapshot_delta * 100) if snapshot_delta else 0.0
-        )
+        gap_pct = float(gap / snapshot_delta * 100) if snapshot_delta else 0.0
         is_reconciled = abs(gap) < 1  # 1 unit tolerance
 
-        txn_service = TransactionService()
-        txn_responses = [txn_service.to_response(t) for t in txns]
+        txn_responses = [transaction_service.to_response(t) for t in txns]
 
         return GapAnalysisResponse(
             wallet_id=wallet_id,
@@ -581,7 +564,7 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         db: AsyncSession,
         space_id: str,
         user_id: str | None = None,
-    ) -> dict:
+    ) -> GlobalSnapshotResponse:
         """Create snapshots for all active wallets with a shared batch_id."""
         batch_id = _uuid7_hex()
 
@@ -597,45 +580,17 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         now = datetime.now(UTC)
 
         for wallet in wallets:
-            # Calculate balance from initial + transactions (reconcile formula)
-            txn_filter = [
-                Transaction.wallet_id == wallet.id,
-                Transaction.status == "completed",
-                Transaction.deleted_at == None,  # noqa: E711
-            ]
-
-            income_sum = (await db.execute(
-                select(func.coalesce(func.sum(Transaction.amount), 0))
-                .where(*txn_filter, Transaction.type == "income")
-            )).scalar_one()
-
-            expense_sum = (await db.execute(
-                select(func.coalesce(func.sum(Transaction.amount), 0))
-                .where(*txn_filter, Transaction.type.in_(["expense", "transfer"]))
-            )).scalar_one()
-
-            transfer_in = (await db.execute(
-                select(func.coalesce(func.sum(Transaction.amount), 0))
-                .where(
-                    Transaction.transfer_to_wallet_id == wallet.id,
-                    Transaction.type == "transfer",
-                    Transaction.status == "completed",
-                    Transaction.deleted_at == None,  # noqa: E711
-                )
-            )).scalar_one()
-
-            fee_sum = (await db.execute(
-                select(func.coalesce(func.sum(Transaction.fee), 0))
-                .where(*txn_filter)
-            )).scalar_one()
-
-            calculated = wallet.initial_balance + income_sum - expense_sum + transfer_in - fee_sum
+            income, expense, transfer_in, fees = await _calc_balance_components(db, wallet.id)
+            calculated = wallet.initial_balance + income - expense + transfer_in - fees
 
             # Determine next version
-            max_version = (await db.execute(
-                select(func.coalesce(func.max(WalletSnapshot.version), 0))
-                .where(WalletSnapshot.wallet_id == wallet.id)
-            )).scalar_one()
+            max_version = (
+                await db.execute(
+                    select(func.coalesce(func.max(WalletSnapshot.version), 0)).where(
+                        WalletSnapshot.wallet_id == wallet.id
+                    )
+                )
+            ).scalar_one()
 
             snapshot = WalletSnapshot(
                 id=_uuid7_hex(),

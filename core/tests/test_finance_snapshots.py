@@ -9,14 +9,12 @@ Tests cover:
 - _compute_period_delta helper
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
-
-from src.modules.finance.models import Transaction, Wallet, WalletSnapshot
+from src.modules.finance.models import Wallet, WalletSnapshot
 from src.modules.finance.schemas import (
     GapAnalysisResponse,
     GlobalSnapshotResponse,
@@ -27,11 +25,7 @@ from src.modules.finance.schemas import (
 )
 from src.modules.finance.services import (
     WalletService,
-    _compute_period_delta,
-    wallet_service,
 )
-from src.shared.schemas import PaginatedResponse
-
 
 # ======================== Fixtures ========================
 
@@ -275,11 +269,17 @@ class TestSyncVersioning:
 class TestDiffSnapshots:
     """Test snapshot diff calculation."""
 
+    def _mock_snapshot_pair_db(self, from_snap, to_snap):
+        """Create db mock for _get_snapshot_pair (single query returning list)."""
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [from_snap, to_snap]
+        db.execute.return_value = result
+        return db
+
     @pytest.mark.asyncio
     async def test_diff_positive_delta(self):
         """Diff should show positive balance change."""
-        db = AsyncMock()
-
         from_snap = _make_snapshot(
             version=1,
             synced_balance=Decimal("10000"),
@@ -290,19 +290,7 @@ class TestDiffSnapshots:
             synced_balance=Decimal("15000"),
             synced_at=datetime(2026, 2, 1, tzinfo=UTC),
         )
-
-        call_count = 0
-        def mock_execute(stmt):
-            nonlocal call_count
-            call_count += 1
-            result = MagicMock()
-            if call_count == 1:
-                result.scalar_one_or_none.return_value = from_snap
-            else:
-                result.scalar_one_or_none.return_value = to_snap
-            return result
-
-        db.execute = AsyncMock(side_effect=mock_execute)
+        db = self._mock_snapshot_pair_db(from_snap, to_snap)
 
         svc = WalletService()
         result = await svc.diff_snapshots(db, "w" * 32, 1, 2)
@@ -315,8 +303,6 @@ class TestDiffSnapshots:
     @pytest.mark.asyncio
     async def test_diff_negative_delta(self):
         """Diff should show negative balance change."""
-        db = AsyncMock()
-
         from_snap = _make_snapshot(
             version=1,
             synced_balance=Decimal("20000"),
@@ -327,19 +313,7 @@ class TestDiffSnapshots:
             synced_balance=Decimal("15000"),
             synced_at=datetime(2026, 2, 1, tzinfo=UTC),
         )
-
-        call_count = 0
-        def mock_execute(stmt):
-            nonlocal call_count
-            call_count += 1
-            result = MagicMock()
-            if call_count == 1:
-                result.scalar_one_or_none.return_value = from_snap
-            else:
-                result.scalar_one_or_none.return_value = to_snap
-            return result
-
-        db.execute = AsyncMock(side_effect=mock_execute)
+        db = self._mock_snapshot_pair_db(from_snap, to_snap)
 
         svc = WalletService()
         result = await svc.diff_snapshots(db, "w" * 32, 1, 2)
@@ -351,11 +325,17 @@ class TestDiffSnapshots:
 class TestGapAnalysis:
     """Test gap analysis (sandwich reconciliation)."""
 
+    def _mock_gap_db(self, from_snap, to_snap):
+        """Create db mock for gap_analysis (_get_snapshot_pair returns list)."""
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [from_snap, to_snap]
+        db.execute.return_value = result
+        return db
+
     @pytest.mark.asyncio
     async def test_gap_zero_reconciled(self):
         """When snapshot delta == transaction sum, gap should be 0."""
-        db = AsyncMock()
-
         from_snap = _make_snapshot(
             version=1,
             synced_balance=Decimal("10000"),
@@ -366,22 +346,7 @@ class TestGapAnalysis:
             synced_balance=Decimal("15000"),
             synced_at=datetime(2026, 2, 1, tzinfo=UTC),
         )
-
-        call_count = 0
-        def mock_execute(stmt):
-            nonlocal call_count
-            call_count += 1
-            result = MagicMock()
-            if call_count <= 2:
-                # Snapshot queries
-                result.scalar_one_or_none.return_value = from_snap if call_count == 1 else to_snap
-            else:
-                # _compute_period_delta queries (income, expense, transfer_in, fee, txn list)
-                result.scalar_one.return_value = Decimal("0")
-                result.scalars.return_value.all.return_value = []
-            return result
-
-        db.execute = AsyncMock(side_effect=mock_execute)
+        db = self._mock_gap_db(from_snap, to_snap)
 
         svc = WalletService()
 
@@ -400,8 +365,6 @@ class TestGapAnalysis:
     @pytest.mark.asyncio
     async def test_gap_nonzero_not_reconciled(self):
         """When there's a gap, is_reconciled should be False."""
-        db = AsyncMock()
-
         from_snap = _make_snapshot(
             version=1,
             synced_balance=Decimal("10000"),
@@ -412,20 +375,7 @@ class TestGapAnalysis:
             synced_balance=Decimal("15000"),
             synced_at=datetime(2026, 2, 1, tzinfo=UTC),
         )
-
-        call_count = 0
-        def mock_execute(stmt):
-            nonlocal call_count
-            call_count += 1
-            result = MagicMock()
-            if call_count <= 2:
-                result.scalar_one_or_none.return_value = from_snap if call_count == 1 else to_snap
-            else:
-                result.scalar_one.return_value = Decimal("0")
-                result.scalars.return_value.all.return_value = []
-            return result
-
-        db.execute = AsyncMock(side_effect=mock_execute)
+        db = self._mock_gap_db(from_snap, to_snap)
 
         svc = WalletService()
 
@@ -444,8 +394,6 @@ class TestGapAnalysis:
     @pytest.mark.asyncio
     async def test_gap_within_tolerance(self):
         """Gap < 1 should still be reconciled (tolerance for rounding)."""
-        db = AsyncMock()
-
         from_snap = _make_snapshot(
             version=1,
             synced_balance=Decimal("10000"),
@@ -456,20 +404,7 @@ class TestGapAnalysis:
             synced_balance=Decimal("15000.5000"),
             synced_at=datetime(2026, 2, 1, tzinfo=UTC),
         )
-
-        call_count = 0
-        def mock_execute(stmt):
-            nonlocal call_count
-            call_count += 1
-            result = MagicMock()
-            if call_count <= 2:
-                result.scalar_one_or_none.return_value = from_snap if call_count == 1 else to_snap
-            else:
-                result.scalar_one.return_value = Decimal("0")
-                result.scalars.return_value.all.return_value = []
-            return result
-
-        db.execute = AsyncMock(side_effect=mock_execute)
+        db = self._mock_gap_db(from_snap, to_snap)
 
         svc = WalletService()
 
@@ -489,10 +424,17 @@ class TestGlobalSnapshot:
 
     def _setup_global_db(self, wallets):
         """Create a properly mocked db for global snapshot tests."""
+        from collections import namedtuple
+
         db = AsyncMock()
         now = datetime(2026, 3, 19, tzinfo=UTC)
 
+        # _calc_balance_components returns a Row with .income/.expense/.fees
+        BalanceRow = namedtuple("BalanceRow", ["income", "expense", "fees"])
+        zero_row = BalanceRow(income=Decimal("0"), expense=Decimal("0"), fees=Decimal("0"))
+
         call_count = 0
+
         def mock_execute(stmt):
             nonlocal call_count
             call_count += 1
@@ -501,7 +443,9 @@ class TestGlobalSnapshot:
                 # Wallet query
                 result.scalars.return_value.all.return_value = wallets
             else:
-                # Various sum/max queries
+                # _calc_balance_components agg query returns .one()
+                result.one.return_value = zero_row
+                # transfer_in and max_version queries return .scalar_one()
                 result.scalar_one.return_value = Decimal("0")
             return result
 
@@ -522,7 +466,9 @@ class TestGlobalSnapshot:
     async def test_global_snapshot_covers_all_active_wallets(self):
         """Global snapshot should create one snapshot per active wallet."""
         wallet1 = _make_wallet(id="a" * 32, name="Bank", current_balance=Decimal("50000"))
-        wallet2 = _make_wallet(id="b" * 32, name="Cash", type="cash", current_balance=Decimal("5000"))
+        wallet2 = _make_wallet(
+            id="b" * 32, name="Cash", type="cash", current_balance=Decimal("5000")
+        )
         db = self._setup_global_db([wallet1, wallet2])
 
         svc = WalletService()
@@ -545,7 +491,9 @@ class TestGlobalSnapshot:
         svc = WalletService()
 
         with patch("src.modules.finance.services.event_bus"):
-            with patch("src.modules.finance.services._uuid7_hex", return_value="batch123" + "0" * 24):
+            with patch(
+                "src.modules.finance.services._uuid7_hex", return_value="batch123" + "0" * 24
+            ):
                 result = await svc.create_global_snapshot(db, "default")
 
         assert len(result.snapshots) == 1
