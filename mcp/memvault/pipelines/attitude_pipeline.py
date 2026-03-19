@@ -25,6 +25,7 @@ Usage:
 import argparse
 import json
 import os
+import shutil
 import sys
 import urllib.error
 import urllib.request
@@ -150,7 +151,10 @@ def evolve_correction(correction: dict, space_id: str, dry_run: bool) -> dict:
         return {"success": False, "status": 0, "error": "empty fact", "correction": correction}
 
     if dry_run:
-        return {"success": True, "status": 0, "dry_run": True, "correction": correction, "payload": body}
+        return {
+            "success": True, "status": 0, "dry_run": True,
+            "correction": correction, "payload": body,
+        }
 
     status, resp = http_post(url, body, params={"space_id": space_id})
     return {
@@ -185,6 +189,14 @@ def main() -> None:
         "--stop-on-error", action="store_true",
         help="Stop processing if Core API returns an error.",
     )
+    parser.add_argument(
+        "--archive", action="store_true",
+        help="Move processed JSONL files to corrections/processed/ directory.",
+    )
+    parser.add_argument(
+        "--notify", action="store_true",
+        help="Output JSON summary of high-drift corrections (drift_score > 0.3) to stdout.",
+    )
     args = parser.parse_args()
 
     print("Memvault — attitude_pipeline.py")
@@ -208,7 +220,10 @@ def main() -> None:
                 print(f"[Load] Scanning all JSONL under {input_path} ...")
                 corrections = collect_all_corrections(input_path)
             else:
-                print(f"[error] {input_path} is a directory. Use --all to process recursively.", file=sys.stderr)
+                print(
+                    f"[error] {input_path} is a directory. Use --all to process recursively.",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
         elif input_path.is_file():
             print(f"[Load] Loading {input_path} ...")
@@ -226,11 +241,11 @@ def main() -> None:
     # Process
     results = {"ok": 0, "fail": 0, "skip": 0}
     failed: list[dict] = []
+    high_drift: list[dict] = []
 
     for i, correction in enumerate(corrections):
         fact_preview = correction.get("fact", "")[:60]
         category = correction.get("category", "?")
-        session_id = correction.get("session_id", "?")[:12]
 
         print(f"  [{i+1}/{len(corrections)}] [{category}] {fact_preview}...", end=" ", flush=True)
 
@@ -241,10 +256,22 @@ def main() -> None:
             results["ok"] += 1
         elif result["success"]:
             drift = ""
+            drift_score = 0.0
             if isinstance(result.get("response"), dict):
-                drift_val = result["response"].get("drift_score", result["response"].get("drift", ""))
+                resp = result["response"]
+                drift_val = resp.get("drift_score", resp.get("drift", ""))
                 if drift_val:
                     drift = f" (drift={drift_val})"
+                    try:
+                        drift_score = float(drift_val)
+                    except (TypeError, ValueError):
+                        pass
+            if drift_score > 0.3:
+                high_drift.append({
+                    "fact": correction.get("fact", ""),
+                    "category": correction.get("category", ""),
+                    "drift_score": drift_score,
+                })
             print(f"OK{drift}")
             results["ok"] += 1
         else:
@@ -274,6 +301,49 @@ def main() -> None:
             print(f"  HTTP {r['status']} — {fact}")
         if len(failed) > 5:
             print(f"  ... and {len(failed) - 5} more")
+
+    # --archive: Move processed files to processed/ directory
+    if args.archive and args.input:
+        input_path = Path(args.input).expanduser()
+        if input_path.is_dir() and args.all:
+            processed_dir = input_path / "processed"
+            processed_dir.mkdir(parents=True, exist_ok=True)
+            jsonl_files = sorted(input_path.rglob("**/*.jsonl"))
+            moved = 0
+            for fpath in jsonl_files:
+                if "processed" in fpath.parts:
+                    continue
+                dest = processed_dir / fpath.name
+                shutil.move(str(fpath), str(dest))
+                moved += 1
+            print(f"\n[archive] Moved {moved} file(s) to {processed_dir}")
+        elif input_path.is_file():
+            processed_dir = input_path.parent / "processed"
+            processed_dir.mkdir(parents=True, exist_ok=True)
+            dest = processed_dir / input_path.name
+            shutil.move(str(input_path), str(dest))
+            print(f"\n[archive] Moved {input_path.name} to {processed_dir}")
+
+    # --notify: Output high-drift summary as JSON
+    if args.notify and not args.dry_run:
+        notify_summary = {
+            "total": len(corrections),
+            "ok": results["ok"],
+            "fail": results["fail"],
+            "high_drift_count": len(high_drift),
+            "high_drift": high_drift,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+        }
+        notify_path = (
+            Path(args.input).expanduser().parent / "notify_summary.json"
+            if args.input
+            else Path("/tmp/attitude_notify.json")
+        )
+        with open(notify_path, "w", encoding="utf-8") as f:
+            json.dump(notify_summary, f, ensure_ascii=False, indent=2)
+        print(f"\n[notify] Summary written to {notify_path}")
+
+    if failed:
         sys.exit(1)
 
     print("Done.")

@@ -353,6 +353,26 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "ws-memvault-attitude",
+      "label": "com.joneshong.scheduler.ws-memvault-attitude",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_attitude.py",
+      "schedule": { "calendar": { "Hour": 5, "Minute": 0 } },
+      "description": "每日 5AM: Attitude corrections 自動處理 + 高 drift 通知",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-memvault-skill-sync",
+      "label": "com.joneshong.scheduler.ws-memvault-skill-sync",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_skill_sync.py",
+      "schedule": { "calendar": { "Hour": 5, "Minute": 30 } },
+      "description": "每日 5:30AM: Anvil → KAS Skill Profile sync（L1 stats + proficiency level）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }
