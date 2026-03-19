@@ -32,8 +32,6 @@ from src.modules.memvault.scoring_pipeline import (
 )
 from src.modules.memvault.services import (
     MemoryBlockService,
-    _is_cjk,
-    _is_cjk_dominant,
     should_search,
 )
 
@@ -420,11 +418,11 @@ class TestRRFFusion:
         assert fused[0].block.id == "b1"
 
     def test_cjk_detection(self):
-        assert _is_cjk("記得") is True
-        assert _is_cjk("hello") is False
-        assert _is_cjk("mixed 中文 text") is True
-        assert _is_cjk_dominant("主要是中文的內容") is True
-        assert _is_cjk_dominant("mostly english text") is False
+        from src.modules.memvault.services import _CJK_RANGES
+
+        assert _CJK_RANGES.search("記得") is not None
+        assert _CJK_RANGES.search("hello") is None
+        assert _CJK_RANGES.search("mixed 中文 text") is not None
 
 
 # ======================== Phase B2: Adaptive Retrieval Tests ========================
