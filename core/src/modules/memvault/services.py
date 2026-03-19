@@ -372,7 +372,7 @@ class MemoryBlockService(
             for r in results
         ]
 
-        scored_dicts, scoring_meta = pipeline.apply(scored_dicts, query_embedding)
+        scored_dicts, scoring_meta = await pipeline.apply(scored_dicts, query_embedding)
 
         # Phase C2: Optional cross-encoder reranking
         if query:
@@ -508,7 +508,7 @@ class MemoryBlockService(
 
         # Apply full scoring pipeline
         pipeline = ScoringPipeline(scoring_config)
-        scored_dicts, scoring_meta = pipeline.apply(scored_dicts, query_embedding)
+        scored_dicts, scoring_meta = await pipeline.apply(scored_dicts, query_embedding)
 
         # Optional cross-encoder reranking
         scored_dicts, reranked = await rerank_results(query, scored_dicts)

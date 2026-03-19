@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.modules.capture.strategies import EnrichmentResult, EnrichmentStrategy
+
 logger = logging.getLogger(__name__)
 
 ENRICHMENT_SCHEMAS: dict[tuple[str, str], dict[str, str]] = {
@@ -58,7 +60,7 @@ _RLM_FIELD_CONFIDENCE_THRESHOLD = 0.6
 _RLM_AMBIGUITY_THRESHOLD = 0.5
 
 
-class RLMEnrichmentStrategy:
+class RLMEnrichmentStrategy(EnrichmentStrategy):
     """RLM-powered enrichment for ambiguous capture inputs.
 
     Activates only when:
@@ -70,8 +72,7 @@ class RLMEnrichmentStrategy:
     2. If confidence < 0.6 on any field, RLM decomposes the input
     3. Cross-references similar past captures for disambiguation
 
-    Implements the same interface as strategies.EnrichmentStrategy
-    but defined here to keep enrichment_config self-contained.
+    Inherits EnrichmentStrategy.__call__ for Operator Protocol compliance.
     """
 
     name = "rlm_decompose"
@@ -97,14 +98,8 @@ class RLMEnrichmentStrategy:
         module: str,
         entity_type: str,
         context: dict[str, Any] | None = None,
-    ) -> dict:
-        """RLM enrichment — only fires for ambiguous or low-confidence inputs.
-
-        Returns dict compatible with strategies.EnrichmentResult fields:
-        {payload, confidence, source, metadata}.
-        """
-        from src.modules.capture.strategies import EnrichmentResult
-
+    ) -> EnrichmentResult:
+        """RLM enrichment — only fires for ambiguous or low-confidence inputs."""
         ctx = context or {}
         pipeline_confidence = ctx.get("pipeline_confidence", 1.0)
         ambiguity_score = payload.get("_ambiguity_score", 0.0)

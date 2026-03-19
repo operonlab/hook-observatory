@@ -10,26 +10,74 @@ See AD-12 in docs/architecture/architecture-decisions.md.
 
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.shared.reactive import Pipeline
+
+logger = logging.getLogger(__name__)
+
 # ── Core Abstractions ──
 
 
 class EnrichmentStrategy(ABC):
-    """Base class for capture enrichment strategies.
+    """Enrichment operator — 同時是 ABC 和 Operator Protocol。
 
-    Each strategy takes a raw capture payload and returns an enriched version.
-    Strategies are composable — multiple can run in sequence via EnrichmentPipeline.
-
-    Analogous to Crawl4AI's ExtractionStrategy ABC:
-    - ``extract()`` → our ``enrich()``
-    - ``input_format`` attribute → our ``can_handle()`` filter
+    子類只需實作 enrich()，基類的 __call__ 處理：
+    1. can_handle() 條件過濾
+    2. try/except 錯誤隔離
+    3. pipeline_confidence 注入與累積
+    4. meta 追蹤（applied/skipped/sources）
     """
 
     name: str = "base"
+
+    # ── Operator Protocol ──
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return ("payload", "module", "entity_type")
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        return ("payload", "confidence")
+
+    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        meta = ctx["meta"]
+        if not self.can_handle(ctx["module"], ctx["entity_type"]):
+            meta["skipped"].append(self.name)
+            return ctx
+        try:
+            live_context = dict(ctx.get("context") or {})
+            live_context["pipeline_confidence"] = ctx.get("confidence", 1.0)
+            result = await self.enrich(
+                ctx["payload"],
+                module=ctx["module"],
+                entity_type=ctx["entity_type"],
+                context=live_context,
+            )
+            ctx["payload"] = result.payload
+            ctx["confidence"] = min(ctx.get("confidence", 1.0), result.confidence)
+            meta["applied"].append(self.name)
+            if result.source:
+                meta["sources"].append(result.source)
+            meta["all_metadata"].update(result.metadata)
+        except Exception:
+            logger.exception("Enrichment stage '%s' failed, skipping", self.name)
+            meta["skipped"].append(self.name)
+        return ctx
+
+    # ── 原有介面（不改） ──
+
+    def can_handle(self, module: str, entity_type: str) -> bool:
+        """Whether this strategy applies to the given module/entity_type.
+
+        Default: accept all. Override to scope a strategy to specific modules.
+        """
+        return True
 
     @abstractmethod
     async def enrich(
@@ -42,13 +90,6 @@ class EnrichmentStrategy(ABC):
     ) -> EnrichmentResult:
         """Enrich a capture payload. Returns enriched payload + metadata."""
         ...
-
-    def can_handle(self, module: str, entity_type: str) -> bool:
-        """Whether this strategy applies to the given module/entity_type.
-
-        Default: accept all. Override to scope a strategy to specific modules.
-        """
-        return True
 
 
 @dataclass
@@ -67,11 +108,8 @@ class EnrichmentResult:
 class EnrichmentPipeline:
     """Compose multiple enrichment strategies in sequence.
 
-    Analogous to Crawl4AI's ``aprocess_html`` pipeline:
-    prefetch → scraping → markdown → extraction → assembly.
-
-    Workshop capture pipeline:
-    pattern_match → smart_defaults → llm_enrichment (optional, Phase 3)
+    Strategies implement the Operator Protocol via EnrichmentStrategy.__call__,
+    so the pipeline delegates to reactive.Pipeline for execution.
 
     Usage::
 
@@ -91,6 +129,9 @@ class EnrichmentPipeline:
         self._strategies.append(strategy)
         return self
 
+    def _build_pipeline(self) -> Pipeline:
+        return Pipeline().pipe(*self._strategies)
+
     async def run(
         self,
         payload: dict[str, Any],
@@ -99,39 +140,23 @@ class EnrichmentPipeline:
         entity_type: str,
         context: dict[str, Any] | None = None,
     ) -> EnrichmentResult:
-        """Run all applicable strategies in sequence, threading payload forward.
-
-        The running ``min_confidence`` is injected into the context dict as
-        ``pipeline_confidence`` so post-processing strategies like
-        ``ConfidenceGateStrategy`` can inspect the accumulated confidence.
-        """
-        current = dict(payload)
-        all_metadata: dict[str, Any] = {}
-        min_confidence = 1.0
-        sources: list[str] = []
-        live_context: dict[str, Any] = dict(context) if context else {}
-
-        for strategy in self._strategies:
-            if not strategy.can_handle(module, entity_type):
-                continue
-            live_context["pipeline_confidence"] = min_confidence
-            result = await strategy.enrich(
-                current,
-                module=module,
-                entity_type=entity_type,
-                context=live_context,
-            )
-            current = result.payload
-            min_confidence = min(min_confidence, result.confidence)
-            if result.source:
-                sources.append(result.source)
-            all_metadata.update(result.metadata)
-
+        """Run all applicable strategies in sequence, threading payload forward."""
+        ctx: dict[str, Any] = {
+            "payload": dict(payload),
+            "module": module,
+            "entity_type": entity_type,
+            "context": context,
+            "confidence": 1.0,
+            "meta": {"applied": [], "skipped": [], "sources": [], "all_metadata": {}},
+        }
+        pipeline = self._build_pipeline()
+        ctx = await pipeline.execute(ctx)
+        meta = ctx["meta"]
         return EnrichmentResult(
-            payload=current,
-            confidence=min_confidence,
-            source=" → ".join(sources),
-            metadata=all_metadata,
+            payload=ctx["payload"],
+            confidence=ctx["confidence"],
+            source=" → ".join(s for s in meta["sources"] if s),
+            metadata=meta["all_metadata"],
         )
 
 
