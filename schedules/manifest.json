@@ -173,6 +173,16 @@
       "enabled": true
     },
     {
+      "name": "ws-finance-monthly-snapshot",
+      "label": "com.joneshong.scheduler.ws-finance-monthly-snapshot",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_finance_snapshot.py",
+      "schedule": { "calendar": { "Day": 1, "Hour": 0, "Minute": 30 } },
+      "description": "每月 1 日 00:30: 全域錢包快照存檔（RPG 式資產備份）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-capture-expire",
       "label": "com.joneshong.scheduler.ws-capture-expire",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_capture_expire.py",

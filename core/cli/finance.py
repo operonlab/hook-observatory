@@ -189,6 +189,87 @@ def cmd_wallet_sync(args):
         err(e)
 
 
+def cmd_wallet_snapshots(args):
+    client = _client()
+    try:
+        result = client.list_snapshots(args.wallet_id, page=args.page, page_size=args.limit)
+        if json_out(result, args):
+            return
+        items = result.get("items", [])
+        total = result.get("total", 0)
+        print(f"Snapshots for wallet {args.wallet_id[:8]} ({total} total)\n")
+        for s in items:
+            diff = float(s.get("difference", 0))
+            diff_str = f"  diff: {diff:+,.0f}" if abs(diff) >= 1 else ""
+            batch = " [global]" if s.get("batch_id") else ""
+            print(
+                f"  v{s.get('version', '?'):>3d}  {fmt_amount(s.get('synced_balance', 0)):>14s}"
+                f"  [{fmt_date(s.get('synced_at'))}]{batch}{diff_str}"
+            )
+    except (APIError, APIConnectionError) as e:
+        err(e)
+
+
+def cmd_wallet_diff(args):
+    client = _client()
+    try:
+        result = client.snapshot_diff(args.wallet_id, args.from_v, args.to_v)
+        if json_out(result, args):
+            return
+        delta = float(result.get("balance_delta", 0))
+        pct = result.get("delta_pct", 0)
+        print(f"Snapshot Diff: v{args.from_v} → v{args.to_v}\n")
+        print(f"  From:   {fmt_amount(result.get('from_synced_balance', 0))}")
+        print(f"  To:     {fmt_amount(result.get('to_synced_balance', 0))}")
+        arrow = "▲" if delta > 0 else "▼" if delta < 0 else "─"
+        print(f"  Delta:  {arrow} {fmt_amount(abs(delta))} ({pct:+.1f}%)")
+        print(f"  Period: {result.get('period_days', 0)} days")
+    except (APIError, APIConnectionError) as e:
+        err(e)
+
+
+def cmd_wallet_gap(args):
+    client = _client()
+    try:
+        result = client.gap_analysis(args.wallet_id, args.from_v, args.to_v)
+        if json_out(result, args):
+            return
+        gap = float(result.get("gap", 0))
+        reconciled = result.get("is_reconciled", False)
+        status = "RECONCILED" if reconciled else f"GAP: {fmt_amount(abs(gap))}"
+        print(f"Gap Analysis: v{args.from_v} → v{args.to_v}\n")
+        print(f"  Snapshot delta:    {fmt_amount(result.get('snapshot_delta', 0))}")
+        print(f"  Transaction sum:   {fmt_amount(result.get('transaction_sum', 0))}")
+        print(f"  Gap:               {fmt_amount(gap)}")
+        print(f"  Status:            {status}")
+        txns = result.get("transactions", [])
+        if txns:
+            print(f"\n  Transactions in period ({len(txns)}):")
+            for t in txns[:10]:
+                icon = {"income": "+", "expense": "-", "transfer": "~"}.get(t.get("type", ""), "?")
+                desc = t.get("description") or t.get("merchant") or "-"
+                print(f"    {icon} {fmt_amount(t['amount']):>12s}  {desc[:30]}")
+    except (APIError, APIConnectionError) as e:
+        err(e)
+
+
+def cmd_global_snapshot(args):
+    client = _client()
+    try:
+        result = client.create_global_snapshot()
+        if json_out(result, args):
+            return
+        batch_id = result.get("batch_id", "?")
+        count = result.get("snapshot_count", 0)
+        net = float(result.get("total_net_worth", 0))
+        print("Global snapshot created.")
+        print(f"  Batch ID:   {batch_id[:8]}")
+        print(f"  Wallets:    {count}")
+        print(f"  Net worth:  {fmt_amount(net)}")
+    except (APIError, APIConnectionError) as e:
+        err(e)
+
+
 # ---------------------------------------------------------------------------
 # budgets
 # ---------------------------------------------------------------------------
@@ -526,6 +607,27 @@ def main():
     w_sync.add_argument("balance", type=float, help="Actual balance")
     w_sync.add_argument("--notes", help="Sync notes")
     w_sync.set_defaults(func=cmd_wallet_sync)
+
+    w_snapshots = w_sub.add_parser("snapshots", help="List wallet snapshots")
+    w_snapshots.add_argument("wallet_id", help="Wallet ID")
+    w_snapshots.add_argument("--limit", type=int, default=20, help="Page size")
+    w_snapshots.add_argument("--page", type=int, default=1)
+    w_snapshots.set_defaults(func=cmd_wallet_snapshots)
+
+    w_diff = w_sub.add_parser("diff", help="Compare two snapshot versions")
+    w_diff.add_argument("wallet_id", help="Wallet ID")
+    w_diff.add_argument("--from", dest="from_v", type=int, required=True, help="From version")
+    w_diff.add_argument("--to", dest="to_v", type=int, required=True, help="To version")
+    w_diff.set_defaults(func=cmd_wallet_diff)
+
+    w_gap = w_sub.add_parser("gap", help="Gap analysis between two versions")
+    w_gap.add_argument("wallet_id", help="Wallet ID")
+    w_gap.add_argument("--from", dest="from_v", type=int, required=True, help="From version")
+    w_gap.add_argument("--to", dest="to_v", type=int, required=True, help="To version")
+    w_gap.set_defaults(func=cmd_wallet_gap)
+
+    w_global = w_sub.add_parser("global-snapshot", help="Create global snapshot")
+    w_global.set_defaults(func=cmd_global_snapshot)
 
     # -- budgets --
     b_parser = sub.add_parser("budgets", aliases=["b"], help="Budget management")

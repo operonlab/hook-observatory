@@ -328,6 +328,51 @@ class WalletSnapshotResponse(SpaceScopedResponse):
     snapshot_type: str = "reconciliation"
     notes: str | None = None
     synced_at: datetime
+    version: int = 0
+    batch_id: str | None = None
+    metadata_json: dict | None = None
+
+
+class SnapshotDiffResponse(BaseModel):
+    wallet_id: str
+    from_version: int
+    to_version: int
+    from_synced_balance: Decimal
+    to_synced_balance: Decimal
+    balance_delta: Decimal
+    delta_pct: float
+    from_synced_at: datetime
+    to_synced_at: datetime
+    period_days: int
+
+
+class GapAnalysisResponse(BaseModel):
+    wallet_id: str
+    from_version: int
+    to_version: int
+    snapshot_delta: Decimal
+    transaction_sum: Decimal
+    gap: Decimal
+    gap_pct: float
+    is_reconciled: bool
+    transactions: list[TransactionResponse]
+    from_synced_at: datetime
+    to_synced_at: datetime
+
+
+class GlobalSnapshotResponse(BaseModel):
+    batch_id: str
+    snapshot_count: int
+    total_net_worth: Decimal
+    snapshots: list[WalletSnapshotResponse]
+    created_at: datetime
+
+
+class GlobalSnapshotSummary(BaseModel):
+    batch_id: str
+    snapshot_count: int
+    total_net_worth: Decimal
+    created_at: datetime
 
 
 # ======================== Transfer ========================

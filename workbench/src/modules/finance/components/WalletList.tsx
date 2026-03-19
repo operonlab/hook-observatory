@@ -6,11 +6,10 @@ import { fmtAmt } from '../types'
 import WalletCard from './WalletCard'
 
 interface WalletListProps {
-  onEdit?: (wallet: Wallet) => void
   onAdd?: () => void
 }
 
-export default function WalletList({ onEdit, onAdd }: WalletListProps) {
+export default function WalletList({ onAdd }: WalletListProps) {
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -71,7 +70,7 @@ export default function WalletList({ onEdit, onAdd }: WalletListProps) {
       {/* Wallet grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {wallets.map((w) => (
-          <WalletCard key={w.id} wallet={w} onEdit={onEdit} onDelete={handleDeleteWallet} />
+          <WalletCard key={w.id} wallet={w} onDelete={handleDeleteWallet} />
         ))}
 
         {/* Add wallet */}
