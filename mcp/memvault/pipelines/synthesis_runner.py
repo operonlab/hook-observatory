@@ -4,11 +4,14 @@
 Runs the full daily synthesis pipeline:
   1. Community Detection (Leiden) — builds graph communities at 3 resolution levels
   2. Community Summary (DeepSeek V3) — generates LLM summaries for each level
+  3. Interest Snapshot — aggregates query_journal into attention profiles
+  4. User Insights — LLM-generated natural language insights from interest data
 
 Usage:
     python3 mcp/memvault/pipelines/synthesis_runner.py
     python3 mcp/memvault/pipelines/synthesis_runner.py --dry-run
     python3 mcp/memvault/pipelines/synthesis_runner.py --skip-summaries
+    python3 mcp/memvault/pipelines/synthesis_runner.py --skip-insights
 
 Environment:
     CORE_API_URL      — defaults to http://localhost:8801
@@ -63,6 +66,11 @@ def main() -> None:
         default=SUMMARY_LEVELS,
         choices=[0, 1, 2],
         help="Summary levels to generate (default: 1 0 2)",
+    )
+    parser.add_argument(
+        "--skip-insights",
+        action="store_true",
+        help="Skip interest snapshot and user insight generation",
     )
     args = parser.parse_args()
 
@@ -125,6 +133,48 @@ def main() -> None:
 
             if not ok:
                 print(f"\n[warn] Summary L{level} failed — continuing with remaining levels.")
+
+    # Step 3: Interest Snapshot — aggregates query_journal into attention profiles
+    if not args.skip_insights:
+        import json
+        import urllib.request
+
+        core_api = os.environ.get("CORE_API_URL", "http://localhost:8801")
+        t0 = time.monotonic()
+        try:
+            url = f"{core_api}/api/memvault/kg/interest/generate?space_id={args.space_id}"
+            req = urllib.request.Request(url, method="POST")  # noqa: S310
+            with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
+                data = json.loads(resp.read())
+            elapsed = time.monotonic() - t0
+            ok = True
+            print(f"\n  [Interest Snapshot] OK — {elapsed:.1f}s")
+            print(f"    {json.dumps(data, ensure_ascii=False)}")
+        except Exception as e:
+            elapsed = time.monotonic() - t0
+            ok = False
+            print(f"\n  [Interest Snapshot] FAILED — {elapsed:.1f}s: {e}", file=sys.stderr)
+        results.append(("interest_snapshot", ok, elapsed))
+
+    # Step 4: User Insights — LLM-generated insights from interest data
+    if not args.skip_insights:
+        insight_cmd = [
+            UV,
+            "run",
+            "--project",
+            CORE_PROJECT,
+            os.path.join(PIPELINE_DIR, "user_insight_pipeline.py"),
+            "--space-id",
+            args.space_id,
+        ]
+        if args.dry_run:
+            insight_cmd.append("--dry-run")
+
+        ok, elapsed = run_pipeline("User Insights (Haiku)", insight_cmd, env)
+        results.append(("user_insights", ok, elapsed))
+
+        if not ok:
+            print("\n[warn] User insights failed — non-critical, continuing.")
 
     _print_summary(results)
 

@@ -228,3 +228,109 @@ def classify_query(query: str) -> LayerPlan:
         confidence=round(confidence, 3),
         layers=_LAYER_MATRIX[best_intent].copy(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Personalized Query Router
+# ---------------------------------------------------------------------------
+
+
+class PersonalizedQueryRouter:
+    """Wraps classify_query() with user-specific attention data.
+
+    Adjusts layer routing based on the user's historical query patterns:
+    1. Query mentions an 'active' entity → boost triples (user is going deep)
+    2. Query mentions a 'fading' entity → boost summaries (user is reviewing)
+    3. Unknown intent + dominant historical intent → bias toward that intent
+    4. Low confidence → double personalization weight (compensate for regex uncertainty)
+
+    Falls back to base classify_query() when no attention data is available.
+    """
+
+    def __init__(self, attention_profile: dict | None = None):
+        self.attention = attention_profile or {}
+
+    def classify(self, query: str) -> LayerPlan:
+        """Classify query with personalization overlay."""
+        base = classify_query(query)
+        if not self.attention:
+            return base
+        return self._adjust_layers(query, base)
+
+    def _adjust_layers(self, query: str, base: LayerPlan) -> LayerPlan:
+        """Apply personalization rules to the base layer plan."""
+        query_lower = query.lower()
+        adjusted = LayerPlan(
+            intent=base.intent,
+            confidence=base.confidence,
+            layers=dict(base.layers),
+        )
+
+        # Find which attention entities are mentioned in the query
+        active_mentioned = []
+        fading_mentioned = []
+        for entity, level in self.attention.items():
+            if entity.lower() in query_lower:
+                if level == "active":
+                    active_mentioned.append(entity)
+                elif level == "fading":
+                    fading_mentioned.append(entity)
+
+        # Rule 1: Active entity mentioned → boost triples (deep exploration)
+        if active_mentioned:
+            if adjusted.layers.get("triples") == "SKIP":
+                adjusted.layers["triples"] = "HYBRID"
+            elif adjusted.layers.get("triples") == "SEMANTIC":
+                adjusted.layers["triples"] = "HYBRID"
+
+        # Rule 2: Fading entity mentioned → boost summaries (review mode)
+        if fading_mentioned:
+            if adjusted.layers.get("summaries") == "SKIP":
+                adjusted.layers["summaries"] = "SEMANTIC"
+            if adjusted.layers.get("communities") == "SKIP":
+                adjusted.layers["communities"] = "SEMANTIC"
+
+        # Rule 3: Unknown intent + dominant historical intent → bias
+        if base.intent == QueryIntent.UNKNOWN and base.confidence < _CONFIDENCE_THRESHOLD:
+            dominant = self._get_dominant_intent()
+            if dominant and dominant in _LAYER_MATRIX:
+                # Merge dominant intent layers (don't override non-SKIP)
+                for layer, mode in _LAYER_MATRIX[dominant].items():
+                    if adjusted.layers.get(layer) == "SKIP" and mode != "SKIP":
+                        adjusted.layers[layer] = mode
+
+        # Rule 4: Low confidence → apply all non-SKIP more aggressively
+        if base.confidence < 0.5 and (active_mentioned or fading_mentioned):
+            for layer in adjusted.layers:
+                if adjusted.layers[layer] == "SKIP":
+                    adjusted.layers[layer] = "SEMANTIC"
+
+        return adjusted
+
+    def _get_dominant_intent(self) -> QueryIntent | None:
+        """Infer dominant intent from attention profile composition.
+
+        If 70%+ of entities are in one attention level, suggest the corresponding intent.
+        """
+        if not self.attention:
+            return None
+
+        level_counts: dict[str, int] = {}
+        for level in self.attention.values():
+            level_counts[level] = level_counts.get(level, 0) + 1
+
+        total = sum(level_counts.values())
+        if total == 0:
+            return None
+
+        # If mostly active entities → user is doing deep research → factual/entity
+        active_ratio = level_counts.get("active", 0) / total
+        if active_ratio >= 0.7:
+            return QueryIntent.FACTUAL
+
+        # If mostly fading → user is reviewing → exploratory
+        fading_ratio = level_counts.get("fading", 0) / total
+        if fading_ratio >= 0.7:
+            return QueryIntent.EXPLORATORY
+
+        return None
