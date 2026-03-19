@@ -1302,13 +1302,15 @@ class CascadeRecallService:
         query_embedding = await get_embedding(query)
         pattern = f"%{query}%"
 
-        # --- Phase 2: Query Router — determine which layers to search ---
+        # --- Phase 5: Personalized Query Router ---
         layer_plan = None
         if not skip_routing:
             try:
-                from .query_router import classify_query
+                from .query_router import PersonalizedQueryRouter
 
-                layer_plan = classify_query(query)
+                attention = await self._get_cached_attention(db, space_id)
+                router = PersonalizedQueryRouter(attention)
+                layer_plan = router.classify(query)
                 result.routing_intent = layer_plan.intent.value
                 result.routing_confidence = layer_plan.confidence
             except Exception as e:
@@ -1414,6 +1416,23 @@ class CascadeRecallService:
                 result.evaluation_metadata = evaluation.metadata
             except Exception as e:
                 logger.warning("CRAG evaluation failed (non-fatal): %s", e)
+
+        # --- Closed-Loop: Record access + implicit feedback + query journal (fire-and-forget) ---
+        import asyncio
+
+        bg_tasks: list[asyncio.Task] = []
+        bg_tasks.append(asyncio.ensure_future(self._record_recall_access(result)))
+        if result.evaluation_verdict:
+            bg_tasks.append(
+                asyncio.ensure_future(self._record_implicit_feedback(space_id, query, result))
+            )
+        bg_tasks.append(
+            asyncio.ensure_future(self._record_query_journal(space_id, query, result))
+        )
+
+        # --- Closed-Loop: Rerank by access count ---
+        result.triples = self._rerank_by_access(result.triples)
+        result.communities = self._rerank_by_access(result.communities)
 
         return result
 
@@ -1527,6 +1546,184 @@ class CascadeRecallService:
             .limit(top_k)
         )
         return list((await db.execute(q)).scalars().all())
+
+    # --- Closed-Loop Learning helpers ---
+
+    async def _record_recall_access(self, result: CascadeRecallResult) -> None:
+        """Increment access_count on all triples and communities returned by recall.
+
+        Uses its own DB session (fire-and-forget safe — request session may close).
+        """
+        from src.shared.database import async_session_factory
+
+        triple_ids = [t.id for t in result.triples if t.id]
+        community_ids = [c.id for c in result.communities if c.id]
+        if not triple_ids and not community_ids:
+            return
+
+        try:
+            now = datetime.now(UTC)
+            async with async_session_factory() as db:
+                if triple_ids:
+                    await db.execute(
+                        update(Triple)
+                        .where(Triple.id.in_(triple_ids))
+                        .values(
+                            access_count=Triple.access_count + 1,
+                            last_accessed_at=now,
+                        )
+                    )
+                if community_ids:
+                    await db.execute(
+                        update(Community)
+                        .where(Community.id.in_(community_ids))
+                        .values(
+                            access_count=Community.access_count + 1,
+                            last_accessed_at=now,
+                        )
+                    )
+                await db.commit()
+            logger.debug(
+                "Recall access recorded: %d triples, %d communities",
+                len(triple_ids),
+                len(community_ids),
+            )
+        except Exception:
+            logger.warning("Failed to record recall access", exc_info=True)
+
+    async def _record_implicit_feedback(
+        self,
+        space_id: str,
+        query: str,
+        result: CascadeRecallResult,
+    ) -> None:
+        """Record implicit feedback from CRAG verdict into search_feedback table.
+
+        CORRECT → positive signal for all returned entities.
+        INCORRECT → negative signal for all returned entities.
+        AMBIGUOUS → skip (not enough signal).
+        Uses its own DB session (fire-and-forget safe — request session may close).
+        """
+        verdict = result.evaluation_verdict
+        if verdict == "AMBIGUOUS":
+            return
+
+        signal = "positive" if verdict == "CORRECT" else "negative"
+
+        entity_ids: list[str] = []
+        entity_ids.extend(t.id for t in result.triples if t.id)
+        entity_ids.extend(c.id for c in result.communities if c.id)
+        for b in result.blocks:
+            bid = b.get("id") if isinstance(b, dict) else getattr(b, "id", None)
+            if bid:
+                entity_ids.append(bid)
+
+        if not entity_ids:
+            return
+
+        try:
+            from src.shared.database import async_session_factory
+
+            from .services import search_feedback_service
+
+            async with async_session_factory() as db:
+                await search_feedback_service.record_implicit_batch(
+                    db, space_id, entity_ids, query, signal
+                )
+                await db.commit()
+            logger.debug(
+                "Implicit feedback recorded: verdict=%s signal=%s entities=%d",
+                verdict,
+                signal,
+                len(entity_ids),
+            )
+        except Exception:
+            logger.warning("Failed to record implicit feedback", exc_info=True)
+
+    async def _record_query_journal(
+        self,
+        space_id: str,
+        query: str,
+        result: CascadeRecallResult,
+    ) -> None:
+        """Record a query journal entry (fire-and-forget, own session)."""
+        import hashlib
+
+        try:
+            from src.shared.database import async_session_factory
+
+            from .models import QueryJournal
+
+            query_hash = hashlib.sha256(query.encode()).hexdigest()
+
+            # Collect top entity IDs (first 5 from triples + communities)
+            top_ids: list[str] = []
+            for t in result.triples[:3]:
+                if t.id:
+                    top_ids.append(t.id)
+            for c in result.communities[:2]:
+                if c.id:
+                    top_ids.append(c.id)
+
+            total_results = (
+                len(result.triples) + len(result.communities)
+                + len(result.summaries) + len(result.blocks)
+            )
+
+            async with async_session_factory() as db:
+                entry = QueryJournal(
+                    space_id=space_id,
+                    query_text=query,
+                    query_hash=query_hash,
+                    routing_intent=result.routing_intent,
+                    routing_confidence=result.routing_confidence,
+                    layers_searched=result.layers_searched or [],
+                    result_count=total_results,
+                    evaluation_verdict=result.evaluation_verdict,
+                    evaluation_score=result.confidence_score,
+                    top_entity_ids=top_ids,
+                )
+                db.add(entry)
+                await db.commit()
+            logger.debug(
+                "Query journal recorded: hash=%s results=%d", query_hash[:12], total_results
+            )
+        except Exception:
+            logger.warning("Failed to record query journal", exc_info=True)
+
+    async def _get_cached_attention(self, db: AsyncSession, space_id: str) -> dict | None:
+        """Get attention profile with Redis caching (30 min TTL)."""
+        from src.shared.cache import cache_get, cache_set
+
+        cache_key = f"cache:memvault:attention_profile:{space_id}"
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            from .interest_profile import interest_profile_service
+
+            profile = await interest_profile_service.get_attention_profile(db, space_id)
+            if profile:
+                await cache_set(cache_key, profile, ttl=1800)  # 30 min
+            return profile
+        except Exception:
+            logger.debug("Failed to load attention profile", exc_info=True)
+            return None
+
+    @staticmethod
+    def _rerank_by_access(items: list) -> list:
+        """Stable rerank: boost items with higher access_count to the front.
+
+        Uses access_count as a secondary sort key (descending) while preserving
+        the original semantic ranking as the primary key.
+        """
+        if not items or len(items) <= 1:
+            return items
+
+        indexed = list(enumerate(items))
+        indexed.sort(key=lambda pair: (-getattr(pair[1], "access_count", 0), pair[0]))
+        return [item for _, item in indexed]
 
 
 # ======================== Confidence Decay ========================

@@ -6,7 +6,7 @@ All tables live in the `memvault` PostgreSQL schema.
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, Index, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.shared.models import Base, SpaceScopedModel
@@ -138,6 +138,66 @@ class SearchFeedback(SpaceScopedModel):
     feedback_source: Mapped[str] = mapped_column(
         String(20), server_default=text("'agent'")
     )  # agent | user | implicit
+
+
+# ======================== Query Journal ========================
+
+
+class QueryJournal(SpaceScopedModel):
+    """Append-only query log — records every cascade recall for interest profiling.
+
+    30-day retention: original query_text cleared after 30 days, hash + aggregates preserved.
+    """
+
+    __tablename__ = "query_journal"
+    __table_args__ = (
+        Index("idx_qj_query_hash", "query_hash"),
+        Index("idx_qj_space_created", "space_id", "created_at"),
+        Index("idx_qj_routing_intent", "routing_intent"),
+        {"schema": SCHEMA},
+    )
+
+    query_text: Mapped[str] = mapped_column(Text)
+    query_hash: Mapped[str] = mapped_column(String(64))  # SHA-256
+    routing_intent: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    routing_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    layers_searched: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]")
+    )
+    result_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    evaluation_verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    evaluation_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    top_entity_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]")
+    )
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+# ======================== Interest Snapshot ========================
+
+
+class InterestSnapshot(SpaceScopedModel):
+    """Periodic interest profile snapshot — aggregated from query_journal.
+
+    Generated daily by synthesis_runner Step 3.
+    """
+
+    __tablename__ = "interest_snapshots"
+    __table_args__ = (
+        Index("idx_is_space_date", "space_id", "snapshot_date"),
+        Index("idx_is_period", "period"),
+        {"schema": SCHEMA},
+    )
+
+    snapshot_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period: Mapped[str] = mapped_column(String(20))  # daily | weekly | monthly
+    top_intents: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    top_entities: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    top_communities: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    knowledge_gaps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    attention_profile: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    query_volume: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    avg_result_quality: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 # ======================== Frozen Tables ========================
