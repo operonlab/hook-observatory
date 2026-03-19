@@ -133,6 +133,7 @@ services:
 
   ntfy:
     image: binwiederhier/ntfy:latest
+    profiles: ["ntfy"]  # disabled — Bark + Web Push only; start with: docker compose --profile ntfy up ntfy
     command: serve
     mem_limit: 128m
     ports:

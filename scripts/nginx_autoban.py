@@ -15,7 +15,6 @@ import re
 import subprocess
 import sys
 import time
-import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -26,7 +25,7 @@ BAN_DURATION_HOURS = 24
 LOG_PATH = Path("/opt/homebrew/var/log/nginx/workshop.access.log")
 BLOCKLIST_PATH = Path("/opt/homebrew/etc/nginx/conf.d/blocklist.conf")
 AUTOBAN_LOG = Path("/opt/homebrew/var/log/nginx/auto-ban.log")
-NTFY_URL = "http://127.0.0.1:9080/workshop"
+REDIS_PUSH_CHANNEL = "workshop:push"
 
 # IPs / networks that must never be banned
 WHITELIST_NETS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
@@ -115,14 +114,28 @@ def _expire_old_bans(content: str) -> str:
 
 
 def _notify(message: str) -> None:
+    """Publish ban alert via Redis → Core fan-out pipeline."""
     try:
-        data = message.encode()
-        req = urllib.request.Request(  # noqa: S310
-            NTFY_URL,
-            data=data,
-            headers={"Title": "Nginx Auto-Ban", "Priority": "default", "Tags": "shield"},
-        )
-        urllib.request.urlopen(req, timeout=5)  # noqa: S310
+        import json
+        import socket
+
+        payload = json.dumps({
+            "category": "system",
+            "title": "Nginx Auto-Ban",
+            "body": message,
+            "tag": "nginx-autoban",
+            "severity": "warning",
+        })
+        # Inline RESP PUBLISH (no redis-py dependency)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
+        sock.connect(("127.0.0.1", 6379))
+        ch = REDIS_PUSH_CHANNEL
+        parts = f"*3\r\n$7\r\nPUBLISH\r\n${len(ch)}\r\n{ch}\r\n"
+        parts += f"${len(payload)}\r\n{payload}\r\n"
+        sock.sendall(parts.encode())
+        sock.recv(256)
+        sock.close()
     except Exception:  # noqa: S110
         pass
 

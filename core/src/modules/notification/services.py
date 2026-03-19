@@ -11,6 +11,7 @@ import structlog
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.shared.capabilities import SupportsIcon, has_capability
 from src.shared.models import _uuid7_hex
 
@@ -20,6 +21,30 @@ from .models import NotificationLog, PushSubscription
 from .schemas import NotificationLogResponse, PushPayload, SubscriptionCreate, SubscriptionResponse
 
 logger = structlog.get_logger()
+
+
+async def _is_duplicate(tag: str) -> bool:
+    """Check if a notification with this tag was sent recently.
+
+    Uses Redis SET NX EX for atomic dedup. Returns True if duplicate.
+    Falls back to False (allow) if Redis is unavailable.
+    """
+    if not tag or settings.notification_dedup_ttl <= 0:
+        return False
+
+    try:
+        import redis.asyncio as aioredis
+
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            key = f"notif:dedup:{tag}"
+            was_set = await r.set(key, "1", nx=True, ex=settings.notification_dedup_ttl)
+            return was_set is None  # None means key already existed → duplicate
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("dedup_redis_unavailable", tag=tag)
+        return False  # fail-open: prefer duplicate over dropped
 
 
 class NotificationService:
@@ -199,6 +224,11 @@ class NotificationService:
 
     async def send_notification(self, db: AsyncSession, payload: PushPayload) -> dict:
         """Fan-out: deliver via all registered channels in parallel."""
+        # Tag-based dedup: skip if same tag was sent within TTL window
+        if payload.tag and await _is_duplicate(payload.tag):
+            logger.info("notification_deduped", tag=payload.tag)
+            return {"dedup": True, "tag": payload.tag}
+
         query = select(PushSubscription).where(PushSubscription.active == True)  # noqa: E712
 
         if payload.user_id:
