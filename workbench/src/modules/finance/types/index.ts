@@ -1,4 +1,5 @@
 import type { BaseEntity } from '@/types'
+export { fmtAmt } from '../../../shared/utils/formatting'
 
 // ─── Transaction ───
 
@@ -379,6 +380,3 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   bank_transfer: '銀行轉帳',
 }
 
-/** Format a numeric amount for display (2 decimal places) */
-export const fmtAmt = (v: number | string): string =>
-  Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })

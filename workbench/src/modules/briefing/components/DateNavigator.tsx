@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { fmtDateLong } from '../../../shared/utils/formatting'
 
 interface DateNavigatorProps {
   date: string // YYYY-MM-DD
@@ -9,15 +10,6 @@ function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + 'T00:00:00')
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  })
 }
 
 function isToday(dateStr: string): boolean {
@@ -45,7 +37,7 @@ export default function DateNavigator({ date, onDateChange }: DateNavigatorProps
           className="text-xl sm:text-2xl font-light"
           style={{ fontFamily: 'var(--bf-font-display)', color: 'var(--bf-text)' }}
         >
-          {formatDate(date)}
+          {fmtDateLong(date)}
         </h1>
         {isToday(date) && (
           <span

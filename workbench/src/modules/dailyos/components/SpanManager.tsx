@@ -1,5 +1,6 @@
 import { CalendarRange, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { fmtDateRange } from '../../../shared/utils/formatting'
 import { useMethodStore } from '../stores/methodStore'
 import type { ActivitySpan, ActivitySpanCreate } from '../types'
 
@@ -14,19 +15,6 @@ const EMPTY_FORM: ActivitySpanCreate = {
   category: '',
   color: PRESET_COLORS[0],
   notes: '',
-}
-
-// ─── Helpers ───
-
-function formatDateRange(start: string, end: string): string {
-  const s = new Date(start + 'T00:00:00')
-  const e = new Date(end + 'T00:00:00')
-  const sm = s.getMonth() + 1
-  const sd = s.getDate()
-  const em = e.getMonth() + 1
-  const ed = e.getDate()
-  if (sm === em) return `${sm}/${sd} - ${ed}`
-  return `${sm}/${sd} - ${em}/${ed}`
 }
 
 // ─── Toggle Switch ───
@@ -117,7 +105,7 @@ function SpanCard({
           backgroundColor: 'var(--do-bg-surface)',
         }}
       >
-        {formatDateRange(span.start_date, span.end_date)}
+        {fmtDateRange(span.start_date, span.end_date)}
       </span>
 
       {/* Category badge */}

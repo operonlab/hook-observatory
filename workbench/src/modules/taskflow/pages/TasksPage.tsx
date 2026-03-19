@@ -3,14 +3,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { dashboardApi, taskApi } from '../api'
 import type { Task, TaskCreate, TaskPriority, TaskSource, TaskStatus, TaskUpdate } from '../types'
 import { PRIORITY_CONFIG, SOURCE_CONFIG, STATUS_CONFIG } from '../types'
+import { fmtDate } from '../../../shared/utils/formatting'
 
 // ─── Helpers ───
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', weekday: 'short' })
-}
 
 // ─── Status Badge ───
 
@@ -435,7 +430,7 @@ function TaskRow({ task, onTransition, onEdit, onDelete }: TaskRowProps) {
           {task.due_date && (
             <span className="text-[11px] ml-2" style={{ color: 'var(--tf-text-muted)' }}>
               <Clock size={10} className="inline mr-0.5" />
-              {formatDate(task.due_date)}
+              {fmtDate(task.due_date)}
             </span>
           )}
           {task.tags.length > 0 && (

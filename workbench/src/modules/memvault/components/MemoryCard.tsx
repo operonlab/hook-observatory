@@ -1,4 +1,5 @@
 import type { MemoryBlock } from '@/types'
+import { relativeTime } from '../../../shared/utils/time'
 import { BLOCK_TYPE_CONFIG } from '../types'
 
 interface MemoryCardProps {
@@ -6,17 +7,6 @@ interface MemoryCardProps {
   onClick?: () => void
   onDelete?: (id: string) => void
   compact?: boolean
-}
-
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins} 分鐘前`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours} 小時前`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days} 天前`
-  return `${Math.floor(days / 30)} 個月前`
 }
 
 function hexToRgba(cssVar: string, alpha: number): string {
