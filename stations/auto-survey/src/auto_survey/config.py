@@ -23,5 +23,8 @@ class Settings(BaseSettings):
     bark_device_key: str = "gx7KnK5f8iAKuqNLWzy5hP"
     bark_server: str = "http://localhost:8090"
 
+    line_community_name: str = "微光早餐會"
+    line_enabled: bool = True
+
 
 settings = Settings()
