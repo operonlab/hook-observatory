@@ -12,8 +12,8 @@ Results dicts should carry access_count and last_accessed_at for this
 stage to take effect (populated by services.py search queries).
 
 Reactive Protocol: Each stage is a ScoringOp implementing the Operator protocol.
-ScoringPipeline.apply() uses Pipeline.pipe() for composable execution with
-compile() validation for key dependency chains.
+ScoringPipeline.apply() is async and uses Pipeline.execute() for composable
+execution with compile() validation for key dependency chains.
 """
 
 import logging
@@ -24,6 +24,12 @@ from typing import Any
 
 from src.shared.access_tracker import compute_effective_half_life
 from src.shared.reactive import Pipeline
+from src.shared.scoring_stages import (
+    apply_length_normalization,
+    apply_min_score_filter,
+    apply_recency_boost,
+    cosine_similarity,
+)
 
 from .noise_filter import check_noise
 
@@ -119,16 +125,6 @@ class ScoringMetadata:
     output_count: int = 0
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors.
-
-    Delegates to shared scoring_stages.cosine_similarity.
-    """
-    from src.shared.scoring_stages import cosine_similarity
-
-    return cosine_similarity(a, b)
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # Scoring Operators — each implements the Operator protocol from reactive.py
 # ═══════════════════════════════════════════════════════════════════════════
@@ -138,9 +134,11 @@ class ScoringOp:
     """Base for scoring pipeline operators (Operator protocol).
 
     Wraps each stage with enable-check + try/except error isolation.
-    Provides both async __call__ (Protocol compliance) and sync
-    execute_stage() for ScoringPipeline's synchronous apply().
+    Subclasses that filter results can set _count_key to auto-track
+    before/after counts on ScoringMetadata (e.g., noise_filtered, mmr_deduped).
     """
+
+    _count_key: str | None = None
 
     def __init__(self, stage_name: str, config: ScoringConfig) -> None:
         self._stage_name = stage_name
@@ -158,23 +156,22 @@ class ScoringOp:
     def output_keys(self) -> tuple[str, ...]:
         return ("results",)
 
-    def execute_stage(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        """Sync execution with enable-check + error isolation."""
+    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Async execution with enable-check + error isolation."""
         meta: ScoringMetadata = ctx["meta"]
         if not self._config.stages_enabled.get(self._stage_name, True):
             meta.stages_skipped.append(self._stage_name)
             return ctx
         try:
+            before = len(ctx["results"]) if self._count_key else 0
             ctx["results"] = self.transform(ctx["results"], ctx)
             meta.stages_applied.append(self._stage_name)
+            if self._count_key:
+                setattr(meta, self._count_key, before - len(ctx["results"]))
         except Exception:
             logger.exception("Scoring stage '%s' failed, skipping", self._stage_name)
             meta.stages_skipped.append(self._stage_name)
         return ctx
-
-    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        """Async path (Operator Protocol compliance)."""
-        return self.execute_stage(ctx)
 
     def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         raise NotImplementedError
@@ -188,8 +185,6 @@ class RecencyOp(ScoringOp):
         return ("results", "now")
 
     def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
-        from src.shared.scoring_stages import apply_recency_boost
-
         return apply_recency_boost(
             results,
             half_life_days=self._config.recency_half_life,
@@ -247,8 +242,6 @@ class LengthNormOp(ScoringOp):
     """Stage 3: Length Normalization — penalize extreme content lengths."""
 
     def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
-        from src.shared.scoring_stages import apply_length_normalization
-
         return apply_length_normalization(
             results,
             anchor_length=self._config.length_anchor,
@@ -258,8 +251,12 @@ class LengthNormOp(ScoringOp):
 class TimeDecayOp(ScoringOp):
     """Stage 4: Time Decay — G3 Weibull + G6 access reinforcement."""
 
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return ("results", "now")
+
     def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
-        now = datetime.now(UTC)
+        now = ctx["now"]
         for r in results:
             created_at = r.get("created_at")
             if not created_at:
@@ -313,7 +310,7 @@ class SemanticBoostOp(ScoringOp):
             emb = r.get("embedding")
             if not emb:
                 continue
-            similarity = _cosine_similarity(emb, query_embedding)
+            similarity = cosine_similarity(emb, query_embedding)
             similarity = max(0.0, similarity)
             r["score"] *= 1.0 + self._config.semantic_boost * similarity
 
@@ -324,28 +321,13 @@ class MinScoreOp(ScoringOp):
     """Stage 5: Hard Min Score — remove results below threshold."""
 
     def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
-        from src.shared.scoring_stages import apply_min_score_filter
-
         return apply_min_score_filter(results, min_score=self._config.min_score)
 
 
 class NoiseFilterOp(ScoringOp):
     """Stage 6: Noise Filter — remove greeting/noise content."""
 
-    def execute_stage(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        meta: ScoringMetadata = ctx["meta"]
-        if not self._config.stages_enabled.get(self._stage_name, True):
-            meta.stages_skipped.append(self._stage_name)
-            return ctx
-        try:
-            before = len(ctx["results"])
-            ctx["results"] = self.transform(ctx["results"], ctx)
-            meta.stages_applied.append(self._stage_name)
-            meta.noise_filtered = before - len(ctx["results"])
-        except Exception:
-            logger.exception("Scoring stage '%s' failed, skipping", self._stage_name)
-            meta.stages_skipped.append(self._stage_name)
-        return ctx
+    _count_key = "noise_filtered"
 
     def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         clean = []
@@ -360,24 +342,11 @@ class NoiseFilterOp(ScoringOp):
 class MMROp(ScoringOp):
     """Stage 7: MMR Diversity — reduce redundant results."""
 
+    _count_key = "mmr_deduped"
+
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("results", "query_embedding")
-
-    def execute_stage(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        meta: ScoringMetadata = ctx["meta"]
-        if not self._config.stages_enabled.get(self._stage_name, True):
-            meta.stages_skipped.append(self._stage_name)
-            return ctx
-        try:
-            before = len(ctx["results"])
-            ctx["results"] = self.transform(ctx["results"], ctx)
-            meta.stages_applied.append(self._stage_name)
-            meta.mmr_deduped = before - len(ctx["results"])
-        except Exception:
-            logger.exception("Scoring stage '%s' failed, skipping", self._stage_name)
-            meta.stages_skipped.append(self._stage_name)
-        return ctx
 
     def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         query_embedding = ctx.get("query_embedding")
@@ -397,7 +366,7 @@ class MMROp(ScoringOp):
                 emb_j = results[j].get("embedding")
                 if not emb_j:
                     continue
-                sim = _cosine_similarity(emb_i, emb_j)
+                sim = cosine_similarity(emb_i, emb_j)
                 if sim > self._config.mmr_threshold:
                     results[j]["score"] *= 0.5
                     if results[j]["score"] < self._config.min_score:
@@ -407,13 +376,14 @@ class MMROp(ScoringOp):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ScoringPipeline — public API (unchanged)
+# ScoringPipeline — public API
 # ═══════════════════════════════════════════════════════════════════════════
 
 
 class ScoringPipeline:
     def __init__(self, config: ScoringConfig | None = None):
         self.config = config or ScoringConfig()
+        self._pipeline = self._build_pipeline()
 
     def _build_pipeline(self) -> Pipeline:
         """Build the reactive Pipeline with all 10 scoring operators."""
@@ -430,7 +400,7 @@ class ScoringPipeline:
             MMROp("mmr", self.config),
         )
 
-    def apply(
+    async def apply(
         self,
         results: list[dict],
         query_embedding: list[float] | None = None,
@@ -453,11 +423,7 @@ class ScoringPipeline:
             "query_embedding": query_embedding,
         }
 
-        pipeline = self._build_pipeline()
-
-        # Sync execution via execute_stage()
-        for op in pipeline:
-            ctx = op.execute_stage(ctx)
+        ctx = await self._pipeline.execute(ctx)
 
         # Sort by final score descending
         results = ctx["results"]
