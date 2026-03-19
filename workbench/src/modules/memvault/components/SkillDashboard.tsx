@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMemvaultStore } from '../stores'
-import type { SkillInvocation, SkillProficiency } from '../types'
+import type { SkillProfile } from '../types'
 import InfoTip from './InfoTip'
 
 const SKILL_DESCRIPTIONS: Record<string, string> = {
@@ -45,19 +45,14 @@ const SKILL_DESCRIPTIONS: Record<string, string> = {
   'sync-config': '設定同步：將 MCP、skill 等設定同步至 Gemini/Codex CLI。',
 }
 
-function hexToRgba(cssVar: string, alpha: number): string {
-  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
+const LEVEL_BADGE: Record<string, { label: string; color: string }> = {
+  novice: { label: '新手', color: 'var(--yellow)' },
+  proficient: { label: '熟練', color: 'var(--blue)' },
+  expert: { label: '專家', color: 'var(--green)' },
 }
 
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins} 分鐘前`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours} 小時前`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days} 天前`
-  return `${Math.floor(days / 30)} 個月前`
+function hexToRgba(cssVar: string, alpha: number): string {
+  return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
 }
 
 function rateColor(rate: number): string {
@@ -70,17 +65,14 @@ function SkillBar({
   skill,
   expanded,
   onToggle,
-  history,
-  onDeleteInvocation,
 }: {
-  skill: SkillProficiency
+  skill: SkillProfile
   expanded: boolean
   onToggle: () => void
-  history: SkillInvocation[]
-  onDeleteInvocation?: (id: string, skillName: string) => void
 }) {
   const barColor = rateColor(skill.success_rate)
-  const width = Math.max(skill.proficiency * 100, 2)
+  const width = Math.max(skill.success_rate * 100, 2)
+  const badge = LEVEL_BADGE[skill.proficiency_level] ?? LEVEL_BADGE.novice
 
   return (
     <div
@@ -108,15 +100,21 @@ function SkillBar({
           className="flex items-center gap-2 shrink-0 text-xs flex-wrap justify-end"
           style={{ color: 'var(--subtext0)' }}
         >
-          <span>{skill.invocation_count} 次</span>
+          <span>{skill.total_uses} 次</span>
           <span style={{ color: barColor }}>{Math.round(skill.success_rate * 100)}%</span>
-          {skill.last_invoked && (
-            <span className="hidden sm:inline">{relativeTime(skill.last_invoked)}</span>
-          )}
+          <span
+            className="rounded px-1.5 py-0.5 text-xs font-medium"
+            style={{
+              backgroundColor: hexToRgba(badge.color, 0.15),
+              color: badge.color,
+            }}
+          >
+            {badge.label}
+          </span>
         </div>
       </div>
 
-      {/* Proficiency bar */}
+      {/* Success rate bar */}
       <div
         className="h-2 w-full rounded-full overflow-hidden"
         style={{ backgroundColor: 'var(--surface0)' }}
@@ -130,103 +128,134 @@ function SkillBar({
         />
       </div>
 
-      {/* Mobile: last invoked time */}
-      {skill.last_invoked && (
-        <p className="sm:hidden mt-1.5 text-xs" style={{ color: 'var(--subtext1)' }}>
-          {relativeTime(skill.last_invoked)}
-        </p>
-      )}
-
-      {/* Expanded history */}
-      {expanded && history.length > 0 && (
-        <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: 'var(--surface0)' }}>
-          <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
-            調用歷史
-          </p>
-          {history.map((inv) => (
-            <div
-              key={inv.id}
-              className="rounded-lg border p-2 text-xs"
-              style={{
-                backgroundColor: 'var(--base)',
-                borderColor: 'var(--surface0)',
-              }}
-            >
-              {/* Row 1: outcome + time */}
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block h-2 w-2 rounded-full shrink-0"
-                    style={{
-                      backgroundColor:
-                        inv.outcome === 'success'
-                          ? 'var(--green)'
-                          : inv.outcome === 'failure'
-                            ? 'var(--red)'
-                            : 'var(--yellow)',
-                    }}
-                  />
-                  <span
-                    className="rounded px-1 py-0.5"
-                    style={{
-                      backgroundColor:
-                        inv.outcome === 'success'
-                          ? hexToRgba('var(--green)', 0.12)
-                          : inv.outcome === 'failure'
-                            ? hexToRgba('var(--red)', 0.12)
-                            : hexToRgba('var(--yellow)', 0.12),
-                      color:
-                        inv.outcome === 'success'
-                          ? 'var(--green)'
-                          : inv.outcome === 'failure'
-                            ? 'var(--red)'
-                            : 'var(--yellow)',
-                    }}
-                  >
-                    {inv.outcome}
-                  </span>
-                  {inv.duration_ms != null && (
-                    <span style={{ color: 'var(--subtext0)' }}>{inv.duration_ms}ms</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span style={{ color: 'var(--subtext1)' }}>{relativeTime(inv.invoked_at)}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (confirm('刪除此調用記錄？'))
-                        onDeleteInvocation?.(inv.id, skill.skill_name)
-                    }}
-                    className="rounded px-1.5 py-0.5 text-xs transition-colors"
-                    style={{ color: 'var(--red)' }}
-                    title="刪除"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              {/* Row 2: session ID */}
-              <span
-                className="block truncate cursor-pointer transition-colors"
-                style={{ color: 'var(--subtext0)' }}
-                title={`點擊複製完整 Session ID: ${inv.source_session}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  navigator.clipboard.writeText(inv.source_session)
-                  const el = e.currentTarget
-                  const orig = el.textContent
-                  el.textContent = '已複製!'
-                  el.style.color = 'var(--green)'
-                  setTimeout(() => {
-                    el.textContent = orig
-                    el.style.color = 'var(--subtext0)'
-                  }, 1200)
-                }}
-              >
-                {inv.source_session}
+      {/* Expanded profile details */}
+      {expanded && (
+        <div className="mt-3 pt-3 border-t space-y-2.5" style={{ borderColor: 'var(--surface0)' }}>
+          {/* Stats row */}
+          <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--subtext0)' }}>
+            <span>
+              近期使用：<strong style={{ color: 'var(--text)' }}>{skill.recent_uses}</strong>
+            </span>
+            {skill.avg_duration_ms != null && (
+              <span>
+                平均耗時：
+                <strong style={{ color: 'var(--text)' }}>
+                  {Math.round(skill.avg_duration_ms)}ms
+                </strong>
               </span>
+            )}
+            {skill.auto_rate != null && (
+              <span>
+                自動率：
+                <strong style={{ color: 'var(--text)' }}>
+                  {Math.round(skill.auto_rate * 100)}%
+                </strong>
+              </span>
+            )}
+            {skill.health_score != null && (
+              <span>
+                健康度：
+                <strong style={{ color: rateColor(skill.health_score) }}>
+                  {Math.round(skill.health_score * 100)}%
+                </strong>
+              </span>
+            )}
+          </div>
+
+          {/* Common patterns */}
+          {skill.common_patterns && skill.common_patterns.length > 0 && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
+                常見模式
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {skill.common_patterns.map((pattern) => (
+                  <span
+                    key={pattern}
+                    className="rounded px-2 py-0.5 text-xs"
+                    style={{
+                      backgroundColor: hexToRgba('var(--blue)', 0.12),
+                      color: 'var(--blue)',
+                    }}
+                  >
+                    {pattern}
+                  </span>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
+
+          {/* Learned preferences */}
+          {skill.learned_preferences && Object.keys(skill.learned_preferences).length > 0 && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
+                學習偏好
+              </p>
+              <div className="space-y-1">
+                {Object.entries(skill.learned_preferences).map(([key, value]) => (
+                  <div
+                    key={key}
+                    className="rounded-lg border p-2 text-xs flex items-center gap-2"
+                    style={{
+                      backgroundColor: 'var(--base)',
+                      borderColor: 'var(--surface0)',
+                      color: 'var(--subtext0)',
+                    }}
+                  >
+                    <span className="font-medium" style={{ color: 'var(--text)' }}>
+                      {key}
+                    </span>
+                    <span>{String(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Evolution notes */}
+          {skill.evolution_notes && skill.evolution_notes.length > 0 && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--subtext0)' }}>
+                演化紀錄
+              </p>
+              <ul
+                className="space-y-0.5 text-xs list-disc pl-4"
+                style={{ color: 'var(--subtext0)' }}
+              >
+                {skill.evolution_notes.map((note, i) => (
+                  <li key={i}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Pitfalls */}
+          {skill.pitfalls && skill.pitfalls.length > 0 && (
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--peach)' }}>
+                注意事項
+              </p>
+              <ul
+                className="space-y-0.5 text-xs list-disc pl-4"
+                style={{ color: 'var(--subtext0)' }}
+              >
+                {skill.pitfalls.map((pitfall, i) => (
+                  <li key={i}>
+                    {Object.entries(pitfall)
+                      .map(([k, v]) => `${k}: ${String(v)}`)
+                      .join(', ')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Last synced */}
+          {skill.last_synced_at && (
+            <p className="text-xs" style={{ color: 'var(--subtext1)' }}>
+              最後同步：{new Date(skill.last_synced_at).toLocaleString('zh-TW')}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -234,33 +263,21 @@ function SkillBar({
 }
 
 export default function SkillDashboard() {
-  const {
-    kg_skills,
-    kg_skillHistory,
-    kg_loading,
-    fetchSkillProficiency,
-    fetchSkillHistory,
-    deleteSkillInvocation,
-  } = useMemvaultStore()
+  const { kg_skills, kg_loading, fetchSkillProfiles } = useMemvaultStore()
 
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
 
   const isStale = useMemvaultStore((s) => s.isStale)
 
   useEffect(() => {
-    if (isStale('kg_skills')) fetchSkillProficiency()
-  }, [fetchSkillProficiency, isStale])
+    if (isStale('kg_skills')) fetchSkillProfiles()
+  }, [fetchSkillProfiles, isStale])
 
   const handleToggle = (name: string) => {
-    if (expandedSkill === name) {
-      setExpandedSkill(null)
-    } else {
-      setExpandedSkill(name)
-      fetchSkillHistory(name)
-    }
+    setExpandedSkill(expandedSkill === name ? null : name)
   }
 
-  const sorted = [...kg_skills].sort((a, b) => b.proficiency - a.proficiency)
+  const sorted = [...kg_skills].sort((a, b) => b.total_uses - a.total_uses)
 
   return (
     <div>
@@ -270,11 +287,11 @@ export default function SkillDashboard() {
           style={{ backgroundColor: 'var(--green)' }}
         />
         <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-          技能熟練度
+          技能概況
         </h3>
         <InfoTip
           text={
-            '熟練度 = 調用次數 × 成功率 × 時效因子\n時效因子：90 天內 1.0→0.1 線性衰減\n百分比 = 成功率，長條 = 熟練度分數'
+            '長條 = 成功率，徽章 = 熟練等級（新手/熟練/專家）\n展開可查看常見模式、學習偏好、演化紀錄'
           }
         />
         <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
@@ -295,10 +312,10 @@ export default function SkillDashboard() {
           style={{ backgroundColor: 'var(--mantle)', borderColor: 'var(--surface0)' }}
         >
           <p className="text-sm" style={{ color: 'var(--subtext0)' }}>
-            尚無技能調用記錄
+            尚無技能資料
           </p>
           <p className="text-xs text-center px-4" style={{ color: 'var(--subtext1)' }}>
-            技能調用數據將在 Skill 使用後自動累積
+            技能概況將在 Skill 使用後由系統自動彙整
           </p>
         </div>
       ) : (
@@ -309,8 +326,6 @@ export default function SkillDashboard() {
               skill={skill}
               expanded={expandedSkill === skill.skill_name}
               onToggle={() => handleToggle(skill.skill_name)}
-              history={expandedSkill === skill.skill_name ? kg_skillHistory : []}
-              onDeleteInvocation={deleteSkillInvocation}
             />
           ))}
         </div>

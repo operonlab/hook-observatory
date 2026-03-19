@@ -136,38 +136,6 @@ class AttitudeEvolveResult(BaseModel):
     previous_id: str | None = None  # for UPDATE
 
 
-# ======================== Skill ========================
-
-
-class SkillInvocationCreate(BaseModel):
-    skill_name: str = Field(..., max_length=200)
-    source_session: str = Field(..., max_length=64)
-    cwd: str | None = Field(default=None, max_length=500)
-    invoked_at: datetime
-    outcome: str = Field(default="unknown")
-    duration_ms: int | None = None
-
-
-class SkillInvocationResponse(SpaceScopedResponse):
-    skill_name: str
-    source_session: str
-    cwd: str | None = None
-    invoked_at: datetime
-    outcome: str = "unknown"
-    duration_ms: int | None = None
-
-
-class SkillProficiencyResponse(BaseModel):
-    """Aggregated skill proficiency — computed from invocations, NOT a DB table."""
-
-    skill_name: str
-    invocation_count: int = 0
-    success_count: int = 0
-    success_rate: float = 0.0
-    last_invoked: datetime | None = None
-    proficiency: float = 0.0  # weighted score
-
-
 # ======================== SkillProfile ========================
 
 

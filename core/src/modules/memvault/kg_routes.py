@@ -30,9 +30,6 @@ from .kg_schemas import (
     EntityMergeResult,
     EntityResolutionStats,
     GraphTraversalResult,
-    SkillInvocationCreate,
-    SkillInvocationResponse,
-    SkillProficiencyResponse,
     SkillProfileResponse,
     SkillProfileUpsert,
     TripleBatchCreate,
@@ -48,7 +45,6 @@ from .kg_services import (
     confidence_decay_service,
     graph_traversal_service,
     skill_profile_service,
-    skill_tracking_service,
     triple_service,
 )
 
@@ -354,49 +350,6 @@ async def update_attitude(
     await db.commit()
     await db.refresh(instance)
     return attitude_service.to_response(instance)
-
-
-# ======================== Skill Tracking ========================
-
-
-@router.post("/skills/invoke", response_model=SkillInvocationResponse, status_code=201)
-async def record_skill_invocation(
-    body: SkillInvocationCreate,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    instance = await skill_tracking_service.record_invocation(db, space_id, body)
-    await db.commit()
-    await db.refresh(instance)
-    return skill_tracking_service.to_response(instance)
-
-
-@router.get("/skills/proficiency", response_model=list[SkillProficiencyResponse])
-async def get_proficiency(
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    return await skill_tracking_service.get_proficiency(db, space_id)
-
-
-@router.get("/skills/{skill_name}/history", response_model=list[SkillInvocationResponse])
-async def skill_history(
-    skill_name: str,
-    space_id: str = Query("default"),
-    limit: int = Query(20),
-    db: AsyncSession = Depends(get_db),
-):
-    return await skill_tracking_service.get_skill_history(db, space_id, skill_name, limit=limit)
-
-
-@router.delete("/skills/invocations/{invocation_id}", status_code=204)
-async def delete_skill_invocation(
-    invocation_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    await skill_tracking_service.delete_by_id(db, invocation_id)
-    await db.commit()
-    return None
 
 
 # ======================== Skill Profiles ========================
@@ -884,9 +837,7 @@ async def get_knowledge_gaps(
 
     Returns queries with INCORRECT verdict that appeared 2+ times in the period.
     """
-    return await interest_profile_service.get_knowledge_gaps(
-        db, space_id, days=days, limit=limit
-    )
+    return await interest_profile_service.get_knowledge_gaps(db, space_id, days=days, limit=limit)
 
 
 @router.get("/insights", status_code=200)

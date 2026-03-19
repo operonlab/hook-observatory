@@ -78,13 +78,16 @@ class CurateResult:
 
 @dataclass
 class GRCConfig:
-    """Safety constants for curation. Modules can override defaults."""
+    """Safety constants for curation and reflection. Modules can override defaults."""
 
     max_actions_per_run: int = 50
     min_item_age_days: int = 30
     min_access_for_protection: int = 1
     cooldown_hours: int = 24
     confidence_threshold: float = 0.15
+    max_insights: int = 20
+    max_corrections: int = 10
+    max_anomalies: int = 10
 
 
 # ─── Protocols ────────────────────────────────────────────────────────

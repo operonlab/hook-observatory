@@ -120,27 +120,24 @@ export interface AttitudeFact {
   previous_version: string | null
 }
 
-export interface SkillProficiency {
-  skill_name: string
-  invocation_count: number
-  success_count: number
-  success_rate: number
-  last_invoked: string | null
-  proficiency: number
-}
-
-export interface SkillInvocation {
+export interface SkillProfile {
   id: string
   space_id: string
-  created_by: string | null
   created_at: string
   updated_at: string
   skill_name: string
-  source_session: string
-  cwd: string | null
-  invoked_at: string
-  outcome: string
-  duration_ms: number | null
+  total_uses: number
+  recent_uses: number
+  success_rate: number
+  avg_duration_ms: number | null
+  auto_rate: number | null
+  common_patterns: string[] | null
+  learned_preferences: Record<string, unknown> | null
+  pitfalls: Array<Record<string, unknown>> | null
+  proficiency_level: string // "novice" | "proficient" | "expert"
+  health_score: number | null
+  evolution_notes: string[] | null
+  last_synced_at: string | null
 }
 
 export interface CascadeRecallResult {

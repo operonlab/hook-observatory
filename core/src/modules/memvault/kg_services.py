@@ -8,7 +8,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,6 @@ from .kg_models import (
     Community,
     CommunitySummary,
     CommunityTriple,
-    SkillInvocation,
     SkillProfile,
     Triple,
 )
@@ -41,9 +40,6 @@ from .kg_schemas import (
     GraphEdge,
     GraphNode,
     GraphTraversalResult,
-    SkillInvocationCreate,
-    SkillInvocationResponse,
-    SkillProficiencyResponse,
     SkillProfileResponse,
     SkillProfileUpsert,
     TripleBatchCreate,
@@ -1176,158 +1172,6 @@ class AttitudeService:
         return instance
 
 
-# ======================== SkillTrackingService ========================
-
-
-class SkillTrackingService:
-    """Record and aggregate skill invocations (standalone)."""
-
-    def to_response(self, instance: SkillInvocation) -> SkillInvocationResponse:
-        """Convert ORM SkillInvocation to SkillInvocationResponse."""
-        return SkillInvocationResponse(
-            id=instance.id,
-            space_id=instance.space_id,
-            created_by=instance.created_by,
-            created_at=instance.created_at,
-            updated_at=instance.updated_at,
-            skill_name=instance.skill_name,
-            source_session=instance.source_session,
-            cwd=instance.cwd,
-            invoked_at=instance.invoked_at,
-            outcome=instance.outcome,
-            duration_ms=instance.duration_ms,
-        )
-
-    async def record_invocation(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        data: SkillInvocationCreate,
-    ) -> SkillInvocation:
-        """Record a skill invocation, skipping duplicates gracefully."""
-        invocation = SkillInvocation(
-            space_id=space_id,
-            skill_name=data.skill_name,
-            source_session=data.source_session,
-            cwd=data.cwd,
-            invoked_at=data.invoked_at,
-            outcome=data.outcome,
-            duration_ms=data.duration_ms,
-        )
-        db.add(invocation)
-        try:
-            await db.flush()
-        except IntegrityError:
-            await db.rollback()
-            logger.debug(
-                "Skipping duplicate skill invocation: %s (session=%s, at=%s)",
-                data.skill_name,
-                data.source_session,
-                data.invoked_at,
-            )
-            # Return existing record
-            q = select(SkillInvocation).where(
-                SkillInvocation.space_id == space_id,
-                SkillInvocation.skill_name == data.skill_name,
-                SkillInvocation.source_session == data.source_session,
-                SkillInvocation.invoked_at == data.invoked_at,
-            )
-            invocation = (await db.execute(q)).scalar_one()
-
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=MemvaultEvents.SKILL_INVOKED,
-                data={
-                    "space_id": space_id,
-                    "skill_name": data.skill_name,
-                    "outcome": data.outcome,
-                    "source_session": data.source_session,
-                },
-                source="memvault",
-            )
-        )
-        return invocation
-
-    async def get_proficiency(
-        self, db: AsyncSession, space_id: str
-    ) -> list[SkillProficiencyResponse]:
-        """Aggregate skill proficiency from invocation records.
-
-        Proficiency = invocation_count * success_rate * recency_factor
-        where recency_factor = max(0.1, 1.0 - days_since_last / 90).
-        """
-        q = (
-            select(
-                SkillInvocation.skill_name,
-                func.count().label("invocation_count"),
-                func.sum(
-                    case(
-                        (SkillInvocation.outcome == "success", 1),
-                        else_=0,
-                    )
-                ).label("success_count"),
-                func.max(SkillInvocation.invoked_at).label("last_invoked"),
-            )
-            .where(SkillInvocation.space_id == space_id)
-            .group_by(SkillInvocation.skill_name)
-        )
-        rows = (await db.execute(q)).all()
-
-        now = datetime.now(UTC)
-        results: list[SkillProficiencyResponse] = []
-        for row in rows:
-            invocation_count: int = row.invocation_count
-            success_count: int = row.success_count or 0
-            last_invoked = row.last_invoked
-            success_rate = success_count / invocation_count if invocation_count > 0 else 0.0
-
-            days_since = (now - last_invoked).days if last_invoked else 90
-            recency_factor = max(0.1, 1.0 - days_since / 90)
-            proficiency = round(invocation_count * success_rate * recency_factor, 4)
-
-            results.append(
-                SkillProficiencyResponse(
-                    skill_name=row.skill_name,
-                    invocation_count=invocation_count,
-                    success_count=success_count,
-                    success_rate=round(success_rate, 4),
-                    last_invoked=last_invoked,
-                    proficiency=proficiency,
-                )
-            )
-
-        # Sort by proficiency descending
-        results.sort(key=lambda r: r.proficiency, reverse=True)
-        return results
-
-    async def get_skill_history(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        skill_name: str,
-        limit: int = 20,
-    ) -> list[SkillInvocationResponse]:
-        """Return recent invocations for a specific skill, newest first."""
-        q = (
-            select(SkillInvocation)
-            .where(
-                SkillInvocation.space_id == space_id,
-                SkillInvocation.skill_name == skill_name,
-            )
-            .order_by(SkillInvocation.invoked_at.desc())
-            .limit(limit)
-        )
-        rows = (await db.execute(q)).scalars().all()
-        return [self.to_response(r) for r in rows]
-
-    async def delete_by_id(self, db: AsyncSession, id: str) -> None:
-        result = await db.execute(select(SkillInvocation).where(SkillInvocation.id == id))
-        instance = result.scalar_one_or_none()
-        if not instance:
-            raise NotFoundError("Skill invocation not found", code="memvault.invocation_not_found")
-        await db.delete(instance)
-
-
 # ======================== CascadeRecallService ========================
 
 
@@ -1486,9 +1330,7 @@ class CascadeRecallService:
             bg_tasks.append(
                 asyncio.ensure_future(self._record_implicit_feedback(space_id, query, result))
             )
-        bg_tasks.append(
-            asyncio.ensure_future(self._record_query_journal(space_id, query, result))
-        )
+        bg_tasks.append(asyncio.ensure_future(self._record_query_journal(space_id, query, result)))
 
         # --- Closed-Loop: Rerank by access count ---
         result.triples = self._rerank_by_access(result.triples)
@@ -1726,8 +1568,10 @@ class CascadeRecallService:
                     top_ids.append(c.id)
 
             total_results = (
-                len(result.triples) + len(result.communities)
-                + len(result.summaries) + len(result.blocks)
+                len(result.triples)
+                + len(result.communities)
+                + len(result.summaries)
+                + len(result.blocks)
             )
 
             async with async_session_factory() as db:
@@ -1930,9 +1774,7 @@ class SkillProfileService:
         await db.flush()
         return profile
 
-    async def get_all(
-        self, db: AsyncSession, space_id: str
-    ) -> list[SkillProfileResponse]:
+    async def get_all(self, db: AsyncSession, space_id: str) -> list[SkillProfileResponse]:
         q = (
             select(SkillProfile)
             .where(SkillProfile.space_id == space_id)
@@ -1960,7 +1802,6 @@ triple_service = TripleService()
 community_service = CommunityService()
 community_summary_service = CommunitySummaryService()
 attitude_service = AttitudeService()
-skill_tracking_service = SkillTrackingService()
 skill_profile_service = SkillProfileService()
 cascade_recall_service = CascadeRecallService()
 confidence_decay_service = ConfidenceDecayService()

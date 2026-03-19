@@ -6,7 +6,7 @@ Knowledge Graph layers (GraphRAG / HiRAG inspired):
   L1 — Community        : Leiden graph communities at multiple resolution levels
   L2 — CommunitySummary : pre-generated LLM summaries per community
   Attitude Layer        — AttitudeFact : versioned attitude/belief facts
-  Skill Layer           — SkillInvocation : per-session skill usage records
+  Skill Layer           — SkillProfile : per-skill proficiency profiles (synced from Anvil)
 
 References: GraphRAG (2404.16130), HiRAG (2503.10150), LeanRAG (2508.10391)
 All tables live in the `memvault` PostgreSQL schema.
@@ -250,42 +250,9 @@ class AttitudeFact(SpaceScopedModel):
 
 
 # ---------------------------------------------------------------------------
-# Skill Layer — SkillInvocation
-# ---------------------------------------------------------------------------
-
-
-class SkillInvocation(SpaceScopedModel):
-    """A record of a single skill invocation within a session."""
-
-    __tablename__ = "skill_invocations"
-    __table_args__ = (
-        Index("idx_skill_invocations_skill_name", "skill_name"),
-        Index("idx_skill_invocations_session", "source_session"),
-        Index(
-            "idx_skill_invocations_recent",
-            "created_at",
-            postgresql_where=text("created_at > now() - interval '30 days'"),
-        ),
-        UniqueConstraint(
-            "space_id",
-            "skill_name",
-            "source_session",
-            "invoked_at",
-            name="uq_skill_invocations_space_skill_session_at",
-        ),
-        {"schema": SCHEMA},
-    )
-
-    skill_name: Mapped[str] = mapped_column(String(200))
-    source_session: Mapped[str] = mapped_column(String(64))
-    cwd: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    invoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    outcome: Mapped[str] = mapped_column(String(20), server_default=text("'unknown'"))
-    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-
-# ---------------------------------------------------------------------------
 # Skill Layer — SkillProfile (KAS Skill dimension L1/L2/L3)
+# NOTE: SkillInvocation table removed — Anvil station is now the sole source
+# of raw skill invocation telemetry. SkillProfile syncs from Anvil daily.
 # ---------------------------------------------------------------------------
 
 

@@ -6,8 +6,7 @@ import type {
   Community,
   CommunityDetail,
   CommunitySummary,
-  SkillInvocation,
-  SkillProficiency,
+  SkillProfile,
   Triple,
 } from '../types'
 
@@ -65,11 +64,7 @@ export const kgApi = {
 
   // ── Skills ──
 
-  skillProficiency: (): Promise<SkillProficiency[]> =>
-    request<SkillProficiency[]>(`${BASE}/skills/proficiency`),
-
-  skillHistory: (name: string, limit = 20): Promise<SkillInvocation[]> =>
-    request<SkillInvocation[]>(`${BASE}/skills/${encodeURIComponent(name)}/history?limit=${limit}`),
+  skillProfiles: (): Promise<SkillProfile[]> => request<SkillProfile[]>(`${BASE}/skill-profiles`),
 
   // ── CRUD: Triples ──
 
@@ -100,11 +95,6 @@ export const kgApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
-
-  // ── CRUD: Skill Invocations ──
-
-  deleteSkillInvocation: (id: string): Promise<void> =>
-    request<void>(`${BASE}/skills/invocations/${id}`, { method: 'DELETE' }),
 
   // ── Cascade Recall ──
 
