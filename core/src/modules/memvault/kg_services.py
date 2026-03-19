@@ -1079,6 +1079,75 @@ class AttitudeService:
             previous_id=None,
         )
 
+    async def semantic_search(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query: str,
+        top_k: int = 3,
+    ) -> list[dict]:
+        """Semantic search on current attitude facts — Qdrant primary, ILIKE fallback.
+
+        Returns dicts with fact, category, confidence, score for autoRecall injection.
+        """
+        query_embedding = await get_embedding(query)
+
+        if query_embedding:
+            from src.shared.qdrant_client import is_available as qdrant_available
+            from src.shared.qdrant_search import vector_search
+            from src.shared.search_types import SearchConfig
+
+            if await qdrant_available():
+                config = SearchConfig(
+                    top_k=top_k,
+                    score_threshold=0.4,
+                    service_ids=["memvault-attitude"],
+                )
+                results = await vector_search(query_embedding, space_id, config)
+                if results:
+                    fact_ids = [r.entity_id for r in results]
+                    scores = {r.entity_id: r.score for r in results}
+                    q = select(AttitudeFact).where(
+                        AttitudeFact.id.in_(fact_ids),
+                        AttitudeFact.superseded_by.is_(None),
+                        AttitudeFact.deleted_at.is_(None),
+                    )
+                    rows = (await db.execute(q)).scalars().all()
+                    id_order = {eid: i for i, eid in enumerate(fact_ids)}
+                    rows = sorted(rows, key=lambda r: id_order.get(str(r.id), 999))
+                    return [
+                        {
+                            "fact": r.fact,
+                            "category": r.category,
+                            "confidence": r.confidence,
+                            "score": round(scores.get(str(r.id), 0.0), 3),
+                        }
+                        for r in rows
+                    ]
+
+        # ILIKE fallback when embedding service unavailable
+        q = (
+            select(AttitudeFact)
+            .where(
+                AttitudeFact.space_id == space_id,
+                AttitudeFact.superseded_by.is_(None),
+                AttitudeFact.deleted_at.is_(None),
+                AttitudeFact.fact.ilike(f"%{query}%"),
+            )
+            .order_by(AttitudeFact.confidence.desc())
+            .limit(top_k)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [
+            {
+                "fact": r.fact,
+                "category": r.category,
+                "confidence": r.confidence,
+                "score": 0.0,
+            }
+            for r in rows
+        ]
+
     async def get_history(self, db: AsyncSession, fact_id: str) -> list[AttitudeFactResponse]:
         """Trace the full evolution history of an attitude fact.
 
