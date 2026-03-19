@@ -22,8 +22,8 @@ import type {
   TransactionUpdate,
   Wallet,
   WalletCreate,
-  WalletUpdate,
   WalletSnapshot,
+  WalletUpdate,
 } from '../types'
 
 // ─── Icon Upload ───
@@ -104,17 +104,17 @@ export const walletApi = {
   // Snapshot APIs
   snapshots: (walletId: string, page = 1, pageSize = 20) =>
     request<PaginatedResponse<WalletSnapshot>>(
-      `/finance/wallets/${walletId}/snapshots?page=${page}&page_size=${pageSize}`,
+      `/finance/wallets/${walletId}/snapshots${buildParams({ page, page_size: pageSize })}`,
     ),
 
   snapshotDiff: (walletId: string, fromV: number, toV: number) =>
     request<SnapshotDiff>(
-      `/finance/wallets/${walletId}/snapshots/diff?from_v=${fromV}&to_v=${toV}`,
+      `/finance/wallets/${walletId}/snapshots/diff${buildParams({ from_v: fromV, to_v: toV })}`,
     ),
 
   gapAnalysis: (walletId: string, fromV: number, toV: number) =>
     request<GapAnalysis>(
-      `/finance/wallets/${walletId}/snapshots/gap-analysis?from_v=${fromV}&to_v=${toV}`,
+      `/finance/wallets/${walletId}/snapshots/gap-analysis${buildParams({ from_v: fromV, to_v: toV })}`,
     ),
 
   globalSnapshot: () =>
@@ -122,7 +122,7 @@ export const walletApi = {
 
   globalSnapshots: (page = 1, pageSize = 20) =>
     request<PaginatedResponse<GlobalSnapshotSummary>>(
-      `/finance/wallets/global-snapshots?page=${page}&page_size=${pageSize}`,
+      `/finance/wallets/global-snapshots${buildParams({ page, page_size: pageSize })}`,
     ),
 }
 

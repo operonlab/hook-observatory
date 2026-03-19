@@ -8,14 +8,17 @@ export default function WalletsPage() {
   const [showForm, setShowForm] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [snapshotting, setSnapshotting] = useState(false)
+  const [snapshotMsg, setSnapshotMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   const handleGlobalSnapshot = async () => {
     setSnapshotting(true)
+    setSnapshotMsg(null)
     try {
-      await walletApi.globalSnapshot()
+      const res = await walletApi.globalSnapshot()
+      setSnapshotMsg({ ok: true, text: `快照完成 — ${res.snapshot_count} 個錢包` })
       setRefreshKey((k) => k + 1)
     } catch {
-      // silent
+      setSnapshotMsg({ ok: false, text: '快照失敗，請稍後再試' })
     } finally {
       setSnapshotting(false)
     }
@@ -43,6 +46,18 @@ export default function WalletsPage() {
           {snapshotting ? '存檔中...' : '全域快照'}
         </button>
       </div>
+
+      {snapshotMsg && (
+        <div
+          className="text-xs px-3 py-1.5 rounded-md"
+          style={{
+            backgroundColor: snapshotMsg.ok ? 'rgba(166,227,161,0.1)' : 'rgba(243,139,168,0.1)',
+            color: snapshotMsg.ok ? 'var(--fn-income)' : 'var(--fn-expense)',
+          }}
+        >
+          {snapshotMsg.text}
+        </div>
+      )}
 
       <WalletList
         key={refreshKey}

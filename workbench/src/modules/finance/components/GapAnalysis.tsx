@@ -1,9 +1,10 @@
 import { AlertTriangle, CheckCircle } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { walletApi } from '../api'
 import type { GapAnalysis as GapAnalysisType } from '../types'
 import { fmtAmt } from '../types'
+import VersionRangeSelector from './VersionRangeSelector'
 
 interface Props {
   walletId: string
@@ -13,91 +14,42 @@ interface Props {
 
 export default function GapAnalysisPanel({ walletId, initialFrom, initialTo }: Props) {
   const navigate = useNavigate()
-  const [fromV, setFromV] = useState(initialFrom ?? 1)
-  const [toV, setToV] = useState(initialTo ?? 2)
   const [analysis, setAnalysis] = useState<GapAnalysisType | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const fetchAnalysis = () => {
-    if (fromV >= toV) {
-      setError('起始版本必須小於目標版本')
-      return
-    }
-    setError('')
-    setLoading(true)
-    walletApi
-      .gapAnalysis(walletId, fromV, toV)
-      .then(setAnalysis)
-      .catch((e) => setError(e.message || '載入失敗'))
-      .finally(() => setLoading(false))
-  }
+  const fetchAnalysis = useCallback(
+    (fromV: number, toV: number) => {
+      if (fromV >= toV) {
+        setError('起始版本必須小於目標版本')
+        return
+      }
+      setError('')
+      setLoading(true)
+      walletApi
+        .gapAnalysis(walletId, fromV, toV)
+        .then(setAnalysis)
+        .catch((e) => setError(e.message || '載入失敗'))
+        .finally(() => setLoading(false))
+    },
+    [walletId],
+  )
 
   useEffect(() => {
-    if (initialFrom && initialTo) fetchAnalysis()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    if (initialFrom && initialTo) fetchAnalysis(initialFrom, initialTo)
+  }, [initialFrom, initialTo, fetchAnalysis])
 
   return (
     <div className="space-y-4">
-      {/* Version selector */}
-      <div className="flex items-end gap-3">
-        <div>
-          <label className="text-[11px] block mb-1" style={{ color: 'var(--fn-text-muted)' }}>
-            從版本
-          </label>
-          <input
-            type="number"
-            min={1}
-            value={fromV}
-            onChange={(e) => setFromV(Number(e.target.value))}
-            className="w-20 px-2 py-1.5 text-xs rounded-md"
-            style={{
-              backgroundColor: 'var(--fn-bg-surface)',
-              border: '1px solid var(--fn-border)',
-              color: 'var(--fn-text)',
-            }}
-          />
-        </div>
-        <span className="text-xs pb-2" style={{ color: 'var(--fn-text-muted)' }}>
-          →
-        </span>
-        <div>
-          <label className="text-[11px] block mb-1" style={{ color: 'var(--fn-text-muted)' }}>
-            到版本
-          </label>
-          <input
-            type="number"
-            min={2}
-            value={toV}
-            onChange={(e) => setToV(Number(e.target.value))}
-            className="w-20 px-2 py-1.5 text-xs rounded-md"
-            style={{
-              backgroundColor: 'var(--fn-bg-surface)',
-              border: '1px solid var(--fn-border)',
-              color: 'var(--fn-text)',
-            }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={fetchAnalysis}
-          disabled={loading}
-          className="px-3 py-1.5 text-xs rounded-md transition-colors"
-          style={{
-            backgroundColor: 'var(--fn-accent)',
-            color: '#fff',
-            opacity: loading ? 0.6 : 1,
-          }}
-        >
-          {loading ? '分析中...' : '夾擊對帳'}
-        </button>
-      </div>
-
-      {error && (
-        <div className="text-xs" style={{ color: 'var(--fn-expense)' }}>
-          {error}
-        </div>
-      )}
+      <VersionRangeSelector
+        initialFrom={initialFrom}
+        initialTo={initialTo}
+        submitLabel="夾擊對帳"
+        loadingLabel="分析中..."
+        loading={loading}
+        error={error}
+        onSubmit={fetchAnalysis}
+      />
 
       {analysis && (
         <div className="space-y-4">
@@ -155,7 +107,8 @@ export default function GapAnalysisPanel({ walletId, initialFrom, initialTo }: P
               </div>
               {analysis.gap_pct !== 0 && (
                 <div className="text-[10px] mt-1" style={{ color: 'var(--fn-text-muted)' }}>
-                  {analysis.gap_pct > 0 ? '+' : ''}{analysis.gap_pct.toFixed(1)}%
+                  {analysis.gap_pct > 0 ? '+' : ''}
+                  {analysis.gap_pct.toFixed(1)}%
                 </div>
               )}
             </div>
@@ -212,10 +165,7 @@ export default function GapAnalysisPanel({ walletId, initialFrom, initialTo }: P
               </div>
               <div
                 className="rounded-lg border divide-y"
-                style={{
-                  borderColor: 'var(--fn-border)',
-                  divideColor: 'var(--fn-border)',
-                }}
+                style={{ borderColor: 'var(--fn-border)' }}
               >
                 {analysis.transactions.slice(0, 20).map((txn) => (
                   <div
