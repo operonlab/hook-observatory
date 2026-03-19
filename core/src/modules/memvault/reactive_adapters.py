@@ -5,7 +5,7 @@ Six concepts:
   Observer     -> FunctionObserver (shared/reactive.py)
   Scheduler    -> EmbeddingScheduler (semaphore-gated concurrency)
   Observable   -> EventChannel.pipe() (_PipedChannel)
-  Operator     -> NoiseGateOp + TagCooccurrenceOp
+  Operator     -> NoiseGateOp + TagCooccurrenceOp + BlockFetchOp
   Subscription -> reactive.py Subscription (from channel.subscribe())
 """
 
@@ -17,10 +17,12 @@ from collections.abc import Callable
 from typing import Any
 
 from src.events.bus import EventBus, event_bus
-from src.events.types import MemvaultEvents
+from src.events.types import CaptureEvents, MemvaultEvents
 from src.shared.database import async_session_factory
 from src.shared.reactive import (
+    ConditionalOp,
     FunctionObserver,
+    Pipeline,
     Subscription,
 )
 
@@ -115,8 +117,70 @@ class TagCooccurrenceOp:
         return ctx
 
 
+class BlockFetchOp:
+    """Operator: promoted_id → tags, space_id, source_session, block_id (DB fetch)."""
+
+    name = "block_fetch"
+    input_keys = ("promoted_id",)
+    output_keys = ("tags", "space_id", "source_session", "block_id")
+
+    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        promoted_id = ctx.get("promoted_id")
+        if not promoted_id:
+            return ctx
+        async with async_session_factory() as db:
+            from .services import memory_block_service
+
+            block = await memory_block_service.get(db, promoted_id)
+            if block:
+                ctx["tags"] = block.tags or []
+                ctx["space_id"] = block.space_id
+                ctx["source_session"] = block.source_session or f"block:{block.id}"
+                ctx["block_id"] = str(block.id)
+            # block 不存在 → tags 不注入 → TagCooccurrenceOp 產生空 triples → observer skip
+        return ctx
+
+
 # ═══════════════════════════════════════════════════════════════════════════
-# 六概念合流 Factory
+# Shared KG write logic
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def _write_triples_to_kg(
+    triple_dicts: list[dict],
+    space_id: str,
+    source_session: str,
+    log_prefix: str = "reactive",
+) -> None:
+    """共用 KG triple 批量寫入。被兩個 flow 的 observer 呼叫。"""
+    try:
+        async with async_session_factory() as db:
+            from .kg_schemas import TripleBatchCreate, TripleCreate
+            from .kg_services import triple_service
+
+            batch = TripleBatchCreate(
+                session_id=source_session,
+                triples=[TripleCreate(**t) for t in triple_dicts],
+            )
+            result = await triple_service.batch_ingest(db, space_id, batch)
+            await db.commit()
+            logger.info(
+                f"{log_prefix}.block_to_kg",
+                extra={
+                    "source_session": source_session,
+                    "triples_created": result.get("ingested", 0),
+                },
+            )
+    except Exception:
+        logger.warning(
+            f"{log_prefix}.block_to_kg_failed",
+            extra={"source_session": source_session},
+            exc_info=True,
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Flow 1: MEMORY_STORED → KG (existing)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -141,9 +205,15 @@ def wire_memory_creation_flow(
     # Channel + pipe
     piped = _bus.channel(MemvaultEvents.MEMORY_STORED).pipe(noise_gate, tag_cooccurrence)
 
-    # Observer — writes KG triples (moved from events.py on_memory_stored_extract_triples)
+    # compile() pre-flight
+    check_pipe = Pipeline(name="memory_creation").pipe(noise_gate, tag_cooccurrence)
+    initial = {"content", "tags", "block_id", "space_id", "source_session"}
+    missing = check_pipe.compile(initial_keys=initial)
+    if missing:
+        logger.error("memory creation flow compile failed: %s", missing)
+
+    # Observer — writes KG triples
     async def _kg_ingest_handler(ctx: dict[str, Any]) -> None:
-        """Process piped context: skip noise, write co-occurrence triples to KG."""
         if ctx.get("is_noise"):
             logger.debug("reactive.noise_gated", extra={"reason": ctx.get("noise_reason")})
             return
@@ -157,33 +227,66 @@ def wire_memory_creation_flow(
             return
 
         source_session = ctx.get("source_session") or f"block:{ctx.get('block_id', 'unknown')}"
-
-        try:
-            async with async_session_factory() as db:
-                from .kg_schemas import TripleBatchCreate, TripleCreate
-                from .kg_services import triple_service
-
-                batch = TripleBatchCreate(
-                    session_id=source_session,
-                    triples=[TripleCreate(**t) for t in triple_dicts],
-                )
-                result = await triple_service.batch_ingest(db, space_id, batch)
-                await db.commit()
-                logger.info(
-                    "reactive.block_to_kg",
-                    extra={
-                        "block_id": ctx.get("block_id"),
-                        "triples_created": result.get("ingested", 0),
-                    },
-                )
-        except Exception:
-            logger.warning(
-                "reactive.block_to_kg_failed",
-                extra={"block_id": ctx.get("block_id")},
-                exc_info=True,
-            )
+        await _write_triples_to_kg(triple_dicts, space_id, source_session, log_prefix="reactive")
 
     observer = FunctionObserver(_kg_ingest_handler, name="kg_triple_ingest")
 
     # Subscription
+    return piped.subscribe(observer)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Flow 2: capture.promoted → memvault KG enrichment (cross-module pipe)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def wire_capture_promotion_flow(
+    bus: EventBus | None = None,
+) -> Subscription:
+    """Cross-module pipe: capture.promoted → memvault KG enrichment.
+
+    ConditionalOp(module==memvault) → Pipeline(BlockFetch → TagCooccurrence) → Observer(KG write)
+    """
+    _bus = bus or event_bus
+
+    memvault_pipe = Pipeline(name="memvault_kg").pipe(BlockFetchOp(), TagCooccurrenceOp())
+
+    piped = _bus.channel(CaptureEvents.PROMOTED).pipe(
+        ConditionalOp(
+            predicate=lambda ctx: ctx.get("module") == "memvault" and bool(ctx.get("promoted_id")),
+            then_op=memvault_pipe,
+            name="memvault_promotion_gate",
+            predicate_keys=("module", "promoted_id"),
+        ),
+    )
+
+    # compile() pre-flight: validate key chain
+    outer = Pipeline().pipe(
+        ConditionalOp(
+            predicate=lambda ctx: True,
+            then_op=memvault_pipe,
+            name="_compile_check",
+            predicate_keys=("module", "promoted_id"),
+        ),
+    )
+    missing = outer.compile(initial_keys={"module", "promoted_id", "capture_id", "entity_type"})
+    if missing:
+        logger.error("capture promotion flow compile failed: %s", missing)
+
+    async def _capture_kg_write_handler(ctx: dict[str, Any]) -> None:
+        """Observer: write KG triples from capture promotion."""
+        triple_dicts = ctx.get("triple_dicts", [])
+        if not triple_dicts:
+            return
+
+        space_id = ctx.get("space_id")
+        if not space_id:
+            return
+
+        source_session = ctx.get("source_session") or f"block:{ctx.get('block_id', 'unknown')}"
+        await _write_triples_to_kg(
+            triple_dicts, space_id, source_session, log_prefix="flywheel.capture_promoted"
+        )
+
+    observer = FunctionObserver(_capture_kg_write_handler, name="capture_to_kg")
     return piped.subscribe(observer)
