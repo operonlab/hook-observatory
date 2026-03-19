@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import case, delete, func, literal_column, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
@@ -137,8 +137,6 @@ async def _calc_balance_components(
     Returns (income_sum, expense_sum, transfer_in, fee_sum).
     Net delta = income - expense + transfer_in - fee.
     """
-    from sqlalchemy import case, literal_column
-
     txn_filter = [
         Transaction.wallet_id == wallet_id,
         Transaction.status == "completed",

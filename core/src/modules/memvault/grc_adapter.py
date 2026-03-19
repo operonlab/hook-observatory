@@ -27,6 +27,8 @@ from src.shared.grc import (
     three_guard_filter,
 )
 
+from .kg_config import PROTECTED_BLOCK_TYPES
+
 logger = logging.getLogger(__name__)
 
 # How far back fetch_blocks looks (days)
@@ -168,9 +170,6 @@ class MemvaultGRCAdapter:
 
     # ======================== SupportsCurate ========================
 
-    # block_types that are protected from curation even with low confidence
-    PROTECTED_BLOCK_TYPES = frozenset({"lesson", "correction", "decision", "rule"})
-
     def identify_candidates(
         self,
         scope_id: str,
@@ -210,7 +209,7 @@ class MemvaultGRCAdapter:
                 confidence=1.0 - (item.metadata.get("confidence") or 0.0),
             )
             for item in candidates
-            if item.metadata.get("block_type") not in self.PROTECTED_BLOCK_TYPES
+            if item.metadata.get("block_type") not in PROTECTED_BLOCK_TYPES
         ]
 
     async def apply_actions(
@@ -252,8 +251,6 @@ class MemvaultGRCAdapter:
                 {"item_id": a.item_id, "action": a.action, "reason": a.reason} for a in actions
             ]
             return result
-
-        from datetime import UTC, datetime
 
         from sqlalchemy import update
 

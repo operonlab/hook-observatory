@@ -1,22 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { MemoryBlock } from '@/types'
+import { relativeTime } from '../../../shared/utils/time'
 import GalaxyCanvas from '../components/GalaxyCanvas'
 import LayerToggle from '../components/LayerToggle'
 import { useGalaxy } from '../hooks/useGalaxy'
 import { useMemvaultStore } from '../stores'
 import type { GalaxyNode } from '../types'
 import { BLOCK_TYPE_CONFIG } from '../types'
-
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins} 分鐘前`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours} 小時前`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days} 天前`
-  return `${Math.floor(days / 30)} 個月前`
-}
 
 function hexToRgba(cssVar: string, alpha: number): string {
   return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
