@@ -184,39 +184,16 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
     model = Wallet
     audit_module = "finance"
     audit_entity_type = "wallets"
+    event_types = {
+        "created": FinanceEvents.WALLET_CREATED,
+        "updated": FinanceEvents.WALLET_UPDATED,
+        "deleted": FinanceEvents.WALLET_DELETED,
+    }
 
     def before_create(self, data: WalletCreate, **kwargs: Any) -> dict:
         d = data.model_dump()
         d["current_balance"] = d["initial_balance"]
         return d
-
-    def after_create(self, instance: Wallet) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=FinanceEvents.WALLET_CREATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-                user_id=instance.created_by,
-            )
-        )
-
-    def after_update(self, instance: Wallet, changes: dict) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=FinanceEvents.WALLET_UPDATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-            )
-        )
-
-    def after_delete(self, instance: Wallet) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=FinanceEvents.WALLET_DELETED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-            )
-        )
 
     def to_response(self, instance: Wallet) -> WalletResponse:
         return WalletResponse(
@@ -775,34 +752,11 @@ class CategoryService(BaseCRUDService[Category, CategoryCreate, CategoryUpdate, 
     model = Category
     audit_module = "finance"
     audit_entity_type = "categories"
-
-    def after_create(self, instance: Category) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=FinanceEvents.CATEGORY_CREATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-                user_id=instance.created_by,
-            )
-        )
-
-    def after_update(self, instance: Category, changes: dict) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=FinanceEvents.CATEGORY_UPDATED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-            )
-        )
-
-    def after_delete(self, instance: Category) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=FinanceEvents.CATEGORY_DELETED,
-                data={"id": instance.id, "space_id": instance.space_id},
-                source="finance",
-            )
-        )
+    event_types = {
+        "created": FinanceEvents.CATEGORY_CREATED,
+        "updated": FinanceEvents.CATEGORY_UPDATED,
+        "deleted": FinanceEvents.CATEGORY_DELETED,
+    }
 
     def to_response(self, instance: Category) -> CategoryResponse:
         children = []
@@ -1277,6 +1231,9 @@ class InstallmentPlanService(
     model = InstallmentPlan
     audit_module = "finance"
     audit_entity_type = "installment_plans"
+    event_types = {"created": FinanceEvents.INSTALLMENT_CREATED}
+    event_id_alias = "plan_id"
+    event_fields = ("num_installments",)
 
     def to_response(self, instance: InstallmentPlan) -> InstallmentPlanResponse:
         return InstallmentPlanResponse(
@@ -1305,16 +1262,6 @@ class InstallmentPlanService(
             status=instance.status,
             tags=instance.tags or [],
             is_private=instance.is_private,
-        )
-
-    def after_create(self, instance: InstallmentPlan) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=FinanceEvents.INSTALLMENT_CREATED,
-                data={"plan_id": instance.id, "num_installments": instance.num_installments},
-                source="finance",
-                user_id=instance.created_by,
-            )
         )
 
     async def list(

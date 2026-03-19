@@ -12,7 +12,6 @@ from typing import Any
 from sqlalchemy import Integer, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.events.bus import Event, event_bus
 from src.events.types import MemvaultEvents
 from src.shared.cache import cached
 from src.shared.errors import BadRequestError, NotFoundError
@@ -182,29 +181,9 @@ class MemoryBlockService(
             d["tags"] = tags
         return d
 
-    def after_create(self, instance: MemoryBlock) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=MemvaultEvents.MEMORY_STORED,
-                data={
-                    "id": instance.id,
-                    "block_id": instance.id,
-                    "space_id": instance.space_id,
-                    "content": instance.content,
-                    "block_type": instance.block_type,
-                    "tags": instance.tags or [],
-                    "source_session": instance.source_session,
-                    "created_at": (
-                        instance.created_at.isoformat() if instance.created_at else None
-                    ),
-                    "updated_at": (
-                        instance.updated_at.isoformat() if instance.updated_at else None
-                    ),
-                },
-                source="memvault",
-                user_id=instance.created_by,
-            )
-        )
+    event_types = {"created": MemvaultEvents.MEMORY_STORED}
+    event_id_alias = "block_id"
+    event_fields = ("content", "block_type", "tags", "source_session")
 
     def to_response(self, instance: MemoryBlock) -> MemoryBlockResponse:
         return MemoryBlockResponse(
