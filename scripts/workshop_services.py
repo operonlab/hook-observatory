@@ -48,7 +48,7 @@ SERVICES = [
         "type": "binary",
         "cmd": (
             "/Users/joneshong/workshop/stations/agent-vista/bin/agent-vista"
-            " --no-browser --port 8840"
+            " --no-browser --host 127.0.0.1 --port 8840"
         ),
         "port": 8840,
         "health": "http://127.0.0.1:8840",
@@ -627,6 +627,52 @@ def health_check_docker() -> None:
                 break  # compose up starts all — no need to check remaining
 
 
+def _check_bind_addresses() -> None:
+    """Verify Workshop services are not bound to 0.0.0.0 (LAN-exposed)."""
+    try:
+        result = subprocess.run(
+            ["lsof", "-iTCP", "-sTCP:LISTEN", "-P", "-n"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return
+
+    svc_ports = {svc["port"] for svc in SERVICES}
+    for line in result.stdout.splitlines()[1:]:  # skip header
+        parts = line.split()
+        if len(parts) < 9:
+            continue
+        name_col = parts[8]  # NAME column e.g. "*:8840" or "127.0.0.1:8801"
+        if ":" not in name_col:
+            continue
+        host, port_str = name_col.rsplit(":", 1)
+        try:
+            port_num = int(port_str)
+        except ValueError:
+            continue
+        if port_num not in svc_ports:
+            continue
+        if host == "*":
+            svc_name = next(
+                (s["name"] for s in SERVICES if s["port"] == port_num),
+                f"port-{port_num}",
+            )
+            log(f"SECURITY: {svc_name} (:{port_num}) bound to 0.0.0.0 — LAN exposed!")
+            # Send ntfy alert
+            try:
+                data = f"⚠️ {svc_name} (:{port_num}) bound to 0.0.0.0".encode()
+                req = urllib.request.Request(
+                    "http://127.0.0.1:9080/workshop",
+                    data=data,
+                    headers={"Title": "Port Security Alert", "Priority": "high"},
+                )
+                urllib.request.urlopen(req, timeout=5)  # noqa: S310
+            except Exception:  # noqa: S110
+                pass
+
+
 def health_check_all() -> None:
     for svc in SERVICES:
         name = svc["name"]
@@ -662,6 +708,7 @@ def daemon_mode() -> None:
             break
         health_check_docker()
         health_check_all()
+        _check_bind_addresses()
         check_log_sizes()
         today = date.today().strftime("%Y-%m-%d")
         if today != last_rotate_date:
