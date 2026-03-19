@@ -248,13 +248,39 @@ class Scheduler(Protocol):
 
 
 class Pipeline:
-    """可驗證的 Operator 組合器。
+    """可驗證的 Operator 組合器——自身也是 Operator（Composite 模式）。
 
     RxJS pipe() + DataFlow compile() 的結合。
+    Pipeline 實作 Operator Protocol，可作為 ConditionalOp 的 then_op/else_op。
     """
 
-    def __init__(self) -> None:
+    def __init__(self, name: str | None = None) -> None:
         self._ops: list[Operator] = []
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name or " → ".join(op.name for op in self._ops) or "empty_pipeline"
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        """精準計算：所有 ops 的 input_keys 減去前面 ops 已提供的 output_keys。"""
+        required: set[str] = set()
+        provided: set[str] = set()
+        for op in self._ops:
+            for key in op.input_keys:
+                if key not in provided:
+                    required.add(key)
+            provided |= set(op.output_keys)
+        return tuple(sorted(required))
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        """所有 ops 的 output_keys 聯集。"""
+        keys: set[str] = set()
+        for op in self._ops:
+            keys |= set(op.output_keys)
+        return tuple(sorted(keys))
 
     def pipe(self, *ops: Operator) -> Pipeline:
         """串接 Operator。回傳 self 支援 chaining。"""
@@ -266,9 +292,6 @@ class Pipeline:
 
         Returns:
             missing keys 列表（空 = 驗證通過）。
-
-        Raises:
-            ValueError: 如果有 key 缺失且未提供 initial_keys。
         """
         available = set(initial_keys) if initial_keys else set()
         missing: list[str] = []
@@ -283,10 +306,14 @@ class Pipeline:
         return missing
 
     async def execute(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        """依序執行所有 Operator。"""
+        """依序執行所有 Operator。向後相容 API。"""
         for op in self._ops:
             ctx = await op(ctx)
         return ctx
+
+    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Operator Protocol 入口——等同 execute()。"""
+        return await self.execute(ctx)
 
     def __iter__(self):
         return iter(self._ops)
@@ -309,11 +336,13 @@ class ConditionalOp:
         else_op: Operator | None = None,
         *,
         name: str = "conditional",
+        predicate_keys: tuple[str, ...] = (),
     ) -> None:
         self._predicate = predicate
         self._then_op = then_op
         self._else_op = else_op
         self._name = name
+        self._predicate_keys = predicate_keys
 
     @property
     def name(self) -> str:
@@ -321,7 +350,8 @@ class ConditionalOp:
 
     @property
     def input_keys(self) -> tuple[str, ...]:
-        keys = set(self._then_op.input_keys)
+        keys = set(self._predicate_keys)
+        keys |= set(self._then_op.input_keys)
         if self._else_op:
             keys |= set(self._else_op.input_keys)
         return tuple(sorted(keys))
