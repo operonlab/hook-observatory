@@ -9,7 +9,6 @@ from src.shared.database import async_session_factory
 logger = structlog.get_logger()
 
 
-@event_bus.on(DailyosEvents.PLAN_COMPLETED)
 async def on_plan_completed(event: Event) -> None:
     """Handle plan completion — extract behavioral patterns to Memvault.
 
@@ -93,3 +92,6 @@ def _synthesize_behavioral_summary(data: dict) -> str | None:
         parts.append(f"反思：{reflection}")  # noqa: RUF001
 
     return "。".join(parts) + "。"
+
+
+event_bus.channel(DailyosEvents.PLAN_COMPLETED).subscribe_handler(on_plan_completed)

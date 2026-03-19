@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 import structlog
 
+from src.shared.reactive import Subscription
+
 from .base import EventBackend, Handler, _current_trace_id
 
 
@@ -24,8 +26,18 @@ class InMemoryBackend(EventBackend):
 
     # ------------------------------------------------------------------ registration
 
-    def subscribe(self, event_type: str, handler: Handler) -> None:
+    def subscribe(self, event_type: str, handler: Handler) -> Subscription:
         self._handlers.setdefault(event_type, []).append(handler)
+        sub = Subscription()
+        sub.add(lambda: self.unsubscribe(event_type, handler))
+        return sub
+
+    def unsubscribe(self, event_type: str, handler: Handler) -> None:
+        handlers = self._handlers.get(event_type, [])
+        try:
+            handlers.remove(handler)
+        except ValueError:
+            pass
 
     def use_middleware(self, middleware: Callable) -> None:
         self._middleware.append(middleware)
