@@ -168,6 +168,9 @@ class MemvaultGRCAdapter:
 
     # ======================== SupportsCurate ========================
 
+    # block_types that are protected from curation even with low confidence
+    PROTECTED_BLOCK_TYPES = frozenset({"lesson", "correction", "decision", "rule"})
+
     def identify_candidates(
         self,
         scope_id: str,
@@ -181,7 +184,8 @@ class MemvaultGRCAdapter:
         - Guard 2: access_count below minimum
         - Guard 3: item age exceeds minimum
 
-        Items failing 2+ guards become CurateAction(action="soft_delete").
+        Items with protected block_types (lesson, correction, decision, rule)
+        are excluded — these carry long-term value even at low confidence.
 
         Args:
             scope_id: space_id.
@@ -206,6 +210,7 @@ class MemvaultGRCAdapter:
                 confidence=1.0 - (item.metadata.get("confidence") or 0.0),
             )
             for item in candidates
+            if item.metadata.get("block_type") not in self.PROTECTED_BLOCK_TYPES
         ]
 
     async def apply_actions(

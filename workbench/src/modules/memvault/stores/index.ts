@@ -18,8 +18,7 @@ import type {
   CommunityDetail,
   CommunitySummary,
   GalaxyLayer,
-  SkillInvocation,
-  SkillProficiency,
+  SkillProfile,
   Triple,
   ViewMode,
 } from '../types'
@@ -84,8 +83,7 @@ interface MemvaultState {
   kg_summaries: CommunitySummary[]
   kg_attitudes: AttitudeFact[]
   kg_attitudeHistory: AttitudeFact[]
-  kg_skills: SkillProficiency[]
-  kg_skillHistory: SkillInvocation[]
+  kg_skills: SkillProfile[]
   kg_cascadeResult: CascadeRecallResult | null
 
   // KG UI
@@ -98,7 +96,6 @@ interface MemvaultState {
 
   // SWR: memo caches for on-demand detail fetches
   _communityDetailCache: Record<string, CommunityDetail>
-  _skillHistoryCache: Record<string, SkillInvocation[]>
   _attitudeHistoryCache: Record<string, AttitudeFact[]>
 
   // SWR helpers
@@ -127,8 +124,7 @@ interface MemvaultState {
   fetchSummaries: () => Promise<void>
   fetchAttitudes: (category?: string) => Promise<void>
   fetchAttitudeHistory: (factId: string) => Promise<void>
-  fetchSkillProficiency: () => Promise<void>
-  fetchSkillHistory: (name: string) => Promise<void>
+  fetchSkillProfiles: () => Promise<void>
   cascadeRecall: (q: string) => Promise<void>
   clearCascadeResult: () => void
 
@@ -136,8 +132,6 @@ interface MemvaultState {
   deleteTriple: (id: string) => Promise<void>
   deleteAttitude: (id: string) => Promise<void>
   updateAttitude: (id: string, data: { fact: string; category: string }) => Promise<void>
-  deleteSkillInvocation: (id: string, skillName: string) => Promise<void>
-
   // Profile
   recalculateProfile: () => Promise<void>
 }
@@ -174,7 +168,6 @@ export const useMemvaultStore = create<MemvaultState>()(
       kg_attitudes: [],
       kg_attitudeHistory: [],
       kg_skills: [],
-      kg_skillHistory: [],
       kg_cascadeResult: null,
 
       // KG UI
@@ -185,7 +178,6 @@ export const useMemvaultStore = create<MemvaultState>()(
       // SWR
       _fetchedAt: { ...EMPTY_FETCHED_AT },
       _communityDetailCache: {},
-      _skillHistoryCache: {},
       _attitudeHistoryCache: {},
 
       isStale: (key: keyof FetchedAt) => {
@@ -433,36 +425,16 @@ export const useMemvaultStore = create<MemvaultState>()(
         }
       },
 
-      fetchSkillProficiency: async () => {
+      fetchSkillProfiles: async () => {
         set({ kg_loading: true })
         try {
-          const skills = await kgApi.skillProficiency()
+          const skills = await kgApi.skillProfiles()
           set((s) => ({
             kg_skills: skills,
             _fetchedAt: { ...s._fetchedAt, kg_skills: Date.now() },
           }))
         } catch (err) {
           set({ error: err instanceof Error ? err.message : 'Failed to fetch skills' })
-        } finally {
-          set({ kg_loading: false })
-        }
-      },
-
-      fetchSkillHistory: async (name: string) => {
-        const cached = get()._skillHistoryCache[name]
-        if (cached) {
-          set({ kg_skillHistory: cached })
-          return
-        }
-        set({ kg_loading: true })
-        try {
-          const history = await kgApi.skillHistory(name)
-          set((s) => ({
-            kg_skillHistory: history,
-            _skillHistoryCache: { ...s._skillHistoryCache, [name]: history },
-          }))
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch skill history' })
         } finally {
           set({ kg_loading: false })
         }
@@ -519,23 +491,6 @@ export const useMemvaultStore = create<MemvaultState>()(
           }))
         } catch (err) {
           set({ error: err instanceof Error ? err.message : 'Failed to update attitude' })
-        }
-      },
-
-      deleteSkillInvocation: async (id: string, skillName: string) => {
-        try {
-          await kgApi.deleteSkillInvocation(id)
-          // Invalidate skill history cache for this skill
-          set((s) => {
-            const next = { ...s._skillHistoryCache }
-            delete next[skillName]
-            return { _skillHistoryCache: next }
-          })
-          // Refresh skill history
-          await get().fetchSkillHistory(skillName)
-          await get().fetchSkillProficiency()
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to delete invocation' })
         }
       },
 
