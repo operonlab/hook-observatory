@@ -28,6 +28,7 @@ from . import (
     pm_autopilot,
     relay_signal,
     rtk_rewrite,
+    schedule_sync,
     sentinel_notify,
     session_channel,
     session_namer,
@@ -66,6 +67,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "PostToolUse": [
         ("Edit|Write", auto_format.handle),
         ("Edit|Write", memory_sync.handle),
+        ("Edit|Write", schedule_sync.handle),
         ("Bash", sentinel_notify.handle),
         ("Bash", pm_autopilot.handle),
         (None, anvil_telemetry.handle),
