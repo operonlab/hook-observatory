@@ -250,6 +250,44 @@ def history(url: str | None):
         db.close()
 
 
+@main.command("line-read")
+@click.option("--group", default=None, help="LINE community name (default: from config)")
+@click.option("--trigger/--no-trigger", default=False, help="Auto-trigger pipeline if URLs found")
+@click.option("--dry-run", is_flag=True, help="Don't actually fill forms (only with --trigger)")
+def line_read(group: str | None, trigger: bool, dry_run: bool):
+    """Read LINE community chat and extract SurveyCake URLs."""
+    from .line_reader import extract_survey_urls, read_line_community
+
+    community = group or settings.line_community_name
+    click.echo(f"[auto-survey] Reading LINE community: {community}")
+
+    text = read_line_community(community)
+    if not text:
+        click.echo("[auto-survey] Failed to read LINE (not running or no content)")
+        raise SystemExit(1)
+
+    urls = extract_survey_urls(text)
+    attend = urls.get("attend_url")
+    quiz = urls.get("quiz_url")
+
+    if not attend and not quiz:
+        click.echo("[auto-survey] No SurveyCake URLs found in today's messages")
+        raise SystemExit(1)
+
+    if attend:
+        click.echo(f"  簽到: {attend}")
+    if quiz:
+        click.echo(f"  測驗: {quiz}")
+
+    if trigger:
+        click.echo("[auto-survey] Triggering pipeline...")
+        _ensure_db()
+        ctx = click.get_current_context()
+        ctx.invoke(run, attend_url=attend, quiz_url=quiz, dry_run=dry_run)
+    else:
+        click.echo("[auto-survey] Dry mode — use --trigger to auto-fill")
+
+
 @main.command()
 def init():
     """Initialize database schema."""
