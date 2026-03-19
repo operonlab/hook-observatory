@@ -6,6 +6,7 @@ const MODULE_COLORS: Record<string, string> = {
   finance: '#a6e3a1',
   taskflow: '#cba6f7',
   invest: '#f38ba8',
+  dailyos: '#89b4fa',
   ideagraph: '#f9e2af',
   intelflow: '#94e2d5',
 }
@@ -14,6 +15,7 @@ const MODULE_LABELS: Record<string, string> = {
   finance: '記帳',
   taskflow: '任務',
   invest: '投資',
+  dailyos: '日程',
   ideagraph: '靈感',
   intelflow: '情報',
 }
@@ -120,6 +122,7 @@ function InlineFieldEditor({
     <div
       className="mt-2 p-3 rounded-md border"
       style={{ backgroundColor: 'var(--base)', borderColor: 'var(--surface1)' }}
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] font-medium" style={{ color: 'var(--subtext0)' }}>
@@ -210,7 +213,7 @@ function CaptureDetail({
       </button>
 
       {isExpanded && (
-        <div className="mt-2 space-y-1">
+        <div className="mt-2 space-y-1" onClick={(e) => e.stopPropagation()}>
           {Object.entries(capture.payload).map(([k, v]) => (
             <div key={k} className="flex items-center gap-2 text-[11px]">
               <span style={{ color: 'var(--overlay0)' }} className="w-28 shrink-0">

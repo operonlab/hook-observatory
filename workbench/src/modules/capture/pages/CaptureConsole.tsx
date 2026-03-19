@@ -109,6 +109,7 @@ export default function CaptureConsole() {
           { key: 'finance', label: '記帳', color: '#a6e3a1' },
           { key: 'taskflow', label: '任務', color: '#cba6f7' },
           { key: 'invest', label: '投資', color: '#f38ba8' },
+          { key: 'dailyos', label: '日程', color: '#89b4fa' },
           { key: 'ideagraph', label: '靈感', color: '#f9e2af' },
           { key: 'intelflow', label: '情報', color: '#94e2d5' },
         ].map((tab) => (
@@ -174,6 +175,7 @@ export default function CaptureConsole() {
         >
           <EnrichmentChat
             selectedCapture={selected}
+            moduleFilter={moduleFilter}
             onCaptureCreated={handleCaptureCreated}
             onUpdate={handleUpdate}
             onPromote={handlePromote}

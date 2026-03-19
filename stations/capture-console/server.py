@@ -1,9 +1,9 @@
-"""Capture Console Station — Gemini CLI headless enrichment + WebSocket relay.
+"""Capture Console Station — Claude Code interactive tmux relay + WebSocket.
 
 Architecture:
-  - WebSocket relay: browser → WS → gemini -p (headless) → parsed response
-  - Each message spawns a headless Gemini CLI subprocess (no TUI parsing needed)
-  - tmux pane (default:3.1) kept for manual Gemini interaction / health display
+  - Persistent Claude Code session in tmux (default:3.1)
+  - WebSocket relay: browser → WS → tmux send-keys → capture-pane → response
+  - Conversation context preserved across messages (interactive session, not headless)
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ import json
 import logging
 import os
 import re
-import shutil
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,17 +26,18 @@ log = logging.getLogger("capture-console")
 # Config
 # ---------------------------------------------------------------------------
 TMUX_SESSION = os.getenv("CAPTURE_TMUX_SESSION", "default")
-GEMINI_WINDOW = os.getenv("CAPTURE_GEMINI_WINDOW", "3")
-GEMINI_PANE = os.getenv("CAPTURE_GEMINI_PANE", "1")
+CAPTURE_WINDOW = os.getenv("CAPTURE_WINDOW", "3")
+CAPTURE_PANE = os.getenv("CAPTURE_PANE", "1")
 HOST = os.getenv("CAPTURE_HOST", "127.0.0.1")
 PORT = int(os.getenv("CAPTURE_PORT", "4104"))
-GEMINI_TIMEOUT = float(os.getenv("CAPTURE_GEMINI_TIMEOUT", "30"))
+CLAUDE_TIMEOUT = float(os.getenv("CAPTURE_CLAUDE_TIMEOUT", "30"))
+CLAUDE_MODEL = os.getenv("CAPTURE_CLAUDE_MODEL", "haiku")
 
-GEMINI_TARGET = f"{TMUX_SESSION}:{GEMINI_WINDOW}.{GEMINI_PANE}"
+TMUX_TARGET = f"{TMUX_SESSION}:{CAPTURE_WINDOW}.{CAPTURE_PANE}"
 
 SYSTEM_PROMPT = (
     "你是 Workshop 平台的捕捉解析助理。"
-    "使用者會給你簡短的自然語言描述（如消費、任務、投資），"
+    "使用者會給你簡短的自然語言描述（如消費、任務、投資、日程），"
     "你必須將其解析成結構化 JSON。\n\n"
     "## 規則\n"
     "1. 禁止使用任何工具或 MCP server。只回覆純文字 JSON。\n"
@@ -44,33 +45,56 @@ SYSTEM_PROMPT = (
     "3. 用繁體中文回覆 notes 欄位。\n\n"
     "## JSON 結構\n"
     "```json\n"
-    '{"module":"finance|taskflow|invest",'
-    '"entity_type":"transaction|subscription|installment|task|trade",'
+    '{"module":"finance|taskflow|invest|dailyos|intelflow",'
+    '"entity_type":"transaction|subscription|installment|task|trade|plan_item|webcrawl",'
     '"payload":{...},"confidence":0.0-1.0,"notes":"..."}\n'
     "```\n\n"
     "## Payload 欄位\n"
     "- finance/transaction: type(expense|income), amount, description, currency(TWD), "
     "payment_method(credit_card|cash|transfer), category_id, wallet_id, transacted_at\n"
     "- finance/subscription: name, amount, billing_cycle(monthly|yearly), start_date\n"
+    "- finance/installment: description, total_amount, installment_count, merchant, start_date\n"
     "- taskflow/task: title, description, priority(low|medium|high|urgent), due_date, source, project\n"
-    "- invest/trade: position_id, type(buy|sell), shares, price, traded_at, currency\n\n"
+    "- invest/trade: position_id, type(buy|sell), shares, price, traded_at, currency\n"
+    "- dailyos/plan_item: title, priority(low|medium|high), plan_date, estimated_hours, category\n"
+    "- intelflow/webcrawl: url, title, tags\n\n"
     "## 智慧預設\n"
     "未指定時：type=expense, currency=TWD, payment_method=credit_card, priority=medium\n"
-    "transacted_at 預設今天。"
+    "transacted_at/plan_date 預設今天。\n\n"
+    "## 解析範例\n"
+    '- 「午餐 150」→ finance/transaction {amount:150, description:"午餐"}\n'
+    '- 「Netflix 390/月」→ finance/subscription {name:"Netflix", amount:390, billing_cycle:"monthly"}\n'
+    '- 「明天下午開會三小時」→ dailyos/plan_item {title:"開會", estimated_hours:3, plan_date:"明天"}\n'
+    '- 「買 10 張台積電 850」→ invest/trade {shares:10, price:850, type:"buy"}'
 )
+IDLE_EXIT_SECONDS = int(os.getenv("CAPTURE_IDLE_EXIT", "300"))  # 5 min
 
-# Regex to extract JSON from markdown code block
+# Prompt file for Claude startup command (avoids shell escaping)
+_PROMPT_FILE = "/tmp/capture-console-system-prompt.txt"
+
+# JSON extraction patterns
 _JSON_BLOCK_RE = re.compile(r"```json\s*([\s\S]*?)```")
-_JSON_OBJECT_RE = re.compile(r"\{[\s\S]*\"module\"[\s\S]*\"payload\"[\s\S]*\}")
+_JSON_OBJECT_RE = re.compile(r"\{[\s\S]*?\"module\"[\s\S]*?\"payload\"[\s\S]*?\}")
+
+# Claude Code TUI detection
+_BORDER_RE = re.compile(r"^[─━]{20,}$")
+_TUI_NOISE = re.compile(r"🔖|🤖|⏵⏵|bypass|Checking for update|shift\+tab|💰|✍️|📁|⎇")
+
+# Serialization lock — one tmux interaction at a time
+_query_lock = asyncio.Lock()
+# Tracks last query time for idle exit
+_last_query_time: float = 0.0
 
 
 # ---------------------------------------------------------------------------
-# tmux helpers (for health check / manual pane)
+# tmux helpers
 # ---------------------------------------------------------------------------
 
 
-async def _run(args: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
+async def _tmux(args: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
+    """Run a tmux subcommand."""
     proc = await asyncio.create_subprocess_exec(
+        "tmux",
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -83,125 +107,344 @@ async def _run(args: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
     return proc.returncode or 0, (stdout or b"").decode(), (stderr or b"").decode()
 
 
-async def gemini_pane_alive() -> bool:
-    """Check if the Gemini pane exists in tmux."""
-    rc, out, _ = await _run(
+async def _capture_pane() -> str:
+    """Capture current visible pane content."""
+    rc, out, _ = await _tmux(["capture-pane", "-t", TMUX_TARGET, "-p"])
+    return out if rc == 0 else ""
+
+
+async def pane_exists() -> bool:
+    """Check if the target tmux pane exists."""
+    rc, _, _ = await _tmux(["has-session", "-t", TMUX_SESSION])
+    if rc != 0:
+        return False
+    rc, out, _ = await _tmux(
         [
-            "tmux",
             "list-panes",
             "-t",
-            f"{TMUX_SESSION}:{GEMINI_WINDOW}",
+            f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
             "-F",
-            "#{pane_index}\t#{pane_current_command}",
+            "#{pane_index}",
         ]
     )
     if rc != 0:
         return False
-    for line in out.strip().split("\n"):
-        parts = line.split("\t")
-        if len(parts) >= 2 and parts[0] == GEMINI_PANE:
-            return True
+    return CAPTURE_PANE in out.strip().split("\n")
+
+
+async def is_claude_running() -> bool:
+    """Check if Claude Code is running in the target pane (node process)."""
+    rc, out, _ = await _tmux(
+        [
+            "display-message",
+            "-t",
+            TMUX_TARGET,
+            "-p",
+            "#{pane_current_command}",
+        ]
+    )
+    if rc != 0:
+        return False
+    cmd = out.strip().lower()
+    # Claude Code shows as "node", "claude", or its version (e.g. "2.1.79")
+    if "node" in cmd or "claude" in cmd:
+        return True
+    # Version string pattern (digits.digits.digits) means Claude Code is running
+    if re.match(r"^\d+\.\d+\.\d+$", cmd):
+        return True
     return False
 
 
-async def gemini_cli_available() -> bool:
-    """Check if gemini CLI is installed."""
-    return shutil.which("gemini") is not None
-
-
 # ---------------------------------------------------------------------------
-# Gemini headless query
+# Claude Code TUI state detection
 # ---------------------------------------------------------------------------
 
 
-async def query_gemini(user_message: str) -> str:
-    """Query Gemini CLI in headless pipe mode.
+def _is_claude_idle(content: str) -> bool:
+    """Check if Claude Code TUI shows the idle input prompt.
 
-    Uses `gemini -p` which outputs plain text (no TUI decorations).
-    Each call is stateless — no conversation history preserved.
+    Idle pattern (bottom of pane):
+        ─────────...          (top border)
+        ❯                     (empty prompt = idle)
+        ─────────...          (bottom border)
+        🔖 ... │ 📁 ... │ ⎇  (status lines)
+        🤖 ... │ 💰 ... │ ✍️
+        ⏵⏵ bypass permissions on
     """
-    full_prompt = f"{SYSTEM_PROMPT}\n\n---\n使用者輸入：{user_message}"
+    lines = content.rstrip().split("\n")
+    i = len(lines) - 1
 
-    proc = await asyncio.create_subprocess_exec(
-        "gemini",
-        "-p",
-        full_prompt,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+    # Step 1: skip trailing empty + status/noise lines
+    while i >= 0 and (not lines[i].strip() or _TUI_NOISE.search(lines[i])):
+        i -= 1
+
+    # Step 2: expect bottom border (─────...)
+    if i < 0 or not _BORDER_RE.match(lines[i].strip()):
+        return False
+    i -= 1
+
+    # Step 3: skip empty lines
+    while i >= 0 and not lines[i].strip():
+        i -= 1
+
+    # Step 4: expect empty prompt (❯)
+    if i < 0:
+        return False
+    prompt = lines[i].strip()
+    if prompt not in ("❯", "❯ "):
+        return False
+    i -= 1
+
+    # Step 5: skip empty lines
+    while i >= 0 and not lines[i].strip():
+        i -= 1
+
+    # Step 6: expect top border
+    if i < 0 or not _BORDER_RE.match(lines[i].strip()):
+        return False
+
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Claude Code session management
+# ---------------------------------------------------------------------------
+
+
+async def _ensure_pane() -> bool:
+    """Ensure the tmux window/pane exists. Create if missing."""
+    # Check session
+    rc, _, _ = await _tmux(["has-session", "-t", TMUX_SESSION])
+    if rc != 0:
+        log.error("tmux session '%s' does not exist", TMUX_SESSION)
+        return False
+
+    # Check if window exists
+    rc, out, _ = await _tmux(
+        [
+            "list-windows",
+            "-t",
+            TMUX_SESSION,
+            "-F",
+            "#{window_index}",
+        ]
     )
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=GEMINI_TIMEOUT)
-    except TimeoutError:
-        proc.kill()
-        await proc.communicate()  # drain buffers to prevent zombie process
-        raise TimeoutError("Gemini CLI timed out")
+    windows = out.strip().split("\n") if rc == 0 else []
 
-    if proc.returncode != 0:
-        err = (stderr or b"").decode()[:200]
-        raise RuntimeError(f"Gemini CLI failed (exit {proc.returncode}): {err}")
+    if CAPTURE_WINDOW not in windows:
+        # Create the window (named "capture")
+        log.info("Creating tmux window %s:%s (capture)", TMUX_SESSION, CAPTURE_WINDOW)
+        rc, _, err = await _tmux(
+            [
+                "new-window",
+                "-t",
+                f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
+                "-n",
+                "capture",
+            ]
+        )
+        if rc != 0:
+            log.error("Failed to create window: %s", err)
+            return False
+        await asyncio.sleep(0.5)
 
-    return _clean_gemini_output((stdout or b"").decode())
+    # Check if target pane exists within the window
+    if not await pane_exists():
+        # Window exists but pane index doesn't — split to create it
+        log.info("Creating pane %s in window %s", CAPTURE_PANE, CAPTURE_WINDOW)
+        rc, _, err = await _tmux(
+            [
+                "split-window",
+                "-t",
+                f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
+            ]
+        )
+        if rc != 0:
+            log.error("Failed to create pane: %s", err)
+            return False
+        await asyncio.sleep(0.3)
+
+    return await pane_exists()
 
 
-# Lines from gemini CLI stderr/hooks that leak into output
-_NOISE_PATTERNS = [
-    "Created execution plan for",
-    "Expanding hook command:",
-    "Hook execution for",
-    "Loaded cached credentials",
-    "Server '",
-    "total duration:",
-    "(cwd:",
-    "MCP issues detected",
-    "Run /mcp",
-    "Using model:",
-    "Model:",
-    "I'll ",
-    "Let me ",
-]
+async def ensure_claude() -> bool:
+    """Ensure Claude Code is running in the tmux pane. Create pane if needed."""
+    if not await _ensure_pane():
+        return False
+
+    if await is_claude_running():
+        return True
+
+    log.info("Starting Claude Code in %s", TMUX_TARGET)
+
+    # Write system prompt to file (avoids shell escaping nightmares)
+    with open(_PROMPT_FILE, "w") as f:
+        f.write(SYSTEM_PROMPT)
+
+    start_cmd = (
+        f"claude --model {CLAUDE_MODEL} --dangerously-skip-permissions"
+        f' --system-prompt "$(cat {_PROMPT_FILE})"'
+    )
+    await _tmux(["send-keys", "-t", TMUX_TARGET, "-l", start_cmd])
+    await _tmux(["send-keys", "-t", TMUX_TARGET, "Enter"])
+
+    # Wait for Claude Code to initialize
+    for _ in range(20):
+        await asyncio.sleep(0.5)
+        if await is_claude_running():
+            # Extra wait for TUI to fully render
+            await asyncio.sleep(2)
+            log.info("Claude Code started in %s", TMUX_TARGET)
+            return True
+
+    log.error("Failed to start Claude Code in %s", TMUX_TARGET)
+    return False
 
 
-def _clean_gemini_output(text: str) -> str:
-    """Strip Gemini CLI noise (hook execution, server loading) from output."""
-    lines = text.split("\n")
-    clean = []
-    for line in lines:
-        if any(pat in line for pat in _NOISE_PATTERNS):
+# ---------------------------------------------------------------------------
+# Response extraction
+# ---------------------------------------------------------------------------
+
+
+def _extract_response(content: str) -> str:
+    """Extract Claude's latest response from pane content.
+
+    Claude Code TUI renders responses with ⏺ (record) prefix and ⎿ (continuation).
+    JSON may appear raw (no ```json fences) in the TUI output.
+    """
+    # Strategy 1: ```json code block (if Claude wrapped it)
+    blocks = _JSON_BLOCK_RE.findall(content)
+    if blocks:
+        return f"```json\n{blocks[-1].strip()}\n```"
+
+    # Strategy 2: extract response lines from TUI (between last ❯ input and idle prompt)
+    lines = content.split("\n")
+    response_lines: list[str] = []
+    last_input_idx = -1
+
+    # Find the LAST user input line (❯ followed by text)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("❯") and stripped not in ("❯", "❯ "):
+            last_input_idx = i
+
+    if last_input_idx >= 0:
+        # Collect everything after the input line until the idle prompt border
+        for i in range(last_input_idx + 1, len(lines)):
+            stripped = lines[i].strip()
+            if _BORDER_RE.match(stripped):
+                # Could be end-of-response or start of idle prompt
+                # Check if next non-empty line is ❯ (idle prompt)
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    if lines[j].strip() in ("❯", "❯ "):
+                        break  # reached idle prompt, stop collecting
+                else:
+                    continue  # border within response, keep going
+                break
+            if _TUI_NOISE.search(stripped):
+                continue
+            # Clean TUI prefixes
+            cleaned = re.sub(r"^\s*[⏺⎿]\s?", "", lines[i])
+            response_lines.append(cleaned)
+
+    text = "\n".join(response_lines).strip()
+
+    # Try to parse as JSON and wrap in code fence for the frontend
+    if text:
+        try:
+            obj = json.loads(text)
+            if "module" in obj and "payload" in obj:
+                return f"```json\n{json.dumps(obj, ensure_ascii=False, indent=2)}\n```"
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return text or "(空回應)"
+
+
+# ---------------------------------------------------------------------------
+# Query Claude via tmux relay
+# ---------------------------------------------------------------------------
+
+
+async def query_claude(message: str) -> str:
+    """Send a message to Claude Code via tmux and capture the response."""
+    global _last_query_time
+    async with _query_lock:
+        if not await ensure_claude():
+            raise RuntimeError("Claude Code 未執行且無法啟動")
+        _last_query_time = time.time()
+
+        before = await _capture_pane()
+
+        # Send message via tmux (literal mode avoids key-name interpretation)
+        safe_msg = message.replace("\n", " ")
+        await _tmux(["send-keys", "-t", TMUX_TARGET, "-l", safe_msg])
+        await asyncio.sleep(0.1)
+        await _tmux(["send-keys", "-t", TMUX_TARGET, "Enter"])
+
+        # Content-stability approach:
+        # Claude Code TUI animates during thinking (✻ Cogitating…) — content
+        # keeps changing. Once response is complete, content stabilizes.
+        # Wait for 3 consecutive identical captures (~0.9s of no change).
+        start = time.time()
+        prev = before
+        stable = 0
+
+        while time.time() - start < CLAUDE_TIMEOUT:
+            await asyncio.sleep(0.3)
+            current = await _capture_pane()
+
+            if current == before:
+                continue  # nothing changed yet
+
+            if current == prev:
+                stable += 1
+                if stable >= 3:
+                    log.info("Response stable (%.1fs)", time.time() - start)
+                    return _extract_response(current)
+            else:
+                stable = 0
+                prev = current
+
+        raise TimeoutError("Claude Code 回應逾時")
+
+
+# ---------------------------------------------------------------------------
+# Idle watchdog — exit Claude Code after N seconds of inactivity
+# ---------------------------------------------------------------------------
+
+
+async def _idle_watchdog() -> None:
+    """Background task: send /exit to Claude Code if idle > IDLE_EXIT_SECONDS.
+
+    Keeps the tmux pane alive (returns to zsh). ensure_claude() restarts on next query.
+    """
+    global _last_query_time
+    while True:
+        await asyncio.sleep(60)  # check every minute
+        if _last_query_time <= 0:
             continue
-        clean.append(line)
-    # Trim leading/trailing blank lines
-    while clean and not clean[0].strip():
-        clean.pop(0)
-    while clean and not clean[-1].strip():
-        clean.pop()
-    return "\n".join(clean)
-
-
-def extract_json_from_response(text: str) -> dict | None:
-    """Extract JSON object from Gemini's response text."""
-    # Try markdown code block first
-    m = _JSON_BLOCK_RE.search(text)
-    if m:
-        try:
-            return json.loads(m.group(1).strip())
-        except json.JSONDecodeError:
-            pass
-
-    # Try raw JSON object
-    m = _JSON_OBJECT_RE.search(text)
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError:
-            pass
-
-    return None
+        elapsed = time.time() - _last_query_time
+        if elapsed >= IDLE_EXIT_SECONDS and await is_claude_running():
+            log.info("Idle %.0fs — sending /exit to Claude Code", elapsed)
+            await _tmux(["send-keys", "-t", TMUX_TARGET, "-l", "/exit"])
+            await _tmux(["send-keys", "-t", TMUX_TARGET, "Enter"])
+            _last_query_time = 0.0
 
 
 # ---------------------------------------------------------------------------
-# App
+# FastAPI App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Capture Console", version="0.2.0")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    task = asyncio.create_task(_idle_watchdog())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="Capture Console", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -213,12 +456,13 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    pane_alive = await gemini_pane_alive()
-    cli_ok = await gemini_cli_available()
+    pane_ok = await pane_exists()
+    claude_ok = await is_claude_running() if pane_ok else False
     return {
-        "status": "ok" if cli_ok else "degraded",
-        "gemini_cli": cli_ok,
-        "gemini_pane": pane_alive,
+        "status": "ok" if claude_ok else ("degraded" if pane_ok else "down"),
+        "pane": TMUX_TARGET,
+        "claude_running": claude_ok,
+        "model": CLAUDE_MODEL,
     }
 
 
@@ -227,12 +471,12 @@ async def ws_chat(ws: WebSocket):
     await ws.accept()
     log.info("WebSocket connected")
 
-    cli_ok = await gemini_cli_available()
-    if not cli_ok:
+    claude_ok = await ensure_claude()
+    if not claude_ok:
         await ws.send_json(
             {
                 "type": "error",
-                "message": "Gemini CLI not found. Install with: npm i -g @anthropic/gemini-cli",
+                "message": f"無法啟動 Claude Code（tmux pane {TMUX_TARGET} 不存在或啟動失敗）",
             }
         )
         await ws.close()
@@ -241,9 +485,7 @@ async def ws_chat(ws: WebSocket):
     await ws.send_json(
         {
             "type": "status",
-            "message": "已連線 Gemini 解析引擎",
-            "gemini_pane": await gemini_pane_alive(),
-            "gemini_ready": True,
+            "message": f"已連線 Claude Code 解析引擎 ({CLAUDE_MODEL})",
         }
     )
 
@@ -264,9 +506,9 @@ async def ws_chat(ws: WebSocket):
 
             msg_id = int(time.time() * 1000)
 
-            # Build the prompt with context
+            # Build prompt with context
             context = data.get("context")
-            prompt_parts = []
+            prompt_parts: list[str] = []
             if context:
                 prompt_parts.append(
                     f"[補充情境: {context.get('module')}/{context.get('entity_type')}, "
@@ -276,12 +518,10 @@ async def ws_chat(ws: WebSocket):
             prompt_parts.append(text)
             full_prompt = " ".join(prompt_parts)
 
-            # Query Gemini headless
             try:
-                log.info("Querying Gemini: %s", full_prompt[:100])
-                response = await query_gemini(full_prompt)
+                log.info("Querying Claude: %s", full_prompt[:100])
+                response = await query_claude(full_prompt)
 
-                # Send the full response as a single chunk
                 await ws.send_json(
                     {
                         "type": "chunk",
@@ -293,12 +533,12 @@ async def ws_chat(ws: WebSocket):
                 await ws.send_json(
                     {
                         "type": "chunk",
-                        "text": "Gemini 回應逾時，請重試。",
+                        "text": "Claude Code 回應逾時，請重試。",
                         "msg_id": msg_id,
                     }
                 )
             except Exception as e:
-                log.error("Gemini query failed: %s", e)
+                log.error("Claude query failed: %s", e)
                 await ws.send_json(
                     {
                         "type": "chunk",
