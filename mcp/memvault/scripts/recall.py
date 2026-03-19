@@ -217,6 +217,45 @@ def _main() -> None:
                     f"{triple_count} triples, {block_count} blocks)"
                 )
 
+                # Skill Profile context injection
+                skill_tags = set()
+                for t in triples:
+                    # Check triple tags if available
+                    for tag in t.get("tags", []):
+                        if tag.startswith("skill:"):
+                            skill_tags.add(tag[6:])
+                # Also check subject/predicate for skill references
+                for t in triples:
+                    subj = t.get("subject", "").lower()
+                    pred = t.get("predicate", "").lower()
+                    if "skill" in pred or "使用" in pred:
+                        skill_tags.add(t.get("subject", ""))
+
+                if skill_tags:
+                    skill_section = ""
+                    for skill_name in list(skill_tags)[:3]:
+                        encoded_skill = urllib.parse.quote(skill_name)
+                        sp_url = (
+                            f"{CORE_API_URL}/api/memvault/kg/skill-profiles/{encoded_skill}"
+                            f"?space_id={SPACE_ID}"
+                        )
+                        sp_status, sp_body = http_get(sp_url, timeout=3)
+                        if sp_status == 200 and sp_body:
+                            try:
+                                profile = json.loads(sp_body)
+                                level_zh = {"novice": "新手", "proficient": "熟練", "expert": "專家"}
+                                level = level_zh.get(profile.get("proficiency_level", ""), profile.get("proficiency_level", ""))
+                                sr_pct = profile.get("success_rate", 0) * 100
+                                skill_section += (
+                                    f"\n- **{skill_name}**: {profile.get('total_uses', 0)} 次使用, "
+                                    f"{sr_pct:.0f}% 成功率 ({level})"
+                                )
+                            except (json.JSONDecodeError, KeyError):
+                                pass
+                    if skill_section:
+                        formatted += f"\n\n### Skill 熟練度{skill_section}"
+                        log(f"Skill profile injected: {list(skill_tags)[:3]}")
+
     # ── Fallback: simple search if cascade returned nothing ───────────────────
     if not formatted:
         search_url = f"{CORE_API_URL}/api/memvault/search?q={encoded_q}&top_k=5&space_id={SPACE_ID}"
