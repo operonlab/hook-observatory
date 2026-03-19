@@ -46,6 +46,7 @@ def cmd_run(args):
             max_lines=args.lines,
             role=getattr(args, "role", "") or "",
             task=getattr(args, "task", "") or "",
+            color=getattr(args, "color", "") or "",
         )
         if args.json:
             _json_out(result.to_dict(), True)
@@ -72,6 +73,7 @@ def cmd_dispatch(args):
             count=args.count,
             role=getattr(args, "role", "") or "",
             task=getattr(args, "task", "") or "",
+            color=getattr(args, "color", "") or "",
         )
         if args.json:
             _json_out(dispatched, True)
@@ -403,6 +405,9 @@ def main():
     p_run.add_argument("--lines", type=int, default=200, help="Max output lines")
     p_run.add_argument("--role", default="", help="Semantic role (e.g. researcher, test-runner)")
     p_run.add_argument("--task", default="", help="Task description")
+    p_run.add_argument(
+        "--color", default="", help="Input bar color (sent as /color to Claude Code)"
+    )
     p_run.set_defaults(func=cmd_run)
 
     # dispatch
@@ -412,6 +417,9 @@ def main():
     p_dispatch.add_argument("--count", type=int, default=1, help="Number of panes")
     p_dispatch.add_argument("--role", default="", help="Semantic role")
     p_dispatch.add_argument("--task", default="", help="Task description")
+    p_dispatch.add_argument(
+        "--color", default="", help="Input bar color (sent as /color to Claude Code)"
+    )
     p_dispatch.set_defaults(func=cmd_dispatch)
 
     # check
