@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
+from src.shared.reactive import Subscription
+
 if TYPE_CHECKING:
     from src.events.bus import Event
 
@@ -42,8 +44,13 @@ class EventBackend(ABC):
         ...
 
     @abstractmethod
-    def subscribe(self, event_type: str, handler: Handler) -> None:
+    def subscribe(self, event_type: str, handler: Handler) -> Subscription:
         """Register a handler for the given event type (or '*' for wildcard)."""
+        ...
+
+    @abstractmethod
+    def unsubscribe(self, event_type: str, handler: Handler) -> None:
+        """Remove a previously registered handler."""
         ...
 
     @abstractmethod

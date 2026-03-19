@@ -20,6 +20,7 @@ from collections.abc import Callable
 import structlog
 
 from src.events.backends.base import _current_trace_id
+from src.shared.reactive import Subscription
 
 from .base import EventBackend, Handler
 from .memory import InMemoryBackend
@@ -120,10 +121,21 @@ class RedisStreamsBackend(EventBackend):
 
     # ------------------------------------------------------------------ registration
 
-    def subscribe(self, event_type: str, handler: Handler) -> None:
+    def subscribe(self, event_type: str, handler: Handler) -> Subscription:
         self._handlers.setdefault(event_type, []).append(handler)
         # Mirror to fallback so degraded path always has handlers
         self._fallback.subscribe(event_type, handler)
+        sub = Subscription()
+        sub.add(lambda: self.unsubscribe(event_type, handler))
+        return sub
+
+    def unsubscribe(self, event_type: str, handler: Handler) -> None:
+        handlers = self._handlers.get(event_type, [])
+        try:
+            handlers.remove(handler)
+        except ValueError:
+            pass
+        self._fallback.unsubscribe(event_type, handler)
 
     def use_middleware(self, middleware: Callable) -> None:
         self._middleware.append(middleware)

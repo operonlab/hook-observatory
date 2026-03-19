@@ -123,6 +123,40 @@ class Subscription:
         return sub
 
 
+# ─── FunctionObserver (convenience) ──────────────────────────────────────────
+
+
+class FunctionObserver:
+    """Observer 便捷實作：將裸函數包裝為 Observer Protocol。支援 sync 與 async handler。"""
+
+    def __init__(
+        self,
+        on_next_fn: Callable,
+        *,
+        on_error_fn: Callable | None = None,
+        name: str = "",
+    ) -> None:
+        self._on_next_fn = on_next_fn
+        self._on_error_fn = on_error_fn
+        self._name = name or getattr(on_next_fn, "__name__", "anonymous")
+
+    async def on_next(self, value: Any) -> None:
+        result = self._on_next_fn(value)
+        if asyncio.iscoroutine(result):
+            await result
+
+    async def on_error(self, error: Exception) -> None:
+        if self._on_error_fn:
+            result = self._on_error_fn(error)
+            if asyncio.iscoroutine(result):
+                await result
+        else:
+            logger.exception("FunctionObserver[%s] error: %s", self._name, error)
+
+    async def on_complete(self) -> None:
+        pass  # no-op
+
+
 # ─── 4. Operator ─────────────────────────────────────────────────────────────
 
 

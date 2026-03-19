@@ -338,5 +338,8 @@ def register_capture_sse_events() -> None:
     """Subscribe to capture EventBus events for SSE broadcast."""
     from src.events.bus import event_bus
 
+    async def _sse_handler(event) -> None:
+        _notify_capture_changed(event.type)
+
     for evt in ("capture.created", "capture.enriched", "capture.promoted"):
-        event_bus.subscribe(evt, lambda e: _notify_capture_changed(e.type))
+        event_bus.channel(evt).subscribe_handler(_sse_handler)

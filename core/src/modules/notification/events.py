@@ -36,9 +36,6 @@ EVENT_PUSH_MAP: dict[str, dict] = {
 }
 
 
-@event_bus.on("finance.budget.exceeded")
-@event_bus.on("taskflow.task.completed")
-@event_bus.on("briefing.daily.completed")
 async def on_mapped_event(event: Event) -> None:
     """Push notification for mapped EventBus events."""
     mapping = EVENT_PUSH_MAP.get(event.type)
@@ -62,3 +59,7 @@ async def on_mapped_event(event: Event) -> None:
             await db.commit()
     except Exception as e:
         logger.error("event_push_failed", event_type=event.type, error=str(e))
+
+
+for _evt_type in EVENT_PUSH_MAP:
+    event_bus.channel(_evt_type).subscribe_handler(on_mapped_event)

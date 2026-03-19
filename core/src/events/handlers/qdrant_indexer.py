@@ -153,7 +153,7 @@ async def register_qdrant_handlers() -> None:
             # Subscribe to create/update/delete events
             for suffix in _INDEX_SUFFIXES:
                 event_type = f"{module_name}.{entity_name}.{suffix}"
-                event_bus.subscribe(event_type, _qdrant_event_handler)
+                event_bus.channel(event_type).subscribe_handler(_qdrant_event_handler)
                 registered += 1
 
     logger.info("Registered %d Qdrant indexing handlers", registered)

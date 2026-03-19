@@ -10,7 +10,6 @@ from src.shared.database import async_session_factory
 logger = logging.getLogger(__name__)
 
 
-@event_bus.on(CaptureEvents.CREATED)
 async def on_capture_created_auto_enrich(event: Event) -> None:
     """Auto-enrich new captures via LLM when raw_input is present.
 
@@ -102,3 +101,6 @@ async def _do_auto_enrich(capture_id: str, module: str, entity_type: str, raw_in
             capture_id,
             exc_info=True,
         )
+
+
+event_bus.channel(CaptureEvents.CREATED).subscribe_handler(on_capture_created_auto_enrich)
