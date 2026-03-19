@@ -16,6 +16,7 @@ from collections.abc import Callable
 # Import all handler modules
 from . import (
     anvil_telemetry,
+    attitude_signal,
     auto_format,
     bash_safety,
     claudemd_suggest,
@@ -82,10 +83,12 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "Notification": [
+        (None, attitude_signal.handle),
         (None, observability.handle),
     ],
     "SessionEnd": [
         (None, session_pipeline.handle),
+        (None, attitude_signal.handle),
         (None, observability.handle),
     ],
     "UserPromptSubmit": [
