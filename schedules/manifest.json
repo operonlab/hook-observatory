@@ -255,16 +255,6 @@
       "enabled": true
     },
     {
-      "name": "ws-relay-reaper",
-      "label": "com.joneshong.scheduler.ws-relay-reaper",
-      "command": "~/.local/bin/relay reaper",
-      "schedule": { "interval": 300 },
-      "description": "每 5 分鐘: relay reaper — 清理 bare shell panes + 空窗口（不碰主窗口）",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
       "name": "ws-memory-guardian",
       "label": "com.joneshong.scheduler.ws-memory-guardian",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memory_guardian.py",

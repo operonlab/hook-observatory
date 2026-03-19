@@ -65,3 +65,7 @@ clients/
 vendor/cronicle/temp_*/
 
 # Rigour
+.metadata_never_index
+
+# Rust build artifacts
+stations/rlm/target/
