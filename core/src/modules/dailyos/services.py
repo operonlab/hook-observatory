@@ -44,6 +44,12 @@ class MethodService(BaseCRUDService[Method, MethodCreate, MethodUpdate, MethodRe
     model = Method
     audit_module = "dailyos"
     audit_entity_type = "methods"
+    event_types = {
+        "created": DailyosEvents.METHOD_CREATED,
+        "updated": DailyosEvents.METHOD_UPDATED,
+    }
+    event_id_alias = "method_id"
+    event_fields = ("name", "name_zh", "description", "tags")
 
     def before_create(self, data: MethodCreate, **kwargs: Any) -> dict:
         d = data.model_dump()
@@ -81,46 +87,6 @@ class MethodService(BaseCRUDService[Method, MethodCreate, MethodUpdate, MethodRe
                 f"Invalid ordering: {ordering}",
                 code="dailyos.invalid_config",
             )
-
-    def after_create(self, instance: Method) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=DailyosEvents.METHOD_CREATED,
-                data={
-                    "method_id": instance.id,
-                    "id": instance.id,
-                    "space_id": instance.space_id,
-                    "name": instance.name,
-                    "name_zh": instance.name_zh,
-                    "description": instance.description,
-                    "tags": instance.tags or [],
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="dailyos",
-                user_id=instance.created_by,
-            )
-        )
-
-    def after_update(self, instance: Method, changes: dict) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=DailyosEvents.METHOD_UPDATED,
-                data={
-                    "method_id": instance.id,
-                    "id": instance.id,
-                    "space_id": instance.space_id,
-                    "name": instance.name,
-                    "name_zh": instance.name_zh,
-                    "description": instance.description,
-                    "tags": instance.tags or [],
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="dailyos",
-                user_id=instance.created_by,
-            )
-        )
 
     def to_response(self, instance: Method) -> MethodResponse:
         return MethodResponse(

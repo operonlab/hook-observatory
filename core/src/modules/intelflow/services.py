@@ -10,7 +10,6 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.events.bus import Event, event_bus
 from src.events.types import IntelflowEvents
 from src.shared.cache import cached
 from src.shared.embedding import get_embedding
@@ -50,30 +49,12 @@ class ReportService(BaseCRUDService[Report, ReportCreate, ReportUpdate, ReportRe
     model = Report
     audit_module = "intelflow"
     audit_entity_type = "reports"
+    event_types = {"created": IntelflowEvents.REPORT_CREATED}
+    event_id_alias = "report_id"
+    event_fields = ("title", "query", "content", "tags", "skill_name")
 
     def before_create(self, data: ReportCreate, **kwargs: Any) -> dict:
         return data.model_dump(exclude={"created_at"})
-
-    def after_create(self, instance: Report) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=IntelflowEvents.REPORT_CREATED,
-                data={
-                    "id": instance.id,
-                    "report_id": instance.id,  # backward compat
-                    "space_id": instance.space_id,
-                    "title": instance.title,
-                    "query": instance.query,
-                    "content": instance.content,
-                    "tags": instance.tags or [],
-                    "skill_name": instance.skill_name,
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="intelflow",
-                user_id=instance.created_by,
-            )
-        )
 
     def to_response(self, instance: Report) -> ReportResponse:
         topics = []
