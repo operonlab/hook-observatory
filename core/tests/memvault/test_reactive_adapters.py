@@ -332,14 +332,15 @@ class TestFullFlow:
 
     @pytest.mark.asyncio
     async def test_wire_memory_creation_flow_factory(self):
-        """Verify the factory wires correctly and subscription lifecycle works."""
+        """Verify the factory wires correctly and observer processes ctx (not just logs)."""
         bus = _make_bus()
-        sub = wire_memory_creation_flow(bus=bus, max_concurrent=2)
+        sub = wire_memory_creation_flow(bus=bus)
 
         assert isinstance(sub, Subscription)
         assert not sub.closed
 
-        # Publish a real event through the bus — should not raise
+        # Publish a real event through the bus — observer should process without error.
+        # The KG write will fail (no DB in test), but the pipe + operator chain must work.
         event = Event(
             type="memvault.memory.stored",
             data={
