@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""skill_tracker_v2.py — PostToolUse hook for Skill invocations.
+"""skill_tracker.py — PostToolUse hook for Skill invocations.
 Triggered by Claude Code PostToolUse (matcher: "Skill").
-V2: POSTs to Core API (localhost:8801), falls back to JSONL.
+POSTs to Core API (localhost:8801), falls back to JSONL.
 
 stdin: Hook JSON payload from Claude Code
 """
@@ -179,7 +179,8 @@ def _main() -> None:
                         _log(f"Knowledge captured for skill='{skill_name}' ({resp_len} chars)")
                     else:
                         _log(
-                            f"Knowledge capture failed (HTTP {block_status}) for skill='{skill_name}'"
+                            f"Knowledge capture failed (HTTP {block_status}) "
+                            f"for skill='{skill_name}'"
                         )
                 except Exception as e:
                     _log(f"Knowledge capture error: {e}")

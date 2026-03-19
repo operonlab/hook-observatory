@@ -452,7 +452,7 @@ async def recalculate_profile(
     _user: dict = require_permission("memvault.write"),
 ):
     """Recalculate KAS scores from actual KG data."""
-    from .kg_models import AttitudeFact, Cluster, SkillInvocation, Triple, WisdomNode
+    from .kg_models import AttitudeFact, Community, CommunitySummary, SkillInvocation, Triple
 
     # Knowledge score: based on triples + clusters + wisdom
     triple_count = (
@@ -462,12 +462,14 @@ async def recalculate_profile(
     ).scalar() or 0
     cluster_count = (
         await db.execute(
-            select(func.count()).select_from(Cluster).where(Cluster.space_id == space_id)
+            select(func.count()).select_from(Community).where(Community.space_id == space_id)
         )
     ).scalar() or 0
     wisdom_count = (
         await db.execute(
-            select(func.count()).select_from(WisdomNode).where(WisdomNode.space_id == space_id)
+            select(func.count())
+            .select_from(CommunitySummary)
+            .where(CommunitySummary.space_id == space_id)
         )
     ).scalar() or 0
 

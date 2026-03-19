@@ -16,6 +16,9 @@ BLOCK_TYPE_ALIASES: dict[str, str] = {
     "achievement": "knowledge",
     "technical": "knowledge",
     "decision": "knowledge",
+    "skill_knowledge": "knowledge",
+    "pattern": "knowledge",
+    "preference": "attitude",
 }
 
 
