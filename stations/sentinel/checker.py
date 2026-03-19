@@ -220,6 +220,14 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4105/api/app/ping",
         expect_json={"code": 0},
     ),
+    # ── security ──
+    LightCheck(
+        name="port-security",
+        group="system",
+        command="/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/port_audit.py --check",
+        expect_contains="PASS",
+        timeout=15.0,
+    ),
 ]
 
 
