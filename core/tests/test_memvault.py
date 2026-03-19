@@ -28,12 +28,12 @@ from src.modules.memvault.scopes import Scope, parse_scopes, scopes_to_filters
 from src.modules.memvault.scoring_pipeline import (
     ScoringConfig,
     ScoringPipeline,
-    _cosine_similarity,
 )
 from src.modules.memvault.services import (
     MemoryBlockService,
     should_search,
 )
+from src.shared.scoring_stages import cosine_similarity
 
 # ======================== Helpers ========================
 
@@ -181,8 +181,9 @@ class TestNoiseFilter:
 # ======================== Phase A2: Scoring Pipeline Tests ========================
 
 
+@pytest.mark.asyncio
 class TestScoringPipeline:
-    def test_recency_boost_recent_higher(self):
+    async def test_recency_boost_recent_higher(self):
         now = datetime.now(UTC)
         recent = _make_scored_dict(
             content="Recent knowledge about Python",
@@ -207,11 +208,11 @@ class TestScoringPipeline:
                 }
             )
         )
-        results, meta = pipeline.apply([recent, old])
+        results, meta = await pipeline.apply([recent, old])
         assert results[0]["score"] > results[1]["score"]
         assert "recency" in meta.stages_applied
 
-    def test_importance_weight_high_confidence(self):
+    async def test_importance_weight_high_confidence(self):
         high_conf = _make_scored_dict(
             content="High confidence knowledge item",
             score=0.7,
@@ -235,10 +236,10 @@ class TestScoringPipeline:
                 }
             )
         )
-        results, _ = pipeline.apply([high_conf, low_conf])
+        results, _ = await pipeline.apply([high_conf, low_conf])
         assert results[0]["score"] > results[1]["score"]
 
-    def test_length_normalization(self):
+    async def test_length_normalization(self):
         # Near-anchor content (400 chars) vs very long (5000 chars)
         optimal = _make_scored_dict(content="A" * 400, score=0.7)
         long = _make_scored_dict(content="L" * 5000, score=0.7)
@@ -255,13 +256,13 @@ class TestScoringPipeline:
                 }
             )
         )
-        results, _ = pipeline.apply([optimal, long])
+        results, _ = await pipeline.apply([optimal, long])
         # Near-anchor content should score higher than very long content
         optimal_score = next(r["score"] for r in results if len(r["content"]) == 400)
         long_score = next(r["score"] for r in results if len(r["content"]) == 5000)
         assert optimal_score > long_score
 
-    def test_min_score_filter(self):
+    async def test_min_score_filter(self):
         good = _make_scored_dict(content="Good quality memory result", score=0.5)
         bad = _make_scored_dict(content="Bad quality memory result", score=0.10)
         pipeline = ScoringPipeline(
@@ -277,11 +278,11 @@ class TestScoringPipeline:
                 }
             )
         )
-        results, _meta = pipeline.apply([good, bad])
+        results, _meta = await pipeline.apply([good, bad])
         assert len(results) == 1
         assert results[0]["score"] >= 0.20
 
-    def test_mmr_deduplication(self):
+    async def test_mmr_deduplication(self):
         emb1 = [1.0] * 768
         emb2 = [1.0] * 768  # identical = similarity 1.0
         emb3 = [0.0] * 768
@@ -317,14 +318,14 @@ class TestScoringPipeline:
                 }
             )
         )
-        results, _meta = pipeline.apply([r1, r2, r3], query_embedding=emb1)
+        results, _meta = await pipeline.apply([r1, r2, r3], query_embedding=emb1)
         # r2 should have reduced score due to similarity with r1
         scores = [r["score"] for r in results]
         assert scores[0] == 0.8  # r1 unchanged
         # r2 score should be reduced (0.7 * 0.5 = 0.35)
         assert any(s < 0.7 for s in scores if s != 0.8 and s != 0.6)
 
-    def test_stage_bypass_config(self):
+    async def test_stage_bypass_config(self):
         pipeline = ScoringPipeline(
             ScoringConfig(
                 stages_enabled={
@@ -341,25 +342,25 @@ class TestScoringPipeline:
                 }
             )
         )
-        _results, meta = pipeline.apply(
+        _results, meta = await pipeline.apply(
             [_make_scored_dict(content="Test memory content here", score=0.5)]
         )
         assert len(meta.stages_applied) == 0
         assert len(meta.stages_skipped) == 10
 
-    def test_scoring_metadata_tracking(self):
+    async def test_scoring_metadata_tracking(self):
         pipeline = ScoringPipeline()
         items = [
             _make_scored_dict(content="Valid memory about architecture", score=0.7),
             _make_scored_dict(content="ping", score=0.3),
         ]
-        _results, meta = pipeline.apply(items)
+        _results, meta = await pipeline.apply(items)
         assert meta.input_count == 2
         assert meta.output_count <= 2
 
-    def test_empty_input_handling(self):
+    async def test_empty_input_handling(self):
         pipeline = ScoringPipeline()
-        results, meta = pipeline.apply([])
+        results, meta = await pipeline.apply([])
         assert results == []
         assert meta.input_count == 0
         assert meta.output_count == 0
@@ -522,7 +523,7 @@ class TestIntegration:
                 created_at=datetime.now(UTC) - timedelta(days=30),
             ),
         ]
-        scored, meta = pipeline.apply(items)
+        scored, meta = await pipeline.apply(items)
         assert meta.input_count == 2
         # The high-quality item should remain
         assert any(d["score"] > 0.2 for d in scored)
@@ -536,13 +537,13 @@ class TestIntegration:
     def test_cosine_similarity(self):
         a = [1.0, 0.0, 0.0]
         b = [1.0, 0.0, 0.0]
-        assert _cosine_similarity(a, b) == pytest.approx(1.0)
+        assert cosine_similarity(a, b) == pytest.approx(1.0)
 
         c = [0.0, 1.0, 0.0]
-        assert _cosine_similarity(a, c) == pytest.approx(0.0)
+        assert cosine_similarity(a, c) == pytest.approx(0.0)
 
-        assert _cosine_similarity([], []) == 0.0
-        assert _cosine_similarity([0, 0, 0], [1, 1, 1]) == 0.0
+        assert cosine_similarity([], []) == 0.0
+        assert cosine_similarity([0, 0, 0], [1, 1, 1]) == 0.0
 
 
 # ======================== Defense ⑤: Task-Aware Embedding Tests ========================
