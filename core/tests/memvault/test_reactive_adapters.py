@@ -1,20 +1,24 @@
 """Tests for memvault reactive adapters — Protocol compliance + functional tests."""
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from src.events.backends.memory import InMemoryBackend
 from src.events.bus import Event, EventBus
 from src.modules.memvault.reactive_adapters import (
+    BlockFetchOp,
     EmbeddingScheduler,
     NoiseGateOp,
     TagCooccurrenceOp,
+    wire_capture_promotion_flow,
     wire_memory_creation_flow,
 )
 from src.shared.reactive import (
     FunctionObserver,
     Observer,
     Operator,
+    Pipeline,
     Scheduler,
     Subscription,
 )
@@ -50,6 +54,14 @@ class TestProtocolCompliance:
     def test_tag_cooccurrence_operator_protocol(self):
         op = TagCooccurrenceOp()
         assert isinstance(op, Operator)
+
+    def test_block_fetch_operator_protocol(self):
+        op = BlockFetchOp()
+        assert isinstance(op, Operator)
+
+    def test_pipeline_is_operator(self):
+        pipe = Pipeline().pipe(NoiseGateOp())
+        assert isinstance(pipe, Operator)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -371,3 +383,155 @@ class TestFullFlow:
 
         await bus.stop()
         assert len(bus._backend.handlers.get("test.cleanup", [])) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Capture Promotion Flow (cross-module pipe)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _mock_block(block_id="block-1", tags=None, space_id="space-1", source_session=None):
+    """Create a mock MemoryBlock."""
+    block = MagicMock()
+    block.id = block_id
+    block.tags = tags or ["python", "reactive", "patterns"]
+    block.space_id = space_id
+    block.source_session = source_session
+    return block
+
+
+class TestCapturePromotionFlow:
+    @pytest.mark.asyncio
+    async def test_memvault_module_receives_triples(self):
+        """module=memvault → BlockFetchOp → TagCooccurrenceOp → observer writes KG."""
+        bus = _make_bus()
+        mock_block = _mock_block()
+
+        mock_write = AsyncMock()
+
+        with (
+            patch(
+                "src.modules.memvault.reactive_adapters.async_session_factory"
+            ) as mock_session_factory,
+            patch(
+                "src.modules.memvault.reactive_adapters._write_triples_to_kg",
+                mock_write,
+            ),
+        ):
+            # Mock the DB session for BlockFetchOp
+            mock_db = AsyncMock()
+            mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+            mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with patch(
+                "src.modules.memvault.services.memory_block_service"
+            ) as mock_svc:
+                mock_svc.get = AsyncMock(return_value=mock_block)
+
+                sub = wire_capture_promotion_flow(bus=bus)
+
+                await bus.publish(
+                    Event(
+                        type="capture.promoted",
+                        data={
+                            "module": "memvault",
+                            "promoted_id": "block-1",
+                            "capture_id": "cap-1",
+                            "entity_type": "memory_block",
+                        },
+                        source="test",
+                    )
+                )
+
+                sub.unsubscribe()
+
+        # _write_triples_to_kg should be called with 3 triples (3C2 from 3 tags)
+        assert mock_write.called
+        triple_dicts = mock_write.call_args[0][0]
+        assert len(triple_dicts) == 3
+        assert mock_write.call_args[0][1] == "space-1"  # space_id
+
+    @pytest.mark.asyncio
+    async def test_non_memvault_module_skipped(self):
+        """module=finance → ConditionalOp passthrough → observer does not write KG."""
+        bus = _make_bus()
+        sub = wire_capture_promotion_flow(bus=bus)
+
+        with patch(
+            "src.modules.memvault.reactive_adapters._write_triples_to_kg"
+        ) as mock_write:
+            await bus.publish(
+                Event(
+                    type="capture.promoted",
+                    data={
+                        "module": "finance",
+                        "promoted_id": "txn-1",
+                        "capture_id": "cap-2",
+                        "entity_type": "transaction",
+                    },
+                    source="test",
+                )
+            )
+
+            # _write_triples_to_kg should NOT be called for finance module
+            mock_write.assert_not_called()
+
+        sub.unsubscribe()
+
+    @pytest.mark.asyncio
+    async def test_block_not_found_skipped(self):
+        """promoted_id invalid → BlockFetchOp returns empty → no triples → observer skip."""
+        bus = _make_bus()
+
+        with patch(
+            "src.modules.memvault.reactive_adapters.async_session_factory"
+        ) as mock_session_factory:
+            mock_db = AsyncMock()
+            mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+            mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with patch(
+                "src.modules.memvault.services.memory_block_service"
+            ) as mock_svc:
+                mock_svc.get = AsyncMock(return_value=None)  # block not found
+
+                with patch(
+                    "src.modules.memvault.reactive_adapters._write_triples_to_kg"
+                ) as mock_write:
+                    sub = wire_capture_promotion_flow(bus=bus)
+
+                    await bus.publish(
+                        Event(
+                            type="capture.promoted",
+                            data={
+                                "module": "memvault",
+                                "promoted_id": "nonexistent",
+                                "capture_id": "cap-3",
+                                "entity_type": "memory_block",
+                            },
+                            source="test",
+                        )
+                    )
+
+                    # No triples generated → _write_triples_to_kg not called
+                    mock_write.assert_not_called()
+
+                    sub.unsubscribe()
+
+    def test_compile_validation_passes(self):
+        """compile() should return empty list for the capture promotion pipeline."""
+        from src.shared.reactive import ConditionalOp, Pipeline
+
+        memvault_pipe = Pipeline(name="memvault_kg").pipe(BlockFetchOp(), TagCooccurrenceOp())
+        outer = Pipeline().pipe(
+            ConditionalOp(
+                predicate=lambda ctx: True,
+                then_op=memvault_pipe,
+                name="_compile_check",
+                predicate_keys=("module", "promoted_id"),
+            ),
+        )
+        missing = outer.compile(
+            initial_keys={"module", "promoted_id", "capture_id", "entity_type"}
+        )
+        assert missing == []
