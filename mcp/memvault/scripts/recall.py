@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""recall_v2.py — Memvault V2 recall script.
+"""recall.py — Memvault recall script (autoRecall-enabled).
 Triggered by Claude Code UserPromptSubmit hook.
-Searches Core API (cascade recall → search fallback) and returns plain text context.
+Searches Core API (cascade recall → attitude autoRecall → search fallback)
+and returns plain text context.
 
 stdin: JSON {"session_id", "prompt", "cwd"}
 stdout: Plain text context (or empty for no match)
@@ -160,21 +161,24 @@ def _main() -> None:
             if layers:
                 formatted = f"## 相關記憶（cascade recall: {layers}）"
 
-                # Wisdom (L2)
-                wisdom = cascade_data.get("wisdom", [])
-                if wisdom:
-                    formatted += "\n\n### Wisdom"
-                    for w in wisdom:
-                        wisdom_text = w.get("wisdom", "")
-                        confidence = w.get("confidence", "")
-                        if wisdom_text:
-                            formatted += f"\n- {wisdom_text} (confidence: {confidence})"
+                # Summaries (L2 — CommunitySummary)
+                summaries = cascade_data.get("summaries", [])
+                if summaries:
+                    formatted += "\n\n### 智慧節點"
+                    for s in summaries:
+                        summary_text = s.get("summary", "")
+                        key_findings = s.get("key_findings", [])
+                        if summary_text:
+                            formatted += f"\n- {summary_text}"
+                            if key_findings:
+                                for kf in key_findings:
+                                    formatted += f"\n  - {kf}"
 
-                # Clusters (L1)
-                clusters = cascade_data.get("clusters", [])
-                if clusters:
-                    formatted += "\n\n### Clusters"
-                    for c in clusters:
+                # Communities (L1)
+                communities = cascade_data.get("communities", [])
+                if communities:
+                    formatted += "\n\n### 知識社群"
+                    for c in communities:
                         name = c.get("name", "")
                         size = c.get("size", 0)
                         summary = c.get("summary") or "—"
@@ -203,12 +207,14 @@ def _main() -> None:
                         tag_str = f" (tags: {', '.join(tags)})" if tags else ""
                         formatted += f"\n- **{topic}**: {content}{tag_str}"
 
-                wisdom_count = len(wisdom)
-                cluster_count = len(clusters)
+                summary_count = len(summaries)
+                community_count = len(communities)
                 triple_count = len(triples)
                 block_count = len(blocks)
                 log(
-                    f"Cascade recall: {layers} ({wisdom_count} wisdom, {cluster_count} clusters, {triple_count} triples, {block_count} blocks)"
+                    f"Cascade recall: {layers} "
+                    f"({summary_count} summaries, {community_count} communities, "
+                    f"{triple_count} triples, {block_count} blocks)"
                 )
 
     # ── Fallback: simple search if cascade returned nothing ───────────────────
