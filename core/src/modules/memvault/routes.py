@@ -492,22 +492,43 @@ async def recalculate_profile(
     a_conf_bonus = att_avg_conf * 40
     attitude_score = round(min(a_base + a_conf_bonus, 100), 1)
 
-    # Skill score: based on invocations + success rate + unique skills
-    skill_result = await db.execute(
-        select(
-            func.count(),
-            func.count(func.distinct(SkillInvocation.skill_name)),
-            func.avg(case((SkillInvocation.outcome == "success", 1.0), else_=0.0)),
-        ).where(SkillInvocation.space_id == space_id)
-    )
-    skill_row = skill_result.one()
-    inv_count = skill_row[0] or 0
-    unique_skills = skill_row[1] or 0
-    avg_success = skill_row[2] or 0.0
-    s_base = min(math.log10(max(inv_count, 1)) / math.log10(500) * 50, 50)
-    s_variety_bonus = min(unique_skills * 2, 25)
-    s_success_bonus = avg_success * 25
-    skill_score = round(min(s_base + s_variety_bonus + s_success_bonus, 100), 1)
+    # Skill score: based on SkillProfile aggregates (KAS Skill dimension)
+    from statistics import mean as _mean
+
+    from .kg_models import SkillProfile
+
+    skill_profiles = (
+        await db.execute(
+            select(SkillProfile).where(SkillProfile.space_id == space_id)
+        )
+    ).scalars().all()
+
+    if skill_profiles:
+        total_skills = len(skill_profiles)
+        avg_sr = _mean(p.success_rate for p in skill_profiles)
+        expert_count = sum(1 for p in skill_profiles if p.proficiency_level == "expert")
+
+        s_diversity = min(total_skills * 3, 30)
+        s_proficiency = avg_sr * 40
+        s_mastery = min(expert_count * 5, 30)
+        skill_score = round(min(s_diversity + s_proficiency + s_mastery, 100), 1)
+    else:
+        # Fallback to SkillInvocation-based calculation if no profiles exist yet
+        skill_result = await db.execute(
+            select(
+                func.count(),
+                func.count(func.distinct(SkillInvocation.skill_name)),
+                func.avg(case((SkillInvocation.outcome == "success", 1.0), else_=0.0)),
+            ).where(SkillInvocation.space_id == space_id)
+        )
+        skill_row = skill_result.one()
+        inv_count = skill_row[0] or 0
+        unique_skills = skill_row[1] or 0
+        avg_success = skill_row[2] or 0.0
+        s_base = min(math.log10(max(inv_count, 1)) / math.log10(500) * 50, 50)
+        s_variety_bonus = min(unique_skills * 2, 25)
+        s_success_bonus = avg_success * 25
+        skill_score = round(min(s_base + s_variety_bonus + s_success_bonus, 100), 1)
 
     # Upsert profile
     result = await profile_score_service.upsert(
