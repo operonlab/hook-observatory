@@ -26,6 +26,7 @@ from .kg_models import (
     CommunitySummary,
     CommunityTriple,
     SkillInvocation,
+    SkillProfile,
     Triple,
 )
 from .kg_schemas import (
@@ -43,6 +44,8 @@ from .kg_schemas import (
     SkillInvocationCreate,
     SkillInvocationResponse,
     SkillProficiencyResponse,
+    SkillProfileResponse,
+    SkillProfileUpsert,
     TripleBatchCreate,
     TripleCreate,
     TripleResponse,
@@ -1874,6 +1877,95 @@ class ConfidenceDecayService:
         }
 
 
+# ======================== SkillProfileService ========================
+
+
+class SkillProfileService:
+    """Manage per-skill proficiency profiles (KAS Skill dimension)."""
+
+    def to_response(self, instance: SkillProfile) -> SkillProfileResponse:
+        return SkillProfileResponse(
+            id=instance.id,
+            space_id=instance.space_id,
+            created_by=instance.created_by,
+            created_at=instance.created_at,
+            updated_at=instance.updated_at,
+            skill_name=instance.skill_name,
+            total_uses=instance.total_uses,
+            recent_uses=instance.recent_uses,
+            success_rate=instance.success_rate,
+            avg_duration_ms=instance.avg_duration_ms,
+            auto_rate=instance.auto_rate,
+            common_patterns=instance.common_patterns,
+            learned_preferences=instance.learned_preferences,
+            pitfalls=instance.pitfalls,
+            proficiency_level=instance.proficiency_level,
+            health_score=instance.health_score,
+            evolution_notes=instance.evolution_notes,
+            last_synced_at=instance.last_synced_at,
+        )
+
+    async def upsert(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        skill_name: str,
+        data: SkillProfileUpsert,
+    ) -> SkillProfile:
+        """Create or update a skill profile by skill_name + space_id."""
+        q = select(SkillProfile).where(
+            SkillProfile.space_id == space_id,
+            SkillProfile.skill_name == skill_name,
+        )
+        existing = (await db.execute(q)).scalar_one_or_none()
+
+        if existing:
+            update_data = data.model_dump(exclude_unset=True, exclude={"skill_name"})
+            for key, val in update_data.items():
+                if val is not None:
+                    setattr(existing, key, val)
+            existing.last_synced_at = datetime.now(UTC)
+            await db.flush()
+            return existing
+
+        # Create new
+        profile = SkillProfile(
+            space_id=space_id,
+            skill_name=skill_name,
+            last_synced_at=datetime.now(UTC),
+        )
+        create_data = data.model_dump(exclude_unset=True, exclude={"skill_name"})
+        for key, val in create_data.items():
+            if val is not None:
+                setattr(profile, key, val)
+        db.add(profile)
+        await db.flush()
+        return profile
+
+    async def get_all(
+        self, db: AsyncSession, space_id: str
+    ) -> list[SkillProfileResponse]:
+        q = (
+            select(SkillProfile)
+            .where(SkillProfile.space_id == space_id)
+            .order_by(SkillProfile.total_uses.desc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [self.to_response(r) for r in rows]
+
+    async def get_by_skill(
+        self, db: AsyncSession, space_id: str, skill_name: str
+    ) -> SkillProfileResponse | None:
+        q = select(SkillProfile).where(
+            SkillProfile.space_id == space_id,
+            SkillProfile.skill_name == skill_name,
+        )
+        instance = (await db.execute(q)).scalar_one_or_none()
+        if not instance:
+            return None
+        return self.to_response(instance)
+
+
 # ======================== Module-level singletons ========================
 
 triple_service = TripleService()
@@ -1881,6 +1973,7 @@ community_service = CommunityService()
 community_summary_service = CommunitySummaryService()
 attitude_service = AttitudeService()
 skill_tracking_service = SkillTrackingService()
+skill_profile_service = SkillProfileService()
 cascade_recall_service = CascadeRecallService()
 confidence_decay_service = ConfidenceDecayService()
 graph_traversal_service = GraphTraversalService()

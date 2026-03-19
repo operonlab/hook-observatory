@@ -168,6 +168,40 @@ class SkillProficiencyResponse(BaseModel):
     proficiency: float = 0.0  # weighted score
 
 
+# ======================== SkillProfile ========================
+
+
+class SkillProfileResponse(SpaceScopedResponse):
+    skill_name: str
+    total_uses: int = 0
+    recent_uses: int = 0
+    success_rate: float = 0.0
+    avg_duration_ms: float | None = None
+    auto_rate: float | None = None
+    common_patterns: list[str] | None = None
+    learned_preferences: dict | None = None
+    pitfalls: list[dict] | None = None
+    proficiency_level: str = "novice"
+    health_score: float | None = None
+    evolution_notes: list[str] | None = None
+    last_synced_at: datetime | None = None
+
+
+class SkillProfileUpsert(BaseModel):
+    skill_name: str
+    total_uses: int | None = None
+    recent_uses: int | None = None
+    success_rate: float | None = None
+    avg_duration_ms: float | None = None
+    auto_rate: float | None = None
+    common_patterns: list[str] | None = None
+    learned_preferences: dict | None = None
+    pitfalls: list[dict] | None = None
+    proficiency_level: str | None = None
+    health_score: float | None = None
+    evolution_notes: list[str] | None = None
+
+
 # ======================== Pipeline Regenerate ========================
 
 

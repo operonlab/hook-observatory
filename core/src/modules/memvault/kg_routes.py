@@ -33,6 +33,8 @@ from .kg_schemas import (
     SkillInvocationCreate,
     SkillInvocationResponse,
     SkillProficiencyResponse,
+    SkillProfileResponse,
+    SkillProfileUpsert,
     TripleBatchCreate,
     TripleCreate,
     TripleInvalidateRequest,
@@ -45,6 +47,7 @@ from .kg_services import (
     community_summary_service,
     confidence_decay_service,
     graph_traversal_service,
+    skill_profile_service,
     skill_tracking_service,
     triple_service,
 )
@@ -394,6 +397,42 @@ async def delete_skill_invocation(
     await skill_tracking_service.delete_by_id(db, invocation_id)
     await db.commit()
     return None
+
+
+# ======================== Skill Profiles ========================
+
+
+@router.get("/skill-profiles", response_model=list[SkillProfileResponse])
+async def list_skill_profiles(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await skill_profile_service.get_all(db, space_id)
+
+
+@router.get("/skill-profiles/{skill_name}", response_model=SkillProfileResponse)
+async def get_skill_profile(
+    skill_name: str,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await skill_profile_service.get_by_skill(db, space_id, skill_name)
+    if not result:
+        raise NotFoundError("Skill profile not found", code="memvault.skill_profile_not_found")
+    return result
+
+
+@router.put("/skill-profiles/{skill_name}", response_model=SkillProfileResponse)
+async def upsert_skill_profile(
+    skill_name: str,
+    body: SkillProfileUpsert,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    instance = await skill_profile_service.upsert(db, space_id, skill_name, body)
+    await db.commit()
+    await db.refresh(instance)
+    return skill_profile_service.to_response(instance)
 
 
 # ======================== Cascade Recall ========================

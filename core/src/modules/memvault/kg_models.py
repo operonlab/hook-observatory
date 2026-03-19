@@ -25,7 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.shared.models import SpaceScopedModel
@@ -282,3 +282,38 @@ class SkillInvocation(SpaceScopedModel):
     invoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     outcome: Mapped[str] = mapped_column(String(20), server_default=text("'unknown'"))
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Skill Layer — SkillProfile (KAS Skill dimension L1/L2/L3)
+# ---------------------------------------------------------------------------
+
+
+class SkillProfile(SpaceScopedModel):
+    """Per-skill proficiency profile — KAS Skill dimension (L1/L2/L3)."""
+
+    __tablename__ = "skill_profiles"
+    __table_args__ = (
+        UniqueConstraint("space_id", "skill_name", name="uq_skill_profiles_space_skill"),
+        {"schema": SCHEMA},
+    )
+
+    skill_name: Mapped[str] = mapped_column(String(200))
+    # L1 — 基礎使用 (from Anvil invocations)
+    total_uses: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    recent_uses: Mapped[int] = mapped_column(Integer, server_default=text("0"))  # 30d
+    success_rate: Mapped[float] = mapped_column(Float, server_default=text("0"))
+    avg_duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # L2 — 偏好熟練 (from LLM analysis of invocation patterns)
+    auto_rate: Mapped[float | None] = mapped_column(Float, nullable=True)  # auto / total
+    common_patterns: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    learned_preferences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    pitfalls: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    # L3 — 創意熟練 (derived metrics)
+    proficiency_level: Mapped[str] = mapped_column(
+        String(20), server_default=text("'novice'")
+    )  # novice | proficient | expert
+    health_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    evolution_notes: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    # Sync metadata
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
