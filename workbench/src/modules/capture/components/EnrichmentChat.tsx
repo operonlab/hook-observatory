@@ -2,6 +2,7 @@ import { ArrowUpRight, Bug, Loader2, Send, Sparkles, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Capture, CapturePromoteResult } from '../api'
 import { captureApi } from '../api'
+import { MODULE_LABELS } from '../constants'
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -231,14 +232,6 @@ function handleWsMessage(
   }
 }
 
-const MODULE_LABELS: Record<string, string> = {
-  finance: '記帳',
-  taskflow: '任務',
-  invest: '投資',
-  dailyos: '日程',
-  intelflow: '情報',
-  ideagraph: '靈感',
-}
 
 export default function EnrichmentChat({
   selectedCapture,

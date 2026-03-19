@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { type Capture, type CapturePromoteResult, captureApi } from './api'
+import { timeAgo } from '../../shared/utils/time'
 
 interface CaptureInboxProps {
   module: string
@@ -240,14 +241,6 @@ export default function CaptureInbox({ module, entityType, onPromoted }: Capture
     return `${d}${amt}`.trim() || c.entity_type
   }
 
-  const timeAgo = (iso: string) => {
-    const d = Date.now() - new Date(iso).getTime()
-    const mins = Math.floor(d / 60000)
-    if (mins < 60) return `${mins}m`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h`
-    return `${Math.floor(hrs / 24)}d`
-  }
 
   return (
     <div

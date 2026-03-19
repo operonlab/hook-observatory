@@ -2,15 +2,7 @@ import { ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useBriefingHistory } from '../hooks/useBriefing'
 import { useBriefingStore } from '../stores'
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  })
-}
+import { fmtDateLong } from '../../../shared/utils/formatting'
 
 export default function BriefingHistory() {
   const { briefings, total, page, loading, fetchBriefings } = useBriefingHistory()
@@ -88,7 +80,7 @@ export default function BriefingHistory() {
               >
                 <div>
                   <div className="text-sm font-medium" style={{ color: 'var(--bf-text)' }}>
-                    {formatDate(date)}
+                    {fmtDateLong(date)}
                   </div>
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-xs" style={{ color: 'var(--bf-text-dim)' }}>

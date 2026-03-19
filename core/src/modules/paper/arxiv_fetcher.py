@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +20,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.shared.scoring_stages import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -246,16 +247,6 @@ async def fetch_arxiv_papers(
 # ── Relevance scoring ─────────────────────────────────────────────────────────
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors."""
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
-
-
 async def score_relevance(
     papers: list[dict],
     topics: list[str] | None = None,
@@ -321,7 +312,7 @@ async def score_relevance(
             continue
 
         # Max similarity across all topics
-        max_sim = max(_cosine_similarity(paper_emb, topic_emb) for _, topic_emb in valid_topics)
+        max_sim = max(cosine_similarity(paper_emb, topic_emb) for _, topic_emb in valid_topics)
         # Normalize: cosine similarity typically in [-1, 1] but embeddings usually [0, 1]
         paper["relevance_score"] = max(0.0, min(1.0, float(max_sim)))
 

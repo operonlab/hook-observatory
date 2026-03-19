@@ -1,24 +1,8 @@
 import { AlertTriangle, ArrowUpRight, ChevronDown, ChevronUp, Clock, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { type Capture, type CapturePromoteResult, captureApi } from '../api'
-
-const MODULE_COLORS: Record<string, string> = {
-  finance: '#a6e3a1',
-  taskflow: '#cba6f7',
-  invest: '#f38ba8',
-  dailyos: '#89b4fa',
-  ideagraph: '#f9e2af',
-  intelflow: '#94e2d5',
-}
-
-const MODULE_LABELS: Record<string, string> = {
-  finance: '記帳',
-  taskflow: '任務',
-  invest: '投資',
-  dailyos: '日程',
-  ideagraph: '靈感',
-  intelflow: '情報',
-}
+import { MODULE_COLORS, MODULE_LABELS } from '../constants'
+import { timeAgo } from '../../../shared/utils/time'
 
 interface CaptureListProps {
   captures: Capture[]
@@ -269,14 +253,6 @@ function desc(c: Capture): string {
   return `${d}${amt}`.trim() || c.entity_type
 }
 
-function timeAgo(iso: string): string {
-  const d = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(d / 60000)
-  if (mins < 60) return `${mins}m`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h`
-  return `${Math.floor(hrs / 24)}d`
-}
 
 function isExpiringSoon(c: Capture): boolean {
   return !!(c.expires_at && new Date(c.expires_at).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000)

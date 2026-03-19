@@ -71,6 +71,15 @@ PREDICATE_ALIASES = {
     "translates_to": "maps_to",
 }
 
+# ---------------------------------------------------------------------------
+# Block Types — canonical vocabulary for MemoryBlock.block_type
+# ---------------------------------------------------------------------------
+BLOCK_TYPES = frozenset({"knowledge", "skill", "attitude", "general"})
+
+# Block types protected from GRC curation even with low confidence scores.
+# These represent high-value user corrections/decisions that should be preserved.
+PROTECTED_BLOCK_TYPES = frozenset({"lesson", "correction", "decision", "rule"})
+
 ATTITUDE_CATEGORIES = [
     "workflow",
     "tool_behavior",

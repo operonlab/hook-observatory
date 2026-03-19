@@ -1,4 +1,5 @@
 import type { BaseEntity } from '@/types'
+export { fmtAmt, fmtPct } from '../../../shared/utils/formatting'
 
 // ─── Asset Type ───
 
@@ -159,8 +160,3 @@ export const TRADE_TYPE_LABELS: Record<TradeType, string> = {
   split: '分割',
 }
 
-export const fmtAmt = (v: number | string): string =>
-  Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-export const fmtPct = (v: number | string): string =>
-  `${Number(v) >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`
