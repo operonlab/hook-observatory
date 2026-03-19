@@ -18,7 +18,7 @@ MEMVAULT_SCRIPTS = os.path.join(HOME, "workshop", "mcp", "memvault", "scripts")
 def recall(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """UserPromptSubmit: memvault recall — returns markdown context."""
     return call_external_script(
-        os.path.join(MEMVAULT_SCRIPTS, "recall_v2.py"),
+        os.path.join(MEMVAULT_SCRIPTS, "recall.py"),
         input_data=raw_input,
         timeout=15,
     )
@@ -36,7 +36,7 @@ def extract(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -
 def skill_tracker(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     """PostToolUse/Skill: track skill usage to Core API."""
     return call_external_script(
-        os.path.join(MEMVAULT_SCRIPTS, "skill_tracker_v2.py"),
+        os.path.join(MEMVAULT_SCRIPTS, "skill_tracker.py"),
         input_data=raw_input,
         timeout=5,
     )
