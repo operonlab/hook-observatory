@@ -45,6 +45,7 @@ def _get_redis() -> redis.Redis | None:
         _r = None
         return None
 
+
 _RKEY_FORMATTED = "agent-metrics:quota:formatted"
 _RKEY_RAW = "agent-metrics:quota:raw"
 _RKEY_CC_RAW = "agent-metrics:quota:cc_raw"
@@ -89,8 +90,9 @@ def _load_persisted_cc_quota() -> None:
     if _cc_last_success:
         return
     # Check Redis first
+    r = _get_redis()
     try:
-        cached = _r.get(_RKEY_CC_RAW)
+        cached = r.get(_RKEY_CC_RAW) if r else None
         if cached:
             data = json.loads(cached)
             _cc_last_success = data
@@ -109,7 +111,8 @@ def _load_persisted_cc_quota() -> None:
                 _cc_last_success = data
                 _cc_last_success_ts = ts
                 # Seed Redis from disk
-                _r.setex(_RKEY_CC_RAW, settings.CC_QUOTA_FETCH_INTERVAL, json.dumps(data))
+                if r:
+                    r.setex(_RKEY_CC_RAW, settings.CC_QUOTA_FETCH_INTERVAL, json.dumps(data))
                 source = payload.get("source", "disk")
                 log.info("cc_quota_loaded_from_disk", age_s=int(time.time() - ts), source=source)
     except (OSError, json.JSONDecodeError, KeyError):

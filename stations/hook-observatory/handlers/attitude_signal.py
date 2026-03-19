@@ -61,7 +61,7 @@ def _handle_notification(tool_name: str, tool_input: dict, raw_input: str) -> Ho
         session_id = notification_data.get("session_id", "")
         _write_correction(
             category="autonomy_level",
-            fact=f"使用者 deny {denied_tool}，偏好更多確認再執行",
+            fact=f"使用者 deny {denied_tool}, 偏好更多確認再執行",
             session_id=session_id,
         )
 
@@ -127,14 +127,14 @@ def _handle_session_end(tool_input: dict, raw_input: str) -> HookResult:
     if deny_count >= 3:
         _write_correction(
             category="autonomy_level",
-            fact=f"本 session deny {deny_count} 次，使用者偏好更多確認",
+            fact=f"本 session deny {deny_count} 次, 使用者偏好更多確認",
             session_id=session_id,
         )
 
     if message_count > 0 and tool_count / message_count > 15:
         _write_correction(
             category="verbosity",
-            fact=f"高工具密度 ({tool_count}/{message_count})，使用者可能偏好精簡對話",
+            fact=f"高工具密度 ({tool_count}/{message_count}), 使用者可能偏好精簡對話",
             session_id=session_id,
         )
 

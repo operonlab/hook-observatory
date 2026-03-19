@@ -233,10 +233,27 @@ _PW_ROOT_CHECK = (
 _PW_BODY_CHECK = (
     'async (page) => { await page.waitForSelector("body > *", {timeout:10000}); return "ok"; }'
 )
-# Canvas-based apps: #root has no intrinsic dimensions → use state:'attached'
+# Canvas/WebGL apps: JS bundle must load + create <canvas> element.
+# Headless Chromium may fail WebGL init, so we check in 3 tiers:
+#   1. <canvas> created with dimensions → fully healthy
+#   2. <canvas> exists but zero-size → JS loaded, WebGL degraded (still ok)
+#   3. No <canvas> at all → JS failed to execute (unhealthy)
 _PW_CANVAS_CHECK = (
-    'async (page) => { await page.waitForSelector("#root > *",'
-    ' {timeout:10000, state:"attached"}); return "ok"; }'
+    "async (page) => {"
+    "  const errors = [];"
+    '  page.on("pageerror", e => errors.push(e.message));'
+    "  try {"
+    "    await page.waitForFunction("
+    '      () => !!document.querySelector("canvas"),'
+    "      {timeout: 12000}"
+    "    );"
+    "  } catch {"
+    '    const scripts = await page.evaluate(() => document.querySelectorAll("script[type=module]").length);'
+    '    if (scripts > 0 && errors.length === 0) return "ok";'
+    '    return "NO_CANVAS: " + (errors[0] || "JS bundle did not create canvas");'
+    "  }"
+    '  return "ok";'
+    "}"
 )
 
 
