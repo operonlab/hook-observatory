@@ -204,12 +204,7 @@ DOCKER_CONTAINERS = [
         "health_cmd": None,
         "health_url": "http://127.0.0.1:8090/ping",
     },
-    {
-        "name": "ws-infra-ntfy-1",
-        "port": 9080,
-        "health_cmd": None,
-        "health_url": "http://127.0.0.1:9080/v1/health",
-    },
+    # ntfy disabled — Bark + Web Push only
     {
         "name": "ws-infra-qdrant-1",
         "port": 6333,
@@ -660,15 +655,27 @@ def _check_bind_addresses() -> None:
                 f"port-{port_num}",
             )
             log(f"SECURITY: {svc_name} (:{port_num}) bound to 0.0.0.0 — LAN exposed!")
-            # Send ntfy alert
+            # Publish alert via Redis → Core fan-out pipeline
             try:
-                data = f"⚠️ {svc_name} (:{port_num}) bound to 0.0.0.0".encode()
-                req = urllib.request.Request(
-                    "http://127.0.0.1:9080/workshop",
-                    data=data,
-                    headers={"Title": "Port Security Alert", "Priority": "high"},
-                )
-                urllib.request.urlopen(req, timeout=5)  # noqa: S310
+                import json as _json
+                import socket as _socket
+
+                _payload = _json.dumps({
+                    "category": "system",
+                    "title": "Port Security Alert",
+                    "body": f"⚠️ {svc_name} (:{port_num}) bound to 0.0.0.0",
+                    "tag": f"port-security-{port_num}",
+                    "severity": "critical",
+                })
+                _ch = "workshop:push"
+                _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                _sock.settimeout(3)
+                _sock.connect(("127.0.0.1", 6379))
+                _parts = f"*3\r\n$7\r\nPUBLISH\r\n${len(_ch)}\r\n{_ch}\r\n"
+                _parts += f"${len(_payload)}\r\n{_payload}\r\n"
+                _sock.sendall(_parts.encode())
+                _sock.recv(256)
+                _sock.close()
             except Exception:  # noqa: S110
                 pass
 
