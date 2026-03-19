@@ -10,14 +10,20 @@ G6 enhancement: Access reinforcement — frequently-accessed memories
 decay more slowly via compute_effective_half_life() from access_tracker.
 Results dicts should carry access_count and last_accessed_at for this
 stage to take effect (populated by services.py search queries).
+
+Reactive Protocol: Each stage is a ScoringOp implementing the Operator protocol.
+ScoringPipeline.apply() uses Pipeline.pipe() for composable execution with
+compile() validation for key dependency chains.
 """
 
 import logging
 import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 from src.shared.access_tracker import compute_effective_half_life
+from src.shared.reactive import Pipeline
 
 from .noise_filter import check_noise
 
@@ -123,173 +129,136 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return cosine_similarity(a, b)
 
 
-class ScoringPipeline:
-    def __init__(self, config: ScoringConfig | None = None):
-        self.config = config or ScoringConfig()
+# ═══════════════════════════════════════════════════════════════════════════
+# Scoring Operators — each implements the Operator protocol from reactive.py
+# ═══════════════════════════════════════════════════════════════════════════
 
-    def _is_enabled(self, stage: str) -> bool:
-        return self.config.stages_enabled.get(stage, True)
 
-    def apply(
-        self,
-        results: list[dict],
-        query_embedding: list[float] | None = None,
-    ) -> tuple[list[dict], ScoringMetadata]:
-        """Apply all enabled stages.
+class ScoringOp:
+    """Base for scoring pipeline operators (Operator protocol).
 
-        Each result dict has: block, score, content, created_at, confidence, embedding (optional).
-        G6 fields (optional): access_count, last_accessed_at — used by time_decay stage.
-        """
-        meta = ScoringMetadata(input_count=len(results))
+    Wraps each stage with enable-check + try/except error isolation.
+    Provides both async __call__ (Protocol compliance) and sync
+    execute_stage() for ScoringPipeline's synchronous apply().
+    """
 
-        if not results:
-            meta.output_count = 0
-            return results, meta
+    def __init__(self, stage_name: str, config: ScoringConfig) -> None:
+        self._stage_name = stage_name
+        self._config = config
 
-        now = datetime.now(UTC)
+    @property
+    def name(self) -> str:
+        return self._stage_name
 
-        # Stage 1: Recency Boost
-        results = self._run_stage("recency", results, meta, self._apply_recency, now=now)
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return ("results",)
 
-        # Stage 2: Importance Weight
-        results = self._run_stage("importance", results, meta, self._apply_importance)
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        return ("results",)
 
-        # Stage 2.5: Trust Boost (P3 source tracking → scoring)
-        results = self._run_stage("trust_boost", results, meta, self._apply_trust_boost)
-
-        # Stage 2.75: Feedback Boost (closed-loop learning from explicit feedback)
-        results = self._run_stage("feedback_boost", results, meta, self._apply_feedback_boost)
-
-        # Stage 3: Length Normalization
-        results = self._run_stage("length_norm", results, meta, self._apply_length_norm)
-
-        # Stage 4: Time Decay (G3 Weibull + G6 access reinforcement)
-        results = self._run_stage("time_decay", results, meta, self._apply_time_decay)
-
-        # Stage 4.5: Semantic Relevance Boost (FadeMem-inspired)
-        results = self._run_stage(
-            "semantic_boost",
-            results,
-            meta,
-            self._apply_semantic_relevance,
-            query_embedding=query_embedding,
-        )
-
-        # Stage 5: Hard Min Score
-        results = self._run_stage("min_score", results, meta, self._apply_min_score)
-
-        # Stage 6: Noise Filter
-        before_noise = len(results)
-        results = self._run_stage("noise_filter", results, meta, self._apply_noise_filter)
-        meta.noise_filtered = before_noise - len(results)
-
-        # Stage 7: MMR Diversity
-        before_mmr = len(results)
-        results = self._run_stage(
-            "mmr", results, meta, self._apply_mmr, query_embedding=query_embedding
-        )
-        meta.mmr_deduped = before_mmr - len(results)
-
-        # Sort by final score descending
-        results.sort(key=lambda r: r["score"], reverse=True)
-        meta.output_count = len(results)
-        return results, meta
-
-    def _run_stage(
-        self,
-        name: str,
-        results: list[dict],
-        meta: ScoringMetadata,
-        fn: ...,
-        **kwargs: ...,
-    ) -> list[dict]:
-        if not self._is_enabled(name):
-            meta.stages_skipped.append(name)
-            return results
+    def execute_stage(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Sync execution with enable-check + error isolation."""
+        meta: ScoringMetadata = ctx["meta"]
+        if not self._config.stages_enabled.get(self._stage_name, True):
+            meta.stages_skipped.append(self._stage_name)
+            return ctx
         try:
-            results = fn(results, **kwargs)
-            meta.stages_applied.append(name)
+            ctx["results"] = self.transform(ctx["results"], ctx)
+            meta.stages_applied.append(self._stage_name)
         except Exception:
-            logger.exception("Scoring stage '%s' failed, skipping", name)
-            meta.stages_skipped.append(name)
-        return results
+            logger.exception("Scoring stage '%s' failed, skipping", self._stage_name)
+            meta.stages_skipped.append(self._stage_name)
+        return ctx
 
-    def _apply_recency(self, results: list[dict], now: datetime) -> list[dict]:
+    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Async path (Operator Protocol compliance)."""
+        return self.execute_stage(ctx)
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
+        raise NotImplementedError
+
+
+class RecencyOp(ScoringOp):
+    """Stage 1: Recency Boost — newer memories score higher."""
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return ("results", "now")
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         from src.shared.scoring_stages import apply_recency_boost
 
         return apply_recency_boost(
             results,
-            half_life_days=self.config.recency_half_life,
-            weight=self.config.recency_weight,
-            now=now,
+            half_life_days=self._config.recency_half_life,
+            weight=self._config.recency_weight,
+            now=ctx["now"],
         )
 
-    def _apply_importance(self, results: list[dict]) -> list[dict]:
+
+class ImportanceOp(ScoringOp):
+    """Stage 2: Importance Weight — confidence-based scoring."""
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         for r in results:
             confidence = r.get("confidence") or 0.5  # unset → neutral
             r["score"] *= 0.7 + 0.3 * confidence
         return results
 
-    def _apply_trust_boost(self, results: list[dict]) -> list[dict]:
-        """P3 source tracking → scoring integration.
 
-        Compute trust_score from source_tracker provenance heuristics.
-        Low-trust memories get penalized; high-trust memories are unaffected.
-        Formula: score *= (1 - trust_penalty * (1 - trust_score))
-        """
+class TrustBoostOp(ScoringOp):
+    """Stage 2.5: Trust Boost — P3 source tracking → scoring integration."""
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         from .source_tracker import MemoryProvenance, compute_trust_score
 
         for r in results:
             block = r.get("block")
             if not block:
                 continue
-            # Build provenance from available block metadata
             session_id = getattr(block, "source_session", None)
             provenance = MemoryProvenance(
                 source_session_id=session_id,
                 extraction_method="auto_extract" if session_id else "manual",
             )
             trust = compute_trust_score(provenance)
-            # Apply penalty: trust=1.0 → no penalty, trust=0.5 → 15% penalty (default)
-            r["score"] *= 1.0 - self.config.trust_penalty * (1.0 - trust)
+            r["score"] *= 1.0 - self._config.trust_penalty * (1.0 - trust)
         return results
 
-    def _apply_feedback_boost(self, results: list[dict]) -> list[dict]:
-        """Closed-loop learning: adjust scores based on accumulated explicit feedback.
 
-        Result dict optional field:
-          feedback_net (int) — net signal (positive_count - negative_count).
-                               Populated by services.py before calling pipeline.
+class FeedbackBoostOp(ScoringOp):
+    """Stage 2.75: Feedback Boost — closed-loop learning from explicit feedback.
 
-        Formula: score *= 1 + feedback_weight * tanh(net_signal / 3)
-        - tanh saturates smoothly: ±3 signals ≈ ±14% boost, ±10 ≈ ±15%
-        - Division by 3 controls sensitivity (3 signals for ~70% of max effect)
-        """
+    Formula: score *= 1 + feedback_weight * tanh(net_signal / 3)
+    """
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         for r in results:
-            net = r.get("feedback_net") or 0  # handles None and missing key safely
+            net = r.get("feedback_net") or 0
             if not net:
                 continue
-            r["score"] *= 1.0 + self.config.feedback_weight * math.tanh(net / 3.0)
+            r["score"] *= 1.0 + self._config.feedback_weight * math.tanh(net / 3.0)
         return results
 
-    def _apply_length_norm(self, results: list[dict]) -> list[dict]:
+
+class LengthNormOp(ScoringOp):
+    """Stage 3: Length Normalization — penalize extreme content lengths."""
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         from src.shared.scoring_stages import apply_length_normalization
 
         return apply_length_normalization(
             results,
-            anchor_length=self.config.length_anchor,
+            anchor_length=self._config.length_anchor,
         )
 
-    def _apply_time_decay(self, results: list[dict]) -> list[dict]:
-        """Weibull decay with G6 access reinforcement.
 
-        G3: tier-aware Weibull forgetting curve (confidence → tier).
-        G6: effective half-life replaces fixed λ when access data is present.
+class TimeDecayOp(ScoringOp):
+    """Stage 4: Time Decay — G3 Weibull + G6 access reinforcement."""
 
-        Result dict optional fields for G6:
-          access_count (int)       — number of times block was retrieved
-          last_accessed_at (datetime | None) — timestamp of last access
-        """
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         now = datetime.now(UTC)
         for r in results:
             created_at = r.get("created_at")
@@ -314,7 +283,6 @@ class ScoringPipeline:
             last_accessed_at = r.get("last_accessed_at")
 
             if access_count > 0 and last_accessed_at is not None:
-                # Use tier's default λ as the base for effective half-life
                 tier_lambda = WEIBULL_PARAMS.get(tier, WEIBULL_PARAMS["hot"])["lambda_"]
                 effective_hl = compute_effective_half_life(
                     access_count=access_count,
@@ -324,24 +292,20 @@ class ScoringPipeline:
                 )
                 r["score"] *= weibull_decay_with_half_life(age_days, effective_hl, tier)
             else:
-                # Fallback: standard Weibull decay (G3 behaviour)
                 r["score"] *= weibull_decay(age_days, tier)
 
         return results
 
-    def _apply_semantic_relevance(
-        self,
-        results: list[dict],
-        query_embedding: list[float] | None = None,
-    ) -> list[dict]:
-        """FadeMem-inspired: boost scores for memories semantically close to query.
 
-        If query_embedding is available, compute cosine similarity between each
-        result's embedding and the query. Higher similarity = less decay penalty.
+class SemanticBoostOp(ScoringOp):
+    """Stage 4.5: Semantic Relevance Boost — FadeMem-inspired."""
 
-        Formula: score *= (1 + semantic_boost_factor * similarity)
-        where semantic_boost_factor defaults to 0.3
-        """
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return ("results", "query_embedding")
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
+        query_embedding = ctx.get("query_embedding")
         if not query_embedding:
             return results
 
@@ -350,18 +314,40 @@ class ScoringPipeline:
             if not emb:
                 continue
             similarity = _cosine_similarity(emb, query_embedding)
-            # similarity is in [-1, 1]; clamp to [0, 1] for boost calculation
             similarity = max(0.0, similarity)
-            r["score"] *= 1.0 + self.config.semantic_boost * similarity
+            r["score"] *= 1.0 + self._config.semantic_boost * similarity
 
         return results
 
-    def _apply_min_score(self, results: list[dict]) -> list[dict]:
+
+class MinScoreOp(ScoringOp):
+    """Stage 5: Hard Min Score — remove results below threshold."""
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         from src.shared.scoring_stages import apply_min_score_filter
 
-        return apply_min_score_filter(results, min_score=self.config.min_score)
+        return apply_min_score_filter(results, min_score=self._config.min_score)
 
-    def _apply_noise_filter(self, results: list[dict]) -> list[dict]:
+
+class NoiseFilterOp(ScoringOp):
+    """Stage 6: Noise Filter — remove greeting/noise content."""
+
+    def execute_stage(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        meta: ScoringMetadata = ctx["meta"]
+        if not self._config.stages_enabled.get(self._stage_name, True):
+            meta.stages_skipped.append(self._stage_name)
+            return ctx
+        try:
+            before = len(ctx["results"])
+            ctx["results"] = self.transform(ctx["results"], ctx)
+            meta.stages_applied.append(self._stage_name)
+            meta.noise_filtered = before - len(ctx["results"])
+        except Exception:
+            logger.exception("Scoring stage '%s' failed, skipping", self._stage_name)
+            meta.stages_skipped.append(self._stage_name)
+        return ctx
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
         clean = []
         for r in results:
             content = r.get("content", "")
@@ -370,16 +356,34 @@ class ScoringPipeline:
                 clean.append(r)
         return clean
 
-    def _apply_mmr(
-        self,
-        results: list[dict],
-        query_embedding: list[float] | None = None,
-    ) -> list[dict]:
-        """MMR diversity: if cosine_similarity > threshold, reduce lower-ranked score by 50%."""
+
+class MMROp(ScoringOp):
+    """Stage 7: MMR Diversity — reduce redundant results."""
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return ("results", "query_embedding")
+
+    def execute_stage(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        meta: ScoringMetadata = ctx["meta"]
+        if not self._config.stages_enabled.get(self._stage_name, True):
+            meta.stages_skipped.append(self._stage_name)
+            return ctx
+        try:
+            before = len(ctx["results"])
+            ctx["results"] = self.transform(ctx["results"], ctx)
+            meta.stages_applied.append(self._stage_name)
+            meta.mmr_deduped = before - len(ctx["results"])
+        except Exception:
+            logger.exception("Scoring stage '%s' failed, skipping", self._stage_name)
+            meta.stages_skipped.append(self._stage_name)
+        return ctx
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
+        query_embedding = ctx.get("query_embedding")
         if not query_embedding:
             return results
 
-        # Collect results that have embeddings
         to_remove = set()
         for i in range(len(results)):
             if i in to_remove:
@@ -394,11 +398,69 @@ class ScoringPipeline:
                 if not emb_j:
                     continue
                 sim = _cosine_similarity(emb_i, emb_j)
-                if sim > self.config.mmr_threshold:
-                    # Reduce lower-ranked one's score by 50%
+                if sim > self._config.mmr_threshold:
                     results[j]["score"] *= 0.5
-                    # If score drops below min_score, mark for removal
-                    if results[j]["score"] < self.config.min_score:
+                    if results[j]["score"] < self._config.min_score:
                         to_remove.add(j)
 
         return [r for i, r in enumerate(results) if i not in to_remove]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ScoringPipeline — public API (unchanged)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class ScoringPipeline:
+    def __init__(self, config: ScoringConfig | None = None):
+        self.config = config or ScoringConfig()
+
+    def _build_pipeline(self) -> Pipeline:
+        """Build the reactive Pipeline with all 10 scoring operators."""
+        return Pipeline().pipe(
+            RecencyOp("recency", self.config),
+            ImportanceOp("importance", self.config),
+            TrustBoostOp("trust_boost", self.config),
+            FeedbackBoostOp("feedback_boost", self.config),
+            LengthNormOp("length_norm", self.config),
+            TimeDecayOp("time_decay", self.config),
+            SemanticBoostOp("semantic_boost", self.config),
+            MinScoreOp("min_score", self.config),
+            NoiseFilterOp("noise_filter", self.config),
+            MMROp("mmr", self.config),
+        )
+
+    def apply(
+        self,
+        results: list[dict],
+        query_embedding: list[float] | None = None,
+    ) -> tuple[list[dict], ScoringMetadata]:
+        """Apply all enabled stages.
+
+        Each result dict has: block, score, content, created_at, confidence, embedding (optional).
+        G6 fields (optional): access_count, last_accessed_at — used by time_decay stage.
+        """
+        meta = ScoringMetadata(input_count=len(results))
+
+        if not results:
+            meta.output_count = 0
+            return results, meta
+
+        ctx: dict[str, Any] = {
+            "results": results,
+            "meta": meta,
+            "now": datetime.now(UTC),
+            "query_embedding": query_embedding,
+        }
+
+        pipeline = self._build_pipeline()
+
+        # Sync execution via execute_stage()
+        for op in pipeline:
+            ctx = op.execute_stage(ctx)
+
+        # Sort by final score descending
+        results = ctx["results"]
+        results.sort(key=lambda r: r["score"], reverse=True)
+        meta.output_count = len(results)
+        return results, meta
