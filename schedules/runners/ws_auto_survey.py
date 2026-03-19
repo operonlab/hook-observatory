@@ -44,7 +44,41 @@ def run_notify_check() -> str:
     return output
 
 
+def try_line_reader() -> bool:
+    """Phase 0: Try reading SurveyCake URLs from LINE Desktop.
+
+    Returns True if pipeline was triggered successfully.
+    """
+    print("[ws_auto_survey] Phase 0: Trying LINE reader...", flush=True)
+    cmd = [
+        UV,
+        "run",
+        "--project",
+        str(STATION_DIR),
+        "auto-survey",
+        "line-read",
+        "--trigger",
+    ]
+    result = subprocess.run(cmd, cwd=str(STATION_DIR), capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout.rstrip(), flush=True)
+    if result.stderr:
+        print(result.stderr.rstrip(), flush=True)
+
+    if result.returncode == 0:
+        print("[ws_auto_survey] Phase 0 success — LINE reader triggered pipeline.", flush=True)
+        return True
+
+    print("[ws_auto_survey] Phase 0 failed — falling through to Bark reminder loop.", flush=True)
+    return False
+
+
 def main() -> None:
+    # Phase 0: Try LINE reader first
+    if try_line_reader():
+        return
+
+    # Phase 1: Bark reminder loop (fallback)
     print(f"[ws_auto_survey] Starting reminder loop (poll every {POLL_INTERVAL}s)", flush=True)
     start_time = time.time()
 
