@@ -8,10 +8,12 @@ from src.events.backends.memory import InMemoryBackend
 from src.events.bus import Event, EventBus
 from src.modules.memvault.reactive_adapters import (
     BlockFetchOp,
+    DigestToBlockOp,
     EmbeddingScheduler,
     NoiseGateOp,
     TagCooccurrenceOp,
     wire_capture_promotion_flow,
+    wire_intelligence_digest_flow,
     wire_memory_creation_flow,
 )
 from src.shared.reactive import (
@@ -57,6 +59,10 @@ class TestProtocolCompliance:
 
     def test_block_fetch_operator_protocol(self):
         op = BlockFetchOp()
+        assert isinstance(op, Operator)
+
+    def test_digest_to_block_operator_protocol(self):
+        op = DigestToBlockOp()
         assert isinstance(op, Operator)
 
     def test_pipeline_is_operator(self):
@@ -534,4 +540,142 @@ class TestCapturePromotionFlow:
         missing = outer.compile(
             initial_keys={"module", "promoted_id", "capture_id", "entity_type"}
         )
+        assert missing == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Intelligence Digest Flow (cross-module pipe)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestDigestToBlockOp:
+    @pytest.mark.asyncio
+    async def test_normalizes_digest_fields(self):
+        op = DigestToBlockOp()
+        ctx = await op({
+            "content": "Weekly intelligence summary",
+            "digest_type": "weekly",
+            "period": "2026-W12",
+            "tags": ["geopolitics"],
+        })
+        assert ctx["block_type"] == "knowledge"
+        assert ctx["space_id"] == "default"
+        assert ctx["source_session"] == "intelligence:weekly:2026-W12"
+        assert "intelligence" in ctx["tags"]
+        assert "digest" in ctx["tags"]
+        assert "weekly" in ctx["tags"]
+        assert "geopolitics" in ctx["tags"]
+
+    @pytest.mark.asyncio
+    async def test_deduplicates_tags(self):
+        op = DigestToBlockOp()
+        ctx = await op({
+            "content": "test",
+            "digest_type": "daily",
+            "tags": ["intelligence", "daily"],
+        })
+        assert ctx["tags"] == ["intelligence", "digest", "daily"]
+
+    @pytest.mark.asyncio
+    async def test_preserves_explicit_space_id(self):
+        op = DigestToBlockOp()
+        ctx = await op({
+            "content": "test",
+            "space_id": "custom-space",
+        })
+        assert ctx["space_id"] == "custom-space"
+
+    def test_operator_metadata(self):
+        op = DigestToBlockOp()
+        assert op.name == "digest_to_block"
+        assert "content" in op.input_keys
+
+
+class TestIntelligenceDigestFlow:
+    @pytest.mark.asyncio
+    async def test_pipe_produces_correct_ctx(self):
+        """Verify operator transforms event data correctly through the pipe."""
+        bus = _make_bus()
+        received = []
+
+        piped = bus.channel("session_intelligence.digest.completed").pipe(
+            DigestToBlockOp()
+        )
+        piped.subscribe(FunctionObserver(lambda ctx: received.append(dict(ctx))))
+
+        await bus.publish(
+            Event(
+                type="session_intelligence.digest.completed",
+                data={
+                    "content": "Weekly summary of key events",
+                    "space_id": "default",
+                    "digest_type": "weekly",
+                    "period": "2026-W12",
+                    "tags": ["geopolitics"],
+                },
+                source="test",
+            )
+        )
+
+        assert len(received) == 1
+        ctx = received[0]
+        assert ctx["content"] == "Weekly summary of key events"
+        assert ctx["block_type"] == "knowledge"
+        assert ctx["source_session"] == "intelligence:weekly:2026-W12"
+        assert "intelligence" in ctx["tags"]
+        assert "geopolitics" in ctx["tags"]
+
+    @pytest.mark.asyncio
+    async def test_wire_factory_returns_subscription(self):
+        """Factory wires correctly and returns valid Subscription."""
+        bus = _make_bus()
+        sub = wire_intelligence_digest_flow(bus=bus)
+        assert isinstance(sub, Subscription)
+        assert not sub.closed
+
+        # Publish — observer will fail on DB (no mock), but pipe must not crash
+        await bus.publish(
+            Event(
+                type="session_intelligence.digest.completed",
+                data={
+                    "content": "Test digest",
+                    "digest_type": "daily",
+                    "period": "2026-03-20",
+                },
+                source="test",
+            )
+        )
+
+        sub.unsubscribe()
+        assert sub.closed
+
+    @pytest.mark.asyncio
+    async def test_empty_content_passthrough(self):
+        """Empty content → pipe still runs but observer skips block creation."""
+        bus = _make_bus()
+        received = []
+
+        piped = bus.channel("session_intelligence.digest.completed").pipe(
+            DigestToBlockOp()
+        )
+        piped.subscribe(FunctionObserver(lambda ctx: received.append(dict(ctx))))
+
+        await bus.publish(
+            Event(
+                type="session_intelligence.digest.completed",
+                data={"content": "", "digest_type": "daily"},
+                source="test",
+            )
+        )
+
+        # Pipe runs (DigestToBlockOp adds fields), but observer would skip on empty content
+        assert len(received) == 1
+        assert received[0]["content"] == ""
+
+    def test_compile_validation_passes(self):
+        """compile() should return empty list for the digest pipeline."""
+        digest_op = DigestToBlockOp()
+        check = Pipeline(name="intelligence_digest").pipe(digest_op)
+        keys = {"content", "space_id", "digest_type", "period", "tags"}
+        missing = check.compile(initial_keys=keys)
         assert missing == []
