@@ -306,8 +306,11 @@ class TestScoringPipeline:
                 stages_enabled={
                     "recency": False,
                     "importance": False,
+                    "trust_boost": False,
+                    "feedback_boost": False,
                     "length_norm": False,
                     "time_decay": False,
+                    "semantic_boost": False,
                     "min_score": False,
                     "noise_filter": False,
                     "mmr": True,
@@ -327,8 +330,11 @@ class TestScoringPipeline:
                 stages_enabled={
                     "recency": False,
                     "importance": False,
+                    "trust_boost": False,
+                    "feedback_boost": False,
                     "length_norm": False,
                     "time_decay": False,
+                    "semantic_boost": False,
                     "min_score": False,
                     "noise_filter": False,
                     "mmr": False,
@@ -339,7 +345,7 @@ class TestScoringPipeline:
             [_make_scored_dict(content="Test memory content here", score=0.5)]
         )
         assert len(meta.stages_applied) == 0
-        assert len(meta.stages_skipped) == 7
+        assert len(meta.stages_skipped) == 10
 
     def test_scoring_metadata_tracking(self):
         pipeline = ScoringPipeline()
