@@ -335,6 +335,16 @@
       "enabled": true
     },
     {
+      "name": "ws-memvault-grc",
+      "label": "com.joneshong.scheduler.ws-memvault-grc",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_grc.py",
+      "schedule": { "calendar": { "Weekday": 0, "Hour": 5, "Minute": 30 } },
+      "description": "每週日 5:30AM: Memvault G-R-C reflect + curate（錯開 intelflow 5AM、anvil 6AM）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-anvil-grc",
       "label": "com.joneshong.scheduler.ws-anvil-grc",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_anvil_grc.py",

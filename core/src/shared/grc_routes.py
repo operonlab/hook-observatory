@@ -96,7 +96,11 @@ def create_grc_routes(
             _user: dict = require_permission(write_permission),
         ) -> dict:
             config = GRCConfig(confidence_threshold=confidence_threshold)
-            actions = adapter.identify_candidates(scope_id, config=config, db=db)
+            extra_kwargs: dict[str, Any] = {"db": db}
+            if hasattr(adapter, "fetch_blocks"):
+                blocks = await adapter.fetch_blocks(db, scope_id)
+                extra_kwargs["blocks"] = blocks
+            actions = adapter.identify_candidates(scope_id, config=config, **extra_kwargs)
             result = await adapter.apply_actions(actions, dry_run=dry_run, db=db)
 
             if not dry_run:
