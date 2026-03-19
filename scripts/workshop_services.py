@@ -36,7 +36,7 @@ SERVICES = [
         "type": "uvicorn",
         "cmd": (
             "/Users/joneshong/workshop/.venv/bin/python3 -m uvicorn"
-            " src.main:app --host 127.0.0.1 --port 8801 --env-file .env"
+            " src.main:app --host 127.0.0.1 --port 8801 --proxy-headers --env-file .env"
         ),
         "port": 8801,
         "health": "http://127.0.0.1:8801/docs",

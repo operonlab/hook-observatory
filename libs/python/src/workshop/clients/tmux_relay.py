@@ -1102,6 +1102,8 @@ class TmuxRelayClient:
         signal_file: str | None = None,
         no_forward: bool = True,
         summary_mode: bool = False,
+        color: str = "",
+        role: str = "",
     ) -> RelayResult:
         """Core relay execution — pure Python equivalent of relay.sh."""
         if not signal_file:
@@ -1119,6 +1121,18 @@ class TmuxRelayClient:
             self._send_keys(source, "/clear")
             self._send_enter(source)
             time.sleep(2)
+
+        # Set session name if role is provided (/rename is a local CLI command, instant)
+        if role:
+            self._send_keys(source, f"/rename {role}")
+            self._send_enter(source)
+            time.sleep(0.5)
+
+        # Set input bar color if requested (/color is a local CLI command, instant)
+        if color:
+            self._send_keys(source, f"/color {color}")
+            self._send_enter(source)
+            time.sleep(0.5)
 
         # Cache: mark pane as busy:relay + store command
         try:
@@ -1297,6 +1311,7 @@ class TmuxRelayClient:
         max_lines: int = 200,
         role: str = "",
         task: str = "",
+        color: str = "",
     ) -> RelayResult:
         """Blocking relay: acquire pane -> send command -> wait -> return result."""
         timeout = timeout or self.default_timeout
@@ -1313,8 +1328,12 @@ class TmuxRelayClient:
             if pane_id:
                 try:
                     self._cache.set_pane(
-                        pane_id.replace("%", ""), pane, "idle", pane_id,
-                        role=role, task=task,
+                        pane_id.replace("%", ""),
+                        pane,
+                        "idle",
+                        pane_id,
+                        role=role,
+                        task=task,
                     )
                 except Exception:
                     pass
@@ -1331,6 +1350,8 @@ class TmuxRelayClient:
             timeout=timeout,
             extract_lines=max_lines,
             no_forward=True,
+            color=color,
+            role=role,
         )
 
         # Truncate output if needed
@@ -1349,6 +1370,7 @@ class TmuxRelayClient:
         count: int = 1,
         role: str = "",
         task: str = "",
+        color: str = "",
     ) -> list[dict[str, str]]:
         """Fire-and-forget dispatch. Returns list of {pane, signal_file, pid}.
 
@@ -1403,6 +1425,8 @@ class TmuxRelayClient:
                         timeout=timeout,
                         signal_file=signal_file,
                         no_forward=True,
+                        color=color,
+                        role=role,
                     )
                 except Exception:
                     pass

@@ -23,7 +23,7 @@ Every feature must implement all applicable layers: Backend → SDK → CLI → 
 ## Architecture
 - Capture: fuzzy natural-language universal intake — criterion is "whether input is ambiguous"
 - Four-tier data lifecycle: Hot → Warm → Cold → Frozen (`docs/plans/four-tier-data-lifecycle.md`)
-- Alembic latest migration: `m5n6o7p8q9r0`
+- Alembic latest migration: `m5n6o7p8q9r2`
 
 ## Scheduling
 - Cronicle = sole scheduler (port 4105), launchd = boot-start + offline fallback only
@@ -34,6 +34,11 @@ Every feature must implement all applicable layers: Backend → SDK → CLI → 
 - mcpproxy-go v0.20.2, config `~/.mcpproxy/mcp_config.json`
 - Profile switching: `mcp-profile.sh <proxy|direct|status>`
 - `top_k` deprecated → use `tools_limit`
+
+## Tmux Status Bar
+- `#(...)` calls MUST use shell script (`tmux_status.sh`), **NEVER** `#(python3 ...)`
+- Reason: tmux forks a subprocess per `#(cmd)` every status-interval seconds; Python startup ~1s/call × 13 = CPU 100%
+- Shell + jq reads same JSON file: 0.07s/call, no residual processes
 
 ## Skill Integration
 - CLI-first, MCP only when no CLI alternative exists
