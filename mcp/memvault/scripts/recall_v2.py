@@ -68,6 +68,36 @@ def http_get(url: str, timeout: int = 10) -> tuple:
         return 0, ""
 
 
+def _should_inject_attitudes(prompt: str) -> bool:
+    """Decide whether to inject attitude facts."""
+    if len(prompt) < 10:
+        return False
+    if prompt.startswith("/"):
+        return False
+    if prompt.startswith("```"):
+        return False
+    return True
+
+
+def _format_attitudes(raw_body: str) -> str:
+    """Format attitude facts API response into markdown section."""
+    try:
+        data = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(data, list) or not data:
+        return ""
+
+    lines = ["\n\n### 行為提醒"]
+    for item in data:
+        fact = item.get("fact", "")
+        category = item.get("category", "")
+        confidence = item.get("confidence", 0)
+        if fact:
+            lines.append(f"- [{category}] {fact} ({confidence:.2f})")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 def main() -> None:
     # Safety net — always exit 0
     try:
@@ -203,6 +233,19 @@ def _main() -> None:
                     tag_str = f" (tags: {', '.join(tags)})" if tags else ""
                     formatted += f"\n- **{topic}**: {content}{tag_str}"
                 log(f"Search fallback: {result_count} results")
+
+    # ── Step 2: Attitude autoRecall ──────────────────────────────────────────
+    if _should_inject_attitudes(prompt):
+        att_url = (
+            f"{CORE_API_URL}/api/memvault/kg/attitudes/relevant"
+            f"?q={encoded_q}&top_k=3&space_id={SPACE_ID}"
+        )
+        _, att_body = http_get(att_url, timeout=3)
+        if att_body:
+            att_section = _format_attitudes(att_body)
+            if att_section:
+                formatted += att_section
+                log("Attitude autoRecall injected")
 
     # ── No results ────────────────────────────────────────────────────────────
     if not formatted:

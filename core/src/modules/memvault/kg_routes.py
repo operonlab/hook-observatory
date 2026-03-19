@@ -279,6 +279,17 @@ async def regenerate_summaries(
 # ======================== Attitude ========================
 
 
+@router.get("/attitudes/relevant")
+async def get_relevant_attitudes(
+    q: str = Query(..., min_length=1),
+    space_id: str = Query("default"),
+    top_k: int = Query(3, ge=1, le=10),
+    db: AsyncSession = Depends(get_db),
+):
+    """Semantic search for attitude facts relevant to a query — used by autoRecall."""
+    return await attitude_service.semantic_search(db, space_id, q, top_k=top_k)
+
+
 @router.get("/attitudes", response_model=list[AttitudeFactResponse])
 async def list_attitudes(
     space_id: str = Query("default"),
