@@ -9,7 +9,6 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,12 +117,11 @@ async def extract_triples_from_content(
         result = response.json()
         raw_text: str = result["choices"][0]["message"]["content"].strip()
 
-        # Strip markdown code fences if present
-        if raw_text.startswith("```"):
-            lines = raw_text.splitlines()
-            raw_text = "\n".join(line for line in lines if not line.startswith("```")).strip()
+        from src.shared.llm_json import parse_llm_json
 
-        triples_raw: list[dict[str, Any]] = json.loads(raw_text)
+        triples_raw = parse_llm_json(raw_text)
+        if not isinstance(triples_raw, list):
+            triples_raw = []
 
         # Validate and filter
         valid_triples: list[dict[str, str]] = []
@@ -223,13 +221,11 @@ def _run_rlm_triple_extraction(content: str, block_type: str) -> list[dict[str, 
     if result.status != "ok":
         raise RuntimeError(f"RLM returned status={result.status}")
 
-    raw = result.response.strip()
-    # Strip markdown fences
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        raw = "\n".join(line for line in lines if not line.startswith("```")).strip()
+    from src.shared.llm_json import parse_llm_json
 
-    triples_raw: list[dict[str, Any]] = json.loads(raw)
+    triples_raw = parse_llm_json(result.response)
+    if not isinstance(triples_raw, list):
+        raise RuntimeError(f"Expected list from RLM, got {type(triples_raw)}")
 
     # Validate and filter using same logic as extract_triples_from_content
     valid: list[dict[str, str]] = []
