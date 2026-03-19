@@ -10,6 +10,7 @@ import (
 
 // Config holds all agent-vista configuration.
 type Config struct {
+	Host        string `toml:"host"`
 	Port        int    `toml:"port"`
 	Verbose     bool   `toml:"verbose"`
 	NoBrowser   bool   `toml:"no_browser"`
@@ -37,6 +38,7 @@ type MonitorConfig struct {
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
+		Host:       "127.0.0.1",
 		Port:       8840,
 		Verbose:    false,
 		NoBrowser:  false,
