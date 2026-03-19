@@ -134,17 +134,14 @@ async def _call_llm(new_content: str, existing_content: str, block_type: str) ->
         resp = await client.post(_OMLX_URL, json=payload)
         resp.raise_for_status()
 
+    from src.shared.llm_json import parse_llm_json
+
     data = resp.json()
-    raw_text: str = data["choices"][0]["message"]["content"].strip()
+    raw_text: str = data["choices"][0]["message"]["content"]
 
-    # Strip markdown code fences if the model added them despite instructions
-    if raw_text.startswith("```"):
-        raw_text = raw_text.split("```")[1]
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:]
-    raw_text = raw_text.strip()
-
-    parsed = json.loads(raw_text)
+    parsed = parse_llm_json(raw_text)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"LLM returned non-dict response: {raw_text[:100]}")
 
     decision_str = str(parsed.get("decision", "coexist")).lower()
     try:
@@ -352,15 +349,11 @@ def _run_rlm_conflict(new_content: str, existing_content: str, block_type: str) 
     if result.status != "ok":
         raise RuntimeError(f"RLM returned status={result.status}")
 
-    raw = result.response.strip()
-    # Strip markdown fences
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
+    from src.shared.llm_json import parse_llm_json
 
-    parsed = json.loads(raw)
+    parsed = parse_llm_json(result.response)
+    if not isinstance(parsed, dict):
+        raise RuntimeError("RLM returned non-dict response")
 
     decision_str = str(parsed.get("decision", "coexist")).lower()
     try:

@@ -290,8 +290,7 @@ async def generate_digest_rlm(
 
     Returns same schema as generate_digest() for compatibility.
     """
-    import json
-
+    from src.shared.llm_json import parse_llm_json
     from src.shared.rlm_engine import RLMConfig, RLMEngine
 
     paper_id = arxiv_id or title[:40]
@@ -321,29 +320,10 @@ async def generate_digest_rlm(
         logger.warning("digest_generator_rlm: non-ok status=%s for %s", result.status, paper_id)
         return None
 
-    # Parse JSON from RLM response
-    raw = result.response.strip()
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        lines = [ln for ln in lines if not ln.strip().startswith("```")]
-        raw = "\n".join(lines)
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        # Try to extract JSON object from the response
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        if start >= 0 and end > start:
-            try:
-                data = json.loads(raw[start:end])
-            except json.JSONDecodeError:
-                logger.warning("digest_generator_rlm: cannot parse JSON for %s", paper_id)
-                return None
-        else:
-            logger.warning("digest_generator_rlm: no JSON found for %s", paper_id)
-            return None
+    data = parse_llm_json(result.response)
+    if not isinstance(data, dict):
+        logger.warning("digest_generator_rlm: cannot parse JSON for %s", paper_id)
+        return None
 
     # Validate required fields
     required = [
