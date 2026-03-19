@@ -23,7 +23,7 @@ Every feature must implement all applicable layers: Backend → SDK → CLI → 
 ## Architecture
 - Capture: fuzzy natural-language universal intake — criterion is "whether input is ambiguous"
 - Four-tier data lifecycle: Hot → Warm → Cold → Frozen (`docs/plans/four-tier-data-lifecycle.md`)
-- Alembic latest migration: `x5p6q7r8s9t0`
+- Alembic latest migration: `m5n6o7p8q9r0`
 
 ## Scheduling
 - Cronicle = sole scheduler (port 4105), launchd = boot-start + offline fallback only

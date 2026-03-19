@@ -13,6 +13,7 @@ from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .embedding import get_embedding, get_embeddings_batch
 from .entity_resolution import entity_resolution_service, normalize_entity_text
+from .interest_profile import interest_profile_service
 from .kg_schemas import (
     AttitudeEvolveRequest,
     AttitudeEvolveResult,
@@ -791,3 +792,82 @@ async def ingest_intelligence_digest(
         "period": period,
         "space_id": space_id,
     }
+
+
+# ======================== Interest Profile ========================
+
+
+@router.post("/interest/generate", status_code=200)
+async def generate_interest_snapshot(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate daily interest snapshot from query_journal.
+
+    Called by synthesis_runner Step 3 or manually for testing.
+    """
+    result = await interest_profile_service.generate_daily_snapshot(db, space_id)
+    await db.commit()
+    return result
+
+
+@router.get("/interest/attention", status_code=200)
+async def get_attention_profile(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the latest attention profile — which entities are active/fading/historical.
+
+    Used by PersonalizedQueryRouter (cached via Redis).
+    """
+    return await interest_profile_service.get_attention_profile(db, space_id)
+
+
+@router.get("/interest/gaps", status_code=200)
+async def get_knowledge_gaps(
+    space_id: str = Query("default"),
+    days: int = Query(7, ge=1, le=90),
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get recurring knowledge gaps — queries that repeatedly fail.
+
+    Returns queries with INCORRECT verdict that appeared 2+ times in the period.
+    """
+    return await interest_profile_service.get_knowledge_gaps(
+        db, space_id, days=days, limit=limit
+    )
+
+
+@router.get("/insights", status_code=200)
+async def get_meta_insights(
+    space_id: str = Query("default"),
+    limit: int = Query(5, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get recent meta_insight attitude facts — system-generated user insights."""
+    from sqlalchemy import select
+
+    from .kg_models import AttitudeFact
+
+    q = (
+        select(AttitudeFact)
+        .where(
+            AttitudeFact.space_id == space_id,
+            AttitudeFact.category == "meta_insight",
+            AttitudeFact.superseded_by.is_(None),
+            AttitudeFact.deleted_at.is_(None),
+        )
+        .order_by(AttitudeFact.created_at.desc())
+        .limit(limit)
+    )
+    facts = (await db.execute(q)).scalars().all()
+    return [
+        {
+            "id": f.id,
+            "fact": f.fact,
+            "confidence": f.confidence,
+            "created_at": f.created_at.isoformat() if f.created_at else None,
+        }
+        for f in facts
+    ]
