@@ -52,7 +52,6 @@ DOCKER_RESTART_MAP: dict[str, str] = {
     "redis": "ws-infra-redis-1",
     "rustfs": "ws-infra-rustfs-1",
     "bark": "ws-infra-bark-1",
-    "ntfy": "ntfy",
     "qdrant": "ws-infra-qdrant-1",
 }
 

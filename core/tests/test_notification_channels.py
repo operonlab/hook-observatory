@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -60,11 +60,6 @@ def _make_bark():
     return BarkChannel()
 
 
-def _make_ntfy():
-    from src.modules.notification.channels.ntfy_channel import NtfyChannel
-    return NtfyChannel()
-
-
 def _make_web_push():
     from src.modules.notification.channels.web_push_channel import WebPushChannel
     return WebPushChannel()
@@ -90,14 +85,6 @@ class TestCapabilities:
         """get_capabilities returns correct bool dict for multiple checks."""
         bark = _make_bark()
         result = get_capabilities(bark, SupportsGrouping, SupportsPriority, SupportsIcon)
-        assert result[SupportsGrouping] is True
-        assert result[SupportsPriority] is True
-        assert result[SupportsIcon] is False
-
-    def test_get_capabilities_ntfy(self):
-        """NtfyChannel supports Grouping + Priority but not Icon."""
-        ntfy = _make_ntfy()
-        result = get_capabilities(ntfy, SupportsGrouping, SupportsPriority, SupportsIcon)
         assert result[SupportsGrouping] is True
         assert result[SupportsPriority] is True
         assert result[SupportsIcon] is False
@@ -130,26 +117,6 @@ class TestCapabilities:
         bark = _make_bark()
         assert bark.map_severity("unknown_level") == "active"
 
-    def test_ntfy_map_severity_critical(self):
-        """ntfy maps 'critical' → 'urgent'."""
-        ntfy = _make_ntfy()
-        assert ntfy.map_severity("critical") == "urgent"
-
-    def test_ntfy_map_severity_info(self):
-        """ntfy maps 'info' → 'default'."""
-        ntfy = _make_ntfy()
-        assert ntfy.map_severity("info") == "default"
-
-    def test_ntfy_map_severity_warning(self):
-        """ntfy maps 'warning' → 'high'."""
-        ntfy = _make_ntfy()
-        assert ntfy.map_severity("warning") == "high"
-
-    def test_ntfy_map_severity_unknown_falls_back(self):
-        """ntfy returns 'default' for unknown severity strings."""
-        ntfy = _make_ntfy()
-        assert ntfy.map_severity("blah") == "default"
-
     def test_web_push_icon_known_category(self):
         """WebPush returns category-specific icon for known categories."""
         wp = _make_web_push()
@@ -169,12 +136,6 @@ class TestCapabilities:
         assert bark.get_group("finance") == "finance"
         assert bark.get_group("") == ""
 
-    def test_ntfy_get_group_passthrough(self):
-        """NtfyChannel.get_group returns category string as group identifier."""
-        ntfy = _make_ntfy()
-        assert ntfy.get_group("taskflow") == "taskflow"
-        assert ntfy.get_group("") == ""
-
 
 # ===========================================================================
 # 2. Channel Registry Tests
@@ -183,12 +144,12 @@ class TestCapabilities:
 class TestChannelRegistry:
 
     def test_discover_finds_all_channels(self):
-        """Auto-discovery finds bark, ntfy, and web_push channels."""
+        """Auto-discovery finds bark and web_push channels (ntfy disabled)."""
         discover_channels()
         names = list_channels()
         assert "bark" in names
-        assert "ntfy" in names
         assert "web_push" in names
+        assert "ntfy" not in names
 
     def test_get_channel_by_name_bark(self):
         """get_channel('bark') returns a BarkChannel instance."""
@@ -197,14 +158,6 @@ class TestChannelRegistry:
         ch = get_channel("bark")
         assert ch is not None
         assert isinstance(ch, BarkChannel)
-
-    def test_get_channel_by_name_ntfy(self):
-        """get_channel('ntfy') returns an NtfyChannel instance."""
-        from src.modules.notification.channels.ntfy_channel import NtfyChannel
-        discover_channels()
-        ch = get_channel("ntfy")
-        assert ch is not None
-        assert isinstance(ch, NtfyChannel)
 
     def test_get_channel_by_name_web_push(self):
         """get_channel('web_push') returns a WebPushChannel instance."""
@@ -329,38 +282,6 @@ class TestChannelSend:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_ntfy_send_not_configured(self):
-        """ntfy returns False when ntfy_server_url and ntfy_topic are empty."""
-        ntfy = _make_ntfy()
-        with patch("src.modules.notification.channels.ntfy_channel.settings") as mock_settings:
-            mock_settings.ntfy_server_url = ""
-            mock_settings.ntfy_topic = ""
-            result = await ntfy.send("Title", "Body")
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_ntfy_send_configured_success(self):
-        """ntfy returns True when server is configured and HTTP call succeeds."""
-        ntfy = _make_ntfy()
-        ntfy_mod = "src.modules.notification.channels.ntfy_channel"
-        with patch(f"{ntfy_mod}.settings") as mock_settings, \
-             patch(f"{ntfy_mod}._send_ntfy_sync", return_value=True):
-            mock_settings.ntfy_server_url = "http://ntfy.local"
-            mock_settings.ntfy_topic = "workshop"
-            result = await ntfy.send("Alert", "Something happened", severity="critical")
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_ntfy_send_only_server_no_topic(self):
-        """ntfy returns False when topic is missing even if server is set."""
-        ntfy = _make_ntfy()
-        with patch("src.modules.notification.channels.ntfy_channel.settings") as mock_settings:
-            mock_settings.ntfy_server_url = "http://ntfy.local"
-            mock_settings.ntfy_topic = ""
-            result = await ntfy.send("Title", "Body")
-        assert result is False
-
-    @pytest.mark.asyncio
     async def test_base_channel_error_handling(self):
         """BaseChannel.send catches exceptions from _do_send and returns False."""
 
@@ -474,3 +395,76 @@ class TestBaseChannelContract:
             assert inspect.iscoroutinefunction(ch.send), (
                 f"Channel {name!r} send() is not a coroutine function"
             )
+
+
+# ===========================================================================
+# 5. Notification Dedup Tests
+# ===========================================================================
+
+class TestNotificationDedup:
+
+    @pytest.mark.asyncio
+    async def test_dedup_blocks_same_tag(self):
+        """Same tag within TTL window → second call returns True (duplicate)."""
+        from src.modules.notification.services import _is_duplicate
+
+        mock_conn = AsyncMock()
+        mock_conn.aclose = AsyncMock()
+
+        with patch("src.modules.notification.services.settings") as mock_settings, \
+             patch("redis.asyncio.from_url", return_value=mock_conn):
+            mock_settings.notification_dedup_ttl = 300
+            mock_settings.redis_url = "redis://localhost:6379/0"
+
+            # First call: key doesn't exist → SET NX returns True (was set)
+            mock_conn.set = AsyncMock(return_value=True)
+            result1 = await _is_duplicate("test-tag")
+            assert result1 is False  # not a duplicate
+
+            # Second call: key exists → SET NX returns None
+            mock_conn.set = AsyncMock(return_value=None)
+            result2 = await _is_duplicate("test-tag")
+            assert result2 is True  # duplicate
+
+    @pytest.mark.asyncio
+    async def test_dedup_different_tag_passes(self):
+        """Different tags both pass (no dedup)."""
+        from src.modules.notification.services import _is_duplicate
+
+        mock_conn = AsyncMock()
+        mock_conn.set = AsyncMock(return_value=True)  # key was set (new)
+        mock_conn.aclose = AsyncMock()
+
+        with patch("src.modules.notification.services.settings") as mock_settings, \
+             patch("redis.asyncio.from_url", return_value=mock_conn):
+            mock_settings.notification_dedup_ttl = 300
+            mock_settings.redis_url = "redis://localhost:6379/0"
+
+            result1 = await _is_duplicate("tag-a")
+            result2 = await _is_duplicate("tag-b")
+            assert result1 is False
+            assert result2 is False
+
+    @pytest.mark.asyncio
+    async def test_dedup_no_tag_skips(self):
+        """tag=None or empty string → skip dedup, return False."""
+        from src.modules.notification.services import _is_duplicate
+
+        with patch("src.modules.notification.services.settings") as mock_settings:
+            mock_settings.notification_dedup_ttl = 300
+
+            assert await _is_duplicate("") is False
+            assert await _is_duplicate(None) is False
+
+    @pytest.mark.asyncio
+    async def test_dedup_redis_unavailable_fallback(self):
+        """Redis connection failure → fallback to False (allow, don't drop)."""
+        from src.modules.notification.services import _is_duplicate
+
+        with patch("src.modules.notification.services.settings") as mock_settings, \
+             patch("redis.asyncio.from_url", side_effect=ConnectionError("Redis down")):
+            mock_settings.notification_dedup_ttl = 300
+            mock_settings.redis_url = "redis://localhost:6379/0"
+
+            result = await _is_duplicate("some-tag")
+            assert result is False  # fail-open
