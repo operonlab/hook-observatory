@@ -45,6 +45,9 @@ class FinanceEvents:
     # 訂閱
     SUBSCRIPTION_RENEWED = "finance.subscription.renewed"
 
+    # 快照
+    GLOBAL_SNAPSHOT_CREATED = "finance.snapshot.global_created"
+
     # 隱密
     PRIVACY_TOGGLED = "finance.privacy.toggled"
 

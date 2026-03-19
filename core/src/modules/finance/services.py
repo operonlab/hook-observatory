@@ -41,6 +41,9 @@ from .schemas import (
     CategoryCreate,
     CategoryResponse,
     CategoryUpdate,
+    GapAnalysisResponse,
+    GlobalSnapshotResponse,
+    GlobalSnapshotSummary,
     InstallmentPlanCreate,
     InstallmentPlanResponse,
     InstallmentPlanUpdate,
@@ -48,6 +51,7 @@ from .schemas import (
     MonthlyTrendResponse,
     NetWorthPointResponse,
     ReconcileResponse,
+    SnapshotDiffResponse,
     SubscriptionCreate,
     SubscriptionResponse,
     SubscriptionUpdate,
@@ -117,6 +121,60 @@ async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decima
         .where(Wallet.id == wallet_id)
         .values(current_balance=Wallet.current_balance + delta)
     )
+
+
+# ======================== Period Delta Helper ========================
+
+
+async def _compute_period_delta(
+    db: AsyncSession, wallet_id: str, from_time: datetime, to_time: datetime
+) -> tuple[Decimal, list]:
+    """Compute net balance change from transactions in a time period.
+    Returns (net_delta, transaction_list).
+    """
+    txn_filter = [
+        Transaction.wallet_id == wallet_id,
+        Transaction.status == "completed",
+        Transaction.deleted_at == None,  # noqa: E711
+        Transaction.transacted_at > from_time,
+        Transaction.transacted_at <= to_time,
+    ]
+
+    income_sum = (await db.execute(
+        select(func.coalesce(func.sum(Transaction.amount), 0))
+        .where(*txn_filter, Transaction.type == "income")
+    )).scalar_one()
+
+    expense_sum = (await db.execute(
+        select(func.coalesce(func.sum(Transaction.amount), 0))
+        .where(*txn_filter, Transaction.type.in_(["expense", "transfer"]))
+    )).scalar_one()
+
+    transfer_in = (await db.execute(
+        select(func.coalesce(func.sum(Transaction.amount), 0))
+        .where(
+            Transaction.transfer_to_wallet_id == wallet_id,
+            Transaction.type == "transfer",
+            Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
+            Transaction.transacted_at > from_time,
+            Transaction.transacted_at <= to_time,
+        )
+    )).scalar_one()
+
+    fee_sum = (await db.execute(
+        select(func.coalesce(func.sum(Transaction.fee), 0))
+        .where(*txn_filter)
+    )).scalar_one()
+
+    net_delta = income_sum - expense_sum + transfer_in - fee_sum
+
+    # Get transaction list
+    txns = (await db.execute(
+        select(Transaction).where(*txn_filter).order_by(Transaction.transacted_at)
+    )).scalars().all()
+
+    return net_delta, txns
 
 
 # ======================== Wallet Service ========================
@@ -230,6 +288,14 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
 
         calculated = wallet.current_balance
+
+        # Determine next version for this wallet
+        max_version = (await db.execute(
+            select(func.coalesce(func.max(WalletSnapshot.version), 0))
+            .where(WalletSnapshot.wallet_id == wallet_id)
+        )).scalar_one()
+        next_version = max_version + 1
+
         snapshot = WalletSnapshot(
             id=_uuid7_hex(),
             space_id=space_id,
@@ -239,6 +305,13 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             calculated_balance=calculated,
             snapshot_type="reconciliation",
             notes=data.notes,
+            version=next_version,
+            metadata_json={
+                "wallet_name": wallet.name,
+                "wallet_type": wallet.type,
+                "currency": wallet.currency,
+                "is_active": wallet.is_active,
+            },
         )
         db.add(snapshot)
 
@@ -272,6 +345,9 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             snapshot_type=snapshot.snapshot_type,
             notes=snapshot.notes,
             synced_at=snapshot.synced_at,
+            version=snapshot.version,
+            batch_id=snapshot.batch_id,
+            metadata_json=snapshot.metadata_json,
         )
 
     async def reconcile(
@@ -356,6 +432,339 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             difference=wallet.current_balance - calculated,
             transaction_count=txn_count,
             last_synced_at=wallet.last_synced_at,
+        )
+
+    # --- Phase D: Snapshot Versioning ---
+
+    def _snapshot_to_response(self, s: WalletSnapshot) -> WalletSnapshotResponse:
+        return WalletSnapshotResponse(
+            id=s.id,
+            space_id=s.space_id,
+            created_by=s.created_by,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+            wallet_id=s.wallet_id,
+            synced_balance=s.synced_balance,
+            calculated_balance=s.calculated_balance,
+            difference=s.synced_balance - s.calculated_balance,
+            snapshot_type=s.snapshot_type,
+            notes=s.notes,
+            synced_at=s.synced_at,
+            version=s.version,
+            batch_id=s.batch_id,
+            metadata_json=s.metadata_json,
+        )
+
+    async def list_snapshots(
+        self,
+        db: AsyncSession,
+        wallet_id: str,
+        pagination: PaginationParams | None = None,
+    ) -> PaginatedResponse[WalletSnapshotResponse]:
+        """List snapshot history for a wallet (version DESC)."""
+        wallet = await db.get(Wallet, wallet_id)
+        if not wallet:
+            raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
+
+        p = pagination or PaginationParams()
+        base = select(WalletSnapshot).where(
+            WalletSnapshot.wallet_id == wallet_id,
+            WalletSnapshot.deleted_at == None,  # noqa: E711
+        )
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+
+        q = (
+            base.order_by(WalletSnapshot.version.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[WalletSnapshotResponse](
+            items=[self._snapshot_to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
+
+    async def diff_snapshots(
+        self,
+        db: AsyncSession,
+        wallet_id: str,
+        from_v: int,
+        to_v: int,
+    ) -> SnapshotDiffResponse:
+        """Compute diff between two snapshot versions."""
+        from_snap = (await db.execute(
+            select(WalletSnapshot).where(
+                WalletSnapshot.wallet_id == wallet_id,
+                WalletSnapshot.version == from_v,
+            )
+        )).scalar_one_or_none()
+        if not from_snap:
+            raise NotFoundError(
+                f"Snapshot version {from_v} not found",
+                code="finance.snapshot_not_found",
+            )
+
+        to_snap = (await db.execute(
+            select(WalletSnapshot).where(
+                WalletSnapshot.wallet_id == wallet_id,
+                WalletSnapshot.version == to_v,
+            )
+        )).scalar_one_or_none()
+        if not to_snap:
+            raise NotFoundError(
+                f"Snapshot version {to_v} not found",
+                code="finance.snapshot_not_found",
+            )
+
+        balance_delta = to_snap.synced_balance - from_snap.synced_balance
+        delta_pct = (
+            float(balance_delta / from_snap.synced_balance * 100)
+            if from_snap.synced_balance
+            else 0.0
+        )
+        period_days = (to_snap.synced_at - from_snap.synced_at).days
+
+        return SnapshotDiffResponse(
+            wallet_id=wallet_id,
+            from_version=from_v,
+            to_version=to_v,
+            from_synced_balance=from_snap.synced_balance,
+            to_synced_balance=to_snap.synced_balance,
+            balance_delta=balance_delta,
+            delta_pct=round(delta_pct, 2),
+            from_synced_at=from_snap.synced_at,
+            to_synced_at=to_snap.synced_at,
+            period_days=period_days,
+        )
+
+    async def gap_analysis(
+        self,
+        db: AsyncSession,
+        wallet_id: str,
+        from_v: int,
+        to_v: int,
+    ) -> GapAnalysisResponse:
+        """Sandwich reconciliation: snapshot delta vs transaction sum."""
+        from_snap = (await db.execute(
+            select(WalletSnapshot).where(
+                WalletSnapshot.wallet_id == wallet_id,
+                WalletSnapshot.version == from_v,
+            )
+        )).scalar_one_or_none()
+        if not from_snap:
+            raise NotFoundError(
+                f"Snapshot version {from_v} not found",
+                code="finance.snapshot_not_found",
+            )
+
+        to_snap = (await db.execute(
+            select(WalletSnapshot).where(
+                WalletSnapshot.wallet_id == wallet_id,
+                WalletSnapshot.version == to_v,
+            )
+        )).scalar_one_or_none()
+        if not to_snap:
+            raise NotFoundError(
+                f"Snapshot version {to_v} not found",
+                code="finance.snapshot_not_found",
+            )
+
+        snapshot_delta = to_snap.synced_balance - from_snap.synced_balance
+        transaction_sum, txns = await _compute_period_delta(
+            db, wallet_id, from_snap.synced_at, to_snap.synced_at
+        )
+        gap = snapshot_delta - transaction_sum
+        gap_pct = (
+            float(gap / snapshot_delta * 100) if snapshot_delta else 0.0
+        )
+        is_reconciled = abs(gap) < 1  # 1 unit tolerance
+
+        txn_service = TransactionService()
+        txn_responses = [txn_service.to_response(t) for t in txns]
+
+        return GapAnalysisResponse(
+            wallet_id=wallet_id,
+            from_version=from_v,
+            to_version=to_v,
+            snapshot_delta=snapshot_delta,
+            transaction_sum=transaction_sum,
+            gap=gap,
+            gap_pct=round(gap_pct, 2),
+            is_reconciled=is_reconciled,
+            transactions=txn_responses,
+            from_synced_at=from_snap.synced_at,
+            to_synced_at=to_snap.synced_at,
+        )
+
+    async def create_global_snapshot(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        user_id: str | None = None,
+    ) -> dict:
+        """Create snapshots for all active wallets with a shared batch_id."""
+        batch_id = _uuid7_hex()
+
+        wallets_q = select(Wallet).where(
+            Wallet.space_id == space_id,
+            Wallet.is_active == True,  # noqa: E712
+            Wallet.deleted_at == None,  # noqa: E711
+        )
+        wallets = (await db.execute(wallets_q)).scalars().all()
+
+        snapshots = []
+        total_net_worth = Decimal("0")
+        now = datetime.now(UTC)
+
+        for wallet in wallets:
+            # Calculate balance from initial + transactions (reconcile formula)
+            txn_filter = [
+                Transaction.wallet_id == wallet.id,
+                Transaction.status == "completed",
+                Transaction.deleted_at == None,  # noqa: E711
+            ]
+
+            income_sum = (await db.execute(
+                select(func.coalesce(func.sum(Transaction.amount), 0))
+                .where(*txn_filter, Transaction.type == "income")
+            )).scalar_one()
+
+            expense_sum = (await db.execute(
+                select(func.coalesce(func.sum(Transaction.amount), 0))
+                .where(*txn_filter, Transaction.type.in_(["expense", "transfer"]))
+            )).scalar_one()
+
+            transfer_in = (await db.execute(
+                select(func.coalesce(func.sum(Transaction.amount), 0))
+                .where(
+                    Transaction.transfer_to_wallet_id == wallet.id,
+                    Transaction.type == "transfer",
+                    Transaction.status == "completed",
+                    Transaction.deleted_at == None,  # noqa: E711
+                )
+            )).scalar_one()
+
+            fee_sum = (await db.execute(
+                select(func.coalesce(func.sum(Transaction.fee), 0))
+                .where(*txn_filter)
+            )).scalar_one()
+
+            calculated = wallet.initial_balance + income_sum - expense_sum + transfer_in - fee_sum
+
+            # Determine next version
+            max_version = (await db.execute(
+                select(func.coalesce(func.max(WalletSnapshot.version), 0))
+                .where(WalletSnapshot.wallet_id == wallet.id)
+            )).scalar_one()
+
+            snapshot = WalletSnapshot(
+                id=_uuid7_hex(),
+                space_id=space_id,
+                created_by=user_id,
+                wallet_id=wallet.id,
+                synced_balance=wallet.current_balance,
+                calculated_balance=calculated,
+                snapshot_type="reconciliation",
+                version=max_version + 1,
+                batch_id=batch_id,
+                synced_at=now,
+                metadata_json={
+                    "wallet_name": wallet.name,
+                    "wallet_type": wallet.type,
+                    "currency": wallet.currency,
+                    "is_active": wallet.is_active,
+                    "global_snapshot": True,
+                },
+            )
+            db.add(snapshot)
+            snapshots.append(snapshot)
+            total_net_worth += wallet.current_balance
+
+        await db.flush()
+
+        # Refresh all snapshots to get computed columns
+        for s in snapshots:
+            await db.refresh(s)
+
+        try:
+            await event_bus.publish(
+                Event(
+                    type=FinanceEvents.GLOBAL_SNAPSHOT_CREATED,
+                    data={
+                        "batch_id": batch_id,
+                        "snapshot_count": len(snapshots),
+                        "total_net_worth": str(total_net_worth),
+                        "space_id": space_id,
+                    },
+                    source="finance",
+                    user_id=user_id,
+                )
+            )
+        except Exception:
+            logger.warning("Failed to publish GLOBAL_SNAPSHOT_CREATED event", exc_info=True)
+
+        return GlobalSnapshotResponse(
+            batch_id=batch_id,
+            snapshot_count=len(snapshots),
+            total_net_worth=total_net_worth,
+            snapshots=[self._snapshot_to_response(s) for s in snapshots],
+            created_at=now,
+        )
+
+    async def list_global_snapshots(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        pagination: PaginationParams | None = None,
+    ) -> PaginatedResponse[GlobalSnapshotSummary]:
+        """List global snapshot batches."""
+        p = pagination or PaginationParams()
+
+        # Aggregate by batch_id
+        base = (
+            select(
+                WalletSnapshot.batch_id,
+                func.count().label("snapshot_count"),
+                func.sum(WalletSnapshot.synced_balance).label("total_net_worth"),
+                func.min(WalletSnapshot.created_at).label("created_at"),
+            )
+            .where(
+                WalletSnapshot.space_id == space_id,
+                WalletSnapshot.batch_id != None,  # noqa: E711
+                WalletSnapshot.deleted_at == None,  # noqa: E711
+            )
+            .group_by(WalletSnapshot.batch_id)
+        )
+
+        # Count total batches
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+
+        q = (
+            base.order_by(func.min(WalletSnapshot.created_at).desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).all()
+
+        items = [
+            GlobalSnapshotSummary(
+                batch_id=row.batch_id,
+                snapshot_count=row.snapshot_count,
+                total_net_worth=row.total_net_worth or Decimal("0"),
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
+        return PaginatedResponse[GlobalSnapshotSummary](
+            items=items,
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
         )
 
 

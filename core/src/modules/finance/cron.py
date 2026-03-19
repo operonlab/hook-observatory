@@ -18,8 +18,8 @@ from uuid_utils import uuid7
 from src.events.bus import Event, event_bus
 from src.events.types import FinanceEvents
 
-from .models import InstallmentPlan, Subscription, Transaction
-from .services import _adjust_wallet_balance
+from .models import InstallmentPlan, Subscription, Transaction, Wallet
+from .services import _adjust_wallet_balance, wallet_service
 
 logger = structlog.get_logger()
 
@@ -331,3 +331,23 @@ async def run_all_cron(db: AsyncSession, space_id: str) -> dict:
     logger.info("finance_cron_complete", **summary)
 
     return summary
+
+
+async def process_monthly_snapshot(db: AsyncSession) -> dict:
+    """Create global snapshots for all active spaces."""
+    from sqlalchemy import distinct
+
+    # Get all distinct space_ids with active wallets
+    space_ids = (await db.execute(
+        select(distinct(Wallet.space_id)).where(
+            Wallet.is_active == True,  # noqa: E712
+            Wallet.deleted_at == None,  # noqa: E711
+        )
+    )).scalars().all()
+
+    results = []
+    for space_id in space_ids:
+        result = await wallet_service.create_global_snapshot(db, space_id)
+        results.append({"space_id": space_id, "batch_id": result.batch_id})
+
+    return {"spaces_processed": len(results), "results": results}

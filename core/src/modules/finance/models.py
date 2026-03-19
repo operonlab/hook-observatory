@@ -325,6 +325,12 @@ class WalletSnapshot(SpaceScopedModel):
     __table_args__ = (
         Index("idx_snapshot_wallet_time", "wallet_id", text("synced_at DESC")),
         Index("idx_snapshot_space_time", "space_id", text("synced_at DESC")),
+        Index("idx_snapshot_wallet_version", "wallet_id", "version", unique=True),
+        Index(
+            "idx_snapshot_batch",
+            "batch_id",
+            postgresql_where=text("batch_id IS NOT NULL"),
+        ),
         {"schema": SCHEMA},
     )
 
@@ -341,6 +347,9 @@ class WalletSnapshot(SpaceScopedModel):
     )  # reconciliation/valuation
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    batch_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 # ======================== Budgets ========================

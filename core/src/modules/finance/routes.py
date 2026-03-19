@@ -25,6 +25,9 @@ from .schemas import (
     CategoryUpdate,
     ExchangeRateResponse,
     FinanceSearchResult,
+    GapAnalysisResponse,
+    GlobalSnapshotResponse,
+    GlobalSnapshotSummary,
     InstallmentPlanCreate,
     InstallmentPlanResponse,
     InstallmentPlanUpdate,
@@ -32,6 +35,7 @@ from .schemas import (
     MonthlyTrendResponse,
     NetWorthPointResponse,
     ReconcileResponse,
+    SnapshotDiffResponse,
     SubscriptionCreate,
     SubscriptionResponse,
     SubscriptionUpdate,
@@ -238,6 +242,30 @@ async def get_net_worth(
     return await summary_service.net_worth(db, space_id, user_id=user.get("id"))
 
 
+@router.post("/wallets/global-snapshot", response_model=GlobalSnapshotResponse)
+async def create_global_snapshot(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.write"),
+):
+    result = await wallet_service.create_global_snapshot(db, space_id, user_id=user.get("id"))
+    await db.commit()
+    return result
+
+
+@router.get("/wallets/global-snapshots", response_model=PaginatedResponse[GlobalSnapshotSummary])
+async def list_global_snapshots(
+    space_id: str = Query("default"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    return await wallet_service.list_global_snapshots(
+        db, space_id, PaginationParams(page=page, page_size=page_size)
+    )
+
+
 @router.get("/wallets/{wallet_id}", response_model=WalletResponse)
 async def get_wallet(
     wallet_id: str,
@@ -307,6 +335,41 @@ async def reconcile_wallet(
     user: dict = require_permission("finance.read"),
 ):
     return await wallet_service.reconcile(db, wallet_id, user_id=user.get("id"))
+
+
+@router.get("/wallets/{wallet_id}/snapshots", response_model=PaginatedResponse[WalletSnapshotResponse])
+async def list_wallet_snapshots(
+    wallet_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    return await wallet_service.list_snapshots(
+        db, wallet_id, PaginationParams(page=page, page_size=page_size)
+    )
+
+
+@router.get("/wallets/{wallet_id}/snapshots/diff", response_model=SnapshotDiffResponse)
+async def diff_wallet_snapshots(
+    wallet_id: str,
+    from_v: int = Query(..., description="From version number"),
+    to_v: int = Query(..., description="To version number"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    return await wallet_service.diff_snapshots(db, wallet_id, from_v, to_v)
+
+
+@router.get("/wallets/{wallet_id}/snapshots/gap-analysis", response_model=GapAnalysisResponse)
+async def gap_analysis(
+    wallet_id: str,
+    from_v: int = Query(..., description="From version number"),
+    to_v: int = Query(..., description="To version number"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("finance.read"),
+):
+    return await wallet_service.gap_analysis(db, wallet_id, from_v, to_v)
 
 
 # ======================== Categories ========================
@@ -811,6 +874,18 @@ async def process_billing(
     from .cron import run_all_cron
 
     result = await run_all_cron(db, space_id)
+    await db.commit()
+    return result
+
+
+@router.post("/snapshots/process-monthly")
+async def process_monthly_snapshots(
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("admin.write"),
+):
+    from .cron import process_monthly_snapshot
+
+    result = await process_monthly_snapshot(db)
     await db.commit()
     return result
 

@@ -305,6 +305,59 @@ export interface NetWorthPoint {
   credit_card: number
 }
 
+// ─── Wallet Snapshot ───
+
+export interface WalletSnapshot extends BaseEntity {
+  wallet_id: string
+  synced_balance: number
+  calculated_balance: number
+  difference: number
+  snapshot_type: string
+  notes: string | null
+  synced_at: string
+  version: number
+  batch_id: string | null
+  metadata_json: Record<string, unknown> | null
+}
+
+export interface SnapshotDiff {
+  wallet_id: string
+  from_version: number
+  to_version: number
+  from_synced_balance: number
+  to_synced_balance: number
+  balance_delta: number
+  delta_pct: number
+  from_synced_at: string
+  to_synced_at: string
+  period_days: number
+}
+
+export interface GapAnalysis {
+  wallet_id: string
+  from_version: number
+  to_version: number
+  snapshot_delta: number
+  transaction_sum: number
+  gap: number
+  gap_pct: number
+  is_reconciled: boolean
+  transactions: Transaction[]
+  from_synced_at: string
+  to_synced_at: string
+}
+
+export interface GlobalSnapshotSummary {
+  batch_id: string
+  snapshot_count: number
+  total_net_worth: number
+  created_at: string
+}
+
+export interface GlobalSnapshot extends GlobalSnapshotSummary {
+  snapshots: WalletSnapshot[]
+}
+
 // ─── Wallet type display config ───
 
 export const WALLET_TYPE_CONFIG: Record<

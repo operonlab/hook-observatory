@@ -5,11 +5,15 @@ import type {
   BudgetSet,
   Category,
   CategoryCreate,
+  GapAnalysis,
+  GlobalSnapshot,
+  GlobalSnapshotSummary,
   InstallmentPlan,
   InstallmentPlanCreate,
   MonthlySummary,
   MonthlyTrend,
   NetWorthPoint,
+  SnapshotDiff,
   Subscription,
   SubscriptionCreate,
   SubscriptionUpdate,
@@ -19,6 +23,7 @@ import type {
   Wallet,
   WalletCreate,
   WalletUpdate,
+  WalletSnapshot,
 } from '../types'
 
 // ─── Icon Upload ───
@@ -95,6 +100,30 @@ export const walletApi = {
         difference: number
       }>
     }>('/finance/wallets/reconcile'),
+
+  // Snapshot APIs
+  snapshots: (walletId: string, page = 1, pageSize = 20) =>
+    request<PaginatedResponse<WalletSnapshot>>(
+      `/finance/wallets/${walletId}/snapshots?page=${page}&page_size=${pageSize}`,
+    ),
+
+  snapshotDiff: (walletId: string, fromV: number, toV: number) =>
+    request<SnapshotDiff>(
+      `/finance/wallets/${walletId}/snapshots/diff?from_v=${fromV}&to_v=${toV}`,
+    ),
+
+  gapAnalysis: (walletId: string, fromV: number, toV: number) =>
+    request<GapAnalysis>(
+      `/finance/wallets/${walletId}/snapshots/gap-analysis?from_v=${fromV}&to_v=${toV}`,
+    ),
+
+  globalSnapshot: () =>
+    request<GlobalSnapshot>('/finance/wallets/global-snapshot', { method: 'POST' }),
+
+  globalSnapshots: (page = 1, pageSize = 20) =>
+    request<PaginatedResponse<GlobalSnapshotSummary>>(
+      `/finance/wallets/global-snapshots?page=${page}&page_size=${pageSize}`,
+    ),
 }
 
 export const installmentApi = {
