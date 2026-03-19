@@ -5,7 +5,6 @@ Subscribes to MemvaultEvents.MEMORY_STORED and runs triple extraction via
 local LLM (oMLX), then feeds results into the existing TripleService pipeline.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -433,9 +432,5 @@ def register_auto_evolve_handler() -> None:
         except Exception:
             logger.warning("KG auto-evolve session error (memory=%s)", memory_id, exc_info=True)
 
-    def _handler(event: Event) -> None:
-        """Sync wrapper that schedules the async handler as fire-and-forget."""
-        asyncio.ensure_future(_on_memory_stored(event))  # noqa: RUF006
-
-    event_bus.subscribe(MemvaultEvents.MEMORY_STORED, _handler)
+    event_bus.channel(MemvaultEvents.MEMORY_STORED).subscribe_handler(_on_memory_stored)
     logger.info("KG auto-evolve handler registered for %s", MemvaultEvents.MEMORY_STORED)

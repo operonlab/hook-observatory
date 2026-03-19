@@ -181,4 +181,4 @@ def register_invalidation(
                 )
 
     for event_type in events:
-        event_bus.subscribe(event_type, _invalidate)
+        event_bus.channel(event_type).subscribe_handler(_invalidate)

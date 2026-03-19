@@ -15,12 +15,13 @@ async def test_follow_up_event_inherits_trace_id(bus: EventBus) -> None:
     """Event published inside a handler should inherit the parent's trace_id."""
     captured: list[str] = []
 
-    @bus.on("order.placed")
     async def handle_order_placed(event: Event) -> None:
         # Publish a follow-up event without explicitly passing trace_id
         follow_up = Event(type="invoice.created", data={"order_id": "123"})
         captured.append(follow_up.trace_id)
         await bus.publish(follow_up)
+
+    bus.channel("order.placed").subscribe_handler(handle_order_placed)
 
     parent = Event(type="order.placed", data={})
     parent_trace = parent.trace_id
@@ -51,11 +52,12 @@ async def test_explicit_trace_id_overrides_context(bus: EventBus) -> None:
     captured: list[str] = []
     explicit_trace = "explicit-trace-0000"
 
-    @bus.on("task.started")
     async def handle_task(event: Event) -> None:
         # Pass an explicit trace_id — should NOT inherit from context
         child = Event(type="task.step", data={}, trace_id=explicit_trace)
         captured.append(child.trace_id)
+
+    bus.channel("task.started").subscribe_handler(handle_task)
 
     parent = Event(type="task.started", data={})
     parent_trace = parent.trace_id
@@ -73,9 +75,11 @@ async def test_explicit_trace_id_overrides_context(bus: EventBus) -> None:
 @pytest.mark.asyncio
 async def test_context_reset_after_handler(bus: EventBus) -> None:
     """ContextVar must be reset to None after handler finishes."""
-    @bus.on("reset.test")
+
     async def handle_reset(event: Event) -> None:
         pass  # Just consume the event
+
+    bus.channel("reset.test").subscribe_handler(handle_reset)
 
     await bus.publish(Event(type="reset.test", data={}))
     # After dispatch, context should be back to None
@@ -84,23 +88,24 @@ async def test_context_reset_after_handler(bus: EventBus) -> None:
 
 @pytest.mark.asyncio
 async def test_deep_chain_preserves_trace_id(bus: EventBus) -> None:
-    """Three-level chain: A → B → C all share the root trace_id."""
+    """Three-level chain: A -> B -> C all share the root trace_id."""
     root_trace: list[str] = []
     chain_traces: list[str] = []
 
-    @bus.on("chain.a")
     async def handle_a(event: Event) -> None:
         root_trace.append(event.trace_id)
         await bus.publish(Event(type="chain.b", data={}))
 
-    @bus.on("chain.b")
     async def handle_b(event: Event) -> None:
         chain_traces.append(event.trace_id)
         await bus.publish(Event(type="chain.c", data={}))
 
-    @bus.on("chain.c")
     async def handle_c(event: Event) -> None:
         chain_traces.append(event.trace_id)
+
+    bus.channel("chain.a").subscribe_handler(handle_a)
+    bus.channel("chain.b").subscribe_handler(handle_b)
+    bus.channel("chain.c").subscribe_handler(handle_c)
 
     root = Event(type="chain.a", data={})
     await bus.publish(root)
