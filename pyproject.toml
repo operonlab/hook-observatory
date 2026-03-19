@@ -62,6 +62,7 @@ ignore = [
 "stations/sentinel/checker.py" = ["ASYNC109"]  # timeout in async health checks is intentional
 "mcp/memvault/pipelines/cluster_pipeline.py" = ["N806", "S310", "S603", "B905"]  # ML matrix vars + trusted subprocess + oMLX URL
 "schedules/runners/*.py" = ["S603", "S607"]  # trusted hardcoded runner scripts
+"core/src/shared/reactive.py" = ["RUF001", "RUF002"]  # Chinese docstrings (Reactive Protocol)
 
 [tool.ruff.format]
 quote-style = "double"
