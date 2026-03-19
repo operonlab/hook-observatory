@@ -45,6 +45,13 @@ VALID_UPDATE_TYPES = {"progress", "blocker", "note", "status_change"}
 class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
     model = Task
     audit_module = "taskflow"
+    event_types = {
+        "created": TaskflowEvents.TASK_CREATED,
+        "updated": TaskflowEvents.TASK_UPDATED,
+        "deleted": TaskflowEvents.TASK_DELETED,
+    }
+    event_id_alias = "task_id"
+    event_fields = ("title", "description", "status", "priority", "project", "tags")
 
     def before_create(self, data: TaskCreate, **kwargs: Any) -> dict:
         d = data.model_dump()
@@ -64,64 +71,6 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
                 code="taskflow.invalid_status",
             )
         return d
-
-    def after_create(self, instance: Task) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=TaskflowEvents.TASK_CREATED,
-                data={
-                    "task_id": instance.id,
-                    "id": instance.id,
-                    "space_id": instance.space_id,
-                    "title": instance.title,
-                    "description": instance.description,
-                    "status": instance.status,
-                    "priority": instance.priority,
-                    "project": instance.project,
-                    "tags": instance.tags or [],
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="taskflow",
-                user_id=instance.created_by,
-            )
-        )
-
-    def after_update(self, instance: Task, changes: dict) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=TaskflowEvents.TASK_UPDATED,
-                data={
-                    "task_id": instance.id,
-                    "id": instance.id,
-                    "space_id": instance.space_id,
-                    "title": instance.title,
-                    "description": instance.description,
-                    "status": instance.status,
-                    "priority": instance.priority,
-                    "project": instance.project,
-                    "tags": instance.tags or [],
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="taskflow",
-                user_id=instance.created_by,
-            )
-        )
-
-    def after_delete(self, instance: Task) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=TaskflowEvents.TASK_DELETED,
-                data={
-                    "task_id": instance.id,
-                    "id": instance.id,
-                    "space_id": instance.space_id,
-                },
-                source="taskflow",
-                user_id=instance.created_by,
-            )
-        )
 
     def to_response(self, instance: Task) -> TaskResponse:
         return TaskResponse(

@@ -77,6 +77,10 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
     """CRUD + batch ingest + semantic search for L0 Triple facts."""
 
     model = Triple
+    audit_module = "memvault"
+    event_types = {"created": MemvaultEvents.TRIPLE_INGESTED}
+    event_id_alias = "triple_id"
+    event_fields = ("subject", "predicate", "source_session")
 
     def before_create(self, data: TripleCreate, **kwargs: Any) -> dict:
         """Normalize predicate and entity text before inserting."""
@@ -85,22 +89,6 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         d["subject"] = normalize_entity_text(d["subject"])
         d["object"] = normalize_entity_text(d["object"])
         return d
-
-    def after_create(self, instance: Triple) -> None:
-        """Publish TRIPLE_INGESTED event (fire-and-forget)."""
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=MemvaultEvents.TRIPLE_INGESTED,
-                data={
-                    "triple_id": instance.id,
-                    "subject": instance.subject,
-                    "predicate": instance.predicate,
-                    "source_session": instance.source_session,
-                },
-                source="memvault",
-                user_id=instance.created_by,
-            )
-        )
 
     def to_response(self, instance: Triple) -> TripleResponse:
         """Map ORM instance to TripleResponse (embedding excluded)."""

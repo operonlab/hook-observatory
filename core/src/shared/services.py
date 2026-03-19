@@ -44,6 +44,9 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
 
     Set `audit_module` to enable automatic audit trail recording.
     Set `audit_entity_type` to override the default (model.__tablename__).
+
+    Set `event_types` to enable automatic event publishing on CRUD hooks.
+    Example: ``event_types = {"created": "finance.wallet.created", ...}``
     """
 
     model: type[ModelT]
@@ -52,6 +55,11 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     audit_module: str = ""
     audit_entity_type: str = ""
 
+    # --- Auto-event configuration (opt-in, empty = no auto-publish) ---
+    event_types: dict[str, str] = {}
+    event_fields: tuple[str, ...] = ()
+    event_id_alias: str = ""
+
     # --- Template Method hooks (override in subclass) ---
 
     def before_create(self, data: CreateT, **kwargs: Any) -> dict:
@@ -59,20 +67,63 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
         return data.model_dump() if hasattr(data, "model_dump") else dict(data)
 
     def after_create(self, instance: ModelT) -> None:
-        """Post-create hook (e.g., publish event)."""
+        """Post-create hook. Auto-publishes event if event_types configured."""
+        self._auto_publish_event("created", instance)
 
     def before_update(self, instance: ModelT, data: UpdateT) -> dict:
         """Transform update schema before applying. Return dict of fields to set."""
         return data.model_dump(exclude_unset=True) if hasattr(data, "model_dump") else dict(data)
 
     def after_update(self, instance: ModelT, changes: dict) -> None:
-        """Post-update hook. `changes` is the field-level diff."""
+        """Post-update hook. Auto-publishes if event_types configured and changes non-empty."""
+        if changes:
+            self._auto_publish_event("updated", instance, changes)
 
     def before_delete(self, instance: ModelT) -> None:
         """Pre-delete hook. Raise to abort deletion."""
 
     def after_delete(self, instance: ModelT) -> None:
-        """Post-soft-delete hook."""
+        """Post-soft-delete hook. Auto-publishes event if event_types configured."""
+        self._auto_publish_event("deleted", instance)
+
+    # --- Auto-event helpers ---
+
+    def _build_event_data(
+        self, instance: ModelT, action: str, changes: dict | None = None
+    ) -> dict[str, Any]:
+        """Build event payload from instance. Subclass can override to extend."""
+        data: dict[str, Any] = {"id": getattr(instance, "id", None)}
+        if hasattr(instance, "space_id"):
+            data["space_id"] = instance.space_id  # type: ignore[attr-defined]
+        if self.event_id_alias:
+            data[self.event_id_alias] = data["id"]
+        for field in self.event_fields:
+            if field in data:
+                continue
+            val = getattr(instance, field, None)
+            data[field] = _serialize_value(val)
+        if action == "updated" and changes is not None:
+            data["changes"] = changes
+        return data
+
+    def _auto_publish_event(
+        self, action: str, instance: ModelT, changes: dict | None = None
+    ) -> None:
+        """Publish event if event_types has a mapping for this action."""
+        event_type = self.event_types.get(action)
+        if not event_type:
+            return
+        from src.events.bus import Event, event_bus
+
+        data = self._build_event_data(instance, action, changes)
+        event_bus.publish_fire_and_forget(
+            Event(
+                type=event_type,
+                data=data,
+                source=self.audit_module,
+                user_id=getattr(instance, "created_by", None),
+            )
+        )
 
     def to_response(self, instance: ModelT) -> ResponseT:
         """Convert ORM instance to response schema. Must override."""

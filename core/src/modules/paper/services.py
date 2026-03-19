@@ -10,7 +10,6 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.events.bus import Event, event_bus
 from src.events.types import PaperEvents
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -39,60 +38,16 @@ class ArticleService(BaseCRUDService[Article, ArticleCreate, ArticleUpdate, Arti
     model = Article
     audit_module = "paper"
     audit_entity_type = "articles"
+    event_types = {
+        "created": PaperEvents.ARTICLE_CREATED,
+        "updated": PaperEvents.ARTICLE_UPDATED,
+        "deleted": PaperEvents.ARTICLE_DELETED,
+    }
+    event_id_alias = "article_id"
+    event_fields = ("title", "abstract", "arxiv_id", "doi", "year", "categories", "tags")
 
     def before_create(self, data: ArticleCreate, **kwargs: Any) -> dict:
         return data.model_dump()
-
-    def after_create(self, instance: Article) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=PaperEvents.ARTICLE_CREATED,
-                data={
-                    "id": instance.id,
-                    "article_id": instance.id,
-                    "space_id": instance.space_id,
-                    "title": instance.title,
-                    "abstract": instance.abstract,
-                    "arxiv_id": instance.arxiv_id,
-                    "doi": instance.doi,
-                    "year": instance.year,
-                    "categories": instance.categories or [],
-                    "tags": instance.tags or [],
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="paper",
-                user_id=instance.created_by,
-            )
-        )
-
-    def after_update(self, instance: Article, changes: dict) -> None:
-        if changes:
-            event_bus.publish_fire_and_forget(
-                Event(
-                    type=PaperEvents.ARTICLE_UPDATED,
-                    data={
-                        "id": instance.id,
-                        "space_id": instance.space_id,
-                        "changes": changes,
-                    },
-                    source="paper",
-                    user_id=instance.created_by,
-                )
-            )
-
-    def after_delete(self, instance: Article) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=PaperEvents.ARTICLE_DELETED,
-                data={
-                    "id": instance.id,
-                    "space_id": instance.space_id,
-                },
-                source="paper",
-                user_id=instance.created_by,
-            )
-        )
 
     def to_response(self, instance: Article) -> ArticleResponse:
         digest_resp = None
@@ -206,27 +161,13 @@ class DigestService(BaseCRUDService[Digest, DigestCreate, DigestUpdate, DigestRe
     model = Digest
     audit_module = "paper"
     audit_entity_type = "digests"
+    event_types = {"created": PaperEvents.DIGEST_GENERATED}
+    event_fields = (
+        "paper_id", "workshop_relevance", "applicable_modules", "model_used", "confidence",
+    )
 
     def before_create(self, data: DigestCreate, **kwargs: Any) -> dict:
         return data.model_dump()
-
-    def after_create(self, instance: Digest) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=PaperEvents.DIGEST_GENERATED,
-                data={
-                    "id": instance.id,
-                    "paper_id": instance.paper_id,
-                    "space_id": instance.space_id,
-                    "workshop_relevance": instance.workshop_relevance,
-                    "applicable_modules": instance.applicable_modules or [],
-                    "model_used": instance.model_used,
-                    "confidence": instance.confidence,
-                },
-                source="paper",
-                user_id=instance.created_by,
-            )
-        )
 
     def to_response(self, instance: Digest) -> DigestResponse:
         return _digest_to_response(instance)
@@ -267,6 +208,8 @@ class AnnotationService(
     model = Annotation
     audit_module = "paper"
     audit_entity_type = "annotations"
+    event_types = {"created": PaperEvents.ANNOTATION_CREATED}
+    event_fields = ("paper_id", "annotation_type")
 
     def before_create(self, data: AnnotationCreate, **kwargs: Any) -> dict:
         d = data.model_dump()
@@ -275,21 +218,6 @@ class AnnotationService(
         if paper_id:
             d["paper_id"] = paper_id
         return d
-
-    def after_create(self, instance: Annotation) -> None:
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=PaperEvents.ANNOTATION_CREATED,
-                data={
-                    "id": instance.id,
-                    "paper_id": instance.paper_id,
-                    "space_id": instance.space_id,
-                    "annotation_type": instance.annotation_type,
-                },
-                source="paper",
-                user_id=instance.created_by,
-            )
-        )
 
     def to_response(self, instance: Annotation) -> AnnotationResponse:
         return AnnotationResponse(
