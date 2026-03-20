@@ -8,14 +8,14 @@ mod types;
 
 use anyhow::Result;
 use chrono::{NaiveDate, Utc};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::time::Instant;
 
 use crate::aggregator::*;
 use crate::cache::CacheManager;
 use crate::pricing::PricingTable;
 use crate::scanner::*;
-use crate::types::{AggregationResult, UsageEntry};
+use crate::types::{AggregationResult, OutputConfig, UsageEntry};
 
 #[derive(Parser)]
 #[command(name = "ccusage-rs", about = "Claude Code usage tracker (Rust)", version)]
@@ -27,17 +27,25 @@ struct Cli {
     #[arg(long, global = true)]
     project: Option<String>,
 
-    /// Start date (YYYYMMDD)
+    /// Filter by model name (substring match, e.g. "opus")
+    #[arg(long, global = true)]
+    model: Option<String>,
+
+    /// Start date (YYYYMMDD or YYYY-MM-DD)
     #[arg(long, global = true)]
     since: Option<String>,
 
-    /// End date (YYYYMMDD)
+    /// End date (YYYYMMDD or YYYY-MM-DD)
     #[arg(long, global = true)]
     until: Option<String>,
 
     /// Output as JSON
     #[arg(long, global = true)]
     json: bool,
+
+    /// Output as CSV
+    #[arg(long, global = true)]
+    csv: bool,
 
     /// Show per-model breakdown
     #[arg(long, global = true)]
@@ -50,6 +58,28 @@ struct Cli {
     /// Disable cache
     #[arg(long, global = true)]
     no_cache: bool,
+
+    /// Hide cost columns (token-only view)
+    #[arg(long, global = true)]
+    no_cost: bool,
+
+    /// Disable colored output (for piping)
+    #[arg(long, global = true)]
+    no_color: bool,
+
+    /// Sort order
+    #[arg(long, global = true, value_enum)]
+    order: Option<SortOrder>,
+
+    /// Limit number of results (for session/instances)
+    #[arg(long, global = true)]
+    limit: Option<usize>,
+}
+
+#[derive(Clone, ValueEnum)]
+enum SortOrder {
+    Asc,
+    Desc,
 }
 
 #[derive(Subcommand)]
@@ -64,6 +94,10 @@ enum Commands {
     Session,
     /// Show 5-hour billing blocks
     Blocks,
+    /// Compact one-line output for tmux statusline
+    Statusline,
+    /// Show usage grouped by project (cwd)
+    Instances,
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate> {
@@ -78,12 +112,21 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let start_time = Instant::now();
 
+    // Build output config
+    let out_cfg = OutputConfig {
+        no_cost: cli.no_cost,
+        no_color: cli.no_color,
+        csv: cli.csv,
+        limit: cli.limit,
+        order_desc: matches!(cli.order, Some(SortOrder::Desc)),
+    };
+
     // Parse date filters
     let since = cli.since.as_ref().map(|s| parse_date(s)).transpose()?;
     let until = cli.until.as_ref().map(|s| parse_date(s)).transpose()?;
 
     let since = since.or_else(|| {
-        if matches!(cli.command, Commands::Daily) {
+        if matches!(cli.command, Commands::Daily | Commands::Statusline) {
             Some(Utc::now().date_naive())
         } else {
             None
@@ -111,17 +154,21 @@ fn main() -> Result<()> {
                 let removed = cache.removed_files(&all_files, &cached_mtimes);
 
                 if changed.is_empty() && removed.is_empty() {
-                    eprintln!("  cache: hit ({} entries)", cached_entries.len());
+                    if !matches!(cli.command, Commands::Statusline) {
+                        eprintln!("  cache: hit ({} entries)", cached_entries.len());
+                    }
                     cached_entries
                 } else {
                     // Any change → full reparse (simple, correct, still fast at 0.5s)
                     let entries = parse_files_parallel(&all_files);
                     let _ = cache.save_all(&all_files, &entries);
-                    eprintln!(
-                        "  cache: {} changed, {} new → reparse",
-                        changed.len(),
-                        removed.len()
-                    );
+                    if !matches!(cli.command, Commands::Statusline) {
+                        eprintln!(
+                            "  cache: {} changed, {} removed → reparse",
+                            changed.len(),
+                            removed.len()
+                        );
+                    }
                     entries
                 }
             }
@@ -148,6 +195,13 @@ fn main() -> Result<()> {
         all_entries
     };
 
+    // Apply model filter
+    let entries = if let Some(ref model) = cli.model {
+        filter_by_model(entries, model)
+    } else {
+        entries
+    };
+
     // Apply date filter
     let filtered = filter_by_date(entries, since, until);
     let elapsed = start_time.elapsed();
@@ -162,58 +216,100 @@ fn main() -> Result<()> {
         }
     }
 
+    // Determine default sort direction per subcommand
+    let desc = match &cli.order {
+        Some(SortOrder::Desc) => true,
+        Some(SortOrder::Asc) => false,
+        None => matches!(cli.command, Commands::Session | Commands::Blocks | Commands::Instances),
+    };
+
     // Aggregate and output
+    let is_statusline = matches!(cli.command, Commands::Statusline);
     let entry_count = filtered.len();
     let print_stats = |elapsed: f64| {
-        eprintln!(
-            "  {} files, {} entries, {:.2}s",
-            file_count, entry_count, elapsed
-        );
+        if !is_statusline {
+            eprintln!(
+                "  {} files, {} entries, {:.2}s",
+                file_count, entry_count, elapsed
+            );
+        }
     };
 
     match cli.command {
         Commands::Daily => {
-            let summaries = aggregate_daily(&filtered, &pricing);
+            let mut summaries = aggregate_daily(&filtered, &pricing);
+            if desc {
+                summaries.reverse();
+            }
             if cli.json {
                 output::print_json(&AggregationResult::Daily(summaries));
             } else {
-                output::print_daily_table(&summaries, cli.breakdown);
+                output::print_daily_table(&summaries, cli.breakdown, &out_cfg);
                 print_stats(elapsed.as_secs_f64());
             }
         }
         Commands::Monthly => {
-            let summaries = aggregate_monthly(&filtered, &pricing);
+            let mut summaries = aggregate_monthly(&filtered, &pricing);
+            if desc {
+                summaries.reverse();
+            }
             if cli.json {
                 output::print_json(&AggregationResult::Monthly(summaries));
             } else {
-                output::print_monthly_table(&summaries, cli.breakdown);
+                output::print_monthly_table(&summaries, cli.breakdown, &out_cfg);
                 print_stats(elapsed.as_secs_f64());
             }
         }
         Commands::Weekly => {
-            let summaries = aggregate_weekly(&filtered, &pricing);
+            let mut summaries = aggregate_weekly(&filtered, &pricing);
+            if desc {
+                summaries.reverse();
+            }
             if cli.json {
                 output::print_json(&AggregationResult::Weekly(summaries));
             } else {
-                output::print_weekly_table(&summaries, cli.breakdown);
+                output::print_weekly_table(&summaries, cli.breakdown, &out_cfg);
                 print_stats(elapsed.as_secs_f64());
             }
         }
         Commands::Session => {
-            let summaries = aggregate_sessions(&filtered, &pricing);
+            let mut summaries = aggregate_sessions(&filtered, &pricing);
+            if !desc {
+                summaries.reverse(); // default is desc by cost, reverse for asc
+            }
             if cli.json {
                 output::print_json(&AggregationResult::Session(summaries));
             } else {
-                output::print_session_table(&summaries);
+                output::print_session_table(&summaries, &out_cfg);
                 print_stats(elapsed.as_secs_f64());
             }
         }
         Commands::Blocks => {
-            let summaries = aggregate_blocks(&filtered, &pricing);
+            let mut summaries = aggregate_blocks(&filtered, &pricing);
+            if desc {
+                summaries.reverse();
+            }
             if cli.json {
                 output::print_json(&AggregationResult::Blocks(summaries));
             } else {
-                output::print_block_table(&summaries);
+                output::print_block_table(&summaries, &out_cfg);
+                print_stats(elapsed.as_secs_f64());
+            }
+        }
+        Commands::Statusline => {
+            let summaries = aggregate_blocks(&filtered, &pricing);
+            output::print_statusline(&summaries, &pricing);
+        }
+        Commands::Instances => {
+            let mut summaries = aggregate_instances(&filtered, &pricing);
+            if !desc {
+                summaries.reverse(); // default is desc by cost
+            }
+            if cli.json {
+                let json = serde_json::to_string_pretty(&summaries).unwrap();
+                println!("{json}");
+            } else {
+                output::print_instance_table(&summaries, &out_cfg);
                 print_stats(elapsed.as_secs_f64());
             }
         }
