@@ -12,11 +12,15 @@ pub fn parse_jsonl_file(path: &Path) -> Result<Vec<UsageEntry>> {
     let file = std::fs::File::open(path)?;
     let reader = BufReader::with_capacity(64 * 1024, file);
     let mut entries = Vec::new();
+    let mut skip_count = 0u64;
 
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
-            Err(_) => continue,
+            Err(_) => {
+                skip_count += 1;
+                continue;
+            }
         };
 
         // Fast byte-level pre-filter: skip lines that can't be assistant+usage
@@ -49,6 +53,14 @@ pub fn parse_jsonl_file(path: &Path) -> Result<Vec<UsageEntry>> {
         };
 
         entries.push(entry);
+    }
+
+    if skip_count > 0 {
+        eprintln!(
+            "warning: {} lines skipped in {}",
+            skip_count,
+            path.display()
+        );
     }
 
     Ok(entries)

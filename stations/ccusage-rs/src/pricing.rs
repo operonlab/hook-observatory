@@ -1,9 +1,12 @@
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 use crate::types::{CostBreakdown, TokenCounts};
+
+static WARNED_MODELS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 const LITELLM_URL: &str = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 const CACHE_TTL: Duration = Duration::from_secs(3600); // 1 hour
@@ -238,9 +241,20 @@ impl PricingTable {
                             * pricing.cache_creation_1h_cost_per_token,
                     cache_read_cost: tokens.cache_read_tokens as f64
                         * pricing.cache_read_cost_per_token,
+                    thinking_cost: tokens.thinking_tokens as f64
+                        * pricing.output_cost_per_token
+                        * output_multiplier,
                 }
             }
-            None => CostBreakdown::default(),
+            None => {
+                let warned = WARNED_MODELS.get_or_init(|| Mutex::new(HashSet::new()));
+                if let Ok(mut set) = warned.lock() {
+                    if set.insert(model.to_string()) {
+                        eprintln!("warning: unknown model \"{}\", cost will be $0", model);
+                    }
+                }
+                CostBreakdown::default()
+            }
         }
     }
 

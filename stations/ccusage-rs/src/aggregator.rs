@@ -179,6 +179,13 @@ pub fn aggregate_sessions(
         model_usage.cost.merge(&cost);
     }
 
+    // Fix session.date to use first_activity timestamp (deterministic)
+    for session in sessions.values_mut() {
+        if let Some(first) = session.first_activity {
+            session.date = first.date_naive();
+        }
+    }
+
     let mut result: Vec<SessionUsage> = sessions.into_values().collect();
     result.sort_by(|a, b| {
         b.total_cost
@@ -493,7 +500,7 @@ pub fn dedup_entries(entries: Vec<UsageEntry>) -> Vec<UsageEntry> {
     let mut result: Vec<Option<UsageEntry>> = Vec::with_capacity(entries.len());
 
     for entry in entries {
-        if let Some(ref mid) = entry.message_id {
+        if let Some(mid) = entry.message_id.as_ref().filter(|s| !s.is_empty()) {
             let key = (entry.session_id.clone(), mid.clone());
             if let Some(&prev_idx) = by_msg.get(&key) {
                 result[prev_idx] = None;
