@@ -140,6 +140,8 @@ pub struct SessionUsage {
     pub by_model: HashMap<String, ModelUsage>,
     pub first_activity: Option<DateTime<Utc>>,
     pub last_activity: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub fast_entry_count: usize,
 }
 
 /// 5-hour billing block summary
