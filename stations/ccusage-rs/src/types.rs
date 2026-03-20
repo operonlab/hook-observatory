@@ -38,6 +38,8 @@ pub struct UsageEntry {
     pub cache_read_tokens: u64,
     pub thinking_tokens: u64,
     pub speed: Option<String>,
+    pub slug: Option<String>,
+    pub agent_id: Option<String>,
 }
 
 /// Aggregated token counts
@@ -135,6 +137,8 @@ pub struct SessionUsage {
     pub session_id: String,
     pub date: NaiveDate,
     pub project: Option<String>,
+    #[serde(default)]
+    pub slug: Option<String>,
     pub total_tokens: TokenCounts,
     pub total_cost: f64,
     pub by_model: HashMap<String, ModelUsage>,
@@ -154,6 +158,30 @@ pub struct BlockSummary {
     pub by_model: HashMap<String, ModelUsage>,
 }
 
+/// Per-agent usage within a session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentUsage {
+    pub agent_id: Option<String>,
+    pub model: Option<String>,
+    pub tokens: TokenCounts,
+    pub cost: f64,
+    pub cost_pct: f64,
+    pub entry_count: usize,
+    pub by_model: HashMap<String, ModelUsage>,
+}
+
+/// Session-level agent summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionAgentSummary {
+    pub session_id: String,
+    pub slug: Option<String>,
+    pub project: Option<String>,
+    pub total_cost: f64,
+    pub main_cost: f64,
+    pub main_pct: f64,
+    pub agents: Vec<AgentUsage>,
+}
+
 /// Aggregation result container
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AggregationResult {
@@ -163,6 +191,7 @@ pub enum AggregationResult {
     Session(Vec<SessionUsage>),
     Blocks(Vec<BlockSummary>),
     Instances(Vec<InstanceUsage>),
+    Agents(Vec<SessionAgentSummary>),
 }
 
 /// Metadata about a scanned JSONL file

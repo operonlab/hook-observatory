@@ -39,6 +39,10 @@ pub struct CachedEntry {
     pub thinking_tokens: u64,
     #[serde(default)]
     pub speed: Option<String>,
+    #[serde(default)]
+    pub slug: Option<String>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
     /// Source JSONL file path (for incremental cache)
     pub source_file: String,
 }
@@ -59,6 +63,8 @@ impl CachedEntry {
             cache_read_tokens: self.cache_read_tokens,
             thinking_tokens: self.thinking_tokens,
             speed: self.speed.clone(),
+            slug: self.slug.clone(),
+            agent_id: self.agent_id.clone(),
         })
     }
 
@@ -76,6 +82,8 @@ impl CachedEntry {
             cache_read_tokens: e.cache_read_tokens,
             thinking_tokens: e.thinking_tokens,
             speed: e.speed.clone(),
+            slug: e.slug.clone(),
+            agent_id: e.agent_id.clone(),
             source_file: source_file.to_string(),
         }
     }
