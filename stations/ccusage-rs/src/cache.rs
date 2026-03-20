@@ -81,16 +81,27 @@ impl CachedEntry {
     }
 }
 
+/// (file_mtimes, cached_entries_raw, usage_entries)
+pub type CacheLoadResult = (HashMap<String, u64>, Vec<CachedEntry>, Vec<UsageEntry>);
+
 pub struct CacheManager {
     cache_dir: PathBuf,
 }
 
 impl CacheManager {
     pub fn new() -> Self {
-        let cache_dir = dirs::cache_dir()
+        let base = dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("ccusage-rs")
-            .join("v5");
+            .join("ccusage-rs");
+        let cache_dir = base.join("v5");
+
+        // Clean up old cache versions
+        for old in &["v2", "v3", "v4"] {
+            let old_dir = base.join(old);
+            if old_dir.exists() {
+                let _ = std::fs::remove_dir_all(old_dir);
+            }
+        }
 
         Self { cache_dir }
     }
@@ -147,8 +158,8 @@ impl CacheManager {
         Ok(())
     }
 
-    /// Load cached entries if valid — returns (file_mtimes, cached_entries_raw, usage_entries)
-    pub fn load_all(&self) -> Option<(HashMap<String, u64>, Vec<CachedEntry>, Vec<UsageEntry>)> {
+    /// Load cached entries if valid
+    pub fn load_all(&self) -> Option<CacheLoadResult> {
         let meta_path = self.cache_dir.join("meta.json");
         let meta_data = std::fs::read_to_string(meta_path).ok()?;
         let meta: CacheMeta = serde_json::from_str(&meta_data).ok()?;

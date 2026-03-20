@@ -164,13 +164,13 @@ fn main() -> Result<()> {
 
     // Use local timezone for default since date
     let today = local_today(&cli.tz);
-    let since = since.or_else(|| {
+    let since = since.or(
         if matches!(cli.command, Commands::Daily | Commands::Statusline) {
             Some(today)
         } else {
             None
         }
-    });
+    );
 
     // Load pricing (non-blocking if cache exists)
     let pricing = PricingTable::load(cli.offline);
@@ -278,6 +278,12 @@ fn main() -> Result<()> {
             }
         }
     };
+
+    // Filter out synthetic/internal placeholder models
+    let all_entries: Vec<UsageEntry> = all_entries
+        .into_iter()
+        .filter(|e| !e.model.starts_with('<'))
+        .collect();
 
     // Apply project filter after cache
     let entries = if let Some(ref project) = cli.project {

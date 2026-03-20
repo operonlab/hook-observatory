@@ -30,7 +30,7 @@ pub fn aggregate_daily(
         let model_usage = summary
             .by_model
             .entry(entry.model.clone())
-            .or_insert_with(ModelUsage::default);
+            .or_default();
         model_usage.tokens.merge(&tokens);
         model_usage.cost.merge(&cost);
     }
@@ -67,7 +67,7 @@ pub fn aggregate_monthly(
         let model_usage = summary
             .by_model
             .entry(entry.model.clone())
-            .or_insert_with(ModelUsage::default);
+            .or_default();
         model_usage.tokens.merge(&tokens);
         model_usage.cost.merge(&cost);
     }
@@ -106,7 +106,7 @@ pub fn aggregate_weekly(
         let model_usage = summary
             .by_model
             .entry(entry.model.clone())
-            .or_insert_with(ModelUsage::default);
+            .or_default();
         model_usage.tokens.merge(&tokens);
         model_usage.cost.merge(&cost);
     }
@@ -141,6 +141,7 @@ pub fn aggregate_sessions(
                 by_model: HashMap::new(),
                 first_activity: None,
                 last_activity: None,
+                fast_entry_count: 0,
             });
 
         // Track first/last activity timestamps
@@ -155,13 +156,17 @@ pub fn aggregate_sessions(
             _ => {}
         }
 
+        if entry.speed.as_deref() == Some("fast") {
+            session.fast_entry_count += 1;
+        }
+
         session.total_tokens.merge(&tokens);
         session.total_cost += cost.total();
 
         let model_usage = session
             .by_model
             .entry(entry.model.clone())
-            .or_insert_with(ModelUsage::default);
+            .or_default();
         model_usage.tokens.merge(&tokens);
         model_usage.cost.merge(&cost);
     }
@@ -217,7 +222,7 @@ pub fn aggregate_blocks(
         let model_usage = block
             .by_model
             .entry(entry.model.clone())
-            .or_insert_with(ModelUsage::default);
+            .or_default();
         model_usage.tokens.merge(&tokens);
         model_usage.cost.merge(&cost);
     }
@@ -282,8 +287,7 @@ pub fn aggregate_instances(
     for entry in entries {
         let project = entry
             .cwd
-            .as_ref()
-            .map(|c| c.clone())
+            .clone()
             .unwrap_or_else(|| "unknown".to_string());
         let tokens = entry_to_tokens(entry);
         let cost = pricing.calculate_cost(&entry.model, &tokens, entry.speed.as_deref());
@@ -307,7 +311,7 @@ pub fn aggregate_instances(
         let model_usage = instance
             .by_model
             .entry(entry.model.clone())
-            .or_insert_with(ModelUsage::default);
+            .or_default();
         model_usage.tokens.merge(&tokens);
         model_usage.cost.merge(&cost);
     }
