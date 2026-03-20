@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 use crate::types::{DailySummary, FileInfo, UsageEntry};
 
-const CACHE_VERSION: u32 = 3;
+const CACHE_VERSION: u32 = 4;
 
 #[derive(Serialize, Deserialize)]
 struct CacheMeta {
@@ -27,11 +27,13 @@ struct EntriesCache {
 pub struct CachedEntry {
     pub timestamp: String,
     pub session_id: String,
+    pub message_id: Option<String>,
     pub model: String,
     pub cwd: Option<String>,
     pub input_tokens: u64,
     pub output_tokens: u64,
-    pub cache_creation_tokens: u64,
+    pub cache_creation_5m_tokens: u64,
+    pub cache_creation_1h_tokens: u64,
     pub cache_read_tokens: u64,
     #[serde(default)]
     pub thinking_tokens: u64,
@@ -45,11 +47,13 @@ impl CachedEntry {
         Some(UsageEntry {
             timestamp,
             session_id: self.session_id.clone(),
+            message_id: self.message_id.clone(),
             model: self.model.clone(),
             cwd: self.cwd.clone(),
             input_tokens: self.input_tokens,
             output_tokens: self.output_tokens,
-            cache_creation_tokens: self.cache_creation_tokens,
+            cache_creation_5m_tokens: self.cache_creation_5m_tokens,
+            cache_creation_1h_tokens: self.cache_creation_1h_tokens,
             cache_read_tokens: self.cache_read_tokens,
             thinking_tokens: self.thinking_tokens,
         })
@@ -59,11 +63,13 @@ impl CachedEntry {
         CachedEntry {
             timestamp: e.timestamp.to_rfc3339(),
             session_id: e.session_id.clone(),
+            message_id: e.message_id.clone(),
             model: e.model.clone(),
             cwd: e.cwd.clone(),
             input_tokens: e.input_tokens,
             output_tokens: e.output_tokens,
-            cache_creation_tokens: e.cache_creation_tokens,
+            cache_creation_5m_tokens: e.cache_creation_5m_tokens,
+            cache_creation_1h_tokens: e.cache_creation_1h_tokens,
             cache_read_tokens: e.cache_read_tokens,
             thinking_tokens: e.thinking_tokens,
             source_file: source_file.to_string(),
@@ -80,7 +86,7 @@ impl CacheManager {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join("ccusage-rs")
-            .join("v3");
+            .join("v4");
 
         Self { cache_dir }
     }

@@ -14,6 +14,7 @@ pub struct ModelPricing {
     pub input_cost_per_token: f64,
     pub output_cost_per_token: f64,
     pub cache_creation_cost_per_token: f64,
+    pub cache_creation_1h_cost_per_token: f64,
     pub cache_read_cost_per_token: f64,
 }
 
@@ -114,6 +115,10 @@ impl PricingTable {
                     .get("cache_creation_input_token_cost")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
+                let cache_creation_1h = val
+                    .get("cache_creation_input_token_cost_above_1hr")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(cache_creation);
                 let cache_read = val
                     .get("cache_read_input_token_cost")
                     .and_then(|v| v.as_f64())
@@ -125,6 +130,7 @@ impl PricingTable {
                         input_cost_per_token: input,
                         output_cost_per_token: output,
                         cache_creation_cost_per_token: cache_creation,
+                        cache_creation_1h_cost_per_token: cache_creation_1h,
                         cache_read_cost_per_token: cache_read,
                     },
                 );
@@ -143,6 +149,7 @@ impl PricingTable {
             input_cost_per_token: 5.0 / 1_000_000.0,
             output_cost_per_token: 25.0 / 1_000_000.0,
             cache_creation_cost_per_token: 6.25 / 1_000_000.0,
+            cache_creation_1h_cost_per_token: 10.0 / 1_000_000.0,
             cache_read_cost_per_token: 0.50 / 1_000_000.0,
         };
         models.insert("claude-opus-4-6".to_string(), opus.clone());
@@ -152,6 +159,7 @@ impl PricingTable {
             input_cost_per_token: 3.0 / 1_000_000.0,
             output_cost_per_token: 15.0 / 1_000_000.0,
             cache_creation_cost_per_token: 3.75 / 1_000_000.0,
+            cache_creation_1h_cost_per_token: 6.0 / 1_000_000.0,
             cache_read_cost_per_token: 0.30 / 1_000_000.0,
         };
         models.insert("claude-sonnet-4-6".to_string(), sonnet.clone());
@@ -161,6 +169,7 @@ impl PricingTable {
             input_cost_per_token: 0.80 / 1_000_000.0,
             output_cost_per_token: 4.0 / 1_000_000.0,
             cache_creation_cost_per_token: 1.0 / 1_000_000.0,
+            cache_creation_1h_cost_per_token: 1.25 / 1_000_000.0,
             cache_read_cost_per_token: 0.08 / 1_000_000.0,
         };
         models.insert("claude-haiku-4-5-20251001".to_string(), haiku.clone());
@@ -213,8 +222,10 @@ impl PricingTable {
             Some(pricing) => CostBreakdown {
                 input_cost: tokens.input_tokens as f64 * pricing.input_cost_per_token,
                 output_cost: tokens.output_tokens as f64 * pricing.output_cost_per_token,
-                cache_creation_cost: tokens.cache_creation_tokens as f64
-                    * pricing.cache_creation_cost_per_token,
+                cache_creation_cost: tokens.cache_creation_5m_tokens as f64
+                    * pricing.cache_creation_cost_per_token
+                    + tokens.cache_creation_1h_tokens as f64
+                        * pricing.cache_creation_1h_cost_per_token,
                 cache_read_cost: tokens.cache_read_tokens as f64
                     * pricing.cache_read_cost_per_token,
             },

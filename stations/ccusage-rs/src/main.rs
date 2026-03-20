@@ -79,6 +79,10 @@ struct Cli {
     /// Override timezone (e.g. "Asia/Taipei", default: system local)
     #[arg(long, global = true)]
     tz: Option<String>,
+
+    /// Block offset hours (shifts 5h block boundaries, default: 0)
+    #[arg(long, global = true, default_value = "0")]
+    block_offset: i64,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -376,7 +380,7 @@ fn main() -> Result<()> {
             }
         }
         Commands::Blocks => {
-            let mut summaries = aggregate_blocks(&filtered, &pricing);
+            let mut summaries = aggregate_blocks(&filtered, &pricing, cli.block_offset);
             if desc {
                 summaries.reverse();
             }
@@ -388,8 +392,8 @@ fn main() -> Result<()> {
             }
         }
         Commands::Statusline => {
-            let summaries = aggregate_blocks(&filtered, &pricing);
-            output::print_statusline(&summaries, &cli.tz);
+            let summaries = aggregate_blocks(&filtered, &pricing, cli.block_offset);
+            output::print_statusline(&summaries, &cli.tz, cli.block_offset);
         }
         Commands::Instances => {
             let mut summaries = aggregate_instances(&filtered, &pricing);
