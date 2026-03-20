@@ -85,6 +85,23 @@ def _soft_delete_filter(query, model):
     return query
 
 
+def _ym_range(year_month: str) -> tuple[datetime, datetime]:
+    """Convert 'YYYY-MM' to [start, end) datetime range for index-friendly queries."""
+    year, month = int(year_month[:4]), int(year_month[5:7])
+    start = datetime(year, month, 1, tzinfo=UTC)
+    if month == 12:
+        end = datetime(year + 1, 1, 1, tzinfo=UTC)
+    else:
+        end = datetime(year, month + 1, 1, tzinfo=UTC)
+    return start, end
+
+
+def _ym_filter(col, year_month: str):
+    """Return a WHERE clause for col within a year-month range (index-friendly)."""
+    start, end = _ym_range(year_month)
+    return col >= start, col < end
+
+
 # ======================== Batch Helpers ========================
 
 
@@ -1163,7 +1180,8 @@ class TransactionService(
         base = apply_privacy_filter(base, Transaction, user_id)
 
         if year_month:
-            base = base.where(func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month)
+            ym_start, ym_end = _ym_filter(Transaction.transacted_at, year_month)
+            base = base.where(ym_start, ym_end)
         if txn_type:
             base = base.where(Transaction.type == txn_type)
         if category_id:
@@ -1443,6 +1461,10 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
         spending_map: dict[tuple[str, str | None], Decimal] = {}
         cat_name_map: dict[str, str] = {}
         if ym_set:
+            # Date range for index-friendly WHERE; to_char only for SELECT/GROUP BY
+            sorted_yms = sorted(ym_set)
+            range_start, _ = _ym_range(sorted_yms[0])
+            _, range_end = _ym_range(sorted_yms[-1])
             spending_q = (
                 select(
                     func.to_char(Transaction.transacted_at, "YYYY-MM").label("ym"),
@@ -1455,7 +1477,8 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
                     Transaction.space_id == space_id,
                     Transaction.type == "expense",
                     Transaction.status == "completed",
-                    func.to_char(Transaction.transacted_at, "YYYY-MM").in_(list(ym_set)),
+                    Transaction.transacted_at >= range_start,
+                    Transaction.transacted_at < range_end,
                 )
                 .group_by(
                     func.to_char(Transaction.transacted_at, "YYYY-MM"),
@@ -1518,7 +1541,7 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
                 Transaction.type == "expense",
                 Transaction.status == "completed",
                 Transaction.deleted_at == None,  # noqa: E711
-                func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
+                *_ym_filter(Transaction.transacted_at, year_month),
             )
             .group_by(Transaction.category_id)
         )
@@ -1680,11 +1703,13 @@ class SummaryService:
         year_month: str,
         user_id: str | None = None,
     ) -> MonthlySummaryResponse:
+        ym_start, ym_end = _ym_filter(Transaction.transacted_at, year_month)
         base = select(Transaction).where(
             Transaction.space_id == space_id,
             Transaction.status == "completed",
             Transaction.deleted_at == None,  # noqa: E711
-            func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
+            ym_start,
+            ym_end,
         )
         base = apply_privacy_filter(base, Transaction, user_id)
 
@@ -1699,7 +1724,8 @@ class SummaryService:
                 Transaction.space_id == space_id,
                 Transaction.status == "completed",
                 Transaction.deleted_at == None,  # noqa: E711
-                func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
+                ym_start,
+                ym_end,
             )
             .group_by(Transaction.type)
         )
@@ -1731,7 +1757,8 @@ class SummaryService:
                 Transaction.type == "expense",
                 Transaction.status == "completed",
                 Transaction.deleted_at == None,  # noqa: E711
-                func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
+                ym_start,
+                ym_end,
             )
             .group_by(Transaction.category_id, Category.name, Category.icon)
             .order_by(func.sum(Transaction.amount).desc())
@@ -1772,7 +1799,7 @@ class SummaryService:
             .where(
                 Transaction.wallet_id.in_(wallet_ids),
                 Transaction.status == "completed",
-                func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
+                *_ym_filter(Transaction.transacted_at, year_month),
             )
             .group_by(Transaction.wallet_id, Transaction.type)
         )
@@ -1828,6 +1855,9 @@ class SummaryService:
         year_months.reverse()  # chronological order
 
         # Single query: GROUP BY year_month, type
+        # Use date range for index-friendly WHERE, to_char only for grouping
+        range_start, _ = _ym_range(year_months[0])
+        _, range_end = _ym_range(year_months[-1])
         ym_col = func.to_char(Transaction.transacted_at, "YYYY-MM").label("ym")
         totals_q = (
             select(
@@ -1838,7 +1868,8 @@ class SummaryService:
             .where(
                 Transaction.space_id == space_id,
                 Transaction.status == "completed",
-                func.to_char(Transaction.transacted_at, "YYYY-MM").in_(year_months),
+                Transaction.transacted_at >= range_start,
+                Transaction.transacted_at < range_end,
             )
             .group_by(ym_col, Transaction.type)
         )
