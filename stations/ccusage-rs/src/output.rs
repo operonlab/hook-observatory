@@ -59,6 +59,16 @@ fn fmt_duration(first: Option<DateTime<Utc>>, last: Option<DateTime<Utc>>) -> St
     }
 }
 
+/// Truncate a string to max_len characters, appending "…" if truncated
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.chars().count() <= max_len {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max_len - 1).collect();
+        format!("{}…", truncated)
+    }
+}
+
 /// Escape a CSV field (quote if contains comma, quote, or newline)
 fn csv_escape(s: &str) -> String {
     if s.contains(',') || s.contains('"') || s.contains('\n') {
@@ -782,18 +792,30 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
 
     let limit = cfg.limit.unwrap_or(30);
 
+    // Check if any session has a slug
+    let has_slugs = summaries.iter().any(|s| s.slug.is_some());
+
     if cfg.csv {
         if cfg.no_cost {
-            println!("Session,Date,Duration,Project,Total Tokens");
+            if has_slugs {
+                println!("Session,Slug,Date,Duration,Project,Total Tokens");
+            } else {
+                println!("Session,Date,Duration,Project,Total Tokens");
+            }
+        } else if has_slugs {
+            println!("Session,Slug,Date,Duration,Project,Total Tokens,Cost");
         } else {
             println!("Session,Date,Duration,Project,Total Tokens,Cost");
         }
         for s in summaries.iter().take(limit) {
             let short_id = &s.session_id[..8.min(s.session_id.len())];
             let dur = fmt_duration(s.first_activity, s.last_activity);
+            print!("{}", short_id);
+            if has_slugs {
+                print!(",{}", csv_escape(s.slug.as_deref().unwrap_or("-")));
+            }
             print!(
-                "{},{},{},{},{}",
-                short_id,
+                ",{},{},{},{}",
                 s.date.format("%Y-%m-%d"),
                 csv_escape(&dur),
                 csv_escape(s.project.as_deref().unwrap_or("-")),
@@ -810,11 +832,16 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
     let mut table = new_table(cfg);
     let mut header = vec![
         Cell::new("Session").add_attribute(Attribute::Bold),
+    ];
+    if has_slugs {
+        header.push(Cell::new("Slug").add_attribute(Attribute::Bold));
+    }
+    header.extend([
         Cell::new("Date").add_attribute(Attribute::Bold),
         Cell::new("Duration").add_attribute(Attribute::Bold),
         Cell::new("Project").add_attribute(Attribute::Bold),
         Cell::new("Total Tokens").add_attribute(Attribute::Bold),
-    ];
+    ]);
     if !cfg.no_cost {
         header.push(Cell::new("Cost").add_attribute(Attribute::Bold));
     }
@@ -824,13 +851,23 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
         let short_id = &s.session_id[..8.min(s.session_id.len())];
         let mut row = vec![
             Cell::new(short_id).fg(Color::Cyan),
+        ];
+        if has_slugs {
+            let slug_display = s
+                .slug
+                .as_deref()
+                .map(|sl| truncate_str(sl, 25))
+                .unwrap_or_else(|| "-".to_string());
+            row.push(Cell::new(slug_display));
+        }
+        row.extend([
             Cell::new(s.date.format("%Y-%m-%d").to_string()),
             Cell::new(fmt_duration(s.first_activity, s.last_activity))
                 .set_alignment(CellAlignment::Right),
             Cell::new(s.project.as_deref().unwrap_or("-")),
             Cell::new(fmt_tokens(s.total_tokens.total_tokens()))
                 .set_alignment(CellAlignment::Right),
-        ];
+        ]);
         if !cfg.no_cost {
             row.push(
                 Cell::new(fmt_cost(s.total_cost))
@@ -853,13 +890,18 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
         Cell::new("TOTAL")
             .add_attribute(Attribute::Bold)
             .fg(Color::Yellow),
+    ];
+    if has_slugs {
+        total_row.push(Cell::new(""));
+    }
+    total_row.extend([
         Cell::new(format!("{} sessions", summaries.len())).add_attribute(Attribute::Bold),
         Cell::new(""),
         Cell::new(""),
         Cell::new(fmt_tokens(all_tokens.total_tokens()))
             .set_alignment(CellAlignment::Right)
             .add_attribute(Attribute::Bold),
-    ];
+    ]);
     if !cfg.no_cost {
         total_row.push(
             Cell::new(fmt_cost(all_cost))
@@ -1110,6 +1152,9 @@ pub fn print_statusline(blocks: &[BlockSummary], tz: &Option<String>, offset_hou
 pub fn print_session_detail(session: &SessionUsage, cfg: &OutputConfig) {
     // Header info
     println!("Session: {}", session.session_id);
+    if let Some(ref slug) = session.slug {
+        println!("Slug:    {}", slug);
+    }
     println!(
         "Date:    {}",
         session.date.format("%Y-%m-%d")
@@ -1170,6 +1215,180 @@ pub fn print_session_detail(session: &SessionUsage, cfg: &OutputConfig) {
                 Cell::new(fmt_cost(usage.cost.total()))
                     .set_alignment(CellAlignment::Right)
                     .fg(Color::Green),
+            );
+        }
+        table.add_row(row);
+    }
+
+    println!("{table}");
+}
+
+// ─── Agent ───────────────────────────────────────────
+
+pub fn print_agent_table(summaries: &[SessionAgentSummary], cfg: &OutputConfig) {
+    if summaries.is_empty() {
+        println!("No sessions with sub-agents found.");
+        return;
+    }
+
+    let limit = cfg.limit.unwrap_or(30);
+
+    if cfg.csv {
+        if cfg.no_cost {
+            println!("Session,Slug,Project,Agents");
+        } else {
+            println!("Session,Slug,Project,Agents,Agent Cost,Agent %");
+        }
+        for s in summaries.iter().take(limit) {
+            let short_id = &s.session_id[..8.min(s.session_id.len())];
+            let agent_count = s.agents.iter().filter(|a| a.agent_id.is_some()).count();
+            let agent_cost: f64 = s
+                .agents
+                .iter()
+                .filter(|a| a.agent_id.is_some())
+                .map(|a| a.cost)
+                .sum();
+            let agent_pct = if s.total_cost > 0.0 {
+                (agent_cost / s.total_cost) * 100.0
+            } else {
+                0.0
+            };
+            print!(
+                "{},{},{},{}",
+                short_id,
+                csv_escape(s.slug.as_deref().unwrap_or("-")),
+                csv_escape(s.project.as_deref().unwrap_or("-")),
+                agent_count,
+            );
+            if !cfg.no_cost {
+                print!(",{:.6},{:.1}", agent_cost, agent_pct);
+            }
+            println!();
+        }
+        return;
+    }
+
+    let mut table = new_table(cfg);
+    let mut header = vec![
+        Cell::new("Session").add_attribute(Attribute::Bold),
+        Cell::new("Slug").add_attribute(Attribute::Bold),
+        Cell::new("Project").add_attribute(Attribute::Bold),
+        Cell::new("Agents").add_attribute(Attribute::Bold),
+    ];
+    if !cfg.no_cost {
+        header.push(Cell::new("Agent Cost").add_attribute(Attribute::Bold));
+        header.push(Cell::new("Agent %").add_attribute(Attribute::Bold));
+    }
+    table.set_header(header);
+
+    for s in summaries.iter().take(limit) {
+        let short_id = &s.session_id[..8.min(s.session_id.len())];
+        let agent_count = s.agents.iter().filter(|a| a.agent_id.is_some()).count();
+        let agent_cost: f64 = s
+            .agents
+            .iter()
+            .filter(|a| a.agent_id.is_some())
+            .map(|a| a.cost)
+            .sum();
+        let agent_pct = if s.total_cost > 0.0 {
+            (agent_cost / s.total_cost) * 100.0
+        } else {
+            0.0
+        };
+
+        let slug_display = s
+            .slug
+            .as_deref()
+            .map(|sl| truncate_str(sl, 25))
+            .unwrap_or_else(|| "-".to_string());
+
+        let mut row = vec![
+            Cell::new(short_id).fg(Color::Cyan),
+            Cell::new(slug_display),
+            Cell::new(s.project.as_deref().unwrap_or("-")),
+            Cell::new(agent_count).set_alignment(CellAlignment::Right),
+        ];
+        if !cfg.no_cost {
+            row.push(
+                Cell::new(fmt_cost(agent_cost))
+                    .set_alignment(CellAlignment::Right)
+                    .fg(Color::Green),
+            );
+            row.push(
+                Cell::new(format!("{:.1}%", agent_pct))
+                    .set_alignment(CellAlignment::Right),
+            );
+        }
+        table.add_row(row);
+    }
+
+    println!("{table}");
+    if summaries.len() > limit {
+        println!(
+            "  ... showing {}/{} sessions with agents",
+            limit,
+            summaries.len()
+        );
+    }
+}
+
+pub fn print_agent_detail(summary: &SessionAgentSummary, cfg: &OutputConfig) {
+    // Header info
+    println!("Session: {}", summary.session_id);
+    if let Some(ref slug) = summary.slug {
+        println!("Slug:    {}", slug);
+    }
+    if let Some(ref project) = summary.project {
+        println!("Project: {}", project);
+    }
+    if !cfg.no_cost {
+        println!("Total:   {}", fmt_cost(summary.total_cost));
+    }
+    println!();
+
+    // Per-agent breakdown table
+    let mut table = new_table(cfg);
+    let mut header = vec![
+        Cell::new("Agent").add_attribute(Attribute::Bold),
+        Cell::new("Model").add_attribute(Attribute::Bold),
+        Cell::new("Entries").add_attribute(Attribute::Bold),
+        Cell::new("Total Tokens").add_attribute(Attribute::Bold),
+    ];
+    if !cfg.no_cost {
+        header.push(Cell::new("Cost").add_attribute(Attribute::Bold));
+        header.push(Cell::new("Cost %").add_attribute(Attribute::Bold));
+    }
+    table.set_header(header);
+
+    for agent in &summary.agents {
+        let agent_label = match &agent.agent_id {
+            None => "(main)".to_string(),
+            Some(id) => {
+                let short = &id[..8.min(id.len())];
+                short.to_string()
+            }
+        };
+
+        let mut row = vec![
+            Cell::new(&agent_label).fg(if agent.agent_id.is_none() {
+                Color::Yellow
+            } else {
+                Color::Cyan
+            }),
+            Cell::new(agent.model.as_deref().unwrap_or("-")),
+            Cell::new(agent.entry_count).set_alignment(CellAlignment::Right),
+            Cell::new(fmt_tokens(agent.tokens.total_tokens()))
+                .set_alignment(CellAlignment::Right),
+        ];
+        if !cfg.no_cost {
+            row.push(
+                Cell::new(fmt_cost(agent.cost))
+                    .set_alignment(CellAlignment::Right)
+                    .fg(Color::Green),
+            );
+            row.push(
+                Cell::new(format!("{:.1}%", agent.cost_pct))
+                    .set_alignment(CellAlignment::Right),
             );
         }
         table.add_row(row);
