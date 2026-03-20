@@ -153,7 +153,11 @@ pub fn aggregate_sessions(
     }
 
     let mut result: Vec<SessionUsage> = sessions.into_values().collect();
-    result.sort_by(|a, b| b.total_cost.partial_cmp(&a.total_cost).unwrap());
+    result.sort_by(|a, b| {
+        b.total_cost
+            .partial_cmp(&a.total_cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     result
 }
 
@@ -238,6 +242,73 @@ pub fn filter_by_date(
             true
         })
         .collect()
+}
+
+/// Filter entries by model name (substring match)
+pub fn filter_by_model(entries: Vec<UsageEntry>, model: &str) -> Vec<UsageEntry> {
+    let model_lower = model.to_lowercase();
+    entries
+        .into_iter()
+        .filter(|e| e.model.to_lowercase().contains(&model_lower))
+        .collect()
+}
+
+/// Aggregate usage entries by project (cwd) into instance summaries
+pub fn aggregate_instances(
+    entries: &[UsageEntry],
+    pricing: &PricingTable,
+) -> Vec<InstanceUsage> {
+    let mut instances: HashMap<String, InstanceUsage> = HashMap::new();
+    let mut session_sets: HashMap<String, std::collections::HashSet<String>> = HashMap::new();
+
+    for entry in entries {
+        let project = entry
+            .cwd
+            .as_ref()
+            .map(|c| c.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let tokens = entry_to_tokens(entry);
+        let cost = pricing.calculate_cost(&entry.model, &tokens);
+
+        session_sets
+            .entry(project.clone())
+            .or_default()
+            .insert(entry.session_id.clone());
+
+        let instance = instances.entry(project.clone()).or_insert_with(|| InstanceUsage {
+            project,
+            session_count: 0,
+            total_tokens: TokenCounts::default(),
+            total_cost: 0.0,
+            by_model: HashMap::new(),
+        });
+
+        instance.total_tokens.merge(&tokens);
+        instance.total_cost += cost.total();
+
+        let model_usage = instance
+            .by_model
+            .entry(entry.model.clone())
+            .or_insert_with(ModelUsage::default);
+        model_usage.tokens.merge(&tokens);
+        model_usage.cost.merge(&cost);
+    }
+
+    // Fill in session counts
+    let mut result: Vec<InstanceUsage> = instances
+        .into_iter()
+        .map(|(key, mut inst)| {
+            inst.session_count = session_sets.get(&key).map(|s| s.len()).unwrap_or(0);
+            inst
+        })
+        .collect();
+
+    result.sort_by(|a, b| {
+        b.total_cost
+            .partial_cmp(&a.total_cost)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    result
 }
 
 fn entry_to_tokens(entry: &UsageEntry) -> TokenCounts {

@@ -138,12 +138,12 @@ impl PricingTable {
     fn fallback() -> Self {
         let mut models = HashMap::new();
 
-        // Claude Opus 4.6: $15/MTok input, $75/MTok output
+        // Claude Opus 4.6: $5/MTok input, $25/MTok output
         let opus = ModelPricing {
-            input_cost_per_token: 15.0 / 1_000_000.0,
-            output_cost_per_token: 75.0 / 1_000_000.0,
-            cache_creation_cost_per_token: 18.75 / 1_000_000.0,
-            cache_read_cost_per_token: 1.50 / 1_000_000.0,
+            input_cost_per_token: 5.0 / 1_000_000.0,
+            output_cost_per_token: 25.0 / 1_000_000.0,
+            cache_creation_cost_per_token: 6.25 / 1_000_000.0,
+            cache_read_cost_per_token: 0.50 / 1_000_000.0,
         };
         models.insert("claude-opus-4-6".to_string(), opus.clone());
 
@@ -168,22 +168,31 @@ impl PricingTable {
         Self { models }
     }
 
-    /// Look up pricing for a model. Uses exact match first, then prefix match.
+    /// Look up pricing for a model.
+    /// Priority: exact → anthropic/ prefix → fuzzy (excluding bedrock/vertex_ai entries)
     pub fn get(&self, model: &str) -> Option<&ModelPricing> {
-        // Exact match
+        // 1. Exact match
         if let Some(p) = self.models.get(model) {
             return Some(p);
         }
 
-        // Try with "anthropic/" prefix (LiteLLM convention)
+        // 2. Try with "anthropic/" prefix (LiteLLM convention)
         let with_prefix = format!("anthropic/{}", model);
         if let Some(p) = self.models.get(&with_prefix) {
             return Some(p);
         }
 
-        // Prefix match: find the longest key that model starts with, or vice versa
+        // 3. Fuzzy match: skip bedrock/vertex_ai entries to avoid wrong tiered pricing
         let mut best_match: Option<(&str, &ModelPricing)> = None;
         for (key, pricing) in &self.models {
+            // Skip provider-specific entries that have different pricing
+            if key.starts_with("bedrock/")
+                || key.starts_with("vertex_ai/")
+                || key.starts_with("azure/")
+            {
+                continue;
+            }
+
             if key.contains(model) || model.contains(key.as_str()) {
                 match best_match {
                     None => best_match = Some((key, pricing)),
