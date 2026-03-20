@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import type { MemoryBlock } from '@/types'
 import { relativeTime } from '../../../shared/utils/time'
-import GalaxyCanvas from '../components/GalaxyCanvas'
+const GalaxyCanvas = lazy(() => import('../components/GalaxyCanvas'))
 import LayerToggle from '../components/LayerToggle'
 import { useGalaxy } from '../hooks/useGalaxy'
 import { useMemvaultStore } from '../stores'
@@ -364,13 +364,15 @@ export default function GalaxyPage() {
               </p>
             </div>
           ) : (
-            <GalaxyCanvas
-              nodes={nodes}
-              links={links}
-              onNodeClick={handleNodeClick}
-              onEmptyClick={handleEmptyClick}
-              selectedNodeId={selectedBlock?.id ?? null}
-            />
+            <Suspense fallback={<div style={{ width: '100%', height: '100%', background: '#0F111E' }} />}>
+              <GalaxyCanvas
+                nodes={nodes}
+                links={links}
+                onNodeClick={handleNodeClick}
+                onEmptyClick={handleEmptyClick}
+                selectedNodeId={selectedBlock?.id ?? null}
+              />
+            </Suspense>
           )}
         </div>
 

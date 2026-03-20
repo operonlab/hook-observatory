@@ -1,5 +1,5 @@
 import ForceGraph3D from '3d-force-graph'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { BlockType, GalaxyLayer, GalaxyLink, GalaxyNode } from '../types'
 
@@ -81,7 +81,8 @@ export default function GalaxyCanvas({
 }: GalaxyCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<any>(null)
-  const colorsRef = useRef(resolveColors())
+  const colors = useMemo(() => resolveColors(), [])
+  const colorsRef = useRef(colors)
   const selectedIdRef = useRef(selectedNodeId)
   const onNodeClickRef = useRef(onNodeClick)
   const onEmptyClickRef = useRef(onEmptyClick)
@@ -188,6 +189,13 @@ export default function GalaxyCanvas({
 
     return () => {
       ro.disconnect()
+      // Properly dispose Three.js resources
+      const g = graphRef.current
+      if (g) {
+        g.pauseAnimation()
+        g._destructor?.()
+      }
+      graphRef.current = null
       if (containerRef.current) containerRef.current.innerHTML = ''
     }
   }, [])

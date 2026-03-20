@@ -1,5 +1,5 @@
 import { LayoutDashboard, LayoutGrid, LogOut } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import CaptureBadge from '@/modules/capture/CaptureBadge'
@@ -14,7 +14,10 @@ export default function AppHeader() {
   const isAppsPage = location.pathname === '/apps'
 
   // Derive current module from route
-  const currentApp = APP_LIST.find((app) => location.pathname.startsWith(app.path))
+  const currentApp = useMemo(() => {
+    // Sort by path length desc to match most specific path first
+    return APP_LIST.find((app) => location.pathname.startsWith(app.path))
+  }, [location.pathname])
 
   const accentColor = currentApp?.color
 
