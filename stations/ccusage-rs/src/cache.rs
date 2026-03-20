@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 use crate::types::{DailySummary, FileInfo, UsageEntry};
 
-const CACHE_VERSION: u32 = 2;
+const CACHE_VERSION: u32 = 3;
 
 #[derive(Serialize, Deserialize)]
 struct CacheMeta {
@@ -33,6 +33,10 @@ pub struct CachedEntry {
     pub output_tokens: u64,
     pub cache_creation_tokens: u64,
     pub cache_read_tokens: u64,
+    #[serde(default)]
+    pub thinking_tokens: u64,
+    /// Source JSONL file path (for incremental cache)
+    pub source_file: String,
 }
 
 impl CachedEntry {
@@ -47,10 +51,11 @@ impl CachedEntry {
             output_tokens: self.output_tokens,
             cache_creation_tokens: self.cache_creation_tokens,
             cache_read_tokens: self.cache_read_tokens,
+            thinking_tokens: self.thinking_tokens,
         })
     }
 
-    pub fn from_usage_entry(e: &UsageEntry) -> Self {
+    pub fn from_usage_entry(e: &UsageEntry, source_file: &str) -> Self {
         CachedEntry {
             timestamp: e.timestamp.to_rfc3339(),
             session_id: e.session_id.clone(),
@@ -60,6 +65,8 @@ impl CachedEntry {
             output_tokens: e.output_tokens,
             cache_creation_tokens: e.cache_creation_tokens,
             cache_read_tokens: e.cache_read_tokens,
+            thinking_tokens: e.thinking_tokens,
+            source_file: source_file.to_string(),
         }
     }
 }
@@ -73,7 +80,7 @@ impl CacheManager {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join("ccusage-rs")
-            .join("v2");
+            .join("v3");
 
         Self { cache_dir }
     }
@@ -90,11 +97,14 @@ impl CacheManager {
         Ok(())
     }
 
-    /// Save all entries + meta in one shot
-    pub fn save_all(&self, files: &[FileInfo], entries: &[UsageEntry]) -> Result<()> {
+    /// Save entries with source file tracking for incremental cache
+    pub fn save_all_with_sources(
+        &self,
+        files: &[FileInfo],
+        cached_entries: Vec<CachedEntry>,
+    ) -> Result<()> {
         std::fs::create_dir_all(&self.cache_dir)?;
 
-        // Save meta
         let file_mtimes: HashMap<String, u64> = files
             .iter()
             .map(|f| {
@@ -116,10 +126,9 @@ impl CacheManager {
         let meta_data = serde_json::to_string(&meta)?;
         std::fs::write(self.cache_dir.join("meta.json"), meta_data)?;
 
-        // Save entries
         let cache = EntriesCache {
             version: CACHE_VERSION,
-            entries: entries.iter().map(CachedEntry::from_usage_entry).collect(),
+            entries: cached_entries,
         };
 
         let entries_data = serde_json::to_vec(&cache)?;
@@ -128,9 +137,8 @@ impl CacheManager {
         Ok(())
     }
 
-    /// Load cached entries if valid
-    pub fn load_all(&self) -> Option<(HashMap<String, u64>, Vec<UsageEntry>)> {
-        // Load meta
+    /// Load cached entries if valid — returns (file_mtimes, cached_entries_raw, usage_entries)
+    pub fn load_all(&self) -> Option<(HashMap<String, u64>, Vec<CachedEntry>, Vec<UsageEntry>)> {
         let meta_path = self.cache_dir.join("meta.json");
         let meta_data = std::fs::read_to_string(meta_path).ok()?;
         let meta: CacheMeta = serde_json::from_str(&meta_data).ok()?;
@@ -140,7 +148,6 @@ impl CacheManager {
             return None;
         }
 
-        // Load entries
         let entries_path = self.cache_dir.join("entries.json");
         let entries_data = std::fs::read(entries_path).ok()?;
         let cache: EntriesCache = serde_json::from_slice(&entries_data).ok()?;
@@ -149,13 +156,13 @@ impl CacheManager {
             return None;
         }
 
-        let entries: Vec<UsageEntry> = cache
+        let usage_entries: Vec<UsageEntry> = cache
             .entries
             .iter()
             .filter_map(|e| e.to_usage_entry())
             .collect();
 
-        Some((meta.file_mtimes, entries))
+        Some((meta.file_mtimes, cache.entries, usage_entries))
     }
 
     /// Get files that need re-parsing
