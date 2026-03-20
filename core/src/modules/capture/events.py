@@ -96,6 +96,35 @@ async def _do_auto_enrich(capture_id: str, module: str, entity_type: str, raw_in
                 list(new_fields.keys()),
                 result.confidence,
             )
+
+            # Auto-promote gate: high completeness + high confidence → 自動促進
+            AUTO_PROMOTE_COMPLETENESS = 0.85
+            AUTO_PROMOTE_CONFIDENCE = 0.7
+
+            capture = await capture_service.get(db, capture_id)
+            if (
+                capture
+                and capture.status == "pending"
+                and capture.completeness >= AUTO_PROMOTE_COMPLETENESS
+                and result.confidence >= AUTO_PROMOTE_CONFIDENCE
+            ):
+                try:
+                    promote_result = await capture_service.promote(db, capture_id)
+                    if promote_result.success:
+                        await db.commit()
+                        logger.info("capture.auto_promoted id=%s", capture_id)
+                    else:
+                        logger.info(
+                            "capture.auto_promote_skipped id=%s reason=%s",
+                            capture_id,
+                            promote_result.error,
+                        )
+                except Exception:
+                    logger.warning(
+                        "capture.auto_promote_failed id=%s",
+                        capture_id,
+                        exc_info=True,
+                    )
     except Exception:
         logger.warning(
             "capture.auto_enrich failed: id=%s",
