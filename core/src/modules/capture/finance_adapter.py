@@ -65,6 +65,14 @@ class TransactionCaptureAdapter(BaseCaptureAdapter):
         if not result.get("transacted_at"):
             result["transacted_at"] = datetime.now(UTC).isoformat()
 
+        # payment_method → wallet_id 反向推斷（存 display name，promote 時 resolve）
+        if not result.get("wallet_id") and result.get("payment_method"):
+            from .finance_resolvers import _WALLET_TYPE_MAP
+
+            mapped = _WALLET_TYPE_MAP.get(result["payment_method"])
+            if mapped:
+                result["wallet_id"] = mapped[1]  # display name, e.g. "現金"
+
         if not result.get("payment_method") and result.get("wallet_id"):
             result["payment_method"] = user_prefs.get("_wallet_payment_method", "credit_card")
         elif not result.get("payment_method"):
