@@ -28,11 +28,13 @@ pub struct InstanceUsage {
 pub struct UsageEntry {
     pub timestamp: DateTime<Utc>,
     pub session_id: String,
+    pub message_id: Option<String>,
     pub model: String,
     pub cwd: Option<String>,
     pub input_tokens: u64,
     pub output_tokens: u64,
-    pub cache_creation_tokens: u64,
+    pub cache_creation_5m_tokens: u64,
+    pub cache_creation_1h_tokens: u64,
     pub cache_read_tokens: u64,
     pub thinking_tokens: u64,
 }
@@ -42,20 +44,27 @@ pub struct UsageEntry {
 pub struct TokenCounts {
     pub input_tokens: u64,
     pub output_tokens: u64,
-    pub cache_creation_tokens: u64,
+    pub cache_creation_5m_tokens: u64,
+    pub cache_creation_1h_tokens: u64,
     pub cache_read_tokens: u64,
     pub thinking_tokens: u64,
 }
 
 impl TokenCounts {
+    /// Combined cache creation tokens (5m + 1h) for display
+    pub fn cache_creation_tokens(&self) -> u64 {
+        self.cache_creation_5m_tokens + self.cache_creation_1h_tokens
+    }
+
     pub fn total_tokens(&self) -> u64 {
-        self.input_tokens + self.output_tokens + self.cache_creation_tokens + self.cache_read_tokens + self.thinking_tokens
+        self.input_tokens + self.output_tokens + self.cache_creation_tokens() + self.cache_read_tokens + self.thinking_tokens
     }
 
     pub fn merge(&mut self, other: &TokenCounts) {
         self.input_tokens += other.input_tokens;
         self.output_tokens += other.output_tokens;
-        self.cache_creation_tokens += other.cache_creation_tokens;
+        self.cache_creation_5m_tokens += other.cache_creation_5m_tokens;
+        self.cache_creation_1h_tokens += other.cache_creation_1h_tokens;
         self.cache_read_tokens += other.cache_read_tokens;
         self.thinking_tokens += other.thinking_tokens;
     }
@@ -128,6 +137,8 @@ pub struct SessionUsage {
     pub total_tokens: TokenCounts,
     pub total_cost: f64,
     pub by_model: HashMap<String, ModelUsage>,
+    pub first_activity: Option<DateTime<Utc>>,
+    pub last_activity: Option<DateTime<Utc>>,
 }
 
 /// 5-hour billing block summary
