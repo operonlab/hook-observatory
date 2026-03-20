@@ -2,6 +2,27 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Output configuration flags
+#[derive(Debug, Clone, Default)]
+pub struct OutputConfig {
+    pub no_cost: bool,
+    pub no_color: bool,
+    pub csv: bool,
+    pub limit: Option<usize>,
+    #[allow(dead_code)]
+    pub order_desc: bool,
+}
+
+/// Instance (project) usage summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstanceUsage {
+    pub project: String,
+    pub session_count: usize,
+    pub total_tokens: TokenCounts,
+    pub total_cost: f64,
+    pub by_model: HashMap<String, ModelUsage>,
+}
+
 /// Raw usage data extracted from a single JSONL assistant entry
 #[derive(Debug, Clone)]
 pub struct UsageEntry {
