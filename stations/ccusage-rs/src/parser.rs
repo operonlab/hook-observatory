@@ -68,6 +68,7 @@ fn extract_usage_entry(value: &simd_json::OwnedValue) -> Option<UsageEntry> {
     let cache_read_tokens = usage
         .get_u64("cache_read_input_tokens")
         .unwrap_or(0);
+    let thinking_tokens = usage.get_u64("thinking_tokens").unwrap_or(0);
 
     Some(UsageEntry {
         timestamp,
@@ -78,5 +79,6 @@ fn extract_usage_entry(value: &simd_json::OwnedValue) -> Option<UsageEntry> {
         output_tokens,
         cache_creation_tokens,
         cache_read_tokens,
+        thinking_tokens,
     })
 }

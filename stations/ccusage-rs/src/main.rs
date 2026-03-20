@@ -7,8 +7,9 @@ mod scanner;
 mod types;
 
 use anyhow::Result;
-use chrono::{NaiveDate, Utc};
-use clap::{Parser, Subcommand, ValueEnum};
+use chrono::NaiveDate;
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::{generate, Shell};
 use std::time::Instant;
 
 use crate::aggregator::*;
@@ -74,6 +75,10 @@ struct Cli {
     /// Limit number of results (for session/instances)
     #[arg(long, global = true)]
     limit: Option<usize>,
+
+    /// Override timezone (e.g. "Asia/Taipei", default: system local)
+    #[arg(long, global = true)]
+    tz: Option<String>,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -98,6 +103,12 @@ enum Commands {
     Statusline,
     /// Show usage grouped by project (cwd)
     Instances,
+    /// Generate shell completions
+    Completions {
+        /// Shell type
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate> {
@@ -108,8 +119,26 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
     }
 }
 
+/// Get today's date in user-specified or system local timezone
+fn local_today(tz: &Option<String>) -> NaiveDate {
+    if let Some(tz_str) = tz {
+        if let Ok(tz) = tz_str.parse::<chrono_tz::Tz>() {
+            return chrono::Utc::now().with_timezone(&tz).date_naive();
+        }
+    }
+    chrono::Local::now().date_naive()
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Handle completions subcommand (no data processing needed)
+    if let Commands::Completions { shell } = &cli.command {
+        let mut cmd = Cli::command();
+        generate(*shell, &mut cmd, "ccusage-rs", &mut std::io::stdout());
+        return Ok(());
+    }
+
     let start_time = Instant::now();
 
     // Build output config
@@ -125,9 +154,11 @@ fn main() -> Result<()> {
     let since = cli.since.as_ref().map(|s| parse_date(s)).transpose()?;
     let until = cli.until.as_ref().map(|s| parse_date(s)).transpose()?;
 
+    // Use local timezone for default since date
+    let today = local_today(&cli.tz);
     let since = since.or_else(|| {
         if matches!(cli.command, Commands::Daily | Commands::Statusline) {
-            Some(Utc::now().date_naive())
+            Some(today)
         } else {
             None
         }
@@ -142,40 +173,100 @@ fn main() -> Result<()> {
     let file_count = all_files.len();
 
     let cache = CacheManager::new();
-    let today = Utc::now().date_naive();
 
     // Load/parse entries with incremental cache (operates on full file set)
     let all_entries: Vec<UsageEntry> = if cli.no_cache {
-        parse_files_parallel(&all_files)
+        dedup_entries(parse_files_parallel(&all_files))
     } else {
         match cache.load_all() {
-            Some((cached_mtimes, cached_entries)) => {
+            Some((cached_mtimes, cached_raw, _cached_entries)) => {
                 let changed = cache.files_needing_reparse(&all_files, &cached_mtimes);
                 let removed = cache.removed_files(&all_files, &cached_mtimes);
 
                 if changed.is_empty() && removed.is_empty() {
                     if !matches!(cli.command, Commands::Statusline) {
-                        eprintln!("  cache: hit ({} entries)", cached_entries.len());
+                        let entry_count = cached_raw.len();
+                        eprintln!("  cache: hit ({} entries)", entry_count);
                     }
-                    cached_entries
+                    // Convert cached raw to usage entries
+                    cached_raw
+                        .iter()
+                        .filter_map(|e| e.to_usage_entry())
+                        .collect()
                 } else {
-                    // Any change → full reparse (simple, correct, still fast at 0.5s)
-                    let entries = parse_files_parallel(&all_files);
-                    let _ = cache.save_all(&all_files, &entries);
+                    // Incremental: keep entries from unchanged files, reparse changed ones
+                    let changed_paths: std::collections::HashSet<String> = changed
+                        .iter()
+                        .map(|f| f.path.to_string_lossy().to_string())
+                        .collect();
+                    let removed_paths: std::collections::HashSet<String> =
+                        removed.iter().cloned().collect();
+
+                    // Retain cached entries from unchanged files
+                    let mut kept_cached: Vec<crate::cache::CachedEntry> = cached_raw
+                        .into_iter()
+                        .filter(|e| {
+                            !changed_paths.contains(&e.source_file)
+                                && !removed_paths.contains(&e.source_file)
+                        })
+                        .collect();
+
+                    // Parse changed files and build cached entries
+                    let new_cached: Vec<crate::cache::CachedEntry> = changed
+                        .iter()
+                        .flat_map(|f| {
+                            let path_str = f.path.to_string_lossy().to_string();
+                            crate::parser::parse_jsonl_file(&f.path)
+                                .unwrap_or_default()
+                                .into_iter()
+                                .map(move |e| {
+                                    crate::cache::CachedEntry::from_usage_entry(&e, &path_str)
+                                })
+                        })
+                        .collect();
+
+                    kept_cached.extend(new_cached);
+
+                    // Convert to usage entries before saving
+                    let entries: Vec<UsageEntry> = kept_cached
+                        .iter()
+                        .filter_map(|e| e.to_usage_entry())
+                        .collect();
+
+                    // Save incremental cache
+                    let _ = cache.save_all_with_sources(&all_files, kept_cached);
+
                     if !matches!(cli.command, Commands::Statusline) {
                         eprintln!(
-                            "  cache: {} changed, {} removed → reparse",
-                            changed.len(),
-                            removed.len()
+                            "  cache: {} changed, {} removed → incremental reparse",
+                            changed_paths.len(),
+                            removed_paths.len()
                         );
                     }
-                    entries
+
+                    dedup_entries(entries)
                 }
             }
             None => {
-                let entries = parse_files_parallel(&all_files);
-                let _ = cache.save_all(&all_files, &entries);
-                entries
+                // No cache — full parse with source tracking
+                let mut all_cached: Vec<crate::cache::CachedEntry> = Vec::new();
+                for f in &all_files {
+                    let path_str = f.path.to_string_lossy().to_string();
+                    if let Ok(file_entries) = crate::parser::parse_jsonl_file(&f.path) {
+                        for e in &file_entries {
+                            all_cached.push(crate::cache::CachedEntry::from_usage_entry(
+                                e, &path_str,
+                            ));
+                        }
+                    }
+                }
+
+                let entries: Vec<UsageEntry> = all_cached
+                    .iter()
+                    .filter_map(|e| e.to_usage_entry())
+                    .collect();
+                let _ = cache.save_all_with_sources(&all_files, all_cached);
+                dedup_entries(entries)
             }
         }
     };
@@ -298,7 +389,7 @@ fn main() -> Result<()> {
         }
         Commands::Statusline => {
             let summaries = aggregate_blocks(&filtered, &pricing);
-            output::print_statusline(&summaries, &pricing);
+            output::print_statusline(&summaries, &cli.tz);
         }
         Commands::Instances => {
             let mut summaries = aggregate_instances(&filtered, &pricing);
@@ -313,6 +404,7 @@ fn main() -> Result<()> {
                 print_stats(elapsed.as_secs_f64());
             }
         }
+        Commands::Completions { .. } => unreachable!(),
     }
 
     Ok(())

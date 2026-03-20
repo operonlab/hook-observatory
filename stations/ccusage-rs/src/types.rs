@@ -34,6 +34,7 @@ pub struct UsageEntry {
     pub output_tokens: u64,
     pub cache_creation_tokens: u64,
     pub cache_read_tokens: u64,
+    pub thinking_tokens: u64,
 }
 
 /// Aggregated token counts
@@ -43,11 +44,12 @@ pub struct TokenCounts {
     pub output_tokens: u64,
     pub cache_creation_tokens: u64,
     pub cache_read_tokens: u64,
+    pub thinking_tokens: u64,
 }
 
 impl TokenCounts {
     pub fn total_tokens(&self) -> u64 {
-        self.input_tokens + self.output_tokens + self.cache_creation_tokens + self.cache_read_tokens
+        self.input_tokens + self.output_tokens + self.cache_creation_tokens + self.cache_read_tokens + self.thinking_tokens
     }
 
     pub fn merge(&mut self, other: &TokenCounts) {
@@ -55,6 +57,7 @@ impl TokenCounts {
         self.output_tokens += other.output_tokens;
         self.cache_creation_tokens += other.cache_creation_tokens;
         self.cache_read_tokens += other.cache_read_tokens;
+        self.thinking_tokens += other.thinking_tokens;
     }
 }
 
