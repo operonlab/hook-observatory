@@ -533,8 +533,8 @@ class MemoryBlockService(
         block_type: str | None,
         extra_filters: list | None = None,
     ) -> list[SemanticSearchResult]:
-        """Run vector search: subtable first, fallback to inline."""
-        results = await self._search_via_subtable(
+        """Run vector search via inline embedding."""
+        return await self._search_via_inline(
             db,
             space_id,
             query_embedding,
@@ -544,18 +544,6 @@ class MemoryBlockService(
             block_type,
             extra_filters=extra_filters,
         )
-        if not results:
-            results = await self._search_via_inline(
-                db,
-                space_id,
-                query_embedding,
-                top_k,
-                threshold,
-                tags,
-                block_type,
-                extra_filters=extra_filters,
-            )
-        return results
 
     async def _keyword_search(
         self,
@@ -687,20 +675,6 @@ class MemoryBlockService(
             )
             for bid in sorted_ids
         ]
-
-    async def _search_via_subtable(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        query_embedding: list[float],
-        top_k: int,
-        threshold: float,
-        tags: list[str] | None,
-        block_type: str | None,
-        extra_filters: list | None = None,
-    ) -> list[SemanticSearchResult]:
-        """LEGACY — BlockEmbedding table removed (Qdrant migration). Returns empty."""
-        return []
 
     async def _search_via_inline(
         self,

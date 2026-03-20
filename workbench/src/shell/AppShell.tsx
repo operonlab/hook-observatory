@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { APP_LIST } from '@/shared/constants/apps'
 import AppHeader from '@/shell/AppHeader'
@@ -14,10 +14,14 @@ export default function AppShell({ children }: AppShellProps) {
   const setCurrentModule = useChatStore((s) => s.setCurrentModule)
 
   // Sync current module to chat store
+  const currentAppId = useMemo(
+    () => APP_LIST.find((a) => location.pathname.startsWith(a.path))?.id ?? null,
+    [location.pathname],
+  )
+
   useEffect(() => {
-    const app = APP_LIST.find((a) => location.pathname.startsWith(a.path))
-    setCurrentModule(app?.id ?? null)
-  }, [location.pathname, setCurrentModule])
+    setCurrentModule(currentAppId)
+  }, [currentAppId, setCurrentModule])
 
   return (
     <>

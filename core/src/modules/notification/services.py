@@ -33,15 +33,12 @@ async def _is_duplicate(tag: str) -> bool:
         return False
 
     try:
-        import redis.asyncio as aioredis
+        from src.shared.redis import get_redis
 
-        r = aioredis.from_url(settings.redis_url, decode_responses=True)
-        try:
-            key = f"notif:dedup:{tag}"
-            was_set = await r.set(key, "1", nx=True, ex=settings.notification_dedup_ttl)
-            return was_set is None  # None means key already existed → duplicate
-        finally:
-            await r.aclose()
+        r = get_redis()
+        key = f"notif:dedup:{tag}"
+        was_set = await r.set(key, "1", nx=True, ex=settings.notification_dedup_ttl)
+        return was_set is None  # None means key already existed → duplicate
     except Exception:
         logger.debug("dedup_redis_unavailable", tag=tag)
         return False  # fail-open: prefer duplicate over dropped
