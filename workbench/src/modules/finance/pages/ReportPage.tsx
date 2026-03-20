@@ -1,10 +1,13 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { analyticsApi } from '../api'
-import MonthlyBarChart from '../components/charts/MonthlyBarChart'
-import NetWorthChart from '../components/charts/NetWorthChart'
 import type { MonthlySummary, MonthlyTrend, NetWorthPoint } from '../types'
 import { fmtAmt } from '../types'
+
+const MonthlyBarChart = lazy(() => import('../components/charts/MonthlyBarChart'))
+const NetWorthChart = lazy(() => import('../components/charts/NetWorthChart'))
+
+const ChartFallback = () => <div className="animate-pulse h-64 bg-white/5 rounded" />
 
 export default function ReportPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
@@ -224,7 +227,9 @@ export default function ReportPage() {
           <h3 className="text-[13px] font-medium mb-3" style={{ color: 'var(--fn-text)' }}>
             12 個月收支趨勢
           </h3>
-          <MonthlyBarChart data={trends} />
+          <Suspense fallback={<ChartFallback />}>
+            <MonthlyBarChart data={trends} />
+          </Suspense>
         </div>
 
         <div
@@ -237,7 +242,9 @@ export default function ReportPage() {
           <h3 className="text-[13px] font-medium mb-3" style={{ color: 'var(--fn-text)' }}>
             淨資產走勢
           </h3>
-          <NetWorthChart data={netWorth} />
+          <Suspense fallback={<ChartFallback />}>
+            <NetWorthChart data={netWorth} />
+          </Suspense>
         </div>
       </div>
     </div>
