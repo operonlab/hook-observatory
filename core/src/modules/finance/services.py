@@ -85,6 +85,105 @@ def _soft_delete_filter(query, model):
     return query
 
 
+# ======================== Batch Helpers ========================
+
+
+async def _batch_balance_components(
+    db: AsyncSession,
+    wallet_ids: list[str],
+) -> dict[str, tuple[Decimal, Decimal, Decimal, Decimal]]:
+    """Batch-compute balance components for multiple wallets in 2 queries.
+
+    Returns ``{wallet_id: (income, expense, transfer_in, fees)}``.
+    """
+    if not wallet_ids:
+        return {}
+
+    zero = Decimal("0")
+    result: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]] = {
+        wid: (zero, zero, zero, zero) for wid in wallet_ids
+    }
+
+    # Query 1: income / expense / fees grouped by wallet
+    agg_q = (
+        select(
+            Transaction.wallet_id,
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Transaction.type == "income", Transaction.amount),
+                        else_=literal_column("0"),
+                    )
+                ),
+                0,
+            ).label("income"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Transaction.type.in_(["expense", "transfer"]), Transaction.amount),
+                        else_=literal_column("0"),
+                    )
+                ),
+                0,
+            ).label("expense"),
+            func.coalesce(func.sum(Transaction.fee), 0).label("fees"),
+        )
+        .where(
+            Transaction.wallet_id.in_(wallet_ids),
+            Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
+        )
+        .group_by(Transaction.wallet_id)
+    )
+    for row in (await db.execute(agg_q)).all():
+        inc = Decimal(str(row.income))
+        exp = Decimal(str(row.expense))
+        fees = Decimal(str(row.fees))
+        result[row.wallet_id] = (inc, exp, zero, fees)
+
+    # Query 2: transfer-in grouped by target wallet
+    xfer_q = (
+        select(
+            Transaction.transfer_to_wallet_id,
+            func.coalesce(func.sum(Transaction.amount), 0).label("transfer_in"),
+        )
+        .where(
+            Transaction.transfer_to_wallet_id.in_(wallet_ids),
+            Transaction.type == "transfer",
+            Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
+        )
+        .group_by(Transaction.transfer_to_wallet_id)
+    )
+    for row in (await db.execute(xfer_q)).all():
+        wid = row.transfer_to_wallet_id
+        inc, exp, _, fees = result[wid]
+        result[wid] = (inc, exp, Decimal(str(row.transfer_in)), fees)
+
+    return result
+
+
+async def _batch_max_versions(
+    db: AsyncSession,
+    wallet_ids: list[str],
+) -> dict[str, int]:
+    """Get max snapshot version per wallet in a single query."""
+    if not wallet_ids:
+        return {}
+    q = (
+        select(
+            WalletSnapshot.wallet_id,
+            func.coalesce(func.max(WalletSnapshot.version), 0).label("max_ver"),
+        )
+        .where(WalletSnapshot.wallet_id.in_(wallet_ids))
+        .group_by(WalletSnapshot.wallet_id)
+    )
+    rows = (await db.execute(q)).all()
+    versions = {row.wallet_id: row.max_ver for row in rows}
+    # Wallets with no snapshots default to 0
+    return {wid: versions.get(wid, 0) for wid in wallet_ids}
+
+
 # ======================== Balance Helpers ========================
 
 
@@ -577,18 +676,15 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         total_net_worth = Decimal("0")
         now = datetime.now(UTC)
 
-        for wallet in wallets:
-            income, expense, transfer_in, fees = await _calc_balance_components(db, wallet.id)
-            calculated = wallet.initial_balance + income - expense + transfer_in - fees
+        # Batch: 3 queries total instead of 3N
+        wallet_ids = [w.id for w in wallets]
+        balance_map = await _batch_balance_components(db, wallet_ids)
+        version_map = await _batch_max_versions(db, wallet_ids)
 
-            # Determine next version
-            max_version = (
-                await db.execute(
-                    select(func.coalesce(func.max(WalletSnapshot.version), 0)).where(
-                        WalletSnapshot.wallet_id == wallet.id
-                    )
-                )
-            ).scalar_one()
+        for wallet in wallets:
+            income, expense, transfer_in, fees = balance_map[wallet.id]
+            calculated = wallet.initial_balance + income - expense + transfer_in - fees
+            max_version = version_map[wallet.id]
 
             snapshot = WalletSnapshot(
                 id=_uuid7_hex(),
@@ -1656,37 +1752,41 @@ class SummaryService:
         wallet_q = apply_privacy_filter(wallet_q, Wallet, user_id)
         wallets = (await db.execute(wallet_q)).scalars().all()
 
-        wallet_overview = []
-        for w in wallets:
-            # Change = income - expense for this wallet in this month
-            change_q = (
-                select(
-                    Transaction.type,
-                    func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("total"),
-                )
-                .where(
-                    Transaction.wallet_id == w.id,
-                    Transaction.status == "completed",
-                    func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
-                )
-                .group_by(Transaction.type)
+        # Batch: single query for all wallets instead of N queries
+        wallet_ids = [w.id for w in wallets]
+        change_q = (
+            select(
+                Transaction.wallet_id,
+                Transaction.type,
+                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("total"),
             )
-            change_rows = (await db.execute(change_q)).all()
-            change = Decimal("0")
-            for cr in change_rows:
-                if cr.type == "income":
-                    change += cr.total or Decimal("0")
-                elif cr.type in ("expense", "transfer"):
-                    change -= cr.total or Decimal("0")
-            wallet_overview.append(
-                WalletOverviewItem(
-                    wallet_id=w.id,
-                    wallet_name=w.name,
-                    wallet_type=w.type,
-                    current_balance=w.current_balance,
-                    change=change,
-                )
+            .where(
+                Transaction.wallet_id.in_(wallet_ids),
+                Transaction.status == "completed",
+                func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
             )
+            .group_by(Transaction.wallet_id, Transaction.type)
+        )
+        change_rows = (await db.execute(change_q)).all()
+
+        # In-memory grouping
+        changes: dict[str, Decimal] = {wid: Decimal("0") for wid in wallet_ids}
+        for cr in change_rows:
+            if cr.type == "income":
+                changes[cr.wallet_id] += cr.total or Decimal("0")
+            elif cr.type in ("expense", "transfer"):
+                changes[cr.wallet_id] -= cr.total or Decimal("0")
+
+        wallet_overview = [
+            WalletOverviewItem(
+                wallet_id=w.id,
+                wallet_name=w.name,
+                wallet_type=w.type,
+                current_balance=w.current_balance,
+                change=changes[w.id],
+            )
+            for w in wallets
+        ]
 
         return MonthlySummaryResponse(
             year_month=year_month,
@@ -1705,51 +1805,51 @@ class SummaryService:
         months: int = 6,
         user_id: str | None = None,
     ) -> list[MonthlyTrendResponse]:
-        """Return income/expense/net for the last N months."""
+        """Return income/expense/net for the last N months (single query)."""
         from datetime import date as _date
         from datetime import timedelta
 
+        # Build year_month list
         today = _date.today()
-        results = []
-        for i in range(months - 1, -1, -1):
-            # Calculate year_month for i months ago
-            d = today.replace(day=1)
-            for _ in range(i):
-                d = (d - timedelta(days=1)).replace(day=1)
-            ym = d.strftime("%Y-%m")
+        year_months: list[str] = []
+        d = today.replace(day=1)
+        for _ in range(months):
+            year_months.append(d.strftime("%Y-%m"))
+            d = (d - timedelta(days=1)).replace(day=1)
+        year_months.reverse()  # chronological order
 
-            totals_q = (
-                select(
-                    Transaction.type,
-                    func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("total"),
-                )
-                .where(
-                    Transaction.space_id == space_id,
-                    Transaction.status == "completed",
-                    func.to_char(Transaction.transacted_at, "YYYY-MM") == ym,
-                )
-                .group_by(Transaction.type)
+        # Single query: GROUP BY year_month, type
+        ym_col = func.to_char(Transaction.transacted_at, "YYYY-MM").label("ym")
+        totals_q = (
+            select(
+                ym_col,
+                Transaction.type,
+                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("total"),
             )
-            totals_q = apply_privacy_filter(totals_q, Transaction, user_id)
-            rows = (await db.execute(totals_q)).all()
-
-            inc = Decimal("0")
-            exp = Decimal("0")
-            for row in rows:
-                if row.type == "income":
-                    inc = row.total or Decimal("0")
-                elif row.type == "expense":
-                    exp = row.total or Decimal("0")
-
-            results.append(
-                MonthlyTrendResponse(
-                    year_month=ym,
-                    income=inc,
-                    expense=exp,
-                    net=inc - exp,
-                )
+            .where(
+                Transaction.space_id == space_id,
+                Transaction.status == "completed",
+                func.to_char(Transaction.transacted_at, "YYYY-MM").in_(year_months),
             )
-        return results
+            .group_by(ym_col, Transaction.type)
+        )
+        totals_q = apply_privacy_filter(totals_q, Transaction, user_id)
+        rows = (await db.execute(totals_q)).all()
+
+        # In-memory grouping
+        data: dict[str, dict[str, Decimal]] = {ym: {} for ym in year_months}
+        for row in rows:
+            data[row.ym][row.type] = row.total or Decimal("0")
+
+        return [
+            MonthlyTrendResponse(
+                year_month=ym,
+                income=d.get("income", Decimal("0")),
+                expense=d.get("expense", Decimal("0")),
+                net=d.get("income", Decimal("0")) - d.get("expense", Decimal("0")),
+            )
+            for ym, d in ((ym, data[ym]) for ym in year_months)
+        ]
 
     async def net_worth(
         self,

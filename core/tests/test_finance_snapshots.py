@@ -424,14 +424,8 @@ class TestGlobalSnapshot:
 
     def _setup_global_db(self, wallets):
         """Create a properly mocked db for global snapshot tests."""
-        from collections import namedtuple
-
         db = AsyncMock()
         now = datetime(2026, 3, 19, tzinfo=UTC)
-
-        # _calc_balance_components returns a Row with .income/.expense/.fees
-        BalanceRow = namedtuple("BalanceRow", ["income", "expense", "fees"])
-        zero_row = BalanceRow(income=Decimal("0"), expense=Decimal("0"), fees=Decimal("0"))
 
         call_count = 0
 
@@ -443,10 +437,9 @@ class TestGlobalSnapshot:
                 # Wallet query
                 result.scalars.return_value.all.return_value = wallets
             else:
-                # _calc_balance_components agg query returns .one()
-                result.one.return_value = zero_row
-                # transfer_in and max_version queries return .scalar_one()
-                result.scalar_one.return_value = Decimal("0")
+                # Batch queries (_batch_balance_components x2, _batch_max_versions)
+                # all use .all() and return empty lists (no transactions/snapshots)
+                result.all.return_value = []
             return result
 
         db.execute = AsyncMock(side_effect=mock_execute)
