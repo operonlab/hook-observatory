@@ -1,13 +1,18 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useAuthStore } from '@/stores/auth'
 
 export function useAuth() {
-  const user = useAuthStore((s) => s.user)
-  const loading = useAuthStore((s) => s.loading)
-  const initialized = useAuthStore((s) => s.initialized)
-  const login = useAuthStore((s) => s.login)
-  const register = useAuthStore((s) => s.register)
-  const logout = useAuthStore((s) => s.logout)
-  const checkSession = useAuthStore((s) => s.checkSession)
+  const { user, loading, initialized, login, register, logout, checkSession } = useAuthStore(
+    useShallow((s) => ({
+      user: s.user,
+      loading: s.loading,
+      initialized: s.initialized,
+      login: s.login,
+      register: s.register,
+      logout: s.logout,
+      checkSession: s.checkSession,
+    })),
+  )
 
   return {
     user,

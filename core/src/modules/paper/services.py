@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.types import PaperEvents
+from src.shared.cache import cached
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
@@ -285,51 +286,44 @@ class AnnotationService(
 class DashboardService:
     """Statistics and summary data for the paper module."""
 
+    @cached("paper", "dashboard_summary", ttl=3600, key_params=("space_id",))
     async def get_summary(self, db: AsyncSession, space_id: str) -> DashboardResponse:
-        total_articles = (
-            await db.execute(
-                select(func.count())
-                .select_from(Article)
-                .where(
-                    Article.space_id == space_id,
-                    Article.deleted_at == None,  # noqa: E711
-                )
+        # Single query with subqueries instead of 4 separate count queries
+        stats_q = select(
+            select(func.count())
+            .select_from(Article)
+            .where(Article.space_id == space_id, Article.deleted_at == None)  # noqa: E711
+            .correlate(None)
+            .scalar_subquery()
+            .label("total_articles"),
+            select(func.count())
+            .select_from(Digest)
+            .where(Digest.space_id == space_id, Digest.deleted_at == None)  # noqa: E711
+            .correlate(None)
+            .scalar_subquery()
+            .label("total_digests"),
+            select(func.count())
+            .select_from(Annotation)
+            .where(Annotation.space_id == space_id, Annotation.deleted_at == None)  # noqa: E711
+            .correlate(None)
+            .scalar_subquery()
+            .label("total_annotations"),
+            select(func.count())
+            .select_from(Digest)
+            .where(
+                Digest.space_id == space_id,
+                Digest.workshop_relevance == "high",
+                Digest.deleted_at == None,  # noqa: E711
             )
-        ).scalar_one()
-
-        total_digests = (
-            await db.execute(
-                select(func.count())
-                .select_from(Digest)
-                .where(
-                    Digest.space_id == space_id,
-                    Digest.deleted_at == None,  # noqa: E711
-                )
-            )
-        ).scalar_one()
-
-        total_annotations = (
-            await db.execute(
-                select(func.count())
-                .select_from(Annotation)
-                .where(
-                    Annotation.space_id == space_id,
-                    Annotation.deleted_at == None,  # noqa: E711
-                )
-            )
-        ).scalar_one()
-
-        high_relevance_count = (
-            await db.execute(
-                select(func.count())
-                .select_from(Digest)
-                .where(
-                    Digest.space_id == space_id,
-                    Digest.workshop_relevance == "high",
-                    Digest.deleted_at == None,  # noqa: E711
-                )
-            )
-        ).scalar_one()
+            .correlate(None)
+            .scalar_subquery()
+            .label("high_relevance_count"),
+        )
+        stats = (await db.execute(stats_q)).one()
+        total_articles = stats.total_articles
+        total_digests = stats.total_digests
+        total_annotations = stats.total_annotations
+        high_relevance_count = stats.high_relevance_count
 
         # Recent articles
         recent_rows = (
