@@ -63,6 +63,12 @@ fn extract_usage_entry(value: &simd_json::OwnedValue) -> Option<UsageEntry> {
 
     let message = value.get("message")?;
     let model = message.get_str("model")?.to_string();
+
+    // Skip synthetic/internal placeholder models
+    if model.starts_with('<') {
+        return None;
+    }
+
     let message_id = message.get_str("id").map(String::from);
     let usage = message.get("usage")?;
 

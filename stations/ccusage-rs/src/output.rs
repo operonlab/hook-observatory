@@ -1121,6 +1121,9 @@ pub fn print_session_detail(session: &SessionUsage, cfg: &OutputConfig) {
     if let Some(ref project) = session.project {
         println!("Project: {}", project);
     }
+    if session.fast_entry_count > 0 {
+        println!("Mode:    fast ({} entries)", session.fast_entry_count);
+    }
     println!(
         "Total:   {} tokens",
         fmt_tokens(session.total_tokens.total_tokens())
