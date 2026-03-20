@@ -12,6 +12,8 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use std::time::Instant;
 
+use rayon::prelude::*;
+
 use crate::aggregator::*;
 use crate::cache::CacheManager;
 use crate::pricing::PricingTable;
@@ -41,11 +43,11 @@ struct Cli {
     until: Option<String>,
 
     /// Output as JSON
-    #[arg(long, global = true)]
+    #[arg(long, global = true, group = "output_format")]
     json: bool,
 
     /// Output as CSV
-    #[arg(long, global = true)]
+    #[arg(long, global = true, group = "output_format")]
     csv: bool,
 
     /// Show per-model breakdown
@@ -161,12 +163,17 @@ fn main() -> Result<()> {
         no_color: cli.no_color,
         csv: cli.csv,
         limit: cli.limit,
-        order_desc: matches!(cli.order, Some(SortOrder::Desc)),
     };
 
     // Parse date filters
     let since = cli.since.as_ref().map(|s| parse_date(s)).transpose()?;
     let until = cli.until.as_ref().map(|s| parse_date(s)).transpose()?;
+
+    if let (Some(s), Some(u)) = (since, until) {
+        if s > u {
+            anyhow::bail!("--since ({s}) is after --until ({u})");
+        }
+    }
 
     // Use local timezone for default since date
     let today = local_today(&cli.tz);
@@ -203,10 +210,10 @@ fn main() -> Result<()> {
                         eprintln!("  cache: hit ({} entries)", entry_count);
                     }
                     // Convert cached raw to usage entries
-                    cached_raw
+                    dedup_entries(cached_raw
                         .iter()
                         .filter_map(|e| e.to_usage_entry())
-                        .collect()
+                        .collect())
                 } else {
                     // Incremental: keep entries from unchanged files, reparse changed ones
                     let changed_paths: std::collections::HashSet<String> = changed
@@ -227,8 +234,8 @@ fn main() -> Result<()> {
 
                     // Parse changed files and build cached entries
                     let new_cached: Vec<crate::cache::CachedEntry> = changed
-                        .iter()
-                        .flat_map(|f| {
+                        .par_iter()
+                        .flat_map_iter(|f| {
                             let path_str = f.path.to_string_lossy().to_string();
                             crate::parser::parse_jsonl_file(&f.path)
                                 .unwrap_or_default()
@@ -390,6 +397,9 @@ fn main() -> Result<()> {
             }
 
             if let Some(ref prefix) = id {
+                if prefix.is_empty() {
+                    anyhow::bail!("--id requires a non-empty value");
+                }
                 // Session ID lookup by prefix
                 let prefix_lower = prefix.to_lowercase();
                 let matches: Vec<_> = summaries
@@ -465,6 +475,9 @@ fn main() -> Result<()> {
             let summaries = aggregate_agents(&filtered, &pricing);
 
             if let Some(ref prefix) = id {
+                if prefix.is_empty() {
+                    anyhow::bail!("--id requires a non-empty value");
+                }
                 let prefix_lower = prefix.to_lowercase();
                 let matches: Vec<_> = summaries
                     .into_iter()

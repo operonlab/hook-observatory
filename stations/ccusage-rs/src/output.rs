@@ -311,34 +311,35 @@ fn print_daily_csv(summaries: &[DailySummary], breakdown: bool, cfg: &OutputConf
             }
         }
     } else {
+        let show_thinking = has_thinking_tokens_daily(summaries);
         if cfg.no_cost {
-            println!("Date,Input,Output,Cache Write,Cache Read,Total");
+            if show_thinking {
+                println!("Date,Input,Output,Cache Write,Cache Read,Thinking,Total");
+            } else {
+                println!("Date,Input,Output,Cache Write,Cache Read,Total");
+            }
+        } else if show_thinking {
+            println!("Date,Input,Output,Cache Write,Cache Read,Thinking,Total,Cost");
         } else {
             println!("Date,Input,Output,Cache Write,Cache Read,Total,Cost");
         }
         for s in summaries {
-            if cfg.no_cost {
-                println!(
-                    "{},{},{},{},{},{}",
-                    s.date.format("%Y-%m-%d"),
-                    s.total_tokens.input_tokens,
-                    s.total_tokens.output_tokens,
-                    s.total_tokens.cache_creation_tokens(),
-                    s.total_tokens.cache_read_tokens,
-                    s.total_tokens.total_tokens(),
-                );
-            } else {
-                println!(
-                    "{},{},{},{},{},{},{:.6}",
-                    s.date.format("%Y-%m-%d"),
-                    s.total_tokens.input_tokens,
-                    s.total_tokens.output_tokens,
-                    s.total_tokens.cache_creation_tokens(),
-                    s.total_tokens.cache_read_tokens,
-                    s.total_tokens.total_tokens(),
-                    s.total_cost,
-                );
+            print!(
+                "{},{},{},{},{}",
+                s.date.format("%Y-%m-%d"),
+                s.total_tokens.input_tokens,
+                s.total_tokens.output_tokens,
+                s.total_tokens.cache_creation_tokens(),
+                s.total_tokens.cache_read_tokens,
+            );
+            if show_thinking {
+                print!(",{}", s.total_tokens.thinking_tokens);
             }
+            print!(",{}", s.total_tokens.total_tokens());
+            if !cfg.no_cost {
+                print!(",{:.6}", s.total_cost);
+            }
+            println!();
         }
     }
 }
@@ -534,22 +535,32 @@ fn print_monthly_csv(summaries: &[MonthlySummary], breakdown: bool, cfg: &Output
             }
         }
     } else {
+        let show_thinking = has_thinking_tokens_monthly(summaries);
         if cfg.no_cost {
-            println!("Month,Input,Output,Cache Write,Cache Read,Total");
+            if show_thinking {
+                println!("Month,Input,Output,Cache Write,Cache Read,Thinking,Total");
+            } else {
+                println!("Month,Input,Output,Cache Write,Cache Read,Total");
+            }
+        } else if show_thinking {
+            println!("Month,Input,Output,Cache Write,Cache Read,Thinking,Total,Cost");
         } else {
             println!("Month,Input,Output,Cache Write,Cache Read,Total,Cost");
         }
         for s in summaries {
             print!(
-                "{}-{:02},{},{},{},{},{}",
+                "{}-{:02},{},{},{},{}",
                 s.year,
                 s.month,
                 s.total_tokens.input_tokens,
                 s.total_tokens.output_tokens,
                 s.total_tokens.cache_creation_tokens(),
                 s.total_tokens.cache_read_tokens,
-                s.total_tokens.total_tokens(),
             );
+            if show_thinking {
+                print!(",{}", s.total_tokens.thinking_tokens);
+            }
+            print!(",{}", s.total_tokens.total_tokens());
             if !cfg.no_cost {
                 print!(",{:.6}", s.total_cost);
             }
@@ -758,22 +769,32 @@ fn print_weekly_csv(summaries: &[WeeklySummary], breakdown: bool, cfg: &OutputCo
             }
         }
     } else {
+        let show_thinking = has_thinking_tokens_weekly(summaries);
         if cfg.no_cost {
-            println!("Week Start,Week End,Input,Output,Cache Write,Cache Read,Total");
+            if show_thinking {
+                println!("Week Start,Week End,Input,Output,Cache Write,Cache Read,Thinking,Total");
+            } else {
+                println!("Week Start,Week End,Input,Output,Cache Write,Cache Read,Total");
+            }
+        } else if show_thinking {
+            println!("Week Start,Week End,Input,Output,Cache Write,Cache Read,Thinking,Total,Cost");
         } else {
             println!("Week Start,Week End,Input,Output,Cache Write,Cache Read,Total,Cost");
         }
         for s in summaries {
             print!(
-                "{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{}",
                 s.week_start.format("%Y-%m-%d"),
                 s.week_end.format("%Y-%m-%d"),
                 s.total_tokens.input_tokens,
                 s.total_tokens.output_tokens,
                 s.total_tokens.cache_creation_tokens(),
                 s.total_tokens.cache_read_tokens,
-                s.total_tokens.total_tokens(),
             );
+            if show_thinking {
+                print!(",{}", s.total_tokens.thinking_tokens);
+            }
+            print!(",{}", s.total_tokens.total_tokens());
             if !cfg.no_cost {
                 print!(",{:.6}", s.total_cost);
             }
@@ -796,14 +817,27 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
     let has_slugs = summaries.iter().any(|s| s.slug.is_some());
 
     if cfg.csv {
+        let show_thinking = summaries.iter().any(|s| s.total_tokens.thinking_tokens > 0);
         if cfg.no_cost {
             if has_slugs {
-                println!("Session,Slug,Date,Duration,Project,Total Tokens");
+                if show_thinking {
+                    println!("Session,Slug,Date,Duration,Project,Thinking,Total Tokens");
+                } else {
+                    println!("Session,Slug,Date,Duration,Project,Total Tokens");
+                }
+            } else if show_thinking {
+                println!("Session,Date,Duration,Project,Thinking,Total Tokens");
             } else {
                 println!("Session,Date,Duration,Project,Total Tokens");
             }
         } else if has_slugs {
-            println!("Session,Slug,Date,Duration,Project,Total Tokens,Cost");
+            if show_thinking {
+                println!("Session,Slug,Date,Duration,Project,Thinking,Total Tokens,Cost");
+            } else {
+                println!("Session,Slug,Date,Duration,Project,Total Tokens,Cost");
+            }
+        } else if show_thinking {
+            println!("Session,Date,Duration,Project,Thinking,Total Tokens,Cost");
         } else {
             println!("Session,Date,Duration,Project,Total Tokens,Cost");
         }
@@ -815,12 +849,15 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
                 print!(",{}", csv_escape(s.slug.as_deref().unwrap_or("-")));
             }
             print!(
-                ",{},{},{},{}",
+                ",{},{},{}",
                 s.date.format("%Y-%m-%d"),
                 csv_escape(&dur),
                 csv_escape(s.project.as_deref().unwrap_or("-")),
-                s.total_tokens.total_tokens(),
             );
+            if show_thinking {
+                print!(",{}", s.total_tokens.thinking_tokens);
+            }
+            print!(",{}", s.total_tokens.total_tokens());
             if !cfg.no_cost {
                 print!(",{:.6}", s.total_cost);
             }
@@ -927,20 +964,30 @@ pub fn print_block_table(summaries: &[BlockSummary], cfg: &OutputConfig) {
     }
 
     if cfg.csv {
+        let show_thinking = summaries.iter().any(|s| s.total_tokens.thinking_tokens > 0);
         if cfg.no_cost {
-            println!("Block Start,Block End,Input,Output,Total");
+            if show_thinking {
+                println!("Block Start,Block End,Input,Output,Thinking,Total");
+            } else {
+                println!("Block Start,Block End,Input,Output,Total");
+            }
+        } else if show_thinking {
+            println!("Block Start,Block End,Input,Output,Thinking,Total,Cost");
         } else {
             println!("Block Start,Block End,Input,Output,Total,Cost");
         }
         for s in summaries {
             print!(
-                "{},{},{},{},{}",
+                "{},{},{},{}",
                 s.block_start.format("%Y-%m-%d %H:%M"),
                 s.block_end.format("%H:%M"),
                 s.total_tokens.input_tokens,
                 s.total_tokens.output_tokens,
-                s.total_tokens.total_tokens(),
             );
+            if show_thinking {
+                print!(",{}", s.total_tokens.thinking_tokens);
+            }
+            print!(",{}", s.total_tokens.total_tokens());
             if !cfg.no_cost {
                 print!(",{:.6}", s.total_cost);
             }
@@ -998,18 +1045,28 @@ pub fn print_instance_table(summaries: &[InstanceUsage], cfg: &OutputConfig) {
     let limit = cfg.limit.unwrap_or(30);
 
     if cfg.csv {
+        let show_thinking = summaries.iter().any(|s| s.total_tokens.thinking_tokens > 0);
         if cfg.no_cost {
-            println!("Project,Sessions,Total Tokens");
+            if show_thinking {
+                println!("Project,Sessions,Thinking,Total Tokens");
+            } else {
+                println!("Project,Sessions,Total Tokens");
+            }
+        } else if show_thinking {
+            println!("Project,Sessions,Thinking,Total Tokens,Cost");
         } else {
             println!("Project,Sessions,Total Tokens,Cost");
         }
         for s in summaries.iter().take(limit) {
             print!(
-                "{},{},{}",
+                "{},{}",
                 csv_escape(&s.project),
                 s.session_count,
-                s.total_tokens.total_tokens(),
             );
+            if show_thinking {
+                print!(",{}", s.total_tokens.thinking_tokens);
+            }
+            print!(",{}", s.total_tokens.total_tokens());
             if !cfg.no_cost {
                 print!(",{:.6}", s.total_cost);
             }
