@@ -216,19 +216,30 @@ impl PricingTable {
         best_match.map(|(_, p)| p)
     }
 
-    /// Calculate cost for given token counts and model
-    pub fn calculate_cost(&self, model: &str, tokens: &TokenCounts) -> CostBreakdown {
+    /// Calculate cost for given token counts, model, and optional speed mode.
+    /// When speed is "fast", output cost is multiplied by 6x.
+    pub fn calculate_cost(
+        &self,
+        model: &str,
+        tokens: &TokenCounts,
+        speed: Option<&str>,
+    ) -> CostBreakdown {
         match self.get(model) {
-            Some(pricing) => CostBreakdown {
-                input_cost: tokens.input_tokens as f64 * pricing.input_cost_per_token,
-                output_cost: tokens.output_tokens as f64 * pricing.output_cost_per_token,
-                cache_creation_cost: tokens.cache_creation_5m_tokens as f64
-                    * pricing.cache_creation_cost_per_token
-                    + tokens.cache_creation_1h_tokens as f64
-                        * pricing.cache_creation_1h_cost_per_token,
-                cache_read_cost: tokens.cache_read_tokens as f64
-                    * pricing.cache_read_cost_per_token,
-            },
+            Some(pricing) => {
+                let output_multiplier = if speed == Some("fast") { 6.0 } else { 1.0 };
+                CostBreakdown {
+                    input_cost: tokens.input_tokens as f64 * pricing.input_cost_per_token,
+                    output_cost: tokens.output_tokens as f64
+                        * pricing.output_cost_per_token
+                        * output_multiplier,
+                    cache_creation_cost: tokens.cache_creation_5m_tokens as f64
+                        * pricing.cache_creation_cost_per_token
+                        + tokens.cache_creation_1h_tokens as f64
+                            * pricing.cache_creation_1h_cost_per_token,
+                    cache_read_cost: tokens.cache_read_tokens as f64
+                        * pricing.cache_read_cost_per_token,
+                }
+            }
             None => CostBreakdown::default(),
         }
     }

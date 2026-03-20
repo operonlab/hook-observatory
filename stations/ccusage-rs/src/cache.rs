@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 use crate::types::{DailySummary, FileInfo, UsageEntry};
 
-const CACHE_VERSION: u32 = 4;
+const CACHE_VERSION: u32 = 5;
 
 #[derive(Serialize, Deserialize)]
 struct CacheMeta {
@@ -37,6 +37,8 @@ pub struct CachedEntry {
     pub cache_read_tokens: u64,
     #[serde(default)]
     pub thinking_tokens: u64,
+    #[serde(default)]
+    pub speed: Option<String>,
     /// Source JSONL file path (for incremental cache)
     pub source_file: String,
 }
@@ -56,6 +58,7 @@ impl CachedEntry {
             cache_creation_1h_tokens: self.cache_creation_1h_tokens,
             cache_read_tokens: self.cache_read_tokens,
             thinking_tokens: self.thinking_tokens,
+            speed: self.speed.clone(),
         })
     }
 
@@ -72,6 +75,7 @@ impl CachedEntry {
             cache_creation_1h_tokens: e.cache_creation_1h_tokens,
             cache_read_tokens: e.cache_read_tokens,
             thinking_tokens: e.thinking_tokens,
+            speed: e.speed.clone(),
             source_file: source_file.to_string(),
         }
     }
@@ -86,7 +90,7 @@ impl CacheManager {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join("ccusage-rs")
-            .join("v4");
+            .join("v5");
 
         Self { cache_dir }
     }

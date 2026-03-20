@@ -99,8 +99,12 @@ enum Commands {
     Monthly,
     /// Show weekly usage
     Weekly,
-    /// Show per-session usage
-    Session,
+    /// Show per-session usage (use --id for single session detail)
+    Session {
+        /// Session ID prefix to look up (e.g. first 8 characters)
+        #[arg(long)]
+        id: Option<String>,
+    },
     /// Show 5-hour billing blocks
     Blocks,
     /// Compact one-line output for tmux statusline
@@ -315,7 +319,7 @@ fn main() -> Result<()> {
     let desc = match &cli.order {
         Some(SortOrder::Desc) => true,
         Some(SortOrder::Asc) => false,
-        None => matches!(cli.command, Commands::Session | Commands::Blocks | Commands::Instances),
+        None => matches!(cli.command, Commands::Session { .. } | Commands::Blocks | Commands::Instances),
     };
 
     // Aggregate and output
@@ -367,16 +371,54 @@ fn main() -> Result<()> {
                 print_stats(elapsed.as_secs_f64());
             }
         }
-        Commands::Session => {
+        Commands::Session { id } => {
             let mut summaries = aggregate_sessions(&filtered, &pricing);
             if !desc {
                 summaries.reverse(); // default is desc by cost, reverse for asc
             }
-            if cli.json {
-                output::print_json(&AggregationResult::Session(summaries));
+
+            if let Some(ref prefix) = id {
+                // Session ID lookup by prefix
+                let prefix_lower = prefix.to_lowercase();
+                let matches: Vec<_> = summaries
+                    .into_iter()
+                    .filter(|s| s.session_id.to_lowercase().starts_with(&prefix_lower))
+                    .collect();
+
+                match matches.len() {
+                    0 => {
+                        eprintln!("No session found matching prefix \"{}\"", prefix);
+                        std::process::exit(1);
+                    }
+                    1 => {
+                        if cli.json {
+                            output::print_json(&AggregationResult::Session(matches));
+                        } else {
+                            output::print_session_detail(&matches[0], &out_cfg);
+                            print_stats(elapsed.as_secs_f64());
+                        }
+                    }
+                    _ => {
+                        eprintln!(
+                            "  {} sessions match prefix \"{}\"",
+                            matches.len(),
+                            prefix
+                        );
+                        if cli.json {
+                            output::print_json(&AggregationResult::Session(matches));
+                        } else {
+                            output::print_session_table(&matches, &out_cfg);
+                            print_stats(elapsed.as_secs_f64());
+                        }
+                    }
+                }
             } else {
-                output::print_session_table(&summaries, &out_cfg);
-                print_stats(elapsed.as_secs_f64());
+                if cli.json {
+                    output::print_json(&AggregationResult::Session(summaries));
+                } else {
+                    output::print_session_table(&summaries, &out_cfg);
+                    print_stats(elapsed.as_secs_f64());
+                }
             }
         }
         Commands::Blocks => {
@@ -401,8 +443,7 @@ fn main() -> Result<()> {
                 summaries.reverse(); // default is desc by cost
             }
             if cli.json {
-                let json = serde_json::to_string_pretty(&summaries).unwrap();
-                println!("{json}");
+                output::print_json(&AggregationResult::Instances(summaries));
             } else {
                 output::print_instance_table(&summaries, &out_cfg);
                 print_stats(elapsed.as_secs_f64());

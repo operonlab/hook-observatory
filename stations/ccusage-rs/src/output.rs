@@ -1105,6 +1105,76 @@ pub fn print_statusline(blocks: &[BlockSummary], tz: &Option<String>, offset_hou
     // No debug output — statusline should be silent on stderr
 }
 
+// ─── Session Detail ──────────────────────────────────
+
+pub fn print_session_detail(session: &SessionUsage, cfg: &OutputConfig) {
+    // Header info
+    println!("Session: {}", session.session_id);
+    println!(
+        "Date:    {}",
+        session.date.format("%Y-%m-%d")
+    );
+    println!(
+        "Duration: {}",
+        fmt_duration(session.first_activity, session.last_activity)
+    );
+    if let Some(ref project) = session.project {
+        println!("Project: {}", project);
+    }
+    println!(
+        "Total:   {} tokens",
+        fmt_tokens(session.total_tokens.total_tokens())
+    );
+    if !cfg.no_cost {
+        println!("Cost:    {}", fmt_cost(session.total_cost));
+    }
+    println!();
+
+    // Per-model breakdown table
+    let mut table = new_table(cfg);
+    let mut header = vec![
+        Cell::new("Model").add_attribute(Attribute::Bold),
+        Cell::new("Input").add_attribute(Attribute::Bold),
+        Cell::new("Output").add_attribute(Attribute::Bold),
+        Cell::new("Cache Write").add_attribute(Attribute::Bold),
+        Cell::new("Cache Read").add_attribute(Attribute::Bold),
+    ];
+    if !cfg.no_cost {
+        header.push(Cell::new("Cost").add_attribute(Attribute::Bold));
+    }
+    table.set_header(header);
+
+    let mut models: Vec<_> = session.by_model.iter().collect();
+    models.sort_by(|a, b| {
+        b.1.cost
+            .total()
+            .partial_cmp(&a.1.cost.total())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for (model, usage) in &models {
+        let mut row = vec![
+            Cell::new(model).fg(Color::Cyan),
+            Cell::new(fmt_tokens(usage.tokens.input_tokens)).set_alignment(CellAlignment::Right),
+            Cell::new(fmt_tokens(usage.tokens.output_tokens)).set_alignment(CellAlignment::Right),
+            Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens()))
+                .set_alignment(CellAlignment::Right),
+            Cell::new(fmt_tokens(usage.tokens.cache_read_tokens))
+                .set_alignment(CellAlignment::Right),
+        ];
+        if !cfg.no_cost {
+            row.push(
+                Cell::new(fmt_cost(usage.cost.total()))
+                    .set_alignment(CellAlignment::Right)
+                    .fg(Color::Green),
+            );
+        }
+        table.add_row(row);
+    }
+
+    println!("{table}");
+}
+
 // ─── JSON ────────────────────────────────────────────
 
 pub fn print_json(result: &crate::types::AggregationResult) {
