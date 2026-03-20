@@ -126,6 +126,28 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/anvil/src",
     },
     {
+        "name": "stt",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/stt/.venv/bin/python3"
+            " main.py"
+        ),
+        "port": 4108,
+        "health": "http://127.0.0.1:4108/health",
+        "workdir": "/Users/joneshong/workshop/stations/stt",
+    },
+    {
+        "name": "ocr",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/ocr/.venv/bin/python3"
+            " main.py"
+        ),
+        "port": 4109,
+        "health": "http://127.0.0.1:4109/health",
+        "workdir": "/Users/joneshong/workshop/stations/ocr",
+    },
+    {
         "name": "tmux-webui",
         "type": "uvicorn",
         "cmd": "/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",  # noqa: E501

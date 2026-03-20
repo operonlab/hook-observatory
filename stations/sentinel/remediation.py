@@ -44,6 +44,8 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "cronicle": "cronicle",
     "mcpproxy": "mcpproxy",
     "tmux-webui": "tmux-webui",
+    "stt": "stt",
+    "ocr": "ocr",
 }
 
 # Docker-managed services: restart via docker

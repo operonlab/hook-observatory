@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""STT MCP Server — Thin wrapper over STTClient SDK.
+
+Usage:
+    python3 mcp/stt/server.py
+
+Configure in mcpproxy:
+    "stt": {
+        "command": "/Users/joneshong/.local/bin/python3",
+        "args": ["/Users/joneshong/workshop/mcp/stt/server.py"]
+    }
+"""
+
+from asyncio import to_thread
+
+from mcp.server.fastmcp import FastMCP
+from workshop.clients.stt import STTClient
+from workshop.mcp_helpers import json_text, mcp_error_handler
+
+mcp = FastMCP("stt")
+client = STTClient()
+
+
+@mcp.tool()
+@mcp_error_handler("STT")
+async def stt_transcribe(
+    file_path: str,
+    language: str = "zh-TW",
+    engine: str = "apple",
+) -> str:
+    """Transcribe audio file to text. Returns text, segments, and metadata."""
+    result = await to_thread(
+        client.transcribe,
+        file_path=file_path,
+        language=language,
+        engine=engine,
+    )
+    text = result.get("text", "")
+    segments = result.get("segments", [])
+    parts = [f"**Text**: {text}", f"**Engine**: {result.get('engine', '?')}"]
+    if segments:
+        parts.append(f"**Segments**: {len(segments)}")
+    return "\n".join(parts)
+
+
+@mcp.tool()
+@mcp_error_handler("STT")
+async def stt_engines() -> str:
+    """List available STT engines."""
+    result = await to_thread(client.list_engines)
+    return json_text(result)
+
+
+if __name__ == "__main__":
+    mcp.run()
