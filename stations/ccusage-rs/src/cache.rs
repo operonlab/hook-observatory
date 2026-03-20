@@ -1,0 +1,202 @@
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::SystemTime;
+
+use crate::types::{DailySummary, FileInfo, UsageEntry};
+
+const CACHE_VERSION: u32 = 2;
+
+#[derive(Serialize, Deserialize)]
+struct CacheMeta {
+    version: u32,
+    last_updated: String,
+    /// Map of file path → mtime (as seconds since epoch)
+    file_mtimes: HashMap<String, u64>,
+}
+
+/// Single consolidated cache of all parsed entries
+#[derive(Serialize, Deserialize)]
+struct EntriesCache {
+    version: u32,
+    entries: Vec<CachedEntry>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CachedEntry {
+    pub timestamp: String,
+    pub session_id: String,
+    pub model: String,
+    pub cwd: Option<String>,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_creation_tokens: u64,
+    pub cache_read_tokens: u64,
+}
+
+impl CachedEntry {
+    pub fn to_usage_entry(&self) -> Option<UsageEntry> {
+        let timestamp = self.timestamp.parse().ok()?;
+        Some(UsageEntry {
+            timestamp,
+            session_id: self.session_id.clone(),
+            model: self.model.clone(),
+            cwd: self.cwd.clone(),
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            cache_creation_tokens: self.cache_creation_tokens,
+            cache_read_tokens: self.cache_read_tokens,
+        })
+    }
+
+    pub fn from_usage_entry(e: &UsageEntry) -> Self {
+        CachedEntry {
+            timestamp: e.timestamp.to_rfc3339(),
+            session_id: e.session_id.clone(),
+            model: e.model.clone(),
+            cwd: e.cwd.clone(),
+            input_tokens: e.input_tokens,
+            output_tokens: e.output_tokens,
+            cache_creation_tokens: e.cache_creation_tokens,
+            cache_read_tokens: e.cache_read_tokens,
+        }
+    }
+}
+
+pub struct CacheManager {
+    cache_dir: PathBuf,
+}
+
+impl CacheManager {
+    pub fn new() -> Self {
+        let cache_dir = dirs::cache_dir()
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join("ccusage-rs")
+            .join("v2");
+
+        Self { cache_dir }
+    }
+
+    /// Save daily summary to cache
+    pub fn save_daily(&self, summary: &DailySummary) -> Result<()> {
+        let daily_dir = self.cache_dir.join("daily");
+        std::fs::create_dir_all(&daily_dir)?;
+
+        let filename = format!("{}.json", summary.date.format("%Y-%m-%d"));
+        let path = daily_dir.join(filename);
+        let data = serde_json::to_string(summary)?;
+        std::fs::write(path, data)?;
+        Ok(())
+    }
+
+    /// Save all entries + meta in one shot
+    pub fn save_all(&self, files: &[FileInfo], entries: &[UsageEntry]) -> Result<()> {
+        std::fs::create_dir_all(&self.cache_dir)?;
+
+        // Save meta
+        let file_mtimes: HashMap<String, u64> = files
+            .iter()
+            .map(|f| {
+                let mtime = f
+                    .mtime
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                (f.path.to_string_lossy().to_string(), mtime)
+            })
+            .collect();
+
+        let meta = CacheMeta {
+            version: CACHE_VERSION,
+            last_updated: chrono::Utc::now().to_rfc3339(),
+            file_mtimes,
+        };
+
+        let meta_data = serde_json::to_string(&meta)?;
+        std::fs::write(self.cache_dir.join("meta.json"), meta_data)?;
+
+        // Save entries
+        let cache = EntriesCache {
+            version: CACHE_VERSION,
+            entries: entries.iter().map(CachedEntry::from_usage_entry).collect(),
+        };
+
+        let entries_data = serde_json::to_vec(&cache)?;
+        std::fs::write(self.cache_dir.join("entries.json"), entries_data)?;
+
+        Ok(())
+    }
+
+    /// Load cached entries if valid
+    pub fn load_all(&self) -> Option<(HashMap<String, u64>, Vec<UsageEntry>)> {
+        // Load meta
+        let meta_path = self.cache_dir.join("meta.json");
+        let meta_data = std::fs::read_to_string(meta_path).ok()?;
+        let meta: CacheMeta = serde_json::from_str(&meta_data).ok()?;
+
+        if meta.version != CACHE_VERSION {
+            let _ = std::fs::remove_dir_all(&self.cache_dir);
+            return None;
+        }
+
+        // Load entries
+        let entries_path = self.cache_dir.join("entries.json");
+        let entries_data = std::fs::read(entries_path).ok()?;
+        let cache: EntriesCache = serde_json::from_slice(&entries_data).ok()?;
+
+        if cache.version != CACHE_VERSION {
+            return None;
+        }
+
+        let entries: Vec<UsageEntry> = cache
+            .entries
+            .iter()
+            .filter_map(|e| e.to_usage_entry())
+            .collect();
+
+        Some((meta.file_mtimes, entries))
+    }
+
+    /// Get files that need re-parsing
+    pub fn files_needing_reparse<'a>(
+        &self,
+        files: &'a [FileInfo],
+        cached_mtimes: &HashMap<String, u64>,
+    ) -> Vec<&'a FileInfo> {
+        files
+            .iter()
+            .filter(|f| {
+                let path_str = f.path.to_string_lossy().to_string();
+                let current_mtime = f
+                    .mtime
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+
+                match cached_mtimes.get(&path_str) {
+                    Some(&cached) => current_mtime > cached,
+                    None => true,
+                }
+            })
+            .collect()
+    }
+
+    /// Get paths of files that were in old cache but no longer exist
+    pub fn removed_files(
+        &self,
+        files: &[FileInfo],
+        cached_mtimes: &HashMap<String, u64>,
+    ) -> Vec<String> {
+        let current_paths: std::collections::HashSet<String> = files
+            .iter()
+            .map(|f| f.path.to_string_lossy().to_string())
+            .collect();
+
+        cached_mtimes
+            .keys()
+            .filter(|k| !current_paths.contains(k.as_str()))
+            .cloned()
+            .collect()
+    }
+}
