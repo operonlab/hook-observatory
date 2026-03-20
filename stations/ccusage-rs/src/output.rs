@@ -53,6 +53,25 @@ fn new_table(cfg: &OutputConfig) -> Table {
     table
 }
 
+/// Check if any summary has non-zero thinking tokens
+fn has_thinking_tokens_daily(summaries: &[DailySummary]) -> bool {
+    summaries
+        .iter()
+        .any(|s| s.total_tokens.thinking_tokens > 0)
+}
+
+fn has_thinking_tokens_monthly(summaries: &[MonthlySummary]) -> bool {
+    summaries
+        .iter()
+        .any(|s| s.total_tokens.thinking_tokens > 0)
+}
+
+fn has_thinking_tokens_weekly(summaries: &[WeeklySummary]) -> bool {
+    summaries
+        .iter()
+        .any(|s| s.total_tokens.thinking_tokens > 0)
+}
+
 // ─── Daily ───────────────────────────────────────────
 
 pub fn print_daily_table(summaries: &[DailySummary], breakdown: bool, cfg: &OutputConfig) {
@@ -71,6 +90,7 @@ pub fn print_daily_table(summaries: &[DailySummary], breakdown: bool, cfg: &Outp
         return;
     }
 
+    let show_thinking = has_thinking_tokens_daily(summaries);
     let mut table = new_table(cfg);
     let mut header = vec![
         Cell::new("Date").add_attribute(Attribute::Bold),
@@ -78,8 +98,11 @@ pub fn print_daily_table(summaries: &[DailySummary], breakdown: bool, cfg: &Outp
         Cell::new("Output").add_attribute(Attribute::Bold),
         Cell::new("Cache Write").add_attribute(Attribute::Bold),
         Cell::new("Cache Read").add_attribute(Attribute::Bold),
-        Cell::new("Total Tokens").add_attribute(Attribute::Bold),
     ];
+    if show_thinking {
+        header.push(Cell::new("Thinking").add_attribute(Attribute::Bold));
+    }
+    header.push(Cell::new("Total Tokens").add_attribute(Attribute::Bold));
     if !cfg.no_cost {
         header.push(Cell::new("Cost").add_attribute(Attribute::Bold));
     }
@@ -97,9 +120,17 @@ pub fn print_daily_table(summaries: &[DailySummary], breakdown: bool, cfg: &Outp
                 .set_alignment(CellAlignment::Right),
             Cell::new(fmt_tokens(s.total_tokens.cache_read_tokens))
                 .set_alignment(CellAlignment::Right),
+        ];
+        if show_thinking {
+            row.push(
+                Cell::new(fmt_tokens(s.total_tokens.thinking_tokens))
+                    .set_alignment(CellAlignment::Right),
+            );
+        }
+        row.push(
             Cell::new(fmt_tokens(s.total_tokens.total_tokens()))
                 .set_alignment(CellAlignment::Right),
-        ];
+        );
         if !cfg.no_cost {
             row.push(
                 Cell::new(fmt_cost(s.total_cost))
@@ -129,10 +160,19 @@ pub fn print_daily_table(summaries: &[DailySummary], breakdown: bool, cfg: &Outp
         Cell::new(fmt_tokens(grand_tokens.cache_read_tokens))
             .set_alignment(CellAlignment::Right)
             .add_attribute(Attribute::Bold),
+    ];
+    if show_thinking {
+        total_row.push(
+            Cell::new(fmt_tokens(grand_tokens.thinking_tokens))
+                .set_alignment(CellAlignment::Right)
+                .add_attribute(Attribute::Bold),
+        );
+    }
+    total_row.push(
         Cell::new(fmt_tokens(grand_tokens.total_tokens()))
             .set_alignment(CellAlignment::Right)
             .add_attribute(Attribute::Bold),
-    ];
+    );
     if !cfg.no_cost {
         total_row.push(
             Cell::new(fmt_cost(grand_cost))
@@ -337,14 +377,18 @@ pub fn print_monthly_table(summaries: &[MonthlySummary], breakdown: bool, cfg: &
             }
         }
     } else {
+        let show_thinking = has_thinking_tokens_monthly(summaries);
         let mut header = vec![
             Cell::new("Month").add_attribute(Attribute::Bold),
             Cell::new("Input").add_attribute(Attribute::Bold),
             Cell::new("Output").add_attribute(Attribute::Bold),
             Cell::new("Cache Write").add_attribute(Attribute::Bold),
             Cell::new("Cache Read").add_attribute(Attribute::Bold),
-            Cell::new("Total Tokens").add_attribute(Attribute::Bold),
         ];
+        if show_thinking {
+            header.push(Cell::new("Thinking").add_attribute(Attribute::Bold));
+        }
+        header.push(Cell::new("Total Tokens").add_attribute(Attribute::Bold));
         if !cfg.no_cost {
             header.push(Cell::new("Cost").add_attribute(Attribute::Bold));
         }
@@ -364,9 +408,17 @@ pub fn print_monthly_table(summaries: &[MonthlySummary], breakdown: bool, cfg: &
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(s.total_tokens.cache_read_tokens))
                     .set_alignment(CellAlignment::Right),
+            ];
+            if show_thinking {
+                row.push(
+                    Cell::new(fmt_tokens(s.total_tokens.thinking_tokens))
+                        .set_alignment(CellAlignment::Right),
+                );
+            }
+            row.push(
                 Cell::new(fmt_tokens(s.total_tokens.total_tokens()))
                     .set_alignment(CellAlignment::Right),
-            ];
+            );
             if !cfg.no_cost {
                 row.push(
                     Cell::new(fmt_cost(s.total_cost))
@@ -395,10 +447,19 @@ pub fn print_monthly_table(summaries: &[MonthlySummary], breakdown: bool, cfg: &
             Cell::new(fmt_tokens(grand_tokens.cache_read_tokens))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
+        ];
+        if show_thinking {
+            total_row.push(
+                Cell::new(fmt_tokens(grand_tokens.thinking_tokens))
+                    .set_alignment(CellAlignment::Right)
+                    .add_attribute(Attribute::Bold),
+            );
+        }
+        total_row.push(
             Cell::new(fmt_tokens(grand_tokens.total_tokens()))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
-        ];
+        );
         if !cfg.no_cost {
             total_row.push(
                 Cell::new(fmt_cost(grand_cost))
@@ -479,11 +540,14 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
     let mut table = new_table(cfg);
 
     if breakdown {
+        // P3-8: Weekly breakdown now includes cache columns
         let mut header = vec![
             Cell::new("Week").add_attribute(Attribute::Bold),
             Cell::new("Model").add_attribute(Attribute::Bold),
             Cell::new("Input").add_attribute(Attribute::Bold),
             Cell::new("Output").add_attribute(Attribute::Bold),
+            Cell::new("Cache Write").add_attribute(Attribute::Bold),
+            Cell::new("Cache Read").add_attribute(Attribute::Bold),
         ];
         if !cfg.no_cost {
             header.push(Cell::new("Cost").add_attribute(Attribute::Bold));
@@ -517,6 +581,10 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
                         .set_alignment(CellAlignment::Right),
                     Cell::new(fmt_tokens(usage.tokens.output_tokens))
                         .set_alignment(CellAlignment::Right),
+                    Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens))
+                        .set_alignment(CellAlignment::Right),
+                    Cell::new(fmt_tokens(usage.tokens.cache_read_tokens))
+                        .set_alignment(CellAlignment::Right),
                 ];
                 if !cfg.no_cost {
                     row.push(
@@ -529,14 +597,18 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
             }
         }
     } else {
+        let show_thinking = has_thinking_tokens_weekly(summaries);
         let mut header = vec![
             Cell::new("Week").add_attribute(Attribute::Bold),
             Cell::new("Input").add_attribute(Attribute::Bold),
             Cell::new("Output").add_attribute(Attribute::Bold),
             Cell::new("Cache Write").add_attribute(Attribute::Bold),
             Cell::new("Cache Read").add_attribute(Attribute::Bold),
-            Cell::new("Total Tokens").add_attribute(Attribute::Bold),
         ];
+        if show_thinking {
+            header.push(Cell::new("Thinking").add_attribute(Attribute::Bold));
+        }
+        header.push(Cell::new("Total Tokens").add_attribute(Attribute::Bold));
         if !cfg.no_cost {
             header.push(Cell::new("Cost").add_attribute(Attribute::Bold));
         }
@@ -560,9 +632,17 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(s.total_tokens.cache_read_tokens))
                     .set_alignment(CellAlignment::Right),
+            ];
+            if show_thinking {
+                row.push(
+                    Cell::new(fmt_tokens(s.total_tokens.thinking_tokens))
+                        .set_alignment(CellAlignment::Right),
+                );
+            }
+            row.push(
                 Cell::new(fmt_tokens(s.total_tokens.total_tokens()))
                     .set_alignment(CellAlignment::Right),
-            ];
+            );
             if !cfg.no_cost {
                 row.push(
                     Cell::new(fmt_cost(s.total_cost))
@@ -591,10 +671,19 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
             Cell::new(fmt_tokens(grand_tokens.cache_read_tokens))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
+        ];
+        if show_thinking {
+            total_row.push(
+                Cell::new(fmt_tokens(grand_tokens.thinking_tokens))
+                    .set_alignment(CellAlignment::Right)
+                    .add_attribute(Attribute::Bold),
+            );
+        }
+        total_row.push(
             Cell::new(fmt_tokens(grand_tokens.total_tokens()))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
-        ];
+        );
         if !cfg.no_cost {
             total_row.push(
                 Cell::new(fmt_cost(grand_cost))
@@ -612,19 +701,21 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
 fn print_weekly_csv(summaries: &[WeeklySummary], breakdown: bool, cfg: &OutputConfig) {
     if breakdown {
         if cfg.no_cost {
-            println!("Week Start,Week End,Model,Input,Output");
+            println!("Week Start,Week End,Model,Input,Output,Cache Write,Cache Read");
         } else {
-            println!("Week Start,Week End,Model,Input,Output,Cost");
+            println!("Week Start,Week End,Model,Input,Output,Cache Write,Cache Read,Cost");
         }
         for s in summaries {
             for (model, usage) in &s.by_model {
                 print!(
-                    "{},{},{},{},{}",
+                    "{},{},{},{},{},{},{}",
                     s.week_start.format("%Y-%m-%d"),
                     s.week_end.format("%Y-%m-%d"),
                     csv_escape(model),
                     usage.tokens.input_tokens,
                     usage.tokens.output_tokens,
+                    usage.tokens.cache_creation_tokens,
+                    usage.tokens.cache_read_tokens,
                 );
                 if !cfg.no_cost {
                     print!(",{:.6}", usage.cost.total());
@@ -721,9 +812,37 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
         table.add_row(row);
     }
 
+    // Grand total row (sum of ALL sessions, not just displayed)
+    let mut all_tokens = TokenCounts::default();
+    let mut all_cost = 0.0;
+    for s in summaries {
+        all_tokens.merge(&s.total_tokens);
+        all_cost += s.total_cost;
+    }
+
+    let mut total_row = vec![
+        Cell::new("TOTAL")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Yellow),
+        Cell::new(format!("{} sessions", summaries.len())).add_attribute(Attribute::Bold),
+        Cell::new(""),
+        Cell::new(fmt_tokens(all_tokens.total_tokens()))
+            .set_alignment(CellAlignment::Right)
+            .add_attribute(Attribute::Bold),
+    ];
+    if !cfg.no_cost {
+        total_row.push(
+            Cell::new(fmt_cost(all_cost))
+                .set_alignment(CellAlignment::Right)
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Green),
+        );
+    }
+    table.add_row(total_row);
+
     println!("{table}");
     if summaries.len() > limit {
-        println!("  ... and {} more sessions", summaries.len() - limit);
+        println!("  ... showing {}/{} sessions", limit, summaries.len());
     }
 }
 
@@ -855,31 +974,84 @@ pub fn print_instance_table(summaries: &[InstanceUsage], cfg: &OutputConfig) {
         table.add_row(row);
     }
 
+    // Grand total row (sum of ALL instances)
+    let mut all_tokens = TokenCounts::default();
+    let mut all_cost = 0.0;
+    let mut all_sessions = 0usize;
+    for s in summaries {
+        all_tokens.merge(&s.total_tokens);
+        all_cost += s.total_cost;
+        all_sessions += s.session_count;
+    }
+
+    let mut total_row = vec![
+        Cell::new("TOTAL")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Yellow),
+        Cell::new(all_sessions)
+            .set_alignment(CellAlignment::Right)
+            .add_attribute(Attribute::Bold),
+        Cell::new(fmt_tokens(all_tokens.total_tokens()))
+            .set_alignment(CellAlignment::Right)
+            .add_attribute(Attribute::Bold),
+    ];
+    if !cfg.no_cost {
+        total_row.push(
+            Cell::new(fmt_cost(all_cost))
+                .set_alignment(CellAlignment::Right)
+                .add_attribute(Attribute::Bold)
+                .fg(Color::Green),
+        );
+    }
+    table.add_row(total_row);
+
     println!("{table}");
     if summaries.len() > limit {
-        println!("  ... and {} more projects", summaries.len() - limit);
+        println!("  ... showing {}/{} projects", limit, summaries.len());
     }
 }
 
 // ─── Statusline ──────────────────────────────────────
 
-pub fn print_statusline(blocks: &[BlockSummary], pricing: &crate::pricing::PricingTable) {
-    use chrono::{Timelike, Utc};
+pub fn print_statusline(blocks: &[BlockSummary], tz: &Option<String>) {
+    use chrono::Timelike;
 
-    let now = Utc::now();
-    let hour_block = (now.hour() / 5) * 5;
-    let block_start = now
-        .date_naive()
+    // Use local timezone for current time calculation
+    let now_local = if let Some(tz_str) = tz {
+        if let Ok(tz) = tz_str.parse::<chrono_tz::Tz>() {
+            chrono::Utc::now().with_timezone(&tz).naive_local()
+        } else {
+            chrono::Local::now().naive_local()
+        }
+    } else {
+        chrono::Local::now().naive_local()
+    };
+
+    let hour_block = (now_local.hour() / 5) * 5;
+
+    let block_start_local = now_local
+        .date()
         .and_hms_opt(hour_block, 0, 0)
-        .unwrap()
-        .and_utc();
+        .unwrap();
 
-    // Find current block
-    let current = blocks.iter().find(|b| b.block_start == block_start);
+    // Find the block that contains "now" based on local time mapping
+    // Since blocks are stored in UTC, we need to find the right one
+    let current = blocks.iter().find(|b| {
+        let b_local = if let Some(tz_str) = tz {
+            if let Ok(tz) = tz_str.parse::<chrono_tz::Tz>() {
+                b.block_start.with_timezone(&tz).naive_local()
+            } else {
+                chrono::DateTime::<chrono::Local>::from(b.block_start).naive_local()
+            }
+        } else {
+            chrono::DateTime::<chrono::Local>::from(b.block_start).naive_local()
+        };
+        b_local == block_start_local
+    });
 
     match current {
         Some(block) => {
-            let block_idx = (now.hour() / 5) + 1; // 1-indexed
+            let block_idx = (now_local.hour() / 5) + 1; // 1-indexed
             let total_blocks = 24u32.div_ceil(5); // 5
             let input = fmt_tokens_compact(block.total_tokens.input_tokens);
             let output = fmt_tokens_compact(block.total_tokens.output_tokens);
@@ -897,15 +1069,7 @@ pub fn print_statusline(blocks: &[BlockSummary], pricing: &crate::pricing::Prici
             println!("↑0 ↓0 $0.00 [0/5h]");
         }
     }
-
-    // Also print pricing sanity check to stderr for debugging
-    if let Some(p) = pricing.get("claude-opus-4-6") {
-        eprintln!(
-            "  pricing: opus input=${:.0}/MTok output=${:.0}/MTok",
-            p.input_cost_per_token * 1_000_000.0,
-            p.output_cost_per_token * 1_000_000.0,
-        );
-    }
+    // No debug output — statusline should be silent on stderr
 }
 
 // ─── JSON ────────────────────────────────────────────

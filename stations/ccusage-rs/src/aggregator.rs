@@ -1,6 +1,6 @@
 use chrono::{Datelike, Duration, NaiveDate};
 use rayon::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::pricing::PricingTable;
 use crate::types::*;
@@ -311,11 +311,28 @@ pub fn aggregate_instances(
     result
 }
 
+/// Deduplicate entries by (session_id, timestamp_ms, model) key
+pub fn dedup_entries(entries: Vec<UsageEntry>) -> Vec<UsageEntry> {
+    let mut seen = HashSet::new();
+    entries
+        .into_iter()
+        .filter(|e| {
+            let key = (
+                e.session_id.clone(),
+                e.timestamp.timestamp_millis(),
+                e.model.clone(),
+            );
+            seen.insert(key)
+        })
+        .collect()
+}
+
 fn entry_to_tokens(entry: &UsageEntry) -> TokenCounts {
     TokenCounts {
         input_tokens: entry.input_tokens,
         output_tokens: entry.output_tokens,
         cache_creation_tokens: entry.cache_creation_tokens,
         cache_read_tokens: entry.cache_read_tokens,
+        thinking_tokens: entry.thinking_tokens,
     }
 }
