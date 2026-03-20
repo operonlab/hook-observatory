@@ -345,26 +345,24 @@ class TopicService:
             topics = await self.extract_from_report(db, report)
             total_links += len(topics)
         await db.flush()
-        # Sync counts to be accurate
-        await self.sync_report_counts(db, space_id)
         return {"reports_processed": len(reports), "topic_links_created": total_links}
 
     async def sync_report_counts(self, db: AsyncSession, space_id: str) -> int:
         """Rebuild report_count for all topics in a space."""
+        # Single GROUP BY query instead of N+1
+        count_q = (
+            select(ReportTopic.topic_id, func.count().label("cnt"))
+            .join(Topic, ReportTopic.topic_id == Topic.id)
+            .where(Topic.space_id == space_id)
+            .group_by(ReportTopic.topic_id)
+        )
+        count_map = {row.topic_id: row.cnt for row in (await db.execute(count_q)).all()}
+
         topics = (await db.execute(select(Topic).where(Topic.space_id == space_id))).scalars().all()
-        count = 0
         for topic in topics:
-            cnt = (
-                await db.execute(
-                    select(func.count())
-                    .select_from(ReportTopic)
-                    .where(ReportTopic.topic_id == topic.id)
-                )
-            ).scalar_one()
-            topic.report_count = cnt
-            count += 1
+            topic.report_count = count_map.get(topic.id, 0)
         await db.flush()
-        return count
+        return len(topics)
 
     def _to_response(self, topic: Topic) -> TopicResponse:
         return TopicResponse(

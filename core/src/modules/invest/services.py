@@ -326,17 +326,28 @@ class PortfolioService:
         acct_q = _soft_delete_filter(acct_q, Account)
         accounts: Sequence[Account] = (await db.execute(acct_q)).scalars().all()
 
+        # Batch fetch all positions for all accounts (N+1 → 2 queries)
+        acct_ids = [a.id for a in accounts]
+        all_positions: Sequence[Position] = []
+        if acct_ids:
+            pos_q = select(Position).where(
+                Position.account_id.in_(acct_ids),
+                Position.deleted_at == None,  # noqa: E711
+            )
+            all_positions = (await db.execute(pos_q)).scalars().all()
+
+        # Group positions by account_id in memory
+        positions_by_acct: dict[str, list[Position]] = {}
+        for pos in all_positions:
+            positions_by_acct.setdefault(pos.account_id, []).append(pos)
+
         total_mv = Decimal("0")
         total_cost = Decimal("0")
         position_count = 0
         account_summaries = []
 
         for acct in accounts:
-            pos_q = select(Position).where(
-                Position.account_id == acct.id,
-                Position.deleted_at == None,  # noqa: E711
-            )
-            positions: Sequence[Position] = (await db.execute(pos_q)).scalars().all()
+            positions = positions_by_acct.get(acct.id, [])
             summary = account_service.to_summary_response(acct, positions)
             account_summaries.append(summary)
             total_mv += summary.total_market_value
@@ -373,16 +384,23 @@ class PortfolioService:
             base = base.where(Quote.symbol.in_(symbols))
         rows: Sequence[Quote] = (await db.execute(base)).scalars().all()
 
-        # Update position prices from quotes
-        for quote in rows:
+        # Batch update position prices from quotes using CASE WHEN
+        if rows:
+            from sqlalchemy import case
+
+            symbol_price_map = {q.symbol: q.price for q in rows}
+            price_cases = [
+                (Position.symbol == sym, price)
+                for sym, price in symbol_price_map.items()
+            ]
             await db.execute(
                 update(Position)
                 .where(
                     Position.space_id == space_id,
-                    Position.symbol == quote.symbol,
+                    Position.symbol.in_(list(symbol_price_map.keys())),
                     Position.deleted_at == None,  # noqa: E711
                 )
-                .values(current_price=quote.price)
+                .values(current_price=case(*price_cases))
             )
 
         await db.flush()

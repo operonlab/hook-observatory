@@ -1442,9 +1442,10 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
         ym_set = {r.year_month for r in rows}
         spending_map: dict[tuple[str, str | None], Decimal] = {}
         cat_name_map: dict[str, str] = {}
-        for ym in ym_set:
+        if ym_set:
             spending_q = (
                 select(
+                    func.to_char(Transaction.transacted_at, "YYYY-MM").label("ym"),
                     Transaction.category_id,
                     func.coalesce(Category.name, "未分類").label("cat_name"),
                     func.sum(Transaction.amount).label("total"),
@@ -1454,20 +1455,28 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
                     Transaction.space_id == space_id,
                     Transaction.type == "expense",
                     Transaction.status == "completed",
-                    func.to_char(Transaction.transacted_at, "YYYY-MM") == ym,
+                    func.to_char(Transaction.transacted_at, "YYYY-MM").in_(list(ym_set)),
                 )
-                .group_by(Transaction.category_id, Category.name)
+                .group_by(
+                    func.to_char(Transaction.transacted_at, "YYYY-MM"),
+                    Transaction.category_id,
+                    Category.name,
+                )
             )
             spending_q = apply_privacy_filter(spending_q, Transaction, user_id)
             spending_rows = (await db.execute(spending_q)).all()
             for sr in spending_rows:
-                spending_map[(ym, sr.category_id)] = sr.total or Decimal("0")
+                spending_map[(sr.ym, sr.category_id)] = sr.total or Decimal("0")
                 if sr.category_id:
                     cat_name_map[sr.category_id] = sr.cat_name
 
-            # Total spending for budgets without category
-            total_spending = sum((sr.total or Decimal("0")) for sr in spending_rows)
-            spending_map[(ym, None)] = total_spending
+            # Total spending per month for budgets without category
+            month_totals: dict[str, Decimal] = {}
+            for sr in spending_rows:
+                amt = sr.total or Decimal("0")
+                month_totals[sr.ym] = month_totals.get(sr.ym, Decimal("0")) + amt
+            for ym in ym_set:
+                spending_map[(ym, None)] = month_totals.get(ym, Decimal("0"))
 
         items = []
         for r in rows:

@@ -477,9 +477,16 @@ class BriefingService:
         worst_status = "completed"
 
         for b in briefings:
-            raw_count = sum(1 for e in b.entries if e.phase == "raw")
-            analysis_count = sum(1 for e in b.entries if e.phase == "analysis")
-            conclusion_entry = next((e for e in b.entries if e.phase == "conclusion"), None)
+            raw_count = 0
+            analysis_count = 0
+            conclusion_entry = None
+            for e in b.entries:
+                if e.phase == "raw":
+                    raw_count += 1
+                elif e.phase == "analysis":
+                    analysis_count += 1
+                elif e.phase == "conclusion" and conclusion_entry is None:
+                    conclusion_entry = e
 
             domains.append(
                 DomainSummary(

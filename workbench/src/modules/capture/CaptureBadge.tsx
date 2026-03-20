@@ -29,16 +29,15 @@ export default function CaptureBadge() {
     refresh()
     const es = new EventSource('/api/captures/events/stream')
     es.addEventListener('changed', () => refresh())
+    let retryTimer: ReturnType<typeof setTimeout>
     es.onerror = () => {
       es.close()
-      // Fallback: retry SSE after 10s
-      const timer = setTimeout(() => {
-        // Will reconnect on next mount cycle
-        refresh()
-      }, 10000)
-      return () => clearTimeout(timer)
+      retryTimer = setTimeout(refresh, 10000)
     }
-    return () => es.close()
+    return () => {
+      es.close()
+      clearTimeout(retryTimer)
+    }
   }, [refresh])
 
   // Fetch recent pending items when popover opens
