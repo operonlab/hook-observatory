@@ -38,4 +38,31 @@ export default defineConfig({
       "@": "./src",
     },
   },
+  performance: {
+    chunkSplit: {
+      strategy: 'split-by-experience',
+      override: {
+        cacheGroups: {
+          three: {
+            test: /[\\/]node_modules[\\/](three|3d-force-graph)[\\/]/,
+            name: 'three',
+            chunks: 'all',
+            priority: 20,
+          },
+          recharts: {
+            test: /[\\/]node_modules[\\/](recharts|d3-[^/]+)[\\/]/,
+            name: 'recharts',
+            chunks: 'all',
+            priority: 20,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendor',
+            chunks: 'all',
+            priority: 10,
+          },
+        },
+      },
+    },
+  },
 });
