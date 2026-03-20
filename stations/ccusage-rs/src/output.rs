@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use comfy_table::{presets::UTF8_FULL_CONDENSED, Attribute, Cell, CellAlignment, Color, Table};
 
 use crate::types::*;
@@ -32,6 +33,29 @@ fn fmt_tokens_compact(n: u64) -> String {
         format!("{:.1}K", n as f64 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+/// Format session duration from first/last activity timestamps
+fn fmt_duration(first: Option<DateTime<Utc>>, last: Option<DateTime<Utc>>) -> String {
+    match (first, last) {
+        (Some(f), Some(l)) => {
+            let total_mins = (l - f).num_minutes();
+            if total_mins < 1 {
+                "<1m".to_string()
+            } else if total_mins < 60 {
+                format!("{}m", total_mins)
+            } else {
+                let hours = total_mins / 60;
+                let mins = total_mins % 60;
+                if mins == 0 {
+                    format!("{}h", hours)
+                } else {
+                    format!("{}h{}m", hours, mins)
+                }
+            }
+        }
+        _ => "-".to_string(),
     }
 }
 
@@ -116,7 +140,7 @@ pub fn print_daily_table(summaries: &[DailySummary], breakdown: bool, cfg: &Outp
             Cell::new(s.date.format("%Y-%m-%d").to_string()),
             Cell::new(fmt_tokens(s.total_tokens.input_tokens)).set_alignment(CellAlignment::Right),
             Cell::new(fmt_tokens(s.total_tokens.output_tokens)).set_alignment(CellAlignment::Right),
-            Cell::new(fmt_tokens(s.total_tokens.cache_creation_tokens))
+            Cell::new(fmt_tokens(s.total_tokens.cache_creation_tokens()))
                 .set_alignment(CellAlignment::Right),
             Cell::new(fmt_tokens(s.total_tokens.cache_read_tokens))
                 .set_alignment(CellAlignment::Right),
@@ -154,7 +178,7 @@ pub fn print_daily_table(summaries: &[DailySummary], breakdown: bool, cfg: &Outp
         Cell::new(fmt_tokens(grand_tokens.output_tokens))
             .set_alignment(CellAlignment::Right)
             .add_attribute(Attribute::Bold),
-        Cell::new(fmt_tokens(grand_tokens.cache_creation_tokens))
+        Cell::new(fmt_tokens(grand_tokens.cache_creation_tokens()))
             .set_alignment(CellAlignment::Right)
             .add_attribute(Attribute::Bold),
         Cell::new(fmt_tokens(grand_tokens.cache_read_tokens))
@@ -224,7 +248,7 @@ fn print_daily_breakdown(summaries: &[DailySummary], cfg: &OutputConfig) {
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(usage.tokens.output_tokens))
                     .set_alignment(CellAlignment::Right),
-                Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens))
+                Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens()))
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(usage.tokens.cache_read_tokens))
                     .set_alignment(CellAlignment::Right),
@@ -259,7 +283,7 @@ fn print_daily_csv(summaries: &[DailySummary], breakdown: bool, cfg: &OutputConf
                         csv_escape(model),
                         usage.tokens.input_tokens,
                         usage.tokens.output_tokens,
-                        usage.tokens.cache_creation_tokens,
+                        usage.tokens.cache_creation_tokens(),
                         usage.tokens.cache_read_tokens,
                     );
                 } else {
@@ -269,7 +293,7 @@ fn print_daily_csv(summaries: &[DailySummary], breakdown: bool, cfg: &OutputConf
                         csv_escape(model),
                         usage.tokens.input_tokens,
                         usage.tokens.output_tokens,
-                        usage.tokens.cache_creation_tokens,
+                        usage.tokens.cache_creation_tokens(),
                         usage.tokens.cache_read_tokens,
                         usage.cost.total(),
                     );
@@ -289,7 +313,7 @@ fn print_daily_csv(summaries: &[DailySummary], breakdown: bool, cfg: &OutputConf
                     s.date.format("%Y-%m-%d"),
                     s.total_tokens.input_tokens,
                     s.total_tokens.output_tokens,
-                    s.total_tokens.cache_creation_tokens,
+                    s.total_tokens.cache_creation_tokens(),
                     s.total_tokens.cache_read_tokens,
                     s.total_tokens.total_tokens(),
                 );
@@ -299,7 +323,7 @@ fn print_daily_csv(summaries: &[DailySummary], breakdown: bool, cfg: &OutputConf
                     s.date.format("%Y-%m-%d"),
                     s.total_tokens.input_tokens,
                     s.total_tokens.output_tokens,
-                    s.total_tokens.cache_creation_tokens,
+                    s.total_tokens.cache_creation_tokens(),
                     s.total_tokens.cache_read_tokens,
                     s.total_tokens.total_tokens(),
                     s.total_cost,
@@ -361,7 +385,7 @@ pub fn print_monthly_table(summaries: &[MonthlySummary], breakdown: bool, cfg: &
                         .set_alignment(CellAlignment::Right),
                     Cell::new(fmt_tokens(usage.tokens.output_tokens))
                         .set_alignment(CellAlignment::Right),
-                    Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens))
+                    Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens()))
                         .set_alignment(CellAlignment::Right),
                     Cell::new(fmt_tokens(usage.tokens.cache_read_tokens))
                         .set_alignment(CellAlignment::Right),
@@ -404,7 +428,7 @@ pub fn print_monthly_table(summaries: &[MonthlySummary], breakdown: bool, cfg: &
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(s.total_tokens.output_tokens))
                     .set_alignment(CellAlignment::Right),
-                Cell::new(fmt_tokens(s.total_tokens.cache_creation_tokens))
+                Cell::new(fmt_tokens(s.total_tokens.cache_creation_tokens()))
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(s.total_tokens.cache_read_tokens))
                     .set_alignment(CellAlignment::Right),
@@ -441,7 +465,7 @@ pub fn print_monthly_table(summaries: &[MonthlySummary], breakdown: bool, cfg: &
             Cell::new(fmt_tokens(grand_tokens.output_tokens))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
-            Cell::new(fmt_tokens(grand_tokens.cache_creation_tokens))
+            Cell::new(fmt_tokens(grand_tokens.cache_creation_tokens()))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
             Cell::new(fmt_tokens(grand_tokens.cache_read_tokens))
@@ -490,7 +514,7 @@ fn print_monthly_csv(summaries: &[MonthlySummary], breakdown: bool, cfg: &Output
                     csv_escape(model),
                     usage.tokens.input_tokens,
                     usage.tokens.output_tokens,
-                    usage.tokens.cache_creation_tokens,
+                    usage.tokens.cache_creation_tokens(),
                     usage.tokens.cache_read_tokens,
                 );
                 if !cfg.no_cost {
@@ -512,7 +536,7 @@ fn print_monthly_csv(summaries: &[MonthlySummary], breakdown: bool, cfg: &Output
                 s.month,
                 s.total_tokens.input_tokens,
                 s.total_tokens.output_tokens,
-                s.total_tokens.cache_creation_tokens,
+                s.total_tokens.cache_creation_tokens(),
                 s.total_tokens.cache_read_tokens,
                 s.total_tokens.total_tokens(),
             );
@@ -581,7 +605,7 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
                         .set_alignment(CellAlignment::Right),
                     Cell::new(fmt_tokens(usage.tokens.output_tokens))
                         .set_alignment(CellAlignment::Right),
-                    Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens))
+                    Cell::new(fmt_tokens(usage.tokens.cache_creation_tokens()))
                         .set_alignment(CellAlignment::Right),
                     Cell::new(fmt_tokens(usage.tokens.cache_read_tokens))
                         .set_alignment(CellAlignment::Right),
@@ -628,7 +652,7 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(s.total_tokens.output_tokens))
                     .set_alignment(CellAlignment::Right),
-                Cell::new(fmt_tokens(s.total_tokens.cache_creation_tokens))
+                Cell::new(fmt_tokens(s.total_tokens.cache_creation_tokens()))
                     .set_alignment(CellAlignment::Right),
                 Cell::new(fmt_tokens(s.total_tokens.cache_read_tokens))
                     .set_alignment(CellAlignment::Right),
@@ -665,7 +689,7 @@ pub fn print_weekly_table(summaries: &[WeeklySummary], breakdown: bool, cfg: &Ou
             Cell::new(fmt_tokens(grand_tokens.output_tokens))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
-            Cell::new(fmt_tokens(grand_tokens.cache_creation_tokens))
+            Cell::new(fmt_tokens(grand_tokens.cache_creation_tokens()))
                 .set_alignment(CellAlignment::Right)
                 .add_attribute(Attribute::Bold),
             Cell::new(fmt_tokens(grand_tokens.cache_read_tokens))
@@ -714,7 +738,7 @@ fn print_weekly_csv(summaries: &[WeeklySummary], breakdown: bool, cfg: &OutputCo
                     csv_escape(model),
                     usage.tokens.input_tokens,
                     usage.tokens.output_tokens,
-                    usage.tokens.cache_creation_tokens,
+                    usage.tokens.cache_creation_tokens(),
                     usage.tokens.cache_read_tokens,
                 );
                 if !cfg.no_cost {
@@ -736,7 +760,7 @@ fn print_weekly_csv(summaries: &[WeeklySummary], breakdown: bool, cfg: &OutputCo
                 s.week_end.format("%Y-%m-%d"),
                 s.total_tokens.input_tokens,
                 s.total_tokens.output_tokens,
-                s.total_tokens.cache_creation_tokens,
+                s.total_tokens.cache_creation_tokens(),
                 s.total_tokens.cache_read_tokens,
                 s.total_tokens.total_tokens(),
             );
@@ -760,16 +784,18 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
 
     if cfg.csv {
         if cfg.no_cost {
-            println!("Session,Date,Project,Total Tokens");
+            println!("Session,Date,Duration,Project,Total Tokens");
         } else {
-            println!("Session,Date,Project,Total Tokens,Cost");
+            println!("Session,Date,Duration,Project,Total Tokens,Cost");
         }
         for s in summaries.iter().take(limit) {
             let short_id = &s.session_id[..8.min(s.session_id.len())];
+            let dur = fmt_duration(s.first_activity, s.last_activity);
             print!(
-                "{},{},{},{}",
+                "{},{},{},{},{}",
                 short_id,
                 s.date.format("%Y-%m-%d"),
+                csv_escape(&dur),
                 csv_escape(s.project.as_deref().unwrap_or("-")),
                 s.total_tokens.total_tokens(),
             );
@@ -785,6 +811,7 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
     let mut header = vec![
         Cell::new("Session").add_attribute(Attribute::Bold),
         Cell::new("Date").add_attribute(Attribute::Bold),
+        Cell::new("Duration").add_attribute(Attribute::Bold),
         Cell::new("Project").add_attribute(Attribute::Bold),
         Cell::new("Total Tokens").add_attribute(Attribute::Bold),
     ];
@@ -798,6 +825,8 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
         let mut row = vec![
             Cell::new(short_id).fg(Color::Cyan),
             Cell::new(s.date.format("%Y-%m-%d").to_string()),
+            Cell::new(fmt_duration(s.first_activity, s.last_activity))
+                .set_alignment(CellAlignment::Right),
             Cell::new(s.project.as_deref().unwrap_or("-")),
             Cell::new(fmt_tokens(s.total_tokens.total_tokens()))
                 .set_alignment(CellAlignment::Right),
@@ -825,6 +854,7 @@ pub fn print_session_table(summaries: &[SessionUsage], cfg: &OutputConfig) {
             .add_attribute(Attribute::Bold)
             .fg(Color::Yellow),
         Cell::new(format!("{} sessions", summaries.len())).add_attribute(Attribute::Bold),
+        Cell::new(""),
         Cell::new(""),
         Cell::new(fmt_tokens(all_tokens.total_tokens()))
             .set_alignment(CellAlignment::Right)
@@ -1013,7 +1043,7 @@ pub fn print_instance_table(summaries: &[InstanceUsage], cfg: &OutputConfig) {
 
 // ─── Statusline ──────────────────────────────────────
 
-pub fn print_statusline(blocks: &[BlockSummary], tz: &Option<String>) {
+pub fn print_statusline(blocks: &[BlockSummary], tz: &Option<String>, offset_hours: i64) {
     use chrono::Timelike;
 
     // Use local timezone for current time calculation
@@ -1027,12 +1057,15 @@ pub fn print_statusline(blocks: &[BlockSummary], tz: &Option<String>) {
         chrono::Local::now().naive_local()
     };
 
-    let hour_block = (now_local.hour() / 5) * 5;
+    // Apply offset: shift current time to find which block we're in
+    let shifted = now_local - chrono::Duration::hours(offset_hours);
+    let hour_block = (shifted.hour() / 5) * 5;
 
-    let block_start_local = now_local
+    let block_start_local = shifted
         .date()
         .and_hms_opt(hour_block, 0, 0)
-        .unwrap();
+        .unwrap()
+        + chrono::Duration::hours(offset_hours);
 
     // Find the block that contains "now" based on local time mapping
     // Since blocks are stored in UTC, we need to find the right one
@@ -1051,7 +1084,7 @@ pub fn print_statusline(blocks: &[BlockSummary], tz: &Option<String>) {
 
     match current {
         Some(block) => {
-            let block_idx = (now_local.hour() / 5) + 1; // 1-indexed
+            let block_idx = (shifted.hour() / 5) + 1; // 1-indexed
             let total_blocks = 24u32.div_ceil(5); // 5
             let input = fmt_tokens_compact(block.total_tokens.input_tokens);
             let output = fmt_tokens_compact(block.total_tokens.output_tokens);
