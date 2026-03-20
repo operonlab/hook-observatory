@@ -139,7 +139,21 @@ pub fn aggregate_sessions(
                 total_tokens: TokenCounts::default(),
                 total_cost: 0.0,
                 by_model: HashMap::new(),
+                first_activity: None,
+                last_activity: None,
             });
+
+        // Track first/last activity timestamps
+        match session.first_activity {
+            Some(t) if entry.timestamp < t => session.first_activity = Some(entry.timestamp),
+            None => session.first_activity = Some(entry.timestamp),
+            _ => {}
+        }
+        match session.last_activity {
+            Some(t) if entry.timestamp > t => session.last_activity = Some(entry.timestamp),
+            None => session.last_activity = Some(entry.timestamp),
+            _ => {}
+        }
 
         session.total_tokens.merge(&tokens);
         session.total_cost += cost.total();
@@ -161,10 +175,11 @@ pub fn aggregate_sessions(
     result
 }
 
-/// Aggregate into 5-hour billing blocks
+/// Aggregate into 5-hour billing blocks with optional hour offset
 pub fn aggregate_blocks(
     entries: &[UsageEntry],
     pricing: &PricingTable,
+    offset_hours: i64,
 ) -> Vec<BlockSummary> {
     use chrono::Timelike;
 
@@ -172,13 +187,16 @@ pub fn aggregate_blocks(
 
     for entry in entries {
         let ts = entry.timestamp;
-        // Calculate 5-hour block start
-        let hour_block = (ts.hour() / 5) * 5;
-        let block_start = ts
+        // Apply offset: shift timestamp so blocks align to offset hour
+        let shifted = ts - Duration::hours(offset_hours);
+        // Calculate 5-hour block start based on shifted time
+        let hour_block = (shifted.hour() / 5) * 5;
+        let block_start = shifted
             .date_naive()
             .and_hms_opt(hour_block, 0, 0)
             .unwrap()
-            .and_utc();
+            .and_utc()
+            + Duration::hours(offset_hours);
         let block_end = block_start + Duration::hours(5);
         let block_key = block_start.timestamp();
 
@@ -311,18 +329,25 @@ pub fn aggregate_instances(
     result
 }
 
-/// Deduplicate entries by (session_id, timestamp_ms, model) key
+/// Deduplicate entries: by (session_id, message_id) when message_id exists,
+/// fallback to (session_id, timestamp_ms, model) for legacy entries
 pub fn dedup_entries(entries: Vec<UsageEntry>) -> Vec<UsageEntry> {
-    let mut seen = HashSet::new();
+    let mut seen_msg: HashSet<(String, String)> = HashSet::new();
+    let mut seen_ts: HashSet<(String, i64, String)> = HashSet::new();
     entries
         .into_iter()
         .filter(|e| {
-            let key = (
-                e.session_id.clone(),
-                e.timestamp.timestamp_millis(),
-                e.model.clone(),
-            );
-            seen.insert(key)
+            if let Some(ref mid) = e.message_id {
+                let key = (e.session_id.clone(), mid.clone());
+                seen_msg.insert(key)
+            } else {
+                let key = (
+                    e.session_id.clone(),
+                    e.timestamp.timestamp_millis(),
+                    e.model.clone(),
+                );
+                seen_ts.insert(key)
+            }
         })
         .collect()
 }
@@ -331,7 +356,8 @@ fn entry_to_tokens(entry: &UsageEntry) -> TokenCounts {
     TokenCounts {
         input_tokens: entry.input_tokens,
         output_tokens: entry.output_tokens,
-        cache_creation_tokens: entry.cache_creation_tokens,
+        cache_creation_5m_tokens: entry.cache_creation_5m_tokens,
+        cache_creation_1h_tokens: entry.cache_creation_1h_tokens,
         cache_read_tokens: entry.cache_read_tokens,
         thinking_tokens: entry.thinking_tokens,
     }
