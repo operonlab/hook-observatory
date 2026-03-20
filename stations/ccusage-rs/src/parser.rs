@@ -24,6 +24,11 @@ pub fn parse_jsonl_file(path: &Path) -> Result<Vec<UsageEntry>> {
             continue;
         }
 
+        // Skip file-history-snapshot entries (may contain "assistant" in content)
+        if line.contains("\"file-history-snapshot\"") {
+            continue;
+        }
+
         // Parse JSON
         let mut bytes = line.into_bytes();
         let value: simd_json::OwnedValue = match simd_json::to_owned_value(&mut bytes) {
@@ -78,6 +83,7 @@ fn extract_usage_entry(value: &simd_json::OwnedValue) -> Option<UsageEntry> {
 
     let cache_read_tokens = usage.get_u64("cache_read_input_tokens").unwrap_or(0);
     let thinking_tokens = usage.get_u64("thinking_tokens").unwrap_or(0);
+    let speed = usage.get_str("speed").map(String::from);
 
     // Filter empty streaming placeholders (no message id + zero tokens)
     if message_id.is_none() && input_tokens == 0 && output_tokens == 0 {
@@ -96,5 +102,6 @@ fn extract_usage_entry(value: &simd_json::OwnedValue) -> Option<UsageEntry> {
         cache_creation_1h_tokens: cache_creation_1h,
         cache_read_tokens,
         thinking_tokens,
+        speed,
     })
 }
