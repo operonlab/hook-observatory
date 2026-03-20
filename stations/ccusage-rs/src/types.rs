@@ -9,8 +9,6 @@ pub struct OutputConfig {
     pub no_color: bool,
     pub csv: bool,
     pub limit: Option<usize>,
-    #[allow(dead_code)]
-    pub order_desc: bool,
 }
 
 /// Instance (project) usage summary
@@ -80,11 +78,12 @@ pub struct CostBreakdown {
     pub output_cost: f64,
     pub cache_creation_cost: f64,
     pub cache_read_cost: f64,
+    pub thinking_cost: f64,
 }
 
 impl CostBreakdown {
     pub fn total(&self) -> f64 {
-        self.input_cost + self.output_cost + self.cache_creation_cost + self.cache_read_cost
+        self.input_cost + self.output_cost + self.cache_creation_cost + self.cache_read_cost + self.thinking_cost
     }
 
     pub fn merge(&mut self, other: &CostBreakdown) {
@@ -92,6 +91,7 @@ impl CostBreakdown {
         self.output_cost += other.output_cost;
         self.cache_creation_cost += other.cache_creation_cost;
         self.cache_read_cost += other.cache_read_cost;
+        self.thinking_cost += other.thinking_cost;
     }
 }
 

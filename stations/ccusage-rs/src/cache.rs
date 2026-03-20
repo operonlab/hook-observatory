@@ -169,8 +169,22 @@ impl CacheManager {
     /// Load cached entries if valid
     pub fn load_all(&self) -> Option<CacheLoadResult> {
         let meta_path = self.cache_dir.join("meta.json");
-        let meta_data = std::fs::read_to_string(meta_path).ok()?;
-        let meta: CacheMeta = serde_json::from_str(&meta_data).ok()?;
+        let meta_data = match std::fs::read_to_string(&meta_path) {
+            Ok(data) => data,
+            Err(e) => {
+                if meta_path.exists() {
+                    eprintln!("warning: cache load failed: {}", e);
+                }
+                return None;
+            }
+        };
+        let meta: CacheMeta = match serde_json::from_str(&meta_data) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("warning: cache meta parse failed: {}", e);
+                return None;
+            }
+        };
 
         if meta.version != CACHE_VERSION {
             let _ = std::fs::remove_dir_all(&self.cache_dir);
@@ -178,8 +192,20 @@ impl CacheManager {
         }
 
         let entries_path = self.cache_dir.join("entries.json");
-        let entries_data = std::fs::read(entries_path).ok()?;
-        let cache: EntriesCache = serde_json::from_slice(&entries_data).ok()?;
+        let entries_data = match std::fs::read(&entries_path) {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("warning: cache entries load failed: {}", e);
+                return None;
+            }
+        };
+        let cache: EntriesCache = match serde_json::from_slice(&entries_data) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("warning: cache entries parse failed: {}", e);
+                return None;
+            }
+        };
 
         if cache.version != CACHE_VERSION {
             return None;
