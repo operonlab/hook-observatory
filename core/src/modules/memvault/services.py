@@ -522,29 +522,6 @@ class MemoryBlockService(
 
         return final, meta
 
-    async def _vector_search_combined(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        query_embedding: list[float],
-        top_k: int,
-        threshold: float,
-        tags: list[str] | None,
-        block_type: str | None,
-        extra_filters: list | None = None,
-    ) -> list[SemanticSearchResult]:
-        """Run vector search via inline embedding."""
-        return await self._search_via_inline(
-            db,
-            space_id,
-            query_embedding,
-            top_k,
-            threshold,
-            tags,
-            block_type,
-            extra_filters=extra_filters,
-        )
-
     async def _keyword_search(
         self,
         db: AsyncSession,
@@ -674,47 +651,6 @@ class MemoryBlockService(
                 score=round(best_result[bid].score, 4),
             )
             for bid in sorted_ids
-        ]
-
-    async def _search_via_inline(
-        self,
-        db: AsyncSession,
-        space_id: str,
-        query_embedding: list[float],
-        top_k: int,
-        threshold: float,
-        tags: list[str] | None,
-        block_type: str | None,
-        extra_filters: list | None = None,
-    ) -> list[SemanticSearchResult]:
-        """Search using the inline embedding column (pre-Phase 2 fallback)."""
-        distance = MemoryBlock.embedding.cosine_distance(query_embedding)
-        similarity = (1 - distance).label("similarity")
-
-        q = (
-            select(MemoryBlock, similarity)
-            .where(
-                MemoryBlock.space_id == space_id,
-                MemoryBlock.embedding.isnot(None),
-                distance < (1 - threshold),
-            )
-            .order_by(distance)
-            .limit(top_k)
-        )
-        if tags:
-            q = q.where(MemoryBlock.tags.contains(tags))
-        if block_type:
-            q = q.where(MemoryBlock.block_type == block_type)
-        for f in extra_filters or []:
-            q = q.where(f)
-
-        rows = (await db.execute(q)).all()
-        return [
-            SemanticSearchResult(
-                block=self.to_response(row.MemoryBlock),
-                score=round(float(row.similarity), 4),
-            )
-            for row in rows
         ]
 
     async def _warm_tier_search(
