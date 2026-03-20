@@ -25,6 +25,7 @@ ENRICHMENT_SCHEMAS: dict[tuple[str, str], dict[str, str]] = {
         "description": "交易描述/備註",
         "type": "交易類型: expense(支出) 或 income(收入)",
         "category_id": "消費類別名稱(如: 餐飲、交通、娛樂)",
+        "wallet_id": "錢包/付款帳戶名稱(如: 現金、信用卡、LINE Pay、街口)",
         "payment_method": "付款方式: cash/credit_card/debit_card/transfer",
         "transacted_at": "交易時間 ISO 格式",
     },

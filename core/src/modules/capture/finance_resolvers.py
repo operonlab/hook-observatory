@@ -24,8 +24,11 @@ _WALLET_TYPE_MAP: dict[str, tuple[str, str]] = {
     "街口": ("e_wallet", "街口支付"),
     "bank_account": ("bank_account", "銀行帳戶"),
     "銀行": ("bank_account", "銀行帳戶"),
+    "轉帳": ("bank_account", "銀行帳戶"),
     "debit_card": ("debit_card", "金融卡"),
     "金融卡": ("debit_card", "金融卡"),
+    "現金支付": ("cash", "現金"),
+    "刷卡": ("credit_card", "信用卡"),
 }
 
 # Map natural language → category display name + icon

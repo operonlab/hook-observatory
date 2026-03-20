@@ -176,14 +176,14 @@ export default function CaptureBadge() {
                       className="shrink-0 text-[10px]"
                       style={{
                         color:
-                          item.completeness >= 80
+                          item.completeness >= 0.8
                             ? '#a6e3a1'
-                            : item.completeness >= 50
+                            : item.completeness >= 0.5
                               ? '#f9e2af'
                               : 'rgba(255, 255, 255, 0.3)',
                       }}
                     >
-                      {Math.round(item.completeness)}%
+                      {Math.round(item.completeness * 100)}%
                     </span>
                   </button>
                 )
