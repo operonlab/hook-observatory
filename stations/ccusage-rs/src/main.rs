@@ -111,6 +111,12 @@ enum Commands {
     Statusline,
     /// Show usage grouped by project (cwd)
     Instances,
+    /// Show per-session sub-agent breakdown (use --id for single session)
+    Agent {
+        /// Session ID prefix to look up (e.g. first 8 characters)
+        #[arg(long)]
+        id: Option<String>,
+    },
     /// Generate shell completions
     Completions {
         /// Shell type
@@ -325,7 +331,7 @@ fn main() -> Result<()> {
     let desc = match &cli.order {
         Some(SortOrder::Desc) => true,
         Some(SortOrder::Asc) => false,
-        None => matches!(cli.command, Commands::Session { .. } | Commands::Blocks | Commands::Instances),
+        None => matches!(cli.command, Commands::Session { .. } | Commands::Blocks | Commands::Instances | Commands::Agent { .. }),
     };
 
     // Aggregate and output
@@ -452,6 +458,50 @@ fn main() -> Result<()> {
                 output::print_json(&AggregationResult::Instances(summaries));
             } else {
                 output::print_instance_table(&summaries, &out_cfg);
+                print_stats(elapsed.as_secs_f64());
+            }
+        }
+        Commands::Agent { id } => {
+            let summaries = aggregate_agents(&filtered, &pricing);
+
+            if let Some(ref prefix) = id {
+                let prefix_lower = prefix.to_lowercase();
+                let matches: Vec<_> = summaries
+                    .into_iter()
+                    .filter(|s| s.session_id.to_lowercase().starts_with(&prefix_lower))
+                    .collect();
+
+                match matches.len() {
+                    0 => {
+                        eprintln!("No session with agents found matching prefix \"{}\"", prefix);
+                        std::process::exit(1);
+                    }
+                    1 => {
+                        if cli.json {
+                            output::print_json(&AggregationResult::Agents(matches));
+                        } else {
+                            output::print_agent_detail(&matches[0], &out_cfg);
+                            print_stats(elapsed.as_secs_f64());
+                        }
+                    }
+                    _ => {
+                        eprintln!(
+                            "  {} sessions match prefix \"{}\"",
+                            matches.len(),
+                            prefix
+                        );
+                        if cli.json {
+                            output::print_json(&AggregationResult::Agents(matches));
+                        } else {
+                            output::print_agent_table(&matches, &out_cfg);
+                            print_stats(elapsed.as_secs_f64());
+                        }
+                    }
+                }
+            } else if cli.json {
+                output::print_json(&AggregationResult::Agents(summaries));
+            } else {
+                output::print_agent_table(&summaries, &out_cfg);
                 print_stats(elapsed.as_secs_f64());
             }
         }

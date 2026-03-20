@@ -60,6 +60,8 @@ fn extract_usage_entry(value: &simd_json::OwnedValue) -> Option<UsageEntry> {
 
     let session_id = value.get_str("sessionId")?.to_string();
     let cwd = value.get_str("cwd").map(String::from);
+    let slug = value.get_str("slug").map(String::from);
+    let agent_id = value.get_str("agentId").map(String::from);
 
     let message = value.get("message")?;
     let model = message.get_str("model")?.to_string();
@@ -109,5 +111,7 @@ fn extract_usage_entry(value: &simd_json::OwnedValue) -> Option<UsageEntry> {
         cache_read_tokens,
         thinking_tokens,
         speed,
+        slug,
+        agent_id,
     })
 }
