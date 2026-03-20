@@ -15,7 +15,7 @@ pub fn aggregate_daily(
     for entry in entries {
         let date = entry.timestamp.date_naive();
         let tokens = entry_to_tokens(entry);
-        let cost = pricing.calculate_cost(&entry.model, &tokens);
+        let cost = pricing.calculate_cost(&entry.model, &tokens, entry.speed.as_deref());
 
         let summary = daily.entry(date).or_insert_with(|| DailySummary {
             date,
@@ -51,7 +51,7 @@ pub fn aggregate_monthly(
         let date = entry.timestamp.date_naive();
         let key = (date.year(), date.month());
         let tokens = entry_to_tokens(entry);
-        let cost = pricing.calculate_cost(&entry.model, &tokens);
+        let cost = pricing.calculate_cost(&entry.model, &tokens, entry.speed.as_deref());
 
         let summary = monthly.entry(key).or_insert_with(|| MonthlySummary {
             year: key.0,
@@ -90,7 +90,7 @@ pub fn aggregate_weekly(
             - Duration::days(date.weekday().num_days_from_monday() as i64);
         let week_end = week_start + Duration::days(6);
         let tokens = entry_to_tokens(entry);
-        let cost = pricing.calculate_cost(&entry.model, &tokens);
+        let cost = pricing.calculate_cost(&entry.model, &tokens, entry.speed.as_deref());
 
         let summary = weekly.entry(week_start).or_insert_with(|| WeeklySummary {
             week_start,
@@ -126,7 +126,7 @@ pub fn aggregate_sessions(
     for entry in entries {
         let date = entry.timestamp.date_naive();
         let tokens = entry_to_tokens(entry);
-        let cost = pricing.calculate_cost(&entry.model, &tokens);
+        let cost = pricing.calculate_cost(&entry.model, &tokens, entry.speed.as_deref());
 
         let session = sessions
             .entry(entry.session_id.clone())
@@ -201,7 +201,7 @@ pub fn aggregate_blocks(
         let block_key = block_start.timestamp();
 
         let tokens = entry_to_tokens(entry);
-        let cost = pricing.calculate_cost(&entry.model, &tokens);
+        let cost = pricing.calculate_cost(&entry.model, &tokens, entry.speed.as_deref());
 
         let block = blocks.entry(block_key).or_insert_with(|| BlockSummary {
             block_start,
@@ -286,7 +286,7 @@ pub fn aggregate_instances(
             .map(|c| c.clone())
             .unwrap_or_else(|| "unknown".to_string());
         let tokens = entry_to_tokens(entry);
-        let cost = pricing.calculate_cost(&entry.model, &tokens);
+        let cost = pricing.calculate_cost(&entry.model, &tokens, entry.speed.as_deref());
 
         session_sets
             .entry(project.clone())
