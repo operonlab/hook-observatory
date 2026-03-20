@@ -37,6 +37,7 @@ pub struct UsageEntry {
     pub cache_creation_1h_tokens: u64,
     pub cache_read_tokens: u64,
     pub thinking_tokens: u64,
+    pub speed: Option<String>,
 }
 
 /// Aggregated token counts
@@ -159,6 +160,7 @@ pub enum AggregationResult {
     Weekly(Vec<WeeklySummary>),
     Session(Vec<SessionUsage>),
     Blocks(Vec<BlockSummary>),
+    Instances(Vec<InstanceUsage>),
 }
 
 /// Metadata about a scanned JSONL file
