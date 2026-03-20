@@ -216,6 +216,16 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4105/api/app/ping",
         expect_json={"code": 0},
     ),
+    LightCheck(
+        name="stt",
+        group="external",
+        url="http://127.0.0.1:4108/health",
+    ),
+    LightCheck(
+        name="ocr",
+        group="external",
+        url="http://127.0.0.1:4109/health",
+    ),
     # ── security ──
     LightCheck(
         name="port-security",
