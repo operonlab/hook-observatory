@@ -1,11 +1,14 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { analyticsApi } from '../api'
-import ExpensePieChart from '../components/charts/ExpensePieChart'
-import MonthlyBarChart from '../components/charts/MonthlyBarChart'
-import TrendLineChart from '../components/charts/TrendLineChart'
 import type { CategoryBreakdown, MonthlySummary, MonthlyTrend } from '../types'
 import { fmtAmt } from '../types'
+
+const ExpensePieChart = lazy(() => import('../components/charts/ExpensePieChart'))
+const MonthlyBarChart = lazy(() => import('../components/charts/MonthlyBarChart'))
+const TrendLineChart = lazy(() => import('../components/charts/TrendLineChart'))
+
+const ChartFallback = () => <div className="animate-pulse h-64 bg-white/5 rounded" />
 
 export default function AnalyticsPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
@@ -160,7 +163,9 @@ export default function AnalyticsPage() {
           <h3 className="text-[13px] font-medium mb-3" style={{ color: 'var(--fn-text)' }}>
             支出分類佔比
           </h3>
-          <ExpensePieChart data={breakdown} />
+          <Suspense fallback={<ChartFallback />}>
+            <ExpensePieChart data={breakdown} />
+          </Suspense>
         </div>
 
         {/* Monthly bar */}
@@ -174,7 +179,9 @@ export default function AnalyticsPage() {
           <h3 className="text-[13px] font-medium mb-3" style={{ color: 'var(--fn-text)' }}>
             月度收支對比
           </h3>
-          <MonthlyBarChart data={trends} />
+          <Suspense fallback={<ChartFallback />}>
+            <MonthlyBarChart data={trends} />
+          </Suspense>
         </div>
 
         {/* Trend line - full width */}
@@ -188,7 +195,9 @@ export default function AnalyticsPage() {
           <h3 className="text-[13px] font-medium mb-3" style={{ color: 'var(--fn-text)' }}>
             收支趨勢
           </h3>
-          <TrendLineChart data={trends} />
+          <Suspense fallback={<ChartFallback />}>
+            <TrendLineChart data={trends} />
+          </Suspense>
         </div>
       </div>
     </div>

@@ -1,9 +1,12 @@
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { budgetApi } from '../api'
 import BudgetProgress from '../components/BudgetProgress'
-import BudgetGauge from '../components/charts/BudgetGauge'
 import type { Budget, BudgetSet } from '../types'
+
+const BudgetGauge = lazy(() => import('../components/charts/BudgetGauge'))
+
+const ChartFallback = () => <div className="animate-pulse h-32 bg-white/5 rounded" />
 
 export default function BudgetPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
@@ -100,7 +103,9 @@ export default function BudgetPage() {
       {budgets.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {budgets.map((b) => (
-            <BudgetGauge key={b.id} budget={b} />
+            <Suspense key={b.id} fallback={<ChartFallback />}>
+              <BudgetGauge budget={b} />
+            </Suspense>
           ))}
         </div>
       )}
