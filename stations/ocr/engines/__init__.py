@@ -44,4 +44,5 @@ def get_engine(name: str = "apple") -> OCREngine:
 from . import apple as _apple  # noqa: F401, E402
 from . import claude as _claude  # noqa: F401, E402
 from . import gemini as _gemini  # noqa: F401, E402
+from . import paddle as _paddle  # noqa: F401, E402
 from . import tesseract as _tesseract  # noqa: F401, E402

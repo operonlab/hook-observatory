@@ -8,15 +8,17 @@ Usage:
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import os.path
 
 import uvicorn
+from engines import get_engine
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from engines import get_engine
+app = FastAPI(title="OCR Station", version="0.2.0")
 
-app = FastAPI(title="OCR Station", version="0.1.0")
+# Engines with built-in preprocessing — skip external preprocessing in auto mode
+_SELF_PREPROCESSING_ENGINES = {"paddle", "claude", "gemini"}
 
 
 @app.get("/health")
@@ -25,27 +27,54 @@ async def health():
 
 
 @app.post("/extract")
-async def extract(
+def extract(
     path: str = Query(..., description="Absolute path to image or PDF file"),
     languages: str = Query("zh-Hant,en", description="Comma-separated language codes"),
     engine: str = Query("apple", description="Engine name"),
+    preprocess: str = Query("auto", description="Preprocessing: 'auto', 'on', or 'off'"),
 ):
     """Extract text from image or PDF."""
-    file_path = Path(path).expanduser()
-    if not file_path.exists():
+    resolved = os.path.realpath(os.path.expanduser(path))
+    if not os.path.isfile(resolved):
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
 
     try:
         eng = get_engine(engine)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    lang_list = [l.strip() for l in languages.split(",")]
-    result = eng.extract(str(file_path), languages=lang_list)
+    # Apply preprocessing pipeline
+    # auto mode: only for engines without built-in preprocessing (apple, tesseract)
+    # on mode: force preprocessing regardless of engine
+    actual_path = resolved
+    preprocessed = False
+    should_preprocess = preprocess == "on" or (
+        preprocess == "auto" and engine not in _SELF_PREPROCESSING_ENGINES
+    )
+    if should_preprocess and not resolved.lower().endswith(".pdf"):
+        from preprocessing import preprocess as pp
+
+        force = preprocess == "on"
+        pp_path = pp(actual_path, force=force)
+        if pp_path != actual_path:
+            preprocessed = True
+            actual_path = pp_path
+
+    lang_list = [lang.strip() for lang in languages.split(",")]
+    result = eng.extract(actual_path, languages=lang_list)
+
+    # Clean up temp file
+    if preprocessed:
+        try:
+            os.unlink(actual_path)
+        except OSError:
+            pass
 
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
 
+    result["preprocessed"] = preprocessed
+    result["file"] = resolved
     return JSONResponse(content=result)
 
 

@@ -13,8 +13,8 @@ import argparse
 import json
 import sys
 
-from workshop.clients.ocr import OCRClient
 from workshop.clients._base import APIError
+from workshop.clients.ocr import OCRClient
 
 
 def cmd_extract(args):
@@ -25,6 +25,7 @@ def cmd_extract(args):
             file_path=args.file,
             languages=languages,
             engine=args.engine,
+            preprocess=args.preprocess,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except APIError as e:
@@ -47,8 +48,8 @@ def cmd_health(args):
     try:
         result = client.health()
         print(json.dumps(result, ensure_ascii=False, indent=2))
-    except APIError as e:
-        print(f"Error: OCR station not reachable", file=sys.stderr)
+    except APIError:
+        print("Error: OCR station not reachable", file=sys.stderr)
         sys.exit(1)
 
 
@@ -59,8 +60,18 @@ def main():
     # extract
     p_ext = sub.add_parser("extract", help="Extract text from image or PDF")
     p_ext.add_argument("file", help="Path to image or PDF file")
-    p_ext.add_argument("--languages", default=None, help="Comma-separated language codes (default: zh-Hant,en)")
+    p_ext.add_argument(
+        "--languages",
+        default=None,
+        help="Comma-separated language codes",
+    )
     p_ext.add_argument("--engine", default="apple", help="Engine name (default: apple)")
+    p_ext.add_argument(
+        "--preprocess",
+        default="auto",
+        choices=["auto", "on", "off"],
+        help="Preprocessing mode (default: auto)",
+    )
     p_ext.set_defaults(func=cmd_extract)
 
     # engines
