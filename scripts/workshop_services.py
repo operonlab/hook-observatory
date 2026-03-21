@@ -171,6 +171,17 @@ SERVICES = [
         "health": "http://127.0.0.1:4105/api/app/ping",
         "workdir": "/Users/joneshong/workshop/vendor/cronicle",
     },
+    {
+        "name": "video-edit",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/video-edit/.venv/bin/python3"
+            " -m video_edit serve --host 127.0.0.1 --port 4110"
+        ),
+        "port": 4110,
+        "health": "http://127.0.0.1:4110/health",
+        "workdir": "/Users/joneshong/workshop/stations/video-edit",
+    },
     # ── Infrastructure Tools ──
     {
         "name": "mcpproxy",
