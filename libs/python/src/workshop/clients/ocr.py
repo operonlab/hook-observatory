@@ -81,12 +81,18 @@ class OCRClient:
         file_path: str,
         languages: list[str] | None = None,
         engine: str = "apple",
+        preprocess: str = "auto",
     ) -> dict:
         """Extract text from image or PDF."""
         lang_str = ",".join(languages) if languages else "zh-Hant,en"
         return self._post(
             "/extract",
-            params={"path": file_path, "languages": lang_str, "engine": engine},
+            params={
+                "path": file_path,
+                "languages": lang_str,
+                "engine": engine,
+                "preprocess": preprocess,
+            },
         )
 
     # ======================== Engines ========================
