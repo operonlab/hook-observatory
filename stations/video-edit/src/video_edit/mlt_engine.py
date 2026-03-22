@@ -606,23 +606,34 @@ class MLTEngine:
         for playlist in root.findall("playlist"):
             track_id = playlist.get("id", "")
             entries = []
-            for entry in playlist.findall("entry"):
-                producer_id = entry.get("producer", "")
-                producer = root.find(f".//producer[@id='{producer_id}']")
-                resource = ""
-                clip_id = ""
-                if producer is not None:
-                    for prop in producer.findall("property"):
-                        if prop.get("name") == "resource":
-                            resource = prop.text or ""
-                        if prop.get("name") == "clip_id":
-                            clip_id = prop.text or ""
-                entries.append({
-                    "clip_id": clip_id or producer_id,
-                    "resource": Path(resource).name if resource else "",
-                    "in": entry.get("in", ""),
-                    "out": entry.get("out", ""),
-                })
+            cursor = 0.0  # absolute timeline position in seconds
+            for child in playlist:
+                if child.tag == "blank":
+                    length_tc = child.get("length", "00:00:00.000")
+                    cursor += _parse_tc(length_tc)
+                elif child.tag == "entry":
+                    producer_id = child.get("producer", "")
+                    producer = root.find(f".//producer[@id='{producer_id}']")
+                    resource = ""
+                    clip_id = ""
+                    if producer is not None:
+                        for prop in producer.findall("property"):
+                            if prop.get("name") == "resource":
+                                resource = prop.text or ""
+                            if prop.get("name") == "clip_id":
+                                clip_id = prop.text or ""
+                    in_tc = child.get("in", "00:00:00.000")
+                    out_tc = child.get("out", "00:00:00.000")
+                    clip_dur = _parse_tc(out_tc) - _parse_tc(in_tc)
+                    entries.append({
+                        "clip_id": clip_id or producer_id,
+                        "resource": Path(resource).name if resource else "",
+                        "in": in_tc,
+                        "out": out_tc,
+                        "timeline_start": _tc(cursor),
+                        "timeline_end": _tc(cursor + clip_dur),
+                    })
+                    cursor += clip_dur
             tracks.append({"track": track_id, "clips": entries})
 
         transitions = []
