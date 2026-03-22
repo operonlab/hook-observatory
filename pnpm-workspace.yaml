@@ -2,6 +2,7 @@ packages:
   - workbench
   - stations/agent-vista/frontend
   - stations/hook-observatory/frontend
+  - stations/video-edit/frontend
   - stations/sandbox-executor
 
 catalog:
