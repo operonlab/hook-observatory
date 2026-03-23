@@ -1,4 +1,5 @@
 import { useRef, useCallback } from "react";
+import { useEditorStore } from "../stores/editorStore";
 
 export type DragMode = "move" | "trim-left" | "trim-right";
 
@@ -17,6 +18,7 @@ interface DragState {
 interface UseDragOpts {
   pxPerSec: number;
   trackHeight: number;
+  snapPoints?: number[]; // clip edges + playhead positions in seconds
   onMoveEnd: (
     clipId: string,
     newTimeSec: number,
@@ -24,6 +26,26 @@ interface UseDragOpts {
   ) => Promise<void>;
   onTrimLeftEnd: (clipId: string, newInSec: number) => Promise<void>;
   onTrimRightEnd: (clipId: string, newOutSec: number) => Promise<void>;
+}
+
+const SNAP_THRESHOLD_PX = 8;
+
+function snapToNearest(
+  timeSec: number,
+  snapPoints: number[],
+  pxPerSec: number,
+): number {
+  const thresholdSec = SNAP_THRESHOLD_PX / pxPerSec;
+  let closest = timeSec;
+  let minDist = thresholdSec;
+  for (const pt of snapPoints) {
+    const dist = Math.abs(timeSec - pt);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = pt;
+    }
+  }
+  return closest;
 }
 
 export function useDrag(opts: UseDragOpts) {
@@ -104,16 +126,40 @@ export function useDrag(opts: UseDragOpts) {
 
       const dx = e.clientX - d.startX;
       const deltaSec = dx / opts.pxPerSec;
+      const snapEnabled = useEditorStore.getState().snapEnabled;
+      const points = opts.snapPoints ?? [];
+      // Add playhead position as snap target
+      const playheadTime = useEditorStore.getState().currentTime;
+      const allSnap = [...points, playheadTime];
 
       try {
         if (d.mode === "move") {
-          const newTime = Math.max(0, d.origTimelineStart + deltaSec);
-          await opts.onMoveEnd(d.clipId, newTime);
+          let newTime = Math.max(0, d.origTimelineStart + deltaSec);
+          if (snapEnabled) {
+            newTime = snapToNearest(newTime, allSnap, opts.pxPerSec);
+            // Also snap the end of the clip
+            const dur = d.origTimelineEnd - d.origTimelineStart;
+            const snappedEnd = snapToNearest(
+              newTime + dur,
+              allSnap,
+              opts.pxPerSec,
+            );
+            if (snappedEnd !== newTime + dur) {
+              newTime = snappedEnd - dur;
+            }
+          }
+          await opts.onMoveEnd(d.clipId, Math.max(0, newTime));
         } else if (d.mode === "trim-left") {
-          const newIn = Math.max(0, d.origTimelineStart + deltaSec);
+          let newIn = Math.max(0, d.origTimelineStart + deltaSec);
+          if (snapEnabled) {
+            newIn = snapToNearest(newIn, allSnap, opts.pxPerSec);
+          }
           await opts.onTrimLeftEnd(d.clipId, newIn);
         } else if (d.mode === "trim-right") {
-          const newOut = Math.max(0, d.origTimelineEnd + deltaSec);
+          let newOut = Math.max(0, d.origTimelineEnd + deltaSec);
+          if (snapEnabled) {
+            newOut = snapToNearest(newOut, allSnap, opts.pxPerSec);
+          }
           await opts.onTrimRightEnd(d.clipId, newOut);
         }
       } catch {

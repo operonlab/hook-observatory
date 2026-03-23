@@ -95,6 +95,11 @@ export interface MoveClipReq {
   new_position?: number;
 }
 
+export interface MoveClipToTimeReq {
+  target_time: number;
+  target_track?: number;
+}
+
 // --- Effects ---
 
 export interface AddTransitionReq {
@@ -119,6 +124,12 @@ export interface AddSubtitleReq {
 export interface AddFilterReq {
   filter_type: string;
   params?: Record<string, string>;
+}
+
+export interface FilterInfo {
+  filter_id: string;
+  type: string;
+  params: Record<string, string>;
 }
 
 export interface AdjustAudioReq {

@@ -29,6 +29,11 @@ class MoveClipRequest(BaseModel):
     new_position: int | None = None
 
 
+class MoveClipToTimeRequest(BaseModel):
+    target_time: float
+    target_track: int | None = None
+
+
 def _engine():
     from video_edit.main import engine
     return engine
@@ -80,5 +85,15 @@ async def remove_clip(project_id: str, clip_id: str):
 async def move_clip(project_id: str, clip_id: str, req: MoveClipRequest):
     try:
         return _engine().move_clip(project_id, clip_id, req.new_track, req.new_position)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/projects/{project_id}/clips/{clip_id}/move-to-time")
+async def move_clip_to_time(project_id: str, clip_id: str, req: MoveClipToTimeRequest):
+    try:
+        return _engine().move_clip_to_time(
+            project_id, clip_id, req.target_time, req.target_track
+        )
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
