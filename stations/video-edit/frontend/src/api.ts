@@ -16,6 +16,7 @@ import type {
   AddOverlayReq,
   PreviewReq,
   RenderReq,
+  WaveformData,
 } from "./types";
 
 const BASE =
@@ -106,6 +107,27 @@ export const api = {
     post(`/projects/${pid}/clips/${clipId}/audio`, data),
   addOverlay: (pid: string, data: AddOverlayReq) =>
     post(`/projects/${pid}/overlays`, data),
+
+  // Media
+  renderFrame: (pid: string, time: number, w = 960, h = 540) =>
+    fetch(`${BASE}/projects/${pid}/frame?time=${time}&w=${w}&h=${h}`, {
+      credentials: "include",
+    }).then((r) => {
+      if (!r.ok) throw new ApiError(r.status, r.statusText);
+      return r.blob();
+    }),
+  getWaveform: (pid: string, clipId: string, samples = 800) =>
+    request<WaveformData>(
+      `/projects/${pid}/clips/${clipId}/waveform?samples=${samples}`,
+    ),
+  getThumbnails: (pid: string, clipId: string, interval = 2) =>
+    fetch(
+      `${BASE}/projects/${pid}/clips/${clipId}/thumbnails?interval=${interval}`,
+      { credentials: "include" },
+    ).then((r) => {
+      if (!r.ok) throw new ApiError(r.status, r.statusText);
+      return r.blob();
+    }),
 
   // Render
   preview: (pid: string, data?: PreviewReq) =>

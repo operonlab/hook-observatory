@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 import type { DragMode } from "../hooks/useDrag";
 import { friendlyName, trackColor } from "../utils";
 
@@ -10,7 +10,9 @@ interface Props {
   trackIndex: number;
   pxPerSec: number;
   isSelected: boolean;
-  onSelect: (clipId: string) => void;
+  projectId: string | null;
+  basePath?: string;
+  onSelect: (clipId: string, event?: React.PointerEvent) => void;
   onDragStart: (
     e: React.PointerEvent,
     clipId: string,
@@ -29,6 +31,8 @@ export function Block({
   trackIndex,
   pxPerSec,
   isSelected,
+  projectId,
+  basePath = "",
   onSelect,
   onDragStart,
 }: Props) {
@@ -36,9 +40,26 @@ export function Block({
   const width = Math.max((timelineEnd - timelineStart) * pxPerSec, 4);
   const color = trackColor(trackIndex);
 
+  // Load thumbnail strip for video clips (track 0)
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const isVideo = trackIndex === 0 && /\.(mp4|mov|mkv|webm|avi)$/i.test(resource);
+  useEffect(() => {
+    if (!isVideo || !projectId) { setThumbUrl(null); return; }
+    let cancelled = false;
+    fetch(`${basePath}/projects/${projectId}/clips/${clipId}/thumbnails?interval=2`, {
+      credentials: "include",
+    })
+      .then((r) => r.ok ? r.blob() : null)
+      .then((blob) => {
+        if (blob && !cancelled) setThumbUrl(URL.createObjectURL(blob));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isVideo, projectId, clipId, basePath]);
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      onSelect(clipId);
+      onSelect(clipId, e);
       onDragStart(e, clipId, "move", timelineStart, timelineEnd, trackIndex);
     },
     [clipId, onSelect, onDragStart, timelineStart, timelineEnd, trackIndex],
@@ -47,7 +68,7 @@ export function Block({
   const handleTrimLeft = useCallback(
     (e: React.PointerEvent) => {
       e.stopPropagation();
-      onSelect(clipId);
+      onSelect(clipId, e);
       onDragStart(
         e,
         clipId,
@@ -63,7 +84,7 @@ export function Block({
   const handleTrimRight = useCallback(
     (e: React.PointerEvent) => {
       e.stopPropagation();
-      onSelect(clipId);
+      onSelect(clipId, e);
       onDragStart(
         e,
         clipId,
@@ -84,7 +105,9 @@ export function Block({
         left: `${left}px`,
         width: `${width}px`,
         height: "calc(48px - 12px)",
-        background: color.bg,
+        background: thumbUrl
+          ? `url(${thumbUrl}) left center / auto 100% no-repeat, ${color.bg}`
+          : color.bg,
         border: `1px solid ${color.border}`,
         outline: isSelected ? "2px solid #e2b714" : "none",
       }}
