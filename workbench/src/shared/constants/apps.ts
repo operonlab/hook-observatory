@@ -284,4 +284,14 @@ export const APP_LIST: AppInfo[] = [
     status: 'external',
     externalUrl: '/fsm-dashboard.html',
   },
+  {
+    id: 'mlt-editor',
+    name: '剪輯時間軸',
+    description: 'MLT 專案時間軸編輯器',
+    icon: '🎬',
+    path: '/mlt-editor',
+    color: '#fab387',
+    status: 'external',
+    externalUrl: '/apps/mlt-editor/',
+  },
 ]

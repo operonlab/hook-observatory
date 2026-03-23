@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     BUDGET_WARNING_PCT: float = 80.0
     MODEL_POLICY_STATE_PATH: str = "~/.claude/data/model-policy/state.json"
     MODEL_POLICY_CONFIG_PATH: str = "~/.claude/data/model-policy/config.json"
-    CCUSAGE_BIN: str = "/opt/homebrew/bin/ccusage"
+    CCUSAGE_BIN: str = "/Users/joneshong/.local/bin/ccusage-rs"
     COLLECTION_INTERVAL_SECONDS: int = 1800
     COLLECTION_SNAPSHOT_DIR: str = "~/.claude/data/llm-usage/snapshots"
     COLLECTION_LATEST_FILE: str = "~/.claude/data/llm-usage/latest.json"

@@ -267,6 +267,21 @@ export default function SkillGalaxyCanvas({
     return () => {
       el?.removeEventListener('dblclick', handleDblClick)
       ro.disconnect()
+      const g = graphRef.current
+      if (g) {
+        // Dispose all GPU resources (geometry + material) created by nodeThreeObject
+        g.scene().traverse((obj: any) => {
+          if (obj.geometry) obj.geometry.dispose()
+          if (obj.material) {
+            if (Array.isArray(obj.material)) obj.material.forEach((m: any) => m.dispose())
+            else obj.material.dispose()
+          }
+        })
+        g.pauseAnimation()
+        g.graphData({ nodes: [], links: [] })
+        g._destructor()
+      }
+      graphRef.current = null
       if (containerRef.current) containerRef.current.innerHTML = ''
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

@@ -180,7 +180,7 @@ async def vedit_add_subtitle(
     )
     return (
         f"Added subtitle `{result['subtitle_id']}`\n"
-        f"- \"{text}\"\n"
+        f'- "{text}"\n'
         f"- Range: {result['start']} → {result['end']}"
     )
 
@@ -260,6 +260,40 @@ async def vedit_adjust_audio(
     if "fade_out" in result:
         parts.append(f"- Fade out: {result['fade_out']}s")
     return "\n".join(parts)
+
+
+@mcp.tool()
+@mcp_error_handler("VideoEdit")
+async def vedit_add_image_overlay(
+    project_id: str,
+    file_path: str,
+    start: float,
+    duration: float,
+    track: int = 1,
+    geometry: str = "0/0:100%x100%",
+    fade_in: float = 0.5,
+    fade_out: float = 0.5,
+    opacity: float = 1.0,
+) -> str:
+    """Overlay an image (PNG/JPG) on the timeline at a specific time with fade in/out."""
+    result = await to_thread(
+        client.add_image_overlay,
+        project_id,
+        file_path,
+        start=start,
+        duration=duration,
+        track=track,
+        geometry=geometry,
+        fade_in=fade_in,
+        fade_out=fade_out,
+        opacity=opacity,
+    )
+    return (
+        f"Added overlay `{result['overlay_id']}`\n"
+        f"- File: {result['file']}\n"
+        f"- Start: {result['start']}s, Duration: {result['duration']}s\n"
+        f"- Track: {result['track']}"
+    )
 
 
 # ======================== Render ========================

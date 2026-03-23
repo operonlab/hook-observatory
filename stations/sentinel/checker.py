@@ -34,6 +34,7 @@ class LightCheck:
     expect_json: dict | None = None  # key-value pairs to verify in JSON
     expect_contains: str | None = None  # substring in body
     timeout: float = 10.0
+    optional: bool = False  # optional services report "skipped" instead of "unhealthy" when down
 
 
 @dataclass
@@ -79,6 +80,7 @@ LIGHT_CHECKS: list[LightCheck] = [
         name="lgtm",
         group="infra",
         url="http://127.0.0.1:3100/",
+        optional=True,
     ),
     LightCheck(
         name="qdrant",
@@ -185,11 +187,7 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="external",
         url="http://127.0.0.1:8795/health",
     ),
-    LightCheck(
-        name="sentinel",
-        group="external",
-        url="http://127.0.0.1:4101/health",
-    ),
+    # sentinel removed — no longer persistent (scheduled via Cronicle)
     LightCheck(
         name="file-manager",
         group="external",
@@ -225,6 +223,7 @@ LIGHT_CHECKS: list[LightCheck] = [
         name="ocr",
         group="external",
         url="http://127.0.0.1:4109/health",
+        optional=True,  # model loads on-demand, may be slow first call
     ),
     # ── security ──
     LightCheck(
@@ -492,10 +491,11 @@ async def run_light_check(check: LightCheck) -> CheckResult:
         return CheckResult(check.name, "light", "unhealthy", 0, "No URL or command defined")
 
     except httpx.ConnectError:
+        status = "skipped" if check.optional else "unhealthy"
         return CheckResult(
             check.name,
             "light",
-            "unhealthy",
+            status,
             (time.monotonic() - start) * 1000,
             "Connection refused",
         )
@@ -507,12 +507,14 @@ async def run_light_check(check: LightCheck) -> CheckResult:
                 await proc.communicate()
         except (NameError, ProcessLookupError):
             pass
+        status = "skipped" if check.optional else "timeout"
         return CheckResult(
-            check.name, "light", "timeout", (time.monotonic() - start) * 1000, "Timeout"
+            check.name, "light", status, (time.monotonic() - start) * 1000, "Timeout"
         )
     except Exception as e:
+        status = "skipped" if check.optional else "unhealthy"
         return CheckResult(
-            check.name, "light", "unhealthy", (time.monotonic() - start) * 1000, str(e)[:200]
+            check.name, "light", status, (time.monotonic() - start) * 1000, str(e)[:200]
         )
 
 
@@ -659,7 +661,11 @@ def merge_status(light: str | None, deep: str | None) -> str:
     light healthy + deep healthy → operational
     light healthy + deep unhealthy → degraded
     light unhealthy → major_outage
+    light skipped → operational (optional service offline)
     """
+    # "skipped" = optional service offline → treat as absent
+    if light == "skipped":
+        light = None
     if light in ("unhealthy", "timeout"):
         return "major_outage"
     if deep in ("unhealthy", "timeout"):

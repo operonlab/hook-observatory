@@ -33,6 +33,9 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 LLM_RETRY_COUNT = 3
 LLM_RETRY_DELAY = 2.0  # seconds between retries
 
+# Self-imposed runtime limit (seconds). When hit, save partial results and exit.
+MAX_RUNTIME = 600  # 10 minutes
+
 # Max triples to include in the LLM prompt per community
 MAX_TRIPLES_IN_PROMPT = 40
 
@@ -212,14 +215,24 @@ def generate_summaries(
     space_id: str,
     api_key: str,
     dry_run: bool,
+    *,
+    max_runtime: int = MAX_RUNTIME,
 ) -> list[dict]:
     """Generate LLM summaries for each community."""
     summaries: list[dict] = []
     total = len(communities)
+    t0 = time.monotonic()
 
-    print(f"\n[Phase 3] Generating LLM summaries for {total} communities ...")
+    print(f"\n[Phase 3] Generating LLM summaries for {total} communities (max {max_runtime}s) ...")
 
     for idx, community in enumerate(communities, 1):
+        elapsed = time.monotonic() - t0
+        if elapsed > max_runtime:
+            print(
+                f"\n[Phase 3] TIMEOUT after {elapsed:.0f}s — "
+                f"saving {len(summaries)}/{total} partial results"
+            )
+            break
         comm_id = community.get("community_id", community.get("id", f"comm_{idx}"))
         name = community.get("name", comm_id)
         print(f"  [{idx}/{total}] {comm_id}: {name[:50]}", end=" ... ", flush=True)
@@ -399,6 +412,12 @@ def main() -> None:
         choices=[0, 1, 2],
         help="Resolution level to summarize: 0=fine, 1=medium, 2=coarse (default: 1)",
     )
+    parser.add_argument(
+        "--max-runtime",
+        type=int,
+        default=MAX_RUNTIME,
+        help=f"Max runtime in seconds before saving partial results (default: {MAX_RUNTIME})",
+    )
     args = parser.parse_args()
 
     api_key = DEEPSEEK_API_KEY
@@ -418,7 +437,13 @@ def main() -> None:
         sys.exit(0)
 
     # Phase 2 + 3: fetch triples (from community record or API) and generate summaries
-    summaries = generate_summaries(communities, args.space_id, api_key, args.dry_run)
+    summaries = generate_summaries(
+        communities,
+        args.space_id,
+        api_key,
+        args.dry_run,
+        max_runtime=args.max_runtime,
+    )
 
     # Phase 4
     print_report(summaries)

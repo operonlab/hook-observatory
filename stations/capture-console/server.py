@@ -22,6 +22,30 @@ from fastapi.middleware.cors import CORSMiddleware
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("capture-console")
 
+# Shared Redis key with capture_watchdog.py / llm_haiku.py
+_REDIS_LAST_USED_KEY = "capture:haiku:last_used"
+_WATCHDOG_TS_FILE = "/tmp/capture_watchdog_ts"
+
+
+def _touch_last_used() -> None:
+    """Update capture:haiku:last_used so capture_watchdog.py knows we're active."""
+    now = str(int(time.time()))
+    # File fallback (always works)
+    try:
+        with open(_WATCHDOG_TS_FILE, "w") as f:
+            f.write(now)
+    except OSError:
+        pass
+    # Redis (best-effort)
+    try:
+        import redis as _redis
+
+        r = _redis.Redis(decode_responses=True)
+        r.set(_REDIS_LAST_USED_KEY, now)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -67,7 +91,7 @@ SYSTEM_PROMPT = (
     '- 「明天下午開會三小時」→ dailyos/plan_item {title:"開會", estimated_hours:3, plan_date:"明天"}\n'
     '- 「買 10 張台積電 850」→ invest/trade {shares:10, price:850, type:"buy"}'
 )
-IDLE_EXIT_SECONDS = int(os.getenv("CAPTURE_IDLE_EXIT", "300"))  # 5 min
+# Idle cleanup delegated to capture_watchdog.py (Cronicle, 30-min threshold)
 
 # Prompt file for Claude startup command (avoids shell escaping)
 _PROMPT_FILE = "/tmp/capture-console-system-prompt.txt"
@@ -82,8 +106,6 @@ _TUI_NOISE = re.compile(r"🔖|🤖|⏵⏵|bypass|Checking for update|shift\+tab
 
 # Serialization lock — one tmux interaction at a time
 _query_lock = asyncio.Lock()
-# Tracks last query time for idle exit
-_last_query_time: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -153,57 +175,6 @@ async def is_claude_running() -> bool:
     if re.match(r"^\d+\.\d+\.\d+$", cmd):
         return True
     return False
-
-
-# ---------------------------------------------------------------------------
-# Claude Code TUI state detection
-# ---------------------------------------------------------------------------
-
-
-def _is_claude_idle(content: str) -> bool:
-    """Check if Claude Code TUI shows the idle input prompt.
-
-    Idle pattern (bottom of pane):
-        ─────────...          (top border)
-        ❯                     (empty prompt = idle)
-        ─────────...          (bottom border)
-        🔖 ... │ 📁 ... │ ⎇  (status lines)
-        🤖 ... │ 💰 ... │ ✍️
-        ⏵⏵ bypass permissions on
-    """
-    lines = content.rstrip().split("\n")
-    i = len(lines) - 1
-
-    # Step 1: skip trailing empty + status/noise lines
-    while i >= 0 and (not lines[i].strip() or _TUI_NOISE.search(lines[i])):
-        i -= 1
-
-    # Step 2: expect bottom border (─────...)
-    if i < 0 or not _BORDER_RE.match(lines[i].strip()):
-        return False
-    i -= 1
-
-    # Step 3: skip empty lines
-    while i >= 0 and not lines[i].strip():
-        i -= 1
-
-    # Step 4: expect empty prompt (❯)
-    if i < 0:
-        return False
-    prompt = lines[i].strip()
-    if prompt not in ("❯", "❯ "):
-        return False
-    i -= 1
-
-    # Step 5: skip empty lines
-    while i >= 0 and not lines[i].strip():
-        i -= 1
-
-    # Step 6: expect top border
-    if i < 0 or not _BORDER_RE.match(lines[i].strip()):
-        return False
-
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -368,11 +339,10 @@ def _extract_response(content: str) -> str:
 
 async def query_claude(message: str) -> str:
     """Send a message to Claude Code via tmux and capture the response."""
-    global _last_query_time
     async with _query_lock:
         if not await ensure_claude():
             raise RuntimeError("Claude Code 未執行且無法啟動")
-        _last_query_time = time.time()
+        _touch_last_used()
 
         before = await _capture_pane()
 
@@ -410,38 +380,13 @@ async def query_claude(message: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Idle watchdog — exit Claude Code after N seconds of inactivity
-# ---------------------------------------------------------------------------
-
-
-async def _idle_watchdog() -> None:
-    """Background task: send /exit to Claude Code if idle > IDLE_EXIT_SECONDS.
-
-    Keeps the tmux pane alive (returns to zsh). ensure_claude() restarts on next query.
-    """
-    global _last_query_time
-    while True:
-        await asyncio.sleep(60)  # check every minute
-        if _last_query_time <= 0:
-            continue
-        elapsed = time.time() - _last_query_time
-        if elapsed >= IDLE_EXIT_SECONDS and await is_claude_running():
-            log.info("Idle %.0fs — sending /exit to Claude Code", elapsed)
-            await _tmux(["send-keys", "-t", TMUX_TARGET, "-l", "/exit"])
-            await _tmux(["send-keys", "-t", TMUX_TARGET, "Enter"])
-            _last_query_time = 0.0
-
-
-# ---------------------------------------------------------------------------
 # FastAPI App
 # ---------------------------------------------------------------------------
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    task = asyncio.create_task(_idle_watchdog())
     yield
-    task.cancel()
 
 
 app = FastAPI(title="Capture Console", version="0.3.0", lifespan=lifespan)

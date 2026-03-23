@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
-ws_auto_survey.py — Wed/Fri 13:30 smart reminder for auto-survey
+ws_auto_survey.py — Wed/Fri 13:00 auto-survey LINE reader + fallback
 
-Triggered by launchd at 13:30 on class days.
-Loops every 10 minutes, sending Bark reminders until URLs are provided.
-Exits when:
-  - Today's DailyRun status is 'running' or 'completed' (URLs provided)
-  - Timeout reached (90 minutes = 15:00)
+Timeline:
+  13:00       Cronicle triggers this script
+  13:00~14:00 Phase 0: LINE poll every 10min (screenshot + OCR)
+  14:00       Decision point:
+              - URLs found → execute pipeline → Bark result
+              - No URLs → Phase 1: Bark reminder loop until timeout
 """
 
 import os
 import subprocess
 import time
+from datetime import datetime
 from pathlib import Path
 
 HOME = Path.home()
 STATION_DIR = HOME / "workshop/stations/auto-survey"
 UV = "/opt/homebrew/bin/uv"
-POLL_INTERVAL = 600  # 10 minutes
-MAX_DURATION = 5400  # 90 minutes
+
+EXECUTION_HOUR = 14
+LINE_POLL_INTERVAL = 600  # 10 minutes
+BARK_POLL_INTERVAL = 600  # 10 minutes
+MAX_DURATION = 7200  # 2 hours (13:00~15:00)
 
 os.environ["PATH"] = (
     f"/opt/homebrew/bin:{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:"
@@ -26,17 +31,38 @@ os.environ["PATH"] = (
 )
 
 
+def _run_auto_survey(*args: str) -> subprocess.CompletedProcess:
+    cmd = [UV, "run", "--project", str(STATION_DIR), "auto-survey", *args]
+    return subprocess.run(cmd, cwd=str(STATION_DIR), capture_output=True, text=True)
+
+
+def try_line_read() -> bool:
+    """Single LINE read attempt. Returns True if URLs found and saved to DB."""
+    print("[ws_auto_survey] LINE read (screenshot + OCR)...", flush=True)
+    result = _run_auto_survey("line-read")
+    if result.stdout:
+        print(result.stdout.rstrip(), flush=True)
+    if result.stderr:
+        print(result.stderr.rstrip(), flush=True)
+    return result.returncode == 0
+
+
+def get_today_status() -> dict[str, str]:
+    """Get today's DailyRun status and URLs from DB via today-status command."""
+    result = _run_auto_survey("today-status")
+    if result.returncode != 0:
+        return {}
+    info = {}
+    for line in result.stdout.strip().splitlines():
+        if ":" in line:
+            key, _, value = line.partition(":")
+            info[key.strip()] = value.strip()
+    return info
+
+
 def run_notify_check() -> str:
-    """Run auto-survey notify-check. Returns stdout."""
-    cmd = [
-        UV,
-        "run",
-        "--project",
-        str(STATION_DIR),
-        "auto-survey",
-        "notify-check",
-    ]
-    result = subprocess.run(cmd, cwd=str(STATION_DIR), capture_output=True, text=True)
+    """Send Bark reminder if needed. Returns stdout."""
+    result = _run_auto_survey("notify-check")
     output = result.stdout.strip()
     print(output, flush=True)
     if result.stderr:
@@ -44,61 +70,76 @@ def run_notify_check() -> str:
     return output
 
 
-def try_line_reader() -> bool:
-    """Phase 0: Try reading SurveyCake URLs from LINE Desktop.
-
-    Returns True if pipeline was triggered successfully.
-    """
-    print("[ws_auto_survey] Phase 0: Trying LINE reader...", flush=True)
-    cmd = [
-        UV,
-        "run",
-        "--project",
-        str(STATION_DIR),
-        "auto-survey",
-        "line-read",
-        "--trigger",
-    ]
-    result = subprocess.run(cmd, cwd=str(STATION_DIR), capture_output=True, text=True)
+def trigger_pipeline(attend_url: str | None, quiz_url: str | None) -> None:
+    """Execute the survey pipeline via auto-survey run."""
+    args = ["run"]
+    if attend_url:
+        args += ["--attend-url", attend_url]
+    if quiz_url:
+        args += ["--quiz-url", quiz_url]
+    print(f"[ws_auto_survey] Triggering pipeline: {' '.join(args)}", flush=True)
+    result = _run_auto_survey(*args)
     if result.stdout:
         print(result.stdout.rstrip(), flush=True)
     if result.stderr:
         print(result.stderr.rstrip(), flush=True)
 
-    if result.returncode == 0:
-        print("[ws_auto_survey] Phase 0 success — LINE reader triggered pipeline.", flush=True)
-        return True
-
-    print("[ws_auto_survey] Phase 0 failed — falling through to Bark reminder loop.", flush=True)
-    return False
-
 
 def main() -> None:
-    # Phase 0: Try LINE reader first
-    if try_line_reader():
+    start = time.time()
+
+    # ── Phase 0: LINE poll (13:00 ~ 14:00) ──
+    print("[ws_auto_survey] Phase 0: LINE poll started", flush=True)
+    while datetime.now().hour < EXECUTION_HOUR:
+        if time.time() - start > MAX_DURATION:
+            break
+        if try_line_read():
+            print("[ws_auto_survey] Phase 0: URLs found, waiting for execution hour", flush=True)
+            break
+        print(f"[ws_auto_survey] No URLs yet, retry in {LINE_POLL_INTERVAL}s", flush=True)
+        time.sleep(LINE_POLL_INTERVAL)
+
+    # ── Wait until EXECUTION_HOUR ──
+    now = datetime.now()
+    if now.hour < EXECUTION_HOUR:
+        target = now.replace(hour=EXECUTION_HOUR, minute=0, second=0, microsecond=0)
+        wait_sec = int((target - now).total_seconds())
+        if wait_sec > 0:
+            print(f"[ws_auto_survey] Waiting {wait_sec}s until {EXECUTION_HOUR}:00", flush=True)
+            time.sleep(wait_sec)
+
+    # ── Decision point at EXECUTION_HOUR ──
+    print(f"[ws_auto_survey] {EXECUTION_HOUR}:00 decision point", flush=True)
+    status = get_today_status()
+
+    if status.get("attend_url") or status.get("quiz_url"):
+        # URLs available → execute pipeline
+        trigger_pipeline(
+            status.get("attend_url") or None,
+            status.get("quiz_url") or None,
+        )
         return
 
-    # Phase 1: Bark reminder loop (fallback)
-    print(f"[ws_auto_survey] Starting reminder loop (poll every {POLL_INTERVAL}s)", flush=True)
-    start_time = time.time()
+    # ── Phase 1: Bark reminder loop (14:00~) ──
+    print(f"[ws_auto_survey] Phase 1: Bark reminders (every {BARK_POLL_INTERVAL}s)", flush=True)
+    while time.time() - start < MAX_DURATION:
+        run_notify_check()
+        time.sleep(BARK_POLL_INTERVAL)
 
-    while time.time() - start_time < MAX_DURATION:
-        output = run_notify_check()
-
-        # If already running or completed, URLs were provided — exit
-        if "already" in output:
-            print("[ws_auto_survey] URLs provided, exiting.", flush=True)
+        # Check if URLs were provided manually (via web UI)
+        status = get_today_status()
+        if status.get("status") in ("running", "completed"):
+            print("[ws_auto_survey] Pipeline handled externally, exiting.", flush=True)
+            return
+        if status.get("attend_url") or status.get("quiz_url"):
+            print("[ws_auto_survey] URLs provided manually, triggering pipeline.", flush=True)
+            trigger_pipeline(
+                status.get("attend_url") or None,
+                status.get("quiz_url") or None,
+            )
             return
 
-        elapsed = int(time.time() - start_time)
-        remaining = MAX_DURATION - elapsed
-        print(
-            f"[ws_auto_survey] Next check in {POLL_INTERVAL}s ({remaining}s remaining)",
-            flush=True,
-        )
-        time.sleep(POLL_INTERVAL)
-
-    print("[ws_auto_survey] Timeout reached (15:00), exiting.", flush=True)
+    print("[ws_auto_survey] Timeout reached, exiting.", flush=True)
 
 
 if __name__ == "__main__":

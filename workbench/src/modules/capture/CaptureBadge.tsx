@@ -27,15 +27,29 @@ export default function CaptureBadge() {
 
   useEffect(() => {
     refresh()
-    const es = new EventSource('/api/captures/events/stream')
-    es.addEventListener('changed', () => refresh())
+    let es: EventSource | null = null
     let retryTimer: ReturnType<typeof setTimeout>
-    es.onerror = () => {
-      es.close()
-      retryTimer = setTimeout(refresh, 10000)
+    let retryCount = 0
+
+    function connect() {
+      es = new EventSource('/api/captures/events/stream')
+      es.addEventListener('changed', () => {
+        retryCount = 0
+        refresh()
+      })
+      es.onerror = () => {
+        es?.close()
+        es = null
+        const delay = Math.min(1000 * 2 ** retryCount, 30000)
+        retryCount++
+        refresh()
+        retryTimer = setTimeout(connect, delay)
+      }
     }
+    connect()
+
     return () => {
-      es.close()
+      es?.close()
       clearTimeout(retryTimer)
     }
   }, [refresh])

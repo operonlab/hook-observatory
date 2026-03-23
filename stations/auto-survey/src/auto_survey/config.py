@@ -7,8 +7,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://joneshong:REDACTED@localhost/workshop"
     schema_name: str = "auto_survey"
 
-    llm_backend: str = "gemini"  # gemini | claude | codex
-    llm_model: str = ""  # empty = CLI default
+    llm_backend: str = "litellm"  # litellm | gemini | claude | codex
+    llm_model: str = "grok-4-fast"  # litellm model name
+    litellm_base_url: str = "http://localhost:4000/v1"
+    litellm_api_key: str = "sk-litellm-local-dev"
 
     min_delay: int = 5
     max_delay: int = 15
@@ -25,6 +27,7 @@ class Settings(BaseSettings):
 
     line_community_name: str = "微光早餐會"
     line_enabled: bool = True
+    line_scroll_pages: int = 3  # Page Up attempts to find older messages
 
 
 settings = Settings()

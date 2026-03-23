@@ -189,11 +189,19 @@ export default function GalaxyCanvas({
 
     return () => {
       ro.disconnect()
-      // Properly dispose Three.js resources
       const g = graphRef.current
       if (g) {
+        // Dispose all GPU resources (geometry + material) created by nodeThreeObject
+        g.scene().traverse((obj: any) => {
+          if (obj.geometry) obj.geometry.dispose()
+          if (obj.material) {
+            if (Array.isArray(obj.material)) obj.material.forEach((m: any) => m.dispose())
+            else obj.material.dispose()
+          }
+        })
         g.pauseAnimation()
-        g._destructor?.()
+        g.graphData({ nodes: [], links: [] })
+        g._destructor()
       }
       graphRef.current = null
       if (containerRef.current) containerRef.current.innerHTML = ''

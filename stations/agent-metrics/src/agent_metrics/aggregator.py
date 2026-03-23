@@ -71,10 +71,10 @@ async def aggregator_loop() -> None:
                     await _flush_snapshots(snapshots)
                 _last_db_flush = now
 
-            # SSE: broadcast usage every ~60s
+            # SSE: broadcast usage every ~60s + write daily.json for statusline
             if now - _last_usage_broadcast >= _USAGE_BROADCAST_INTERVAL:
                 try:
-                    from agent_metrics.usage_collector import get_month_to_date
+                    from agent_metrics.usage_collector import get_month_to_date, write_daily_json
                     from agent_metrics.config import settings as _settings
 
                     loop = asyncio.get_running_loop()
@@ -91,6 +91,8 @@ async def aggregator_loop() -> None:
                         "days_elapsed": mtd.get("days", 0),
                     }
                     await sse_broadcast("usage", usage_payload)
+                    # Write daily cost JSON for statusline.sh (replaces llm-usage server.js)
+                    await loop.run_in_executor(None, write_daily_json)
                 except Exception:
                     log.debug("sse_usage_broadcast_failed", exc_info=True)
                 _last_usage_broadcast = now

@@ -1,6 +1,7 @@
-"""Phase 2: Analyze — use LLM CLI to answer quiz questions."""
+"""Phase 2: Analyze — use LLM to answer quiz questions."""
 
 import json
+import logging
 import re
 import subprocess
 
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .models import Question, Survey
+
+log = logging.getLogger("auto_survey")
 
 
 def _build_prompt(questions: list[Question]) -> str:
@@ -32,6 +35,10 @@ def _build_prompt(questions: list[Question]) -> str:
 def _call_llm(prompt: str) -> str:
     backend = settings.llm_backend
 
+    if backend == "litellm":
+        return _call_litellm(prompt)
+
+    # CLI fallback
     if backend == "gemini":
         cmd = ["gemini", "-p", prompt]
     elif backend == "claude":
@@ -52,6 +59,31 @@ def _call_llm(prompt: str) -> str:
     return result.stdout
 
 
+def _call_litellm(prompt: str) -> str:
+    """Call LLM via LiteLLM proxy (OpenAI-compatible API)."""
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url=settings.litellm_base_url,
+        api_key=settings.litellm_api_key,
+    )
+    model = settings.llm_model or "grok-4-fast"
+    log.info("[analyze] Calling LiteLLM model=%s", model)
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1,
+        timeout=60,
+    )
+    return response.choices[0].message.content
+
+
+def _strip_letter_prefix(text: str) -> str:
+    """Strip leading letter prefix like 'A. ', 'B. ' from LLM answers."""
+    return re.sub(r"^[A-Z]\.\s*", "", text)
+
+
 def _parse_answers(raw: str) -> dict[str, str]:
     """Parse LLM response into {subject_id: answer_text} map."""
     # Strip markdown code fences
@@ -63,14 +95,18 @@ def _parse_answers(raw: str) -> dict[str, str]:
     if not match:
         raise ValueError(f"No JSON found in LLM response: {raw[:300]}")
 
-    data = json.loads(match.group())
+    json_str = match.group()
+    # Fix invalid JSON escapes (e.g. \log, \Sigma, \delta from LaTeX)
+    # Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+    json_str = re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", json_str)
+    data = json.loads(json_str)
 
     # Handle {"answers": [...]} format
     if "answers" in data:
-        return {a["subject_id"]: a["answer"] for a in data["answers"]}
+        return {a["subject_id"]: _strip_letter_prefix(a["answer"]) for a in data["answers"]}
 
     # Handle flat {"subject-5": "answer", ...} format
-    return {k: v for k, v in data.items() if k.startswith("subject-")}
+    return {k: _strip_letter_prefix(v) for k, v in data.items() if k.startswith("subject-")}
 
 
 def analyze_quiz(db: Session, survey: Survey) -> dict[str, str]:

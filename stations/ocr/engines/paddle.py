@@ -16,20 +16,51 @@ from . import register
 
 logger = logging.getLogger(__name__)
 
-# Lazy singleton — initialized on first use to avoid slow startup
+# Lazy singleton — initialized on first use, auto-unloaded after idle timeout
 _ocr_instances: dict[str, object] = {}
+_last_used: float = 0.0  # monotonic timestamp of last extract() call
+MODEL_IDLE_TTL = 300  # 5 minutes — unload model after this idle period
 
 
 def _get_ocr(lang: str = "ch"):
     """Get or create a PaddleOCR instance (cached per language)."""
+    import time
+
+    global _last_used
+    _last_used = time.monotonic()
+
     if lang not in _ocr_instances:
         import os
 
         os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
         from paddleocr import PaddleOCR
 
+        logger.info("Loading PaddleOCR model (lang=%s)...", lang)
         _ocr_instances[lang] = PaddleOCR(lang=lang)
+        logger.info("PaddleOCR model loaded")
     return _ocr_instances[lang]
+
+
+def unload_models() -> bool:
+    """Unload all cached PaddleOCR instances and free memory. Returns True if any unloaded."""
+    import gc
+
+    if not _ocr_instances:
+        return False
+    count = len(_ocr_instances)
+    _ocr_instances.clear()
+    gc.collect()
+    logger.info("Unloaded %d PaddleOCR model(s), memory freed", count)
+    return True
+
+
+def is_idle() -> bool:
+    """Check if models are loaded but idle beyond TTL."""
+    import time
+
+    if not _ocr_instances:
+        return False
+    return (time.monotonic() - _last_used) > MODEL_IDLE_TTL
 
 
 # Language code mapping: OCR station codes → PaddleOCR codes

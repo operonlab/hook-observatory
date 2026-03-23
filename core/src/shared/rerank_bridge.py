@@ -145,6 +145,19 @@ async def _send_request(request: dict) -> dict | None:
             return None
 
 
+async def shutdown():
+    """Gracefully shutdown the rerank worker process."""
+    global _process, _ready
+    if _process and _process.poll() is None:
+        try:
+            _process.stdin.close()
+            _process.wait(timeout=5)
+        except Exception:
+            _process.kill()
+    _process = None
+    _ready = False
+
+
 async def rerank(
     query: str,
     documents: list[str],

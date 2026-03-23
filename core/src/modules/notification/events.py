@@ -19,6 +19,13 @@ EVENT_PUSH_MAP: dict[str, dict] = {
         "tag": "finance-budget",
         "url": "/finance",
     },
+    "finance.wallet.cash_gap_detected": {
+        "category": "finance",
+        "title": "現金錢包需要對帳",
+        "severity": "warning",
+        "tag": "finance-cash-gap",
+        "url": "/finance",
+    },
     "taskflow.task.completed": {
         "category": "taskflow",
         "title": "任務完成",
