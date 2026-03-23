@@ -11,6 +11,7 @@ interface EditorState {
   playbackState: PlaybackState;
   activeTool: ActiveTool;
   snapEnabled: boolean;
+  rippleEnabled: boolean;
 }
 
 interface EditorActions {
@@ -24,6 +25,7 @@ interface EditorActions {
   setPlaybackState: (state: PlaybackState) => void;
   setActiveTool: (tool: ActiveTool) => void;
   setSnapEnabled: (enabled: boolean) => void;
+  setRippleEnabled: (enabled: boolean) => void;
 }
 
 export const useEditorStore = create<EditorState & EditorActions>()((set) => ({
@@ -34,6 +36,7 @@ export const useEditorStore = create<EditorState & EditorActions>()((set) => ({
   playbackState: "stopped",
   activeTool: "select",
   snapEnabled: true,
+  rippleEnabled: false,
 
   selectClip: (clipId) =>
     set({ selectedClipIds: clipId ? new Set([clipId]) : new Set() }),
@@ -61,4 +64,5 @@ export const useEditorStore = create<EditorState & EditorActions>()((set) => ({
   setPlaybackState: (state) => set({ playbackState: state }),
   setActiveTool: (tool) => set({ activeTool: tool }),
   setSnapEnabled: (enabled) => set({ snapEnabled: enabled }),
+  setRippleEnabled: (enabled) => set({ rippleEnabled: enabled }),
 }));

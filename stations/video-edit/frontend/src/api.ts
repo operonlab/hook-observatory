@@ -17,6 +17,9 @@ import type {
   PreviewReq,
   RenderReq,
   WaveformData,
+  SetSpeedReq,
+  KeyframeData,
+  SetKeyframesReq,
 } from "./types";
 
 const BASE =
@@ -107,6 +110,23 @@ export const api = {
     post(`/projects/${pid}/clips/${clipId}/audio`, data),
   addOverlay: (pid: string, data: AddOverlayReq) =>
     post(`/projects/${pid}/overlays`, data),
+
+  // Speed
+  setSpeed: (pid: string, clipId: string, data: SetSpeedReq) =>
+    post(`/projects/${pid}/clips/${clipId}/speed`, data),
+
+  // Keyframes
+  getKeyframes: (pid: string, clipId: string, filterId: string) =>
+    request<KeyframeData>(`/projects/${pid}/clips/${clipId}/filters/${filterId}/keyframes`),
+  setKeyframes: (pid: string, clipId: string, filterId: string, data: SetKeyframesReq) =>
+    request(`/projects/${pid}/clips/${clipId}/filters/${filterId}/keyframes`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  // Ripple delete
+  rippleRemove: (pid: string, clipId: string) =>
+    del(`/projects/${pid}/clips/${clipId}/ripple`),
 
   // Media
   renderFrame: (pid: string, time: number, w = 960, h = 540) =>

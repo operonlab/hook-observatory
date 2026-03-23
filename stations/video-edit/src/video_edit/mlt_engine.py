@@ -700,6 +700,151 @@ class MLTEngine:
                 return {"filter_id": filter_id, "removed": True}
         raise KeyError(f"Filter {filter_id} not found on clip {clip_id}")
 
+    def set_speed(self, project_id: str, clip_id: str, speed: float) -> dict:
+        """Set playback speed for a clip using MLT's timewarp producer."""
+        if speed <= 0:
+            raise ValueError("Speed must be positive")
+        root = self._get_root(project_id)
+        producer, entry, playlist = self._find_clip(root, clip_id)
+
+        resource = ""
+        for prop in producer.findall("property"):
+            if prop.get("name") == "resource":
+                resource = prop.text or ""
+                break
+
+        # Create a timewarp producer wrapping the original
+        tw_id = _gen_id("tw")
+        timewarp = etree.Element("producer", id=tw_id)
+        props = {
+            "mlt_service": "timewarp",
+            "speed": str(speed),
+            "resource": resource,
+            "warp_pitch": "1",  # preserve audio pitch
+            "clip_id": producer.find("property[@name='clip_id']").text,
+        }
+        for k, v in props.items():
+            p = etree.SubElement(timewarp, "property", name=k)
+            p.text = v
+
+        # Replace the producer reference in the entry
+        root.insert(list(root).index(producer), timewarp)
+        entry.set("producer", tw_id)
+
+        # Adjust out point based on speed change
+        in_sec = _parse_tc(entry.get("in", "00:00:00.000"))
+        out_sec = _parse_tc(entry.get("out", "00:00:00.000"))
+        new_duration = (out_sec - in_sec) / speed
+        entry.set("out", _tc(in_sec + new_duration))
+
+        return {
+            "clip_id": clip_id,
+            "speed": speed,
+            "new_duration": _tc(new_duration),
+        }
+
+    def get_keyframes(
+        self,
+        project_id: str,
+        clip_id: str,
+        filter_id: str,
+    ) -> dict:
+        """Get keyframe data from a filter's properties."""
+        root = self._get_root(project_id)
+        producer, _, _ = self._find_clip(root, clip_id)
+
+        for filt in producer.findall("filter"):
+            if filt.get("id") != filter_id:
+                continue
+            service = ""
+            keyframed_props = {}
+            for prop in filt.findall("property"):
+                name = prop.get("name", "")
+                value = prop.text or ""
+                if name == "mlt_service":
+                    service = value
+                elif "=" in value and ";" in value:
+                    # Parse keyframe string: "0=1;30~=0.5;60=1"
+                    keyframes = []
+                    for segment in value.split(";"):
+                        segment = segment.strip()
+                        if "=" not in segment:
+                            continue
+                        frame_part, val_part = segment.split("=", 1)
+                        smooth = frame_part.endswith("~")
+                        frame = int(frame_part.rstrip("~"))
+                        keyframes.append({
+                            "frame": frame,
+                            "value": val_part,
+                            "easing": "smooth" if smooth else "linear",
+                        })
+                    keyframed_props[name] = keyframes
+                else:
+                    # Static value — no keyframes
+                    pass
+            return {
+                "filter_id": filter_id,
+                "type": service,
+                "keyframed_properties": keyframed_props,
+            }
+        raise KeyError(f"Filter {filter_id} not found")
+
+    def set_keyframes(
+        self,
+        project_id: str,
+        clip_id: str,
+        filter_id: str,
+        property_name: str,
+        keyframe_str: str,
+    ) -> dict:
+        """Set keyframe string on a filter property.
+
+        keyframe_str format: "0=1;30~=0.5;60=1"
+        """
+        root = self._get_root(project_id)
+        producer, _, _ = self._find_clip(root, clip_id)
+
+        for filt in producer.findall("filter"):
+            if filt.get("id") != filter_id:
+                continue
+            # Find or create the property
+            for prop in filt.findall("property"):
+                if prop.get("name") == property_name:
+                    prop.text = keyframe_str
+                    return {"filter_id": filter_id, "property": property_name, "keyframes": keyframe_str}
+            # Property doesn't exist yet, create it
+            new_prop = etree.SubElement(filt, "property", name=property_name)
+            new_prop.text = keyframe_str
+            return {"filter_id": filter_id, "property": property_name, "keyframes": keyframe_str}
+        raise KeyError(f"Filter {filter_id} not found")
+
+    def ripple_remove(self, project_id: str, clip_id: str) -> dict:
+        """Remove a clip and close the gap (ripple delete)."""
+        root = self._get_root(project_id)
+        producer, entry, playlist = self._find_clip(root, clip_id)
+
+        # Find and remove preceding blank if any
+        idx = list(playlist).index(entry)
+        if idx > 0:
+            prev = list(playlist)[idx - 1]
+            if prev.tag == "blank":
+                playlist.remove(prev)
+
+        # Remove the entry
+        playlist.remove(entry)
+
+        # Clean up orphaned producer
+        producer_id = producer.get("id")
+        still_used = any(
+            e.get("producer") == producer_id
+            for pl in root.findall(".//playlist")
+            for e in pl.findall("entry")
+        )
+        if not still_used:
+            root.remove(producer)
+
+        return {"clip_id": clip_id, "ripple_removed": True}
+
     # ======================== Info & Render ========================
 
     def timeline_info(self, project_id: str) -> dict:
