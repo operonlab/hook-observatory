@@ -42,3 +42,6 @@ def get_engine(name: str = "apple") -> STTEngine:
 
 # Auto-import engines to trigger registration
 from . import apple as _apple  # noqa: F401, E402
+from . import mlx_whisper as _mlx_whisper  # noqa: F401, E402
+from . import openai_api as _openai_api  # noqa: F401, E402
+from . import qwen3_asr as _qwen3_asr  # noqa: F401, E402
