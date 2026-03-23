@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useEffect, useRef } from "react";
+import { useCallback, useMemo, useEffect, useRef, useState } from "react";
 import { AuthGuard } from "./components/AuthGuard";
 import { ProjectSelector } from "./components/ProjectSelector";
 import { VideoPlayer } from "./components/VideoPlayer";
 import { Timeline } from "./components/Timeline";
 import { PropertiesPanel } from "./components/PropertiesPanel";
+import { ExportDialog } from "./components/ExportDialog";
 import { useVideoSync } from "./hooks/useVideoSync";
 import { useDrag } from "./hooks/useDrag";
 import { useProjectStore } from "./stores/projectStore";
@@ -30,6 +31,8 @@ export default function App() {
   const selectClip = useEditorStore((s) => s.selectClip);
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
   const setDuration = useEditorStore((s) => s.setDuration);
+
+  const [exportOpen, setExportOpen] = useState(false);
 
   const historyUndo = useHistoryStore((s) => s.undo);
   const historyRedo = useHistoryStore((s) => s.redo);
@@ -248,13 +251,21 @@ export default function App() {
             </div>
 
             {projectId && (
-              <button
-                onClick={save}
-                disabled={saving}
-                className="rounded border border-white/10 bg-surface-2 px-3 py-1 text-xs text-white/60 hover:text-white/80 disabled:opacity-50"
-              >
-                {saving ? "儲存中..." : "儲存"}
-              </button>
+              <>
+                <button
+                  onClick={save}
+                  disabled={saving}
+                  className="rounded border border-white/10 bg-surface-2 px-3 py-1 text-xs text-white/60 hover:text-white/80 disabled:opacity-50"
+                >
+                  {saving ? "儲存中..." : "儲存"}
+                </button>
+                <button
+                  onClick={() => setExportOpen(true)}
+                  className="rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs text-accent hover:bg-accent/20"
+                >
+                  匯出
+                </button>
+              </>
             )}
           </div>
         </header>
@@ -348,6 +359,7 @@ export default function App() {
           </span>
         </div>
       </div>
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
     </AuthGuard>
   );
 }
