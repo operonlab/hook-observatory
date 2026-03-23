@@ -34,6 +34,15 @@ class MoveClipToTimeRequest(BaseModel):
     target_track: int | None = None
 
 
+class SetSpeedRequest(BaseModel):
+    speed: float
+
+
+class SetKeyframesRequest(BaseModel):
+    property_name: str
+    keyframe_str: str
+
+
 def _engine():
     from video_edit.main import engine
     return engine
@@ -97,3 +106,35 @@ async def move_clip_to_time(project_id: str, clip_id: str, req: MoveClipToTimeRe
         )
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/projects/{project_id}/clips/{clip_id}/speed")
+async def set_speed(project_id: str, clip_id: str, req: SetSpeedRequest):
+    try:
+        return _engine().set_speed(project_id, clip_id, req.speed)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/projects/{project_id}/clips/{clip_id}/filters/{filter_id}/keyframes")
+async def get_keyframes(project_id: str, clip_id: str, filter_id: str):
+    try:
+        return _engine().get_keyframes(project_id, clip_id, filter_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.put("/projects/{project_id}/clips/{clip_id}/filters/{filter_id}/keyframes")
+async def set_keyframes(project_id: str, clip_id: str, filter_id: str, req: SetKeyframesRequest):
+    try:
+        return _engine().set_keyframes(project_id, clip_id, filter_id, req.property_name, req.keyframe_str)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/projects/{project_id}/clips/{clip_id}/ripple")
+async def ripple_remove(project_id: str, clip_id: str):
+    try:
+        return _engine().ripple_remove(project_id, clip_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
