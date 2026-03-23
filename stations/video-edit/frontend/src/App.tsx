@@ -1,104 +1,162 @@
-import { useState, useCallback, useMemo } from "react";
+import { useCallback, useMemo, useEffect } from "react";
 import { AuthGuard } from "./components/AuthGuard";
 import { ProjectSelector } from "./components/ProjectSelector";
 import { VideoPlayer } from "./components/VideoPlayer";
 import { Timeline } from "./components/Timeline";
 import { PropertiesPanel } from "./components/PropertiesPanel";
-import { useTimeline } from "./hooks/useTimeline";
 import { useVideoSync } from "./hooks/useVideoSync";
 import { useDrag } from "./hooks/useDrag";
+import { useProjectStore } from "./stores/projectStore";
+import { useEditorStore } from "./stores/editorStore";
+import { useHistoryStore } from "./stores/historyStore";
 import { api } from "./api";
 import type { ProjectInfo, ClipInfo } from "./types";
 
 export default function App() {
-  const [projectId, setProjectId] = useState<string | null>(null);
-  const [projectName, setProjectName] = useState<string | null>(null);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-  const [pxPerSec, setPxPerSec] = useState(6);
-  const [saving, setSaving] = useState(false);
+  // --- Stores ---
+  const projectId = useProjectStore((s) => s.projectId);
+  const projectName = useProjectStore((s) => s.projectName);
+  const timeline = useProjectStore((s) => s.timeline);
+  const loading = useProjectStore((s) => s.loading);
+  const error = useProjectStore((s) => s.error);
+  const saving = useProjectStore((s) => s.saving);
+  const loadProject = useProjectStore((s) => s.loadProject);
+  const reloadTimeline = useProjectStore((s) => s.reloadTimeline);
+  const save = useProjectStore((s) => s.save);
 
-  const { timeline, loading, error, load, reload } = useTimeline();
+  const selectedClipIds = useEditorStore((s) => s.selectedClipIds);
+  const pxPerSec = useEditorStore((s) => s.pxPerSec);
+  const zoom = useEditorStore((s) => s.zoom);
+  const selectClip = useEditorStore((s) => s.selectClip);
+  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
+  const setDuration = useEditorStore((s) => s.setDuration);
+
+  const historyUndo = useHistoryStore((s) => s.undo);
+  const historyRedo = useHistoryStore((s) => s.redo);
+
+  // First selected clip ID (for components that take single selection)
+  const selectedClipId = useMemo(() => {
+    const ids = Array.from(selectedClipIds);
+    return ids.length > 0 ? ids[0] : null;
+  }, [selectedClipIds]);
+
+  // --- Video sync ---
   const { videoRef, currentTime, duration, seekTo } = useVideoSync();
 
+  // Sync video time/duration into editor store
+  useEffect(() => {
+    setCurrentTime(currentTime);
+  }, [currentTime, setCurrentTime]);
+
+  useEffect(() => {
+    setDuration(duration);
+  }, [duration, setDuration]);
+
+  // --- Keyboard shortcuts ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (e.key === " ") {
+        e.preventDefault();
+        const video = videoRef.current;
+        if (video) {
+          if (video.paused) video.play();
+          else video.pause();
+        }
+      }
+
+      // Cmd+Z / Ctrl+Z = undo
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        historyUndo();
+      }
+
+      // Cmd+Shift+Z / Ctrl+Shift+Z = redo
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) {
+        e.preventDefault();
+        historyRedo();
+      }
+
+      // Delete / Backspace = remove selected clip
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedClipId && projectId) {
+          e.preventDefault();
+          handleRemove(selectedClipId);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedClipId, projectId, historyUndo, historyRedo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- Handlers ---
   const handleProjectSelect = useCallback(
     async (info: ProjectInfo) => {
-      setProjectId(info.id);
-      setProjectName(info.name);
-      setSelectedClipId(null);
-      await load(info.id);
+      selectClip(null);
+      useHistoryStore.getState().clear();
+      await loadProject(info.id, info.name);
     },
-    [load],
+    [loadProject, selectClip],
   );
 
-  const handleSave = useCallback(async () => {
-    if (!projectId) return;
-    setSaving(true);
-    try {
-      await api.saveProject(projectId);
-    } catch (err) {
-      console.error("Save failed:", err);
-    } finally {
-      setSaving(false);
-    }
-  }, [projectId]);
-
-  const handleZoom = useCallback(
-    (delta: number) => {
-      setPxPerSec((prev) => Math.max(1, Math.min(20, prev + delta)));
-    },
-    [],
-  );
-
-  // Drag handlers
+  // Drag callbacks
   const dragCallbacks = useMemo(
     () => ({
       pxPerSec,
       trackHeight: 48,
       onMoveEnd: async (clipId: string, newTimeSec: number) => {
-        if (!projectId) return;
-        await api.moveClip(projectId, clipId, {
+        const pid = useProjectStore.getState().projectId;
+        if (!pid) return;
+        await api.moveClip(pid, clipId, {
           new_position: Math.round(newTimeSec),
         });
-        await reload(projectId);
+        await reloadTimeline();
       },
       onTrimLeftEnd: async (clipId: string, newInSec: number) => {
-        if (!projectId) return;
-        await api.trimClip(projectId, clipId, { in_point: newInSec });
-        await reload(projectId);
+        const pid = useProjectStore.getState().projectId;
+        if (!pid) return;
+        await api.trimClip(pid, clipId, { in_point: newInSec });
+        await reloadTimeline();
       },
       onTrimRightEnd: async (clipId: string, newOutSec: number) => {
-        if (!projectId) return;
-        await api.trimClip(projectId, clipId, { out_point: newOutSec });
-        await reload(projectId);
+        const pid = useProjectStore.getState().projectId;
+        if (!pid) return;
+        await api.trimClip(pid, clipId, { out_point: newOutSec });
+        await reloadTimeline();
       },
     }),
-    [pxPerSec, projectId, reload],
+    [pxPerSec, reloadTimeline],
   );
 
   const { onPointerDown, onPointerMove, onPointerUp } =
     useDrag(dragCallbacks);
 
-  // Trim from properties panel
   const handleTrim = useCallback(
     async (clipId: string, inPoint: number, outPoint: number) => {
-      if (!projectId) return;
-      await api.trimClip(projectId, clipId, {
+      const pid = useProjectStore.getState().projectId;
+      if (!pid) return;
+      await api.trimClip(pid, clipId, {
         in_point: inPoint,
         out_point: outPoint,
       });
-      await reload(projectId);
+      await reloadTimeline();
     },
-    [projectId, reload],
+    [reloadTimeline],
   );
 
   const handleRemove = useCallback(
     async (clipId: string) => {
-      if (!projectId) return;
-      await api.removeClip(projectId, clipId);
-      setSelectedClipId(null);
-      await reload(projectId);
+      const pid = useProjectStore.getState().projectId;
+      if (!pid) return;
+      await api.removeClip(pid, clipId);
+      selectClip(null);
+      await reloadTimeline();
     },
-    [projectId, reload],
+    [reloadTimeline, selectClip],
   );
 
   // Find selected clip info
@@ -111,7 +169,6 @@ export default function App() {
     return null;
   }, [timeline, selectedClipId]);
 
-  // Total clip count
   const clipCount = timeline
     ? timeline.tracks.reduce((sum, t) => sum + t.clips.length, 0)
     : 0;
@@ -141,7 +198,7 @@ export default function App() {
             {/* Zoom controls */}
             <div className="flex items-center gap-1">
               <button
-                onClick={() => handleZoom(-1)}
+                onClick={() => zoom(-1)}
                 className="flex h-7 w-7 items-center justify-center rounded border border-white/10 bg-surface-2 text-sm text-white/60"
               >
                 -
@@ -150,7 +207,7 @@ export default function App() {
                 {pxPerSec}x
               </span>
               <button
-                onClick={() => handleZoom(1)}
+                onClick={() => zoom(1)}
                 className="flex h-7 w-7 items-center justify-center rounded border border-white/10 bg-surface-2 text-sm text-white/60"
               >
                 +
@@ -159,7 +216,7 @@ export default function App() {
 
             {projectId && (
               <button
-                onClick={handleSave}
+                onClick={save}
                 disabled={saving}
                 className="rounded border border-white/10 bg-surface-2 px-3 py-1 text-xs text-white/60 hover:text-white/80 disabled:opacity-50"
               >
@@ -216,7 +273,7 @@ export default function App() {
               currentTime={currentTime}
               totalDuration={duration}
               selectedClipId={selectedClipId}
-              onSelectClip={setSelectedClipId}
+              onSelectClip={(id) => selectClip(id)}
               onDragStart={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
