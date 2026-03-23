@@ -164,3 +164,11 @@ export interface RenderReq {
   preset?: string;
   crf?: number;
 }
+
+// --- Media ---
+
+export interface WaveformData {
+  clip_id: string;
+  samples: number;
+  peaks: number[];
+}
