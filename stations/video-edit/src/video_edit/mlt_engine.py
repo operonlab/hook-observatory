@@ -404,6 +404,76 @@ class MLTEngine:
 
         return {"clip_id": clip_id, "track": new_track, "position": new_position}
 
+    def move_clip_to_time(
+        self,
+        project_id: str,
+        clip_id: str,
+        target_time: float,
+        target_track: int | None = None,
+    ) -> dict:
+        """Move a clip to a specific time position using blank elements."""
+        root = self._get_root(project_id)
+        producer, entry, old_playlist = self._find_clip(root, clip_id)
+
+        in_tc = entry.get("in", "00:00:00.000")
+        out_tc = entry.get("out", "00:00:00.000")
+        clip_duration = _parse_tc(out_tc) - _parse_tc(in_tc)
+
+        # Determine target playlist
+        if target_track is not None:
+            new_playlist = root.find(f".//playlist[@id='track{target_track}']")
+            if new_playlist is None:
+                raise ValueError(f"Track {target_track} does not exist")
+        else:
+            new_playlist = old_playlist
+            # Find track index from playlist id
+            target_track = int(old_playlist.get("id", "track0").replace("track", ""))
+
+        # Remove from old playlist
+        old_playlist.remove(entry)
+
+        # Clear all blanks and entries from target playlist, collect entries
+        existing_entries = []
+        for child in list(new_playlist):
+            if child.tag == "entry":
+                # Calculate this entry's timeline position
+                cursor = 0.0
+                for prev in new_playlist:
+                    if prev is child:
+                        break
+                    if prev.tag == "blank":
+                        cursor += _parse_tc(prev.get("length", "00:00:00.000"))
+                    elif prev.tag == "entry":
+                        e_in = _parse_tc(prev.get("in", "00:00:00.000"))
+                        e_out = _parse_tc(prev.get("out", "00:00:00.000"))
+                        cursor += e_out - e_in
+                existing_entries.append((cursor, child))
+            new_playlist.remove(child)
+
+        # Add our moved entry at the target time
+        existing_entries.append((target_time, entry))
+        # Sort by time
+        existing_entries.sort(key=lambda x: x[0])
+
+        # Rebuild playlist with proper blanks
+        cursor = 0.0
+        for t, e in existing_entries:
+            gap = t - cursor
+            if gap > 0.01:  # >10ms gap → insert blank
+                blank = etree.SubElement(new_playlist, "blank")
+                blank.set("length", _tc(gap))
+                cursor += gap
+            new_playlist.append(e)
+            e_in = _parse_tc(e.get("in", "00:00:00.000"))
+            e_out = _parse_tc(e.get("out", "00:00:00.000"))
+            cursor += e_out - e_in
+
+        return {
+            "clip_id": clip_id,
+            "track": target_track,
+            "time": _tc(target_time),
+        }
+
     # ======================== Effects ========================
 
     def add_transition(
@@ -594,6 +664,41 @@ class MLTEngine:
             results["fade_out"] = fade_out
 
         return {"clip_id": clip_id, **results}
+
+    def list_filters(self, project_id: str, clip_id: str) -> list[dict]:
+        """List all filters attached to a clip's producer."""
+        root = self._get_root(project_id)
+        producer, _, _ = self._find_clip(root, clip_id)
+
+        filters = []
+        for filt in producer.findall("filter"):
+            filter_id = filt.get("id", "")
+            service = ""
+            params = {}
+            for prop in filt.findall("property"):
+                name = prop.get("name", "")
+                value = prop.text or ""
+                if name == "mlt_service":
+                    service = value
+                else:
+                    params[name] = value
+            filters.append({
+                "filter_id": filter_id,
+                "type": service,
+                "params": params,
+            })
+        return filters
+
+    def remove_filter(self, project_id: str, clip_id: str, filter_id: str) -> dict:
+        """Remove a filter from a clip's producer."""
+        root = self._get_root(project_id)
+        producer, _, _ = self._find_clip(root, clip_id)
+
+        for filt in producer.findall("filter"):
+            if filt.get("id") == filter_id:
+                producer.remove(filt)
+                return {"filter_id": filter_id, "removed": True}
+        raise KeyError(f"Filter {filter_id} not found on clip {clip_id}")
 
     # ======================== Info & Render ========================
 

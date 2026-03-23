@@ -9,13 +9,31 @@ export function useVideoSync() {
     const video = videoRef.current;
     if (!video) return;
 
-    const onTimeUpdate = () => setCurrentTime(video.currentTime);
     const onMeta = () => setDuration(video.duration || 0);
-
-    video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("loadedmetadata", onMeta);
+
+    // Use requestVideoFrameCallback for frame-accurate sync if available
+    let rVFCHandle: number | undefined;
+    if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
+      const onVideoFrame = (_now: DOMHighResTimeStamp, _meta: VideoFrameCallbackMetadata) => {
+        setCurrentTime(video.currentTime);
+        rVFCHandle = video.requestVideoFrameCallback(onVideoFrame);
+      };
+      rVFCHandle = video.requestVideoFrameCallback(onVideoFrame);
+    } else {
+      // Fallback: timeupdate (~4Hz)
+      const onTimeUpdate = () => setCurrentTime(video.currentTime);
+      video.addEventListener("timeupdate", onTimeUpdate);
+      return () => {
+        video.removeEventListener("timeupdate", onTimeUpdate);
+        video.removeEventListener("loadedmetadata", onMeta);
+      };
+    }
+
     return () => {
-      video.removeEventListener("timeupdate", onTimeUpdate);
+      if (rVFCHandle !== undefined) {
+        video.cancelVideoFrameCallback(rVFCHandle);
+      }
       video.removeEventListener("loadedmetadata", onMeta);
     };
   }, []);
