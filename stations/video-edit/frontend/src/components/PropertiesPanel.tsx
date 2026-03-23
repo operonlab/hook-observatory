@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ClipInfo } from "../types";
+import { api } from "../api";
 import { parseTc, friendlyName } from "../utils";
 
 interface Props {
@@ -19,11 +20,13 @@ export function PropertiesPanel({
 }: Props) {
   const [startInput, setStartInput] = useState("");
   const [endInput, setEndInput] = useState("");
+  const [speed, setSpeed] = useState(1.0);
 
   useEffect(() => {
     if (clip) {
       setStartInput(clip.timeline_start);
       setEndInput(clip.timeline_end);
+      setSpeed(1.0);
     }
   }, [clip]);
 
@@ -90,6 +93,30 @@ export function PropertiesPanel({
             {clip.resource}
           </div>
         </div>
+      </div>
+
+      {/* Speed control */}
+      <div className="mt-2 flex items-center gap-2">
+        <label className="w-12 text-[10px] text-white/40">Speed:</label>
+        <input
+          type="range"
+          min="0.25"
+          max="4"
+          step="0.25"
+          value={speed}
+          onChange={async (e) => {
+            const newSpeed = parseFloat(e.target.value);
+            setSpeed(newSpeed);
+            if (!projectId || !clip) return;
+            try {
+              await api.setSpeed(projectId, clip.clip_id, { speed: newSpeed });
+            } catch {
+              /* ignore */
+            }
+          }}
+          className="h-1 flex-1"
+        />
+        <span className="w-8 text-right text-[10px] text-white/50">{speed.toFixed(2)}x</span>
       </div>
 
       <div className="mt-2.5 flex gap-2">

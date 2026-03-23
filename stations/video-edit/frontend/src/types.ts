@@ -165,6 +165,41 @@ export interface RenderReq {
   crf?: number;
 }
 
+// --- Speed ---
+
+export interface SetSpeedReq {
+  speed: number;
+}
+
+// --- Keyframes ---
+
+export interface KeyframePoint {
+  frame: number;
+  value: string;
+  easing: "linear" | "smooth" | "hold";
+}
+
+export interface KeyframeData {
+  filter_id: string;
+  type: string;
+  keyframed_properties: Record<string, KeyframePoint[]>;
+}
+
+export interface SetKeyframesReq {
+  property_name: string;
+  keyframe_str: string;
+}
+
+// --- Export ---
+
+export interface ExportReq {
+  output_path: string;
+  vcodec?: string;
+  acodec?: string;
+  preset?: string;
+  crf?: number;
+}
+
 // --- Media ---
 
 export interface WaveformData {
