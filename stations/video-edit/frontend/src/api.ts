@@ -7,9 +7,11 @@ import type {
   AddClipReq,
   TrimClipReq,
   MoveClipReq,
+  MoveClipToTimeReq,
   AddTransitionReq,
   AddSubtitleReq,
   AddFilterReq,
+  FilterInfo,
   AdjustAudioReq,
   AddOverlayReq,
   PreviewReq,
@@ -86,6 +88,8 @@ export const api = {
     del(`/projects/${pid}/clips/${clipId}`),
   moveClip: (pid: string, clipId: string, data: MoveClipReq) =>
     patch(`/projects/${pid}/clips/${clipId}/move`, data),
+  moveClipToTime: (pid: string, clipId: string, data: MoveClipToTimeReq) =>
+    patch(`/projects/${pid}/clips/${clipId}/move-to-time`, data),
 
   // Effects
   addTransition: (pid: string, data: AddTransitionReq) =>
@@ -94,6 +98,10 @@ export const api = {
     post(`/projects/${pid}/subtitles`, data),
   addFilter: (pid: string, clipId: string, data: AddFilterReq) =>
     post(`/projects/${pid}/clips/${clipId}/filters`, data),
+  listFilters: (pid: string, clipId: string) =>
+    request<FilterInfo[]>(`/projects/${pid}/clips/${clipId}/filters`),
+  removeFilter: (pid: string, clipId: string, filterId: string) =>
+    del(`/projects/${pid}/clips/${clipId}/filters/${filterId}`),
   adjustAudio: (pid: string, clipId: string, data: AdjustAudioReq) =>
     post(`/projects/${pid}/clips/${clipId}/audio`, data),
   addOverlay: (pid: string, data: AddOverlayReq) =>

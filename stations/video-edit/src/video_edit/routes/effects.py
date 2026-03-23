@@ -92,3 +92,19 @@ async def adjust_audio(project_id: str, clip_id: str, req: AdjustAudioRequest):
         )
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/projects/{project_id}/clips/{clip_id}/filters")
+async def list_filters(project_id: str, clip_id: str):
+    try:
+        return _engine().list_filters(project_id, clip_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/projects/{project_id}/clips/{clip_id}/filters/{filter_id}")
+async def remove_filter(project_id: str, clip_id: str, filter_id: str):
+    try:
+        return _engine().remove_filter(project_id, clip_id, filter_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
