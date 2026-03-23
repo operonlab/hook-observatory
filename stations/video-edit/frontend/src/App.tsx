@@ -81,11 +81,13 @@ export default function App() {
         historyRedo();
       }
 
-      // Delete / Backspace = remove selected clip
+      // Delete / Backspace = remove selected clip(s)
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedClipId && projectId) {
+        const ids = Array.from(useEditorStore.getState().selectedClipIds);
+        if (ids.length > 0 && useProjectStore.getState().projectId) {
           e.preventDefault();
-          handleRemove(selectedClipId);
+          // Remove first selected, user can press Delete again for more
+          handleRemove(ids[0]);
         }
       }
     };
@@ -303,7 +305,14 @@ export default function App() {
               currentTime={currentTime}
               totalDuration={duration}
               selectedClipId={selectedClipId}
-              onSelectClip={(id) => selectClip(id)}
+              projectId={projectId}
+              onSelectClip={(id, event) => {
+                if (event?.shiftKey) {
+                  useEditorStore.getState().toggleClipSelection(id);
+                } else {
+                  selectClip(id);
+                }
+              }}
               onDragStart={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
