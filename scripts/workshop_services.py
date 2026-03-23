@@ -144,6 +144,22 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/ocr",
     },
     {
+        "name": "tts",
+        "type": "uvicorn",
+        "cmd": ("/Users/joneshong/workshop/stations/tts/.venv/bin/python3 main.py"),
+        "port": 4111,
+        "health": "http://127.0.0.1:4111/health",
+        "workdir": "/Users/joneshong/workshop/stations/tts",
+    },
+    {
+        "name": "vision",
+        "type": "uvicorn",
+        "cmd": ("/Users/joneshong/workshop/stations/vision/.venv/bin/python3 main.py"),
+        "port": 4112,
+        "health": "http://127.0.0.1:4112/health",
+        "workdir": "/Users/joneshong/workshop/stations/vision",
+    },
+    {
         "name": "tmux-webui",
         "type": "uvicorn",
         "cmd": "/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",  # noqa: E501
