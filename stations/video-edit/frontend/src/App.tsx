@@ -9,7 +9,8 @@ import { useDrag } from "./hooks/useDrag";
 import { useProjectStore } from "./stores/projectStore";
 import { useEditorStore } from "./stores/editorStore";
 import { useHistoryStore } from "./stores/historyStore";
-import { api } from "./api";
+import { TrimCommand, RemoveCommand, MoveToTimeCommand } from "./commands";
+import { parseTc } from "./utils";
 import type { ProjectInfo, ClipInfo } from "./types";
 
 export default function App() {
@@ -21,7 +22,6 @@ export default function App() {
   const error = useProjectStore((s) => s.error);
   const saving = useProjectStore((s) => s.saving);
   const loadProject = useProjectStore((s) => s.loadProject);
-  const reloadTimeline = useProjectStore((s) => s.reloadTimeline);
   const save = useProjectStore((s) => s.save);
 
   const selectedClipIds = useEditorStore((s) => s.selectedClipIds);
@@ -33,6 +33,7 @@ export default function App() {
 
   const historyUndo = useHistoryStore((s) => s.undo);
   const historyRedo = useHistoryStore((s) => s.redo);
+  const executeCmd = useHistoryStore((s) => s.execute);
 
   // First selected clip ID (for components that take single selection)
   const selectedClipId = useMemo(() => {
@@ -103,33 +104,55 @@ export default function App() {
     [loadProject, selectClip],
   );
 
+  // Snap points: all clip edges across all tracks
+  const snapPoints = useMemo(() => {
+    if (!timeline) return [];
+    const pts = new Set<number>();
+    for (const track of timeline.tracks) {
+      for (const clip of track.clips) {
+        pts.add(parseTc(clip.timeline_start));
+        pts.add(parseTc(clip.timeline_end));
+      }
+    }
+    return Array.from(pts);
+  }, [timeline]);
+
   // Drag callbacks
   const dragCallbacks = useMemo(
     () => ({
       pxPerSec,
       trackHeight: 48,
+      snapPoints,
       onMoveEnd: async (clipId: string, newTimeSec: number) => {
-        const pid = useProjectStore.getState().projectId;
-        if (!pid) return;
-        await api.moveClip(pid, clipId, {
-          new_position: Math.round(newTimeSec),
-        });
-        await reloadTimeline();
+        const clip = useProjectStore.getState().findClip(clipId);
+        if (!clip) return;
+        const prevTime = parseTc(clip.timeline_start);
+        const prevTrack = (() => {
+          const tl = useProjectStore.getState().timeline;
+          if (!tl) return 0;
+          for (let i = 0; i < tl.tracks.length; i++) {
+            if (tl.tracks[i].clips.some((c) => c.clip_id === clipId)) return i;
+          }
+          return 0;
+        })();
+        await executeCmd(new MoveToTimeCommand(clipId, newTimeSec, undefined, prevTime, prevTrack));
       },
       onTrimLeftEnd: async (clipId: string, newInSec: number) => {
-        const pid = useProjectStore.getState().projectId;
-        if (!pid) return;
-        await api.trimClip(pid, clipId, { in_point: newInSec });
-        await reloadTimeline();
+        const clip = useProjectStore.getState().findClip(clipId);
+        if (!clip) return;
+        const prevIn = parseTc(clip.in);
+        const prevOut = parseTc(clip.out);
+        await executeCmd(new TrimCommand(clipId, newInSec, undefined, prevIn, prevOut));
       },
       onTrimRightEnd: async (clipId: string, newOutSec: number) => {
-        const pid = useProjectStore.getState().projectId;
-        if (!pid) return;
-        await api.trimClip(pid, clipId, { out_point: newOutSec });
-        await reloadTimeline();
+        const clip = useProjectStore.getState().findClip(clipId);
+        if (!clip) return;
+        const prevIn = parseTc(clip.in);
+        const prevOut = parseTc(clip.out);
+        await executeCmd(new TrimCommand(clipId, undefined, newOutSec, prevIn, prevOut));
       },
     }),
-    [pxPerSec, reloadTimeline],
+    [pxPerSec, snapPoints, executeCmd],
   );
 
   const { onPointerDown, onPointerMove, onPointerUp } =
@@ -137,26 +160,33 @@ export default function App() {
 
   const handleTrim = useCallback(
     async (clipId: string, inPoint: number, outPoint: number) => {
-      const pid = useProjectStore.getState().projectId;
-      if (!pid) return;
-      await api.trimClip(pid, clipId, {
-        in_point: inPoint,
-        out_point: outPoint,
-      });
-      await reloadTimeline();
+      const clip = useProjectStore.getState().findClip(clipId);
+      if (!clip) return;
+      const prevIn = parseTc(clip.in);
+      const prevOut = parseTc(clip.out);
+      await executeCmd(new TrimCommand(clipId, inPoint, outPoint, prevIn, prevOut));
     },
-    [reloadTimeline],
+    [executeCmd],
   );
 
   const handleRemove = useCallback(
     async (clipId: string) => {
-      const pid = useProjectStore.getState().projectId;
-      if (!pid) return;
-      await api.removeClip(pid, clipId);
+      const clip = useProjectStore.getState().findClip(clipId);
+      if (!clip) return;
+      const trackIdx = (() => {
+        const timeline = useProjectStore.getState().timeline;
+        if (!timeline) return 0;
+        for (let i = 0; i < timeline.tracks.length; i++) {
+          if (timeline.tracks[i].clips.some((c) => c.clip_id === clipId)) return i;
+        }
+        return 0;
+      })();
+      const inPt = parseTc(clip.in);
+      const outPt = parseTc(clip.out);
       selectClip(null);
-      await reloadTimeline();
+      await executeCmd(new RemoveCommand(clipId, clip.resource, trackIdx, inPt, outPt));
     },
-    [reloadTimeline, selectClip],
+    [executeCmd, selectClip],
   );
 
   // Find selected clip info
