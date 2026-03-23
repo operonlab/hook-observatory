@@ -32,6 +32,7 @@ class FinanceEvents:
     WALLET_DELETED = "finance.wallet.deleted"
     WALLET_SYNCED = "finance.wallet.synced"
     WALLET_RECONCILED = "finance.wallet.reconciled"
+    WALLET_CASH_GAP = "finance.wallet.cash_gap_detected"
 
     # 分期
     INSTALLMENT_CREATED = "finance.installment.created"

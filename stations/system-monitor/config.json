@@ -43,14 +43,25 @@
   "guardian": {
     "warn_threshold": 40,
     "crit_threshold": 15,
+    "p0_age_seconds": 600,
+    "p0_threshold_offset": 20,
     "idle_cpu": 1.0,
     "min_age_seconds": 300,
     "grace_seconds": 30,
     "log_dir": "~/.claude/data/system-monitor",
+    "compressed_memory": {
+      "watch_threshold_gb": 3.0,
+      "warn_threshold_gb": 5.0,
+      "crit_threshold_gb": 8.0,
+      "purge_on_warn": true,
+      "safari_tab_warn_gb": 2.0,
+      "notify_cooldown_minutes": 15
+    },
     "expendables": [
       { "pattern": "Google Chrome Helper (Renderer)", "label": "Chrome 分頁" },
-      { "pattern": "LINE", "label": "LINE" },
-      { "pattern": "LineCall", "label": "LINE Call" },
+      { "pattern": "/Applications/Google Chrome.app", "label": "Google Chrome" },
+      { "pattern": "plugin-container", "label": "Zen 分頁" },
+      { "pattern": "/Applications/Zen Browser.app", "label": "Zen Browser" },
       { "pattern": "Visual Studio Code", "label": "VS Code" },
       { "pattern": "Antigravity", "label": "Antigravity" },
       { "pattern": "openclaw-gateway", "label": "OpenClaw" },

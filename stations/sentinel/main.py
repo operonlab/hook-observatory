@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -10,7 +11,6 @@ from pathlib import Path
 
 from checker import (
     CheckResult,
-    run_all_deep_checks,
     run_all_light_checks,
 )
 from database import async_session, drain_spool_loop, engine, persist
@@ -126,28 +126,16 @@ async def _light_check_loop() -> None:
 
 
 async def _deep_check_loop() -> None:
-    """Run deep checks every 5 min."""
-    from sse import sse_broadcast
+    """Deep checks disabled — Playwright checks are too flaky and trigger
+    cascading repair storms (pnpm rebuild + nginx reload → service disruption).
+    Keeping the coroutine as a no-op so lifespan doesn't need changes.
+    """
+    logger.info("Deep check loop DISABLED")
+    # Block forever without consuming CPU
+    await asyncio.Event().wait()
 
-    await asyncio.sleep(30)  # Initial delay
-    while True:
-        try:
-            results = await run_all_deep_checks()
-            for r in results:
-                intervention_engine.update_deep(r.service, r.status)
-                await _persist_check(r)
 
-            healthy = sum(1 for r in results if r.status == "healthy")
-            logger.info("Deep check: %d/%d healthy", healthy, len(results))
-
-            # Broadcast updated status to all SSE clients
-            await sse_broadcast("status", _build_status_payload())
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Deep check loop error")
-
-        await asyncio.sleep(config.check.deep_interval)
+_NOTIFICATION_COOLDOWN = 1800  # 30 minutes — suppress repeat notifications for same service
 
 
 async def _repair_monitor_loop() -> None:
@@ -205,6 +193,19 @@ async def _repair_monitor_loop() -> None:
 
                 # Dispatch repair if needed
                 elif tracker.state == State.INTERVENING:
+                    # ── Cooldown gate: skip entire repair+notification cycle ──
+                    _now_ts = time.time()
+                    if _now_ts - tracker.last_notified_at < _NOTIFICATION_COOLDOWN:
+                        # Recently handled — go to ESCALATED to stop re-attempts
+                        tracker.state = State.ESCALATED
+                        logger.info(
+                            "Repair cooldown for %s (%.0fs remaining), → ESCALATED",
+                            service,
+                            _NOTIFICATION_COOLDOWN - (_now_ts - tracker.last_notified_at),
+                        )
+                        continue
+                    tracker.last_notified_at = _now_ts
+
                     # Build detail with deep check info for richer diagnosis
                     detail_parts = []
                     if tracker.light_status and tracker.light_status != "healthy":
@@ -233,11 +234,7 @@ async def _repair_monitor_loop() -> None:
                                     " AND detail IS NOT NULL AND detail != ''"
                                     " ORDER BY created_at DESC LIMIT 1"
                                 ),
-                                {
-                                    "svc": service.replace("-render", "")
-                                    if "-render" not in service
-                                    else service
-                                },
+                                {"svc": f"{service}-render"},
                             )
                             r = row.first()
                             if r:

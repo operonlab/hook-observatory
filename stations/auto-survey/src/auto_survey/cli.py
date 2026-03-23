@@ -252,10 +252,8 @@ def history(url: str | None):
 
 @main.command("line-read")
 @click.option("--group", default=None, help="LINE community name (default: from config)")
-@click.option("--trigger/--no-trigger", default=False, help="Auto-trigger pipeline if URLs found")
-@click.option("--dry-run", is_flag=True, help="Don't actually fill forms (only with --trigger)")
-def line_read(group: str | None, trigger: bool, dry_run: bool):
-    """Read LINE community chat and extract SurveyCake URLs."""
+def line_read(group: str | None):
+    """Single LINE read: screenshot + OCR → extract URLs → save to DB as scheduled."""
     from .line_reader import extract_survey_urls, read_line_community
 
     community = group or settings.line_community_name
@@ -279,13 +277,108 @@ def line_read(group: str | None, trigger: bool, dry_run: bool):
     if quiz:
         click.echo(f"  測驗: {quiz}")
 
-    if trigger:
-        click.echo("[auto-survey] Triggering pipeline...")
-        _ensure_db()
-        ctx = click.get_current_context()
-        ctx.invoke(run, attend_url=attend, quiz_url=quiz, dry_run=dry_run)
-    else:
-        click.echo("[auto-survey] Dry mode — use --trigger to auto-fill")
+    # Save to DB as scheduled
+    _ensure_db()
+    db = get_session()
+    try:
+        today = date.today()
+        now = datetime.now(timezone.utc)
+        daily = db.query(DailyRun).filter(DailyRun.run_date == today).first()
+        if not daily:
+            daily = DailyRun(run_date=today)
+            db.add(daily)
+        daily.attend_url = attend
+        daily.quiz_url = quiz
+        daily.status = "scheduled"
+        daily.updated_at = now
+        db.commit()
+        click.echo("[auto-survey] URLs saved to DB (status: scheduled)")
+    finally:
+        db.close()
+
+
+@main.command("today-status")
+def today_status():
+    """Output today's DailyRun status and URLs (machine-readable key:value)."""
+    _ensure_db()
+    db = get_session()
+    try:
+        today = date.today()
+        daily = db.query(DailyRun).filter(DailyRun.run_date == today).first()
+        if not daily:
+            click.echo("status:none")
+            return
+        click.echo(f"status:{daily.status}")
+        click.echo(f"attend_url:{daily.attend_url or ''}")
+        click.echo(f"quiz_url:{daily.quiz_url or ''}")
+        click.echo(f"result_summary:{daily.result_summary or ''}")
+    finally:
+        db.close()
+
+
+@main.command("line-poll")
+@click.option("--max-retries", default=5, type=int, help="Max retry attempts")
+@click.option("--interval", default=120, type=int, help="Retry interval (seconds)")
+def line_poll(max_retries: int, interval: int):
+    """Manual testing: poll LINE with retries, save URLs to DB.
+
+    For scheduled execution, use ws_auto_survey.py which calls line-read directly.
+    """
+    import time as _time
+
+    from .line_reader import extract_survey_urls, read_line_community
+
+    community = settings.line_community_name
+
+    for attempt in range(1, max_retries + 1):
+        click.echo(f"[auto-survey] LINE poll attempt {attempt}/{max_retries}")
+
+        text = read_line_community(community)
+        if not text:
+            click.echo("  No content (LINE not running?)")
+            if attempt < max_retries:
+                click.echo(f"  Retrying in {interval}s...")
+                _time.sleep(interval)
+            continue
+
+        urls = extract_survey_urls(text)
+        attend = urls.get("attend_url")
+        quiz = urls.get("quiz_url")
+
+        if attend or quiz:
+            click.echo(f"  Found URLs on attempt {attempt}!")
+            if attend:
+                click.echo(f"  簽到: {attend}")
+            if quiz:
+                click.echo(f"  測驗: {quiz}")
+
+            # Save to DB as scheduled (same as line-read)
+            _ensure_db()
+            db = get_session()
+            try:
+                today = date.today()
+                now = datetime.now(timezone.utc)
+                daily = db.query(DailyRun).filter(DailyRun.run_date == today).first()
+                if not daily:
+                    daily = DailyRun(run_date=today)
+                    db.add(daily)
+                daily.attend_url = attend
+                daily.quiz_url = quiz
+                daily.status = "scheduled"
+                daily.updated_at = now
+                db.commit()
+                click.echo("[auto-survey] URLs saved to DB (status: scheduled)")
+            finally:
+                db.close()
+            return
+
+        click.echo("  No SurveyCake URLs in visible messages")
+        if attempt < max_retries:
+            click.echo(f"  Retrying in {interval}s...")
+            _time.sleep(interval)
+
+    click.echo(f"[auto-survey] Failed after {max_retries} attempts")
+    raise SystemExit(1)
 
 
 @main.command()

@@ -129,9 +129,14 @@ def save_survey(
         company = classified.get("company")
         if company:
             survey.company_options = company.get("options", [])
-        # Delete old questions and re-insert
+        # Preserve correct_answer from existing questions before re-insert
+        old_qs = db.query(Question).filter(Question.survey_id == survey.id).all()
+        preserved_answers = {
+            q.subject_id: (q.correct_answer, q.verified) for q in old_qs if q.correct_answer
+        }
         db.query(Question).filter(Question.survey_id == survey.id).delete()
     else:
+        preserved_answers = {}
         company = classified.get("company")
         survey = Survey(
             url=url,
@@ -145,12 +150,15 @@ def save_survey(
         db.flush()
 
     for q in classified["questions"]:
+        correct_answer, verified = preserved_answers.get(q["id"], (None, False))
         db.add(
             Question(
                 survey_id=survey.id,
                 subject_id=q["id"],
                 question_text=q["text"],
                 options=q["options"],
+                correct_answer=correct_answer,
+                verified=verified,
             )
         )
 

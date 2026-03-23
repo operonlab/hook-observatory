@@ -97,6 +97,13 @@ async def lifespan(app: FastAPI):
         pass
     await event_bus.stop()
 
+    # Cleanup ML worker subprocesses
+    from src.shared import ax_bridge, omlx_bridge, rerank_bridge
+
+    await omlx_bridge.shutdown()
+    await rerank_bridge.shutdown()
+    await ax_bridge.shutdown()
+
 
 app = FastAPI(title="Workshop", version="0.1.0", lifespan=lifespan)
 

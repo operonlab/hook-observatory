@@ -7,6 +7,7 @@ from pathlib import Path
 
 from database import async_session, engine
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from models import Base, HookEvent
 from spool import SpoolDrainer
@@ -22,6 +23,17 @@ logger = setup_logging("hook-observatory")
 _drainer: SpoolDrainer | None = None
 
 
+def _strip_null(obj):
+    """Recursively strip \\u0000 null bytes from strings (PostgreSQL rejects them)."""
+    if isinstance(obj, str):
+        return obj.replace("\x00", "").replace("\\u0000", "")
+    if isinstance(obj, dict):
+        return {k: _strip_null(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_strip_null(v) for v in obj]
+    return obj
+
+
 async def _batch_write_events(events: list[dict]) -> None:
     """Write a batch of events to PostgreSQL. ON CONFLICT DO NOTHING for idempotency."""
     import asyncio
@@ -32,7 +44,7 @@ async def _batch_write_events(events: list[dict]) -> None:
     async with async_session() as session:
         rows = []
         for evt in events:
-            data = evt.get("data", {})
+            data = _strip_null(evt.get("data", {}))
             rows.append(
                 {
                     "event_type": evt.get("event_type", "unknown"),

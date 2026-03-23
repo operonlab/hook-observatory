@@ -847,6 +847,148 @@ class MLTEngine:
 
         return output_path
 
+    def render_frame(
+        self,
+        project_id: str,
+        time: float,
+        width: int = 960,
+        height: int = 540,
+    ) -> bytes:
+        """Render a single frame at the given time as JPEG bytes."""
+        root = self._get_root(project_id)
+        project_dir = self.projects_dir / project_id
+        tmp_mlt = project_dir / "project.mlt"
+        tree = etree.ElementTree(root)
+        tree.write(str(tmp_mlt), xml_declaration=True, encoding="UTF-8")
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(tmp_mlt),
+            "-ss", str(time),
+            "-vframes", "1",
+            "-s", f"{width}x{height}",
+            "-f", "image2pipe",
+            "-vcodec", "mjpeg",
+            "-q:v", "3",
+            "pipe:1",
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=15)
+        if result.returncode != 0:
+            # Fallback: try melt for .mlt files
+            cmd2 = [
+                settings.MELT_BIN, str(tmp_mlt),
+                "-in", str(int(time * 30)),
+                "-out", str(int(time * 30)),
+                "-consumer", f"avformat:/dev/stdout",
+                "vcodec=mjpeg", "f=image2pipe",
+            ]
+            result = subprocess.run(cmd2, capture_output=True, timeout=15)
+            if result.returncode != 0:
+                raise RuntimeError(f"Frame render failed at t={time}")
+        return result.stdout
+
+    def get_waveform(
+        self,
+        project_id: str,
+        clip_id: str,
+        samples: int = 800,
+    ) -> list[float]:
+        """Extract audio waveform peaks for a clip."""
+        root = self._get_root(project_id)
+        producer, entry, _ = self._find_clip(root, clip_id)
+
+        resource = ""
+        for prop in producer.findall("property"):
+            if prop.get("name") == "resource":
+                resource = prop.text or ""
+                break
+
+        if not resource or not Path(resource).exists():
+            return [0.0] * samples
+
+        # Use ffmpeg to extract raw audio, compute peaks
+        cmd = [
+            "ffmpeg", "-i", resource,
+            "-ac", "1",  # mono
+            "-ar", "8000",  # low sample rate for speed
+            "-f", "f32le",
+            "-acodec", "pcm_f32le",
+            "pipe:1",
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        if result.returncode != 0 or not result.stdout:
+            return [0.0] * samples
+
+        import struct
+        raw = result.stdout
+        total_floats = len(raw) // 4
+        if total_floats == 0:
+            return [0.0] * samples
+
+        # Downsample to requested number of samples
+        chunk_size = max(1, total_floats // samples)
+        peaks = []
+        for i in range(0, total_floats, chunk_size):
+            end = min(i + chunk_size, total_floats)
+            chunk_max = 0.0
+            for j in range(i, end):
+                val = abs(struct.unpack_from('<f', raw, j * 4)[0])
+                if val > chunk_max:
+                    chunk_max = val
+            peaks.append(round(min(chunk_max, 1.0), 4))
+            if len(peaks) >= samples:
+                break
+
+        return peaks
+
+    def get_thumbnails(
+        self,
+        project_id: str,
+        clip_id: str,
+        interval: float = 2.0,
+        thumb_width: int = 160,
+        thumb_height: int = 90,
+    ) -> str:
+        """Generate thumbnail sprite sheet for a clip. Returns path to PNG."""
+        root = self._get_root(project_id)
+        producer, entry, _ = self._find_clip(root, clip_id)
+
+        resource = ""
+        for prop in producer.findall("property"):
+            if prop.get("name") == "resource":
+                resource = prop.text or ""
+                break
+
+        if not resource or not Path(resource).exists():
+            raise FileNotFoundError(f"Resource not found for clip {clip_id}")
+
+        in_sec = _parse_tc(entry.get("in", "00:00:00.000"))
+        out_sec = _parse_tc(entry.get("out", "00:00:00.000"))
+        duration = out_sec - in_sec
+
+        # Output path
+        thumb_dir = self.projects_dir / project_id / "thumbnails"
+        thumb_dir.mkdir(parents=True, exist_ok=True)
+        output_path = str(thumb_dir / f"{clip_id}_strip.png")
+
+        num_frames = max(1, int(duration / interval))
+
+        # Use ffmpeg to extract frames and tile them horizontally
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", resource,
+            "-ss", str(in_sec),
+            "-t", str(duration),
+            "-vf", f"fps=1/{interval},scale={thumb_width}:{thumb_height},tile={num_frames}x1",
+            "-frames:v", "1",
+            output_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=60)
+        if result.returncode != 0:
+            raise RuntimeError(f"Thumbnail generation failed: {result.stderr[:200]}")
+
+        return output_path
+
     # ======================== Internal helpers ========================
 
     def _get_root(self, project_id: str) -> etree._Element:

@@ -1,13 +1,12 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { analyticsApi } from '../api'
+import ChartFallback from '../components/ChartFallback'
 import type { MonthlySummary, MonthlyTrend, NetWorthPoint } from '../types'
 import { fmtAmt } from '../types'
 
 const MonthlyBarChart = lazy(() => import('../components/charts/MonthlyBarChart'))
 const NetWorthChart = lazy(() => import('../components/charts/NetWorthChart'))
-
-const ChartFallback = () => <div className="animate-pulse h-64 bg-white/5 rounded" />
 
 export default function ReportPage() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))

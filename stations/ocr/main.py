@@ -1,5 +1,8 @@
 """OCR Station — Text extraction service with pluggable engines.
 
+Models are loaded on-demand and auto-unloaded after idle timeout (5min)
+to avoid persistent ~1.5GB memory usage from PaddleOCR.
+
 Usage:
     cd stations/ocr && .venv/bin/python3 main.py
     # or via workshop_services.py
@@ -7,6 +10,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import os.path
 
@@ -15,7 +19,32 @@ from engines import get_engine
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-app = FastAPI(title="OCR Station", version="0.2.0")
+_unloader_task: asyncio.Task | None = None
+
+
+async def _model_unloader_loop():
+    """Background loop: check every 60s and unload idle PaddleOCR models."""
+    from engines.paddle import is_idle, unload_models
+
+    while True:
+        await asyncio.sleep(60)
+        if is_idle():
+            unload_models()
+
+
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _unloader_task
+    _unloader_task = asyncio.create_task(_model_unloader_loop())
+    yield
+    if _unloader_task:
+        _unloader_task.cancel()
+
+
+app = FastAPI(title="OCR Station", version="0.3.0", lifespan=lifespan)
 
 # Engines with built-in preprocessing — skip external preprocessing in auto mode
 _SELF_PREPROCESSING_ENGINES = {"paddle", "claude", "gemini"}

@@ -4,6 +4,7 @@ This is the public KG API of the memvault module.
 Other modules import from here, never from kg_models.py.
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -48,6 +49,9 @@ from .kg_schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Module-level set to prevent fire-and-forget tasks from being GC'd
+_kg_bg_tasks: set[asyncio.Task] = set()
 
 
 # ======================== TripleUpdate (lightweight) ========================
@@ -1322,15 +1326,14 @@ class CascadeRecallService:
                 logger.warning("CRAG evaluation failed (non-fatal): %s", e)
 
         # --- Closed-Loop: Record access + implicit feedback + query journal (fire-and-forget) ---
-        import asyncio
-
-        bg_tasks: list[asyncio.Task] = []
-        bg_tasks.append(asyncio.ensure_future(self._record_recall_access(result)))
+        _bg_coros = [self._record_recall_access(result)]
         if result.evaluation_verdict:
-            bg_tasks.append(
-                asyncio.ensure_future(self._record_implicit_feedback(space_id, query, result))
-            )
-        bg_tasks.append(asyncio.ensure_future(self._record_query_journal(space_id, query, result)))
+            _bg_coros.append(self._record_implicit_feedback(space_id, query, result))
+        _bg_coros.append(self._record_query_journal(space_id, query, result))
+        for _coro in _bg_coros:
+            _t = asyncio.ensure_future(_coro)
+            _kg_bg_tasks.add(_t)
+            _t.add_done_callback(_kg_bg_tasks.discard)
 
         # --- Closed-Loop: Rerank by access count ---
         result.triples = self._rerank_by_access(result.triples)

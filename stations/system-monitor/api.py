@@ -452,7 +452,9 @@ async def service_logs(label: str, lines: int = 50):
 
 @app.get("/guardian")
 async def guardian_log():
-    """Get memory guardian action log + heartbeat status."""
+    """Get memory guardian action log + heartbeat status + live compressed/safari snapshot."""
+    import asyncio
+
     from collector import collect_guardian_log, collect_guardian_status
 
     entries = collect_guardian_log()
@@ -462,6 +464,18 @@ async def guardian_log():
         result["last_checked"] = status.get("last_checked")
         result["current_level"] = status.get("mem_level")
         result["current_status"] = status.get("status")
+        result["compressed_gb"] = status.get("compressed_gb")
+
+    # Live snapshot of compressed memory + Safari memory
+    from memory_guardian import _get_compressed_memory_gb, _get_safari_memory
+
+    loop = asyncio.get_event_loop()
+    compressed, safari = await asyncio.gather(
+        loop.run_in_executor(None, _get_compressed_memory_gb),
+        loop.run_in_executor(None, _get_safari_memory),
+    )
+    result["compressed_memory"] = compressed
+    result["safari_memory"] = safari
     return result
 
 
@@ -472,6 +486,18 @@ async def guardian_run():
 
     guardian = MemoryGuardian(CONFIG.get("guardian", {}))
     result = guardian.run()
+    return result
+
+
+@app.post("/guardian/compressed-sweep")
+async def guardian_compressed_sweep():
+    """Manually trigger compressed memory hygiene sweep (independent of full guardian run)."""
+    import asyncio
+
+    from memory_guardian import MemoryGuardian
+
+    guardian = MemoryGuardian(CONFIG.get("guardian", {}))
+    result = await asyncio.get_event_loop().run_in_executor(None, guardian.compressed_sweep)
     return result
 
 

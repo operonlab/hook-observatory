@@ -43,13 +43,25 @@ def _build_fill_script(
       }}
     }}"""
 
-    # Build answer clicks for quiz
+    # Build answer clicks for quiz — match via getAttribute('data-qa')
+    # to avoid CSS selector crashes and hasText mismatch with spacing/escapes
     answer_clicks = ""
     if answers:
         for subject_id, answer_text in answers.items():
             escaped = _js_escape(answer_text)
             answer_clicks += f"""
-    await page.click('[data-qa="option-{escaped}"]');
+    {{
+      const subj = page.locator('[data-qa="{subject_id}"]');
+      const opts = subj.locator('[data-qa^="option-"]');
+      const count = await opts.count();
+      for (let i = 0; i < count; i++) {{
+        const qa = await opts.nth(i).getAttribute('data-qa');
+        if (qa === 'option-{escaped}') {{
+          await opts.nth(i).click();
+          break;
+        }}
+      }}
+    }}
     await page.waitForTimeout(300);"""
 
     name_escaped = _js_escape(person.name)
@@ -108,24 +120,26 @@ def _build_fill_script(
       await page.waitForFunction(
         (oldUrl) => window.location.href !== oldUrl,
         preSubmitUrl,
-        {{ timeout: 15000 }}
+        {{ timeout: 30000 }}
       );
     }} catch (e) {{}}
 
     // 9. Wait for result page to fully load
     try {{
-      await page.waitForLoadState('networkidle', {{ timeout: 10000 }});
+      await page.waitForLoadState('networkidle', {{ timeout: 15000 }});
     }} catch (e) {{}}
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
 
     // 10. Wait for score text to appear (quiz result pages)
     try {{
       await page.waitForFunction(
-        () => /成績|分數|Score|感謝/.test(document.body.innerText),
+        () => /成績|分數|Score|感謝|你的/.test(document.body.innerText),
         null,
-        {{ timeout: 5000 }}
+        {{ timeout: 15000 }}
       );
     }} catch (e) {{}}
+    // Extra wait for score rendering after text appears
+    await page.waitForTimeout(2000);
 
     // 11. Extract page text
     const bodyText = await page.evaluate(() => document.body.innerText);
@@ -193,7 +207,7 @@ def fill_form(
         # Debug: log result text for score extraction diagnosis
         if survey.type == "quiz":
             preview = result_text[:300].replace("\n", " | ")
-            log.info("[fill] %s result_text: %s", person.name, preview)
+            log.warning("[fill] %s result_text: %s", person.name, preview)
             if score is None:
                 log.warning("[fill] %s score=None — regex matched nothing", person.name)
 

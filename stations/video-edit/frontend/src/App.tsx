@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useEffect, useRef } from "react";
 import { AuthGuard } from "./components/AuthGuard";
 import { ProjectSelector } from "./components/ProjectSelector";
 import { VideoPlayer } from "./components/VideoPlayer";
@@ -42,6 +42,7 @@ export default function App() {
   }, [selectedClipIds]);
 
   // --- Video sync ---
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const { videoRef, currentTime, duration, seekTo } = useVideoSync();
 
   // Sync video time/duration into editor store
@@ -81,11 +82,13 @@ export default function App() {
         historyRedo();
       }
 
-      // Delete / Backspace = remove selected clip
+      // Delete / Backspace = remove selected clip(s)
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedClipId && projectId) {
+        const ids = Array.from(useEditorStore.getState().selectedClipIds);
+        if (ids.length > 0 && useProjectStore.getState().projectId) {
           e.preventDefault();
-          handleRemove(selectedClipId);
+          // Remove first selected, user can press Delete again for more
+          handleRemove(ids[0]);
         }
       }
     };
@@ -257,7 +260,7 @@ export default function App() {
         </header>
 
         {/* Video Player */}
-        <VideoPlayer videoRef={videoRef} currentTime={currentTime} />
+        <VideoPlayer videoRef={videoRef} canvasRef={canvasRef} currentTime={currentTime} hasSrc={!!timeline} />
 
         {/* Legend */}
         <div className="flex gap-4 border-b border-white/5 bg-surface-1 px-4 py-1.5 text-xs text-white/50">
@@ -303,7 +306,14 @@ export default function App() {
               currentTime={currentTime}
               totalDuration={duration}
               selectedClipId={selectedClipId}
-              onSelectClip={(id) => selectClip(id)}
+              projectId={projectId}
+              onSelectClip={(id, event) => {
+                if (event?.shiftKey) {
+                  useEditorStore.getState().toggleClipSelection(id);
+                } else {
+                  selectClip(id);
+                }
+              }}
               onDragStart={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}

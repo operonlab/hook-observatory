@@ -12,7 +12,8 @@ interface Props {
   currentTime: number;
   totalDuration: number;
   selectedClipId: string | null;
-  onSelectClip: (clipId: string) => void;
+  projectId: string | null;
+  onSelectClip: (clipId: string, event?: React.PointerEvent | React.MouseEvent) => void;
   onDragStart: (
     e: React.PointerEvent,
     clipId: string,
@@ -32,6 +33,7 @@ export function Timeline({
   currentTime,
   totalDuration,
   selectedClipId,
+  projectId,
   onSelectClip,
   onDragStart,
   onPointerMove,
@@ -110,6 +112,7 @@ export function Timeline({
             clips={track.clips}
             pxPerSec={pxPerSec}
             selectedClipId={selectedClipId}
+            projectId={projectId}
             onSelectClip={onSelectClip}
             onDragStart={onDragStart}
           />

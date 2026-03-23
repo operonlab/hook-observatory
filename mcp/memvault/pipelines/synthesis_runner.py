@@ -33,19 +33,49 @@ PIPELINE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARY_LEVELS = [1, 0, 2]  # medium first (most useful), then fine, then coarse
 
 
-def run_pipeline(name: str, cmd: list[str], env: dict) -> tuple[bool, float]:
-    """Run a pipeline subprocess and return (success, duration_seconds)."""
+PIPELINE_TIMEOUT = 900  # 15 minutes max per pipeline step
+
+
+def run_pipeline(
+    name: str, cmd: list[str], env: dict, *, timeout: int = PIPELINE_TIMEOUT
+) -> tuple[bool, float]:
+    """Run a pipeline subprocess and return (success, duration_seconds).
+
+    Uses process group kill to ensure all child processes (including grandchildren
+    spawned by 'uv run') are terminated on timeout.
+    """
     print(f"\n{'─' * 60}")
     print(f"  Running: {name}")
     print(f"  Command: {' '.join(cmd)}")
     print(f"{'─' * 60}\n")
 
-    t0 = time.monotonic()
-    result = subprocess.run(cmd, env=env)
-    elapsed = time.monotonic() - t0
+    import signal
 
-    ok = result.returncode == 0
-    status = "OK" if ok else f"FAILED (exit {result.returncode})"
+    t0 = time.monotonic()
+    try:
+        proc = subprocess.Popen(cmd, env=env, start_new_session=True)
+        proc.wait(timeout=timeout)
+        elapsed = time.monotonic() - t0
+        ok = proc.returncode == 0
+        status = "OK" if ok else f"FAILED (exit {proc.returncode})"
+    except subprocess.TimeoutExpired:
+        elapsed = time.monotonic() - t0
+        # Kill entire process group (uv → python grandchild)
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            proc.wait()
+        ok = False
+        status = f"TIMEOUT after {elapsed:.0f}s"
+
     print(f"\n  [{name}] {status} — {elapsed:.1f}s")
     return ok, elapsed
 

@@ -70,17 +70,19 @@ SERVICES = [
         "health": "http://127.0.0.1:4106/health",
         "workdir": "/Users/joneshong/workshop/stations/session-channel",
     },
-    {
-        "name": "sentinel",
-        "type": "uvicorn",
-        "cmd": (
-            "/Users/joneshong/workshop/stations/sentinel/.venv/bin/python3"
-            " -m uvicorn main:app --host 127.0.0.1 --port 4101"
-        ),
-        "port": 4101,
-        "health": "http://127.0.0.1:4101/health",
-        "workdir": "/Users/joneshong/workshop/stations/sentinel",
-    },
+    # Sentinel: scheduled-only (Cronicle every 5min), not persistent
+    # API/SSE unavailable — light checks + Bark notifications via runner
+    # {
+    #     "name": "sentinel",
+    #     "type": "uvicorn",
+    #     "cmd": (
+    #         "/Users/joneshong/workshop/stations/sentinel/.venv/bin/python3"
+    #         " -m uvicorn main:app --host 127.0.0.1 --port 4101"
+    #     ),
+    #     "port": 4101,
+    #     "health": "http://127.0.0.1:4101/health",
+    #     "workdir": "/Users/joneshong/workshop/stations/sentinel",
+    # },
     {
         "name": "system-monitor",
         "type": "uvicorn",
@@ -128,10 +130,7 @@ SERVICES = [
     {
         "name": "stt",
         "type": "uvicorn",
-        "cmd": (
-            "/Users/joneshong/workshop/stations/stt/.venv/bin/python3"
-            " main.py"
-        ),
+        "cmd": ("/Users/joneshong/workshop/stations/stt/.venv/bin/python3 main.py"),
         "port": 4108,
         "health": "http://127.0.0.1:4108/health",
         "workdir": "/Users/joneshong/workshop/stations/stt",
@@ -139,10 +138,7 @@ SERVICES = [
     {
         "name": "ocr",
         "type": "uvicorn",
-        "cmd": (
-            "/Users/joneshong/workshop/stations/ocr/.venv/bin/python3"
-            " main.py"
-        ),
+        "cmd": ("/Users/joneshong/workshop/stations/ocr/.venv/bin/python3 main.py"),
         "port": 4109,
         "health": "http://127.0.0.1:4109/health",
         "workdir": "/Users/joneshong/workshop/stations/ocr",
@@ -230,6 +226,7 @@ DOCKER_CONTAINERS = [
         "port": 3100,
         "health_cmd": None,
         "health_url": "http://127.0.0.1:3100/api/health",
+        "optional": True,  # profile-gated — only check if container exists
     },
     {
         "name": "ws-infra-bark-1",
@@ -265,6 +262,16 @@ def log(msg: str) -> None:
 def err(msg: str) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] ERROR: {msg}", file=sys.stderr, flush=True)
+
+
+def _container_exists(name: str) -> bool:
+    """Check if a Docker container exists (running or stopped)."""
+    result = subprocess.run(
+        ["docker", "inspect", "--format", "{{.Name}}", name],
+        capture_output=True,
+        timeout=5,
+    )
+    return result.returncode == 0
 
 
 def ensure_dirs() -> None:
@@ -371,6 +378,11 @@ def ensure_containers() -> None:
     for container in DOCKER_CONTAINERS:
         name = container["name"]
         port = container["port"]
+
+        # Skip optional containers (profile-gated) that don't exist
+        if container.get("optional") and not _container_exists(name):
+            log(f"Skipping optional container: {name} (not provisioned)")
+            continue
 
         # Check if running
         result = subprocess.run(
@@ -619,6 +631,11 @@ def health_check_docker() -> None:
 
     for container in DOCKER_CONTAINERS:
         name = container["name"]
+
+        # Skip optional containers (profile-gated) that don't exist
+        if container.get("optional") and not _container_exists(name):
+            continue
+
         result = subprocess.run(
             ["docker", "inspect", "--format", "{{.State.Running}}", name],
             capture_output=True,
@@ -693,13 +710,15 @@ def _check_bind_addresses() -> None:
                 import json as _json
                 import socket as _socket
 
-                _payload = _json.dumps({
-                    "category": "system",
-                    "title": "Port Security Alert",
-                    "body": f"⚠️ {svc_name} (:{port_num}) bound to 0.0.0.0",
-                    "tag": f"port-security-{port_num}",
-                    "severity": "critical",
-                })
+                _payload = _json.dumps(
+                    {
+                        "category": "system",
+                        "title": "Port Security Alert",
+                        "body": f"⚠️ {svc_name} (:{port_num}) bound to 0.0.0.0",
+                        "tag": f"port-security-{port_num}",
+                        "severity": "critical",
+                    }
+                )
                 _ch = "workshop:push"
                 _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
                 _sock.settimeout(3)
@@ -774,6 +793,7 @@ def cmd_status() -> None:
     for container in DOCKER_CONTAINERS:
         name = container["name"]
         port = container["port"]
+        is_optional = container.get("optional", False)
 
         result = subprocess.run(
             ["docker", "inspect", "--format", "{{.State.Status}}", name],
@@ -781,6 +801,11 @@ def cmd_status() -> None:
             text=True,
         )
         state = result.stdout.strip() if result.returncode == 0 else "not found"
+
+        # Optional containers that don't exist → show as inactive, not as error
+        if is_optional and state == "not found":
+            print(f"  - {name:<18} Docker    :{port:<6} inactive (optional)")
+            continue
 
         health_result = subprocess.run(
             [

@@ -47,6 +47,7 @@ class ServiceTracker:
     repair_started_at: float = 0.0
     incident_id: str | None = None
     response_ms: float = 0.0
+    last_notified_at: float = 0.0
 
 
 @dataclass

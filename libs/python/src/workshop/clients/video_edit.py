@@ -63,9 +63,7 @@ class VideoEditClient:
                 "Start server: cd stations/video-edit && uv run video-edit serve",
             ) from None
         except httpx.HTTPStatusError as e:
-            raise VideoEditError(
-                e.response.status_code, e.response.text[:500]
-            ) from e
+            raise VideoEditError(e.response.status_code, e.response.text[:500]) from e
 
     def _get(self, path: str, params: dict | None = None) -> Any:
         filtered = {k: v for k, v in params.items() if v is not None} if params else None
@@ -106,14 +104,17 @@ class VideoEditClient:
         fps_den: int = 1,
         num_tracks: int = 3,
     ) -> dict:
-        return self._post("/projects/", {
-            "name": name,
-            "width": width,
-            "height": height,
-            "fps_num": fps_num,
-            "fps_den": fps_den,
-            "num_tracks": num_tracks,
-        })
+        return self._post(
+            "/projects/",
+            {
+                "name": name,
+                "width": width,
+                "height": height,
+                "fps_num": fps_num,
+                "fps_den": fps_den,
+                "num_tracks": num_tracks,
+            },
+        )
 
     def open_project(self, path: str) -> dict:
         return self._post("/projects/open", {"path": path})
@@ -191,13 +192,16 @@ class VideoEditClient:
         in_time: float = 0,
         out_time: float = 2,
     ) -> dict:
-        return self._post(f"/projects/{project_id}/transitions", {
-            "a_track": a_track,
-            "b_track": b_track,
-            "transition_type": transition_type,
-            "in_time": in_time,
-            "out_time": out_time,
-        })
+        return self._post(
+            f"/projects/{project_id}/transitions",
+            {
+                "a_track": a_track,
+                "b_track": b_track,
+                "transition_type": transition_type,
+                "in_time": in_time,
+                "out_time": out_time,
+            },
+        )
 
     def add_subtitle(
         self,
@@ -252,6 +256,32 @@ class VideoEditClient:
         if fade_out is not None:
             body["fade_out"] = fade_out
         return self._post(f"/projects/{project_id}/clips/{clip_id}/audio", body)
+
+    def add_image_overlay(
+        self,
+        project_id: str,
+        file_path: str,
+        start: float,
+        duration: float,
+        track: int = 1,
+        geometry: str = "0/0:100%x100%",
+        fade_in: float = 0.5,
+        fade_out: float = 0.5,
+        opacity: float = 1.0,
+    ) -> dict:
+        return self._post(
+            f"/projects/{project_id}/overlays",
+            {
+                "file_path": file_path,
+                "start": start,
+                "duration": duration,
+                "track": track,
+                "geometry": geometry,
+                "fade_in": fade_in,
+                "fade_out": fade_out,
+                "opacity": opacity,
+            },
+        )
 
     # ======================== Render ========================
 

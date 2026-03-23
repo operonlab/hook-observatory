@@ -9,7 +9,8 @@ interface Props {
   clips: ClipInfo[];
   pxPerSec: number;
   selectedClipId: string | null;
-  onSelectClip: (clipId: string) => void;
+  projectId: string | null;
+  onSelectClip: (clipId: string, event?: React.PointerEvent) => void;
   onDragStart: (
     e: React.PointerEvent,
     clipId: string,
@@ -26,6 +27,7 @@ export function Track({
   clips,
   pxPerSec,
   selectedClipId,
+  projectId,
   onSelectClip,
   onDragStart,
 }: Props) {
@@ -56,6 +58,7 @@ export function Track({
               trackIndex={trackIndex}
               pxPerSec={pxPerSec}
               isSelected={clip.clip_id === selectedClipId}
+              projectId={projectId}
               onSelect={onSelectClip}
               onDragStart={onDragStart}
             />

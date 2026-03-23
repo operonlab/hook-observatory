@@ -219,19 +219,42 @@ def _balance_delta(txn_type: str, amount: Decimal) -> Decimal:
 async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decimal) -> None:
     """Atomic delta update on wallet current_balance.
 
-    Cash wallets enforce a hard floor of 0 — cannot go negative.
+    Cash wallets: when balance would go negative, allow it but publish
+    a cash_gap event to force reconciliation (untracked income).
     """
     if delta < 0:
         wallet = await db.get(Wallet, wallet_id)
         if wallet and wallet.type == "cash":
             projected = wallet.current_balance + delta
             if projected < 0:
-                raise BadRequestError(
-                    f"現金錢包「{wallet.name}」餘額不足："  # noqa: RUF001
-                    f"目前 ${wallet.current_balance:,.0f}，"  # noqa: RUF001
-                    f"需要 ${abs(delta):,.0f}",
-                    code="finance.cash_insufficient",
+                gap = abs(projected)
+                logger.warning(
+                    "cash_gap wallet=%s current=%s delta=%s gap=%s",
+                    wallet.name,
+                    wallet.current_balance,
+                    delta,
+                    gap,
                 )
+                try:
+                    await event_bus.publish(
+                        Event(
+                            type=FinanceEvents.WALLET_CASH_GAP,
+                            data={
+                                "wallet_id": wallet_id,
+                                "wallet_name": wallet.name,
+                                "current_balance": str(wallet.current_balance),
+                                "projected_balance": str(projected),
+                                "gap": str(gap),
+                                "message": (
+                                    f"現金錢包「{wallet.name}」餘額不足"
+                                    f"（差額 ${gap:,.0f}），請補登現金來源"
+                                ),
+                            },
+                            source="finance",
+                        )
+                    )
+                except Exception:
+                    logger.warning("cash_gap event publish failed wallet=%s", wallet_id)
     await db.execute(
         update(Wallet)
         .where(Wallet.id == wallet_id)
@@ -946,7 +969,11 @@ class TransactionService(
         )
 
     async def create(
-        self, db: AsyncSession, space_id: str, data: TransactionCreate, user_id: str | None = None
+        self,
+        db: AsyncSession,
+        space_id: str,
+        data: TransactionCreate,
+        user_id: str | None = None,
     ) -> Transaction:
         instance = await super().create(db, space_id, data, user_id)
 
@@ -1180,8 +1207,7 @@ class TransactionService(
         base = apply_privacy_filter(base, Transaction, user_id)
 
         if year_month:
-            ym_start, ym_end = _ym_filter(Transaction.transacted_at, year_month)
-            base = base.where(ym_start, ym_end)
+            base = base.where(*_ym_filter(Transaction.transacted_at, year_month))
         if txn_type:
             base = base.where(Transaction.type == txn_type)
         if category_id:
@@ -1488,15 +1514,12 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
             )
             spending_q = apply_privacy_filter(spending_q, Transaction, user_id)
             spending_rows = (await db.execute(spending_q)).all()
-            for sr in spending_rows:
-                spending_map[(sr.ym, sr.category_id)] = sr.total or Decimal("0")
-                if sr.category_id:
-                    cat_name_map[sr.category_id] = sr.cat_name
-
-            # Total spending per month for budgets without category
             month_totals: dict[str, Decimal] = {}
             for sr in spending_rows:
                 amt = sr.total or Decimal("0")
+                spending_map[(sr.ym, sr.category_id)] = amt
+                if sr.category_id:
+                    cat_name_map[sr.category_id] = sr.cat_name
                 month_totals[sr.ym] = month_totals.get(sr.ym, Decimal("0")) + amt
             for ym in ym_set:
                 spending_map[(ym, None)] = month_totals.get(ym, Decimal("0"))
@@ -1703,13 +1726,11 @@ class SummaryService:
         year_month: str,
         user_id: str | None = None,
     ) -> MonthlySummaryResponse:
-        ym_start, ym_end = _ym_filter(Transaction.transacted_at, year_month)
         base = select(Transaction).where(
             Transaction.space_id == space_id,
             Transaction.status == "completed",
             Transaction.deleted_at == None,  # noqa: E711
-            ym_start,
-            ym_end,
+            *_ym_filter(Transaction.transacted_at, year_month),
         )
         base = apply_privacy_filter(base, Transaction, user_id)
 
@@ -1724,8 +1745,7 @@ class SummaryService:
                 Transaction.space_id == space_id,
                 Transaction.status == "completed",
                 Transaction.deleted_at == None,  # noqa: E711
-                ym_start,
-                ym_end,
+                *_ym_filter(Transaction.transacted_at, year_month),
             )
             .group_by(Transaction.type)
         )
@@ -1757,8 +1777,7 @@ class SummaryService:
                 Transaction.type == "expense",
                 Transaction.status == "completed",
                 Transaction.deleted_at == None,  # noqa: E711
-                ym_start,
-                ym_end,
+                *_ym_filter(Transaction.transacted_at, year_month),
             )
             .group_by(Transaction.category_id, Category.name, Category.icon)
             .order_by(func.sum(Transaction.amount).desc())

@@ -1,10 +1,31 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 
-export function useVideoSync() {
+export function useVideoSync(src?: string) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  // Manage src changes safely
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (src) {
+      // Only update if src actually changed
+      const currentSrc = video.getAttribute("src") || "";
+      if (currentSrc !== src) {
+        video.pause();
+        video.setAttribute("src", src);
+        // Catch the play promise rejection that happens when load() interrupts
+        video.load();
+      }
+    } else {
+      // No src — just pause, do NOT call load() on empty src
+      video.pause();
+    }
+  }, [src]);
+
+  // Attach media event listeners
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -36,11 +57,13 @@ export function useVideoSync() {
       }
       video.removeEventListener("loadedmetadata", onMeta);
     };
-  }, []);
+    // Re-run when src changes because the video element's event state resets on load
+  }, [src]);
 
   const seekTo = useCallback((t: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = t;
+    const video = videoRef.current;
+    if (video && video.readyState >= 1) {
+      video.currentTime = t;
       setCurrentTime(t);
     }
   }, []);

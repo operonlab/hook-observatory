@@ -9,6 +9,8 @@ from src.shared.database import async_session_factory
 
 logger = logging.getLogger(__name__)
 
+_background_tasks: set[asyncio.Task] = set()
+
 
 async def on_capture_created_auto_enrich(event: Event) -> None:
     """Auto-enrich new captures via LLM when raw_input is present.
@@ -29,7 +31,9 @@ async def on_capture_created_auto_enrich(event: Event) -> None:
     entity_type = data.get("entity_type", "")
 
     # Schedule as background task — lets create() commit first
-    asyncio.create_task(_do_auto_enrich(capture_id, module, entity_type, raw_input))
+    task = asyncio.create_task(_do_auto_enrich(capture_id, module, entity_type, raw_input))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 async def _do_auto_enrich(capture_id: str, module: str, entity_type: str, raw_input: str) -> None:

@@ -19,7 +19,11 @@ class PlaywrightSession:
         if self.profile_dir:
             # Insert --profile before the subcommand args
             idx = next(
-                (i for i, a in enumerate(cmd_parts) if a in ("open", "run-code", "screenshot", "close")),
+                (
+                    i
+                    for i, a in enumerate(cmd_parts)
+                    if a in ("open", "run-code", "screenshot", "close")
+                ),
                 len(cmd_parts),
             )
             cmd_parts.insert(idx, f"--profile={self.profile_dir}")
@@ -32,6 +36,8 @@ class PlaywrightSession:
         )
         if result.returncode != 0:
             raise RuntimeError(f"Playwright CLI error: {result.stderr or result.stdout}")
+        if result.stdout.lstrip().startswith("### Error"):
+            raise RuntimeError(f"Playwright CLI error: {result.stdout[:500]}")
         return result.stdout
 
     def open(self, url: str) -> str:
