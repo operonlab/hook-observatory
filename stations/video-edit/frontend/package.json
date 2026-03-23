@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "immer": "^11.1.4",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "zustand": "catalog:"
   },
   "devDependencies": {
     "@types/react": "catalog:",
