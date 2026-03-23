@@ -20,9 +20,7 @@ class STTClient:
     """HTTP client for STT station (port 4108)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 120):
-        self.base_url = (
-            base_url or os.environ.get("STT_URL", "http://127.0.0.1:4108")
-        ).rstrip("/")
+        self.base_url = (base_url or os.environ.get("STT_URL", "http://127.0.0.1:4108")).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None
 
@@ -81,12 +79,20 @@ class STTClient:
         file_path: str,
         language: str = "zh-TW",
         engine: str = "apple",
-    ) -> dict:
-        """Transcribe audio file to text."""
-        return self._post(
-            "/transcribe",
-            params={"path": file_path, "language": language, "engine": engine},
-        )
+        format: str = "json",
+    ) -> dict | str:
+        """Transcribe audio file. Returns dict for json, str for srt/vtt/text."""
+        params = {
+            "path": file_path,
+            "language": language,
+            "engine": engine,
+            "format": format,
+        }
+        filtered = {k: v for k, v in params.items() if v is not None}
+        resp = self._request("POST", "/transcribe", params=filtered)
+        if format in ("srt", "vtt", "text"):
+            return resp.text
+        return resp.json()
 
     # ======================== Engines ========================
 

@@ -2,7 +2,7 @@
 """STT CLI — Speech-to-text transcription.
 
 Usage:
-    stt transcribe <audio-file> [--language LANG] [--engine ENGINE]
+    stt transcribe <audio-file> [--language LANG] [--engine ENGINE] [--format FMT]
     stt engines
     stt health
 
@@ -13,8 +13,8 @@ import argparse
 import json
 import sys
 
-from workshop.clients.stt import STTClient
 from workshop.clients._base import APIError
+from workshop.clients.stt import STTClient
 
 
 def cmd_transcribe(args):
@@ -24,8 +24,12 @@ def cmd_transcribe(args):
             file_path=args.file,
             language=args.language,
             engine=args.engine,
+            format=args.format,
         )
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if args.format == "json":
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(result)
     except APIError as e:
         print(f"Error ({e.status_code}): {e.detail}", file=sys.stderr)
         sys.exit(1)
@@ -46,8 +50,8 @@ def cmd_health(args):
     try:
         result = client.health()
         print(json.dumps(result, ensure_ascii=False, indent=2))
-    except APIError as e:
-        print(f"Error: STT station not reachable", file=sys.stderr)
+    except APIError:
+        print("Error: STT station not reachable", file=sys.stderr)
         sys.exit(1)
 
 
@@ -60,6 +64,12 @@ def main():
     p_trans.add_argument("file", help="Path to audio file")
     p_trans.add_argument("--language", default="zh-TW", help="Language code (default: zh-TW)")
     p_trans.add_argument("--engine", default="apple", help="Engine name (default: apple)")
+    p_trans.add_argument(
+        "--format",
+        default="json",
+        choices=["json", "srt", "vtt", "text"],
+        help="Output format (default: json)",
+    )
     p_trans.set_defaults(func=cmd_transcribe)
 
     # engines
