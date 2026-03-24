@@ -13,6 +13,8 @@ from typing import Any
 
 import httpx
 
+from workshop.port_registry import get_url
+
 from ._base import APIError
 
 
@@ -20,7 +22,7 @@ class STTClient:
     """HTTP client for STT station (port 4108)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 120):
-        self.base_url = (base_url or os.environ.get("STT_URL", "http://127.0.0.1:4108")).rstrip("/")
+        self.base_url = (base_url or os.environ.get("STT_URL", get_url("stt"))).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None
 

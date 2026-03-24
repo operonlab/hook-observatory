@@ -13,6 +13,8 @@ from typing import Any
 
 import httpx
 
+from workshop.port_registry import get_url
+
 from ._base import APIError
 
 
@@ -20,9 +22,9 @@ class TranslateClient:
     """HTTP client for Translate station (port 4114)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 60):
-        self.base_url = (
-            base_url or os.environ.get("TRANSLATE_URL", "http://127.0.0.1:4114")
-        ).rstrip("/")
+        self.base_url = (base_url or os.environ.get("TRANSLATE_URL", get_url("translate"))).rstrip(
+            "/"
+        )
         self._timeout = timeout
         self._client: httpx.Client | None = None
 
@@ -41,9 +43,7 @@ class TranslateClient:
     ) -> httpx.Response:
         url = f"{self.base_url}{path}"
         try:
-            resp = self.client.request(
-                method, url, timeout=timeout or self._timeout, **kwargs
-            )
+            resp = self.client.request(method, url, timeout=timeout or self._timeout, **kwargs)
             resp.raise_for_status()
             return resp
         except httpx.ConnectError:
@@ -54,9 +54,7 @@ class TranslateClient:
                 module="translate",
             ) from None
         except httpx.HTTPStatusError as e:
-            raise APIError(
-                e.response.status_code, e.response.text[:500], module="translate"
-            ) from e
+            raise APIError(e.response.status_code, e.response.text[:500], module="translate") from e
 
     # ======================== Health ========================
 
