@@ -251,6 +251,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4113/health",
         optional=True,
     ),
+    LightCheck(
+        name="tps",
+        group="external",
+        url="http://127.0.0.1:4114/health",
+        optional=True,
+    ),
     # ── security ──
     LightCheck(
         name="port-security",

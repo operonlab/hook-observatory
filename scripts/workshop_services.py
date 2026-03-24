@@ -168,6 +168,14 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/voice-gateway",
     },
     {
+        "name": "tps",
+        "type": "uvicorn",
+        "cmd": "/Users/joneshong/workshop/stations/tps/.venv/bin/python3 main.py",
+        "port": 4114,
+        "health": "http://127.0.0.1:4114/health",
+        "workdir": "/Users/joneshong/workshop/stations/tps",
+    },
+    {
         "name": "tmux-webui",
         "type": "uvicorn",
         "cmd": "/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",  # noqa: E501
