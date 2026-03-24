@@ -35,12 +35,21 @@ def _resolve_model_path(rel: str) -> Path:
     return Path(__file__).parent / p
 
 
+async def _publish(event_bus: VoiceEventBus | None, event_type: str, payload: dict) -> None:
+    """Publish event to Redis + SSE."""
+    if event_bus:
+        await event_bus.publish(event_type, payload)
+    sse_broadcast({"type": event_type, **payload})
+
+
 async def _pipeline_loop(app_state) -> None:
     """Main server-side pipeline loop (Path B).
 
-    Runs: AudioSource → VAD → (future: KWS) → STT Bridge → Events
+    Full pipeline: AudioSource → VAD → KWS → STT Bridge → Events
+    State machine: IDLE → LISTENING → PROCESSING → RESPONDING → IDLE
     """
     from pipeline.audio_source import AudioSource
+    from pipeline.kws import KeywordSpotter
     from pipeline.stt_bridge import STTBridge
     from pipeline.vad import VadGate
 
@@ -54,6 +63,11 @@ async def _pipeline_loop(app_state) -> None:
         logger.error("vad_model_not_found: %s — run scripts/download_models.py", vad_model)
         return
 
+    kws_model_dir = _resolve_model_path(config.server.kws_model_dir)
+    kws_available = kws_model_dir.exists()
+    if not kws_available:
+        logger.warning("kws_model_not_found: %s — running without wake word", kws_model_dir)
+
     audio = AudioSource(
         sample_rate=config.server.sample_rate,
         chunk_ms=config.server.chunk_ms,
@@ -63,6 +77,12 @@ async def _pipeline_loop(app_state) -> None:
         sample_rate=config.server.sample_rate,
         threshold=config.server.vad_threshold,
     )
+    kws = KeywordSpotter(
+        model_dir=kws_model_dir,
+        keywords=config.keywords,
+        sample_rate=config.server.sample_rate,
+    ) if kws_available else None
+
     stt = STTBridge(
         ws_url=config.server.stt_ws_url,
         engine=config.server.stt_engine,
@@ -76,7 +96,7 @@ async def _pipeline_loop(app_state) -> None:
     try:
         await audio.start()
         app_state.pipeline_active = True
-        logger.info("pipeline_started")
+        logger.info("pipeline_started: kws=%s", "enabled" if kws else "disabled")
 
         while True:
             # Check if server should be capturing
@@ -93,26 +113,63 @@ async def _pipeline_loop(app_state) -> None:
 
             is_speech = vad.accept(chunk)
 
-            # ── IDLE: wait for speech ──
+            # ── IDLE: wait for speech (Tier 1 — VAD only) ──
             if sm.state == GatewayState.IDLE:
                 if is_speech:
-                    sm.transition(GatewayState.PROCESSING, reason="vad_speech_detected")
-                    speech_buffer = [chunk]
-                    last_speech_time = now
+                    if kws:
+                        # With KWS: go to LISTENING, run KWS
+                        sm.transition(GatewayState.LISTENING, reason="vad_speech_detected")
+                        speech_buffer = [chunk]
+                        last_speech_time = now
+                        await _publish(event_bus, "voice.state.changed", {
+                            "from": "IDLE", "to": "LISTENING",
+                            "reason": "vad_speech_detected", "source_path": "server",
+                        })
+                    else:
+                        # No KWS: skip directly to PROCESSING
+                        sm.transition(GatewayState.PROCESSING, reason="vad_speech_detected")
+                        speech_buffer = [chunk]
+                        last_speech_time = now
+                        await _publish(event_bus, "voice.state.changed", {
+                            "from": "IDLE", "to": "PROCESSING",
+                            "reason": "vad_speech_detected", "source_path": "server",
+                        })
 
-                    if event_bus:
-                        await event_bus.publish("voice.state.changed", {
-                            "from": "IDLE",
-                            "to": "PROCESSING",
-                            "reason": "vad_speech_detected",
+            # ── LISTENING: VAD + KWS active (Tier 2) ──
+            elif sm.state == GatewayState.LISTENING:
+                speech_buffer.append(chunk)
+
+                if is_speech:
+                    last_speech_time = now
+                    # Run KWS on speech chunks
+                    keyword = kws.accept(chunk) if kws else None
+                    if keyword:
+                        sm.transition(GatewayState.PROCESSING, reason="kws_match")
+                        await _publish(event_bus, "voice.wakeword.detected", {
+                            "keyword": keyword,
+                            "audio_duration_ms": int(len(speech_buffer) * chunk_duration_s * 1000),
                             "source_path": "server",
                         })
-                    sse_broadcast({
-                        "type": "voice.state.changed",
-                        "from": "IDLE", "to": "PROCESSING",
-                    })
+                        # Clear buffer — only record AFTER wake word
+                        speech_buffer = []
+                        last_speech_time = now
+                else:
+                    # Silence in LISTENING — timeout back to IDLE
+                    silence_s = now - last_speech_time
+                    if silence_s > config.listening_timeout_s * 0.5:
+                        sm.transition(GatewayState.IDLE, reason="listening_silence_timeout")
+                        speech_buffer = []
+                        if kws:
+                            kws.reset()
 
-            # ── PROCESSING: accumulate speech, wait for silence ──
+                # LISTENING overall timeout
+                if sm.state == GatewayState.LISTENING and sm.time_in_state() > config.listening_timeout_s:
+                    sm.transition(GatewayState.IDLE, reason="listening_timeout")
+                    speech_buffer = []
+                    if kws:
+                        kws.reset()
+
+            # ── PROCESSING: recording post-wakeword speech (Tier 3) ──
             elif sm.state == GatewayState.PROCESSING:
                 speech_buffer.append(chunk)
 
@@ -127,14 +184,13 @@ async def _pipeline_loop(app_state) -> None:
                         and speech_duration > config.min_speech_for_stt_s
                     ):
                         # Speech ended — send to STT
+                        sm.transition(GatewayState.RESPONDING, reason="speech_complete")
                         full_audio = np.concatenate(speech_buffer)
                         audio_ms = int(len(full_audio) / config.server.sample_rate * 1000)
 
-                        if event_bus:
-                            await event_bus.publish("voice.speech.captured", {
-                                "audio_duration_ms": audio_ms,
-                                "source_path": "server",
-                            })
+                        await _publish(event_bus, "voice.speech.captured", {
+                            "audio_duration_ms": audio_ms, "source_path": "server",
+                        })
 
                         logger.info("speech_captured: %d ms, sending to STT", audio_ms)
 
@@ -146,23 +202,17 @@ async def _pipeline_loop(app_state) -> None:
                             text = result.get("text", "").strip()
                             if text:
                                 logger.info("transcript: %r", text[:80])
-                                if event_bus:
-                                    await event_bus.publish("voice.transcript.completed", {
-                                        "text": text,
-                                        "language": config.language,
-                                        "engine": result.get("engine", config.server.stt_engine),
-                                        "latency_ms": result.get("latency_ms", 0),
-                                        "audio_duration_ms": audio_ms,
-                                        "source_path": "server",
-                                    })
-                                sse_broadcast({
-                                    "type": "voice.transcript.completed",
+                                await _publish(event_bus, "voice.transcript.completed", {
                                     "text": text,
+                                    "language": config.language,
+                                    "engine": result.get("engine", config.server.stt_engine),
+                                    "latency_ms": result.get("latency_ms", 0),
+                                    "audio_duration_ms": audio_ms,
+                                    "source_path": "server",
                                 })
                         except Exception as e:
                             logger.error("stt_failed: %s", e)
-                            if event_bus:
-                                await event_bus.publish("voice.error.occurred", {
+                            await _publish(event_bus, "voice.error.occurred", {
                                     "error": "stt_failed",
                                     "detail": str(e),
                                     "state": "PROCESSING",
