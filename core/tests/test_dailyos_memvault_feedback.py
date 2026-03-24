@@ -8,13 +8,11 @@ Verifies:
 """
 
 import pytest
-
 from src.events.backends.memory import InMemoryBackend
 from src.events.bus import Event, EventBus
 from src.events.types import DailyosEvents
 from src.modules.dailyos.events import _synthesize_behavioral_summary
 from src.modules.dailyos.services import _build_completion_payload
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
