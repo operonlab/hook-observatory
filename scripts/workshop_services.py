@@ -219,6 +219,15 @@ SERVICES = [
         "health": "http://127.0.0.1:4000",
         "workdir": "/Users/joneshong",
     },
+    # ── External Sites ──
+    {
+        "name": "blog",
+        "type": "binary",
+        "cmd": "/opt/homebrew/bin/node dist/server/entry.mjs",
+        "port": 4107,
+        "health": "http://127.0.0.1:4107/zh/",
+        "workdir": "/Users/joneshong/blog",
+    },
 ]
 
 # Docker containers: name, port, health_cmd
