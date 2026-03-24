@@ -34,7 +34,6 @@ from tmux_manager import (
     list_windows,
     new_window,
     resize_pane,
-    select_layout,
     select_pane,
     send_keys,
     status_metrics,
@@ -86,49 +85,25 @@ RELAY_SCRIPTS_DIR = Path.home() / ".claude/skills/tmux-relay/scripts"
 RELAY_PANE_POOL = RELAY_SCRIPTS_DIR / "pane_pool.sh"
 RELAY_SH = RELAY_SCRIPTS_DIR / "relay.sh"
 
-# ── Disconnect layout reset (debounced 10s) ──
+# ── Connection tracking ──
 
-_disconnect_timers: dict[str, asyncio.Task] = {}
 _active_connections: dict[str, int] = {}  # session -> connection count
 _ws_clients: set[WebSocket] = set()
 _tts_store: dict = {}  # {"id": str, "data": bytes, "text": str}
 
-
-async def _reset_layout_delayed(session: str, delay: float = 10.0):
-    """After delay, reset all windows in session to even-horizontal layout."""
-    try:
-        await asyncio.sleep(delay)
-        # Only reset if no active connections remain
-        if _active_connections.get(session, 0) > 0:
-            return
-        windows = await list_windows(session)
-        for w in windows:
-            target = f"{session}:{w['index']}"
-            await select_layout(target, "even-horizontal")
-        logger.info("Reset layout to even-horizontal for session '%s'", session)
-    except asyncio.CancelledError:
-        pass
-    except Exception as exc:
-        logger.error("Reset layout error: %s", exc)
-    finally:
-        _disconnect_timers.pop(session, None)
+# Note: disconnect layout reset removed — fitPane no longer resizes tmux panes,
+# so there's nothing to reset on disconnect.
 
 
 def _on_ws_connect(session: str):
-    """Track connection and cancel pending reset."""
+    """Track connection count."""
     _active_connections[session] = _active_connections.get(session, 0) + 1
-    timer = _disconnect_timers.pop(session, None)
-    if timer:
-        timer.cancel()
-        logger.info("Cancelled layout reset for session '%s' (reconnected)", session)
 
 
 def _on_ws_disconnect(session: str):
-    """Start debounced reset timer if no connections remain."""
+    """Track connection count."""
     count = _active_connections.get(session, 1) - 1
     _active_connections[session] = max(0, count)
-    if count <= 0 and session not in _disconnect_timers:
-        _disconnect_timers[session] = asyncio.create_task(_reset_layout_delayed(session))
 
 
 @asynccontextmanager
@@ -149,12 +124,9 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 async def index(request: Request):
     cfg = get_config()
     return templates.TemplateResponse(
+        request,
         "index.html",
-        {
-            "request": request,
-            "config": cfg,
-            "git_hash": GIT_HASH,
-        },
+        context={"config": cfg, "git_hash": GIT_HASH},
     )
 
 

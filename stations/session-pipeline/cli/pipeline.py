@@ -86,7 +86,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     else:
         print(f"Pipeline: session={result.session_id}")
         print(f"  transcript: {result.transcript_path or '(auto-detect)'}")
-        for stage in result.stages:
+        for stage in data["stages"]:
             icon = "ok " if stage["success"] else "FAIL"
             err = f"  [{stage['error']}]" if stage.get("error") else ""
             print(f"  [{icon}] {stage['name']:10s}  {stage['duration_ms']:>5}ms{err}")

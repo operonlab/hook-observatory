@@ -19,6 +19,37 @@ from session_archiver.models import SessionMeta
 log = structlog.get_logger(__name__)
 
 
+def get_active_session_ids() -> set[str]:
+    """Read ~/.claude/sessions/*.json to find currently active Claude Code sessions.
+
+    Each JSON file contains {pid, sessionId, cwd, startedAt}.
+    Only returns sessions whose PID is still alive.
+    """
+    sessions_dir = Path.home() / ".claude" / "sessions"
+    active: set[str] = set()
+    if not sessions_dir.is_dir():
+        return active
+    for f in sessions_dir.glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+            sid = data.get("sessionId", "")
+            pid = data.get("pid", 0)
+            if sid and pid and _is_pid_alive(pid):
+                active.add(sid)
+        except (json.JSONDecodeError, OSError):
+            continue
+    return active
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process is still running (signal 0 = existence check)."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
 def scan_sessions(config: Config, *, session_id: str | None = None) -> list[SessionMeta]:
     """Scan sessions under the configured projects directory.
 

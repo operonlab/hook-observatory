@@ -2,8 +2,10 @@
 Voice notification handler with async TTS queue.
 
 Events:
-  PreToolUse/AskUserQuestion → random "請示" phrase
-  Stop → task summary from state file, or "視窗X面板Y任務完成了"
+  PreToolUse/AskUserQuestion → random "請示" phrase + cancel pending TTS
+  SubagentStart → track active sub-agent (Redis INCR) + cancel pending TTS
+  SubagentStop → track completion (Redis DECR) + subtle sound effect
+  Stop → deferred task announcement with activity-aware guards
 
 Queue guarantees:
   - Non-blocking enqueue (hook returns immediately)
@@ -18,10 +20,14 @@ Debounce:
 TTS fallback chain: Workshop TTS service → edge-tts CLI → macOS say
 Disable: CLAUDE_VOICE=0
 
-Three-guard state machine (prevents false "task done" announcements):
-  Guard 1: stop_hook_active — skip if hook is re-entrant
-  Guard 2: last_assistant_message content analysis — detect intermediate states
-  Guard 3: Event separation — SubagentStop plays sound effect, Stop plays TTS
+Seven-guard state machine (prevents false "task done" announcements):
+  Guard 0:   hook_event_name — skip non-Claude Stop events
+  Guard 0.5: agent_type — skip Agent Teams teammate Stops
+  Guard 1:   stop_hook_active — skip if hook is re-entrant
+  Guard 1.5: active_agents > 0 — sub-agents still running (Redis counter)
+  Guard 1.7: recent activity — sub-agent completed within settle window
+  Guard 2:   last_assistant_message content analysis — detect intermediate states
+  Guard 3:   Event separation — SubagentStop plays sound effect, Stop plays TTS
 """
 
 from __future__ import annotations
@@ -32,25 +38,52 @@ import os
 import random
 import re
 import subprocess
+import time
 
 from .base import ALLOW, HOME, HookResult
 
 # --- Intermediate-state detection patterns ---
 # If the assistant's last message ends with these, it's NOT done yet.
 _INTERMEDIATE_PATTERNS = [
+    # Chinese patterns
     r"接下來",
     r"下一步",
     r"繼續\s*(處理|執行|進行)",
     r"我(會|將|來|先)",
+    r"(那麼|好的|首先|然後)，?\s*(我|讓)",
+    r"先(處理|檢查|看看|確認|完成)",
+    r"(開始|著手)(處理|進行|執行)",
+    r"讓我(再|繼續|先|來)",
+    # English patterns
     r"let me continue",
     r"I'll now\b",
     r"I will now\b",
     r"next,?\s*I",
     r"moving on to",
-    r"let me (?:check|read|look|fix|update|run)",
+    r"let me (?:check|read|look|fix|update|run|create|implement|start|explore|analyze)",
     r"now (?:let me|I'll|I will)",
+    r"(?:first|then),?\s*(?:let me|I'll|I need to)",
+    r"starting (?:with|by|to)",
+    r"I need to (?:first|also|still)",
+    # Question patterns (Stop before AskUserQuestion)
+    r"\?\s*$",
+    r"您(覺得|認為|希望|想要|選擇|確認)",
+    r"請(選擇|確認|決定|告訴我)",
 ]
 _INTERMEDIATE_RE = re.compile("|".join(_INTERMEDIATE_PATTERNS), re.IGNORECASE)
+
+# Known sub-agent / teammate types that should NEVER trigger TTS on Stop
+_TEAMMATE_TYPES = frozenset({
+    # Agent Teams built-in roles
+    "Plan", "Explore", "Code", "Debug", "Review",
+    # Custom sub-agent types (from ~/.claude/agents/)
+    "worker", "explorer", "reviewer", "designer",
+    "foreman", "researcher", "browser", "media",
+    "codex-dispatcher", "gemini-dispatcher", "copilot-dispatcher",
+    "writer", "statusline-setup", "claude-code-guide",
+    "audit-context-building:function-analyzer",
+    "chaos-engineer", "general-purpose",
+})
 
 # Sub-agent completion sound effect (macOS system sound)
 # Opt-in: set CLAUDE_SUBAGENT_SOUND=1 to enable Pop.aiff on SubagentStop
@@ -69,6 +102,12 @@ QUEUE_FILE = "/tmp/claude-tts-queue.jsonl"
 PID_FILE = "/tmp/claude-tts-consumer.pid"
 DEBOUNCE_TTL = int(os.environ.get("CLAUDE_VOICE_DEBOUNCE", "10"))  # seconds, 0=disable
 WEBUI_URL = os.environ.get("TMUX_WEBUI_URL", "http://127.0.0.1:8765")
+
+# Activity tracking — deferred announcement settings
+SETTLE_WINDOW = int(os.environ.get("CLAUDE_VOICE_SETTLE", "8"))  # seconds
+_ACTIVE_TTL = 300  # safety net: orphaned counters expire after 5 min
+_CHECKER_INTERVAL = 2  # background checker poll interval (seconds)
+_CHECKER_MAX_WAIT = 45  # upper bound before force-announcing (seconds)
 
 _ASK_PHRASES = [
     "少爺，維恩有問題想請示您",
@@ -143,6 +182,91 @@ def _debounce_ok(event_type: str, session_id: str = "") -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Session activity tracking — Redis-based sub-agent lifecycle awareness
+# ---------------------------------------------------------------------------
+
+
+def _get_ident(session_id: str = "") -> str:
+    """Stable identity for Redis keys: TMUX_PANE > session_id > ppid."""
+    ident = os.environ.get("TMUX_PANE", "")
+    if not ident:
+        ident = session_id or f"pid-{os.getppid()}"
+    return ident
+
+
+def _track_subagent_start(ident: str) -> None:
+    """Increment active sub-agent counter and cancel any pending TTS."""
+    r = _get_redis()
+    if not r:
+        return
+    try:
+        pipe = r.pipeline()
+        pipe.incr(f"tts:active_agents:{ident}")
+        pipe.expire(f"tts:active_agents:{ident}", _ACTIVE_TTL)
+        pipe.set(f"tts:last_activity:{ident}", str(time.time()), ex=_ACTIVE_TTL)
+        pipe.delete(f"tts:pending:{ident}")  # cancel deferred TTS
+        pipe.execute()
+    except Exception:
+        pass  # fail-open
+
+
+def _track_subagent_stop(ident: str) -> None:
+    """Decrement active sub-agent counter and update last activity timestamp."""
+    r = _get_redis()
+    if not r:
+        return
+    try:
+        pipe = r.pipeline()
+        pipe.decr(f"tts:active_agents:{ident}")
+        pipe.expire(f"tts:active_agents:{ident}", _ACTIVE_TTL)
+        pipe.set(f"tts:last_activity:{ident}", str(time.time()), ex=_ACTIVE_TTL)
+        pipe.execute()
+        # Floor at 0 — prevent negative counter from missed SubagentStart
+        val = r.get(f"tts:active_agents:{ident}")
+        if val is not None and int(val) < 0:
+            r.set(f"tts:active_agents:{ident}", 0, ex=_ACTIVE_TTL)
+    except Exception:
+        pass
+
+
+def _has_active_subagents(ident: str) -> bool:
+    """Check if there are still active sub-agents for this identity."""
+    r = _get_redis()
+    if not r:
+        return False  # fail-open: no Redis → assume no active sub-agents
+    try:
+        val = r.get(f"tts:active_agents:{ident}")
+        return val is not None and int(val) > 0
+    except Exception:
+        return False
+
+
+def _recent_subagent_activity(ident: str) -> bool:
+    """Check if a sub-agent completed within the settle window."""
+    r = _get_redis()
+    if not r:
+        return False
+    try:
+        ts_str = r.get(f"tts:last_activity:{ident}")
+        if ts_str is None:
+            return False
+        return (time.time() - float(ts_str)) < SETTLE_WINDOW
+    except Exception:
+        return False
+
+
+def _cancel_pending_tts(ident: str) -> None:
+    """Cancel any deferred TTS announcement for this identity."""
+    r = _get_redis()
+    if not r:
+        return
+    try:
+        r.delete(f"tts:pending:{ident}")
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Main handler (dispatcher entry point)
 # ---------------------------------------------------------------------------
 
@@ -152,16 +276,41 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         return ALLOW
 
     if event_type == "PreToolUse" and tool_name == "AskUserQuestion":
+        # About to ask a question → cancel any pending "task done" announcement
+        ident = _get_ident()
+        _cancel_pending_tts(ident)
         if _debounce_ok("ask"):
             _enqueue_tts(random.choice(_ASK_PHRASES))
-    elif event_type == "Stop":
-        # Parse Stop event data for guard checks
+
+    elif event_type == "SubagentStart":
+        # Track: new sub-agent starting → increment counter + cancel pending TTS
+        data = _parse_event_data(raw_input)
+        ident = _get_ident(data.get("session_id", ""))
+        _track_subagent_start(ident)
+
+    elif event_type == "SubagentStop":
+        # Track: sub-agent finished → decrement counter + update activity
         data = _parse_event_data(raw_input)
         session_id = data.get("session_id", "")
+        ident = _get_ident(session_id)
+        _track_subagent_stop(ident)
+        # Guard 3: sub-agent completion → subtle sound effect, not TTS
+        if _debounce_ok("subagent_stop", session_id):
+            _play_sound_effect()
+
+    elif event_type == "Stop":
+        data = _parse_event_data(raw_input)
+        session_id = data.get("session_id", "")
+        ident = _get_ident(session_id)
 
         # Guard 0: skip non-Claude events (e.g. Gemini CLI AfterAgent mapped to Stop)
         hook_name = data.get("hook_event_name", "")
         if hook_name and hook_name != "Stop":
+            return ALLOW
+
+        # Guard 0.5: skip teammate/sub-agent Stops (Agent Teams in-process mode)
+        agent_type = data.get("agent_type", data.get("subagent_type", ""))
+        if agent_type and agent_type in _TEAMMATE_TYPES:
             return ALLOW
 
         # Guard 1: skip if stop hook is re-entrant (prevents infinite loops)
@@ -173,14 +322,10 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         if _is_intermediate(last_msg):
             return ALLOW
 
+        # Guards 1.5 + 1.7 are inside _handle_stop_with_tracking
         if _debounce_ok("stop", session_id):
-            _handle_stop()
-    elif event_type == "SubagentStop":
-        # Guard 3: sub-agent completion → subtle sound effect, not TTS
-        data = _parse_event_data(raw_input)
-        session_id = data.get("session_id", "")
-        if _debounce_ok("subagent_stop", session_id):
-            _play_sound_effect()
+            _handle_stop_with_tracking(ident)
+
     return ALLOW
 
 
@@ -220,17 +365,208 @@ def _play_sound_effect() -> None:
         )
 
 
-def _handle_stop() -> None:
-    """Stop: announce task summary, or fall back to tmux position."""
+def _build_stop_message() -> str:
+    """Build the TTS message for task completion."""
     summary = _get_task_summary()
     if summary:
-        _enqueue_tts(f"少爺，{summary}的任務完成了")
+        return f"少爺，{summary}的任務完成了"
+    label = _get_label()
+    return f"少爺，{label}任務完成了" if label else "少爺，任務完成了"
+
+
+def _handle_stop_with_tracking(ident: str) -> None:
+    """Activity-aware Stop handler: defer TTS if sub-agents are active."""
+    msg = _build_stop_message()
+    r = _get_redis()
+
+    if not r:
+        # fail-open: Redis down → announce immediately (legacy behavior)
+        _enqueue_tts(msg)
         return
 
-    # Fallback: tmux position (視窗X面板Y) or generic
-    label = _get_label()
-    msg = f"少爺，{label}任務完成了" if label else "少爺，任務完成了"
+    try:
+        active = int(r.get(f"tts:active_agents:{ident}") or 0)
+        last_act = float(r.get(f"tts:last_activity:{ident}") or 0)
+        now = time.time()
+
+        # Guard 1.5: sub-agents still running → defer
+        # Guard 1.7: recent sub-agent activity within settle window → defer
+        if active > 0 or (last_act > 0 and (now - last_act) < SETTLE_WINDOW):
+            _defer_announcement(r, ident, msg)
+            return
+    except Exception:
+        pass  # fail-open: fall through to immediate announce
+
     _enqueue_tts(msg)
+
+
+def _defer_announcement(r, ident: str, msg: str) -> None:
+    """Write pending TTS to Redis and spawn background checker."""
+    try:
+        pending = json.dumps({"msg": msg, "queued_at": time.time()})
+        r.set(f"tts:pending:{ident}", pending, ex=_CHECKER_MAX_WAIT + 10)
+    except Exception:
+        # fail-open: can't defer → announce immediately
+        _enqueue_tts(msg)
+        return
+
+    # Spawn lightweight checker process
+    checker_pid = f"/tmp/tts-checker-{ident.replace('%', '')}.pid"
+    if _process_alive(checker_pid):
+        return  # checker already running — it will pick up new pending
+    script = _build_checker_script(ident)
+    subprocess.Popen(
+        [PYTHON_BIN, "-c", script],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _process_alive(pid_file: str) -> bool:
+    """Check if a process identified by pid_file is still running."""
+    if not os.path.isfile(pid_file):
+        return False
+    try:
+        pid = int(open(pid_file).read().strip())
+        os.kill(pid, 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _build_checker_script(ident: str) -> str:
+    """Build self-contained background checker that waits for activity to settle.
+
+    The checker polls Redis every CHECK_INTERVAL seconds. When conditions are met
+    (no active sub-agents, no recent activity), it writes to the TTS queue file
+    and either delegates to the existing consumer or plays directly via edge-tts/say.
+    """
+    return f"""\
+import fcntl, json, os, shutil, subprocess, sys, time
+
+IDENT = {ident!r}
+PID_FILE = "/tmp/tts-checker-{ident.replace('%', '')}.pid"
+QUEUE_FILE = {QUEUE_FILE!r}
+CONSUMER_PID = {PID_FILE!r}
+CHECK_INTERVAL = {_CHECKER_INTERVAL}
+MAX_WAIT = {_CHECKER_MAX_WAIT}
+SETTLE = {SETTLE_WINDOW}
+VOICE = {VOICE!r}
+RATE = {RATE!r}
+VOL = {PLAYBACK_VOL!r}
+
+with open(PID_FILE, "w") as f:
+    f.write(str(os.getpid()))
+
+try:
+    import redis
+    r = redis.Redis(host="127.0.0.1", port=6379, socket_timeout=2.0)
+    r.ping()
+except Exception:
+    try:
+        os.remove(PID_FILE)
+    except Exception:
+        pass
+    sys.exit(0)
+
+
+def announce(msg):
+    # Try 1: write to queue file (existing consumer may pick it up)
+    entry = json.dumps({{"text": msg, "voice": VOICE, "rate": RATE, "vol": VOL}},
+                       ensure_ascii=False)
+    try:
+        with open(QUEUE_FILE, "a") as fq:
+            fcntl.flock(fq, fcntl.LOCK_EX)
+            fq.write(entry + "\\n")
+            fcntl.flock(fq, fcntl.LOCK_UN)
+    except Exception:
+        pass
+    # Check if consumer is alive
+    alive = False
+    try:
+        pid = int(open(CONSUMER_PID).read().strip())
+        os.kill(pid, 0)
+        alive = True
+    except Exception:
+        pass
+    if alive:
+        return  # consumer will handle playback
+    # Try 2: direct synthesis + playback (no consumer available)
+    tmp = "/tmp/claude-tts-deferred.mp3"
+    if shutil.which("edge-tts"):
+        subprocess.run(
+            ["edge-tts", "--voice", VOICE, "--rate", RATE,
+             "--text", msg, "--write-media", tmp],
+            capture_output=True, timeout=15,
+        )
+        if os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
+            subprocess.run(["afplay", "-v", VOL, tmp],
+                           capture_output=True, timeout=30)
+            return
+    # Try 3: macOS say
+    if shutil.which("say"):
+        tmp2 = "/tmp/claude-tts-deferred.aiff"
+        subprocess.run(
+            ["say", "-v", "Meijia", "-r", "320", "-o", tmp2, msg],
+            capture_output=True, timeout=15,
+        )
+        if os.path.isfile(tmp2) and os.path.getsize(tmp2) > 0:
+            subprocess.run(["afplay", "-v", VOL, tmp2],
+                           capture_output=True, timeout=30)
+
+
+waited = 0.0
+while waited < MAX_WAIT:
+    time.sleep(CHECK_INTERVAL)
+    waited += CHECK_INTERVAL
+
+    pending_raw = r.get(f"tts:pending:{{IDENT}}")
+    if not pending_raw:
+        break  # cancelled
+
+    try:
+        active = int(r.get(f"tts:active_agents:{{IDENT}}") or 0)
+    except Exception:
+        active = 0
+    if active > 0:
+        continue
+
+    try:
+        last_act = float(r.get(f"tts:last_activity:{{IDENT}}") or 0)
+    except Exception:
+        last_act = 0
+    if last_act > 0 and (time.time() - last_act) < SETTLE:
+        continue
+
+    # All clear — fire TTS
+    try:
+        pending = json.loads(pending_raw)
+        msg = pending.get("msg", "")
+        if msg:
+            announce(msg)
+    except Exception:
+        pass
+    r.delete(f"tts:pending:{{IDENT}}")
+    break
+else:
+    # MAX_WAIT exceeded — force announce (fail-safe)
+    pending_raw = r.get(f"tts:pending:{{IDENT}}")
+    if pending_raw:
+        try:
+            pending = json.loads(pending_raw)
+            msg = pending.get("msg", "")
+            if msg:
+                announce(msg)
+        except Exception:
+            pass
+        r.delete(f"tts:pending:{{IDENT}}")
+
+try:
+    os.remove(PID_FILE)
+except Exception:
+    pass
+"""
 
 
 # ---------------------------------------------------------------------------

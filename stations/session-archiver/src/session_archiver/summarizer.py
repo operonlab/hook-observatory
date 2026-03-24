@@ -78,11 +78,16 @@ def _extract_text(event: dict) -> str:
     return ""
 
 
-def generate_summary(jsonl_path: Path, timeout: int = 30) -> str | None:
+def generate_summary(jsonl_path: Path, timeout: int | None = None) -> str | None:
     """Generate a one-line session summary using Claude Haiku.
 
     Returns the summary string, or None on failure (graceful degradation).
+    Timeout scales with file size: base 30s + 2s/MB, capped at 180s.
     """
+    file_size_mb = jsonl_path.stat().st_size / (1024 * 1024) if jsonl_path.exists() else 0
+    if timeout is None:
+        timeout = min(180, max(30, 30 + int(file_size_mb * 2)))
+
     first_msg, last_msg = _extract_user_messages(jsonl_path)
 
     if not first_msg and not last_msg:
@@ -96,35 +101,62 @@ def generate_summary(jsonl_path: Path, timeout: int = 30) -> str | None:
         f"Last user message:\n{last_msg}"
     )
 
-    try:
-        result = subprocess.run(
-            ["claude", "--model", "haiku", "-p", prompt_text],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        if result.returncode != 0:
-            logger.warning(
-                "claude_haiku_failed", returncode=result.returncode, stderr=result.stderr[:200]
+    # Clean env: remove CLAUDECODE to avoid interfering with nested claude CLI calls
+    import os
+    import time
+
+    env = os.environ.copy()
+    env.pop("CLAUDECODE", None)
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = subprocess.run(
+                ["claude", "--model", "haiku", "-p", prompt_text],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
             )
+            if result.returncode != 0:
+                logger.warning(
+                    "claude_haiku_failed",
+                    returncode=result.returncode,
+                    stderr=result.stderr[:200],
+                    attempt=attempt + 1,
+                )
+                if attempt < max_retries - 1:
+                    backoff = 2**attempt  # 1s, 2s, 4s
+                    time.sleep(backoff)
+                    continue
+                return None
+
+            summary = result.stdout.strip()
+            if not summary:
+                return None
+
+            # Truncate to reasonable length
+            return summary[:500]
+
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "claude_haiku_timeout",
+                timeout=timeout,
+                file_size_mb=round(file_size_mb, 1),
+                attempt=attempt + 1,
+            )
+            if attempt < max_retries - 1:
+                backoff = 2**attempt
+                time.sleep(backoff)
+                continue
             return None
-
-        summary = result.stdout.strip()
-        if not summary:
+        except FileNotFoundError:
+            logger.warning("claude_cli_not_found")
             return None
-
-        # Truncate to reasonable length
-        return summary[:500]
-
-    except subprocess.TimeoutExpired:
-        logger.warning("claude_haiku_timeout", timeout=timeout)
-        return None
-    except FileNotFoundError:
-        logger.warning("claude_cli_not_found")
-        return None
-    except OSError as e:
-        logger.warning("summary_generation_failed", error=str(e))
-        return None
+        except OSError as e:
+            logger.warning("summary_generation_failed", error=str(e))
+            return None
+    return None
 
 
 def generate_summary_rlm(jsonl_path: Path, timeout: int = 45) -> dict | None:

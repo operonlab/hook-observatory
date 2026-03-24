@@ -8,8 +8,8 @@ import logging
 import time
 from dataclasses import asdict
 
+import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
 from starlette.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
@@ -132,7 +132,7 @@ async def sse_stream(request: Request):
                 try:
                     data = await asyncio.wait_for(q.get(), timeout=30)
                     yield f"data: {data}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield f"data: {json.dumps({'type': 'heartbeat', 'ts': time.time()})}\n\n"
         except asyncio.CancelledError:
             pass
@@ -144,3 +144,61 @@ async def sse_stream(request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── STT proxy routes ──
+
+_STT_BASE = "http://127.0.0.1:4108"
+
+
+@router.get("/api/stt/health")
+async def stt_health():
+    try:
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{_STT_BASE}/health")
+            return r.json()
+    except Exception as e:
+        return {"status": "unreachable", "error": str(e)}
+
+
+@router.get("/api/stt/engines")
+async def stt_engines():
+    try:
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{_STT_BASE}/engines")
+            return r.json()
+    except Exception as e:
+        return {"status": "unreachable", "error": str(e)}
+
+
+# ── Metrics + devices ──
+
+
+@router.get("/api/voice/metrics")
+async def voice_metrics(request: Request):
+    """Real-time pipeline metrics (updated every tick by pipeline loop)."""
+    return request.app.state.metrics or {}
+
+
+@router.get("/api/voice/devices")
+async def voice_devices():
+    """List available audio input devices."""
+    import sounddevice as sd
+
+    devices = []
+    try:
+        default_idx = sd.default.device[0]
+        for i, d in enumerate(sd.query_devices()):
+            if d["max_input_channels"] > 0:
+                devices.append(
+                    {
+                        "index": i,
+                        "name": d["name"],
+                        "channels": d["max_input_channels"],
+                        "sample_rate": int(d["default_samplerate"]),
+                        "is_default": i == default_idx,
+                    }
+                )
+    except Exception as e:
+        return {"devices": [], "error": str(e)}
+    return {"devices": devices}

@@ -284,11 +284,19 @@ def parse_transcript(jsonl_path: str | Path) -> TranscriptStats:
                 obj_type = obj.get("type", "")
 
                 # ----------------------------------------------------------
-                # message event: role + content
+                # message event: Claude Code JSONL uses type="user"/"assistant"
+                # with data nested in obj["message"], not at root level.
                 # ----------------------------------------------------------
-                if obj_type == "message":
-                    role = obj.get("role", "")
-                    content = obj.get("content", "")
+                if obj_type in ("user", "assistant", "message"):
+                    # Claude Code format: role/content in obj["message"]
+                    msg = obj.get("message", {})
+                    if isinstance(msg, dict) and msg.get("role"):
+                        role = msg["role"]
+                        content = msg.get("content", "")
+                    else:
+                        # Legacy format: role/content at root level
+                        role = obj.get("role", obj_type)
+                        content = obj.get("content", "")
 
                     text = _extract_text(content)
                     tok = _estimate_tokens(text)
@@ -297,6 +305,22 @@ def parse_transcript(jsonl_path: str | Path) -> TranscriptStats:
                     if role == "user":
                         stats.user_tokens += tok
                         stats.user_message_count += 1
+
+                        # Extract tool_result from user content blocks
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "tool_result":
+                                    if _is_tool_error(block):
+                                        stats.tool_error_count += 1
+                                        err_text = _extract_text(block.get("content", ""))
+                                        if (
+                                            err_text
+                                            and len(stats.error_messages) < _MAX_ERROR_MESSAGES
+                                        ):
+                                            stats.error_messages.append(err_text[:200])
+                                    else:
+                                        stats.tool_success_count += 1
+
                     elif role == "assistant":
                         stats.assistant_tokens += tok
                         stats.turn_count += 1
@@ -309,7 +333,6 @@ def parse_transcript(jsonl_path: str | Path) -> TranscriptStats:
                                     if block.get("type") == "text":
                                         text_only_parts.append(block.get("text", ""))
                                     elif block.get("type") == "tool_use":
-                                        # Count tool calls
                                         stats.tool_call_count += 1
                         elif isinstance(content, str):
                             text_only_parts.append(content)
@@ -385,7 +408,7 @@ def calculate_quality_score(stats: TranscriptStats) -> tuple[str, float]:
     """
     # Derived rates
     total_calls = stats.tool_call_count
-    tool_success_rate = stats.tool_success_count / total_calls if total_calls > 0 else 1.0
+    tool_success_rate = stats.tool_success_count / total_calls if total_calls > 0 else 0.5
     error_rate = stats.tool_error_count / total_calls if total_calls > 0 else 0.0
     context_efficiency = (
         stats.assistant_text_tokens / stats.total_tokens if stats.total_tokens > 0 else 0.0
@@ -544,7 +567,7 @@ def analyze_transcript(jsonl_path: str | Path, session_id: str = "") -> ReflectM
     failure_patterns = extract_failure_patterns(stats)
 
     total_calls = stats.tool_call_count
-    tool_success_rate = stats.tool_success_count / total_calls if total_calls > 0 else 1.0
+    tool_success_rate = stats.tool_success_count / total_calls if total_calls > 0 else 0.5
     context_efficiency = (
         stats.assistant_text_tokens / stats.total_tokens if stats.total_tokens > 0 else 0.0
     )

@@ -1,15 +1,16 @@
-#!/usr/bin/env python3
+#!/Users/joneshong/.local/bin/python3
 """
-ws_session_archive.py — Daily 5:15AM session lifecycle pipeline
+ws_session_archive.py — Daily 5:45AM session lifecycle pipeline
 
 Pipeline (sequential, fail-safe):
   1. redact sweep — catch any sessions missed by SessionEnd hook
   2. scan         — discover all sessions, update DB index
   3. archive      — compress cold candidates with summaries + embeddings
+  4. reflect      — quality scoring for unreflected sessions
 
 Design: 3-layer fallback strategy
-  Layer 1 (real-time): SessionEnd hook → pipeline (redact → extract → archive → log)
-  Layer 2 (daily):     This script — sweep redact + scan + archive (catches hook failures)
+  Layer 1 (real-time): SessionEnd hook → pipeline (redact → extract → archive → reflect → log)
+  Layer 2 (daily):     This script — sweep all stages (catches hook failures)
   Layer 3 (manual):    SDK / CLI available anytime
 
 Logs: ~/.claude/data/session-archiver/run.log
@@ -71,31 +72,98 @@ def run_redact_sweep() -> bool:
         return False
 
 
+def run_reflect_sweep() -> bool:
+    """Run reflect engine on unreflected sessions via SDK (in-process)."""
+    try:
+        _libs = str(HOME / "workshop/libs/python/src")
+        if _libs not in sys.path:
+            sys.path.insert(0, _libs)
+        _engine_dir = str(HOME / "workshop/stations/session-pipeline")
+        if _engine_dir not in sys.path:
+            sys.path.insert(0, _engine_dir)
+        _archiver_src = str(HOME / "workshop/stations/session-archiver/src")
+        if _archiver_src not in sys.path:
+            sys.path.insert(0, _archiver_src)
+
+        from reflect_engine import analyze_transcript
+        from session_archiver.config import load_config
+        from session_archiver.db import get_unreflected_session_ids, upsert_reflection
+
+        config = load_config()
+
+        unreflected = get_unreflected_session_ids(config, limit=50)
+        if not unreflected:
+            log("  reflect sweep: no unreflected sessions")
+            return True
+
+        reflected = 0
+        for sid, project_path in unreflected:
+            # Find transcript JSONL
+            transcript = None
+            if project_path:
+                proj = Path(project_path) / ".claude"
+                candidates = list(proj.glob(f"{sid}.jsonl"))
+                if candidates:
+                    transcript = str(candidates[0])
+
+            if not transcript:
+                continue
+
+            try:
+                from dataclasses import asdict
+
+                metrics = analyze_transcript(transcript, sid)
+                upsert_reflection(config, asdict(metrics))
+                reflected += 1
+            except Exception:
+                continue
+
+        log(f"  reflect sweep: reflected={reflected}/{len(unreflected)}")
+        return True
+    except Exception as exc:
+        log(f"  reflect sweep error: {exc}")
+        return False
+
+
 def main() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     log("========== Daily session lifecycle started ==========")
 
     # Step 1: Redact sweep — catch sessions missed by SessionEnd hook
-    log("Step 1/3: Redact sweep...")
+    log("Step 1/6: Redact sweep...")
     if run_redact_sweep():
         log("Step 1 OK")
     else:
         log("Step 1 FAILED — continuing anyway (archive still runs)")
 
-    # Step 2: Scan sessions
-    log("Step 2/3: Scanning sessions...")
-    if run_step(["session_archiver", "scan", "--json"]):
+    # Step 2: Scan + warm promotion (generate summaries for aging sessions)
+    log("Step 2/6: Scanning + warm promotion...")
+    if run_step(["session_archiver", "scan", "--summarize", "--json"]):
         log("Step 2 OK")
     else:
         log("Step 2 FAILED — continuing anyway")
 
-    # Step 3: Archive (execute mode with summaries + embeddings)
-    log("Step 3/3: Archiving cold candidates...")
+    # Step 3: Archive (execute mode, warm sessions skip summary generation)
+    log("Step 3/6: Archiving cold candidates...")
     if run_step(["session_archiver", "archive", "--execute", "--summarize", "--embed", "--json"]):
         log("Step 3 OK")
     else:
         log("Step 3 FAILED — continuing anyway")
+
+    # Step 4: Freeze — upload old cold archives to RustFS (S3)
+    log("Step 4/6: Freezing old cold sessions...")
+    if run_step(["session_archiver", "freeze", "--execute", "--json"]):
+        log("Step 4 OK")
+    else:
+        log("Step 4 FAILED — continuing anyway (RustFS may be offline)")
+
+    # Step 5: Reflect — quality scoring for unreflected sessions
+    log("Step 5/6: Reflect sweep...")
+    if run_reflect_sweep():
+        log("Step 5 OK")
+    else:
+        log("Step 5 FAILED — continuing anyway")
 
     log("========== Daily session lifecycle complete ==========")
 

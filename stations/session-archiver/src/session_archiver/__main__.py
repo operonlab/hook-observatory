@@ -12,6 +12,8 @@ Commands:
     thaw       Restore an archived session
     status     Show archive statistics
     search     Search sessions by summary (semantic + ILIKE fallback)
+    freeze     Freeze cold sessions to S3 (dry-run by default)
+    info       Display session metadata without thawing
 """
 
 from __future__ import annotations
@@ -65,6 +67,8 @@ _root_logger.addHandler(_stderr_handler)
 
 from session_archiver.cli import (
     cmd_archive,
+    cmd_freeze,
+    cmd_info,
     cmd_scan,
     cmd_score,
     cmd_search,
@@ -76,9 +80,11 @@ COMMANDS = {
     "scan": cmd_scan,
     "score": cmd_score,
     "archive": cmd_archive,
+    "freeze": cmd_freeze,
     "thaw": cmd_thaw,
     "status": cmd_status,
     "search": cmd_search,
+    "info": cmd_info,
 }
 
 

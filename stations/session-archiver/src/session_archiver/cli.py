@@ -15,10 +15,13 @@ logger = structlog.get_logger(__name__)
 
 
 def cmd_scan(args: list[str]) -> None:
-    """Scan all sessions and update DB index."""
+    """Scan all sessions and update DB index. With --summarize, also promote hot→warm."""
     parser = argparse.ArgumentParser(description="Scan sessions")
     parser.add_argument("--json", action="store_true", help="JSON output")
     parser.add_argument("--session-id", help="Scan only this session (fast path)")
+    parser.add_argument(
+        "--summarize", action="store_true", help="Generate summaries for warm candidates"
+    )
     opts = parser.parse_args(args)
 
     config = load_config()
@@ -39,9 +42,42 @@ def cmd_scan(args: list[str]) -> None:
         if db.upsert_session(config, meta, score):
             upserted += 1
 
+    # Warm tier promotion: generate summary + embedding for eligible hot sessions
+    warmed = 0
+    if opts.summarize:
+        from session_archiver.embedding import get_embedding
+        from session_archiver.scanner import get_active_session_ids
+        from session_archiver.summarizer import generate_summary
+
+        active_ids = get_active_session_ids()
+        candidates = db.get_warm_candidates(config)
+        for sid, project_path in candidates:
+            if sid in active_ids:
+                continue
+            # Find JSONL path
+            from pathlib import Path
+
+            proj_dir = Path(config.projects_dir) / project_path
+            jsonl_candidates = list(proj_dir.rglob(f"{sid}.jsonl"))
+            if not jsonl_candidates:
+                continue
+            jsonl_path = jsonl_candidates[0]
+
+            summary = generate_summary(jsonl_path)
+            if not summary:
+                continue
+
+            db.update_summary(config, sid, summary)
+            emb = get_embedding(summary, config.omlx_venv, config.embedding_dim)
+            if emb:
+                db.upsert_embedding(config, sid, emb)
+            db.update_tier(config, sid, "warm")
+            warmed += 1
+
     result = {
         "scanned": len(sessions),
         "upserted": upserted,
+        "warmed": warmed,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -49,6 +85,8 @@ def cmd_scan(args: list[str]) -> None:
         print(json.dumps(result, indent=2))
     else:
         print(f"Scanned {len(sessions)} sessions, upserted {upserted} to DB")
+        if warmed:
+            print(f"Promoted {warmed} sessions to warm (summary + embedding generated)")
 
 
 def cmd_score(args: list[str]) -> None:
@@ -138,11 +176,20 @@ def cmd_archive(args: list[str]) -> None:
     sessions = scan_sessions(config)
     scored = score_all(sessions)
 
-    # Filter candidates: score > threshold, age > min days, tier == hot
+    # Active session guard — never archive sessions with a live PID
+    from session_archiver.scanner import get_active_session_ids
+
+    active_ids = get_active_session_ids()
+    if active_ids:
+        logger.info("active_sessions_protected", count=len(active_ids))
+
+    # Filter candidates: score > threshold, age > min days, not active
     min_age = config.archive_min_age_days
     now = datetime.now(UTC)
     candidates = []
     for meta, score in scored:
+        if meta.session_id in active_ids:
+            continue
         age_days = (now - meta.last_modified).total_seconds() / 86400
         if score.total >= threshold and age_days >= min_age:
             candidates.append((meta, score))
@@ -155,12 +202,17 @@ def cmd_archive(args: list[str]) -> None:
             print(msg)
         return
 
-    # Generate summaries if requested
+    # Generate summaries if requested (skip for warm sessions — they already have one)
     summaries: dict[str, str | None] = {}
     if opts.summarize and not dry_run:
         from session_archiver.summarizer import generate_summary
 
         for meta, _ in candidates:
+            # Check if warm session already has summary in DB
+            existing = db.get_session(config, meta.session_id)
+            if existing and existing.summary:
+                summaries[meta.session_id] = existing.summary
+                continue
             if meta.jsonl_path.exists():
                 summaries[meta.session_id] = generate_summary(meta.jsonl_path)
 
@@ -168,6 +220,13 @@ def cmd_archive(args: list[str]) -> None:
     results = archive_batch(config, candidates, summaries=summaries, dry_run=dry_run)
 
     # Generate embeddings if requested
+    # Save summaries to DB (regardless of embedding success)
+    if not dry_run and summaries:
+        for sid, summary in summaries.items():
+            if summary:
+                db.update_summary(config, sid, summary)
+
+    # Generate embeddings from summaries
     if opts.embed and not dry_run and summaries:
         from session_archiver.embedding import get_embedding
 
@@ -176,7 +235,6 @@ def cmd_archive(args: list[str]) -> None:
                 emb = get_embedding(summary, config.omlx_venv, config.embedding_dim)
                 if emb:
                     db.upsert_embedding(config, sid, emb)
-                    db.update_summary(config, sid, summary)
 
     # Output
     total_saved = sum(r.get("saved_bytes", 0) for r in results)
@@ -261,10 +319,14 @@ def cmd_status(args: list[str]) -> None:
         result = {
             "hot_count": stats.hot_count,
             "hot_size_mb": round(stats.hot_size / 1024 / 1024, 1),
+            "warm_count": stats.warm_count,
+            "warm_size_mb": round(stats.warm_size / 1024 / 1024, 1),
             "cold_count": stats.cold_count,
             "cold_original_mb": round(stats.cold_original_size / 1024 / 1024, 1),
             "cold_compressed_mb": round(stats.cold_compressed_size / 1024 / 1024, 1),
             "frozen_count": stats.frozen_count,
+            "frozen_original_mb": round(stats.frozen_original_size / 1024 / 1024, 1),
+            "frozen_compressed_mb": round(stats.frozen_compressed_size / 1024 / 1024, 1),
             "total_saved_mb": round(stats.total_saved / 1024 / 1024, 1),
             "compression_ratio": f"{stats.compression_ratio:.1%}"
             if stats.compression_ratio
@@ -275,28 +337,36 @@ def cmd_status(args: list[str]) -> None:
     if opts.json:
         print(json.dumps(result, indent=2))
     else:
+        from session_archiver.scanner import get_active_session_ids
+
+        active_count = len(get_active_session_ids())
         print("Session Archive Status")
-        print("=" * 40)
+        print("=" * 48)
         print(
-            f"  Hot:    {result.get('hot_count', 0)} sessions ({result.get('hot_size_mb', 0)} MB)"
+            f"  Hot:    {result.get('hot_count', 0):>5} sessions ({result.get('hot_size_mb', 0)} MB)"
+        )
+        print(
+            f"  Warm:   {result.get('warm_count', 0):>5} sessions ({result.get('warm_size_mb', 0)} MB) — indexed"
         )
         if "cold_original_mb" in result:
             print(
-                f"  Cold:   {result.get('cold_count', 0)} sessions "
+                f"  Cold:   {result.get('cold_count', 0):>5} sessions "
                 f"({result.get('cold_original_mb', 0)} MB "
                 f"→ {result.get('cold_compressed_mb', 0)} MB)"
             )
         else:
             print(
-                f"  Cold:   {result.get('cold_count', 0)} archives "
+                f"  Cold:   {result.get('cold_count', 0):>5} archives "
                 f"({result.get('cold_size_mb', 0)} MB)"
             )
-        print(f"  Frozen: {result.get('frozen_count', 0)} sessions")
+        print(f"  Frozen: {result.get('frozen_count', 0):>5} sessions (S3)")
+        print("-" * 48)
         if "total_saved_mb" in result:
             print(
                 f"  Saved:  {result.get('total_saved_mb', 0)} MB "
                 f"({result.get('compression_ratio', 'N/A')})"
             )
+        print(f"  Active: {active_count} sessions (protected)")
         print(f"  DB:     {result.get('db_status', 'unknown')}")
 
 
@@ -345,3 +415,148 @@ def cmd_search(args: list[str]) -> None:
             summary = (r.summary or "")[:60]
             print(f"  [{tier_icon}] {r.session_id[:12]}  {summary}")
         print(f"\n{len(results)} result(s)")
+
+
+def cmd_freeze(args: list[str]) -> None:
+    """Freeze eligible cold sessions to RustFS (S3)."""
+    parser = argparse.ArgumentParser(description="Freeze cold sessions to S3")
+    parser.add_argument(
+        "--execute", action="store_true", help="Actually freeze (default is dry-run)"
+    )
+    parser.add_argument("--session-id", help="Freeze a specific session by ID")
+    parser.add_argument(
+        "--min-days",
+        type=int,
+        default=None,
+        help="Minimum days in cold tier (default from config)",
+    )
+    parser.add_argument("--json", action="store_true", help="JSON output")
+    opts = parser.parse_args(args)
+
+    config = load_config()
+    if opts.min_days is not None:
+        config.freeze_min_cold_days = opts.min_days
+    dry_run = not opts.execute
+
+    from session_archiver.freezer import freeze_eligible, freeze_session
+
+    if opts.session_id:
+        result = freeze_session(config, opts.session_id, dry_run=dry_run)
+        results = [result] if result else []
+    else:
+        results = freeze_eligible(config, dry_run=dry_run)
+
+    output = {
+        "mode": "dry-run" if dry_run else "execute",
+        "min_cold_days": config.freeze_min_cold_days,
+        "frozen": len(results),
+    }
+
+    if opts.json:
+        output["details"] = results
+        print(json.dumps(output, indent=2))
+    else:
+        mode_label = "[DRY RUN] " if dry_run else ""
+        print(f"{mode_label}Freeze candidates processed: {len(results)}")
+        for r in results:
+            sid = r["session_id"][:12]
+            size_mb = round(r.get("size_bytes", 0) / 1024 / 1024, 2)
+            s3 = r.get("s3_uri", "")
+            print(f"  {sid}  {size_mb} MB  -> {s3}")
+        if dry_run and results:
+            print("\nTo execute: session-archiver freeze --execute")
+
+
+def cmd_info(args: list[str]) -> None:
+    """Display session metadata without thawing."""
+    parser = argparse.ArgumentParser(description="Session info")
+    parser.add_argument("session_id", help="Full or partial session ID (min 8 chars)")
+    parser.add_argument("--json", action="store_true", help="JSON output")
+    opts = parser.parse_args(args)
+
+    config = load_config()
+
+    from session_archiver import db
+
+    record = db.get_session(config, opts.session_id)
+    if record is None:
+        print(f"Session not found: {opts.session_id}", file=sys.stderr)
+        sys.exit(1)
+
+    # Also fetch reflection if available
+    reflection = db.get_reflection(config, record.session_id)
+
+    info = {
+        "session_id": record.session_id,
+        "project_path": record.project_path,
+        "tier": record.tier,
+        "file_size_bytes": record.file_size_bytes,
+        "file_size_mb": round(record.file_size_bytes / 1024 / 1024, 2),
+        "event_count": record.event_count,
+        "turn_count": record.turn_count,
+        "first_timestamp": record.first_timestamp,
+        "last_timestamp": record.last_timestamp,
+        "claude_version": record.claude_version,
+        "git_branch": record.git_branch,
+        "cwd": record.cwd,
+        "score": record.score,
+        "archive_path": record.archive_path,
+        "archive_type": record.archive_type,
+        "compressed_size": record.compressed_size,
+        "compression_ratio": record.compression_ratio,
+        "archived_at": record.archived_at,
+        "thawed_at": record.thawed_at,
+        "thaw_count": record.thaw_count,
+        "summary": record.summary,
+        "scanned_at": record.scanned_at,
+        "updated_at": record.updated_at,
+    }
+
+    if reflection:
+        info["reflection"] = {
+            "outcome": reflection.get("outcome"),
+            "quality_score": reflection.get("quality_score"),
+            "total_tokens": reflection.get("total_tokens"),
+            "tool_success_rate": reflection.get("tool_success_rate"),
+            "duration_secs": reflection.get("duration_secs"),
+        }
+
+    if opts.json:
+        print(json.dumps(info, indent=2))
+    else:
+        tier_label = {"hot": "Hot", "warm": "Warm", "cold": "Cold", "frozen": "Frozen (S3)"}.get(
+            record.tier, record.tier
+        )
+        print(f"Session: {record.session_id}")
+        print(f"  Project:  {record.project_path}")
+        print(f"  Tier:     {tier_label}")
+        print(f"  Size:     {info['file_size_mb']} MB ({record.file_size_bytes:,} bytes)")
+        print(f"  Events:   {record.event_count}  Turns: {record.turn_count}")
+        print(f"  Score:    {record.score:.1f}")
+        if record.first_timestamp:
+            print(f"  First:    {record.first_timestamp}")
+        if record.last_timestamp:
+            print(f"  Last:     {record.last_timestamp}")
+        if record.claude_version:
+            print(f"  Claude:   {record.claude_version}")
+        if record.git_branch:
+            print(f"  Branch:   {record.git_branch}")
+        if record.cwd:
+            print(f"  CWD:      {record.cwd}")
+        if record.archive_path:
+            print(f"  Archive:  {record.archive_path}")
+        if record.compressed_size:
+            ratio = f" ({record.compression_ratio:.1%})" if record.compression_ratio else ""
+            print(f"  Compressed: {record.compressed_size:,} bytes{ratio}")
+        if record.archived_at:
+            print(f"  Archived: {record.archived_at}")
+        if record.thaw_count > 0:
+            print(f"  Thawed:   {record.thaw_count}x (last: {record.thawed_at})")
+        if record.summary:
+            print(f"  Summary:  {record.summary[:100]}")
+        if reflection:
+            print(
+                f"  Reflection: {reflection.get('outcome', '?')} "
+                f"(quality={reflection.get('quality_score', 0):.1f}, "
+                f"tokens={reflection.get('total_tokens', 0):,})"
+            )

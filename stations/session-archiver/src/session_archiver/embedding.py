@@ -110,10 +110,12 @@ def get_embedding(
             logger.warning("omlx_error", error=response["error"])
             return None
         embeddings = response.get("embeddings", [])
-        if embeddings and len(embeddings[0]) == dim:
+        if embeddings and embeddings[0] and len(embeddings[0]) == dim:
             return embeddings[0]
         logger.warning(
-            "unexpected_embedding_dim", expected=dim, actual=len(embeddings[0]) if embeddings else 0
+            "unexpected_embedding_dim",
+            expected=dim,
+            actual=len(embeddings[0]) if embeddings and embeddings[0] else 0,
         )
         return None
     except Exception as e:
@@ -142,7 +144,7 @@ def get_embeddings_batch(
         embeddings = response.get("embeddings", [])
         results: list[list[float] | None] = []
         for i in range(len(texts)):
-            if i < len(embeddings) and len(embeddings[i]) == dim:
+            if i < len(embeddings) and embeddings[i] and len(embeddings[i]) == dim:
                 results.append(embeddings[i])
             else:
                 results.append(None)

@@ -72,8 +72,35 @@ def _decompress_companion(src: Path, dest_dir: Path) -> bool:
         return False
 
 
+def _download_from_s3(config: Config, s3_uri: str, local_path: Path) -> bool:
+    """Download a file from S3 (RustFS) to local path. Returns True on success."""
+    from session_archiver.freezer import _get_s3_client
+
+    client = _get_s3_client(config)
+    if client is None:
+        logger.error("thaw_s3_client_unavailable")
+        return False
+
+    try:
+        # Parse s3://bucket/key
+        without_prefix = s3_uri.removeprefix("s3://")
+        bucket, _, key = without_prefix.partition("/")
+
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        client.download_file(bucket, key, str(local_path))
+        logger.info("s3_downloaded", s3_uri=s3_uri, local=str(local_path))
+        return True
+    except Exception as exc:
+        logger.error("s3_download_failed", s3_uri=s3_uri, error=str(exc))
+        return False
+
+
 def thaw_session(config: Config, session_id_prefix: str) -> dict | None:
     """Thaw (restore) an archived session.
+
+    Supports both cold (local .zst) and frozen (S3) tiers.
+    Frozen sessions are downloaded from S3 to local cold dir first,
+    then decompressed normally.
 
     Args:
         config: Configuration
@@ -84,18 +111,39 @@ def thaw_session(config: Config, session_id_prefix: str) -> dict | None:
     """
     from session_archiver import db
 
-    # Step 1: Find the session — try DB first, then local stub
+    # Step 1: Find the session -- try DB first, then local stub
     record = None
     full_session_id = None
     archive_path = None
     project_path = None
     stub_path = None
+    from_tier = "cold"
 
     record = db.get_session(config, session_id_prefix)
     if record and record.archive_path:
         full_session_id = record.session_id
-        archive_path = Path(record.archive_path)
+        archive_path_str = record.archive_path
         project_path = record.project_path
+
+        # Handle frozen tier: download from S3 first
+        if record.tier == "frozen" and archive_path_str.startswith("s3://"):
+            from_tier = "frozen"
+            cold_dir = Path(config.archive_dir).expanduser()
+            cold_dir.mkdir(parents=True, exist_ok=True)
+            local_zst = cold_dir / f"{full_session_id}.jsonl.zst"
+
+            if not _download_from_s3(config, archive_path_str, local_zst):
+                return None
+
+            # Also try to download companion
+            companion_s3 = archive_path_str.replace(".jsonl.zst", ".companion.tar.zst")
+            local_companion = cold_dir / f"{full_session_id}.companion.tar.zst"
+            _download_from_s3(config, companion_s3, local_companion)
+            # Non-fatal if companion doesn't exist
+
+            archive_path = local_zst
+        else:
+            archive_path = Path(archive_path_str)
     else:
         # Fallback: scan for local stub
         stub = _find_stub(config.projects_dir, session_id_prefix)
@@ -142,7 +190,7 @@ def thaw_session(config: Config, session_id_prefix: str) -> dict | None:
 
     # Step 5: Update DB
     db.update_thaw(config, full_session_id)
-    db.log_action(config, full_session_id, "thaw", "cold", "hot")
+    db.log_action(config, full_session_id, "thaw", from_tier, "hot")
 
     # Step 6: Remove stub
     if stub_path:
@@ -159,10 +207,17 @@ def thaw_session(config: Config, session_id_prefix: str) -> dict | None:
             except (json.JSONDecodeError, OSError):
                 continue
 
+    # Step 7: Clean up downloaded S3 files (they are now decompressed)
+    if from_tier == "frozen":
+        archive_path.unlink(missing_ok=True)
+        if companion_archive.exists():
+            companion_archive.unlink(missing_ok=True)
+
     result = {
         "session_id": full_session_id,
         "restored_to": str(dest_jsonl),
         "companion_restored": companion_restored,
+        "from_tier": from_tier,
         "resume_command": f"claude --resume {full_session_id}",
     }
 
