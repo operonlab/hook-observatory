@@ -62,7 +62,10 @@ SERVICES = [
     {
         "name": "hook-observatory",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py",
+        "cmd": (
+            f"HOOK_OBS_PORT={get_port('hook-observatory')}"
+            " /Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py"
+        ),
         "port": get_port("hook-observatory"),
         "health": get("hook-observatory").health_url,
         "workdir": "/Users/joneshong/workshop/stations/hook-observatory",
@@ -70,7 +73,10 @@ SERVICES = [
     {
         "name": "session-channel",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py",
+        "cmd": (
+            f"SESSION_CHANNEL_PORT={get_port('session-channel')}"
+            " /Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py"
+        ),
         "port": get_port("session-channel"),
         "health": get("session-channel").health_url,
         "workdir": "/Users/joneshong/workshop/stations/session-channel",
@@ -103,7 +109,8 @@ SERVICES = [
         "name": "agent-metrics",
         "type": "uvicorn",
         "cmd": (
-            "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
+            f"AGENT_METRICS_PORT={get_port('agent-metrics')}"
+            " /Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
             " -m agent_metrics serve"
         ),
         "port": get_port("agent-metrics"),
@@ -136,7 +143,10 @@ SERVICES = [
     {
         "name": "stt",
         "type": "uvicorn",
-        "cmd": ("/Users/joneshong/workshop/stations/stt/.venv/bin/python3 main.py"),
+        "cmd": (
+            f"STT_PORT={get_port('stt')}"
+            " /Users/joneshong/workshop/stations/stt/.venv/bin/python3 main.py"
+        ),
         "port": get_port("stt"),
         "health": get("stt").health_url,
         "workdir": "/Users/joneshong/workshop/stations/stt",
@@ -144,7 +154,10 @@ SERVICES = [
     {
         "name": "ocr",
         "type": "uvicorn",
-        "cmd": ("/Users/joneshong/workshop/stations/ocr/.venv/bin/python3 main.py"),
+        "cmd": (
+            f"OCR_PORT={get_port('ocr')}"
+            " /Users/joneshong/workshop/stations/ocr/.venv/bin/python3 main.py"
+        ),
         "port": get_port("ocr"),
         "health": get("ocr").health_url,
         "workdir": "/Users/joneshong/workshop/stations/ocr",
@@ -152,7 +165,10 @@ SERVICES = [
     {
         "name": "tts",
         "type": "uvicorn",
-        "cmd": ("/Users/joneshong/workshop/stations/tts/.venv/bin/python3 main.py"),
+        "cmd": (
+            f"TTS_PORT={get_port('tts')}"
+            " /Users/joneshong/workshop/stations/tts/.venv/bin/python3 main.py"
+        ),
         "port": get_port("tts"),
         "health": get("tts").health_url,
         "workdir": "/Users/joneshong/workshop/stations/tts",
@@ -160,7 +176,10 @@ SERVICES = [
     {
         "name": "vision",
         "type": "uvicorn",
-        "cmd": ("/Users/joneshong/workshop/stations/vision/.venv/bin/python3 main.py"),
+        "cmd": (
+            f"VISION_PORT={get_port('vision')}"
+            " /Users/joneshong/workshop/stations/vision/.venv/bin/python3 main.py"
+        ),
         "port": get_port("vision"),
         "health": get("vision").health_url,
         "workdir": "/Users/joneshong/workshop/stations/vision",
@@ -168,7 +187,10 @@ SERVICES = [
     {
         "name": "voice-gateway",
         "type": "uvicorn",
-        "cmd": ("/Users/joneshong/workshop/stations/voice-gateway/.venv/bin/python3 main.py"),
+        "cmd": (
+            f"VOICE_GATEWAY_PORT={get_port('voice-gateway')}"
+            " /Users/joneshong/workshop/stations/voice-gateway/.venv/bin/python3 main.py"
+        ),
         "port": get_port("voice-gateway"),
         "health": get("voice-gateway").health_url,
         "workdir": "/Users/joneshong/workshop/stations/voice-gateway",
@@ -176,7 +198,10 @@ SERVICES = [
     {
         "name": "translate",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/translate/.venv/bin/python3 main.py",
+        "cmd": (
+            f"TRANSLATE_PORT={get_port('translate')}"
+            " /Users/joneshong/workshop/stations/translate/.venv/bin/python3 main.py"
+        ),
         "port": get_port("translate"),
         "health": get("translate").health_url,
         "workdir": "/Users/joneshong/workshop/stations/translate",
