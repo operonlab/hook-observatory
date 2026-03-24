@@ -69,3 +69,7 @@ vendor/cronicle/temp_*/
 
 # Rust build artifacts
 stations/rlm/target/
+
+# Voice-gateway binary models + WASM (managed externally)
+stations/voice-gateway/models/
+stations/voice-gateway/static/sherpa-onnx-wasm-kws-main.*
