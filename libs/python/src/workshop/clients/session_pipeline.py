@@ -328,7 +328,7 @@ class SessionPipelineClient:
             )
 
             client = SessionArchiverClient()
-            scan_result = client.scan()
+            scan_result = client.scan(session_id=session_id)
             stage.details = {
                 "scanned": scan_result.get("scanned", 0),
                 "upserted": scan_result.get("upserted", 0),
@@ -425,15 +425,26 @@ class SessionPipelineClient:
             # ------------------------------------------------------------------
             if metrics.quality_score > 0.6:
                 try:
-                    import sys as _sys2
+                    import importlib.util
 
-                    _memvault_src = os.path.expanduser("~/workshop/core/src")
-                    if _memvault_src not in _sys2.path:
-                        _sys2.path.insert(0, _memvault_src)
-
-                    from src.modules.memvault.reflection import (  # type: ignore[import]
-                        reflect_on_session as _reflect_on_session,
+                    # Load reflection.py directly via importlib to avoid triggering
+                    # memvault/__init__.py which imports fastapi (not available in
+                    # the background pipeline's Python env).
+                    _refl_path = os.path.expanduser(
+                        "~/workshop/core/src/modules/memvault/reflection.py"
                     )
+                    _core_src = os.path.expanduser("~/workshop/core/src")
+                    if _core_src not in sys.path:
+                        sys.path.insert(0, _core_src)
+                    _spec = importlib.util.spec_from_file_location(
+                        "memvault_reflection",
+                        _refl_path,
+                        submodule_search_locations=[],
+                    )
+                    _mod = importlib.util.module_from_spec(_spec)
+                    sys.modules[_spec.name] = _mod  # register so @dataclass works
+                    _spec.loader.exec_module(_mod)
+                    _reflect_on_session = _mod.reflect_on_session
 
                     # Load memory blocks from the transcript (best-effort).
                     # reflect_on_session is a pure function — no DB required.
@@ -473,9 +484,9 @@ class SessionPipelineClient:
                     _ref_result = _reflect_on_session(_blocks, session_id=session_id)
                     metrics.invariant_count = len(_ref_result.invariants)
                     metrics.derived_count = len(_ref_result.derived)
-                    # KG write-back deferred — no auth available in background pipeline.
-                    # The weekly GRC runner will call /api/memvault/reflect with auth.
-                    # memvault_fed remains False (set above).
+                    # KG write-back deferred — the weekly GRC runner will persist
+                    # invariants/derived to DB with proper auth context.
+                    metrics.reflection_fed = True  # analysis done, write-back deferred
                     log.info(
                         "reflect: pure analysis done (KG write-back deferred) "
                         "invariants=%d derived=%d session=%s",
@@ -495,6 +506,8 @@ class SessionPipelineClient:
                 "total_tokens": metrics.total_tokens,
                 "db_written": db_written,
                 "reflection_fed": metrics.reflection_fed,
+                "invariant_count": metrics.invariant_count,
+                "derived_count": metrics.derived_count,
                 "failure_patterns": metrics.failure_patterns,
             }
         except Exception as exc:
