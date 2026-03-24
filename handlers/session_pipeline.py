@@ -17,10 +17,15 @@ import json
 import logging
 import subprocess
 import sys
+from pathlib import Path
 
 from .base import ALLOW, HookResult
 
 log = logging.getLogger(__name__)
+
+# Pipeline log directory — created at import time so Popen can open it immediately.
+_LOG_DIR = Path.home() / ".claude" / "data" / "session-pipeline"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def handle(
@@ -47,12 +52,14 @@ def handle(
             "from workshop.clients.session_pipeline import SessionPipelineClient; "
             f"SessionPipelineClient().run_pipeline({session_id!r}, {transcript_path!r})"
         )
+        _log_file = open(_LOG_DIR / "pipeline.log", "a")
         subprocess.Popen(
             [sys.executable, "-c", code],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=_log_file,
+            stderr=_log_file,
             start_new_session=True,
         )
+        # fd is inherited by the child process; parent does not need to close it.
     except Exception:
         pass  # fail-open: never block Claude Code
 
