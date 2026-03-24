@@ -112,6 +112,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "SubagentStart": [
         (None, context_inject.handle),
+        (None, voice_notify.handle),
         (None, observability.handle),
     ],
     "SubagentStop": [
