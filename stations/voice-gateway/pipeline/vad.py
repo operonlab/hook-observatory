@@ -41,7 +41,7 @@ class VadGate:
     def accept(self, samples: np.ndarray) -> bool:
         """Feed audio chunk, return True if speech is detected."""
         self._vad.accept_waveform(samples)
-        return self._vad.is_speech()
+        return self._vad.is_speech_detected()
 
     def get_speech_segment(self) -> np.ndarray | None:
         """Pop a completed speech segment (after silence detected), or None."""
@@ -57,4 +57,4 @@ class VadGate:
 
     def reset(self) -> None:
         """Clear all internal state."""
-        self._vad.clear()
+        self._vad.reset()
