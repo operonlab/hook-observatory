@@ -3,6 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type Capture, type CaptureStats, captureApi } from './api'
 
+// TODO: ideally these thresholds come from the API response
+const COMPLETENESS_HIGH = 0.8
+const COMPLETENESS_MED = 0.5
+
 const MODULE_COLORS: Record<string, string> = {
   finance: '#a6e3a1',
   taskflow: '#89b4fa',
@@ -190,9 +194,9 @@ export default function CaptureBadge() {
                       className="shrink-0 text-[10px]"
                       style={{
                         color:
-                          item.completeness >= 0.8
+                          item.completeness >= COMPLETENESS_HIGH
                             ? '#a6e3a1'
-                            : item.completeness >= 0.5
+                            : item.completeness >= COMPLETENESS_MED
                               ? '#f9e2af'
                               : 'rgba(255, 255, 255, 0.3)',
                       }}

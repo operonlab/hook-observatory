@@ -20,6 +20,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.grc import GenerateItem, ReflectResult
 
 LOOKBACK_DAYS = 7
+
+
+def _low_confidence_threshold(enrichment_count: int = 0) -> float:
+    """Dynamic threshold for flagging low-confidence captures.
+
+    Captures that have been enriched multiple times have had more chances
+    to improve quality, so the bar rises slightly. Clamped to [0.35, 0.65].
+    """
+    return max(0.35, min(0.65, 0.45 + 0.04 * enrichment_count))
+
+
+# Module-level constant kept for backward-compatible metric labels and log messages.
+# Use _low_confidence_threshold() for per-item gating.
 LOW_CONFIDENCE_THRESHOLD = 0.5
 
 

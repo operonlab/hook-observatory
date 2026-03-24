@@ -60,7 +60,11 @@ ENRICHMENT_SCHEMAS: dict[tuple[str, str], dict[str, str]] = {
 
 # ── RLM Enrichment Strategy ──────────────────────────────────────────────────
 
+# TODO: dynamic based on input complexity — e.g. longer / more structured inputs
+# can sustain higher confidence expectations than short freeform text.
 _RLM_FIELD_CONFIDENCE_THRESHOLD = 0.6
+# TODO: dynamic based on input complexity — inputs with clear numeric tokens or
+# known entity names warrant a higher ambiguity bar.
 _RLM_AMBIGUITY_THRESHOLD = 0.5
 
 

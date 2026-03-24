@@ -861,7 +861,13 @@ class GuideService:
     """Generate composite method guides using Codex CLI headless, cached in Redis."""
 
     CACHE_TTL = 86400 * 7  # 7 days — only regenerate when methods change
-    CLI_TIMEOUT = 60  # seconds
+    # Dynamic: base=30 + method_complexity_factor (10s per method, capped at 120s)
+    _CLI_TIMEOUT_BASE = 30
+
+    @classmethod
+    def _calc_timeout(cls, method_count: int = 1) -> int:
+        """Dynamic timeout based on method count: base=30 + 10s per method, max 120s."""
+        return min(120, cls._CLI_TIMEOUT_BASE + method_count * 10)
 
     @staticmethod
     def _cache_key(slugs: list[str]) -> str:
@@ -989,7 +995,9 @@ class GuideService:
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
             )
-            stdout, _stderr = await asyncio.wait_for(proc.communicate(), timeout=self.CLI_TIMEOUT)
+            stdout, _stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self._calc_timeout(len(methods))
+            )
             if proc.returncode != 0:
                 return self._fallback_guide(methods)
             guide_text = stdout.decode("utf-8").strip()

@@ -12,6 +12,10 @@ import type {
   TopicGraph,
 } from '../types'
 
+// TODO: ideally these thresholds come from the API response
+const SEARCH_THRESHOLD = 0.5
+const DEDUP_THRESHOLD = 0.85
+
 const reportCrud = createCrudApi<Report, ReportCreate, ReportUpdate>('/intelflow/reports')
 
 export const intelflowApi = {

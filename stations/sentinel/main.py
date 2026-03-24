@@ -28,6 +28,13 @@ from routes import router, set_engine  # isort: skip
 
 logger = setup_logging("sentinel")
 
+# ── Timeout presets by operation type (seconds) ──
+
+_TIMEOUT_INITIAL_DELAY = 5     # startup settling before first light check
+_SLEEP_BETWEEN_ROUNDS = 15     # inter-round pause in repair monitor loop
+_SLEEP_AFTER_LAYER1 = 10       # settle time after Layer 1 simple restart
+_SLEEP_AFTER_LAYER2 = 5        # settle time after Layer 2 frontend rebuild
+
 # ── Global State ──
 
 intervention_engine = InterventionEngine()
@@ -101,7 +108,7 @@ async def _light_check_loop() -> None:
     """Run light checks every 30s."""
     from sse import sse_broadcast
 
-    await asyncio.sleep(5)  # Initial delay for startup
+    await asyncio.sleep(_TIMEOUT_INITIAL_DELAY)  # Initial delay for startup
     while True:
         try:
             results = await run_all_light_checks()
@@ -140,7 +147,7 @@ _NOTIFICATION_COOLDOWN = 1800  # 30 minutes — suppress repeat notifications fo
 
 async def _repair_monitor_loop() -> None:
     """Monitor intervention states and dispatch repairs."""
-    await asyncio.sleep(10)
+    await asyncio.sleep(_SLEEP_BETWEEN_ROUNDS)
     while True:
         try:
             for service, tracker in list(intervention_engine.trackers.items()):
@@ -281,7 +288,7 @@ async def _repair_monitor_loop() -> None:
                         logger.info("Layer 1: Attempting simple restart for %s", service)
                         restarted = await _simple.try_restart(service)
                         if restarted:
-                            await asyncio.sleep(10)
+                            await asyncio.sleep(_SLEEP_AFTER_LAYER1)
                             from checker import LIGHT_CHECKS, run_light_check
 
                             check = next((c for c in LIGHT_CHECKS if c.name == service), None)
@@ -304,7 +311,7 @@ async def _repair_monitor_loop() -> None:
                         logger.info("Layer 2: Attempting frontend rebuild for %s", service)
                         rebuilt = await _frontend.try_rebuild()
                         if rebuilt:
-                            await asyncio.sleep(5)
+                            await asyncio.sleep(_SLEEP_AFTER_LAYER2)
                             # Re-run the deep check to see if rebuild fixed it
                             from checker import run_deep_check
 
@@ -382,7 +389,7 @@ async def _repair_monitor_loop() -> None:
         except Exception:
             logger.exception("Repair monitor error")
 
-        await asyncio.sleep(15)
+        await asyncio.sleep(_SLEEP_BETWEEN_ROUNDS)
 
 
 # ── Lifespan ──

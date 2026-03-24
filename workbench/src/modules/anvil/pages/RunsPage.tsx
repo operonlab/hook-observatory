@@ -4,6 +4,10 @@ import { lifecycleApi } from '../api'
 import type { LifecycleRun, LifecycleRunList } from '../types'
 import { STATUS_CONFIG, TRIGGER_LABELS } from '../types'
 
+// TODO: ideally these thresholds come from the API response
+const PASS_RATE_HIGH = 0.8
+const PASS_RATE_MED = 0.6
+
 export default function RunsPage() {
   const navigate = useNavigate()
   const [data, setData] = useState<LifecycleRunList | null>(null)
@@ -104,9 +108,9 @@ export default function RunsPage() {
                       color:
                         run.total_skills === 0
                           ? 'var(--av-text-muted)'
-                          : (run.test_passed + run.test_partial) / run.total_skills >= 0.8
+                          : (run.test_passed + run.test_partial) / run.total_skills >= PASS_RATE_HIGH
                             ? 'var(--av-pass)'
-                            : (run.test_passed + run.test_partial) / run.total_skills >= 0.6
+                            : (run.test_passed + run.test_partial) / run.total_skills >= PASS_RATE_MED
                               ? 'var(--av-warn)'
                               : 'var(--av-fail)',
                     }}
