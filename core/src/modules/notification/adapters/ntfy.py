@@ -9,6 +9,12 @@ import structlog
 
 from src.config import settings
 
+try:
+    from workshop.retry import with_backoff
+    _HAS_RETRY = True
+except ImportError:
+    _HAS_RETRY = False
+
 logger = structlog.get_logger()
 
 SEVERITY_TO_PRIORITY = {
@@ -18,14 +24,23 @@ SEVERITY_TO_PRIORITY = {
 }
 
 
+def _send_ntfy_once(url: str, data: bytes) -> bool:
+    """Single HTTP POST attempt to ntfy server (no retry)."""
+    import urllib.request
+
+    req = urllib.request.Request(url, data=data, method="POST")  # noqa: S310
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+        return resp.status == 200
+
+
 def _send_ntfy_sync(server: str, topic: str, payload: dict) -> bool:
-    """Synchronous HTTP POST to ntfy server (runs in executor).
+    """Synchronous HTTP POST to ntfy server (runs in executor), with retry.
 
     Uses JSON body format to support UTF-8 titles (HTTP headers are latin-1 only).
     """
     import json
     import urllib.error
-    import urllib.request
 
     url = f"{server.rstrip('/')}"
 
@@ -46,11 +61,15 @@ def _send_ntfy_sync(server: str, topic: str, payload: dict) -> bool:
             json_payload["click"] = payload["click"]
 
         data = json.dumps(json_payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST")  # noqa: S310
-        req.add_header("Content-Type", "application/json")
 
-        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
-            return resp.status == 200
+        if _HAS_RETRY:
+            return with_backoff(
+                max_retries=3,
+                base_delay=1.0,
+                retryable=(urllib.error.URLError, TimeoutError, OSError),
+            )(_send_ntfy_once)(url, data)
+        else:
+            return _send_ntfy_once(url, data)
     except urllib.error.HTTPError as e:
         logger.error("ntfy_http_error", status=e.code, url=url)
         return False

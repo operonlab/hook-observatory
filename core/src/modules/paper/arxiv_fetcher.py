@@ -23,6 +23,12 @@ if TYPE_CHECKING:
 
 from src.shared.scoring_stages import cosine_similarity
 
+try:
+    from workshop.retry import with_backoff as _with_backoff
+    _HAS_RETRY = True
+except ImportError:
+    _HAS_RETRY = False
+
 logger = logging.getLogger(__name__)
 
 # ── Watch configuration ──────────────────────────────────────────────────────
@@ -155,12 +161,25 @@ def _parse_feed(xml_bytes: bytes) -> list[dict]:
     return papers
 
 
+def _fetch_arxiv_page_once(url: str) -> bytes:
+    """Single HTTP GET to arXiv Atom API (no retry)."""
+    req = urllib.request.Request(  # noqa: S310 — arXiv API only
+        url, headers={"User-Agent": "Workshop/1.0 (paper module)"}
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+        return resp.read()
+
+
 def _fetch_arxiv_page_sync(
     query: str,
     start: int,
     max_results: int,
 ) -> bytes | None:
-    """Synchronous HTTP GET to arXiv Atom API. Called via asyncio.to_thread."""
+    """Synchronous HTTP GET to arXiv Atom API. Called via asyncio.to_thread.
+
+    Retries up to 3 times with exponential backoff on transient errors.
+    _RATE_LIMIT_DELAY is preserved in the caller (fetch_arxiv_papers) for API politeness.
+    """
     params = urllib.parse.urlencode(
         {
             "search_query": query,
@@ -173,11 +192,15 @@ def _fetch_arxiv_page_sync(
     url = f"{_ARXIV_API_BASE}?{params}"
     logger.debug("arxiv_fetcher: GET %s", url)
     try:
-        req = urllib.request.Request(  # noqa: S310 — arXiv API only
-            url, headers={"User-Agent": "Workshop/1.0 (paper module)"}
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-            return resp.read()
+        if _HAS_RETRY:
+            return _with_backoff(
+                max_retries=3,
+                base_delay=2.0,
+                max_delay=30.0,
+                retryable=(urllib.error.URLError, TimeoutError, OSError),
+            )(_fetch_arxiv_page_once)(url)
+        else:
+            return _fetch_arxiv_page_once(url)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         logger.error("arxiv_fetcher: HTTP error — %s", exc)
         return None

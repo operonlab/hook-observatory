@@ -16,6 +16,9 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from workshop.retry import async_with_backoff
+from workshop.timeout import dynamic_timeout
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -693,28 +696,43 @@ def _run_rlm_expansion(query: str) -> str | None:
     return text
 
 
+@async_with_backoff(
+    max_retries=2,
+    base_delay=0.5,
+    max_delay=5.0,
+    retryable=(httpx.TimeoutException, httpx.NetworkError),
+)
+async def _call_local_llm_with_retry(prompt: str, max_tokens: int, timeout: float) -> str | None:
+    """Inner call with retry — separated so backoff decorator can wrap cleanly."""
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            "http://localhost:8000/v1/chat/completions",
+            json={
+                "model": "default",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": 0.3,
+                "stream": False,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+    return None
+
+
 async def _call_local_llm(prompt: str, max_tokens: int = 200) -> str | None:
     """Call oMLX local LLM for query expansion. Returns None on failure.
 
-    Uses oMLX port 8000 with a 5-second timeout to keep search fast.
+    Uses oMLX port 8000 with a dynamic timeout scaled by prompt length,
+    retrying up to 2 times on transient network/timeout errors.
     """
+    query_length = len(prompt)
+    timeout = dynamic_timeout(base=5, factor=0.5, context=query_length / 1000, cap=30)
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.post(
-                "http://localhost:8000/v1/chat/completions",
-                json={
-                    "model": "default",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens,
-                    "temperature": 0.3,
-                    "stream": False,
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            choices = data.get("choices", [])
-            if choices:
-                return choices[0].get("message", {}).get("content", "")
+        return await _call_local_llm_with_retry(prompt, max_tokens, timeout)
     except httpx.TimeoutException:
         logger.debug("oMLX LLM timeout during query expansion — falling back to keyword mode")
     except httpx.ConnectError:

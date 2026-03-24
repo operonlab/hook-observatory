@@ -8,7 +8,9 @@ See AD-12 in docs/architecture/architecture-decisions.md.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,14 +44,26 @@ async def create_report_from_url(
     # 0. SSRF guard — reject internal/private network targets
     validate_url(url)
 
-    # 1. Crawl (rate-limited per domain)
+    # 1. Crawl (rate-limited per domain, with exponential backoff retry)
     await _limiter.acquire(url)
-    result = await crawl_url(url, timeout=90.0)
-    if result.success:
-        _limiter.report_success(url)
-    else:
-        _limiter.report_failure(url, 429)  # treat crawl failure as rate-limit signal
-        return {"success": False, "error": result.error, "url": url}
+    result = None
+    _crawl_max_retries = 3
+    for _attempt in range(_crawl_max_retries):
+        result = await crawl_url(url, timeout=90.0)
+        if result.success:
+            _limiter.report_success(url)
+            break
+        # Retry on transient failures; permanent failures (e.g. 404) don't benefit from retry
+        _is_transient = result.error and any(
+            kw in str(result.error).lower()
+            for kw in ("timeout", "connection", "network", "reset", "refused")
+        )
+        if not _is_transient or _attempt == _crawl_max_retries - 1:
+            _limiter.report_failure(url, 429)
+            return {"success": False, "error": result.error, "url": url}
+        _delay = min(2.0 * (2**_attempt), 30.0) + random.uniform(0, 1)
+        logger.warning("crawl retry %d/%d for %s in %.1fs: %s", _attempt + 1, _crawl_max_retries, url, _delay, result.error)
+        await asyncio.sleep(_delay)
 
     # 2. Build report content
     report_title = title or result.title or f"Web Crawl: {url}"

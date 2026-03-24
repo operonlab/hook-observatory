@@ -11,6 +11,13 @@ import logging
 import subprocess
 from pathlib import Path
 
+try:
+    from workshop.retry import async_with_backoff as _async_with_backoff
+    from workshop.timeout import dynamic_timeout as _dynamic_timeout
+    _HAS_RETRY = True
+except ImportError:
+    _HAS_RETRY = False
+
 logger = logging.getLogger(__name__)
 
 OMLX_VENV = Path.home() / ".venvs" / "omlx"
@@ -91,14 +98,16 @@ async def _send_request(request: dict) -> dict | None:
                 _process.stdin.write(line)
                 _process.stdin.flush()
 
+            write_timeout = _dynamic_timeout(base=10, factor=0.5, context=len(line), cap=30) if _HAS_RETRY else 10
             await asyncio.wait_for(
                 loop.run_in_executor(None, _write_request),
-                timeout=10,
+                timeout=write_timeout,
             )
 
+            read_timeout = _dynamic_timeout(base=30, factor=0.5, context=len(line), cap=120) if _HAS_RETRY else 30
             response_line = await asyncio.wait_for(
                 loop.run_in_executor(None, _process.stdout.readline),
-                timeout=30,
+                timeout=read_timeout,
             )
             if not response_line:
                 logger.warning("oMLX worker returned empty response")
@@ -118,11 +127,8 @@ async def _send_request(request: dict) -> dict | None:
             return None
 
 
-async def embed_texts(texts: list[str], task_type: str | None = None) -> list[list[float] | None]:
-    """Embed multiple texts. Returns list of embeddings (or None per failed text)."""
-    if not texts:
-        return []
-
+async def _embed_texts_once(texts: list[str], task_type: str | None) -> list[list[float] | None]:
+    """Single attempt to embed texts via worker (no retry)."""
     response = await _send_request({"texts": texts, "task_type": task_type})
 
     if response is None or "error" in response:
@@ -138,6 +144,28 @@ async def embed_texts(texts: list[str], task_type: str | None = None) -> list[li
         else:
             results.append(None)
     return results
+
+
+async def embed_texts(texts: list[str], task_type: str | None = None) -> list[list[float] | None]:
+    """Embed multiple texts. Returns list of embeddings (or None per failed text).
+
+    Retries up to 2 times on Exception (worker crash triggers restart via _send_request).
+    """
+    if not texts:
+        return []
+
+    if _HAS_RETRY:
+        try:
+            return await _async_with_backoff(
+                max_retries=2,
+                base_delay=1.0,
+                max_delay=10.0,
+            )(_embed_texts_once)(texts, task_type)
+        except Exception as exc:
+            logger.warning("oMLX embed_texts failed after retries: %s", exc)
+            return [None] * len(texts)
+    else:
+        return await _embed_texts_once(texts, task_type)
 
 
 async def embed_single(text: str, task_type: str | None = None) -> list[float] | None:

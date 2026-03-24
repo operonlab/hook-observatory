@@ -96,7 +96,7 @@ def _get_redis():
     try:
         import redis
 
-        _redis_client = redis.Redis(host="127.0.0.1", port=6379, socket_timeout=0.5)
+        _redis_client = redis.Redis(host="127.0.0.1", port=6379, socket_timeout=2.0)
         _redis_client.ping()
         return _redis_client
     except Exception:

@@ -12,6 +12,13 @@ import subprocess
 import threading
 from pathlib import Path
 
+try:
+    from workshop.retry import async_with_backoff as _async_with_backoff
+    from workshop.timeout import dynamic_timeout as _dynamic_timeout
+    _HAS_RETRY = True
+except ImportError:
+    _HAS_RETRY = False
+
 logger = logging.getLogger(__name__)
 
 OMLX_VENV = Path.home() / ".venvs" / "omlx"

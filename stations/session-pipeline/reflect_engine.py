@@ -49,10 +49,29 @@ _FAILURE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 _MAX_ERROR_MESSAGES = 10
 _MAX_FAILURE_PATTERNS = 20
 
-# Outcome thresholds
-_FAILURE_ERROR_RATE = 0.50
-_PARTIAL_ERROR_RATE = 0.20
-_PARTIAL_TOOL_SUCCESS_RATE = 0.70
+# Outcome thresholds — dynamic based on session length (turn count).
+# Short sessions (< 10 turns) are more tolerant of errors.
+
+
+def _calc_failure_threshold(turn_count: int) -> float:
+    """Failure error-rate threshold: rises slightly for longer sessions."""
+    base = 0.50
+    adjustment = min((turn_count - 10) / 100, 0.15) if turn_count > 10 else -0.1
+    return max(0.30, min(0.65, base + adjustment))
+
+
+def _calc_partial_error_threshold(turn_count: int) -> float:
+    """Partial error-rate threshold: rises slightly for longer sessions."""
+    base = 0.20
+    adjustment = min((turn_count - 10) / 200, 0.10) if turn_count > 10 else -0.05
+    return max(0.10, min(0.35, base + adjustment))
+
+
+def _calc_partial_tool_success_threshold(turn_count: int) -> float:
+    """Partial tool-success-rate threshold: loosens slightly for longer sessions."""
+    base = 0.70
+    adjustment = min((turn_count - 10) / 200, 0.10) if turn_count > 10 else 0.05
+    return max(0.50, min(0.85, base - adjustment))
 
 
 # ---------------------------------------------------------------------------
@@ -373,10 +392,13 @@ def calculate_quality_score(stats: TranscriptStats) -> tuple[str, float]:
     )
     context_efficiency = min(1.0, context_efficiency)
 
-    # Outcome classification
-    if stats.turn_count == 0 or stats.user_message_count == 0 or error_rate > _FAILURE_ERROR_RATE:
+    # Outcome classification (dynamic thresholds based on session length)
+    failure_threshold = _calc_failure_threshold(stats.turn_count)
+    partial_error_threshold = _calc_partial_error_threshold(stats.turn_count)
+    partial_tool_threshold = _calc_partial_tool_success_threshold(stats.turn_count)
+    if stats.turn_count == 0 or stats.user_message_count == 0 or error_rate > failure_threshold:
         outcome = "failure"
-    elif error_rate > _PARTIAL_ERROR_RATE or tool_success_rate < _PARTIAL_TOOL_SUCCESS_RATE:
+    elif error_rate > partial_error_threshold or tool_success_rate < partial_tool_threshold:
         outcome = "partial"
     else:
         outcome = "success"
