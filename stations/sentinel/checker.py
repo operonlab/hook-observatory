@@ -237,6 +237,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url="http://127.0.0.1:4112/health",
         optional=True,
     ),
+    LightCheck(
+        name="voice-gateway",
+        group="external",
+        url="http://127.0.0.1:4113/health",
+        optional=True,
+    ),
     # ── security ──
     LightCheck(
         name="port-security",
