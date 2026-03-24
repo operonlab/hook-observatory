@@ -13,7 +13,7 @@ from providers.base import (
 )
 from schemas import TranslateResponse
 
-import cache as tps_cache
+import db as translate_db
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class TranslationWorkflow:
         target_lang = normalize_lang(target_lang)
 
         # 1. Cache check
-        cached = await tps_cache.cache_get(text, source_lang, target_lang)
+        cached = await translate_db.cache_get(text, source_lang, target_lang)
         if cached:
             return TranslateResponse(
                 text=cached["text"],
@@ -63,7 +63,7 @@ class TranslationWorkflow:
             )
 
         # 2. Budget check
-        if await tps_cache.is_budget_exceeded():
+        if await translate_db.is_budget_exceeded():
             raise TranslationError(
                 f"Daily budget ${config.daily_budget_usd:.2f} exceeded"
             )
@@ -88,10 +88,11 @@ class TranslationWorkflow:
                 result = await provider.translate(text, source_lang, target_lang)
 
                 # Write to cache + record usage
-                await tps_cache.cache_set(
-                    text, source_lang, target_lang, result.text, result.provider
+                await translate_db.cache_set(
+                    text, source_lang, target_lang,
+                    result.text, result.provider, result.estimated_cost_usd,
                 )
-                await tps_cache.record_usage(
+                await translate_db.record_usage(
                     result.provider, result.char_count, result.estimated_cost_usd
                 )
 

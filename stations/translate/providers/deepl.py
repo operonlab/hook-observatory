@@ -60,7 +60,7 @@ class DeepLProvider(BaseTranslationProvider):
 
             key = self._api_key or config.deepl_api_key
             if not key:
-                raise AuthenticationError("TPS_DEEPL_API_KEY not set")
+                raise AuthenticationError("TRANSLATE_DEEPL_API_KEY not set")
             self._translator = deepl.Translator(key)
         return self._translator
 

@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""TPS MCP Server — Thin wrapper over TPSClient SDK.
+"""Translate MCP Server — Thin wrapper over TranslateClient SDK.
 
 Usage:
-    python3 mcp/tps/server.py
+    python3 mcp/translate/server.py
 
 Configure in mcpproxy:
-    "tps": {
+    "translate": {
         "command": "/Users/joneshong/.local/bin/python3",
-        "args": ["/Users/joneshong/workshop/mcp/tps/server.py"]
+        "args": ["/Users/joneshong/workshop/mcp/translate/server.py"]
     }
 """
 
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.tps import TPSClient
+from workshop.clients.translate import TranslateClient
 from workshop.mcp_helpers import json_text, mcp_error_handler
 
-mcp = FastMCP("tps")
-client = TPSClient()
+mcp = FastMCP("translate")
+client = TranslateClient()
 
 
 @mcp.tool()
-@mcp_error_handler("TPS")
-async def tps_translate(
+@mcp_error_handler("Translate")
+async def translate_text(
     text: str,
     target_lang: str = "zh-TW",
     source_lang: str = "auto",
@@ -43,8 +43,8 @@ async def tps_translate(
 
 
 @mcp.tool()
-@mcp_error_handler("TPS")
-async def tps_batch(
+@mcp_error_handler("Translate")
+async def translate_batch(
     texts: list[str],
     target_lang: str = "zh-TW",
     source_lang: str = "auto",
@@ -66,8 +66,8 @@ async def tps_batch(
 
 
 @mcp.tool()
-@mcp_error_handler("TPS")
-async def tps_usage() -> str:
+@mcp_error_handler("Translate")
+async def translate_usage() -> str:
     """Show today's translation usage stats and budget."""
     result = await to_thread(client.usage)
     return json_text(result)

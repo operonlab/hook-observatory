@@ -1,6 +1,6 @@
-"""TPS Station — Translation Proxy Service.
+"""Translate Station — Translation Proxy Service.
 
-DeepL → Google Translate cascading with Redis cache.
+DeepL → Google Translate cascading with PostgreSQL cache.
 Port 4114.
 """
 
@@ -18,31 +18,29 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from workshop.station_bootstrap import setup_cors, setup_logging
 
-from cache import close_redis, get_redis
 from config import config
+from db import close_db, init_db
 from routes import router
 
-logger = setup_logging("tps")
+logger = setup_logging("translate")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: verify Redis. Shutdown: close connections."""
+    """Startup: init PostgreSQL schema. Shutdown: close connections."""
     try:
-        r = await get_redis()
-        await r.ping()
-        logger.info("Redis connected")
+        await init_db()
     except Exception as e:
-        logger.warning("Redis unavailable (cache degraded): %s", e)
+        logger.warning("Database init failed (degraded): %s", e)
 
-    logger.info("TPS ready on %s:%d", config.host, config.port)
+    logger.info("Translate ready on %s:%d", config.host, config.port)
     yield
 
-    await close_redis()
-    logger.info("TPS shutdown")
+    await close_db()
+    logger.info("Translate shutdown")
 
 
-app = FastAPI(title="TPS Station", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Translate Station", version="0.2.0", lifespan=lifespan)
 setup_cors(app)
 app.include_router(router)
 

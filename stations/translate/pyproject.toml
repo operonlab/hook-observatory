@@ -1,7 +1,7 @@
 [project]
-name = "workshop-tps"
+name = "workshop-translate"
 version = "0.1.0"
-description = "Translation Proxy Station — DeepL/Google cascading with Redis cache"
+description = "Translation Proxy Station — DeepL/Google cascading with PostgreSQL cache"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -11,7 +11,9 @@ dependencies = [
     "pydantic-settings>=2.7",
     "pyyaml>=6.0",
     "deepl>=1.18",
-    "redis>=5.0",
+    "sqlalchemy>=2.0",
+    "asyncpg>=0.30",
+    "greenlet>=3.0",
 ]
 
 [build-system]

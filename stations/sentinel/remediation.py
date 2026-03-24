@@ -60,7 +60,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "stt": "stt",
     "ocr": "ocr",
     "voice-gateway": "voice-gateway",
-    "tps": "tps",
+    "translate": "translate",
 }
 
 # Docker-managed services: restart via docker
