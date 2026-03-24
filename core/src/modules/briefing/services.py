@@ -821,6 +821,11 @@ class FollowUpService:
         return self._to_response(fu)
 
     @staticmethod
+    def _calc_timeout(prompt_text: str) -> int:
+        """Dynamic timeout: base=60s + 10s per 500 chars, capped at 300s."""
+        return min(300, max(60, 60 + len(prompt_text) // 500 * 10))
+
+    @staticmethod
     def _run_claude_answer(prompt: str) -> str:
         """Run Claude CLI to generate follow-up answer (blocking)."""
         import os
@@ -831,11 +836,12 @@ class FollowUpService:
         env["PATH"] = f"{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:{env.get('PATH', '')}"
         env.pop("CLAUDECODE", None)
 
+        timeout = FollowUpService._calc_timeout(prompt)
         result = subprocess.run(  # noqa: S603
             ["claude", "-p", prompt, "--model", "haiku"],  # noqa: S607
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=timeout,
             env=env,
         )
         ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\r")

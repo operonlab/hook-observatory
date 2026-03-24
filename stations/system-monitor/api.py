@@ -42,6 +42,12 @@ REPORTS_DIR = Path(
     CONFIG.get("reports", {}).get("output_dir", "~/.claude/data/system-monitor/reports")
 ).expanduser()
 
+# ── Timing constants ──────────────────────────────────────────────────────────
+_SLEEP_STARTUP_DELAY = 5        # seconds — short delay before first broadcast on startup
+_SLEEP_DISK_STARTUP_DELAY = 15  # seconds — let dashboard loop run first before disk loop
+_TIMEOUT_LAUNCHCTL = 10         # seconds — launchctl load/unload/list commands
+_TIMEOUT_SSE_KEEPALIVE = 30     # seconds — SSE queue.get before sending keepalive comment
+
 # Background broadcast intervals
 _DASHBOARD_INTERVAL = 30  # seconds — hardware + status + alerts + history
 _DISK_INTERVAL = 300  # seconds — disk summary (heavier, 5 min)
@@ -54,7 +60,7 @@ async def _dashboard_broadcast_loop() -> None:
     """Collect hardware + status data and broadcast to SSE clients every 30s."""
     from sse import sse_broadcast
 
-    await asyncio.sleep(5)  # short startup delay
+    await asyncio.sleep(_SLEEP_STARTUP_DELAY)  # short startup delay
     while True:
         try:
             loop = asyncio.get_event_loop()
@@ -85,7 +91,7 @@ async def _disk_broadcast_loop() -> None:
     """Collect disk summary and broadcast to SSE clients every 5 min."""
     from sse import sse_broadcast
 
-    await asyncio.sleep(15)  # let dashboard loop go first
+    await asyncio.sleep(_SLEEP_DISK_STARTUP_DELAY)  # let dashboard loop go first
     while True:
         try:
             from collector import collect_disk_fast, load_config
@@ -250,7 +256,7 @@ async def sse_events(request: Request):
                 if await request.is_disconnected():
                     break
                 try:
-                    msg = await asyncio.wait_for(queue.get(), timeout=30)
+                    msg = await asyncio.wait_for(queue.get(), timeout=_TIMEOUT_SSE_KEEPALIVE)
                     yield msg
                 except TimeoutError:
                     yield ": keepalive\n\n"
@@ -348,7 +354,7 @@ async def enable_service(label: str):
         ["launchctl", "load", str(enabled_path)],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=_TIMEOUT_LAUNCHCTL,
     )
     if result.returncode != 0:
         return {"status": "error", "label": label, "detail": result.stderr.strip()}
@@ -382,7 +388,7 @@ async def disable_service(label: str):
         ["launchctl", "unload", str(plist_path)],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=_TIMEOUT_LAUNCHCTL,
     )
     if result.returncode != 0:
         return {"status": "error", "label": label, "detail": result.stderr.strip()}
@@ -421,7 +427,7 @@ async def restart_service(label: str):
         ["launchctl", "unload", str(plist_path)],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=_TIMEOUT_LAUNCHCTL,
     )
     if unload.returncode != 0:
         logger.warning("launchctl unload failed for %s: %s", label, unload.stderr.strip())
@@ -430,7 +436,7 @@ async def restart_service(label: str):
         ["launchctl", "load", str(plist_path)],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=_TIMEOUT_LAUNCHCTL,
     )
     if result.returncode != 0:
         return {"status": "error", "label": label, "detail": result.stderr.strip()}

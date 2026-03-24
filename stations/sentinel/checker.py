@@ -12,6 +12,14 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# ── Checker timeout presets (seconds) ──
+
+_TIMEOUT_HEALTH_CHECK = 10.0    # HTTP light check (LightCheck default)
+_TIMEOUT_SECURITY_SCAN = 15.0   # port-security audit script
+_TIMEOUT_DEEP_CHECK = 45.0      # Playwright deep check including Chrome startup
+_TIMEOUT_BROWSER_OPEN = 15      # Playwright session open
+_TIMEOUT_BROWSER_CLOSE = 5      # Playwright session close / cleanup
+
 
 @dataclass
 class CheckResult:
@@ -33,7 +41,7 @@ class LightCheck:
     command: str | None = None  # shell command alternative
     expect_json: dict | None = None  # key-value pairs to verify in JSON
     expect_contains: str | None = None  # substring in body
-    timeout: float = 10.0
+    timeout: float = _TIMEOUT_HEALTH_CHECK
     optional: bool = False  # optional services report "skipped" instead of "unhealthy" when down
 
 
@@ -43,7 +51,7 @@ class DeepCheck:
     group: str = ""
     url: str = ""
     playwright_code: str = ""  # JS code for run-code
-    timeout: float = 45.0  # increased: Chrome startup can be slow under memory pressure
+    timeout: float = _TIMEOUT_DEEP_CHECK  # Chrome startup can be slow under memory pressure
 
 
 LIGHT_CHECKS: list[LightCheck] = [
@@ -249,7 +257,7 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="system",
         command="/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/port_audit.py --check",
         expect_contains="PASS",
-        timeout=15.0,
+        timeout=_TIMEOUT_SECURITY_SCAN,
     ),
 ]
 

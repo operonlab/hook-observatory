@@ -16,6 +16,9 @@ LOG_DIR = Path("~/.claude/data/system-monitor/logs").expanduser()
 
 LABEL_PREFIX = "com.workshop.system-monitor"
 
+# ── Timing constants ──────────────────────────────────────────────────────────
+_TIMEOUT_LAUNCHCTL = 10  # seconds — launchctl load/unload/list commands
+
 PLIST_CONFIGS = {
     "weekly": {
         "label": f"{LABEL_PREFIX}-weekly",
@@ -90,7 +93,7 @@ class Scheduler:
             # Unload first if already loaded
             subprocess.run(
                 ["launchctl", "unload", str(plist_path)],
-                capture_output=True, timeout=10,
+                capture_output=True, timeout=_TIMEOUT_LAUNCHCTL,
             )
 
             # Write plist
@@ -100,7 +103,7 @@ class Scheduler:
             # Load
             r = subprocess.run(
                 ["launchctl", "load", str(plist_path)],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, timeout=_TIMEOUT_LAUNCHCTL,
             )
             if r.returncode == 0:
                 installed.append(label)
@@ -132,7 +135,7 @@ class Scheduler:
         """Query schedule status for all report types."""
         result = {}
         list_out = subprocess.run(
-            ["launchctl", "list"], capture_output=True, text=True, timeout=10,
+            ["launchctl", "list"], capture_output=True, text=True, timeout=_TIMEOUT_LAUNCHCTL,
         ).stdout
 
         for rt, cfg in PLIST_CONFIGS.items():

@@ -28,7 +28,20 @@ logger = logging.getLogger(__name__)
 _OMLX_URL = "http://localhost:8000/v1/chat/completions"
 _LLM_TIMEOUT = 10  # seconds
 
-# Similarity thresholds that trigger conflict arbitration
+def _conflict_threshold(block_type: str = "memory") -> float:
+    """Dynamic conflict similarity threshold based on block type.
+
+    Attitudes and skills encode personal facts that should merge aggressively,
+    so they use a stricter threshold (fires earlier). Knowledge blocks can
+    tolerate more divergence before triggering arbitration.
+    Clamped to [0.80, 0.92].
+    """
+    adjustments = {"attitude": 0.03, "skill": 0.02, "memory": 0, "knowledge": -0.02}
+    return max(0.80, min(0.92, 0.85 + adjustments.get(block_type, 0)))
+
+
+# Static constants kept for backward-compatible heuristic comparisons.
+# Prefer _conflict_threshold(block_type) for per-call gating.
 CONFLICT_SIMILARITY_THRESHOLD = 0.85
 HIGH_SIMILARITY_THRESHOLD = 0.95
 
@@ -224,7 +237,7 @@ async def resolve_conflict(
     """Resolve a potential memory conflict using LLM arbitration.
 
     Intended to be called from the dedup layer when:
-      - similarity > CONFLICT_SIMILARITY_THRESHOLD (0.85)
+      - similarity > _conflict_threshold(block_type) (default ~0.85)
       - AND the preliminary decision is MERGE or SKIP
 
     Uses oMLX local LLM at port 8000 for arbitration.

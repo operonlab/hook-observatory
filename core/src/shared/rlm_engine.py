@@ -169,14 +169,22 @@ def _call_openai_compat(
 
 # ── tmux persistent backend ──────────────────────────────────────────────────
 
-_TMUX_POLL = 0.6  # seconds between ready checks
+# Timing presets for tmux relay interaction
+_SLEEP_PROMPT_DETECT = 0.5     # wait for prompt detection (initial ready-check loop)
+_SLEEP_CONTENT_CHANGE = 0.5    # wait for pane content to change after send
+_SLEEP_CONTENT_STABLE = 0.8    # poll interval while waiting for content to stabilise
+_SLEEP_POST_SEND = 0.4         # settle after send-keys before re-capturing pane
+_TIMEOUT_TMUX_CMD = 10         # tmux subprocess timeout (seconds)
+_TIMEOUT_READY_CHECK = 5       # paste-buffer / short tmux operation timeout (seconds)
+_TMUX_POLL = 0.6               # poll interval for content-stability loop (seconds)
+
 _TMUX_PROMPT_RE = re.compile(r"❯\s*$", re.MULTILINE)
 _TMUX_SEND_LIMIT = 512
 _tmux_lock = __import__("threading").Lock()
 
 
 def _tmux_cmd(*args: str, check: bool = False) -> str:
-    proc = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=10)
+    proc = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=_TIMEOUT_TMUX_CMD)
     if check and proc.returncode != 0:
         raise RuntimeError(f"tmux {args[0]} failed: {proc.stderr.strip()}")
     return proc.stdout.strip()
@@ -193,7 +201,7 @@ def _tmux_ensure_window(target: str, model: str = "sonnet") -> bool:
         logger.info("rlm-tmux: creating window %s", target)
         try:
             _tmux_cmd("new-window", "-d", "-n", target, check=True)
-            time.sleep(1)
+            time.sleep(_SLEEP_CONTENT_STABLE)  # wait for shell to initialise in new window
         except Exception:
             return False
 
@@ -212,7 +220,7 @@ def _tmux_ensure_window(target: str, model: str = "sonnet") -> bool:
             if _TMUX_PROMPT_RE.search(bottom):
                 logger.info("rlm-tmux: Claude ready in window %s", target)
                 return True
-            time.sleep(0.8)
+            time.sleep(_SLEEP_CONTENT_STABLE)
         logger.warning("rlm-tmux: Claude failed to start in 30s")
         return False
 
@@ -237,7 +245,7 @@ def _tmux_send(target: str, text: str) -> None:
             input=text,
             text=True,
             capture_output=True,
-            timeout=5,
+            timeout=_TIMEOUT_READY_CHECK,
             check=True,
         )
         _tmux_cmd("paste-buffer", "-b", buf, "-t", target, "-d", "-p")
@@ -298,7 +306,7 @@ def _call_tmux_persistent(
         deadline = time.time() + timeout
         changed = False
         while time.time() < deadline:
-            time.sleep(0.5)
+            time.sleep(_SLEEP_CONTENT_CHANGE)
             current = _tmux_capture(target, 100)
             if current != before:
                 changed = True
@@ -311,7 +319,7 @@ def _call_tmux_persistent(
         stable_count = 0
         last_content = current
         while time.time() < deadline:
-            time.sleep(_TMUX_POLL)
+            time.sleep(_TMUX_POLL)  # Consider: exponential backoff for long-running responses
             current = _tmux_capture(target, 100)
             if current == last_content:
                 stable_count += 1
@@ -745,7 +753,7 @@ class RLMEngine:
             while time.time() < deadline:
                 if _tmux_is_ready(target):
                     break
-                time.sleep(0.5)
+                time.sleep(_SLEEP_PROMPT_DETECT)
             else:
                 return self._build_result("[tmux Claude not ready]", trajectory, 0, "error")
 
@@ -888,7 +896,7 @@ class RLMEngine:
         # Wait for content change
         deadline = time.time() + timeout
         while time.time() < deadline:
-            time.sleep(0.4)
+            time.sleep(_SLEEP_POST_SEND)
             current = _tmux_capture(target, 200)
             if current != before:
                 break
@@ -899,7 +907,7 @@ class RLMEngine:
         stable_count = 0
         last = current
         while time.time() < deadline:
-            time.sleep(_TMUX_POLL)
+            time.sleep(_TMUX_POLL)  # Consider: exponential backoff for long-running responses
             current = _tmux_capture(target, 200)
             if current == last:
                 stable_count += 1
