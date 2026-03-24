@@ -26,7 +26,30 @@ from .models import MemoryBlock
 
 logger = logging.getLogger(__name__)
 
-# Similarity threshold: blocks above this are dedup candidates
+def _dedup_similarity_threshold(category: str = "knowledge") -> float:
+    """Dynamic dedup threshold based on block category.
+
+    Mirrors the CATEGORY_DEDUP_RULES table below, but provides a single
+    callable entry-point for callers that need a scalar threshold.
+    Clamped to [0.70, 0.92].
+    """
+    # Lower threshold = more aggressive dedup (merge earlier)
+    adjustments = {"attitude": -0.13, "skill": 0.04, "knowledge": 0.0, "general": 0.0}
+    return max(0.70, min(0.92, 0.88 + adjustments.get(category, 0.0)))
+
+
+def _conflict_dedup_threshold(block_type: str = "general") -> float:
+    """Dynamic LLM arbitration trigger threshold based on block type.
+
+    Matches _conflict_threshold() in conflict_resolver for consistency.
+    Clamped to [0.80, 0.92].
+    """
+    adjustments = {"attitude": 0.03, "skill": 0.02, "memory": 0, "knowledge": -0.02}
+    return max(0.80, min(0.92, 0.85 + adjustments.get(block_type, 0)))
+
+
+# Static constants kept for backward-compatible external references.
+# Prefer _dedup_similarity_threshold(category) / _conflict_dedup_threshold(block_type).
 DEDUP_SIMILARITY_THRESHOLD = 0.88
 # If content overlap exceeds this ratio, auto-merge
 CONTENT_OVERLAP_RATIO = 0.7
@@ -232,9 +255,9 @@ async def check_duplicate(
                 block_type=block_type,
             )
 
-    # P2: LLM conflict arbitration for uncertain zone (0.85-0.95 similarity)
+    # P2: LLM conflict arbitration for uncertain zone (dynamic threshold per block_type)
     # Instead of simple content overlap, use LLM to determine MERGE / SUPERSEDE / COEXIST
-    if best_sim >= _CONFLICT_SIMILARITY_THRESHOLD:
+    if best_sim >= _conflict_dedup_threshold(block_type or "general"):
         try:
             from .conflict_resolver import ConflictDecision, resolve_conflict
 

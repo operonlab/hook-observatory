@@ -346,15 +346,16 @@ def read_line_community(community_name: str | None = None) -> str | None:
     if subprocess.run(["pgrep", "-x", "LINE"], capture_output=True).returncode != 0:
         log.info("LINE not running, launching...")
         subprocess.run(["open", "-a", "LINE"], timeout=10)
-        # Wait for LINE to fully start and render window
-        for _ in range(10):
-            time.sleep(2)
+        # Wait for LINE to fully start and render window (exponential backoff)
+        for _attempt in range(10):
+            delay = min(2 * (2 ** _attempt), 20)
+            time.sleep(delay)
             if subprocess.run(["pgrep", "-x", "LINE"], capture_output=True).returncode == 0:
                 log.info("LINE launched, waiting for window to render")
                 time.sleep(5)
                 break
         else:
-            log.warning("LINE failed to start after 20s")
+            log.warning("LINE failed to start after retries")
             return None
 
     # Step 1: Activate LINE
@@ -370,14 +371,14 @@ def read_line_community(community_name: str | None = None) -> str | None:
     if not _click_community_tab(wid):
         log.warning("Cannot click 社群 tab")
         return None
-    time.sleep(1.5)
+    time.sleep(2.0)
 
     # Step 4: OCR chat list to find and double-click community
     if not _find_and_click_community(wid, name):
         log.warning("Cannot find '%s' in community list", name)
         _run_osascript(_SCRIPT_ESCAPE)
         return None
-    time.sleep(2.0)
+    time.sleep(2.5)
 
     # Step 5: Screenshot and OCR the message area
     wid = _get_line_window_id()  # refresh WID

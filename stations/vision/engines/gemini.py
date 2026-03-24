@@ -8,9 +8,24 @@ from __future__ import annotations
 
 import base64
 import os
+import time
 from pathlib import Path
 
 from . import register
+
+
+def _retry_with_backoff(fn, max_retries=3, base_delay=1.0, max_delay=30.0):
+    """Retry with exponential backoff."""
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                time.sleep(delay)
+    raise last_exc
 
 _MIME_MAP = {
     ".png": "image/png",
@@ -69,25 +84,31 @@ class GeminiVisionEngine:
         try:
             import httpx
 
-            resp = httpx.post(
-                _API_URL,
-                headers={
-                    "x-goog-api-key": api_key,
-                    "content-type": "application/json",
-                },
-                json={
-                    "contents": [
-                        {
-                            "parts": [
-                                {"inline_data": {"mime_type": mime, "data": image_data}},
-                                {"text": prompt_text},
-                            ],
-                        }
-                    ],
-                    "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048},
-                },
-                timeout=60,
-            )
+            def _call_api():
+                r = httpx.post(
+                    _API_URL,
+                    headers={
+                        "x-goog-api-key": api_key,
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "contents": [
+                            {
+                                "parts": [
+                                    {"inline_data": {"mime_type": mime, "data": image_data}},
+                                    {"text": prompt_text},
+                                ],
+                            }
+                        ],
+                        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048},
+                    },
+                    timeout=60,
+                )
+                if r.status_code >= 500:
+                    r.raise_for_status()
+                return r
+
+            resp = _retry_with_backoff(_call_api, max_retries=3, base_delay=1.0, max_delay=30.0)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             return {

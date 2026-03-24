@@ -28,7 +28,14 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
-CONFIDENCE_THRESHOLD = 0.5
+
+def _confidence_threshold(enrichment_depth: int = 1) -> float:
+    """Dynamic confidence gate: base 0.45 + 0.05 per enrichment depth level.
+
+    Deeper enrichment pipelines have more context to extract from,
+    so the bar rises. Clamped to [0.3, 0.8].
+    """
+    return max(0.3, min(0.8, 0.45 + 0.05 * enrichment_depth))
 
 
 class CaptureService:
@@ -260,7 +267,9 @@ class CaptureService:
             )
             for strategy in adapter_strategies:
                 pipeline.add(strategy)
-            pipeline.add(ConfidenceGateStrategy(threshold=CONFIDENCE_THRESHOLD))
+            enrichment_depth = len(adapter_strategies)
+            threshold = _confidence_threshold(enrichment_depth)
+            pipeline.add(ConfidenceGateStrategy(threshold=threshold))
 
             enrichment_result = await pipeline.run(
                 capture.payload,
@@ -275,7 +284,7 @@ class CaptureService:
                 enrichment_result.source,
             )
 
-            if enrichment_result.confidence < CONFIDENCE_THRESHOLD:
+            if enrichment_result.confidence < threshold:
                 logger.warning(
                     "Low confidence enrichment (%.2f) for capture %s, flagged for review",
                     enrichment_result.confidence,

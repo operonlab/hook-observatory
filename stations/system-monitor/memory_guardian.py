@@ -71,6 +71,11 @@ def _get(cfg: dict, key: str):
     return cfg.get(key, DEFAULTS[key])
 
 
+# ── Timing constants ──────────────────────────────────────────────────────────
+_TIMEOUT_SHELL_CMD = 10   # seconds — ps/sysctl/vm_stat shell commands
+_TIMEOUT_PURGE = 30       # seconds — sudo purge can be slow on large memory
+_TIMEOUT_NOTIFY = 5       # seconds — terminal-notifier / osascript
+
 _ENV = {**os.environ, "PATH": "/usr/sbin:/usr/bin:/bin:/sbin:" + os.environ.get("PATH", "")}
 
 

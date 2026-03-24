@@ -19,6 +19,19 @@ from prompt_templates import build_repair_prompt
 
 logger = logging.getLogger(__name__)
 
+# ── Remediation timeout presets (seconds) ──
+
+_TIMEOUT_SERVICE_RESTART = 45   # workshop_services.py stop/start cycle
+_TIMEOUT_PORT_CHECK = 10        # process status / port availability check
+_TIMEOUT_DOCKER_RESTART = 30    # docker restart container
+_TIMEOUT_INFRA_RESTART = 60     # infrastructure engine restart (e.g. OrbStack)
+_TIMEOUT_BUILD = 120            # frontend pnpm build
+_TIMEOUT_NGINX_RELOAD = 10      # nginx -s reload
+_TIMEOUT_GIT_OP = 15            # git / relay dispatch operations
+_SLEEP_POST_KILL = 2            # settle after process kill / stop
+_SLEEP_POST_RESTART = 5         # settle after service restart
+_SLEEP_ENGINE_STARTUP = 15      # wait for infra engine (OrbStack) to fully start
+
 RELAY_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/relay.sh"
 PANE_POOL_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/pane_pool.sh"
 SIGNAL_DIR = Path("/tmp")  # noqa: S108
@@ -100,9 +113,9 @@ class SimpleRestarter:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                await asyncio.wait_for(proc.communicate(), timeout=45)
+                await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_SERVICE_RESTART)
             # Brief wait then verify the process came back
-            await asyncio.sleep(2)
+            await asyncio.sleep(_SLEEP_POST_KILL)
             check_proc = await asyncio.create_subprocess_exec(
                 str(PYTHON),
                 str(WORKSHOP_SERVICES),
@@ -111,7 +124,7 @@ class SimpleRestarter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _stdout, _ = await asyncio.wait_for(check_proc.communicate(), timeout=10)
+            _stdout, _ = await asyncio.wait_for(check_proc.communicate(), timeout=_TIMEOUT_PORT_CHECK)
             if check_proc.returncode != 0:
                 logger.warning("Service %s restarted but health check failed", name)
                 return False
@@ -130,7 +143,7 @@ class SimpleRestarter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_DOCKER_RESTART)
             if proc.returncode == 0:
                 logger.info("Docker restart succeeded for %s", container)
                 return True
@@ -151,11 +164,11 @@ class SimpleRestarter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_INFRA_RESTART)
             if proc.returncode == 0:
                 logger.info("Infra restart succeeded for %s", service)
                 # Wait for engine to be fully ready
-                await asyncio.sleep(5)
+                await asyncio.sleep(_SLEEP_POST_RESTART)
                 return True
             # Fallback: if orbctl fails, try opening the app
             if service == "orbstack":
@@ -167,17 +180,17 @@ class SimpleRestarter:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                await asyncio.wait_for(fallback.communicate(), timeout=10)
-                await asyncio.sleep(15)  # Wait for app + engine startup
+                await asyncio.wait_for(fallback.communicate(), timeout=_TIMEOUT_PORT_CHECK)
+                await asyncio.sleep(_SLEEP_ENGINE_STARTUP)  # Wait for app + engine startup
                 retry = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                _, _ = await asyncio.wait_for(retry.communicate(), timeout=30)
+                _, _ = await asyncio.wait_for(retry.communicate(), timeout=_TIMEOUT_DOCKER_RESTART)
                 if retry.returncode == 0:
                     logger.info("Infra restart succeeded for %s (fallback)", service)
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(_SLEEP_POST_RESTART)
                     return True
             logger.error("Infra restart failed for %s: %s", service, stderr.decode()[:200])
             return False
@@ -215,7 +228,7 @@ class FrontendRebuilder:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)  # noqa: RUF059
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_BUILD)  # noqa: RUF059
 
             if proc.returncode != 0:
                 logger.error("Frontend rebuild failed: %s", stderr.decode()[-500:])
@@ -231,7 +244,7 @@ class FrontendRebuilder:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await asyncio.wait_for(nginx_proc.communicate(), timeout=10)
+            await asyncio.wait_for(nginx_proc.communicate(), timeout=_TIMEOUT_NGINX_RELOAD)
 
             return True
 
@@ -342,7 +355,7 @@ class Remediator:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_PORT_CHECK)
             if proc.returncode == 0:
                 pane = stdout.decode().strip()
                 return pane if pane else None
@@ -369,7 +382,7 @@ class Remediator:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+            _, _ = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_GIT_OP)
             return proc.returncode == 0
         except (TimeoutError, FileNotFoundError):
             return False

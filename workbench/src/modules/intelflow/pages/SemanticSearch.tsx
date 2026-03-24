@@ -3,6 +3,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSearch } from '../hooks/useIntelflow'
 
+// TODO: ideally these thresholds come from the API response
+const SCORE_HIGH = 0.7
+const SCORE_MED = 0.4
+
 export default function SemanticSearch() {
   const { query, results, loading, setQuery, search, clear } = useSearch()
   const [input, setInput] = useState(query)
@@ -95,15 +99,15 @@ export default function SemanticSearch() {
 
           {results.map((r) => {
             const scoreColor =
-              r.score >= 0.7
+              r.score >= SCORE_HIGH
                 ? 'var(--if-score-high)'
-                : r.score >= 0.4
+                : r.score >= SCORE_MED
                   ? 'var(--if-score-mid)'
                   : 'var(--if-score-low)'
             const scoreBg =
-              r.score >= 0.7
+              r.score >= SCORE_HIGH
                 ? 'var(--if-score-high-bg)'
-                : r.score >= 0.4
+                : r.score >= SCORE_MED
                   ? 'var(--if-score-mid-bg)'
                   : 'var(--if-score-low-bg)'
 
