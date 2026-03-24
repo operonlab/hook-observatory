@@ -6,7 +6,7 @@ const basePath = process.env.BASE_PATH || "";
 export default defineConfig({
   plugins: [pluginReact()],
   server: {
-    port: 3000,
+    port: 10500,
     proxy: {
       "/auth": {
         target: "http://127.0.0.1:8801",

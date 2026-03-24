@@ -46,15 +46,15 @@ class ServicePort:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  Service Definitions
 #
-#  NOTE: Ports below are CURRENT values. Phase 4 migration will
-#  switch self-managed services to 10000+ range per the convention.
+#  NOTE: Ports below are ACTIVE values. Self-managed services
+#  have been migrated to the 10000+ range per the convention.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 PORTS: list[ServicePort] = [
     # ── Core ──
     ServicePort(
         "core",
-        8801,
+        10000,
         "core",
         health_path="/health",
         env_var="CORE_API_URL",
@@ -62,7 +62,7 @@ PORTS: list[ServicePort] = [
     # ── Stations: Infra & Ops ──
     ServicePort(
         "hook-observatory",
-        4100,
+        10100,
         "station-infra",
         health_path="/",
         env_var="HOOK_OBS_URL",
@@ -70,7 +70,7 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "session-channel",
-        4106,
+        10101,
         "station-infra",
         health_path="/health",
         env_var="SESSION_CHANNEL_URL",
@@ -78,7 +78,7 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "system-monitor",
-        9526,
+        10102,
         "station-infra",
         health_path="/",
         env_var="SYSTEM_MONITOR_URL",
@@ -86,7 +86,7 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "agent-metrics",
-        8795,
+        10103,
         "station-infra",
         health_path="/health",
         env_var="AGENT_METRICS_URL",
@@ -94,7 +94,7 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "capture-console",
-        4104,
+        10104,
         "station-infra",
         health_path="/docs",
         env_var="CAPTURE_CONSOLE_URL",
@@ -102,7 +102,7 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "tmux-webui",
-        8765,
+        10105,
         "station-infra",
         health_path="/",
         env_var="TMUX_WEBUI_URL",
@@ -111,35 +111,35 @@ PORTS: list[ServicePort] = [
     # ── Stations: AI & Media ──
     ServicePort(
         "stt",
-        4108,
+        10200,
         "station-ai",
         env_var="STT_URL",
         optional=True,
     ),
     ServicePort(
         "tts",
-        4111,
+        10201,
         "station-ai",
         env_var="TTS_URL",
         optional=True,
     ),
     ServicePort(
         "ocr",
-        4109,
+        10202,
         "station-ai",
         env_var="OCR_URL",
         optional=True,
     ),
     ServicePort(
         "vision",
-        4112,
+        10203,
         "station-ai",
         env_var="VISION_URL",
         optional=True,
     ),
     ServicePort(
         "voice-gateway",
-        4113,
+        10204,
         "station-ai",
         env_var="VOICE_GATEWAY_URL",
         optional=True,
@@ -147,21 +147,21 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "translate",
-        4114,
+        10205,
         "station-ai",
         env_var="TRANSLATE_URL",
         optional=True,
     ),
     ServicePort(
         "video-edit",
-        4110,
+        10206,
         "station-ai",
         env_var="VIDEO_EDIT_URL",
         nginx_path="/apps/mlt-editor/",
     ),
     ServicePort(
         "agent-vista",
-        8840,
+        10207,
         "station-ai",
         health_path="/",
         env_var="AGENT_VISTA_URL",
@@ -170,7 +170,7 @@ PORTS: list[ServicePort] = [
     # ── Stations: Business & Tools ──
     ServicePort(
         "auto-survey",
-        4102,
+        10300,
         "station-biz",
         health_path="/api/people",
         env_var="AUTO_SURVEY_URL",
@@ -178,7 +178,7 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "anvil",
-        4103,
+        10301,
         "station-biz",
         health_path="/docs",
         env_var="ANVIL_URL",
@@ -186,13 +186,13 @@ PORTS: list[ServicePort] = [
     ),
     ServicePort(
         "blog",
-        4107,
+        10302,
         "station-biz",
         health_path="/zh/",
         env_var="BLOG_URL",
     ),
     # ── Frontend ──
-    ServicePort("workbench", 3000, "frontend", health_path=""),
+    ServicePort("workbench", 10500, "frontend", health_path=""),
     # ── Third-party (keep original ports) ──
     ServicePort(
         "cronicle",
@@ -272,8 +272,8 @@ def check_conflicts() -> list[str]:
     return errors
 
 
-# ── Migration Target Map (10000+ convention) ───────────────
-# Reference only — will be activated in Phase 4.
+# ── Migration Map (10000+ convention) ──────────────────────
+# ACTIVE values — migration complete. Kept as reference index.
 
 MIGRATION_MAP: dict[str, int] = {
     # Core
