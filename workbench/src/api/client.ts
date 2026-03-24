@@ -1,4 +1,5 @@
 import type { ErrorResponse, PaginatedResponse } from '@/types'
+import { withRetry } from '@/shared/utils/retry'
 
 const API_BASE = `${__BASE_PATH__}/api`
 
@@ -15,23 +16,42 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
+  const method = options?.method?.toUpperCase() ?? 'GET'
+  const isIdempotent = method === 'GET' || method === 'HEAD'
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({
-      detail: `Request failed: ${res.status}`,
-      code: 'system.unknown',
-      module: null,
-    }))
-    throw new ApiError(res.status, body as ErrorResponse)
+  const doFetch = async (): Promise<T> => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    })
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({
+        detail: `Request failed: ${res.status}`,
+        code: 'system.unknown',
+        module: null,
+      }))
+      const err = new ApiError(res.status, body as ErrorResponse)
+      // 4xx errors are application-level — do not retry
+      if (res.status >= 400 && res.status < 500) {
+        Object.assign(err, { _noRetry: true })
+      }
+      throw err
+    }
+
+    if (res.status === 204) return undefined as T
+    return res.json()
   }
 
-  if (res.status === 204) return undefined as T
-  return res.json()
+  if (isIdempotent) {
+    return withRetry(doFetch, {
+      maxRetries: 2,
+      baseDelay: 500,
+      isRetryable: (err) => !(err as { _noRetry?: boolean })?._noRetry,
+    })
+  }
+  return doFetch()
 }
 
 /** Generic CRUD client factory — one line per module. */

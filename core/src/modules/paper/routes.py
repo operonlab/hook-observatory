@@ -31,6 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.deps import get_db, require_permission
 from src.shared.embedding import get_embedding
 from src.shared.errors import BadRequestError, ConflictError, NotFoundError
+
+try:
+    from workshop.retry import with_backoff as _with_backoff
+    _HAS_RETRY = True
+except ImportError:
+    _HAS_RETRY = False
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from . import search as search_engine
@@ -405,15 +411,31 @@ def _extract_arxiv_id(raw: str) -> str | None:
     return arxiv_id.rsplit("v", 1)[0] if re.search(r"v\d+$", arxiv_id) else arxiv_id
 
 
+def _fetch_single_arxiv_once(url: str) -> bytes:
+    """Single HTTP GET to arXiv Atom API (no retry)."""
+    req = urllib.request.Request(url, headers={"User-Agent": "Workshop/1.0 (paper module)"})  # noqa: S310
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+        return resp.read()
+
+
 def _fetch_single_arxiv_sync(arxiv_id: str) -> bytes | None:
-    """Synchronous fetch of a single arXiv paper from the Atom API."""
+    """Synchronous fetch of a single arXiv paper from the Atom API.
+
+    Retries up to 3 times with exponential backoff on transient errors.
+    """
     params = urllib.parse.urlencode({"id_list": arxiv_id})
     url = f"http://export.arxiv.org/api/query?{params}"
     logger.debug("fetch/arxiv: GET %s", url)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Workshop/1.0 (paper module)"})  # noqa: S310
-        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-            return resp.read()
+        if _HAS_RETRY:
+            return _with_backoff(
+                max_retries=3,
+                base_delay=2.0,
+                max_delay=30.0,
+                retryable=(urllib.error.URLError, TimeoutError, OSError),
+            )(_fetch_single_arxiv_once)(url)
+        else:
+            return _fetch_single_arxiv_once(url)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         logger.error("fetch/arxiv: HTTP error — %s", exc)
         return None

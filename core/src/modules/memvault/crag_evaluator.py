@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from workshop.timeout import dynamic_timeout
+
 if TYPE_CHECKING:
     from .kg_schemas import CascadeRecallResult
 
@@ -242,26 +244,44 @@ class CRAGEvaluator:
                 "Verdict:"
             )
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.post(
-                    "http://localhost:4000/v1/chat/completions",
-                    json={
-                        "model": "haiku",
-                        "messages": [{"role": "user", "content": prompt}],
-                        "max_tokens": 10,
-                        "temperature": 0.0,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-                answer = data["choices"][0]["message"]["content"].strip().lower()
+            # Dynamic timeout: scale by context size, cap at 30s
+            ctx_chars = len(context)
+            timeout = dynamic_timeout(base=5, factor=0.5, context=ctx_chars / 1000, cap=30)
 
-                score_map = {"correct": 0.8, "ambiguous": 0.5, "incorrect": 0.1}
-                for v in ("correct", "ambiguous", "incorrect"):
-                    if v in answer:
-                        return {"verdict": v, "score": score_map[v]}
+            last_exc: Exception | None = None
+            for attempt in range(2):
+                try:
+                    async with httpx.AsyncClient(timeout=timeout) as client:
+                        response = await client.post(
+                            "http://localhost:4000/v1/chat/completions",
+                            json={
+                                "model": "haiku",
+                                "messages": [{"role": "user", "content": prompt}],
+                                "max_tokens": 10,
+                                "temperature": 0.0,
+                            },
+                        )
+                        response.raise_for_status()
+                        data = response.json()
+                        answer = data["choices"][0]["message"]["content"].strip().lower()
 
-                return {"verdict": "ambiguous", "score": 0.5, "raw": answer}
+                        score_map = {"correct": 0.8, "ambiguous": 0.5, "incorrect": 0.1}
+                        for v in ("correct", "ambiguous", "incorrect"):
+                            if v in answer:
+                                return {"verdict": v, "score": score_map[v]}
+
+                        return {"verdict": "ambiguous", "score": 0.5, "raw": answer}
+                except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                    last_exc = exc
+                    if attempt == 0:
+                        import asyncio
+                        await asyncio.sleep(1.0)
+                    continue
+                except Exception:
+                    raise
+
+            if last_exc:
+                raise last_exc  # will be caught by outer except
 
         except Exception as e:
             logger.warning("Layer C (Haiku) evaluation failed: %s", e)

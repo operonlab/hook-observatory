@@ -9,9 +9,24 @@ from __future__ import annotations
 
 import base64
 import os
+import time
 from pathlib import Path
 
 from . import register
+
+
+def _retry_with_backoff(fn, max_retries=3, base_delay=1.0, max_delay=30.0):
+    """Retry with exponential backoff."""
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                time.sleep(delay)
+    raise last_exc
 
 _MIME_MAP = {
     ".png": "image/png",
@@ -66,35 +81,41 @@ class ClaudeVisionEngine:
         try:
             import httpx
 
-            resp = httpx.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 1024,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": mime,
-                                        "data": image_data,
+            def _call_api():
+                r = httpx.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5-20251001",
+                        "max_tokens": 1024,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": mime,
+                                            "data": image_data,
+                                        },
                                     },
-                                },
-                                {"type": "text", "text": prompt_text},
-                            ],
-                        }
-                    ],
-                },
-                timeout=60,
-            )
+                                    {"type": "text", "text": prompt_text},
+                                ],
+                            }
+                        ],
+                    },
+                    timeout=60,
+                )
+                if r.status_code >= 500:
+                    r.raise_for_status()
+                return r
+
+            resp = _retry_with_backoff(_call_api, max_retries=3, base_delay=1.0, max_delay=30.0)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             return {
