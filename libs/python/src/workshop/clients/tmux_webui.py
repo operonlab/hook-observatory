@@ -1,4 +1,4 @@
-"""tmux-webui SDK -- wraps the tmux-webui HTTP API (port 9527).
+"""tmux-webui SDK -- wraps the tmux-webui HTTP API.
 
 Provides programmatic access to tmux session/window/pane listing,
 autocomplete, and relay dispatch. WebSocket endpoints are NOT wrapped.
@@ -23,6 +23,8 @@ from typing import Any
 
 import httpx
 
+from workshop.port_registry import get_url
+
 
 class TmuxWebuiError(Exception):
     """Raised when the tmux-webui API returns a non-2xx response."""
@@ -34,16 +36,16 @@ class TmuxWebuiError(Exception):
 
 
 class TmuxWebuiClient:
-    """HTTP client for tmux-webui station (port 9527).
+    """HTTP client for tmux-webui station.
 
     Args:
-        base_url: API URL. Defaults to TMUX_WEBUI_URL env or http://localhost:9527.
+        base_url: API URL. Defaults to TMUX_WEBUI_URL env or registry value.
         timeout: Default request timeout in seconds.
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 30):
         self.base_url = (
-            base_url or os.environ.get("TMUX_WEBUI_URL", "http://localhost:9527")
+            base_url or os.environ.get("TMUX_WEBUI_URL", get_url("tmux-webui"))
         ).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None

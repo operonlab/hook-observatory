@@ -20,6 +20,8 @@ from typing import Any
 
 import httpx
 
+from workshop.port_registry import get_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,7 +67,7 @@ class BaseClient:
         space_id: str | None = None,
         timeout: float = 30,
     ):
-        self.base_url = base_url or os.environ.get("CORE_API_URL", "http://localhost:8801")
+        self.base_url = base_url or os.environ.get("CORE_API_URL", get_url("core"))
         self.space_id = space_id or os.environ.get("WORKSHOP_SPACE_ID", "default")
         self.prefix = f"{self.base_url}/api/{module}"
         self._timeout = timeout

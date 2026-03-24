@@ -5,10 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
+
+# Port registry — single source of truth for all Workshop ports
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "python" / "src"))
+from workshop.port_registry import get_port
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +60,17 @@ class DeepCheck:
     timeout: float = _TIMEOUT_DEEP_CHECK  # Chrome startup can be slow under memory pressure
 
 
+def _url(name: str, path: str = "/") -> str:
+    """Build health check URL from port registry."""
+    return f"http://127.0.0.1:{get_port(name)}{path}"
+
+
 LIGHT_CHECKS: list[LightCheck] = [
     # ── system ──
     LightCheck(
         name="nginx",
         group="system",
-        url="http://127.0.0.1:8080/health",
+        url=_url("nginx", "/health"),
     ),
     LightCheck(
         name="orbstack",
@@ -81,180 +92,180 @@ LIGHT_CHECKS: list[LightCheck] = [
     LightCheck(
         name="rustfs",
         group="infra",
-        url="http://127.0.0.1:9000/",
+        url=_url("rustfs", "/"),
         timeout=5.0,
     ),
     LightCheck(
         name="lgtm",
         group="infra",
-        url="http://127.0.0.1:3100/",
+        url=_url("lgtm", "/"),
         optional=True,
     ),
     LightCheck(
         name="qdrant",
         group="infra",
-        url="http://127.0.0.1:6333/healthz",
+        url=_url("qdrant", "/healthz"),
     ),
     LightCheck(
         name="litellm",
         group="infra",
-        url="http://127.0.0.1:4000/health/liveliness",
+        url=_url("litellm", "/health/liveliness"),
         expect_contains="I'm alive!",
     ),
     # oMLX removed — embed_worker is a stdin/stdout subprocess, not an HTTP service
     LightCheck(
         name="bark",
         group="infra",
-        url="http://127.0.0.1:8090/ping",
+        url=_url("bark", "/ping"),
     ),
     # ntfy disabled — Bark + Web Push only
     LightCheck(
         name="mcpproxy",
         group="infra",
-        url="http://127.0.0.1:8808/health",
+        url=_url("mcpproxy", "/health"),
         expect_json={"status": "ok"},
     ),
     # ── internal ──
     LightCheck(
         name="core",
         group="internal",
-        url="http://127.0.0.1:8801/health",
+        url=_url("core", "/health"),
         expect_json={"status": "healthy"},
     ),
     # V1 gateway retired (2026-03-08)
     LightCheck(
         name="frontend",
         group="internal",
-        url="http://127.0.0.1:8080/",
+        url=_url("nginx", "/"),
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-finance",
         group="internal",
-        url="http://127.0.0.1:8080/finance/",
+        url=_url("nginx", "/finance/"),
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-memvault",
         group="internal",
-        url="http://127.0.0.1:8080/memvault/",
+        url=_url("nginx", "/memvault/"),
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-intelflow",
         group="internal",
-        url="http://127.0.0.1:8080/intelflow/",
+        url=_url("nginx", "/intelflow/"),
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-briefing",
         group="internal",
-        url="http://127.0.0.1:8080/briefing/",
+        url=_url("nginx", "/briefing/"),
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-dailyos",
         group="internal",
-        url="http://127.0.0.1:8080/dailyos/",
+        url=_url("nginx", "/dailyos/"),
         expect_contains='<div id="root">',
     ),
     LightCheck(
         name="frontend-paper",
         group="internal",
-        url="http://127.0.0.1:8080/paper/",
+        url=_url("nginx", "/paper/"),
         expect_contains='<div id="root">',
     ),
     # ── external (stations) ──
     LightCheck(
         name="hook-observatory",
         group="external",
-        url="http://127.0.0.1:4100/",
+        url=_url("hook-observatory"),
     ),
     LightCheck(
         name="session-channel",
         group="external",
-        url="http://127.0.0.1:4106/health",
+        url=_url("session-channel", "/health"),
     ),
     LightCheck(
         name="agent-vista",
         group="external",
-        url="http://127.0.0.1:8840/",
+        url=_url("agent-vista"),
     ),
     LightCheck(
         name="system-monitor",
         group="external",
-        url="http://127.0.0.1:9526/",
+        url=_url("system-monitor"),
     ),
     LightCheck(
         name="tmux-webui",
         group="external",
-        url="http://127.0.0.1:8765/",
+        url=_url("tmux-webui"),
     ),
     LightCheck(
         name="agent-metrics",
         group="external",
-        url="http://127.0.0.1:8795/health",
+        url=_url("agent-metrics", "/health"),
     ),
     # sentinel removed — no longer persistent (scheduled via Cronicle)
     LightCheck(
         name="file-manager",
         group="external",
-        url="http://127.0.0.1:8850/",
+        url=_url("filebrowser"),
     ),
     LightCheck(
         name="auto-survey",
         group="external",
-        url="http://127.0.0.1:4102/api/people",
+        url=_url("auto-survey", "/api/people"),
     ),
     LightCheck(
         name="capture-console",
         group="external",
-        url="http://127.0.0.1:4104/health",
+        url=_url("capture-console", "/health"),
     ),
     LightCheck(
         name="anvil",
         group="external",
-        url="http://127.0.0.1:4103/docs",
+        url=_url("anvil", "/docs"),
     ),
     LightCheck(
         name="cronicle",
         group="external",
-        url="http://127.0.0.1:4105/api/app/ping",
+        url=_url("cronicle", "/api/app/ping"),
         expect_json={"code": 0},
     ),
     LightCheck(
         name="stt",
         group="external",
-        url="http://127.0.0.1:4108/health",
+        url=_url("stt", "/health"),
     ),
     LightCheck(
         name="ocr",
         group="external",
-        url="http://127.0.0.1:4109/health",
+        url=_url("ocr", "/health"),
         optional=True,  # model loads on-demand, may be slow first call
     ),
     LightCheck(
         name="tts",
         group="external",
-        url="http://127.0.0.1:4111/health",
+        url=_url("tts", "/health"),
         optional=True,
     ),
     LightCheck(
         name="vision",
         group="external",
-        url="http://127.0.0.1:4112/health",
+        url=_url("vision", "/health"),
         optional=True,
     ),
     LightCheck(
         name="voice-gateway",
         group="external",
-        url="http://127.0.0.1:4113/health",
+        url=_url("voice-gateway", "/health"),
         optional=True,
     ),
     LightCheck(
         name="tps",
         group="external",
-        url="http://127.0.0.1:4114/health",
+        url=_url("tps", "/health"),
         optional=True,
     ),
     # ── security ──
@@ -325,110 +336,110 @@ DEEP_CHECKS: list[DeepCheck] = [
     DeepCheck(
         name="frontend-render",
         group="internal",
-        url="http://127.0.0.1:8080/",
+        url=_url("nginx", "/"),
         playwright_code=_PW_ROOT_CHECK,
     ),
     DeepCheck(
         name="frontend-finance-render",
         group="internal",
-        url="http://127.0.0.1:8080/finance/",
+        url=_url("nginx", "/finance/"),
         playwright_code=_pw_module_check("finance"),
     ),
     DeepCheck(
         name="frontend-memvault-render",
         group="internal",
-        url="http://127.0.0.1:8080/memvault/",
+        url=_url("nginx", "/memvault/"),
         playwright_code=_pw_module_check("memvault"),
     ),
     DeepCheck(
         name="frontend-intelflow-render",
         group="internal",
-        url="http://127.0.0.1:8080/intelflow/",
+        url=_url("nginx", "/intelflow/"),
         playwright_code=_pw_module_check("intelflow"),
     ),
     DeepCheck(
         name="frontend-briefing-render",
         group="internal",
-        url="http://127.0.0.1:8080/briefing/",
+        url=_url("nginx", "/briefing/"),
         playwright_code=_pw_module_check("briefing"),
     ),
     DeepCheck(
         name="frontend-dailyos-render",
         group="internal",
-        url="http://127.0.0.1:8080/dailyos/",
+        url=_url("nginx", "/dailyos/"),
         playwright_code=_pw_module_check("dailyos"),
     ),
     DeepCheck(
         name="frontend-paper-render",
         group="internal",
-        url="http://127.0.0.1:8080/paper/",
+        url=_url("nginx", "/paper/"),
         playwright_code=_pw_module_check("paper"),
     ),
     # ── external (station HTML — body > *) ──
     DeepCheck(
         name="hook-observatory-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/hook/",
+        url=_url("nginx", "/apps/hook/"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="session-channel-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/channel/",
+        url=_url("nginx", "/apps/channel/"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="agent-vista-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/vista/",
+        url=_url("nginx", "/apps/vista/"),
         playwright_code=_PW_CANVAS_CHECK,
     ),
     DeepCheck(
         name="system-monitor-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/sysmon/",
+        url=_url("nginx", "/apps/sysmon/"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="tmux-webui-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/tmux/?readonly=1",
+        url=_url("nginx", "/apps/tmux/?readonly=1"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="agent-metrics-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/agent-metrics/",
+        url=_url("nginx", "/apps/agent-metrics/"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="sentinel-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/sentinel/",
+        url=_url("nginx", "/apps/sentinel/"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="auto-survey-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/survey/",
+        url=_url("nginx", "/apps/survey/"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="anvil-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/anvil/",
+        url=_url("nginx", "/apps/anvil/"),
         playwright_code=_PW_BODY_CHECK,
     ),
     DeepCheck(
         name="capture-console-render",
         group="external",
-        url="http://127.0.0.1:8080/capture",
+        url=_url("nginx", "/capture"),
         playwright_code=_PW_ROOT_CHECK,
     ),
     DeepCheck(
         name="cronicle-render",
         group="external",
-        url="http://127.0.0.1:8080/apps/scheduler/",
+        url=_url("nginx", "/apps/scheduler/"),
         playwright_code=_PW_BODY_CHECK,
     ),
 ]

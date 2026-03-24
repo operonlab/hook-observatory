@@ -15,6 +15,10 @@ import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 
+# Port registry — single source of truth
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libs" / "python" / "src"))
+from workshop.port_registry import get, get_port
+
 # ── Daemon PATH (launchd does not inherit .zshenv) ─────────────
 _DAEMON_PATH = (
     "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin"
@@ -36,10 +40,11 @@ SERVICES = [
         "type": "uvicorn",
         "cmd": (
             "/Users/joneshong/workshop/.venv/bin/python3 -m uvicorn"
-            " src.main:app --host 127.0.0.1 --port 8801 --proxy-headers --env-file .env"
+            f" src.main:app --host 127.0.0.1 --port {get_port('core')}"
+            " --proxy-headers --env-file .env"
         ),
-        "port": 8801,
-        "health": "http://127.0.0.1:8801/docs",
+        "port": get_port("core"),
+        "health": f"http://127.0.0.1:{get_port('core')}/docs",
         "workdir": "/Users/joneshong/workshop/core",
     },
     # ── Stations ──
@@ -48,26 +53,26 @@ SERVICES = [
         "type": "binary",
         "cmd": (
             "/Users/joneshong/workshop/stations/agent-vista/bin/agent-vista"
-            " --no-browser --host 127.0.0.1 --port 8840"
+            f" --no-browser --host 127.0.0.1 --port {get_port('agent-vista')}"
         ),
-        "port": 8840,
-        "health": "http://127.0.0.1:8840",
+        "port": get_port("agent-vista"),
+        "health": get("agent-vista").health_url,
         "workdir": "/Users/joneshong/workshop/stations/agent-vista",
     },
     {
         "name": "hook-observatory",
         "type": "uvicorn",
         "cmd": "/Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py",
-        "port": 4100,
-        "health": "http://127.0.0.1:4100",
+        "port": get_port("hook-observatory"),
+        "health": get("hook-observatory").health_url,
         "workdir": "/Users/joneshong/workshop/stations/hook-observatory",
     },
     {
         "name": "session-channel",
         "type": "uvicorn",
         "cmd": "/Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py",
-        "port": 4106,
-        "health": "http://127.0.0.1:4106/health",
+        "port": get_port("session-channel"),
+        "health": get("session-channel").health_url,
         "workdir": "/Users/joneshong/workshop/stations/session-channel",
     },
     # Sentinel: scheduled-only (Cronicle every 5min), not persistent
@@ -87,10 +92,11 @@ SERVICES = [
         "name": "system-monitor",
         "type": "uvicorn",
         "cmd": (
-            "/Users/joneshong/workshop/stations/system-monitor/.venv/bin/python3 api.py --port 9526"
+            "/Users/joneshong/workshop/stations/system-monitor/.venv/bin/python3"
+            f" api.py --port {get_port('system-monitor')}"
         ),
-        "port": 9526,
-        "health": "http://127.0.0.1:9526",
+        "port": get_port("system-monitor"),
+        "health": get("system-monitor").health_url,
         "workdir": "/Users/joneshong/workshop/stations/system-monitor",
     },
     {
@@ -100,8 +106,8 @@ SERVICES = [
             "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
             " -m agent_metrics serve"
         ),
-        "port": 8795,
-        "health": "http://127.0.0.1:8795/health",
+        "port": get_port("agent-metrics"),
+        "health": get("agent-metrics").health_url,
         "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
     },
     {
@@ -110,10 +116,10 @@ SERVICES = [
         "cmd": (
             "/opt/homebrew/bin/uv run --project"
             " /Users/joneshong/workshop/stations/auto-survey"
-            " auto-survey serve --host 127.0.0.1 --port 4102"
+            f" auto-survey serve --host 127.0.0.1 --port {get_port('auto-survey')}"
         ),
-        "port": 4102,
-        "health": "http://127.0.0.1:4102/api/people",
+        "port": get_port("auto-survey"),
+        "health": get("auto-survey").health_url,
         "workdir": "/Users/joneshong/workshop/stations/auto-survey",
     },
     {
@@ -121,58 +127,58 @@ SERVICES = [
         "type": "uvicorn",
         "cmd": (
             "/Users/joneshong/workshop/stations/anvil/.venv/bin/python3"
-            " -m uvicorn server:app --host 127.0.0.1 --port 4103"
+            f" -m uvicorn server:app --host 127.0.0.1 --port {get_port('anvil')}"
         ),
-        "port": 4103,
-        "health": "http://127.0.0.1:4103/docs",
+        "port": get_port("anvil"),
+        "health": get("anvil").health_url,
         "workdir": "/Users/joneshong/workshop/stations/anvil/src",
     },
     {
         "name": "stt",
         "type": "uvicorn",
         "cmd": ("/Users/joneshong/workshop/stations/stt/.venv/bin/python3 main.py"),
-        "port": 4108,
-        "health": "http://127.0.0.1:4108/health",
+        "port": get_port("stt"),
+        "health": get("stt").health_url,
         "workdir": "/Users/joneshong/workshop/stations/stt",
     },
     {
         "name": "ocr",
         "type": "uvicorn",
         "cmd": ("/Users/joneshong/workshop/stations/ocr/.venv/bin/python3 main.py"),
-        "port": 4109,
-        "health": "http://127.0.0.1:4109/health",
+        "port": get_port("ocr"),
+        "health": get("ocr").health_url,
         "workdir": "/Users/joneshong/workshop/stations/ocr",
     },
     {
         "name": "tts",
         "type": "uvicorn",
         "cmd": ("/Users/joneshong/workshop/stations/tts/.venv/bin/python3 main.py"),
-        "port": 4111,
-        "health": "http://127.0.0.1:4111/health",
+        "port": get_port("tts"),
+        "health": get("tts").health_url,
         "workdir": "/Users/joneshong/workshop/stations/tts",
     },
     {
         "name": "vision",
         "type": "uvicorn",
         "cmd": ("/Users/joneshong/workshop/stations/vision/.venv/bin/python3 main.py"),
-        "port": 4112,
-        "health": "http://127.0.0.1:4112/health",
+        "port": get_port("vision"),
+        "health": get("vision").health_url,
         "workdir": "/Users/joneshong/workshop/stations/vision",
     },
     {
         "name": "voice-gateway",
         "type": "uvicorn",
         "cmd": ("/Users/joneshong/workshop/stations/voice-gateway/.venv/bin/python3 main.py"),
-        "port": 4113,
-        "health": "http://127.0.0.1:4113/health",
+        "port": get_port("voice-gateway"),
+        "health": get("voice-gateway").health_url,
         "workdir": "/Users/joneshong/workshop/stations/voice-gateway",
     },
     {
         "name": "tps",
         "type": "uvicorn",
         "cmd": "/Users/joneshong/workshop/stations/tps/.venv/bin/python3 main.py",
-        "port": 4114,
-        "health": "http://127.0.0.1:4114/health",
+        "port": get_port("tps"),
+        "health": get("tps").health_url,
         "workdir": "/Users/joneshong/workshop/stations/tps",
     },
     {

@@ -15,39 +15,13 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-# ── Expected ports from workshop_services.py ──────────────────
-# Keep in sync with scripts/workshop_services.py SERVICES + DOCKER_CONTAINERS
-EXPECTED_PORTS: dict[int, str] = {
-    # Core
-    8801: "core",
-    # Stations
-    8840: "agent-vista",
-    4100: "hook-observatory",
-    4106: "session-channel",
-    4101: "sentinel",
-    9526: "system-monitor",
-    8795: "agent-metrics",
-    4102: "auto-survey",
-    4103: "anvil",
-    8765: "tmux-webui",
-    4104: "capture-console",
-    4105: "cronicle",
-    # Infra
-    8808: "mcpproxy",
-    4000: "litellm",
-    # Docker (bind inside container, mapped to host)
-    5432: "postgres",
-    6379: "redis",
-    9000: "rustfs",
-    8850: "filebrowser",
-    3100: "lgtm",
-    8090: "bark",
-    # 9080: "ntfy",  # disabled
-    6333: "qdrant",
-    # Nginx
-    8080: "nginx",
-}
+# ── Expected ports from port_registry (single source of truth) ──
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libs" / "python" / "src"))
+from workshop.port_registry import all_ports
+
+EXPECTED_PORTS: dict[int, str] = all_ports()
 
 # System ports to ignore (not Workshop-managed)
 SYSTEM_PORTS = {22, 5000, 7000, 3025}

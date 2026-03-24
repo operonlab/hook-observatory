@@ -29,6 +29,8 @@ from typing import Any
 
 import httpx
 
+from workshop.port_registry import get_url
+
 from ._base import APIError
 
 AnvilError = APIError
@@ -43,7 +45,7 @@ class AnvilClient:
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 15):
-        self.base_url = (base_url or os.environ.get("ANVIL_URL", "http://127.0.0.1:4103")).rstrip(
+        self.base_url = (base_url or os.environ.get("ANVIL_URL", get_url("anvil"))).rstrip(
             "/"
         )
         self._timeout = timeout

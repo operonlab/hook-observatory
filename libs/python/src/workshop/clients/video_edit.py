@@ -14,6 +14,8 @@ from typing import Any
 
 import httpx
 
+from workshop.port_registry import get_url
+
 
 class VideoEditError(Exception):
     def __init__(self, status_code: int, detail: str):
@@ -32,7 +34,7 @@ class VideoEditClient:
         render_timeout: float = 600,
     ):
         self.base_url = (
-            base_url or os.environ.get("VIDEO_EDIT_URL", "http://127.0.0.1:4110")
+            base_url or os.environ.get("VIDEO_EDIT_URL", get_url("video-edit"))
         ).rstrip("/")
         self._timeout = timeout
         self._render_timeout = render_timeout
