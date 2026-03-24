@@ -193,7 +193,14 @@ _LAYER_MATRIX: dict[QueryIntent, dict[str, str]] = {
     },
 }
 
-_CONFIDENCE_THRESHOLD = 0.4
+def _route_confidence_threshold(query_len: int) -> float:
+    """Dynamic routing confidence threshold based on query length.
+
+    Short queries (< 20 chars) are inherently ambiguous — lower the bar so
+    the router doesn't immediately fall back to full-scan.
+    query_len is capped at 50 to avoid unbounded growth. Clamped to [0.25, 0.6].
+    """
+    return max(0.25, min(0.6, 0.35 + 0.005 * min(query_len, 50)))
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +210,8 @@ _CONFIDENCE_THRESHOLD = 0.4
 def classify_query(query: str) -> LayerPlan:
     """Classify a query and return the layer plan.
 
-    Returns LayerPlan with intent=UNKNOWN and full-scan layers if confidence < 0.4.
+    Returns LayerPlan with intent=UNKNOWN and full-scan layers if confidence
+    is below the dynamic threshold (shorter queries use a lower bar).
     """
     keywords = extract_keywords(query)
     scores = _score_intent(query, keywords)
@@ -212,8 +220,10 @@ def classify_query(query: str) -> LayerPlan:
     best_intent = max(scores, key=lambda k: scores[k])
     best_score = scores[best_intent]
 
+    confidence_threshold = _route_confidence_threshold(len(query))
+
     # Low confidence → unknown (full scan)
-    if best_score < _CONFIDENCE_THRESHOLD:
+    if best_score < confidence_threshold:
         return LayerPlan(
             intent=QueryIntent.UNKNOWN,
             confidence=best_score,
@@ -291,7 +301,7 @@ class PersonalizedQueryRouter:
                 adjusted.layers["communities"] = "SEMANTIC"
 
         # Rule 3: Unknown intent + dominant historical intent → bias
-        if base.intent == QueryIntent.UNKNOWN and base.confidence < _CONFIDENCE_THRESHOLD:
+        if base.intent == QueryIntent.UNKNOWN and base.confidence < _route_confidence_threshold(len(query)):
             dominant = self._get_dominant_intent()
             if dominant and dominant in _LAYER_MATRIX:
                 # Merge dominant intent layers (don't override non-SKIP)

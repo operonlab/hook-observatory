@@ -9,10 +9,25 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from shutil import which
 
 from . import register
+
+
+def _retry_with_backoff(fn, max_retries=3, base_delay=1.0, max_delay=30.0):
+    """Retry with exponential backoff."""
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                time.sleep(delay)
+    raise last_exc
 
 _SUPPORTED_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
@@ -88,8 +103,8 @@ class ClaudeOCREngine:
         # Unset CLAUDECODE to avoid nested execution protection
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
-        try:
-            result = subprocess.run(
+        def _run_subprocess():
+            return subprocess.run(
                 [
                     "claude",
                     "-p",
@@ -110,10 +125,17 @@ class ClaudeOCREngine:
                 timeout=120,
                 env=env,
             )
+
+        try:
+            result = _retry_with_backoff(
+                _run_subprocess, max_retries=3, base_delay=1.0, max_delay=30.0
+            )
         except FileNotFoundError:
             return {"error": "claude CLI not found", "engine": "claude"}
         except subprocess.TimeoutExpired:
             return {"error": "claude CLI timed out (120s)", "engine": "claude"}
+        except OSError as e:
+            return {"error": f"claude CLI failed: {e}", "engine": "claude"}
 
         if result.returncode != 0:
             stderr = result.stderr.strip()[:300]

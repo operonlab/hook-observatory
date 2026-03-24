@@ -257,6 +257,7 @@ export default function EnrichmentChat({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const pendingChunks = useRef('')
+  const reconnectAttempt = useRef(0)
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -275,6 +276,7 @@ export default function EnrichmentChat({
       ws = new WebSocket(CAPTURE_CONSOLE_WS)
 
       ws.onopen = () => {
+        reconnectAttempt.current = 0
         setIsConnected(true)
       }
 
@@ -282,7 +284,9 @@ export default function EnrichmentChat({
 
       ws.onclose = () => {
         setIsConnected(false)
-        reconnectTimer = setTimeout(connect, 3000)
+        const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 30000)
+        reconnectAttempt.current += 1
+        reconnectTimer = setTimeout(connect, delay)
       }
 
       ws.onerror = () => {

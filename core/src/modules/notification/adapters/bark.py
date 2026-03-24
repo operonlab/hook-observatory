@@ -10,22 +10,42 @@ import structlog
 
 from src.config import settings
 
+try:
+    from workshop.retry import with_backoff
+    _HAS_RETRY = True
+except ImportError:
+    _HAS_RETRY = False
+
 logger = structlog.get_logger()
 
 
-def _send_bark_sync(url: str) -> bool:
-    """Synchronous HTTP GET to Bark server (runs in executor)."""
+def _send_bark_once(url: str) -> bool:
+    """Single HTTP GET attempt to Bark server (no retry)."""
     import urllib.error
     import urllib.request
+
+    req = urllib.request.Request(url, method="GET")  # noqa: S310
+    with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+        return resp.status == 200
+
+
+def _send_bark_sync(url: str) -> bool:
+    """Synchronous HTTP GET to Bark server (runs in executor), with retry."""
+    import urllib.error
 
     if not url.startswith(("http://", "https://")):
         logger.error("bark_invalid_scheme", url=url)
         return False
 
     try:
-        req = urllib.request.Request(url, method="GET")  # noqa: S310
-        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
-            return resp.status == 200
+        if _HAS_RETRY:
+            return with_backoff(
+                max_retries=3,
+                base_delay=1.0,
+                retryable=(urllib.error.URLError, TimeoutError, OSError),
+            )(_send_bark_once)(url)
+        else:
+            return _send_bark_once(url)
     except urllib.error.HTTPError as e:
         logger.error("bark_http_error", status=e.code, url=url)
         return False

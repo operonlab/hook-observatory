@@ -318,11 +318,13 @@ def today_status():
 
 @main.command("line-poll")
 @click.option("--max-retries", default=5, type=int, help="Max retry attempts")
-@click.option("--interval", default=120, type=int, help="Retry interval (seconds)")
-def line_poll(max_retries: int, interval: int):
+@click.option("--interval", default=120, type=int, help="Base retry interval (seconds)")
+@click.option("--max-interval", default=600, type=int, help="Max retry interval cap (seconds)")
+def line_poll(max_retries: int, interval: int, max_interval: int):
     """Manual testing: poll LINE with retries, save URLs to DB.
 
     For scheduled execution, use ws_auto_survey.py which calls line-read directly.
+    Uses exponential backoff: delay = min(interval * 2^attempt, max_interval).
     """
     import time as _time
 
@@ -337,8 +339,9 @@ def line_poll(max_retries: int, interval: int):
         if not text:
             click.echo("  No content (LINE not running?)")
             if attempt < max_retries:
-                click.echo(f"  Retrying in {interval}s...")
-                _time.sleep(interval)
+                delay = min(interval * (2 ** (attempt - 1)), max_interval)
+                click.echo(f"  Retrying in {delay}s (backoff)...")
+                _time.sleep(delay)
             continue
 
         urls = extract_survey_urls(text)
@@ -374,8 +377,9 @@ def line_poll(max_retries: int, interval: int):
 
         click.echo("  No SurveyCake URLs in visible messages")
         if attempt < max_retries:
-            click.echo(f"  Retrying in {interval}s...")
-            _time.sleep(interval)
+            delay = min(interval * (2 ** (attempt - 1)), max_interval)
+            click.echo(f"  Retrying in {delay}s (backoff)...")
+            _time.sleep(delay)
 
     click.echo(f"[auto-survey] Failed after {max_retries} attempts")
     raise SystemExit(1)

@@ -11,6 +11,8 @@ from typing import Any
 
 import httpx
 
+from workshop.retry import async_with_backoff
+
 logger = logging.getLogger(__name__)
 
 # CDN API — free, no key, daily updates
@@ -33,8 +35,14 @@ def _get_redis():
         return None
 
 
+@async_with_backoff(
+    max_retries=3,
+    base_delay=2.0,
+    max_delay=30.0,
+    retryable=(httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError),
+)
 async def fetch_rates() -> dict[str, Any]:
-    """Fetch USD-based exchange rates from CDN."""
+    """Fetch USD-based exchange rates from CDN (with exponential backoff retry)."""
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(f"{_CDN_BASE}/usd.json")
         resp.raise_for_status()

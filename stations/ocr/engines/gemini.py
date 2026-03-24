@@ -9,9 +9,24 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 from pathlib import Path
 
 from . import register
+
+
+def _retry_with_backoff(fn, max_retries=3, base_delay=1.0, max_delay=30.0):
+    """Retry with exponential backoff."""
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                time.sleep(delay)
+    raise last_exc
 
 _MIME_MAP = {
     ".png": "image/png",

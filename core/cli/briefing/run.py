@@ -14,10 +14,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
 import subprocess
 import sys
 import textwrap
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -74,6 +76,12 @@ def clean_output(text: str) -> str:
     return ANSI_RE.sub("", text)
 
 
+def _backoff_delay(attempt: int, base: float = 1.0, cap: float = 30.0) -> float:
+    """Exponential backoff with jitter: base * 2^attempt + uniform(0, 10%)."""
+    delay = min(base * (2**attempt), cap)
+    return delay + random.uniform(0, delay * 0.1)
+
+
 def _auth_headers(extra: dict | None = None) -> dict:
     h = {}
     if INTERNAL_KEY:
@@ -85,13 +93,26 @@ def _auth_headers(extra: dict | None = None) -> dict:
 
 def api_get(path: str) -> dict | list | None:
     url = f"{API_BASE}{path}"
-    try:
-        req = urllib.request.Request(url, headers=_auth_headers())
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
-    except Exception as e:
-        log.error("API GET %s failed: %s", path, e)
-        return None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(url, headers=_auth_headers())
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            # 4xx errors won't benefit from retry
+            log.error("API GET %s -> %d", path, e.code)
+            return None
+        except Exception as e:
+            if attempt < 2:
+                delay = _backoff_delay(attempt)
+                log.warning(
+                    "API GET %s failed (attempt %d/3), retry in %.1fs: %s",
+                    path, attempt + 1, delay, e,
+                )
+                time.sleep(delay)
+            else:
+                log.error("API GET %s failed: %s", path, e)
+    return None
 
 
 def api_post(path: str, data: dict) -> dict | None:

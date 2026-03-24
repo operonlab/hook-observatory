@@ -7,9 +7,24 @@ Requires: OPENAI_API_KEY environment variable.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from . import register
+
+
+def _retry_with_backoff(fn, max_retries=3, base_delay=1.0, max_delay=30.0):
+    """Retry with exponential backoff."""
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                time.sleep(delay)
+    raise last_exc
 
 
 @register("openai")
@@ -37,21 +52,27 @@ class OpenAISTTEngine:
 
         lang_code = language.split("-")[0] if language else None
 
-        try:
+        def _call_api():
             with open(str(path), "rb") as f:
                 files = {"file": (path.name, f, "audio/mpeg")}
                 data = {"model": "whisper-1", "response_format": "verbose_json"}
                 if lang_code:
                     data["language"] = lang_code
 
-                resp = httpx.post(
+                r = httpx.post(
                     "https://api.openai.com/v1/audio/transcriptions",
                     headers={"Authorization": f"Bearer {api_key}"},
                     files=files,
                     data=data,
                     timeout=120,
                 )
-                resp.raise_for_status()
+                if r.status_code >= 500:
+                    r.raise_for_status()
+                return r
+
+        try:
+            resp = _retry_with_backoff(_call_api, max_retries=3, base_delay=1.0, max_delay=30.0)
+            resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             return {
                 "error": f"OpenAI API error ({e.response.status_code}): {e.response.text[:300]}",

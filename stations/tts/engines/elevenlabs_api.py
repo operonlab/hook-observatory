@@ -8,9 +8,24 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from . import register
+
+
+def _retry_with_backoff(fn, max_retries=3, base_delay=1.0, max_delay=30.0):
+    """Retry with exponential backoff."""
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                time.sleep(delay)
+    raise last_exc
 
 _API_BASE = "https://api.elevenlabs.io/v1"
 
@@ -51,8 +66,8 @@ class ElevenLabsEngine:
 
         voice_id = _DEFAULT_VOICES.get(voice, voice)
 
-        try:
-            resp = httpx.post(
+        def _call_api():
+            r = httpx.post(
                 f"{_API_BASE}/text-to-speech/{voice_id}",
                 headers={
                     "xi-api-key": api_key,
@@ -70,6 +85,12 @@ class ElevenLabsEngine:
                 },
                 timeout=60,
             )
+            if r.status_code >= 500:
+                r.raise_for_status()
+            return r
+
+        try:
+            resp = _retry_with_backoff(_call_api, max_retries=3, base_delay=1.0, max_delay=30.0)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             return {
