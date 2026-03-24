@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -19,8 +19,12 @@ from session_archiver.models import SessionMeta
 log = structlog.get_logger(__name__)
 
 
-def scan_sessions(config: Config) -> list[SessionMeta]:
-    """Scan all sessions under the configured projects directory.
+def scan_sessions(config: Config, *, session_id: str | None = None) -> list[SessionMeta]:
+    """Scan sessions under the configured projects directory.
+
+    Args:
+        config: Session archiver configuration.
+        session_id: If provided, scan only this session (fast path).
 
     Returns a list of SessionMeta for every discoverable session:
     - Live JSONL files (tier=hot)
@@ -30,6 +34,10 @@ def scan_sessions(config: Config) -> list[SessionMeta]:
     if not projects_dir.is_dir():
         log.warning("projects_dir_not_found", path=str(projects_dir))
         return []
+
+    # Fast path: scan a single session by ID
+    if session_id:
+        return _scan_single(projects_dir, session_id)
 
     results: list[SessionMeta] = []
 
@@ -58,6 +66,26 @@ def scan_sessions(config: Config) -> list[SessionMeta]:
         archived=sum(1 for m in results if _is_cold(m)),
     )
     return results
+
+
+def _scan_single(projects_dir: Path, session_id: str) -> list[SessionMeta]:
+    """Scan a single session by ID across all project directories."""
+    for project_dir in projects_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        jsonl_path = project_dir / f"{session_id}.jsonl"
+        if jsonl_path.exists():
+            meta = _scan_jsonl(jsonl_path, project_dir.name)
+            if meta is not None:
+                log.info("scan_single", session_id=session_id)
+                return [meta]
+        stub_path = project_dir / f"{session_id}.archived.json"
+        if stub_path.exists():
+            meta = _parse_archived_stub(stub_path, project_dir.name)
+            if meta is not None:
+                return [meta]
+    log.warning("session_not_found", session_id=session_id)
+    return []
 
 
 def _is_cold(meta: SessionMeta) -> bool:
@@ -116,7 +144,7 @@ def _scan_jsonl(jsonl_path: Path, project_path: str) -> SessionMeta | None:
             last_timestamp = last_line_data.get("timestamp")
 
         # Stream through all lines for counting + metadata extraction
-        with open(jsonl_path, "r", encoding="utf-8") as f:
+        with open(jsonl_path, encoding="utf-8") as f:
             for line in f:
                 stripped = line.strip()
                 if not stripped:
@@ -163,7 +191,7 @@ def _scan_jsonl(jsonl_path: Path, project_path: str) -> SessionMeta | None:
     if not session_id:
         session_id = session_id_from_name
 
-    last_modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    last_modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
 
     return SessionMeta(
         session_id=session_id,
@@ -257,7 +285,7 @@ def _parse_archived_stub(stub_path: Path, project_path: str) -> SessionMeta | No
     }
     """
     try:
-        with open(stub_path, "r", encoding="utf-8") as f:
+        with open(stub_path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         log.warning("stub_parse_failed", path=str(stub_path), error=str(exc))
@@ -278,9 +306,9 @@ def _parse_archived_stub(stub_path: Path, project_path: str) -> SessionMeta | No
         try:
             last_modified = datetime.fromisoformat(archived_at_str.replace("Z", "+00:00"))
         except (ValueError, TypeError):
-            last_modified = datetime.now(tz=timezone.utc)
+            last_modified = datetime.now(tz=UTC)
     else:
-        last_modified = datetime.now(tz=timezone.utc)
+        last_modified = datetime.now(tz=UTC)
 
     return SessionMeta(
         session_id=session_id,

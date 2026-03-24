@@ -18,6 +18,7 @@ def cmd_scan(args: list[str]) -> None:
     """Scan all sessions and update DB index."""
     parser = argparse.ArgumentParser(description="Scan sessions")
     parser.add_argument("--json", action="store_true", help="JSON output")
+    parser.add_argument("--session-id", help="Scan only this session (fast path)")
     opts = parser.parse_args(args)
 
     config = load_config()
@@ -29,7 +30,7 @@ def cmd_scan(args: list[str]) -> None:
     # Ensure DB schema exists (graceful if PG down)
     db.ensure_schema(config)
 
-    sessions = scan_sessions(config)
+    sessions = scan_sessions(config, session_id=opts.session_id)
     scored = score_all(sessions)
 
     # Upsert each session into DB

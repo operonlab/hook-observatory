@@ -97,13 +97,19 @@ class SessionArchiverClient:
 
     # ======================== Commands ========================
 
-    def scan(self) -> dict:
-        """Scan all sessions and update DB index.
+    def scan(self, session_id: str | None = None) -> dict:
+        """Scan sessions and update DB index.
+
+        Args:
+            session_id: If provided, scan only this session (fast path).
 
         Returns:
             Dict with scanned count, upserted count, timestamp.
         """
-        return self._run("scan")
+        args = ["scan"]
+        if session_id:
+            args.extend(["--session-id", session_id])
+        return self._run(*args)
 
     def score(self, top: int = 0) -> dict:
         """Display session scores.
