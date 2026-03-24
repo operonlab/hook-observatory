@@ -22,7 +22,8 @@ import functools
 import logging
 import random
 import time
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -35,11 +36,25 @@ def _calc_delay(attempt: int, base_delay: float, max_delay: float) -> float:
     return delay + jitter
 
 
+def _should_retry(exc: Exception, retryable: Any) -> bool:
+    """Check if an exception should be retried.
+
+    retryable can be:
+      - A type or tuple of types: isinstance check
+      - A callable(exc) -> bool: custom filter
+    """
+    if callable(retryable) and not isinstance(retryable, type):
+        return retryable(exc)
+    return isinstance(exc, retryable)
+
+
 def with_backoff(
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 60.0,
-    retryable: type[Exception] | tuple[type[Exception], ...] = Exception,
+    retryable: type[Exception]
+    | tuple[type[Exception], ...]
+    | Callable[[Exception], bool] = Exception,
     on_retry: Callable[[int, Exception], None] | None = None,
 ) -> Callable:
     """Sync decorator for exponential backoff retry."""
@@ -51,7 +66,9 @@ def with_backoff(
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
-                except retryable as exc:
+                except Exception as exc:
+                    if not _should_retry(exc, retryable):
+                        raise
                     last_exc = exc
                     if attempt < max_retries - 1:
                         delay = _calc_delay(attempt, base_delay, max_delay)
@@ -78,7 +95,9 @@ def async_with_backoff(
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 60.0,
-    retryable: type[Exception] | tuple[type[Exception], ...] = Exception,
+    retryable: type[Exception]
+    | tuple[type[Exception], ...]
+    | Callable[[Exception], bool] = Exception,
     on_retry: Callable[[int, Exception], None] | None = None,
 ) -> Callable:
     """Async decorator for exponential backoff retry."""
@@ -90,7 +109,9 @@ def async_with_backoff(
             for attempt in range(max_retries):
                 try:
                     return await func(*args, **kwargs)
-                except retryable as exc:
+                except Exception as exc:
+                    if not _should_retry(exc, retryable):
+                        raise
                     last_exc = exc
                     if attempt < max_retries - 1:
                         delay = _calc_delay(attempt, base_delay, max_delay)
@@ -119,7 +140,9 @@ def retry_call(
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 60.0,
-    retryable: type[Exception] | tuple[type[Exception], ...] = Exception,
+    retryable: type[Exception]
+    | tuple[type[Exception], ...]
+    | Callable[[Exception], bool] = Exception,
     **kwargs: Any,
 ) -> T:
     """Inline retry helper (non-decorator usage)."""
@@ -127,7 +150,9 @@ def retry_call(
     for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
-        except retryable as exc:
+        except Exception as exc:
+            if not _should_retry(exc, retryable):
+                raise
             last_exc = exc
             if attempt < max_retries - 1:
                 delay = _calc_delay(attempt, base_delay, max_delay)

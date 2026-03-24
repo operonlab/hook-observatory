@@ -11,6 +11,7 @@ from src.config import settings
 
 try:
     from workshop.retry import with_backoff
+
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False
@@ -32,6 +33,15 @@ def _send_ntfy_once(url: str, data: bytes) -> bool:
     req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
         return resp.status == 200
+
+
+def _is_transient_network_error(exc: Exception) -> bool:
+    """URLError but NOT HTTPError (4xx/5xx are not transient)."""
+    import urllib.error
+
+    if isinstance(exc, urllib.error.HTTPError):
+        return False
+    return isinstance(exc, (urllib.error.URLError, TimeoutError, OSError))
 
 
 def _send_ntfy_sync(server: str, topic: str, payload: dict) -> bool:
@@ -66,7 +76,7 @@ def _send_ntfy_sync(server: str, topic: str, payload: dict) -> bool:
             return with_backoff(
                 max_retries=3,
                 base_delay=1.0,
-                retryable=(urllib.error.URLError, TimeoutError, OSError),
+                retryable=_is_transient_network_error,
             )(_send_ntfy_once)(url, data)
         else:
             return _send_ntfy_once(url, data)
