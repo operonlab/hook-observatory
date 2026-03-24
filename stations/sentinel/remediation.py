@@ -46,6 +46,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "tmux-webui": "tmux-webui",
     "stt": "stt",
     "ocr": "ocr",
+    "voice-gateway": "voice-gateway",
 }
 
 # Docker-managed services: restart via docker

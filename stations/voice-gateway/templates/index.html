@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <title>Voice Gateway</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 2rem; }
+    h1 { font-size: 1.4rem; margin-bottom: 1rem; }
+    .status { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1rem; min-width: 160px; }
+    .card .label { font-size: 0.75rem; color: #888; text-transform: uppercase; }
+    .card .value { font-size: 1.4rem; font-weight: 600; margin-top: 0.25rem; }
+    .card .value.idle { color: #666; }
+    .card .value.listening { color: #f59e0b; }
+    .card .value.processing { color: #3b82f6; }
+    .card .value.responding { color: #10b981; }
+    #log { background: #111; border: 1px solid #333; border-radius: 8px; padding: 1rem; font-family: 'SF Mono', monospace; font-size: 0.8rem; max-height: 400px; overflow-y: auto; }
+    .log-entry { padding: 2px 0; border-bottom: 1px solid #1a1a1a; }
+    .log-entry .ts { color: #555; }
+    .log-entry .type { color: #6ee7b7; }
+  </style>
+</head>
+<body>
+  <h1>Voice Gateway</h1>
+  <div class="status">
+    <div class="card"><div class="label">State</div><div class="value" id="state">--</div></div>
+    <div class="card"><div class="label">Mode</div><div class="value" id="mode">--</div></div>
+    <div class="card"><div class="label">Events</div><div class="value" id="events">0</div></div>
+    <div class="card"><div class="label">Pipeline</div><div class="value" id="pipeline">--</div></div>
+  </div>
+  <div id="log"></div>
+  <script>
+    const stateEl = document.getElementById('state');
+    const modeEl = document.getElementById('mode');
+    const eventsEl = document.getElementById('events');
+    const pipelineEl = document.getElementById('pipeline');
+    const logEl = document.getElementById('log');
+    let eventCount = 0;
+
+    async function refreshStatus() {
+      try {
+        const r = await fetch('/status');
+        const d = await r.json();
+        stateEl.textContent = d.state;
+        stateEl.className = 'value ' + d.state.toLowerCase();
+        modeEl.textContent = d.active_mode;
+        pipelineEl.textContent = d.pipeline_active ? 'active' : 'stopped';
+        eventsEl.textContent = d.events_published;
+      } catch {}
+    }
+
+    const evtSource = new EventSource('/api/voice/stream');
+    evtSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'heartbeat') return;
+      eventCount++;
+      eventsEl.textContent = eventCount;
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      const ts = new Date().toLocaleTimeString();
+      div.innerHTML = `<span class="ts">${ts}</span> <span class="type">${data.type}</span> ${JSON.stringify(data).slice(0, 120)}`;
+      logEl.prepend(div);
+      if (logEl.children.length > 100) logEl.lastChild.remove();
+      if (data.type === 'voice.state.changed') {
+        stateEl.textContent = data.to;
+        stateEl.className = 'value ' + (data.to || '').toLowerCase();
+      }
+    };
+
+    refreshStatus();
+    setInterval(refreshStatus, 5000);
+  </script>
+</body>
+</html>

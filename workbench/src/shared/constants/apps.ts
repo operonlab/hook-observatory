@@ -255,6 +255,16 @@ export const APP_LIST: AppInfo[] = [
     externalUrl: '/apps/scheduler/',
   },
   {
+    id: 'voice-gateway',
+    name: '語音閘道',
+    description: '語音喚醒詞偵測、VAD 即時監控、雙路徑模式管理',
+    icon: '🎙️',
+    path: '/voice-gateway',
+    color: '#f5c2e7',
+    status: 'external',
+    externalUrl: '/apps/voice/',
+  },
+  {
     id: 'stt',
     name: '語音轉文字',
     description: 'Apple 原生語音辨識、多引擎策略、離線優先',
