@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import CaptureBadge from '@/modules/capture/CaptureBadge'
+import { VoiceFab } from '@/modules/voice'
 import { APP_LIST } from '@/shared/constants/apps'
 import AppLauncher from '@/shell/AppLauncher'
 
@@ -101,6 +102,9 @@ export default function AppHeader() {
         />
 
         {showLauncher && <AppLauncher onClose={() => setShowLauncher(false)} />}
+
+        {/* Voice Gateway */}
+        <VoiceFab />
 
         {/* Capture Badge */}
         <CaptureBadge />
