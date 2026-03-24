@@ -24,7 +24,7 @@ log = structlog.get_logger(__name__)
 
 _DDL = """
 CREATE SCHEMA IF NOT EXISTS {schema};
-SET search_path TO {schema};
+SET search_path TO {schema}, public;
 
 CREATE TABLE IF NOT EXISTS sessions (
     id              SERIAL PRIMARY KEY,
@@ -127,8 +127,9 @@ def get_connection(config: Config) -> psycopg.Connection | None:
             autocommit=False,
         )
         conn.execute(
-            "SET search_path TO %s",
-            (config.db_schema,),
+            psycopg.sql.SQL("SET search_path TO {}, public").format(
+                psycopg.sql.Identifier(config.db_schema)
+            )
         )
         return conn
     except Exception:
@@ -160,8 +161,7 @@ def ensure_schema(config: Config) -> bool:
         return False
     try:
         with conn:
-            # Enable pgvector extension (requires superuser or CREATE on schema)
-            conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            # pgvector extension is managed by core Alembic migrations (public schema)
             conn.execute(_DDL.format(schema=config.db_schema))
         log.info("schema_ensured", schema=config.db_schema)
         return True
@@ -345,9 +345,7 @@ def log_action(
         return False
 
     now_iso = datetime.now(UTC).isoformat()
-    dedup_hash = hashlib.sha256(
-        f"{session_id}:{action}:{now_iso}".encode()
-    ).hexdigest()
+    dedup_hash = hashlib.sha256(f"{session_id}:{action}:{now_iso}".encode()).hexdigest()
 
     try:
         with conn:
@@ -556,9 +554,7 @@ def search_by_embedding(
         conn.close()
 
 
-def search_by_text(
-    config: Config, query: str, limit: int = 10
-) -> list[ArchiveRecord]:
+def search_by_text(config: Config, query: str, limit: int = 10) -> list[ArchiveRecord]:
     """ILIKE fallback search on summary field."""
     conn = get_connection(config)
     if conn is None:
