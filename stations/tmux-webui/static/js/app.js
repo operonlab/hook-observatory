@@ -717,13 +717,22 @@ function lineDiffUpdate(terminal, newContent) {
   const newLines = newHtml.split('\n');
   const children = terminal.children;
 
-  // If terminal is empty or structure mismatch, fall back to full replace
-  if (children.length === 0 || Math.abs(children.length - newLines.length) > 20) {
-    terminal.innerHTML = newHtml;
+  // Structure check: children must be div.term-line for safe diffing.
+  // After innerHTML full-replace, children are <span> from ANSI rendering,
+  // NOT <div class="term-line"> — diffing against those corrupts the DOM.
+  const isStructured = children.length > 0
+    && children[0]?.tagName === 'DIV'
+    && children[0]?.classList?.contains('term-line');
+
+  if (!isStructured || children.length === 0 || Math.abs(children.length - newLines.length) > 20) {
+    // Full rebuild: wrap each line in a div for correct structure
+    terminal.innerHTML = newLines
+      .map(l => '<div class="term-line">' + (l || '\u200b') + '</div>')
+      .join('');
     return;
   }
 
-  // Adjust line count
+  // Safe diff — children are guaranteed to be div.term-line
   while (children.length > newLines.length) terminal.lastChild.remove();
   while (children.length < newLines.length) {
     const div = document.createElement('div');
@@ -731,10 +740,10 @@ function lineDiffUpdate(terminal, newContent) {
     terminal.appendChild(div);
   }
 
-  // Update only changed lines
   for (let i = 0; i < newLines.length; i++) {
-    if (children[i].innerHTML !== newLines[i]) {
-      children[i].innerHTML = newLines[i];
+    const lineHtml = newLines[i] || '\u200b';
+    if (children[i].innerHTML !== lineHtml) {
+      children[i].innerHTML = lineHtml;
     }
   }
 }
@@ -998,16 +1007,10 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
     charW = r.width; lineH = r.height;
   }
   function fitPane(paneId) {
-    const pe = S.paneEls[paneId];
-    if (!pe || !charW || !lineH) return;
-    const cs = getComputedStyle(pe.terminal);
-    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-    const cols = Math.floor((pe.terminal.clientWidth - padX) / charW) - 1;
-    const rows = Math.floor((pe.terminal.clientHeight - padY) / lineH);
-    if (cols > 0 && rows > 0 && window.tmuxWs.isConnected()) {
-      window.tmuxWs.send({ type: 'fit', pane: paneId, cols, rows });
-    }
+    // Disabled: resizing tmux panes from the webui disrupts the physical
+    // terminal layout (e.g. desktop panes get expanded to webui width,
+    // then content wraps when layout resets on disconnect).
+    // The webui now adapts to tmux's pane size instead.
   }
   function fitAllPanes() {
     measureChar();

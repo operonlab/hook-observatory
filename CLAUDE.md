@@ -25,6 +25,6 @@ Modular Monolith + Event-Driven workspace.
 - `lab/` — POC experiments; `infra/` — Docker, Nginx, observability; `scripts/` — Build/deploy
 
 ## Session Naming
-On receiving the FIRST user message of a session, immediately run `/rename <title>`.
+On receiving the FIRST user message of a session, rename the session using the built-in `/rename <title>` CLI command (NOT the Skill tool — `/rename` is a built-in command).
 Rules: verb-first, kebab-case, max 30 chars, 2-4 words.
 Examples: `fix-auth-middleware`, `add-paper-search`, `refactor-memvault-scoring`, `explore-testing-types`

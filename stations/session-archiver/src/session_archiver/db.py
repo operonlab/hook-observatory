@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS session_embeddings (
     id              SERIAL PRIMARY KEY,
     session_id      TEXT NOT NULL UNIQUE REFERENCES sessions(session_id) ON DELETE CASCADE,
-    embedding       VECTOR(768) NOT NULL
+    embedding       VECTOR(1024) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS archive_log (
@@ -472,19 +472,24 @@ def get_stats(config: Config) -> ArchiveStats | None:
             if tier == "hot":
                 stats.hot_count = row["cnt"]
                 stats.hot_size = row["total_size"]
+            elif tier == "warm":
+                stats.warm_count = row["cnt"]
+                stats.warm_size = row["total_size"]
             elif tier == "cold":
                 stats.cold_count = row["cnt"]
                 stats.cold_original_size = row["total_size"]
                 stats.cold_compressed_size = row["total_compressed"]
             elif tier == "frozen":
                 stats.frozen_count = row["cnt"]
+                stats.frozen_original_size = row["total_size"]
+                stats.frozen_compressed_size = row["total_compressed"]
 
-        # Total saved = original cold size - compressed cold size
-        if stats.cold_original_size > 0:
-            stats.total_saved = stats.cold_original_size - stats.cold_compressed_size
-            stats.compression_ratio = round(
-                stats.cold_compressed_size / stats.cold_original_size, 4
-            )
+        # Total saved = (cold + frozen) original - compressed
+        total_original = stats.cold_original_size + stats.frozen_original_size
+        total_compressed = stats.cold_compressed_size + stats.frozen_compressed_size
+        if total_original > 0:
+            stats.total_saved = total_original - total_compressed
+            stats.compression_ratio = round(total_compressed / total_original, 4)
 
         return stats
     except Exception:
@@ -697,6 +702,154 @@ def get_reflection(config: Config, session_id: str) -> dict | None:
     except Exception:
         log.warning("get_reflection_failed", session_id=session_id, exc_info=True)
         return None
+    finally:
+        conn.close()
+
+
+def get_warm_candidates(
+    config: Config, min_age_days: int = 3, min_turns: int = 1, limit: int = 100
+) -> list[tuple[str, str]]:
+    """Return (session_id, project_path) for hot sessions eligible for warm transition.
+
+    Criteria: tier='hot', age >= min_age_days, turn_count >= min_turns, no summary yet.
+    """
+    conn = get_connection(config)
+    if conn is None:
+        return []
+
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT session_id, project_path
+                FROM sessions
+                WHERE tier = 'hot'
+                  AND summary IS NULL
+                  AND turn_count >= %(min_turns)s
+                  AND last_timestamp < (now() - make_interval(days => %(min_age)s))::text
+                ORDER BY score DESC
+                LIMIT %(limit)s
+                """,
+                {"min_turns": min_turns, "min_age": min_age_days, "limit": limit},
+            ).fetchall()
+        return [(r["session_id"], r.get("project_path", "")) for r in rows]
+    except Exception:
+        log.warning("get_warm_candidates_failed", exc_info=True)
+        return []
+    finally:
+        conn.close()
+
+
+def update_tier(config: Config, session_id: str, new_tier: str) -> bool:
+    """Update the tier field for a session."""
+    conn = get_connection(config)
+    if conn is None:
+        return False
+
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE sessions SET tier = %(tier)s, updated_at = %(now)s WHERE session_id = %(sid)s",
+                {"tier": new_tier, "now": datetime.now(UTC).isoformat(), "sid": session_id},
+            )
+        log.debug("tier_updated", session_id=session_id, tier=new_tier)
+        return True
+    except Exception:
+        log.warning("tier_update_failed", session_id=session_id, exc_info=True)
+        return False
+    finally:
+        conn.close()
+
+
+def get_unreflected_session_ids(config: Config, limit: int = 50) -> list[tuple[str, str | None]]:
+    """Return (session_id, project_path) for sessions without reflections."""
+    conn = get_connection(config)
+    if conn is None:
+        return []
+
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT s.session_id, s.project_path
+                FROM sessions s
+                LEFT JOIN session_reflections r ON r.session_id = s.session_id
+                WHERE r.session_id IS NULL
+                ORDER BY s.last_timestamp DESC NULLS LAST
+                LIMIT %(limit)s
+                """,
+                {"limit": limit},
+            ).fetchall()
+        return [(r["session_id"], r.get("project_path")) for r in rows]
+    except Exception:
+        log.warning("get_unreflected_failed", exc_info=True)
+        return []
+    finally:
+        conn.close()
+
+
+def get_freeze_candidates(config: Config, min_cold_days: int = 30) -> list[dict]:
+    """Return cold sessions eligible for freezing (archived_at older than min_cold_days)."""
+    conn = get_connection(config)
+    if conn is None:
+        return []
+
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT session_id, archive_path, archived_at, compressed_size
+                FROM sessions
+                WHERE tier = 'cold'
+                  AND archived_at IS NOT NULL
+                  AND archived_at::TIMESTAMPTZ < NOW() - make_interval(days => %s)
+                ORDER BY archived_at ASC
+                """,
+                (min_cold_days,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        log.warning("get_freeze_candidates_failed", exc_info=True)
+        return []
+    finally:
+        conn.close()
+
+
+def update_freeze_info(
+    config: Config,
+    session_id: str,
+    s3_uri: str,
+    archive_type: str = "cold-blob",
+) -> bool:
+    """Update a session to frozen tier with S3 URI."""
+    conn = get_connection(config)
+    if conn is None:
+        return False
+
+    now_iso = datetime.now(UTC).isoformat()
+    try:
+        with conn:
+            conn.execute(
+                """
+                UPDATE sessions SET
+                    tier = 'frozen',
+                    archive_path = %(archive_path)s,
+                    archive_type = %(archive_type)s,
+                    updated_at = %(now)s
+                WHERE session_id = %(session_id)s
+                """,
+                {
+                    "session_id": session_id,
+                    "archive_path": s3_uri,
+                    "archive_type": archive_type,
+                    "now": now_iso,
+                },
+            )
+        log.debug("freeze_info_updated", session_id=session_id, s3_uri=s3_uri)
+        return True
+    except Exception:
+        log.warning("freeze_info_update_failed", session_id=session_id, exc_info=True)
+        return False
     finally:
         conn.close()
 

@@ -13,7 +13,7 @@ server:
   sample_rate: 16000
   chunk_ms: 30
   vad_model: "models/silero_vad.onnx"
-  vad_threshold: 0.5
+  vad_threshold: 0.2
   kws_model_dir: "models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
   stt_ws_url: "ws://127.0.0.1:4108/transcribe/stream"
   stt_engine: "mlx-whisper"

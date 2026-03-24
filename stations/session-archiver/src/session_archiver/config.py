@@ -21,6 +21,11 @@ _DEFAULTS = {
     "compression_level": 9,
     "omlx_venv": str(Path.home() / ".venvs" / "omlx"),
     "embedding_dim": 1024,
+    "rustfs_endpoint": "http://127.0.0.1:9000",
+    "rustfs_access_key": "rustfsadmin",
+    "rustfs_secret_key": "rustfsadmin",
+    "rustfs_bucket": "workshop-session-archive",
+    "freeze_min_cold_days": 30,
 }
 
 
@@ -37,6 +42,11 @@ class Config:
     compression_level: int = _DEFAULTS["compression_level"]
     omlx_venv: str = _DEFAULTS["omlx_venv"]
     embedding_dim: int = _DEFAULTS["embedding_dim"]
+    rustfs_endpoint: str = _DEFAULTS["rustfs_endpoint"]
+    rustfs_access_key: str = _DEFAULTS["rustfs_access_key"]
+    rustfs_secret_key: str = _DEFAULTS["rustfs_secret_key"]
+    rustfs_bucket: str = _DEFAULTS["rustfs_bucket"]
+    freeze_min_cold_days: int = _DEFAULTS["freeze_min_cold_days"]
 
 
 def load_config() -> Config:

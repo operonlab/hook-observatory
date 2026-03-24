@@ -141,9 +141,10 @@ select:focus{outline:none;border-color:var(--accent)}
 /* Terminal */
 .pane-terminal{
   flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 10px;background:var(--bg);
-  font-size:var(--font-size);line-height:1.5;white-space:pre-wrap;word-break:break-all;
+  font-size:var(--font-size);line-height:1.5;white-space:pre;word-break:normal;
   scrollbar-width:thin;scrollbar-color:var(--border) transparent;
 }
+.term-line:empty::after{content:'\00a0'}
 .pane-terminal::-webkit-scrollbar{width:5px}
 .pane-terminal::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 

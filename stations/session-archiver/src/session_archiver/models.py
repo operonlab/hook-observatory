@@ -90,9 +90,13 @@ class ArchiveStats:
 
     hot_count: int = 0
     hot_size: int = 0
+    warm_count: int = 0
+    warm_size: int = 0
     cold_count: int = 0
     cold_original_size: int = 0
     cold_compressed_size: int = 0
     frozen_count: int = 0
+    frozen_original_size: int = 0
+    frozen_compressed_size: int = 0
     total_saved: int = 0
     compression_ratio: float = 0.0

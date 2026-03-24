@@ -14,3 +14,10 @@ export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
 # bat（cat 替代，語法高亮）
 export BAT_THEME="Catppuccin Mocha"
 alias cat='bat --paging=never'
+
+# lazygit（Git TUI，worktree 視覺化 + interactive rebase）
+alias lg='lazygit'
+alias lgw='lazygit --git-dir=$(git rev-parse --git-dir 2>/dev/null) --work-tree=$(git rev-parse --show-toplevel 2>/dev/null)'
+
+# jq（JSON 處理管線標準工具）
+alias jqc='jq -C | less -R'
