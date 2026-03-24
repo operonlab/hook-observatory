@@ -12,6 +12,7 @@ from src.config import settings
 
 try:
     from workshop.retry import with_backoff
+
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False
@@ -21,12 +22,20 @@ logger = structlog.get_logger()
 
 def _send_bark_once(url: str) -> bool:
     """Single HTTP GET attempt to Bark server (no retry)."""
-    import urllib.error
     import urllib.request
 
     req = urllib.request.Request(url, method="GET")  # noqa: S310
     with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
         return resp.status == 200
+
+
+def _is_transient_network_error(exc: Exception) -> bool:
+    """URLError but NOT HTTPError (4xx/5xx are not transient)."""
+    import urllib.error
+
+    if isinstance(exc, urllib.error.HTTPError):
+        return False
+    return isinstance(exc, (urllib.error.URLError, TimeoutError, OSError))
 
 
 def _send_bark_sync(url: str) -> bool:
@@ -42,7 +51,7 @@ def _send_bark_sync(url: str) -> bool:
             return with_backoff(
                 max_retries=3,
                 base_delay=1.0,
-                retryable=(urllib.error.URLError, TimeoutError, OSError),
+                retryable=_is_transient_network_error,
             )(_send_bark_once)(url)
         else:
             return _send_bark_once(url)
