@@ -75,6 +75,8 @@ async def receive_client_event(request: Request):
 
     Expected body: {"type": "voice.*", "payload": {...}}
     """
+    from state_machine import GatewayState
+
     body = await request.json()
     event_type = body.get("type", "")
     payload = body.get("payload", {})
@@ -82,6 +84,7 @@ async def receive_client_event(request: Request):
 
     app = request.app
     arbiter = app.state.arbiter
+    sm = app.state.state_machine
 
     # Handle lifecycle events
     if event_type == "voice.client.connected":
@@ -91,6 +94,16 @@ async def receive_client_event(request: Request):
     elif event_type == "voice.client.heartbeat":
         arbiter.client_heartbeat()
         return {"ok": True}
+
+    # Drive state machine from client events
+    if event_type == "voice.wakeword.detected":
+        if sm.state in (GatewayState.IDLE, GatewayState.LISTENING):
+            sm.transition(GatewayState.PROCESSING, reason="client_kws_match")
+    elif event_type == "voice.speech.captured":
+        if sm.state == GatewayState.PROCESSING:
+            sm.transition(GatewayState.RESPONDING, reason="client_speech_complete")
+    elif event_type == "voice.transcript.completed":
+        sm.reset()  # back to IDLE
 
     # Forward to Redis
     event_bus = app.state.event_bus
@@ -202,3 +215,57 @@ async def voice_devices():
     except Exception as e:
         return {"devices": [], "error": str(e)}
     return {"devices": devices}
+
+
+@router.post("/api/voice/transcribe")
+async def transcribe_audio(request: Request):
+    """Receive audio from client browser, forward to STT station for transcription."""
+    import tempfile
+    from pathlib import Path
+
+    body = await request.body()
+    if not body:
+        return {"error": "empty body"}
+
+    cfg = request.app.state.config
+
+    # Save to temp WAV file
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp.write(body)
+    tmp.close()
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.post(
+                f"{_STT_BASE}/transcribe",
+                params={
+                    "path": tmp.name,
+                    "language": cfg.language,
+                    "engine": cfg.server.stt_engine,
+                },
+            )
+            result = r.json()
+
+        # Publish transcript event
+        text = result.get("text", "").strip()
+        if text:
+            event_bus = request.app.state.event_bus
+            payload = {
+                "text": text,
+                "language": cfg.language,
+                "engine": result.get("engine", cfg.server.stt_engine),
+                "source_path": "client",
+            }
+            if event_bus:
+                await event_bus.publish("voice.transcript.completed", payload)
+            sse_broadcast({"type": "voice.transcript.completed", **payload, "ts": time.time()})
+
+            # Reset state machine
+            request.app.state.state_machine.reset()
+
+        return result
+    except Exception as e:
+        logger.error("transcribe_failed: %s", e)
+        return {"error": str(e)}
+    finally:
+        Path(tmp.name).unlink(missing_ok=True)

@@ -71,6 +71,7 @@ async def _pipeline_loop(app_state) -> None:
         sample_rate=config.server.sample_rate,
         chunk_ms=config.server.chunk_ms,
     )
+
     vad = VadGate(
         model_path=vad_model,
         sample_rate=config.server.sample_rate,
