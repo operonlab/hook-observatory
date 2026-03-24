@@ -5,7 +5,8 @@ observability.handle calls with a single, ordered pipeline:
   1. redact  — clean sensitive data
   2. extract — memvault knowledge extraction
   3. archive — session-archiver scan
-  4. log     — observatory event logging
+  4. reflect — quality scoring + context efficiency metrics
+  5. log     — observatory event logging
 
 The pipeline runs as a background process so the hook returns immediately
 without blocking Claude Code.
