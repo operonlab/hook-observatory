@@ -1,4 +1,4 @@
-"""TPS Station API routes."""
+"""Translate Station API routes."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from schemas import (
 )
 from workflow import workflow
 
-import cache as tps_cache
+import db as translate_db
 
 router = APIRouter()
 
@@ -28,7 +28,7 @@ async def health():
     status = {}
     for p in providers:
         status[p.name] = await p.is_available()
-    return {"status": "ok", "service": "tps", "port": config.port, "providers": status}
+    return {"status": "ok", "service": "translate", "port": config.port, "providers": status}
 
 
 @router.post("/translate", response_model=TranslateResponse)
@@ -68,8 +68,8 @@ async def translate_batch(req: BatchTranslateRequest):
 @router.get("/usage")
 async def usage():
     """Today's usage stats and budget."""
-    stats = await tps_cache.get_usage_stats()
-    daily_cost = await tps_cache.get_daily_cost()
+    stats = await translate_db.get_usage_stats()
+    daily_cost = await translate_db.get_daily_cost()
     return {
         "date": date.today().isoformat(),
         "providers": stats,

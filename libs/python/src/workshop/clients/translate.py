@@ -1,9 +1,9 @@
-"""TPS SDK — HTTP client for TPS station (port 4114).
+"""Translate SDK — HTTP client for Translate station (port 4114).
 
 Usage:
-    from workshop.clients.tps import TPSClient
+    from workshop.clients.translate import TranslateClient
 
-    client = TPSClient()
+    client = TranslateClient()
     result = client.translate("Hello world", target_lang="zh-TW")
     print(result["text"])
 """
@@ -16,12 +16,12 @@ import httpx
 from ._base import APIError
 
 
-class TPSClient:
-    """HTTP client for TPS station (port 4114)."""
+class TranslateClient:
+    """HTTP client for Translate station (port 4114)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 60):
         self.base_url = (
-            base_url or os.environ.get("TPS_URL", "http://127.0.0.1:4114")
+            base_url or os.environ.get("TRANSLATE_URL", "http://127.0.0.1:4114")
         ).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None
@@ -49,13 +49,13 @@ class TPSClient:
         except httpx.ConnectError:
             raise APIError(
                 0,
-                f"Cannot connect to TPS at {self.base_url}. "
-                "Start server: cd stations/tps && .venv/bin/python3 main.py",
-                module="tps",
+                f"Cannot connect to Translate at {self.base_url}. "
+                "Start server: cd stations/translate && .venv/bin/python3 main.py",
+                module="translate",
             ) from None
         except httpx.HTTPStatusError as e:
             raise APIError(
-                e.response.status_code, e.response.text[:500], module="tps"
+                e.response.status_code, e.response.text[:500], module="translate"
             ) from e
 
     # ======================== Health ========================
@@ -118,4 +118,4 @@ class TPSClient:
         self.close()
 
     def __repr__(self) -> str:
-        return f"TPSClient(base_url={self.base_url!r})"
+        return f"TranslateClient(base_url={self.base_url!r})"

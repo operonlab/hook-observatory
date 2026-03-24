@@ -168,12 +168,12 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/voice-gateway",
     },
     {
-        "name": "tps",
+        "name": "translate",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/tps/.venv/bin/python3 main.py",
+        "cmd": "/Users/joneshong/workshop/stations/translate/.venv/bin/python3 main.py",
         "port": 4114,
         "health": "http://127.0.0.1:4114/health",
-        "workdir": "/Users/joneshong/workshop/stations/tps",
+        "workdir": "/Users/joneshong/workshop/stations/translate",
     },
     {
         "name": "tmux-webui",

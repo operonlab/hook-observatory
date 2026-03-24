@@ -40,9 +40,9 @@ class GoogleProvider(BaseTranslationProvider):
         self._api_key = api_key
 
     def _get_key(self) -> str:
-        key = self._api_key or os.environ.get("TPS_GOOGLE_API_KEY", "")
+        key = self._api_key or os.environ.get("TRANSLATE_GOOGLE_API_KEY", "")
         if not key:
-            raise AuthenticationError("TPS_GOOGLE_API_KEY not set")
+            raise AuthenticationError("TRANSLATE_GOOGLE_API_KEY not set")
         return key
 
     def _map_lang(self, code: str) -> str:

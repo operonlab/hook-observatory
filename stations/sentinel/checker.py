@@ -252,7 +252,7 @@ LIGHT_CHECKS: list[LightCheck] = [
         optional=True,
     ),
     LightCheck(
-        name="tps",
+        name="translate",
         group="external",
         url="http://127.0.0.1:4114/health",
         optional=True,

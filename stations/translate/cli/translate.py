@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""TPS CLI — Translation Proxy Station command-line interface.
+"""Translate CLI — Translation Proxy Station command-line interface.
 
 Usage:
-    tps translate "Hello world" --to zh-TW
-    tps batch input.txt --to zh-TW --output output.txt
-    tps usage
-    tps providers
+    translate translate "Hello world" --to zh-TW
+    translate batch input.txt --to zh-TW --output output.txt
+    translate usage
+    translate providers
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ import sys
 
 
 def _get_client():
-    from workshop.clients.tps import TPSClient
+    from workshop.clients.translate import TranslateClient
 
-    return TPSClient()
+    return TranslateClient()
 
 
 def cmd_translate(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="tps translate")
+    parser = argparse.ArgumentParser(prog="translate translate")
     parser.add_argument("text", help="Text to translate")
     parser.add_argument("--from", dest="source_lang", default="auto")
     parser.add_argument("--to", dest="target_lang", default="zh-TW")
@@ -47,7 +47,7 @@ def cmd_translate(args: list[str]) -> None:
 
 
 def cmd_batch(args: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="tps batch")
+    parser = argparse.ArgumentParser(prog="translate batch")
     parser.add_argument("file", help="Input file (one text per line)")
     parser.add_argument("--from", dest="source_lang", default="auto")
     parser.add_argument("--to", dest="target_lang", default="zh-TW")
@@ -96,7 +96,7 @@ def cmd_providers(args: list[str]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="tps", description="Translation Proxy Station CLI")
+    parser = argparse.ArgumentParser(prog="translate", description="Translation Proxy Station CLI")
     subparsers = parser.add_subparsers(dest="command")
 
     subparsers.add_parser("translate", help="Translate text")
@@ -104,7 +104,6 @@ def main():
     subparsers.add_parser("usage", help="Show usage stats")
     subparsers.add_parser("providers", help="List providers")
 
-    # Parse only the command name
     args, remaining = parser.parse_known_args()
 
     commands = {
