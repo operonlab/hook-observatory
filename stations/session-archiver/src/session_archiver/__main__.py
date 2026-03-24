@@ -16,18 +16,52 @@ Commands:
 
 from __future__ import annotations
 
+import logging
 import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import structlog
 
+# ---------------------------------------------------------------------------
+# Log rotation setup — structlog routed through stdlib for rotating file support
+# ---------------------------------------------------------------------------
+_LOG_DIR = Path.home() / ".claude" / "data" / "session-archiver"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_LOG_FILE = _LOG_DIR / "run.log"
+
+_pre_chain = [
+    structlog.stdlib.add_log_level,
+    structlog.stdlib.add_logger_name,
+    structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+]
+
 structlog.configure(
-    processors=[
-        structlog.stdlib.add_log_level,
-        structlog.dev.ConsoleRenderer(),
-    ],
+    processors=_pre_chain + [structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
     wrapper_class=structlog.stdlib.BoundLogger,
-    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+    logger_factory=structlog.stdlib.LoggerFactory(),
 )
+
+_formatter = structlog.stdlib.ProcessorFormatter(
+    processor=structlog.dev.ConsoleRenderer(),
+    foreign_pre_chain=_pre_chain,
+)
+
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.DEBUG)
+
+_file_handler = RotatingFileHandler(
+    _LOG_FILE,
+    maxBytes=10 * 1024 * 1024,  # 10 MB
+    backupCount=5,
+    encoding="utf-8",
+)
+_file_handler.setFormatter(_formatter)
+_root_logger.addHandler(_file_handler)
+
+_stderr_handler = logging.StreamHandler(sys.stderr)
+_stderr_handler.setFormatter(_formatter)
+_root_logger.addHandler(_stderr_handler)
 
 from session_archiver.cli import (
     cmd_archive,

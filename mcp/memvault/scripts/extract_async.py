@@ -73,6 +73,26 @@ attitude_log = str(log_dir / "attitude-digest.log")
 with open(tmpfile, "rb") as f:
     data = f.read()
 
+# Check transcript exists, fallback to project dir search
+try:
+    import json as _json
+    _hook_input = _json.loads(data.decode("utf-8"))
+    _transcript_path = (_hook_input.get("transcript_path") or "").strip()
+    _session_id = (_hook_input.get("session_id") or "").strip()
+    if _transcript_path and not Path(_transcript_path).exists() and _session_id:
+        # Search in ~/.claude/projects/ for matching session JSONL
+        _projects = Path.home() / ".claude" / "projects"
+        _found = None
+        if _projects.exists():
+            for _candidate in _projects.rglob(f"{_session_id}.jsonl"):
+                _found = str(_candidate)
+                break
+        if _found:
+            _hook_input["transcript_path"] = _found
+            data = _json.dumps(_hook_input).encode("utf-8")
+except Exception:
+    pass
+
 # Launch memory block extraction
 block_proc = None
 if Path(extract_script).is_file():

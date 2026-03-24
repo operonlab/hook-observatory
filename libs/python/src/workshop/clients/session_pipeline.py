@@ -357,7 +357,6 @@ class SessionPipelineClient:
         """
         t0 = time.monotonic()
         stage = StageResult(name="reflect")
-        reflect_timeout_secs = 10
         try:
             # ------------------------------------------------------------------
             # Import reflect_engine from stations/session-pipeline/
@@ -399,55 +398,93 @@ class SessionPipelineClient:
             try:
                 import sys as _sys
 
-                _archiver_src = os.path.expanduser(
-                    "~/workshop/stations/session-archiver/src"
-                )
+                _archiver_src = os.path.expanduser("~/workshop/stations/session-archiver/src")
                 if _archiver_src not in _sys.path:
                     _sys.path.insert(0, _archiver_src)
 
-                from session_archiver.config import Config as ArchiverConfig  # type: ignore[import]
+                from session_archiver.config import (
+                    load_config as _load_archiver_config,  # type: ignore[import]
+                )
                 from session_archiver.db import upsert_reflection  # type: ignore[import]
 
-                archiver_cfg = ArchiverConfig()
+                archiver_cfg = _load_archiver_config()
                 db_written = upsert_reflection(archiver_cfg, metrics.to_dict())
             except Exception as db_exc:
                 log.warning("reflect db write failed (non-fatal): %s", db_exc)
 
             # ------------------------------------------------------------------
             # Feed high-quality sessions back to memvault (quality_score > 0.6)
+            #
+            # NOTE: The /api/memvault/reflect route requires auth (session cookie).
+            # The background pipeline has no session cookie, so HTTP POST would
+            # always receive 401.  Instead, call reflect_on_session() directly
+            # (pure function, no DB/auth needed) to obtain invariant/derived
+            # counts for this pipeline run, then mark the KG write-back as
+            # deferred — the weekly GRC runner will perform the full write-back
+            # with a proper authenticated context.
             # ------------------------------------------------------------------
-            memvault_fed = False
             if metrics.quality_score > 0.6:
                 try:
-                    import httpx
+                    import sys as _sys2
 
-                    resp = httpx.post(
-                        f"{self.core_api_url}/api/memvault/reflect",
-                        params={"session_id": session_id},
-                        timeout=reflect_timeout_secs,
+                    _memvault_src = os.path.expanduser("~/workshop/core/src")
+                    if _memvault_src not in _sys2.path:
+                        _sys2.path.insert(0, _memvault_src)
+
+                    from src.modules.memvault.reflection import (  # type: ignore[import]
+                        reflect_on_session as _reflect_on_session,
                     )
-                    if resp.status_code < 400:
-                        memvault_fed = True
-                        # Parse invariant/derived counts from response if available
+
+                    # Load memory blocks from the transcript (best-effort).
+                    # reflect_on_session is a pure function — no DB required.
+                    _blocks: list[dict] = []
+                    if transcript_path:
                         try:
-                            body = resp.json()
-                            metrics.invariant_count = body.get("invariant_count", 0)
-                            metrics.derived_count = body.get("derived_count", 0)
+                            import json as _json2
+
+                            with open(transcript_path) as _tf:
+                                for _line in _tf:
+                                    _line = _line.strip()
+                                    if not _line:
+                                        continue
+                                    try:
+                                        _entry = _json2.loads(_line)
+                                        # Extract assistant text content as pseudo-blocks
+                                        if _entry.get("type") == "assistant":
+                                            for _msg in _entry.get("message", {}).get(
+                                                "content", []
+                                            ):
+                                                if (
+                                                    isinstance(_msg, dict)
+                                                    and _msg.get("type") == "text"
+                                                ):
+                                                    _blocks.append(
+                                                        {
+                                                            "content": _msg["text"],
+                                                            "block_type": "observation",
+                                                            "tags": [],
+                                                        }
+                                                    )
+                                    except Exception:  # noqa: S110
+                                        pass
                         except Exception:  # noqa: S110
                             pass
-                    if memvault_fed and db_written:
-                        # Update reflection_fed flag in DB
-                        try:
-                            data = metrics.to_dict()
-                            data["reflection_fed"] = True
-                            data["invariant_count"] = metrics.invariant_count
-                            data["derived_count"] = metrics.derived_count
-                            upsert_reflection(archiver_cfg, data)  # type: ignore[possibly-undefined]
-                        except Exception:  # noqa: S110
-                            pass
-                    metrics.reflection_fed = memvault_fed
+
+                    _ref_result = _reflect_on_session(_blocks, session_id=session_id)
+                    metrics.invariant_count = len(_ref_result.invariants)
+                    metrics.derived_count = len(_ref_result.derived)
+                    # KG write-back deferred — no auth available in background pipeline.
+                    # The weekly GRC runner will call /api/memvault/reflect with auth.
+                    # memvault_fed remains False (set above).
+                    log.info(
+                        "reflect: pure analysis done (KG write-back deferred) "
+                        "invariants=%d derived=%d session=%s",
+                        metrics.invariant_count,
+                        metrics.derived_count,
+                        session_id,
+                    )
                 except Exception as mv_exc:
-                    log.info("memvault feed skipped (non-fatal): %s", mv_exc)
+                    log.info("memvault reflect skipped (non-fatal): %s", mv_exc)
 
             stage.details = {
                 "outcome": metrics.outcome,
