@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ====================================================================
 # 1. qdrant_client — async signatures + gRPC
 # ====================================================================
