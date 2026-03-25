@@ -11,7 +11,7 @@ STATION_DIR = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     SERVICE_NAME: str = "agent-metrics"
-    PORT: int = 8795
+    PORT: int = 10103
     HOST: str = "127.0.0.1"
     DEBUG: bool = False
 

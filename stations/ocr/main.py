@@ -52,7 +52,7 @@ _SELF_PREPROCESSING_ENGINES = {"paddle", "claude", "gemini"}
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "ocr", "port": 4109}
+    return {"status": "ok", "service": "ocr", "port": 10202}
 
 
 @app.post("/extract")
@@ -116,5 +116,5 @@ async def list_engines():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("OCR_PORT", "4109"))
+    port = int(os.environ.get("OCR_PORT", "10202"))
     uvicorn.run(app, host="127.0.0.1", port=port)

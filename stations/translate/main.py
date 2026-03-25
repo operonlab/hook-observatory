@@ -1,7 +1,7 @@
 """Translate Station — Translation Proxy Service.
 
 DeepL → Google Translate cascading with PostgreSQL cache.
-Port 4114.
+Port 10205.
 """
 
 from __future__ import annotations

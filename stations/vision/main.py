@@ -50,7 +50,7 @@ app = FastAPI(title="Vision Station", version="0.1.0", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "vision", "port": 4112}
+    return {"status": "ok", "service": "vision", "port": 10203}
 
 
 @app.post("/analyze")
@@ -94,5 +94,5 @@ async def list_engines():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("VISION_PORT", "4112"))
+    port = int(os.environ.get("VISION_PORT", "10203"))
     uvicorn.run(app, host="127.0.0.1", port=port)

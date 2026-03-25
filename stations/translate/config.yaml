@@ -1,5 +1,5 @@
 env_prefix: "TRANSLATE"
-port: 4114
+port: 10205
 host: "127.0.0.1"
 
 # Provider cascade (priority order)

@@ -1,4 +1,4 @@
-port: 4113
+port: 10204
 host: "127.0.0.1"
 language: "zh-TW"
 keywords:
@@ -15,7 +15,7 @@ server:
   vad_model: "models/silero_vad.onnx"
   vad_threshold: 0.2
   kws_model_dir: "models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
-  stt_ws_url: "ws://127.0.0.1:4108/transcribe/stream"
+  stt_ws_url: "ws://127.0.0.1:10200/transcribe/stream"
   stt_engine: "mlx-whisper"
 
 # Client config (Path A, served via GET /api/voice/config)

@@ -18,7 +18,7 @@ class ServerConfig:
     vad_model: str = "models/silero_vad.onnx"
     vad_threshold: float = 0.5
     kws_model_dir: str = "models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
-    stt_ws_url: str = "ws://127.0.0.1:4108/transcribe/stream"
+    stt_ws_url: str = "ws://127.0.0.1:10200/transcribe/stream"
     stt_engine: str = "mlx-whisper"
 
 
@@ -30,7 +30,7 @@ class ClientConfig:
 
 @dataclass
 class Config:
-    port: int = 4113
+    port: int = 10204
     host: str = "127.0.0.1"
     language: str = "zh-TW"
     keywords: list[str] = field(default_factory=lambda: ["你好助手", "嘿助手", "hey assistant"])

@@ -55,7 +55,7 @@ app = FastAPI(title="TTS Station", version="0.2.0", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "tts", "port": 4111, "streaming": True}
+    return {"status": "ok", "service": "tts", "port": 10201, "streaming": True}
 
 
 @app.post("/synthesize")
@@ -204,5 +204,5 @@ async def list_engines():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("TTS_PORT", "4111"))
+    port = int(os.environ.get("TTS_PORT", "10201"))
     uvicorn.run(app, host="127.0.0.1", port=port)

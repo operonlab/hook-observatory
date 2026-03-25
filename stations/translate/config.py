@@ -10,13 +10,13 @@ from workshop.station_bootstrap import load_yaml_config
 
 _yaml = load_yaml_config(
     Path(__file__).parent / "config.yaml",
-    defaults={"port": 4114, "host": "127.0.0.1", "cache_ttl": 86400},
+    defaults={"port": 10205, "host": "127.0.0.1", "cache_ttl": 86400},
 )
 
 
 @dataclass(frozen=True)
 class Config:
-    port: int = _yaml.get("port", 4114)
+    port: int = _yaml.get("port", 10205)
     host: str = _yaml.get("host", "127.0.0.1")
     daily_budget_usd: float = float(_yaml.get("daily_budget_usd", 5.0))
     cache_ttl: int = _yaml.get("cache_ttl", 86400)

@@ -1,6 +1,6 @@
 env_prefix: "HOOK_OBS"
 
-port: 4100
+port: 10100
 host: "127.0.0.1"
 database_url: "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
 secret_key: "change-me-in-production"

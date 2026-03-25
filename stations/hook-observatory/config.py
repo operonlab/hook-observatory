@@ -21,7 +21,7 @@ class SpoolConfig:
 
 @dataclass
 class Config:
-    port: int = 4100
+    port: int = 10100
     host: str = "127.0.0.1"
     database_url: str = "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
     secret_key: str = "change-me-in-production"

@@ -52,7 +52,7 @@ app = FastAPI(title="STT Station", version="0.3.0", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "stt", "port": 4108, "streaming": True}
+    return {"status": "ok", "service": "stt", "port": 10200, "streaming": True}
 
 
 # ======================== Subtitle Helpers ========================
@@ -308,5 +308,5 @@ async def list_engines():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("STT_PORT", "4108"))
+    port = int(os.environ.get("STT_PORT", "10200"))
     uvicorn.run(app, host="127.0.0.1", port=port)
