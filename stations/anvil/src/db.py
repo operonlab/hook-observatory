@@ -149,6 +149,9 @@ class Invocation(Base):
     category: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'skill'")
     )
+    # Failure attribution (Memento-Skills pattern)
+    attribution_score: Mapped[float | None] = mapped_column(Float)
+    attribution_reason: Mapped[str | None] = mapped_column(Text)
 
 
 class Intent(Base):
