@@ -108,7 +108,7 @@ def main() -> None:
                     if i.get("success", True) and i["skill_name"] != skill
                 ]
                 if successful:
-                    pos = successful[0]
+                    pos = random.choice(successful)  # noqa: S311
                     pairs.append(
                         {
                             "anchor": query,

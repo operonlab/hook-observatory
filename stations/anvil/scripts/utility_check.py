@@ -38,38 +38,29 @@ MIN_INVOCATIONS = 5
 def _has_failures(client, skill_name: str, session_id: str) -> bool:
     """Check if a skill has any failures in this session."""
     try:
-        data = client.list_invocations(skill_name=skill_name, limit=100)
+        data = client.list_invocations(skill_name=skill_name, session_id=session_id, limit=500)
         for inv in data.get("items", []):
-            if inv.get("session_id") == session_id and not inv.get("success", True):
+            if not inv.get("success", True):
                 return True
     except Exception:
         pass
     return False
 
 
-def _check_create_on_miss(client: "AnvilClient", session_id: str) -> None:
+def _check_create_on_miss(client: "AnvilClient", session_id: str, tool_count: int) -> None:
     """Detect sessions with no skill usage but real work done."""
     try:
-        # Check if session had ANY invocations (including non-skill)
-        all_inv = client.list_invocations(limit=100)
-        session_inv = [i for i in all_inv.get("items", []) if i.get("session_id") == session_id]
-        # Need at least some tool activity to be meaningful
-        if len(session_inv) < 3:
+        if tool_count < 3:
             return
-
-        # No skills used but work happened → propose
         CREATE_PROPOSALS_FILE.parent.mkdir(parents=True, exist_ok=True)
         entry = {
             "session_id": session_id,
-            "tool_count": len(session_inv),
+            "tool_count": tool_count,
             "ts": datetime.now(timezone.utc).isoformat(),  # noqa: UP017
         }
         with open(CREATE_PROPOSALS_FILE, "a") as f:
             f.write(json.dumps(entry) + "\n")
-        print(
-            f"[utility_check] CreateOnMiss proposal for session {session_id[:8]}",
-            file=sys.stderr,
-        )
+        print(f"[utility_check] CreateOnMiss for session {session_id[:8]}", file=sys.stderr)
     except Exception:
         pass  # best-effort
 
@@ -84,24 +75,22 @@ def dynamic_threshold(n_total: int) -> float:
 def main(session_id: str) -> None:
     from workshop.clients.anvil import AnvilClient
 
-    client = AnvilClient()
+    client = AnvilClient(base_url="http://127.0.0.1:4103")
 
-    # 1. Get skills used in this session
+    # 1. Get skills used in this session (use session_id filter!)
     try:
-        invocations = client.list_invocations(limit=100)
+        invocations = client.list_invocations(session_id=session_id, limit=500)
     except Exception as e:
         print(f"[utility_check] Cannot reach Anvil: {e}", file=sys.stderr)
         return
 
-    # Filter to this session's skill invocations
     items = invocations.get("items", [])
-    session_skills = set()
-    for inv in items:
-        if inv.get("session_id") == session_id and inv.get("category") == "skill":
-            session_skills.add(inv.get("skill_name", ""))
-
+    session_skills = {i.get("skill_name", "") for i in items if i.get("category") == "skill"}
     session_skills.discard("")
+
+    # CreateOnMiss: check BEFORE early return (C2 fix)
     if not session_skills:
+        _check_create_on_miss(client, session_id, len(items))
         return
 
     # 2. Check utility for each skill
@@ -151,10 +140,6 @@ def main(session_id: str) -> None:
             f"[utility_check] {len(proposals)} proposals for session {session_id[:8]}",
             file=sys.stderr,
         )
-
-    # 4. CreateOnMiss: detect sessions with no skill invocations
-    if not session_skills:
-        _check_create_on_miss(client, session_id)
 
 
 if __name__ == "__main__":

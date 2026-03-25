@@ -355,6 +355,15 @@
       "enabled": true
     },
     {
+      "name": "ws-routing-training-export",
+      "label": "com.joneshong.scheduler.ws-routing-training-export",
+      "command": "~/.local/bin/python3 ~/workshop/stations/anvil/scripts/export_routing_training.py",
+      "schedule": "30 6 * * 0",
+      "timezone": "Asia/Taipei",
+      "enabled": true,
+      "description": "每週日 6:30AM: Export skill routing training data (Memento-Skills Phase 4)"
+    },
+    {
       "name": "ws-memvault-attitude",
       "label": "com.joneshong.scheduler.ws-memvault-attitude",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_attitude.py",

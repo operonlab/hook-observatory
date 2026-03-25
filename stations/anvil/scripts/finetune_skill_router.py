@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 from pathlib import Path
 
@@ -62,7 +63,8 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Split train/eval
+    # Split train/eval (shuffle first to avoid temporal leakage)
+    random.shuffle(pairs)  # noqa: S311
     split_idx = int(len(pairs) * 0.9)
     train_pairs = pairs[:split_idx]
     eval_pairs = pairs[split_idx:]

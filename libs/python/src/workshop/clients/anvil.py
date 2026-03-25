@@ -197,13 +197,14 @@ class AnvilClient:
     def list_invocations(
         self,
         skill_name: str | None = None,
+        session_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
         """List invocations with optional filters. GET /api/anvil/invocations"""
         return self._get(
             "/api/anvil/invocations",
-            {"skill_name": skill_name, "limit": limit, "offset": offset},
+            {"skill_name": skill_name, "session_id": session_id, "limit": limit, "offset": offset},
         )
 
     # ======================== Stats ========================
