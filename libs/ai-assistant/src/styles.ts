@@ -23,41 +23,40 @@ export const STYLES = /* css */ `
     color: var(--ai-text);
   }
 
-  :host([position="bottom-right"]) { right: 20px; bottom: 20px; }
-  :host([position="bottom-left"]) { left: 20px; bottom: 20px; }
+  :host([position="bottom-right"]) { right: 0; bottom: 0; }
+  :host([position="bottom-left"]) { left: 0; bottom: 0; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── FAB (floating action button) ── */
+  /* ── FAB (floating mascot character) ── */
   .fab {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    border: 1px solid var(--ai-border);
-    background: var(--ai-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    width: 300px;
+    height: 300px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    transition: transform 0.2s, box-shadow 0.2s;
-    overflow: hidden;
+    transition: transform 0.3s ease, filter 0.3s ease;
     position: relative;
+    padding: 0;
   }
   .fab:hover {
-    transform: scale(1.08);
-    box-shadow: 0 6px 28px rgba(0,0,0,0.5);
+    transform: scale(1.05);
+    filter: drop-shadow(0 4px 16px rgba(180, 190, 254, 0.35));
   }
   .fab.hidden { display: none; }
 
   .fab-icon {
-    width: 48px;
-    height: 48px;
+    width: 300px;
+    height: 300px;
     object-fit: contain;
     user-select: none;
     pointer-events: none;
+    transition: opacity 0.3s ease;
+    filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.2));
   }
 
   /* Mascot animations */
@@ -71,33 +70,37 @@ export const STYLES = /* css */ `
     animation: bounce 0.6s ease-in-out infinite;
   }
   .fab[data-state="wave"] .fab-icon {
-    animation: wave 0.8s ease-in-out;
+    animation: wave-entrance 0.8s ease-in-out;
+  }
+
+  /* State transition flash — brief fade on image swap */
+  .fab.state-transition .fab-icon {
+    opacity: 0.6;
   }
 
   @keyframes float {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
+    50% { transform: translateY(-5px); }
   }
   @keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.1); opacity: 0.8; }
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(180, 190, 254, 0.4)); }
   }
   @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-3px) scale(1.03); }
   }
-  @keyframes wave {
-    0% { transform: rotate(0deg); }
-    25% { transform: rotate(15deg); }
-    50% { transform: rotate(-10deg); }
-    75% { transform: rotate(8deg); }
-    100% { transform: rotate(0deg); }
+  @keyframes wave-entrance {
+    0% { transform: scale(0.8) rotate(-10deg); opacity: 0.5; }
+    40% { transform: scale(1.1) rotate(8deg); opacity: 1; }
+    70% { transform: scale(0.95) rotate(-4deg); }
+    100% { transform: scale(1) rotate(0deg); }
   }
 
   /* ── Chat Panel ── */
   .panel {
     position: absolute;
-    bottom: 68px;
+    bottom: 260px;
     width: 360px;
     max-height: 520px;
     background: var(--ai-bg);

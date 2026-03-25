@@ -55,9 +55,9 @@ export class AiAssistantElement extends HTMLElement {
     this.render();
     this.bindEvents();
 
-    // Play wave animation on first appearance
-    this.setMascotState("wave");
-    setTimeout(() => this.setMascotState("idle"), 1200);
+    // Start in idle state — mascot is always visible
+    this.mascotState = "idle";
+    this.fab.setAttribute("data-state", "idle");
 
     this.dispatchEvent(new CustomEvent("assistant-ready"));
   }
@@ -329,24 +329,31 @@ export class AiAssistantElement extends HTMLElement {
   }
 
   private setMascotState(state: MascotState) {
+    if (this.mascotState === state) return;
     this.mascotState = state;
-    this.fab.setAttribute("data-state", state);
 
-    // Swap mascot image
-    const fabImg = this.fab.querySelector(".fab-icon") as HTMLImageElement | null;
-    if (fabImg) fabImg.src = this.mascotSrc(state);
+    // Crossfade: brief opacity dip during image swap
+    this.fab.classList.add("state-transition");
+    setTimeout(() => {
+      this.fab.setAttribute("data-state", state);
+      const fabImg = this.fab.querySelector(".fab-icon") as HTMLImageElement | null;
+      if (fabImg) fabImg.src = this.mascotSrc(state);
+
+      requestAnimationFrame(() => {
+        this.fab.classList.remove("state-transition");
+      });
+    }, 150);
   }
 
   private updatePanelVisibility() {
     if (this.isOpen) {
       this.panel.classList.remove("hidden");
       this.panel.classList.add("visible");
-      this.fab.classList.add("hidden");
+      // FAB stays visible — mascot is always on screen
       requestAnimationFrame(() => this.inputEl?.focus());
     } else {
       this.panel.classList.add("hidden");
       this.panel.classList.remove("visible");
-      this.fab.classList.remove("hidden");
     }
   }
 
