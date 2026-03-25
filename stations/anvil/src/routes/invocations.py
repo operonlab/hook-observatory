@@ -64,10 +64,10 @@ class InvocationListResponse(BaseModel):
 
 
 class AttributionItem(BaseModel):
-    invocation_id: str
     skill_name: str
     attribution_score: float
     attribution_reason: str
+    invocation_count: int = 1
 
 
 class AttributionResponse(BaseModel):
@@ -166,10 +166,11 @@ async def attribute_session(
     """Compute failure attribution for a session's failed invocations."""
     svc = AttributionService(db)
     attributions = await svc.attribute_session(session_id)
+    total_failures = sum(a.get("invocation_count", 1) for a in attributions)
     return AttributionResponse(
         session_id=session_id,
-        attributions=attributions,
-        total_failures=len(attributions),
+        attributions=[AttributionItem(**a) for a in attributions],
+        total_failures=total_failures,
     )
 
 
@@ -178,7 +179,7 @@ async def get_attribution(
     session_id: str,
     db: AsyncSession = Depends(get_session),
 ) -> AttributionResponse:
-    """Get existing attribution results for a session."""
+    """Get existing attribution results for a session (grouped by skill)."""
     result = await db.execute(
         select(Invocation).where(
             Invocation.session_id == session_id,
@@ -186,17 +187,21 @@ async def get_attribution(
         )
     )
     items = result.scalars().all()
-    attributions = [
-        AttributionItem(
-            invocation_id=i.id,
-            skill_name=i.skill_name,
-            attribution_score=i.attribution_score,
-            attribution_reason=i.attribution_reason or "",
-        )
-        for i in items
-    ]
+    # Group by skill
+    skill_map: dict[str, dict] = {}
+    for i in items:
+        name = i.skill_name
+        if name not in skill_map:
+            skill_map[name] = {
+                "skill_name": name,
+                "attribution_score": i.attribution_score,
+                "attribution_reason": i.attribution_reason or "",
+                "invocation_count": 0,
+            }
+        skill_map[name]["invocation_count"] += 1
+    attributions = [AttributionItem(**v) for v in skill_map.values()]
     return AttributionResponse(
         session_id=session_id,
         attributions=attributions,
-        total_failures=len(attributions),
+        total_failures=sum(a.invocation_count for a in attributions),
     )

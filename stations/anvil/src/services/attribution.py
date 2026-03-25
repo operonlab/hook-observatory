@@ -112,30 +112,30 @@ class AttributionService:
             for s in raw_scores.values():
                 s["score"] = round(s["score"] / total, 4)
 
-        # Write attribution back to invocations
+        # Write attribution back to invocations (per-skill, not per-invocation)
         attributions = []
-        for inv in failed:
-            name = inv.skill_name
-            attr = raw_scores.get(name, {"score": 0.0, "reason": ""})
-            await self.db.execute(
-                text("""
-                    UPDATE anvil.invocations
-                    SET attribution_score = :score,
-                        attribution_reason = :reason
-                    WHERE id = :id
-                """),
-                {
-                    "score": attr["score"],
-                    "reason": attr["reason"],
-                    "id": inv.id,
-                },
-            )
+        for name, attr in raw_scores.items():
+            skill_failed_ids = [inv.id for inv in failed if inv.skill_name == name]
+            for inv_id in skill_failed_ids:
+                await self.db.execute(
+                    text("""
+                        UPDATE anvil.invocations
+                        SET attribution_score = :score,
+                            attribution_reason = :reason
+                        WHERE id = :id
+                    """),
+                    {
+                        "score": attr["score"],
+                        "reason": attr["reason"],
+                        "id": inv_id,
+                    },
+                )
             attributions.append(
                 {
-                    "invocation_id": inv.id,
                     "skill_name": name,
                     "attribution_score": attr["score"],
                     "attribution_reason": attr["reason"],
+                    "invocation_count": len(skill_failed_ids),
                 }
             )
 

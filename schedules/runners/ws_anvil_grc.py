@@ -74,6 +74,18 @@ async def run() -> None:
         }
         log(f"summary: {json.dumps(summary)}")
 
+        # ── Refresh utility scores (Memento-Skills pattern) ───────────────
+        try:
+            from services.telemetry import TelemetryService
+
+            async with session_factory() as session:
+                svc = TelemetryService(session)
+                utility_count = await svc.refresh_all_utilities()
+                await session.commit()
+            log(f"Refreshed utility scores for {utility_count} skills")
+        except Exception as exc:
+            log(f"Utility refresh failed: {exc}")
+
     finally:
         await engine.dispose()
 
