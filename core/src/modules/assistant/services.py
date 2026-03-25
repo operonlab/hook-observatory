@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 LITELLM_BASE = "http://localhost:4000/v1"
 LITELLM_KEY = "sk-litellm-local-dev"
-CHAT_MODEL = "claude-haiku-4-5-20251001"
+CHAT_MODEL = "grok-4-fast"
 
 
 async def stream_chat(

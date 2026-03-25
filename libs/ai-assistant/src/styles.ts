@@ -23,8 +23,8 @@ export const STYLES = /* css */ `
     color: var(--ai-text);
   }
 
-  :host([position="bottom-right"]) { right: 0; bottom: 0; }
-  :host([position="bottom-left"]) { left: 0; bottom: 0; }
+  :host([position="bottom-right"]) { right: 20px; bottom: 20px; }
+  :host([position="bottom-left"]) { left: 20px; bottom: 20px; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -39,13 +39,13 @@ export const STYLES = /* css */ `
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.3s ease, filter 0.3s ease;
+    transition: transform 0.2s, filter 0.2s;
     position: relative;
     padding: 0;
   }
   .fab:hover {
-    transform: scale(1.05);
-    filter: drop-shadow(0 4px 16px rgba(180, 190, 254, 0.35));
+    transform: scale(1.12);
+    filter: drop-shadow(0 4px 12px rgba(180, 190, 254, 0.3));
   }
   .fab.hidden { display: none; }
 
@@ -56,7 +56,7 @@ export const STYLES = /* css */ `
     user-select: none;
     pointer-events: none;
     transition: opacity 0.3s ease;
-    filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.2));
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
   }
 
   /* Mascot animations */
@@ -100,7 +100,7 @@ export const STYLES = /* css */ `
   /* ── Chat Panel ── */
   .panel {
     position: absolute;
-    bottom: 260px;
+    bottom: 310px;
     width: 360px;
     max-height: 520px;
     background: var(--ai-bg);
@@ -191,8 +191,8 @@ export const STYLES = /* css */ `
     text-align: center;
   }
   .empty-state .mascot-large {
-    width: 80px;
-    height: 80px;
+    width: 300px;
+    height: 300px;
     object-fit: contain;
   }
   .empty-state p { font-size: 11px; color: var(--ai-text-dim); }
