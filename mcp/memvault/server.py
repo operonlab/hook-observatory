@@ -466,6 +466,66 @@ async def memvault_feedback(
     )
 
 
+@mcp.tool()
+@mcp_error_handler("Memvault")
+async def annotate_insight(
+    insight: str,
+    block_type: str = "knowledge",
+    tags: list[str] | None = None,
+    importance: float = 0.7,
+) -> str:
+    """即時標注知識洞見：直接建立 memory block，適合 realtime sideband 快速記錄。
+
+    Args:
+        insight: 知識內容（完整文字）
+        block_type: 區塊類型，可選 knowledge / decision / pattern / insight
+        tags: 額外標籤（自動附加 realtime-annotation）
+        importance: 重要度 0.0–1.0（預設 0.7）
+    """
+    import os
+
+    topic = insight[:15]
+    all_tags = list(tags or []) + ["realtime-annotation"]
+    api_url = os.environ.get("MEMVAULT_API_URL", "http://127.0.0.1:8801/api/memvault")
+
+    body: dict = {
+        "content": insight,
+        "block_type": block_type,
+        "tags": all_tags,
+        "topic": topic,
+        "importance": importance,
+        "source": "annotate_insight_tool",
+    }
+
+    import httpx as _httpx
+
+    try:
+        async with _httpx.AsyncClient(timeout=15) as http:
+            resp = await http.post(
+                f"{api_url}/blocks",
+                json=body,
+                params={"space_id": client.space_id},
+                headers={"X-Internal-Key": client._internal_key} if client._internal_key else {},
+            )
+            resp.raise_for_status()
+            result = resp.json()
+    except _httpx.ConnectError:
+        return f"Error: 無法連線至 Memvault API（{api_url}）"
+    except _httpx.HTTPStatusError as e:
+        return f"Error: API 回傳 {e.response.status_code} — {e.response.text[:200]}"
+    except _httpx.RequestError as e:
+        return f"Error: 請求失敗 — {type(e).__name__}: {e}"
+
+    return (
+        f"Insight annotated.\n"
+        f"Block ID: {result.get('id', '?')}\n"
+        f"Type: {result.get('block_type', block_type)}\n"
+        f"Topic: {result.get('topic', topic)}\n"
+        f"Tags: {', '.join(result.get('tags', all_tags))}\n"
+        f"Importance: {importance}"
+    )
+
+
 # ======================== Resources ========================
 
 
