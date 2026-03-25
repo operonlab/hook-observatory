@@ -1,5 +1,6 @@
 packages:
   - workbench
+  - libs/ai-assistant
   - stations/agent-vista/frontend
   - stations/hook-observatory/frontend
   - stations/video-edit/frontend

@@ -29,7 +29,8 @@
     "recharts": "^2.15.4",
     "remark-gfm": "^4.0.1",
     "three": "^0.183.1",
-    "zustand": "catalog:"
+    "zustand": "catalog:",
+    "@workshop/ai-assistant": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
