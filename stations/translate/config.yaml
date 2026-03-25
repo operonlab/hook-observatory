@@ -2,14 +2,23 @@ env_prefix: "TRANSLATE"
 port: 10205
 host: "127.0.0.1"
 
-# Provider cascade (priority order)
+# Provider cascade — priority depends on text length
+# Short text (< sentence_threshold chars): DeepL → Gemini → Google
+# Long text (>= sentence_threshold chars): Gemini → DeepL → Google
 providers:
   - name: deepl
     priority: 1
     enabled: true
-  - name: google
+  - name: gemini
     priority: 2
     enabled: true
+    model: "gemini-2.5-flash"
+  - name: google
+    priority: 3
+    enabled: true
+
+# Chars threshold: text >= this → Gemini first (sentences/articles)
+sentence_threshold: 80
 
 # Daily budget (USD)
 daily_budget_usd: 5.0

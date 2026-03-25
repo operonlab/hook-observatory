@@ -26,8 +26,8 @@ async def health():
     """Health check with provider status."""
     providers = workflow._ensure_providers()
     status = {}
-    for p in providers:
-        status[p.name] = await p.is_available()
+    for name, p in providers.items():
+        status[name] = await p.is_available()
     return {"status": "ok", "service": "translate", "port": config.port, "providers": status}
 
 

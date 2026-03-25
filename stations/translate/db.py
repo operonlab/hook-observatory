@@ -131,9 +131,7 @@ async def get_daily_cost() -> float:
     try:
         today = date.today()
         async with async_session() as session:
-            result = await session.execute(
-                select(UsageLog.cost_usd).where(UsageLog.date == today)
-            )
+            result = await session.execute(select(UsageLog.cost_usd).where(UsageLog.date == today))
             return sum(row[0] for row in result.all())
     except Exception:
         return 0.0
@@ -149,9 +147,7 @@ async def get_usage_stats() -> dict:
     try:
         today = date.today()
         async with async_session() as session:
-            result = await session.execute(
-                select(UsageLog).where(UsageLog.date == today)
-            )
+            result = await session.execute(select(UsageLog).where(UsageLog.date == today))
             stats = {}
             for row in result.scalars().all():
                 stats[row.provider] = {
@@ -159,8 +155,8 @@ async def get_usage_stats() -> dict:
                     "request_count": row.request_count,
                     "estimated_cost_usd": row.cost_usd,
                 }
-            # Ensure both providers appear
-            for pname in ("deepl", "google"):
+            # Ensure all providers appear
+            for pname in ("deepl", "gemini", "google"):
                 if pname not in stats:
                     stats[pname] = {
                         "char_count": 0,

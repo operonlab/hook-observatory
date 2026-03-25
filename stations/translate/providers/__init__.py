@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from .base import BaseTranslationProvider, TranslationResult
 from .deepl import DeepLProvider
+from .gemini import GeminiProvider
 from .google import GoogleProvider
 
 PROVIDERS: dict[str, type[BaseTranslationProvider]] = {
     "deepl": DeepLProvider,
+    "gemini": GeminiProvider,
     "google": GoogleProvider,
 }
 
@@ -24,6 +26,7 @@ __all__ = [
     "PROVIDERS",
     "BaseTranslationProvider",
     "DeepLProvider",
+    "GeminiProvider",
     "GoogleProvider",
     "TranslationResult",
     "get_provider",

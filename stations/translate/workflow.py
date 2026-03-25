@@ -19,24 +19,52 @@ logger = logging.getLogger(__name__)
 
 
 class TranslationWorkflow:
-    """Cache → DeepL → Google cascading translator."""
+    """Smart cascading translator.
+
+    Short text (< threshold): DeepL → Gemini → Google
+    Long text (>= threshold): Gemini → DeepL → Google
+    """
 
     def __init__(self):
-        self._providers: list[BaseTranslationProvider] = []
+        self._providers: dict[str, BaseTranslationProvider] = {}
 
-    def _ensure_providers(self) -> list[BaseTranslationProvider]:
-        """Lazy-init providers from config, sorted by priority."""
+    def _ensure_providers(self) -> dict[str, BaseTranslationProvider]:
+        """Lazy-init all enabled providers."""
         if not self._providers:
-            sorted_cfg = sorted(
-                [p for p in config.providers if p.get("enabled", True)],
-                key=lambda p: p.get("priority", 99),
-            )
-            for pcfg in sorted_cfg:
+            for pcfg in config.providers:
+                if not pcfg.get("enabled", True):
+                    continue
                 try:
-                    self._providers.append(get_provider(pcfg["name"]))
+                    self._providers[pcfg["name"]] = get_provider(pcfg["name"])
                 except ValueError as e:
                     logger.warning("Skip provider: %s", e)
         return self._providers
+
+    def _get_cascade(
+        self, text_len: int, preferred: str | None = None
+    ) -> list[BaseTranslationProvider]:
+        """Build provider cascade based on text length.
+
+        Short text (< sentence_threshold): DeepL → Gemini → Google  (precise terms)
+        Long text (>= sentence_threshold): Gemini → DeepL → Google  (contextual)
+        """
+        providers = self._ensure_providers()
+        if not providers:
+            return []
+
+        if preferred and preferred in providers:
+            # Preferred first, then the rest in smart order
+            rest = [p for name, p in providers.items() if name != preferred]
+            return [providers[preferred]] + rest
+
+        if text_len >= config.sentence_threshold:
+            # Sentences/articles: Gemini first (better context understanding)
+            order = ["gemini", "deepl", "google"]
+        else:
+            # Short text: DeepL first (precise translation)
+            order = ["deepl", "gemini", "google"]
+
+        return [providers[n] for n in order if n in providers]
 
     async def translate(
         self,
@@ -45,7 +73,7 @@ class TranslationWorkflow:
         target_lang: str = "zh-TW",
         preferred_provider: str | None = None,
     ) -> TranslateResponse:
-        """Execute translation with cache check + cascading fallback."""
+        """Execute translation with cache check + smart cascading."""
         source_lang = normalize_lang(source_lang)
         target_lang = normalize_lang(target_lang)
 
@@ -64,19 +92,10 @@ class TranslationWorkflow:
 
         # 2. Budget check
         if await translate_db.is_budget_exceeded():
-            raise TranslationError(
-                f"Daily budget ${config.daily_budget_usd:.2f} exceeded"
-            )
+            raise TranslationError(f"Daily budget ${config.daily_budget_usd:.2f} exceeded")
 
-        # 3. Provider cascade
-        providers = self._ensure_providers()
-
-        # If preferred provider requested, try it first
-        if preferred_provider:
-            providers = sorted(
-                providers,
-                key=lambda p: 0 if p.name == preferred_provider else 1,
-            )
+        # 3. Smart provider cascade
+        providers = self._get_cascade(len(text), preferred_provider)
 
         errors: list[str] = []
         for provider in providers:
@@ -89,8 +108,12 @@ class TranslationWorkflow:
 
                 # Write to cache + record usage
                 await translate_db.cache_set(
-                    text, source_lang, target_lang,
-                    result.text, result.provider, result.estimated_cost_usd,
+                    text,
+                    source_lang,
+                    target_lang,
+                    result.text,
+                    result.provider,
+                    result.estimated_cost_usd,
                 )
                 await translate_db.record_usage(
                     result.provider, result.char_count, result.estimated_cost_usd

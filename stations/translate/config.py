@@ -25,12 +25,18 @@ class Config:
         "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop",
     )
 
+    # Sentence threshold: text >= this chars → Gemini first
+    sentence_threshold: int = _yaml.get("sentence_threshold", 80)
+
     # API keys from env only (never in YAML)
     deepl_api_key: str = field(
         default_factory=lambda: os.environ.get("TRANSLATE_DEEPL_API_KEY", "")
     )
     google_api_key: str = field(
         default_factory=lambda: os.environ.get("TRANSLATE_GOOGLE_API_KEY", "")
+    )
+    gemini_api_key: str = field(
+        default_factory=lambda: os.environ.get("TRANSLATE_GEMINI_API_KEY", "")
     )
 
     # Provider config from YAML
