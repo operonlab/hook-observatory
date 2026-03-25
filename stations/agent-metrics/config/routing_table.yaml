@@ -2,14 +2,14 @@
 # Tiers: budget (minimize cost), primary (balanced), power (maximize quality)
 
 cli_routing:
-  code_generation:   { primary: claude, budget: gemini, power: claude }
+  code_generation:   { primary: codex,  budget: gemini, power: claude }
   code_review:       { primary: claude, budget: codex,  power: claude }
   debugging:         { primary: claude, budget: gemini, power: claude }
   refactoring:       { primary: codex,  budget: codex,  power: claude }
   architecture:      { primary: claude, budget: claude, power: claude }
   testing:           { primary: codex,  budget: codex,  power: claude }
   long_doc_analysis: { primary: gemini, budget: gemini, power: gemini }
-  frontend:          { primary: claude, budget: gemini, power: claude }
+  frontend:          { primary: gemini, budget: gemini, power: claude }
   backend:           { primary: codex,  budget: codex,  power: claude }
   security:          { primary: claude, budget: claude, power: claude }
   research:          { primary: gemini, budget: gemini, power: gemini }
