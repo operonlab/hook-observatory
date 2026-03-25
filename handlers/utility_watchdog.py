@@ -61,14 +61,15 @@ def _handle_session_end(raw_input: str) -> HookResult:
         # Spawn detached background process to check utility
         python = os.path.expanduser("~/.local/bin/python3")
         log_file = open(_DATA_DIR / "watchdog.log", "a")
-        subprocess.Popen(
+        subprocess.Popen(  # noqa: S603
             [python, _CHECK_SCRIPT, session_id],
             stdout=log_file,
             stderr=log_file,
             start_new_session=True,
         )
-    except Exception:
-        pass  # fail-open
+        log_file.close()  # Parent releases fd; child inherits it
+    except Exception as exc:
+        log.debug("utility_watchdog session_end failed (fail-open): %s", exc)
 
     return ALLOW
 
@@ -86,6 +87,11 @@ def _handle_session_start(raw_input: str) -> HookResult:
 
         # 1. Utility proposals
         if _PROPOSALS_FILE.exists():
+            # Size cap: if proposals file is too large, truncate
+            if _PROPOSALS_FILE.stat().st_size > 100_000:
+                _PROPOSALS_FILE.write_text("")
+                return ALLOW
+
             skill_counts: dict[str, list[dict]] = {}
             lines = _PROPOSALS_FILE.read_text().strip().split("\n")
             for line in lines:
@@ -112,8 +118,23 @@ def _handle_session_start(raw_input: str) -> HookResult:
                     f"{', '.join(parts)}. Consider /skill-optimizer."
                 )
 
+            # Clean up: remove consumed proposals (skills that have been alerted)
+            if _PROPOSALS_FILE.exists() and flagged:
+                remaining = []
+                for _name, entries in skill_counts.items():
+                    if len(entries) < _PROPOSAL_THRESHOLD:
+                        remaining.extend(entries)
+                _PROPOSALS_FILE.write_text(
+                    "\n".join(json.dumps(e) for e in remaining) + ("\n" if remaining else "")
+                )
+
         # 2. CreateOnMiss proposals
         if _CREATE_PROPOSALS_FILE.exists():
+            # Size cap: if create-proposals file is too large, truncate
+            if _CREATE_PROPOSALS_FILE.stat().st_size > 100_000:
+                _CREATE_PROPOSALS_FILE.write_text("")
+                return ALLOW
+
             create_lines = [
                 line
                 for line in _CREATE_PROPOSALS_FILE.read_text().strip().split("\n")
@@ -124,11 +145,13 @@ def _handle_session_start(raw_input: str) -> HookResult:
                     f"[CreateOnMiss] {len(create_lines)} sessions completed"
                     " without skills. Consider /create-skill."
                 )
+                # Clean up: remove consumed create proposals
+                _CREATE_PROPOSALS_FILE.write_text("")
 
         if messages:
             return message(" | ".join(messages))
 
-    except Exception:
-        pass  # fail-open
+    except Exception as exc:
+        log.debug("utility_watchdog session_start failed (fail-open): %s", exc)
 
     return ALLOW
