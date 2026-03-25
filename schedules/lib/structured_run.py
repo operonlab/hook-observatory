@@ -101,6 +101,9 @@ def _try_summarize(text: str, model: str) -> str | None:
     except (KeyError, IndexError, json.JSONDecodeError):
         # 回應格式異常 → 靜默略過
         return None
+    except Exception:
+        # 任何未預期的錯誤 → 靜默略過，保證不影響主流程
+        return None
 
 
 # ── 核心函式 ──────────────────────────────────────────────────────────────────
@@ -140,9 +143,21 @@ def structured_run(
             text=True,
             timeout=timeout,
         )
-        stdout = proc.stdout or ""
-        stderr = proc.stderr or ""
         returncode = proc.returncode
+        # capture_stdout=False 時 subprocess 不捕獲，獨立保證空字串
+        if not capture_stdout:
+            stdout = ""
+            stderr = ""
+        else:
+            # subprocess.run(text=True) 應回傳 str，但防禦性確保型別
+            raw_out = proc.stdout or ""
+            raw_err = proc.stderr or ""
+            stdout = (
+                raw_out if isinstance(raw_out, str) else raw_out.decode("utf-8", errors="replace")
+            )
+            stderr = (
+                raw_err if isinstance(raw_err, str) else raw_err.decode("utf-8", errors="replace")
+            )
     except subprocess.TimeoutExpired:
         # 超時：視為失敗，傳回特殊 returncode
         duration = time.monotonic() - t0
@@ -186,9 +201,7 @@ def _print_report(result: RunResult, label: str) -> None:
     tag = f"[{label}] " if label else ""
 
     print(
-        f"{tag}structured_run {ts} "
-        f"duration={result.duration_seconds:.1f}s "
-        f"status={status_str}",
+        f"{tag}structured_run {ts} duration={result.duration_seconds:.1f}s status={status_str}",
         flush=True,
     )
 
