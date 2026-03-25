@@ -34,6 +34,7 @@ from . import (
     session_namer,
     session_pipeline,
     skill_security,
+    utility_watchdog,
     verify_commit,
     verify_completion,
     voice_notify,
@@ -90,6 +91,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "SessionEnd": [
         (None, session_pipeline.handle),
+        (None, utility_watchdog.handle),
         (None, attitude_signal.handle),
         (None, observability.handle),
     ],
@@ -107,6 +109,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, claudemd_suggest.handle),
         (None, cleanup_versions.handle),
         (None, pm_autopilot.handle),
+        (None, utility_watchdog.handle),
         # context_supervisor: disabled
         (None, observability.handle),
     ],
