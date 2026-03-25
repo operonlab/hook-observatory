@@ -9,6 +9,7 @@ from classify import classify
 from db import Invocation, get_session
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
+from services.attribution import AttributionService
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +61,19 @@ class InvocationListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AttributionItem(BaseModel):
+    invocation_id: str
+    skill_name: str
+    attribution_score: float
+    attribution_reason: str
+
+
+class AttributionResponse(BaseModel):
+    session_id: str
+    attributions: list[AttributionItem]
+    total_failures: int
 
 
 # ---------------------------------------------------------------------------
@@ -142,3 +156,47 @@ async def list_invocations(
     items = [InvocationResponse.model_validate(i) for i in result.scalars().all()]
 
     return InvocationListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.post("/invocations/attribute/{session_id}")
+async def attribute_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_session),
+) -> AttributionResponse:
+    """Compute failure attribution for a session's failed invocations."""
+    svc = AttributionService(db)
+    attributions = await svc.attribute_session(session_id)
+    return AttributionResponse(
+        session_id=session_id,
+        attributions=attributions,
+        total_failures=len(attributions),
+    )
+
+
+@router.get("/invocations/attribution/{session_id}")
+async def get_attribution(
+    session_id: str,
+    db: AsyncSession = Depends(get_session),
+) -> AttributionResponse:
+    """Get existing attribution results for a session."""
+    result = await db.execute(
+        select(Invocation).where(
+            Invocation.session_id == session_id,
+            Invocation.attribution_score.isnot(None),
+        )
+    )
+    items = result.scalars().all()
+    attributions = [
+        AttributionItem(
+            invocation_id=i.id,
+            skill_name=i.skill_name,
+            attribution_score=i.attribution_score,
+            attribution_reason=i.attribution_reason or "",
+        )
+        for i in items
+    ]
+    return AttributionResponse(
+        session_id=session_id,
+        attributions=attributions,
+        total_failures=len(attributions),
+    )
