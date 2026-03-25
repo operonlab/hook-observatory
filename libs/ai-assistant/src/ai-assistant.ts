@@ -9,13 +9,24 @@
  *   <ai-assistant mode="blog" api-url="/api/assistant/chat" />
  */
 
-import { renderMarkdown } from "./markdown";
 import { startStream } from "./stream-handler";
 import { STYLES } from "./styles";
 import type { ChatMessage, MascotState } from "./types";
 
-const DEFAULT_GREETING = "有什麼我可以幫忙的嗎？";
+const DEFAULT_GREETING = "有什麼可以幫忙的嗎？";
 const DEFAULT_MASCOT_BASE = "/static/mascot";
+const PHRASE_INTERVAL = 6000;
+
+const IDLE_PHRASES = [
+  "有什麼可以幫忙的嗎？",
+  "今天想做什麼呢？",
+  "需要查什麼資料嗎？",
+  "隨時可以問我問題喔！",
+  "正在待命中...",
+  "要不要看看今天的簡報？",
+  "有新的想法想記錄嗎？",
+  "我可以幫你搜尋記憶庫！",
+];
 
 let msgIdCounter = 0;
 
@@ -33,18 +44,21 @@ export class AiAssistantElement extends HTMLElement {
 
   private shadow: ShadowRoot;
   private messages: ChatMessage[] = [];
-  private isOpen = false;
   private isStreaming = false;
   private mascotState: MascotState = "idle";
   private streamingContent = "";
   private abortController: AbortController | null = null;
+  private phraseTimer: ReturnType<typeof setInterval> | null = null;
+  private isDragging = false;
+  private dragOffset = { x: 0, y: 0 };
 
   // DOM refs
-  private fab!: HTMLButtonElement;
-  private panel!: HTMLDivElement;
-  private messagesEl!: HTMLDivElement;
-  private inputEl!: HTMLInputElement;
-  private sendBtn!: HTMLButtonElement;
+  private mascotEl!: HTMLDivElement;
+  private speechTextEl!: HTMLSpanElement;
+  private quickInputWrap!: HTMLDivElement;
+  private quickInputEl!: HTMLInputElement;
+  private quickSendBtn!: HTMLButtonElement;
+  private chatToggleBtn!: HTMLButtonElement;
 
   constructor() {
     super();
@@ -54,54 +68,58 @@ export class AiAssistantElement extends HTMLElement {
   connectedCallback() {
     this.render();
     this.bindEvents();
-
-    // Start in idle state — mascot visible immediately
     this.setMascotState("idle");
-
+    this.startPhraseRotation();
     this.dispatchEvent(new CustomEvent("assistant-ready"));
   }
 
   disconnectedCallback() {
     this.abortController?.abort();
-  }
-
-  attributeChangedCallback(name: string, _old: string | null, val: string | null) {
-    if (name === "position") {
-      // Position is handled by :host CSS
-    } else if (name === "mascot-emoji") {
-      this.updateMascotDisplay();
-    }
+    if (this.phraseTimer) clearInterval(this.phraseTimer);
   }
 
   // ── Public API ──
 
   say(text: string) {
-    this.addMessage("assistant", text);
+    this.setSpeechText(text);
   }
 
   open() {
-    this.isOpen = true;
-    this.updatePanelVisibility();
-    this.inputEl?.focus();
-    this.dispatchEvent(new CustomEvent("assistant-open"));
+    this.showInput();
   }
 
   close() {
-    this.isOpen = false;
-    this.updatePanelVisibility();
-    this.dispatchEvent(new CustomEvent("assistant-close"));
+    this.hideInput();
   }
 
   toggle() {
-    if (this.isOpen) this.close();
-    else this.open();
+    this.toggleInput();
+  }
+
+  private toggleInput() {
+    const isHidden = this.quickInputWrap.classList.contains("hidden");
+    if (isHidden) this.showInput();
+    else this.hideInput();
+  }
+
+  private showInput() {
+    this.quickInputWrap.classList.remove("hidden");
+    this.chatToggleBtn.classList.add("active");
+    requestAnimationFrame(() => this.quickInputEl?.focus());
+    this.dispatchEvent(new CustomEvent("assistant-open"));
+  }
+
+  private hideInput() {
+    this.quickInputWrap.classList.add("hidden");
+    this.chatToggleBtn.classList.remove("active");
+    this.dispatchEvent(new CustomEvent("assistant-close"));
   }
 
   setModule(name: string) {
     this.setAttribute("module", name);
   }
 
-  // ── Internal ──
+  // ── Internal getters ──
 
   private get apiUrl(): string {
     return this.getAttribute("api-url") ?? "/api/assistant/chat";
@@ -127,87 +145,169 @@ export class AiAssistantElement extends HTMLElement {
     return `${this.mascotBase}/${state}.png`;
   }
 
+  // ── Render ──
+
   private render() {
     const style = document.createElement("style");
     style.textContent = STYLES;
 
-    const container = document.createElement("div");
-    container.innerHTML = `
-      <button class="fab" data-state="idle" aria-label="開啟 AI 助手">
-        <img class="fab-icon" src="${this.mascotSrc("idle")}" alt="AI 助手" />
-      </button>
+    const root = document.createElement("div");
+    root.className = "assistant-root";
+    root.innerHTML = `
+      <div class="speech-bubble">
+        <span class="speech-text">${this.greeting}</span>
+      </div>
 
-      <div class="panel hidden" role="dialog" aria-label="AI 助手對話">
-        <div class="panel-header">
-          <div class="panel-title">
-            <img class="mascot-small" src="${this.mascotSrc("idle")}" alt="" />
-            <span>AI 助手</span>
-          </div>
-          <button class="close-btn" aria-label="關閉">✕</button>
+      <div class="mascot-row">
+        <div class="mascot" data-state="idle">
+          <img class="mascot-img" src="${this.mascotSrc("idle")}" alt="AI 助手" />
         </div>
+        <div class="action-buttons">
+          <button class="action-btn chat-toggle" aria-label="展開輸入框" title="展開輸入框">⋯</button>
+        </div>
+      </div>
 
-        <div class="messages">
-          <div class="empty-state">
-            <img class="mascot-large" src="${this.mascotSrc("wave")}" alt="AI 助手" />
-            <p>${this.greeting}</p>
-          </div>
-        </div>
-
-        <div class="input-area">
-          <input type="text" placeholder="輸入訊息..." aria-label="訊息輸入" />
-          <button class="send-btn" disabled aria-label="送出">↑</button>
-        </div>
+      <div class="quick-input hidden">
+        <input type="text" placeholder="輸入問題..." aria-label="快速提問" />
+        <button class="send-btn" disabled aria-label="送出">↑</button>
       </div>
     `;
 
     this.shadow.appendChild(style);
-    this.shadow.appendChild(container);
+    this.shadow.appendChild(root);
 
     // Cache DOM refs
-    this.fab = this.shadow.querySelector(".fab")!;
-    this.panel = this.shadow.querySelector(".panel")!;
-    this.messagesEl = this.shadow.querySelector(".messages")!;
-    this.inputEl = this.shadow.querySelector("input")!;
-    this.sendBtn = this.shadow.querySelector(".send-btn")!;
+    this.mascotEl = this.shadow.querySelector(".mascot")!;
+    this.speechTextEl = this.shadow.querySelector(".speech-text")!;
+    this.quickInputWrap = this.shadow.querySelector(".quick-input")!;
+    this.quickInputEl = this.shadow.querySelector(".quick-input input")!;
+    this.quickSendBtn = this.shadow.querySelector(".quick-input .send-btn")!;
+    this.chatToggleBtn = this.shadow.querySelector(".chat-toggle")!;
   }
 
+  // ── Events ──
+
   private bindEvents() {
-    this.fab.addEventListener("click", () => this.toggle());
+    // ⋯ button → toggle input box visibility
+    this.chatToggleBtn.addEventListener("click", () => this.toggleInput());
 
-    this.shadow.querySelector(".close-btn")!.addEventListener("click", () => this.close());
-
-    this.inputEl.addEventListener("input", () => {
-      const hasText = this.inputEl.value.trim().length > 0;
-      this.sendBtn.disabled = !hasText;
-      this.sendBtn.classList.toggle("active", hasText);
+    // Click mascot → change phrase (use pointerup to avoid drag conflict)
+    let mascotPointerStart = { x: 0, y: 0 };
+    this.mascotEl.addEventListener("pointerdown", (e) => {
+      mascotPointerStart = { x: e.clientX, y: e.clientY };
     });
-
-    this.inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        this.handleSend();
+    this.mascotEl.addEventListener("pointerup", (e) => {
+      const dx = Math.abs(e.clientX - mascotPointerStart.x);
+      const dy = Math.abs(e.clientY - mascotPointerStart.y);
+      if (dx < 5 && dy < 5 && this.mascotState === "idle") {
+        const phrase = IDLE_PHRASES[Math.floor(Math.random() * IDLE_PHRASES.length)];
+        this.setSpeechText(phrase);
       }
     });
 
-    this.sendBtn.addEventListener("click", () => this.handleSend());
+    // Quick input
+    this.bindInputPair(this.quickInputEl, this.quickSendBtn);
+
+    // Drag support
+    this.initDrag();
 
     // Keyboard shortcut: Cmd/Ctrl+Shift+A
     document.addEventListener("keydown", (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "a") {
         e.preventDefault();
-        this.toggle();
+        this.toggleInput();
       }
     });
   }
 
-  private handleSend() {
-    const text = this.inputEl.value.trim();
+  private initDrag() {
+    const host = this as HTMLElement;
+    let startX = 0;
+    let startY = 0;
+    let pointerId = -1;
+    let captured = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.composedPath()[0] as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "BUTTON") return;
+
+      this.isDragging = false;
+      captured = false;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = host.getBoundingClientRect();
+      this.dragOffset.x = e.clientX - rect.left;
+      this.dragOffset.y = e.clientY - rect.top;
+
+      // Don't capture yet — let click events flow normally
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!this.isDragging && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+
+      // First real movement — now capture
+      if (!captured) {
+        try { host.setPointerCapture(pointerId); } catch { /* ok */ }
+        captured = true;
+      }
+      this.isDragging = true;
+
+      host.style.position = "fixed";
+      host.style.left = `${e.clientX - this.dragOffset.x}px`;
+      host.style.top = `${e.clientY - this.dragOffset.y}px`;
+      host.style.right = "auto";
+      host.style.bottom = "auto";
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      if (captured) {
+        try { host.releasePointerCapture(pointerId); } catch { /* ok */ }
+      }
+      if (this.isDragging) {
+        setTimeout(() => { this.isDragging = false; }, 50);
+      }
+    };
+
+    host.addEventListener("pointerdown", onPointerDown);
+  }
+
+  private bindInputPair(input: HTMLInputElement, btn: HTMLButtonElement) {
+    input.addEventListener("input", () => {
+      const hasText = input.value.trim().length > 0;
+      btn.disabled = !hasText;
+      btn.classList.toggle("active", hasText);
+    });
+
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        this.handleSend(input, btn);
+      }
+    });
+
+    btn.addEventListener("click", () => this.handleSend(input, btn));
+  }
+
+  // ── Send ──
+
+  private handleSend(input: HTMLInputElement, btn: HTMLButtonElement) {
+    const text = input.value.trim();
     if (!text || this.isStreaming) return;
 
-    this.addMessage("user", text);
-    this.inputEl.value = "";
-    this.sendBtn.disabled = true;
-    this.sendBtn.classList.remove("active");
+    this.messages.push({ id: `msg-${Date.now()}`, role: "user", content: text, timestamp: Date.now() });
+    input.value = "";
+    btn.disabled = true;
+    btn.classList.remove("active");
 
     this.sendToApi(text);
   }
@@ -216,14 +316,7 @@ export class AiAssistantElement extends HTMLElement {
     this.isStreaming = true;
     this.streamingContent = "";
     this.setMascotState("thinking");
-
-    // Create a placeholder assistant message
-    const assistantMsgId = this.addMessage("assistant", "");
-    const bubbleEl = this.shadow.querySelector(`[data-msg-id="${assistantMsgId}"] .msg-bubble`);
-
-    if (bubbleEl) {
-      bubbleEl.innerHTML = '<span class="streaming-dot"></span>';
-    }
+    this.setSpeechText("思考中...");
 
     const body: Record<string, unknown> = {
       message,
@@ -236,6 +329,7 @@ export class AiAssistantElement extends HTMLElement {
     this.abortController = startStream(this.apiUrl, body, {
       onThinking: () => {
         this.setMascotState("thinking");
+        this.setSpeechText("思考中...");
       },
 
       onContent: (text, isDelta) => {
@@ -245,18 +339,17 @@ export class AiAssistantElement extends HTMLElement {
           this.streamingContent = text;
         }
         this.setMascotState("speaking");
-
-        if (bubbleEl) {
-          bubbleEl.innerHTML = renderMarkdown(this.streamingContent);
-          this.scrollToBottom();
-        }
+        // Show streaming content in speech bubble (truncate for display)
+        const preview =
+          this.streamingContent.length > 60
+            ? this.streamingContent.slice(0, 60) + "..."
+            : this.streamingContent;
+        this.setSpeechText(preview);
       },
 
       onError: (msg) => {
         this.setMascotState("idle");
-        if (bubbleEl) {
-          bubbleEl.innerHTML = `<em style="opacity:0.6">${msg}</em>`;
-        }
+        this.setSpeechText(msg);
       },
 
       onDone: () => {
@@ -264,106 +357,83 @@ export class AiAssistantElement extends HTMLElement {
         this.setMascotState("idle");
         this.abortController = null;
 
-        // Update the message content in our model
-        const assistantMsg = this.messages.find((m) => m.id === assistantMsgId);
-        if (assistantMsg) {
-          assistantMsg.content = this.streamingContent;
+        // Show final answer in speech bubble (truncated)
+        if (this.streamingContent) {
+          const final =
+            this.streamingContent.length > 80
+              ? this.streamingContent.slice(0, 80) + "..."
+              : this.streamingContent;
+          this.setSpeechText(final);
+          this.messages.push({
+            id: `msg-${Date.now()}`,
+            role: "assistant",
+            content: this.streamingContent,
+            timestamp: Date.now(),
+          });
         }
 
-        // Final render with markdown
-        if (bubbleEl && this.streamingContent) {
-          bubbleEl.innerHTML = renderMarkdown(this.streamingContent);
-        }
+        // Resume phrase rotation after 10s
+        setTimeout(() => this.startPhraseRotation(), 10000);
 
         this.dispatchEvent(
           new CustomEvent("assistant-message", {
             detail: { content: this.streamingContent },
           }),
         );
-
-        this.scrollToBottom();
       },
     });
   }
 
-  private addMessage(role: "user" | "assistant", content: string): string {
-    const id = `msg-${Date.now()}-${++msgIdCounter}`;
-    const msg: ChatMessage = { id, role, content, timestamp: Date.now() };
-    this.messages.push(msg);
-
-    // Remove empty state
-    const emptyState = this.messagesEl.querySelector(".empty-state");
-    if (emptyState) emptyState.remove();
-
-    // Create DOM
-    const msgEl = document.createElement("div");
-    msgEl.className = `msg ${role}`;
-    msgEl.setAttribute("data-msg-id", id);
-
-    const bubble = document.createElement("div");
-    bubble.className = "msg-bubble";
-    if (content) {
-      bubble.innerHTML = role === "assistant" ? renderMarkdown(content) : this.escapeHtml(content);
-    }
-
-    const time = document.createElement("span");
-    time.className = "msg-time";
-    time.textContent = new Date().toLocaleTimeString("zh-TW", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    msgEl.appendChild(bubble);
-    msgEl.appendChild(time);
-    this.messagesEl.appendChild(msgEl);
-    this.scrollToBottom();
-
-    return id;
-  }
-
-  private scrollToBottom() {
-    requestAnimationFrame(() => {
-      this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
-    });
-  }
+  // ── Mascot State ──
 
   private setMascotState(state: MascotState) {
     if (this.mascotState === state) return;
     this.mascotState = state;
 
-    // Crossfade: brief opacity dip during image swap
-    this.fab.classList.add("state-transition");
+    if (state !== "idle") {
+      this.stopPhraseRotation();
+    }
+
+    this.mascotEl.classList.add("state-transition");
     setTimeout(() => {
-      this.fab.setAttribute("data-state", state);
-      const fabImg = this.fab.querySelector(".fab-icon") as HTMLImageElement | null;
-      if (fabImg) fabImg.src = this.mascotSrc(state);
+      this.mascotEl.setAttribute("data-state", state);
+      const img = this.mascotEl.querySelector(
+        ".mascot-img",
+      ) as HTMLImageElement | null;
+      if (img) img.src = this.mascotSrc(state);
 
       requestAnimationFrame(() => {
-        this.fab.classList.remove("state-transition");
+        this.mascotEl.classList.remove("state-transition");
       });
     }, 150);
   }
 
-  private updatePanelVisibility() {
-    if (this.isOpen) {
-      this.panel.classList.remove("hidden");
-      this.panel.classList.add("visible");
-      // FAB stays visible — mascot is always on screen
-      requestAnimationFrame(() => this.inputEl?.focus());
-    } else {
-      this.panel.classList.add("hidden");
-      this.panel.classList.remove("visible");
-    }
+  // ── Speech Bubble ──
+
+  private setSpeechText(text: string) {
+    if (!this.speechTextEl) return;
+    this.speechTextEl.style.opacity = "0";
+    setTimeout(() => {
+      this.speechTextEl.textContent = text;
+      this.speechTextEl.style.opacity = "1";
+    }, 200);
   }
 
-  private updateMascotDisplay() {
-    const fabImg = this.shadow.querySelector(".fab-icon") as HTMLImageElement | null;
-    const panelImg = this.shadow.querySelector(".mascot-small") as HTMLImageElement | null;
-    const emptyImg = this.shadow.querySelector(".mascot-large") as HTMLImageElement | null;
+  private startPhraseRotation() {
+    this.stopPhraseRotation();
+    this.phraseTimer = setInterval(() => {
+      if (this.mascotState !== "idle") return;
+      const phrase =
+        IDLE_PHRASES[Math.floor(Math.random() * IDLE_PHRASES.length)];
+      this.setSpeechText(phrase);
+    }, PHRASE_INTERVAL);
+  }
 
-    if (fabImg) fabImg.src = this.mascotSrc(this.mascotState);
-    if (panelImg) panelImg.src = this.mascotSrc("idle");
-    if (emptyImg) emptyImg.src = this.mascotSrc("wave");
+  private stopPhraseRotation() {
+    if (this.phraseTimer) {
+      clearInterval(this.phraseTimer);
+      this.phraseTimer = null;
+    }
   }
 
   private escapeHtml(text: string): string {
