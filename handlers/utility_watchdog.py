@@ -82,41 +82,51 @@ _PROPOSAL_THRESHOLD = 3  # need N+ proposals for same skill before alerting
 
 def _handle_session_start(raw_input: str) -> HookResult:
     try:
-        if not _PROPOSALS_FILE.exists():
-            return ALLOW
+        messages = []
 
-        # Count proposals per skill
-        skill_counts: dict[str, list[dict]] = {}
-        lines = _PROPOSALS_FILE.read_text().strip().split("\n")
-        for line in lines:
-            if not line.strip():
-                continue
-            try:
-                entry = json.loads(line)
-                name = entry.get("skill_name", "")
-                if name:
-                    skill_counts.setdefault(name, []).append(entry)
-            except json.JSONDecodeError:
-                continue
+        # 1. Utility proposals
+        if _PROPOSALS_FILE.exists():
+            skill_counts: dict[str, list[dict]] = {}
+            lines = _PROPOSALS_FILE.read_text().strip().split("\n")
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    name = entry.get("skill_name", "")
+                    if name:
+                        skill_counts.setdefault(name, []).append(entry)
+                except json.JSONDecodeError:
+                    continue
 
-        # Filter skills with enough proposals
-        flagged = {}
-        for name, entries in skill_counts.items():
-            if len(entries) >= _PROPOSAL_THRESHOLD:
-                # Use most recent utility score
-                latest = entries[-1]
-                flagged[name] = latest.get("utility", "?")
+            flagged = {}
+            for name, entries in skill_counts.items():
+                if len(entries) >= _PROPOSAL_THRESHOLD:
+                    latest = entries[-1]
+                    flagged[name] = latest.get("utility", "?")
 
-        if not flagged:
-            return ALLOW
+            if flagged:
+                parts = [f"{name}({score})" for name, score in flagged.items()]
+                messages.append(
+                    f"[Utility Watchdog] {len(flagged)} skills below threshold: "
+                    f"{', '.join(parts)}. Consider /skill-optimizer."
+                )
 
-        # Build reminder message
-        parts = [f"{name}({score})" for name, score in flagged.items()]
-        msg = (
-            f"[Utility Watchdog] {len(flagged)} skills below threshold: "
-            f"{', '.join(parts)}. Consider /skill-optimizer."
-        )
-        return message(msg)
+        # 2. CreateOnMiss proposals
+        if _CREATE_PROPOSALS_FILE.exists():
+            create_lines = [
+                line
+                for line in _CREATE_PROPOSALS_FILE.read_text().strip().split("\n")
+                if line.strip()
+            ]
+            if len(create_lines) >= 5:
+                messages.append(
+                    f"[CreateOnMiss] {len(create_lines)} sessions completed"
+                    " without skills. Consider /create-skill."
+                )
+
+        if messages:
+            return message(" | ".join(messages))
 
     except Exception:
         pass  # fail-open
