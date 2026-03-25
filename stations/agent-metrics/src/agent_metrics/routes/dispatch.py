@@ -43,6 +43,9 @@ async def run_dispatch(body: DispatchRequest) -> dict:
     if body.pattern:
         analysis.recommended_pattern = body.pattern.value
 
+    # Honor explicit CLI mentions in task description
+    explicit_clis = me.detect_explicit_clis(body.task)
+
     run = me.MaestroRun(
         id=me.generate_run_id(),
         name=me.generate_run_name(),
@@ -59,7 +62,9 @@ async def run_dispatch(body: DispatchRequest) -> dict:
     cwd = body.cwd or None
 
     if analysis.recommended_pattern == "solo":
-        cli = me.route_to_cli(analysis.categories[0], body.budget.value)
+        cli = explicit_clis[0] if explicit_clis else me.route_to_cli(
+            analysis.categories[0], body.budget.value
+        )
         result = await asyncio.to_thread(
             me.dispatch_agent, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
         )
@@ -79,7 +84,7 @@ async def run_dispatch(body: DispatchRequest) -> dict:
             if result.status == "failed":
                 break
     elif analysis.recommended_pattern == "race":
-        clis = ["claude", "codex", "gemini"]
+        clis = explicit_clis if len(explicit_clis) >= 2 else ["claude", "codex", "gemini"]
         tasks = [
             asyncio.to_thread(
                 me.dispatch_agent, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
@@ -93,7 +98,9 @@ async def run_dispatch(body: DispatchRequest) -> dict:
             else:
                 run.results.append(asdict(r))
     else:
-        cli = me.route_to_cli(analysis.categories[0], body.budget.value)
+        cli = explicit_clis[0] if explicit_clis else me.route_to_cli(
+            analysis.categories[0], body.budget.value
+        )
         result = await asyncio.to_thread(
             me.dispatch_agent, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
         )

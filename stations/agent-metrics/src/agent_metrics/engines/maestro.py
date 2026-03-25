@@ -173,9 +173,9 @@ def analyze_task(description: str, budget: str = "balanced") -> TaskAnalysis:
                 re.findall(r"\b" + re.escape(w) + r"\b", desc_lower, re.IGNORECASE)
             )
 
-    if word_count > 50 or multi_signals >= 3:
+    if word_count > 30 or multi_signals >= 2:
         analysis.complexity = "complex"
-    elif word_count > 20 or multi_signals >= 1:
+    elif word_count > 12 or multi_signals >= 1:
         analysis.complexity = "moderate"
 
     seq_signals = any(
@@ -187,6 +187,8 @@ def analyze_task(description: str, budget: str = "balanced") -> TaskAnalysis:
     if seq_signals:
         analysis.decomposability = "sequential"
     elif par_signals and analysis.complexity != "simple":
+        analysis.decomposability = "parallel"
+    elif len(analysis.categories) >= 2 and analysis.complexity == "complex":
         analysis.decomposability = "parallel"
 
     analysis.recommended_pattern = select_pattern(analysis, budget)
@@ -204,11 +206,11 @@ def select_pattern(analysis: TaskAnalysis, budget: str) -> str:
         return "escalation"
     if analysis.decomposability == "sequential":
         return "pipeline"
-    if analysis.decomposability == "parallel" and analysis.complexity == "complex":
+    if analysis.decomposability == "parallel" and analysis.complexity in ("complex", "moderate"):
         return "swarm"
-    if analysis.complexity in ("simple", "moderate"):
+    if analysis.complexity == "simple":
         return "solo"
-    return "race"
+    return "solo"
 
 
 def route_to_cli(category: str, budget: str = "balanced") -> str:
@@ -303,7 +305,7 @@ def build_headless_paths(skills_dir: str) -> dict[str, str]:
     sd = Path(skills_dir)
     return {
         "claude": str(sd / "claude-code-headless" / "scripts" / "claude_headless.py"),
-        "codex": str(sd / "codex-headless" / "scripts" / "codex_headless.py"),
+        "codex": str(sd / "codex-cli-headless" / "scripts" / "codex_headless.py"),
         "gemini": str(sd / "gemini-cli-headless" / "scripts" / "gemini_headless.py"),
     }
 
