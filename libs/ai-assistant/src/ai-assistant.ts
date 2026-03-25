@@ -55,9 +55,8 @@ export class AiAssistantElement extends HTMLElement {
     this.render();
     this.bindEvents();
 
-    // Start in idle state — mascot is always visible
-    this.mascotState = "idle";
-    this.fab.setAttribute("data-state", "idle");
+    // Start in idle state — mascot visible immediately
+    this.setMascotState("idle");
 
     this.dispatchEvent(new CustomEvent("assistant-ready"));
   }
