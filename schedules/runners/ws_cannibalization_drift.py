@@ -10,10 +10,12 @@ Logs: ~/workshop/outputs/scheduler/logs/ws-cannibalization-drift.log
 """
 
 import os
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.structured_run import structured_run
 
 # ── Configuration ──────────────────────────────────────────────
 HOME = Path.home()
@@ -42,11 +44,12 @@ def main() -> None:
 
     log("========== Cannibalization drift check started ==========")
 
-    cmd = [str(PYTHON), str(SCRIPT), "--notify"]
-    with open(LOG_FILE, "a") as f:
-        result = subprocess.run(cmd, stdout=f, stderr=f)
+    result = structured_run(
+        [str(PYTHON), str(SCRIPT), "--notify"],
+        label="cannibalization-drift",
+    )
 
-    if result.returncode == 0:
+    if result.success:
         log("Drift check completed successfully")
     else:
         log(f"Drift check failed with exit code {result.returncode}")

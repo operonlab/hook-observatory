@@ -11,7 +11,6 @@ Logs: ~/workshop/outputs/memvault/logs/extract-batch.log
 """
 
 import os
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +18,7 @@ from pathlib import Path
 # ── Quota Gate ─────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.quota_gate import request_clearance
+from lib.structured_run import structured_run
 
 request_clearance("ws-memvault-extract")
 
@@ -59,27 +59,21 @@ def main() -> None:
 
     # Step 1: Extract P0 sessions (never extracted)
     log("Step 1/2: re_extract_batch.py --priority P0 --parallel 2")
-    result = subprocess.run(
+    r1 = structured_run(
         [str(PYTHON), str(EXTRACT_SCRIPT), "--priority", "P0", "--parallel", "2"],
-        cwd=str(HOME / "workshop"),
+        label="memvault-extract-step1",
         timeout=3600,
     )
-    if result.returncode == 0:
-        log("Step 1 OK")
-    else:
-        log(f"Step 1 FAILED (exit {result.returncode})")
+    log("Step 1 OK" if r1.success else f"Step 1 FAILED (exit {r1.returncode})")
 
     # Step 2: Embed any new blocks missing embeddings
     log("Step 2/2: memvault_re_embed.py --missing-only")
-    result = subprocess.run(
+    r2 = structured_run(
         [str(PYTHON), str(EMBED_SCRIPT), "--missing-only"],
-        cwd=str(HOME / "workshop"),
+        label="memvault-extract-step2",
         timeout=600,
     )
-    if result.returncode == 0:
-        log("Step 2 OK")
-    else:
-        log(f"Step 2 FAILED (exit {result.returncode})")
+    log("Step 2 OK" if r2.success else f"Step 2 FAILED (exit {r2.returncode})")
 
     log("========== Daily extraction complete ==========")
 
