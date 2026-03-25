@@ -53,9 +53,11 @@ export const STYLES = /* css */ `
   .fab.hidden { display: none; }
 
   .fab-icon {
-    font-size: 24px;
-    line-height: 1;
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
     user-select: none;
+    pointer-events: none;
   }
 
   /* Mascot animations */
@@ -140,7 +142,9 @@ export const STYLES = /* css */ `
     gap: 6px;
   }
   .panel-title .mascot-small {
-    font-size: 16px;
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
   }
   .close-btn {
     width: 24px;
@@ -183,7 +187,11 @@ export const STYLES = /* css */ `
     opacity: 0.4;
     text-align: center;
   }
-  .empty-state .mascot-large { font-size: 32px; }
+  .empty-state .mascot-large {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+  }
   .empty-state p { font-size: 11px; color: var(--ai-text-dim); }
 
   /* ── Message Bubbles ── */

@@ -14,8 +14,8 @@ import { startStream } from "./stream-handler";
 import { STYLES } from "./styles";
 import type { ChatMessage, MascotState } from "./types";
 
-const DEFAULT_MASCOT = "✨";
 const DEFAULT_GREETING = "有什麼我可以幫忙的嗎？";
+const DEFAULT_MASCOT_BASE = "/static/mascot";
 
 let msgIdCounter = 0;
 
@@ -28,7 +28,7 @@ export class AiAssistantElement extends HTMLElement {
     "greeting",
     "language",
     "module",
-    "mascot-emoji",
+    "mascot-base",
   ];
 
   private shadow: ShadowRoot;
@@ -120,8 +120,12 @@ export class AiAssistantElement extends HTMLElement {
     return this.getAttribute("greeting") ?? DEFAULT_GREETING;
   }
 
-  private get mascotEmoji(): string {
-    return this.getAttribute("mascot-emoji") ?? DEFAULT_MASCOT;
+  private get mascotBase(): string {
+    return this.getAttribute("mascot-base") ?? DEFAULT_MASCOT_BASE;
+  }
+
+  private mascotSrc(state: MascotState): string {
+    return `${this.mascotBase}/${state}.png`;
   }
 
   private render() {
@@ -131,13 +135,13 @@ export class AiAssistantElement extends HTMLElement {
     const container = document.createElement("div");
     container.innerHTML = `
       <button class="fab" data-state="idle" aria-label="開啟 AI 助手">
-        <span class="fab-icon">${this.mascotEmoji}</span>
+        <img class="fab-icon" src="${this.mascotSrc("idle")}" alt="AI 助手" />
       </button>
 
       <div class="panel hidden" role="dialog" aria-label="AI 助手對話">
         <div class="panel-header">
           <div class="panel-title">
-            <span class="mascot-small">${this.mascotEmoji}</span>
+            <img class="mascot-small" src="${this.mascotSrc("idle")}" alt="" />
             <span>AI 助手</span>
           </div>
           <button class="close-btn" aria-label="關閉">✕</button>
@@ -145,7 +149,7 @@ export class AiAssistantElement extends HTMLElement {
 
         <div class="messages">
           <div class="empty-state">
-            <span class="mascot-large">${this.mascotEmoji}</span>
+            <img class="mascot-large" src="${this.mascotSrc("wave")}" alt="AI 助手" />
             <p>${this.greeting}</p>
           </div>
         </div>
@@ -327,6 +331,10 @@ export class AiAssistantElement extends HTMLElement {
   private setMascotState(state: MascotState) {
     this.mascotState = state;
     this.fab.setAttribute("data-state", state);
+
+    // Swap mascot image
+    const fabImg = this.fab.querySelector(".fab-icon") as HTMLImageElement | null;
+    if (fabImg) fabImg.src = this.mascotSrc(state);
   }
 
   private updatePanelVisibility() {
@@ -343,14 +351,13 @@ export class AiAssistantElement extends HTMLElement {
   }
 
   private updateMascotDisplay() {
-    const emoji = this.mascotEmoji;
-    const fabIcon = this.shadow.querySelector(".fab-icon");
-    const panelMascot = this.shadow.querySelector(".mascot-small");
-    const emptyMascot = this.shadow.querySelector(".mascot-large");
+    const fabImg = this.shadow.querySelector(".fab-icon") as HTMLImageElement | null;
+    const panelImg = this.shadow.querySelector(".mascot-small") as HTMLImageElement | null;
+    const emptyImg = this.shadow.querySelector(".mascot-large") as HTMLImageElement | null;
 
-    if (fabIcon) fabIcon.textContent = emoji;
-    if (panelMascot) panelMascot.textContent = emoji;
-    if (emptyMascot) emptyMascot.textContent = emoji;
+    if (fabImg) fabImg.src = this.mascotSrc(this.mascotState);
+    if (panelImg) panelImg.src = this.mascotSrc("idle");
+    if (emptyImg) emptyImg.src = this.mascotSrc("wave");
   }
 
   private escapeHtml(text: string): string {
