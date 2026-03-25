@@ -103,7 +103,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:4100",
+        "http://localhost:10100",
         "https://workshop.joneshong.com",
     ],
     allow_credentials=True,
