@@ -207,6 +207,17 @@ async def sync_catalog_to_db(
     else:
         errors.append("scan_skills module not available — edges not synced")
 
+    # ── 4. Refresh utility scores from invocation data ─────────────────
+    try:
+        from services.telemetry import TelemetryService
+
+        svc = TelemetryService(db)
+        utility_count = await svc.refresh_all_utilities()
+        logger.info("Refreshed utility scores for %d skills", utility_count)
+    except Exception as exc:
+        errors.append(f"utility refresh: {exc}")
+        logger.warning("Failed to refresh utility scores: %s", exc)
+
     await db.commit()
 
     return {

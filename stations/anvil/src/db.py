@@ -102,6 +102,11 @@ class Skill(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=text("now()")
     )
+    # Utility score (Memento-Skills pattern)
+    utility_score: Mapped[float | None] = mapped_column(Float)
+    utility_n_succ: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    utility_n_fail: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    utility_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Invocation(Base):

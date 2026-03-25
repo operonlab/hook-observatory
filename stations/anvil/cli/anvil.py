@@ -152,7 +152,8 @@ def cmd_optimize(args):
         _json_out(
             {
                 "skill": args.name,
-                "message": "Run /skill-optimizer or use 'anvil eval' first to identify optimization targets.",
+                "message": "Run /skill-optimizer or use "
+                "'anvil eval' first to identify optimization targets.",
                 "suggestions": [
                     "anvil eval {name} --runs 3",
                     "anvil test {name}",
@@ -168,7 +169,8 @@ def cmd_optimize(args):
         print("  Anvil does not perform automatic optimization. Use these tools:")
         print()
         print(
-            f"  1. anvil eval {args.name} --runs 3    Evaluate quality (multiple runs for stability)"
+            f"  1. anvil eval {args.name} --runs 3"
+            "    Evaluate quality (multiple runs for stability)"
         )
         print(f"  2. anvil test {args.name}              Check structural compliance")
         print(f"  3. anvil scan {args.name}              Security audit")
@@ -533,6 +535,56 @@ def cmd_correct(args):
         _err(e)
 
 
+def cmd_utility(args):
+    """Show utility scores for skills."""
+    client = AnvilClient()
+    if hasattr(args, "name") and args.name:
+        # Single skill utility
+        try:
+            data = client.get_utility(args.name)
+        except AnvilError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        if args.json:
+            _json_out(data, True)
+            return
+        u = data.get("utility_score")
+        n_s = data.get("n_succ", 0)
+        n_f = data.get("n_fail", 0)
+        total = data.get("total_invocations", 0)
+        score_str = f"{u:.2%}" if u is not None else "N/A (insufficient data)"
+        print(f"Skill: {data['skill_name']}")
+        print(f"  Utility: {score_str}")
+        print(f"  Success: {n_s} / Fail: {n_f} / Total: {total}")
+    else:
+        # All skills utility
+        try:
+            data = client.get_all_utilities()
+        except AnvilError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        if args.json:
+            _json_out(data, True)
+            return
+        items = data.get("items", [])
+        flagged = data.get("flagged", [])
+        threshold = data.get("threshold", 0.7)
+        if not items:
+            print("No skills with sufficient invocations.")
+            return
+        print(f"Utility Scores (threshold: {threshold:.0%}, {len(flagged)} flagged)\n")
+        print(f"  {'Skill':<30} {'Utility':>8} {'Succ':>6} {'Fail':>6} {'Total':>6}")
+        print(f"  {'-' * 30} {'-' * 8} {'-' * 6} {'-' * 6} {'-' * 6}")
+        for item in items:
+            u = item["utility_score"]
+            flag = " ⚠" if item["below_threshold"] else ""
+            score = f"{u:.2%}" if u is not None else "N/A"
+            n_s = item["n_succ"]
+            n_f = item["n_fail"]
+            n_t = item["total_invocations"]
+            print(f"  {item['skill_name']:<30} {score:>8}{flag} {n_s:>6} {n_f:>6} {n_t:>6}")
+
+
 def cmd_sync(args):
     """Sync skills from filesystem to Anvil registry."""
     with AnvilClient() as client:
@@ -657,6 +709,15 @@ def main():
     p = sub.add_parser("correct", parents=[common_parser], help="Self-correction")
     p.add_argument("name", help="Skill name")
     p.add_argument("--level", type=int, default=1, help="Correction level (0-3)")
+
+    # utility
+    p_utility = sub.add_parser(
+        "utility",
+        parents=[common_parser],
+        help="Show skill utility scores (Memento-style)",
+    )
+    p_utility.add_argument("name", nargs="?", help="Skill name (omit for all)")
+    p_utility.set_defaults(func=cmd_utility)
 
     # sync
     p = sub.add_parser("sync", parents=[common_parser], help="Sync skills from filesystem")

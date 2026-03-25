@@ -232,3 +232,112 @@ class TelemetryService:
             "tasks_with_estimates": row.tasks_with_estimates or 0,
             "monthly_breakdown": monthly_breakdown,
         }
+
+    async def compute_utility(self, skill_name: str, window_days: int = 90) -> dict[str, Any]:
+        """Compute Memento-style utility score: U(s) = n_succ / (n_succ + n_fail).
+
+        Returns dict with skill_name, n_succ, n_fail, utility_score, total_invocations.
+        """
+        result = await self.db.execute(
+            text("""
+                SELECT
+                    COUNT(*) FILTER (WHERE success) AS n_succ,
+                    COUNT(*) FILTER (WHERE NOT success) AS n_fail
+                FROM anvil.invocations
+                WHERE skill_name = :name
+                    AND timestamp > now() - make_interval(days => :days)
+            """),
+            {"name": skill_name, "days": window_days},
+        )
+        row = result.one()
+        n_succ = row.n_succ or 0
+        n_fail = row.n_fail or 0
+        total = n_succ + n_fail
+        utility = round(n_succ / total, 4) if total > 0 else None
+        return {
+            "skill_name": skill_name,
+            "n_succ": n_succ,
+            "n_fail": n_fail,
+            "utility_score": utility,
+            "total_invocations": total,
+        }
+
+    async def get_all_utilities(
+        self,
+        threshold: float = 0.7,
+        min_invocations: int = 5,
+        window_days: int = 90,
+    ) -> dict[str, Any]:
+        """Get utility scores for all skills, flagging those below threshold."""
+        result = await self.db.execute(
+            text("""
+                SELECT
+                    skill_name,
+                    COUNT(*) FILTER (WHERE success) AS n_succ,
+                    COUNT(*) FILTER (WHERE NOT success) AS n_fail,
+                    COUNT(*) AS total
+                FROM anvil.invocations
+                WHERE timestamp > now() - make_interval(days => :days)
+                    AND category = 'skill'
+                GROUP BY skill_name
+                HAVING COUNT(*) >= :min_inv
+                ORDER BY CASE WHEN COUNT(*) > 0
+                    THEN COUNT(*) FILTER (WHERE success)::float / COUNT(*)
+                    ELSE 0 END ASC
+            """),
+            {"days": window_days, "min_inv": min_invocations},
+        )
+        items = []
+        flagged = []
+        for r in result.all():
+            total = r.total
+            utility = round(r.n_succ / total, 4) if total > 0 else None
+            below = utility is not None and utility < threshold
+            items.append(
+                {
+                    "skill_name": r.skill_name,
+                    "utility_score": utility,
+                    "n_succ": r.n_succ,
+                    "n_fail": r.n_fail,
+                    "total_invocations": total,
+                    "below_threshold": below,
+                }
+            )
+            if below:
+                flagged.append(r.skill_name)
+        return {
+            "items": items,
+            "threshold": threshold,
+            "flagged": flagged,
+        }
+
+    async def refresh_all_utilities(self, window_days: int = 90) -> int:
+        """Batch-compute utility for all skills and cache in skills table.
+
+        Returns number of skills updated.
+        """
+        result = await self.db.execute(
+            text("""
+                UPDATE anvil.skills s SET
+                    utility_score = sub.utility,
+                    utility_n_succ = sub.n_succ,
+                    utility_n_fail = sub.n_fail,
+                    utility_updated_at = now()
+                FROM (
+                    SELECT skill_name,
+                        COUNT(*) FILTER (WHERE success) AS n_succ,
+                        COUNT(*) FILTER (WHERE NOT success) AS n_fail,
+                        CASE WHEN COUNT(*) > 0
+                            THEN COUNT(*) FILTER (WHERE success)::float / COUNT(*)
+                            ELSE NULL END AS utility
+                    FROM anvil.invocations
+                    WHERE timestamp > now() - make_interval(days => :days)
+                    GROUP BY skill_name
+                ) sub
+                WHERE s.name = sub.skill_name
+            """),
+            {"days": window_days},
+        )
+        updated = result.rowcount or 0
+        logger.info("Refreshed utility scores for %d skills (window=%dd)", updated, window_days)
+        return updated
