@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     DEFAULT_BUDGET: str = "balanced"
 
     # Hook Observatory (fire-and-forget notifications)
-    HOOK_URL: str = "http://127.0.0.1:4100/api/hooks"
+    HOOK_URL: str = "http://127.0.0.1:10100/api/hooks"
 
     # Session tracking
     SESSION_EXPIRY_SECONDS: int = 7200

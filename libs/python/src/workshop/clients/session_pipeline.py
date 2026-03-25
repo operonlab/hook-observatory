@@ -79,8 +79,8 @@ class SessionPipelineClient:
     Args:
         projects_dir: Root dir for Claude projects (default ~/.claude/projects).
         scripts_dir:  memvault scripts directory.
-        observatory_url: Hook Observatory base URL (default http://localhost:4100).
-        core_api_url: Core API base URL (default http://localhost:8801).
+        observatory_url: Hook Observatory base URL (default port_registry).
+        core_api_url: Core API base URL (default port_registry).
     """
 
     def __init__(
@@ -90,13 +90,16 @@ class SessionPipelineClient:
         observatory_url: str | None = None,
         core_api_url: str | None = None,
     ) -> None:
+        from workshop import port_registry
+
         self.projects_dir = projects_dir or os.path.expanduser("~/.claude/projects")
         self.scripts_dir = scripts_dir or os.path.expanduser("~/workshop/mcp/memvault/scripts")
         self.observatory_url = (
-            observatory_url or os.environ.get("HOOK_OBS_URL", "http://localhost:4100")
+            observatory_url
+            or os.environ.get("HOOK_OBS_URL", port_registry.get_url("hook-observatory"))
         ).rstrip("/")
         self.core_api_url = (
-            core_api_url or os.environ.get("CORE_API_URL", "http://localhost:8801")
+            core_api_url or os.environ.get("CORE_API_URL", port_registry.get_url("core"))
         ).rstrip("/")
 
     # ------------------------------------------------------------------

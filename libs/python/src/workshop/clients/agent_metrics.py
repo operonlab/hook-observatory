@@ -1,4 +1,4 @@
-"""Agent Metrics API client — station at port 8795.
+"""Agent Metrics API client — station at port 10103.
 
 Wraps the orchestration HTTP API (Maestro dispatch + Project management).
 Unlike Core API clients (which inherit BaseClient), this wraps a station API.
@@ -34,10 +34,10 @@ class AgentMetricsError(Exception):
 
 
 class AgentMetricsClient:
-    """HTTP client for Agent Metrics station (port 8795).
+    """HTTP client for Agent Metrics station (port 10103).
 
     Args:
-        base_url: API URL. Defaults to AGENT_METRICS_URL env or http://localhost:8795.
+        base_url: API URL. Defaults to AGENT_METRICS_URL env or port_registry.
         timeout: Default request timeout in seconds.
         dispatch_timeout: Timeout for long-running dispatch operations.
     """
@@ -48,8 +48,10 @@ class AgentMetricsClient:
         timeout: float = 15,
         dispatch_timeout: float = 600,
     ):
+        from workshop import port_registry
+
         self.base_url = (
-            base_url or os.environ.get("AGENT_METRICS_URL", "http://localhost:8795")
+            base_url or os.environ.get("AGENT_METRICS_URL", port_registry.get_url("agent-metrics"))
         ).rstrip("/")
         self._timeout = timeout
         self._dispatch_timeout = dispatch_timeout

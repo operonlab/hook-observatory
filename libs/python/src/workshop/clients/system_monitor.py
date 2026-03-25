@@ -1,4 +1,4 @@
-"""System Monitor API client -- hardware monitoring station at port 9526.
+"""System Monitor API client -- hardware monitoring station at port 10102.
 
 Wraps the System Monitor HTTP API (status, services, disk, alerts, reports).
 Unlike Core API clients (which inherit BaseClient), this wraps a station API.
@@ -33,16 +33,19 @@ SystemMonitorError = APIError
 
 
 class SystemMonitorClient:
-    """HTTP client for System Monitor station (port 9526).
+    """HTTP client for System Monitor station (port 10102).
 
     Args:
-        base_url: API URL. Defaults to SYSTEM_MONITOR_URL env or http://localhost:9526.
+        base_url: API URL. Defaults to SYSTEM_MONITOR_URL env or port_registry.
         timeout: Default request timeout in seconds.
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 30):
+        from workshop import port_registry
+
         self.base_url = (
-            base_url or os.environ.get("SYSTEM_MONITOR_URL", "http://localhost:9526")
+            base_url
+            or os.environ.get("SYSTEM_MONITOR_URL", port_registry.get_url("system-monitor"))
         ).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None

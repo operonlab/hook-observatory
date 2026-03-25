@@ -1,4 +1,4 @@
-"""Hook Observatory API client — station at port 4100.
+"""Hook Observatory API client — station at port 10100.
 
 Unlike Core API clients (which inherit BaseClient), this wraps a station API
 with its own auth mechanism (X-Local-Key header).
@@ -27,10 +27,10 @@ class HookObservatoryError(Exception):
 
 
 class HookObservatoryClient:
-    """HTTP client for Hook Observatory station (port 4100).
+    """HTTP client for Hook Observatory station (port 10100).
 
     Args:
-        base_url: API URL. Defaults to HOOK_OBS_URL env or http://localhost:4100.
+        base_url: API URL. Defaults to HOOK_OBS_URL env or port_registry.
         secret_key: Auth key for X-Local-Key header. Defaults to HOOK_OBS_SECRET_KEY env.
         timeout: Default request timeout in seconds.
     """
@@ -41,8 +41,10 @@ class HookObservatoryClient:
         secret_key: str | None = None,
         timeout: float = 15,
     ):
+        from workshop import port_registry
+
         self.base_url = (
-            base_url or os.environ.get("HOOK_OBS_URL", "http://localhost:4100")
+            base_url or os.environ.get("HOOK_OBS_URL", port_registry.get_url("hook-observatory"))
         ).rstrip("/")
         self.secret_key = secret_key or os.environ.get("HOOK_OBS_SECRET_KEY", "workshop-v2-dev-key")
         self._timeout = timeout
