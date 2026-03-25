@@ -62,24 +62,20 @@ SERVICES = [
     {
         "name": "hook-observatory",
         "type": "uvicorn",
-        "cmd": (
-            f"HOOK_OBS_PORT={get_port('hook-observatory')}"
-            " /Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py",
         "port": get_port("hook-observatory"),
         "health": get("hook-observatory").health_url,
         "workdir": "/Users/joneshong/workshop/stations/hook-observatory",
+        "env": {"HOOK_OBS_PORT": str(get_port("hook-observatory"))},
     },
     {
         "name": "session-channel",
         "type": "uvicorn",
-        "cmd": (
-            f"SESSION_CHANNEL_PORT={get_port('session-channel')}"
-            " /Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py",
         "port": get_port("session-channel"),
         "health": get("session-channel").health_url,
         "workdir": "/Users/joneshong/workshop/stations/session-channel",
+        "env": {"SESSION_CHANNEL_PORT": str(get_port("session-channel"))},
     },
     # Sentinel: scheduled-only (Cronicle every 5min), not persistent
     # API/SSE unavailable — light checks + Bark notifications via runner
@@ -109,13 +105,13 @@ SERVICES = [
         "name": "agent-metrics",
         "type": "uvicorn",
         "cmd": (
-            f"AGENT_METRICS_PORT={get_port('agent-metrics')}"
-            " /Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
+            "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
             " -m agent_metrics serve"
         ),
         "port": get_port("agent-metrics"),
         "health": get("agent-metrics").health_url,
         "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
+        "env": {"AGENT_METRICS_PORT": str(get_port("agent-metrics"))},
     },
     {
         "name": "auto-survey",
@@ -143,83 +139,71 @@ SERVICES = [
     {
         "name": "stt",
         "type": "uvicorn",
-        "cmd": (
-            f"STT_PORT={get_port('stt')}"
-            " /Users/joneshong/workshop/stations/stt/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/stt/.venv/bin/python3 main.py",
         "port": get_port("stt"),
         "health": get("stt").health_url,
         "workdir": "/Users/joneshong/workshop/stations/stt",
+        "env": {"STT_PORT": str(get_port("stt"))},
     },
     {
         "name": "ocr",
         "type": "uvicorn",
-        "cmd": (
-            f"OCR_PORT={get_port('ocr')}"
-            " /Users/joneshong/workshop/stations/ocr/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/ocr/.venv/bin/python3 main.py",
         "port": get_port("ocr"),
         "health": get("ocr").health_url,
         "workdir": "/Users/joneshong/workshop/stations/ocr",
+        "env": {"OCR_PORT": str(get_port("ocr"))},
     },
     {
         "name": "tts",
         "type": "uvicorn",
-        "cmd": (
-            f"TTS_PORT={get_port('tts')}"
-            " /Users/joneshong/workshop/stations/tts/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/tts/.venv/bin/python3 main.py",
         "port": get_port("tts"),
         "health": get("tts").health_url,
         "workdir": "/Users/joneshong/workshop/stations/tts",
+        "env": {"TTS_PORT": str(get_port("tts"))},
     },
     {
         "name": "vision",
         "type": "uvicorn",
-        "cmd": (
-            f"VISION_PORT={get_port('vision')}"
-            " /Users/joneshong/workshop/stations/vision/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/vision/.venv/bin/python3 main.py",
         "port": get_port("vision"),
         "health": get("vision").health_url,
         "workdir": "/Users/joneshong/workshop/stations/vision",
+        "env": {"VISION_PORT": str(get_port("vision"))},
     },
     {
         "name": "voice-gateway",
         "type": "uvicorn",
-        "cmd": (
-            f"VOICE_GATEWAY_PORT={get_port('voice-gateway')}"
-            " /Users/joneshong/workshop/stations/voice-gateway/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/voice-gateway/.venv/bin/python3 main.py",
         "port": get_port("voice-gateway"),
         "health": get("voice-gateway").health_url,
         "workdir": "/Users/joneshong/workshop/stations/voice-gateway",
+        "env": {"VOICE_GATEWAY_PORT": str(get_port("voice-gateway"))},
     },
     {
         "name": "translate",
         "type": "uvicorn",
-        "cmd": (
-            f"TRANSLATE_PORT={get_port('translate')}"
-            " /Users/joneshong/workshop/stations/translate/.venv/bin/python3 main.py"
-        ),
+        "cmd": "/Users/joneshong/workshop/stations/translate/.venv/bin/python3 main.py",
         "port": get_port("translate"),
         "health": get("translate").health_url,
         "workdir": "/Users/joneshong/workshop/stations/translate",
+        "env": {"TRANSLATE_PORT": str(get_port("translate"))},
     },
     {
         "name": "tmux-webui",
         "type": "uvicorn",
-        "cmd": "/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",  # noqa: E501
-        "port": 8765,
-        "health": "http://127.0.0.1:8765",
+        "cmd": f"/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port {get_port('tmux-webui')}",  # noqa: E501
+        "port": get_port("tmux-webui"),
+        "health": get("tmux-webui").health_url,
         "workdir": "/Users/joneshong/workshop/stations/tmux-webui",
     },
     {
         "name": "capture-console",
         "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/capture-console/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port 4104",  # noqa: E501
-        "port": 4104,
-        "health": "http://127.0.0.1:4104/docs",
+        "cmd": f"/Users/joneshong/workshop/stations/capture-console/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port {get_port('capture-console')}",  # noqa: E501
+        "port": get_port("capture-console"),
+        "health": get("capture-console").health_url,
         "workdir": "/Users/joneshong/workshop/stations/capture-console",
     },
     {
@@ -235,10 +219,10 @@ SERVICES = [
         "type": "uvicorn",
         "cmd": (
             "/Users/joneshong/workshop/stations/video-edit/.venv/bin/python3"
-            " -m video_edit serve --host 127.0.0.1 --port 4110"
+            f" -m video_edit serve --host 127.0.0.1 --port {get_port('video-edit')}"
         ),
-        "port": 4110,
-        "health": "http://127.0.0.1:4110/health",
+        "port": get_port("video-edit"),
+        "health": get("video-edit").health_url,
         "workdir": "/Users/joneshong/workshop/stations/video-edit",
     },
     # ── Infrastructure Tools ──
@@ -263,9 +247,10 @@ SERVICES = [
         "name": "blog",
         "type": "binary",
         "cmd": "/opt/homebrew/bin/node dist/server/entry.mjs",
-        "port": 4107,
-        "health": "http://127.0.0.1:4107/zh/",
+        "port": get_port("blog"),
+        "health": get("blog").health_url,
         "workdir": "/Users/joneshong/blog",
+        "env": {"PORT": str(get_port("blog"))},
     },
 ]
 
@@ -537,6 +522,12 @@ def start_service(svc: dict) -> None:
 
     cmd_parts = shlex.split(cmd)
 
+    # Merge per-service env vars (e.g. port overrides) into daemon env
+    run_env = _DAEMON_ENV
+    svc_env = svc.get("env")
+    if svc_env:
+        run_env = {**_DAEMON_ENV, **svc_env}
+
     try:
         with open(stdout_log, "ab") as fout, open(stderr_log, "ab") as ferr:
             proc = subprocess.Popen(
@@ -545,7 +536,7 @@ def start_service(svc: dict) -> None:
                 stdout=fout,
                 stderr=ferr,
                 start_new_session=True,
-                env=_DAEMON_ENV,
+                env=run_env,
             )
     except OSError as e:
         err(f"Failed to start {name}: {e}")
