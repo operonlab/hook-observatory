@@ -45,9 +45,7 @@ class AnvilClient:
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 15):
-        self.base_url = (base_url or os.environ.get("ANVIL_URL", get_url("anvil"))).rstrip(
-            "/"
-        )
+        self.base_url = (base_url or os.environ.get("ANVIL_URL", get_url("anvil"))).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None
 
@@ -221,6 +219,26 @@ class AnvilClient:
     def get_skill_stats(self, name: str) -> dict:
         """Get per-skill stats. GET /api/anvil/stats/{name}"""
         return self._get(f"/api/anvil/stats/{name}")
+
+    def get_utility(self, name: str, window_days: int = 90) -> dict:
+        """Get single skill utility score. GET /api/anvil/stats/{name}/utility"""
+        return self._get(f"/api/anvil/stats/{name}/utility", {"window_days": window_days})
+
+    def get_all_utilities(
+        self,
+        threshold: float = 0.7,
+        min_invocations: int = 5,
+        window_days: int = 90,
+    ) -> dict:
+        """Get all skills' utility scores. GET /api/anvil/stats/utility"""
+        return self._get(
+            "/api/anvil/stats/utility",
+            {
+                "threshold": threshold,
+                "min_invocations": min_invocations,
+                "window_days": window_days,
+            },
+        )
 
     # ======================== Evaluations ========================
 

@@ -86,6 +86,29 @@ class DemandStatsResponse(BaseModel):
     overall_auto_rate: float
 
 
+class UtilityItem(BaseModel):
+    skill_name: str
+    utility_score: float | None
+    n_succ: int
+    n_fail: int
+    total_invocations: int
+    below_threshold: bool
+
+
+class UtilityListResponse(BaseModel):
+    items: list[UtilityItem]
+    threshold: float
+    flagged: list[str]
+
+
+class UtilityDetailResponse(BaseModel):
+    skill_name: str
+    utility_score: float | None
+    n_succ: int
+    n_fail: int
+    total_invocations: int
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -176,6 +199,33 @@ async def demand_stats(
         total_usage=total_all,
         overall_auto_rate=overall,
     )
+
+
+@router.get("/stats/utility")
+async def utility_stats(
+    threshold: float = Query(0.7, description="Utility threshold for flagging"),
+    min_invocations: int = Query(5, description="Minimum invocations to include"),
+    window_days: int = Query(90, description="Time window in days"),
+    db: AsyncSession = Depends(get_session),
+) -> UtilityListResponse:
+    """Utility scores for all skills — flags skills below threshold."""
+    svc = TelemetryService(db)
+    data = await svc.get_all_utilities(
+        threshold=threshold, min_invocations=min_invocations, window_days=window_days
+    )
+    return UtilityListResponse(**data)
+
+
+@router.get("/stats/{name}/utility")
+async def skill_utility(
+    name: str,
+    window_days: int = Query(90, description="Time window in days"),
+    db: AsyncSession = Depends(get_session),
+) -> UtilityDetailResponse:
+    """Single skill utility score with success/fail breakdown."""
+    svc = TelemetryService(db)
+    data = await svc.compute_utility(name, window_days=window_days)
+    return UtilityDetailResponse(**data)
 
 
 @router.get("/stats/{name}")
