@@ -919,7 +919,6 @@ class AttitudeService:
             operation="ADD",
             confidence=0.5,
             source_sessions=data.source_sessions or [],
-            embedding=embedding,
         )
         db.add(fact)
         await db.flush()

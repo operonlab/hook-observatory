@@ -9,7 +9,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Integer, delete, func, select, text, update
+from sqlalchemy import Integer, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.types import MemvaultEvents
@@ -862,22 +862,31 @@ class MemoryBlockService(
     async def update_embedding(
         self, db: AsyncSession, block_id: str, embedding: list[float]
     ) -> None:
-        """Set or update the embedding vector for a block.
+        """Index embedding to Qdrant for a block.
 
-        Writes to both inline column (backward compat) and sub-table (Phase 2).
+        PG embedding column removed in Qdrant migration — embeddings now live in Qdrant only.
         """
-        if len(embedding) != EMBEDDING_DIM:
-            raise BadRequestError(
-                f"Embedding must be {EMBEDDING_DIM}d",
-                code="memvault.invalid_embedding_dim",
-            )
-        result = await db.execute(
-            update(MemoryBlock).where(MemoryBlock.id == block_id).values(embedding=embedding)
-        )
-        if result.rowcount == 0:
+        from src.shared.qdrant_search import index_document
+        from src.shared.search_types import IndexDocument
+
+        # Fetch block for metadata needed by Qdrant indexing
+        block = await self.get(db, block_id)
+        if not block:
             raise NotFoundError("Block not found", code="memvault.block_not_found")
 
-        # BlockEmbedding sub-table removed (Qdrant migration) — inline embedding only
+        await index_document(
+            IndexDocument(
+                service_id="memvault",
+                entity_id=block_id,
+                entity_type=block.block_type or "general",
+                space_id=block.space_id,
+                content=block.content,
+                tags=block.tags or [],
+                created_at=block.created_at,
+                updated_at=block.updated_at,
+                metadata={},
+            )
+        )
 
 
 # ======================== Tag Service ========================
