@@ -1010,7 +1010,6 @@ class AttitudeService:
                 confidence=max(best_fact.confidence, 0.5),
                 source_sessions=([request.source_session] if request.source_session else []),
                 previous_version=old_id,
-                embedding=new_embedding,
             )
             db.add(new_fact)
             await db.flush()
@@ -1046,7 +1045,6 @@ class AttitudeService:
             operation="ADD",
             confidence=0.5,
             source_sessions=([request.source_session] if request.source_session else []),
-            embedding=new_embedding,
         )
         db.add(new_fact)
         await db.flush()
