@@ -50,7 +50,7 @@ async def finance_add_transaction(
     invoice_number: str = "",
     fee: float = 0,
 ) -> str:
-    """新增交易（收入/支出/轉帳）"""
+    """Create a financial transaction (income/expense/transfer) with amount, wallet, merchant, category, tags. 新增交易。"""
     body = build_body(
         {"type": type, "amount": amount, "wallet_id": wallet_id},
         description=description,
@@ -90,7 +90,7 @@ async def finance_update_transaction(
     invoice_number: str = "",
     fee: float | None = None,
 ) -> str:
-    """更新交易欄位"""
+    """Update transaction fields: amount, merchant, category, wallet, tags, payment method. 更新交易。"""
     if not id:
         return "Error: transaction id is required"
     body = build_body(
@@ -117,7 +117,7 @@ async def finance_update_transaction(
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_delete_transaction(id: str) -> str:
-    """刪除交易"""
+    """Soft-delete a financial transaction by ID. 刪除交易。"""
     await to_thread(client.delete_transaction, id)
     return f"Transaction {id} deleted."
 
@@ -137,7 +137,7 @@ async def finance_list_transactions(
     page: int = 1,
     page_size: int = 20,
 ) -> str:
-    """列出交易（支援多種過濾條件）"""
+    """List transactions with filters: month, type, category, wallet, payment method, tag, keyword. 交易列表。"""
     result = await to_thread(
         client.list_transactions,
         year_month=month or None,
@@ -185,7 +185,7 @@ async def finance_add_subscription(
     notes: str = "",
     is_private: bool = False,
 ) -> str:
-    """新增週期性訂閱"""
+    """Create a recurring subscription (monthly/yearly/weekly) with amount, wallet, billing cycle. 新增訂閱。"""
     body = build_body(
         {"name": name, "amount": amount, "billing_cycle": billing_cycle, "start_date": start_date},
         billing_day=billing_day,
@@ -222,7 +222,7 @@ async def finance_update_subscription(
     status: str = "",
     notes: str = "",
 ) -> str:
-    """更新訂閱（含暫停/取消）"""
+    """Update subscription: name, amount, cycle, wallet, or change status to paused/cancelled. 更新訂閱。"""
     if not id:
         return "Error: subscription id is required"
     body = build_body(
@@ -253,7 +253,7 @@ async def finance_list_subscriptions(
     page: int = 1,
     page_size: int = 20,
 ) -> str:
-    """列出訂閱"""
+    """List subscriptions with status filter (active/paused/cancelled), amounts, next billing dates. 訂閱列表。"""
     result = await to_thread(
         client.list_subscriptions,
         status=status or None,
@@ -291,7 +291,7 @@ async def finance_manage_categories(
     sort_order: int | None = None,
     is_private: bool = False,
 ) -> str:
-    """分類管理（新增/編輯/移動/停用）"""
+    """Manage expense categories: list tree, create, update (rename/reparent), deactivate. 分類管理。"""
     if action == "list":
         result = await to_thread(client.list_categories)
         items = result if isinstance(result, list) else result.get("items", [])
@@ -372,7 +372,7 @@ async def finance_toggle_privacy(
     entity_id: str,
     is_private: bool,
 ) -> str:
-    """切換項目隱密狀態"""
+    """Toggle privacy flag on a finance entity (transaction, subscription, category, wallet, installment). 隱密切換。"""
     update_map = {
         "transaction": lambda: client.update_transaction(entity_id, {"is_private": is_private}),
         "subscription": lambda: client.update_subscription(entity_id, {"is_private": is_private}),

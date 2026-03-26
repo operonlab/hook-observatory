@@ -56,7 +56,7 @@ async def tts_voices(engine: str = "apple") -> str:
 @mcp.tool()
 @mcp_error_handler("TTS")
 async def tts_engines() -> str:
-    """List available TTS engines."""
+    """List available text-to-speech engines (e.g. Apple, Edge TTS) with supported languages and capabilities."""
     result = await to_thread(client.list_engines)
     return json_text(result)
 

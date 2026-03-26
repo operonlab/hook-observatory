@@ -49,7 +49,7 @@ async def translate_batch(
     target_lang: str = "zh-TW",
     source_lang: str = "auto",
 ) -> str:
-    """Batch translate multiple texts. Returns all translations."""
+    """Batch translate multiple texts concurrently via DeepL or Google. Returns per-text translations with provider and cache info."""
     result = await to_thread(
         client.batch_translate,
         texts=texts,

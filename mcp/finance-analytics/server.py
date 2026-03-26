@@ -41,7 +41,7 @@ def pct(value: float, total: float) -> str:
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_summary(month: str | None = None) -> str:
-    """月度收支摘要（含分類明細、錢包餘額總覽、淨資產）"""
+    """Monthly income/expense summary with category breakdown, wallet balances, and net worth. 月度收支摘要。"""
     result = await to_thread(client.get_summary, month=month)
 
     display_month = result.get("month", month or "current")
@@ -76,7 +76,7 @@ async def finance_summary(month: str | None = None) -> str:
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_insights(months: int = 6) -> str:
-    """多月消費趨勢分析（近 N 月收支走勢、異常偵測）"""
+    """Multi-month spending trend analysis with income/expense by month and anomaly detection. 消費趨勢分析。"""
     result = await to_thread(client.monthly_trends, months=months)
 
     trends = result.get("trends", []) if isinstance(result, dict) else result
@@ -118,7 +118,7 @@ async def finance_budget_set(
     savings_target: float | None = None,
     category_budgets: list = None,
 ) -> str:
-    """設定月度預算（總額 + 分類）"""
+    """Set monthly budget with total amount and per-category limits. 設定月度預算。"""
     body: dict[str, Any] = {
         "year_month": year_month,
         "budget_amount": budget_amount,
@@ -149,7 +149,7 @@ async def finance_budget_set(
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_budget_status(year_month: str | None = None) -> str:
-    """查詢預算消耗狀態（含承諾支出 vs 自由支出）"""
+    """Check budget consumption: spent vs committed (installments + subscriptions) vs free balance. 預算消耗查詢。"""
     result = await to_thread(client.list_budgets, year_month=year_month)
 
     month = result.get("year_month", year_month or "current")
@@ -196,7 +196,7 @@ async def finance_budget_status(year_month: str | None = None) -> str:
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_monthly_report(year_month: str, regenerate: bool = False) -> str:
-    """產生或查閱月度消費報告（含 AI 建議）"""
+    """Generate or retrieve monthly spending report with AI-powered suggestions. 月度消費報告。"""
     if regenerate:
         result = await to_thread(client.generate_monthly_report, year_month, regenerate=True)
     else:
@@ -212,7 +212,7 @@ async def finance_monthly_report(year_month: str, regenerate: bool = False) -> s
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_category_breakdown(month: str | None = None, category_id: str | None = None) -> str:
-    """分類消費明細（含子分類展開）"""
+    """Category-level expense breakdown with subcategory expansion and percentage ratios. 分類消費明細。"""
     result = await to_thread(client.get_category_breakdown, month=month, category_id=category_id)
     items = result if isinstance(result, list) else result.get("items", [])
 
@@ -240,7 +240,7 @@ async def finance_category_breakdown(month: str | None = None, category_id: str 
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_subscription_forecast(months: int = 3) -> str:
-    """訂閱未來 N 月預估支出"""
+    """Forecast subscription expenses for the next N months with per-item projected costs. 訂閱預估支出。"""
     result = await to_thread(client.subscription_forecast, months=months)
     items = result if isinstance(result, list) else result.get("months", [])
 
@@ -263,7 +263,7 @@ async def finance_subscription_forecast(months: int = 3) -> str:
 @mcp.tool()
 @mcp_error_handler("Finance")
 async def finance_installment_forecast(months: int = 6) -> str:
-    """分期未來支出預估（各月份分期扣款明細）"""
+    """Forecast installment payment schedule for next N months with per-item breakdown. 分期預估支出。"""
     result = await to_thread(client.installment_forecast, months=months)
     items = result if isinstance(result, list) else result.get("months", [])
 
@@ -295,7 +295,7 @@ async def finance_export(
     end_date: str | None = None,
     include_archived: bool = False,
 ) -> str:
-    """匯出財務資料（CSV / JSON，含隱密過濾）"""
+    """Export financial data (transactions, subscriptions, budgets) as CSV or JSON with privacy filtering. 匯出財務資料。"""
     resp = await to_thread(
         client.export_data,
         data_type=data_type,

@@ -120,7 +120,7 @@ async def crawl4ai_crawl(url: str, timeout: float = 60.0) -> str:
 async def crawl4ai_crawl_batch(
     urls: list[str], max_concurrent: int = 3, timeout: float = 60.0
 ) -> str:
-    """Crawl multiple URLs concurrently. Returns list of results."""
+    """Crawl multiple URLs concurrently with configurable parallelism. Returns markdown content and metadata for each URL."""
     results = await crawl_batch(
         urls,
         max_concurrent=max_concurrent,
@@ -154,7 +154,7 @@ async def crawl4ai_chunk(
     chunk_size: int = 1000,
     overlap: int = 100,
 ) -> str:
-    """Chunk text for embedding using configurable strategies."""
+    """Split text into chunks for vector embedding. Strategies: sentence, regex, fixed-length, sliding-window. Returns chunk list with metadata."""
     chunker = _build_chunker(strategy, chunk_size, overlap)
     chunks = chunker.chunk(text)
     return json_text(
