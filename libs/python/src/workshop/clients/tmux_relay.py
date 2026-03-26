@@ -259,7 +259,11 @@ class TmuxRelayClient:
         return False
 
     def _pane_status(self, pane: str) -> str:
-        """Determine idle/busy status — reads from Redis cache first."""
+        """Determine idle/busy status — reads from Redis cache first.
+
+        Staleness guard: if cached status is busy but updated_at is older
+        than STALE_PENDING_THRESHOLD, fall through to live check to self-heal.
+        """
         pane_id = self._display(pane, "#{pane_id}")
         if pane_id is None:
             return "not-claude"
@@ -269,11 +273,19 @@ class TmuxRelayClient:
         try:
             cached = self._cache.get_pane(pane_safe)
             if cached:
-                return cached["status"]
+                status = cached["status"]
+                if status.startswith("busy"):
+                    age = time.time() - cached.get("updated_at", 0)
+                    if age > self.STALE_PENDING_THRESHOLD:
+                        pass  # fall through to live check
+                    else:
+                        return status
+                else:
+                    return status
         except Exception:
             pass
 
-        # Cache miss → live check + backfill
+        # Cache miss or stale busy → live check + backfill
         status = self._pane_status_live(pane, pane_safe)
         try:
             self._cache.set_pane(pane_safe, pane, status, pane_id)
@@ -544,7 +556,7 @@ class TmuxRelayClient:
         return self._list_panes_live(session)
 
     def _list_panes_live(self, session: str | None = None) -> list[PaneInfo]:
-        """List all relay panes via tmux subprocess (original logic)."""
+        """List all relay panes via tmux subprocess — includes standby (bare shell) panes."""
         session = session or self._resolve_relay_session()
         panes = []
         for wname in self._list_relay_windows(session):
@@ -558,12 +570,19 @@ class TmuxRelayClient:
             if not raw:
                 continue
             for line in raw.splitlines():
-                idx = line.split()[0]
+                parts = line.split(None, 1)
+                idx = parts[0]
                 pane_ref = f"{session}:{wname}.{idx}"
                 if self._is_claude_pane(pane_ref):
                     status = self._pane_status_live(pane_ref)
                     pane_id = self._display(pane_ref, "#{pane_id}") or "?"
                     panes.append(PaneInfo(pane_ref=pane_ref, status=status, pane_id=pane_id))
+                else:
+                    # Bare shell in relay window → standby (warm pool, reusable)
+                    cmd = parts[1] if len(parts) > 1 else ""
+                    if cmd and cmd.split("/")[-1] in self.SHELL_COMMANDS:
+                        pane_id = self._display(pane_ref, "#{pane_id}") or "?"
+                        panes.append(PaneInfo(pane_ref=pane_ref, status="standby", pane_id=pane_id))
         return panes
 
     def refresh_cache(self, session: str | None = None) -> dict:
@@ -692,11 +711,18 @@ class TmuxRelayClient:
         with open(self._ACQUIRE_LOCK, "w") as lock_fd:
             fcntl.flock(lock_fd, fcntl.LOCK_EX)
 
-            idle = [p for p in self.list_panes(session) if p.status == "idle"]
+            idle = [p for p in self.list_panes(session) if p.status in ("idle", "standby")]
             acquired = []
 
-            # Take from idle pool first
+            # Take from idle/standby pool first
             for p in idle[:count]:
+                if p.status == "standby":
+                    # Bare shell → start Claude Code before acquiring
+                    self._send_keys(p.pane_ref, self._claude_cmd())
+                    self._send_enter(p.pane_ref)
+                    if not self._wait_for_prompt(p.pane_ref):
+                        continue  # failed to start → skip, deficit spawning handles it
+
                 acquired.append(p.pane_ref)
                 if p.pane_id:
                     self._clear_idle_ts(p.pane_id)
@@ -1322,16 +1348,13 @@ class TmuxRelayClient:
             raise TmuxRelayError("run", "Failed to acquire relay pane. Is tmux running?")
         pane = panes[0]
 
-        # 2. Write role/task metadata before execution
+        # 2. Write role/task metadata (preserve busy:acquired status from acquire())
         if role or task:
             pane_id = self._display(pane, "#{pane_id}")
             if pane_id:
                 try:
-                    self._cache.set_pane(
+                    self._cache.update_pane_meta(
                         pane_id.replace("%", ""),
-                        pane,
-                        "idle",
-                        pane_id,
                         role=role,
                         task=task,
                     )

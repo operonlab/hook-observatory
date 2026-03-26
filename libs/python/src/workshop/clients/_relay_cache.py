@@ -77,6 +77,37 @@ class RelayCacheManager:
         self._r.hset(PANES_KEY, pane_safe, json.dumps(data))
         self.touch()
 
+    def update_pane_meta(
+        self,
+        pane_safe: str,
+        role: str = "",
+        task: str = "",
+        last_command: str = "",
+    ) -> bool:
+        """Update ONLY metadata fields without changing status.
+
+        Returns True if pane existed and was updated, False if not found.
+        """
+        raw = self._r.hget(PANES_KEY, pane_safe)
+        if raw is None:
+            return False
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return False
+
+        changed = False
+        for field, val in (("role", role), ("task", task), ("last_command", last_command)):
+            if val:
+                data[field] = val
+                changed = True
+
+        if changed:
+            data["updated_at"] = time.time()
+            self._r.hset(PANES_KEY, pane_safe, json.dumps(data))
+            self.touch()
+        return True
+
     def remove_pane(self, pane_safe: str) -> None:
         """HDEL relay:panes <pane_safe>"""
         self._r.hdel(PANES_KEY, pane_safe)
