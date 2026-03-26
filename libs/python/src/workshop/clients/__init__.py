@@ -17,6 +17,7 @@ Stations (standalone):
     from workshop.clients.agent_metrics import AgentMetricsClient
     from workshop.clients.hook_observatory import HookObservatoryClient
     from workshop.clients.sandbox import SandboxClient
+    from workshop.clients.remote_node import RemoteNodeClient
 
 CLI wrappers (subprocess):
     from workshop.clients.envkit import EnvkitClient

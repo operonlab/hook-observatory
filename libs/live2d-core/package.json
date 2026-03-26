@@ -1,7 +1,7 @@
 {
   "name": "@workshop/live2d-core",
   "version": "0.1.0",
-  "description": "Platform-agnostic Live2D rendering core for Workshop AI assistant",
+  "description": "PixiJS-based layered sprite animator for Workshop AI assistant mascot",
   "type": "module",
   "main": "dist/live2d-core.js",
   "module": "dist/live2d-core.mjs",
@@ -22,8 +22,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "pixi.js": "^8.0.0",
-    "pixi-live2d-display": "latest"
+    "pixi.js": "^8.0.0"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
@@ -31,7 +30,7 @@
     "vite-plugin-dts": "^4.3.0"
   },
   "keywords": [
-    "live2d",
+    "sprite-animator",
     "pixi",
     "mascot",
     "ai-assistant",

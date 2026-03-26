@@ -167,6 +167,13 @@ PORTS: list[ServicePort] = [
         env_var="AGENT_VISTA_URL",
         nginx_path="/apps/vista/",
     ),
+    ServicePort(
+        "remote-node",
+        10208,
+        "station-ai",
+        env_var="REMOTE_NODE_URL",
+        optional=True,
+    ),
     # ── Stations: Business & Tools ──
     ServicePort(
         "auto-survey",
@@ -294,6 +301,7 @@ MIGRATION_MAP: dict[str, int] = {
     "translate": 10205,
     "video-edit": 10206,
     "agent-vista": 10207,
+    "remote-node": 10208,
     # Stations: Business & Tools
     "auto-survey": 10300,
     "anvil": 10301,

@@ -191,6 +191,17 @@ SERVICES = [
         "env": {"TRANSLATE_PORT": str(get_port("translate"))},
     },
     {
+        "name": "remote-node",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/.local/bin/python3"
+            " /Users/joneshong/workshop/stations/remote-node/main.py"
+        ),
+        "port": get_port("remote-node"),
+        "health": get("remote-node").health_url,
+        "workdir": "/Users/joneshong/workshop/stations/remote-node",
+    },
+    {
         "name": "tmux-webui",
         "type": "uvicorn",
         "cmd": f"/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port {get_port('tmux-webui')}",  # noqa: E501

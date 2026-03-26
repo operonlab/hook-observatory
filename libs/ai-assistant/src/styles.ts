@@ -86,51 +86,11 @@ export const STYLES = /* css */ `
     position: relative;
   }
 
-  .mascot-img {
+  .mascot-canvas {
     width: 255px;
     height: 255px;
-    object-fit: contain;
     user-select: none;
     pointer-events: none;
-    transition: opacity 0.3s ease;
-    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
-  }
-
-  /* Mascot animations */
-  .mascot[data-state="idle"] .mascot-img {
-    animation: float 3s ease-in-out infinite;
-  }
-  .mascot[data-state="thinking"] .mascot-img {
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-  .mascot[data-state="speaking"] .mascot-img {
-    animation: bounce 0.6s ease-in-out infinite;
-  }
-  .mascot[data-state="wave"] .mascot-img {
-    animation: wave-entrance 0.8s ease-in-out;
-  }
-
-  .mascot.state-transition .mascot-img {
-    opacity: 0.6;
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-  }
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
-    50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(180, 190, 254, 0.4)); }
-  }
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0) scale(1); }
-    50% { transform: translateY(-3px) scale(1.03); }
-  }
-  @keyframes wave-entrance {
-    0% { transform: scale(0.8) rotate(-10deg); opacity: 0.5; }
-    40% { transform: scale(1.1) rotate(8deg); opacity: 1; }
-    70% { transform: scale(0.95) rotate(-4deg); }
-    100% { transform: scale(1) rotate(0deg); }
   }
 
   /* ── Action Buttons (right side of mascot) ── */
@@ -225,7 +185,7 @@ export const STYLES = /* css */ `
   /* ── Responsive ── */
   @media (max-width: 480px) {
     .mascot { width: 200px; height: 200px; }
-    .mascot-img { width: 200px; height: 200px; }
+    .mascot-canvas { width: 200px; height: 200px; }
     .quick-input { max-width: 240px; }
   }
 `;

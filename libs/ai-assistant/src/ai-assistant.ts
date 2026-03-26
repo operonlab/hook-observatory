@@ -9,6 +9,7 @@
  *   <ai-assistant mode="blog" api-url="/api/assistant/chat" />
  */
 
+import { SpriteAnimator } from "@workshop/live2d-core";
 import { startStream } from "./stream-handler";
 import { STYLES } from "./styles";
 import type { ChatMessage, MascotState } from "./types";
@@ -43,6 +44,7 @@ export class AiAssistantElement extends HTMLElement {
   ];
 
   private shadow: ShadowRoot;
+  private animator: SpriteAnimator | null = null;
   private messages: ChatMessage[] = [];
   private isStreaming = false;
   private mascotState: MascotState = "idle";
@@ -70,12 +72,33 @@ export class AiAssistantElement extends HTMLElement {
     this.bindEvents();
     this.setMascotState("idle");
     this.startPhraseRotation();
+
+    const canvas = this.shadow.querySelector('.mascot-canvas') as HTMLCanvasElement;
+    if (canvas) {
+      this.animator = new SpriteAnimator({
+        canvas,
+        width: 510,
+        height: 510,
+        layerBasePath: `${this.mascotBase}/layers`,
+      });
+
+      // Mouse tracking
+      document.addEventListener('mousemove', this._onMouseMove);
+    }
+
     this.dispatchEvent(new CustomEvent("assistant-ready"));
   }
+
+  private _onMouseMove = (e: MouseEvent) => {
+    this.animator?.setMousePosition(e.clientX, e.clientY);
+  };
 
   disconnectedCallback() {
     this.abortController?.abort();
     if (this.phraseTimer) clearInterval(this.phraseTimer);
+    this.animator?.destroy();
+    this.animator = null;
+    document.removeEventListener('mousemove', this._onMouseMove);
   }
 
   // ── Public API ──
@@ -141,10 +164,6 @@ export class AiAssistantElement extends HTMLElement {
     return this.getAttribute("mascot-base") ?? DEFAULT_MASCOT_BASE;
   }
 
-  private mascotSrc(state: MascotState): string {
-    return `${this.mascotBase}/${state}.png`;
-  }
-
   // ── Render ──
 
   private render() {
@@ -159,8 +178,8 @@ export class AiAssistantElement extends HTMLElement {
       </div>
 
       <div class="mascot-row">
-        <div class="mascot" data-state="idle">
-          <img class="mascot-img" src="${this.mascotSrc("idle")}" alt="AI 助手" />
+        <div class="mascot">
+          <canvas class="mascot-canvas" width="510" height="510"></canvas>
         </div>
         <div class="action-buttons">
           <button class="action-btn chat-toggle" aria-label="展開輸入框" title="展開輸入框">⋯</button>
@@ -394,18 +413,7 @@ export class AiAssistantElement extends HTMLElement {
       this.stopPhraseRotation();
     }
 
-    this.mascotEl.classList.add("state-transition");
-    setTimeout(() => {
-      this.mascotEl.setAttribute("data-state", state);
-      const img = this.mascotEl.querySelector(
-        ".mascot-img",
-      ) as HTMLImageElement | null;
-      if (img) img.src = this.mascotSrc(state);
-
-      requestAnimationFrame(() => {
-        this.mascotEl.classList.remove("state-transition");
-      });
-    }, 150);
+    this.animator?.setState(state);
   }
 
   // ── Speech Bubble ──
