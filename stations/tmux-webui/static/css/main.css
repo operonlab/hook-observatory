@@ -425,6 +425,8 @@ footer{padding-bottom:env(safe-area-inset-bottom)}
 .tts-indicator.active{opacity:1}
 .tts-indicator .tts-play-icon{color:var(--green);font-size:14px;margin-right:4px}
 @media(hover:none){.tts-indicator.active{border-color:var(--accent);padding:10px 22px;font-size:14px}}
+#fit-toggle{font-size:11px;min-width:28px;font-weight:600}
+#fit-toggle.active{color:var(--green);border-color:var(--green);background:rgba(74,222,128,.1)}
 #tts-toggle{font-size:14px;min-width:28px}
 #tts-toggle.active{color:var(--green);border-color:rgba(74,222,128,.3)}
 
