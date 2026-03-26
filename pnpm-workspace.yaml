@@ -1,6 +1,8 @@
 packages:
   - workbench
   - libs/ai-assistant
+  - libs/live2d-core
+  - apps/desktop-assistant
   - stations/agent-vista/frontend
   - stations/hook-observatory/frontend
   - stations/video-edit/frontend

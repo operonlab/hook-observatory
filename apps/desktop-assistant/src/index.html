@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workshop Assistant</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!--
+      Root container: transparent, no decorations.
+      The window is 300x400px (set in tauri.conf.json).
+    -->
+    <div id="app">
+      <!-- Live2D canvas — rendered by @workshop/live2d-core when ready -->
+      <div id="canvas-container">
+        <canvas id="live2d-canvas" width="300" height="250"></canvas>
+        <!--
+          Placeholder shown until Live2D model is loaded.
+          Replace with actual mascot sprite or SVG when model is ready.
+        -->
+        <div id="mascot-placeholder" aria-hidden="true">✨</div>
+      </div>
+
+      <!-- Speech bubble: assistant replies appear here -->
+      <div id="speech-bubble" class="bubble hidden" role="status" aria-live="polite">
+        <div id="bubble-text"></div>
+        <div id="bubble-cursor" class="cursor" aria-hidden="true"></div>
+      </div>
+
+      <!-- Input area: user types here to chat -->
+      <div id="input-area">
+        <input
+          id="chat-input"
+          type="text"
+          placeholder="Ask the fairy..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="send-btn" aria-label="Send">→</button>
+      </div>
+
+      <!-- Settings panel (hidden by default) -->
+      <div id="settings-panel" class="hidden" role="dialog" aria-label="Settings">
+        <label for="api-url-input">API URL</label>
+        <input id="api-url-input" type="url" />
+        <label for="api-key-input">API Key</label>
+        <input id="api-key-input" type="password" />
+        <div class="settings-actions">
+          <button id="settings-save-btn">Save</button>
+          <button id="settings-close-btn">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Drag handle: invisible strip at top for window dragging -->
+      <div id="drag-handle" aria-hidden="true"></div>
+
+      <!-- Settings trigger -->
+      <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
