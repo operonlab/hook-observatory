@@ -54,7 +54,7 @@ async def vision_analyze(
 @mcp.tool()
 @mcp_error_handler("Vision")
 async def vision_engines() -> str:
-    """List available vision engines."""
+    """List available computer vision engines with supported analysis tasks and capabilities."""
     result = await to_thread(client.list_engines)
     return json_text(result)
 

@@ -86,7 +86,7 @@ async def taskflow_list_tasks(
     page: int = 1,
     page_size: int = 20,
 ) -> str:
-    """列出任務（可依狀態/來源/專案/優先級/標籤/關鍵字篩選）"""
+    """List tasks with filters: status, source, project, priority, tag, keyword search. 列出任務。"""
     result = await to_thread(
         client.list_tasks,
         status=status,
@@ -112,7 +112,7 @@ async def taskflow_list_tasks(
 @mcp.tool()
 @mcp_error_handler("Taskflow")
 async def taskflow_get_task(task_id: str) -> str:
-    """查看任務詳情（含子任務與進度更新）"""
+    """Get task details: title, status, priority, due date, subtasks, progress updates. 任務詳情。"""
     result = await to_thread(client.get_task, task_id)
     return fmt_task_detail(result)
 
@@ -131,7 +131,7 @@ async def taskflow_create_task(
     tags: Optional[list[str]] = None,
     parent_id: Optional[str] = None,
 ) -> str:
-    """新增任務"""
+    """Create a new task with title, source, priority, due date, tags, parent task. 新增任務。"""
     body = build_body(
         {"title": title, "source": source},
         description=description,
@@ -169,7 +169,7 @@ async def taskflow_update_task(
     tags: Optional[list[str]] = None,
     parent_id: Optional[str] = None,
 ) -> str:
-    """更新任務欄位"""
+    """Update task fields: title, description, priority, due date, tags, estimated hours. 更新任務。"""
     body = build_body(
         None,
         title=title,
@@ -238,7 +238,7 @@ async def taskflow_add_update(
 @mcp.tool()
 @mcp_error_handler("Taskflow")
 async def taskflow_today() -> str:
-    """列出今日任務（今日到期 + 進行中）"""
+    """List today's tasks: items due today and currently in-progress. 今日任務。"""
     items = await to_thread(client.get_today)
     if not items:
         return "今日沒有待辦任務，幹得漂亮！"
@@ -251,7 +251,7 @@ async def taskflow_today() -> str:
 @mcp.tool()
 @mcp_error_handler("Taskflow")
 async def taskflow_upcoming(days: int = 7) -> str:
-    """列出即將到期的任務"""
+    """List tasks due within the next N days (default 7). 即將到期任務。"""
     items = await to_thread(client.get_upcoming, days)
     if not items:
         return f"未來 {days} 天內沒有到期任務。"
@@ -264,7 +264,7 @@ async def taskflow_upcoming(days: int = 7) -> str:
 @mcp.tool()
 @mcp_error_handler("Taskflow")
 async def taskflow_progress() -> str:
-    """查看任務進度統計（狀態/來源/優先級分布、逾期數、工時）"""
+    """Task progress statistics: distribution by status/source/priority, overdue count, hours. 進度統計。"""
     result = await to_thread(client.get_progress)
     lines = ["# 任務進度統計\n"]
 
@@ -308,7 +308,7 @@ async def taskflow_list_subtasks(
     page: int = 1,
     page_size: int = 20,
 ) -> str:
-    """列出指定任務的子任務"""
+    """List subtasks of a parent task with status and priority. 子任務列表。"""
     result = await to_thread(
         client.list_subtasks,
         task_id,

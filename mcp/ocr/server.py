@@ -49,7 +49,7 @@ async def ocr_extract(
 @mcp.tool()
 @mcp_error_handler("OCR")
 async def ocr_engines() -> str:
-    """List available OCR engines."""
+    """List available OCR engines (e.g. Apple Vision, Tesseract) with supported languages and capabilities."""
     result = await to_thread(client.list_engines)
     return json_text(result)
 

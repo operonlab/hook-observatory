@@ -267,7 +267,7 @@ async def anvil_catalog(status: str = "active", limit: int = 50) -> str:
 
 @mcp.tool()
 async def anvil_test_skill(name: str) -> str:
-    """Run T1-T5 structural tests on a skill."""
+    """Run T1-T5 structural validation tests (file existence, YAML frontmatter, schema) on a registered skill."""
 
     def _run():
         with _client() as c:
@@ -312,7 +312,7 @@ async def anvil_eval_skill(name: str, mode: str = "grader") -> str:
 
 @mcp.tool()
 async def anvil_skill_detail(name: str) -> str:
-    """Get detailed information about a specific skill."""
+    """Get detailed skill metadata: version, health score, invocation count, success rate, I/O schema, and tags."""
 
     def _run():
         with _client() as c:

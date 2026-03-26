@@ -95,7 +95,7 @@ async def intelflow_report_create(
     sources: list = None,
     skill_name: str | None = None,
 ) -> str:
-    """Create a new intelligence report."""
+    """Create a new intelligence report with title, query, content, tags, sources, and skill attribution."""
     body = build_body(
         {"title": title, "query": query, "content": content},
         tags=tags,

@@ -46,7 +46,7 @@ async def stt_transcribe(
 @mcp.tool()
 @mcp_error_handler("STT")
 async def stt_engines() -> str:
-    """List available STT engines."""
+    """List available speech-to-text engines (e.g. Apple, Whisper) with supported languages and capabilities."""
     result = await to_thread(client.list_engines)
     return json_text(result)
 

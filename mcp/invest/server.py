@@ -32,7 +32,7 @@ def fmt_pct(v: float | int) -> str:
 @mcp.tool()
 @mcp_error_handler("Invest")
 async def invest_list_accounts(page: int = 1, page_size: int = 20) -> str:
-    """列出投資帳戶"""
+    """List investment brokerage accounts with name, broker, currency. 列出投資帳戶。"""
     result = await to_thread(client.list_accounts, page=page, page_size=page_size)
     items = result.get("items", [])
     if not items:
@@ -52,7 +52,7 @@ async def invest_create_account(
     currency: str = "TWD",
     notes: str = "",
 ) -> str:
-    """新增投資帳戶"""
+    """Create a new investment brokerage account (name, broker, currency). 新增投資帳戶。"""
     body = build_body({"name": name}, broker=broker, currency=currency, notes=notes)
     result = await to_thread(client.create_account, body)
     return (
@@ -66,7 +66,7 @@ async def invest_create_account(
 @mcp.tool()
 @mcp_error_handler("Invest")
 async def invest_account_summary(account_id: str) -> str:
-    """查看帳戶摘要（含持倉損益）"""
+    """Get investment account summary: total market value, cost basis, unrealized gain/loss, position count. 帳戶摘要。"""
     result = await to_thread(client.get_account_summary, account_id)
     lines = [
         f"# {result['name']} 帳戶摘要\n",
@@ -85,7 +85,7 @@ async def invest_list_positions(
     page: int = 1,
     page_size: int = 20,
 ) -> str:
-    """列出持倉部位"""
+    """List stock/ETF positions with symbol, shares, current price, unrealized gain/loss. 持倉部位。"""
     result = await to_thread(
         client.list_positions,
         account_id=account_id or None,
@@ -120,7 +120,7 @@ async def invest_create_position(
     current_price: float = 0,
     currency: str = "TWD",
 ) -> str:
-    """新增持倉部位"""
+    """Create a new portfolio position (symbol, shares, average cost, asset type). 新增持倉。"""
     body = build_body(
         {"account_id": account_id, "symbol": symbol},
         exchange=exchange,
@@ -151,7 +151,7 @@ async def invest_create_trade(
     tax: float = 0,
     notes: str = "",
 ) -> str:
-    """新增交易紀錄（買入/賣出/股利/分割）"""
+    """Record a trade (buy/sell/dividend/split) with price, shares, fee, tax. 交易紀錄。"""
     body = build_body(
         {"position_id": position_id, "type": type, "shares": shares, "price": price, "traded_at": traded_at},
         fee=fee,
@@ -172,7 +172,7 @@ async def invest_create_trade(
 @mcp.tool()
 @mcp_error_handler("Invest")
 async def invest_portfolio() -> str:
-    """查看投資組合總覽（所有帳戶彙總）"""
+    """Portfolio overview: total market value, cost, gain/loss across all investment accounts. 投資組合總覽。"""
     result = await to_thread(client.get_portfolio)
     lines = [
         "# 投資組合總覽\n",
@@ -199,7 +199,7 @@ async def invest_portfolio() -> str:
 @mcp.tool()
 @mcp_error_handler("Invest")
 async def invest_refresh_quotes(symbols: list[str] | None = None) -> str:
-    """更新股價報價"""
+    """Refresh current stock/ETF price quotes with change percentage. 更新報價。"""
     result = await to_thread(client.refresh_quotes, symbols or [])
     if not result:
         return "無報價可更新。"

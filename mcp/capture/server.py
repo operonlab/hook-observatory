@@ -150,7 +150,7 @@ async def capture_stats() -> str:
 @mcp.tool()
 @mcp_error_handler("Capture")
 async def capture_delete(capture_id: str) -> str:
-    """刪除捕捉資料。"""
+    """Delete a capture record by ID (hard delete). Permanently removes the pending data. 刪除捕捉資料。"""
     await to_thread(client.delete, capture_id=capture_id)
     return "Capture deleted."
 

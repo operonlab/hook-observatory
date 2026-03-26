@@ -106,7 +106,7 @@ def _format_runs(result: dict) -> str:
 @mcp.tool()
 @mcp_error_handler("Nodeflow")
 async def nodeflow_flows(page: int = 1, page_size: int = 20) -> str:
-    """List DAG flows with pagination."""
+    """List workflow DAG flows with name, status, and trigger type. Supports pagination."""
     result = await to_thread(client.list_flows, page=page, page_size=page_size)
     return _format_flows(result)
 
@@ -127,7 +127,7 @@ async def nodeflow_create_flow(
     trigger_type: str = "manual",
     trigger_config: dict = None,
 ) -> str:
-    """Create a new DAG flow."""
+    """Create a new workflow DAG flow with name, description, and trigger type (manual/scheduled/event)."""
     data = {"name": name, "status": "draft"}
     if description:
         data["description"] = description
@@ -151,7 +151,7 @@ async def nodeflow_trigger_flow(flow_id: str, input_data: dict = None) -> str:
 @mcp.tool()
 @mcp_error_handler("Nodeflow")
 async def nodeflow_nodes(flow_id: str, limit: int = 50) -> str:
-    """List nodes in a flow."""
+    """List all nodes in a workflow flow with type, label, config, and position."""
     result = await to_thread(client.list_nodes, flow_id)
     items = result if isinstance(result, list) else result.get("items", [])
     total_count = len(items)
@@ -169,7 +169,7 @@ async def nodeflow_create_node(
     position_x: float = 0,
     position_y: float = 0,
 ) -> str:
-    """Create a node in a flow."""
+    """Create a workflow node in a DAG flow. Specify node_type, label, config, and position."""
     data = {
         "flow_id": flow_id,
         "node_type": node_type,
@@ -185,7 +185,7 @@ async def nodeflow_create_node(
 @mcp.tool()
 @mcp_error_handler("Nodeflow")
 async def nodeflow_edges(flow_id: str, limit: int = 50) -> str:
-    """List edges in a flow."""
+    """List all edges (connections between nodes) in a workflow flow with source and target node IDs."""
     result = await to_thread(client.list_edges, flow_id)
     items = result if isinstance(result, list) else result.get("items", [])
     total_count = len(items)
