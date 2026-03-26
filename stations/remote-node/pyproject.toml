@@ -1,0 +1,12 @@
+[project]
+name = "remote-node"
+version = "0.1.0"
+description = "Proxy station forwarding requests to Windows GPU server over Tailscale"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "httpx>=0.28",
+    "pillow>=11.0",
+    "pyyaml>=6.0",
+]
