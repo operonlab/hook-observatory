@@ -833,7 +833,7 @@ window.tmuxWs = (function() {
     const basePath = location.pathname.replace(/\/+$/, '') || '';
     ws = new WebSocket(`${proto}://${location.host}${basePath}/ws?session=${encodeURIComponent(session)}`);
 
-    ws.onopen = () => setStatus('connected', session);
+    ws.onopen = () => { setStatus('connected', session); if (window._fitOnConnect) window._fitOnConnect(); };
 
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
@@ -997,22 +997,36 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
 // ========================================================================
 
 (function() {
+  const FIT_KEY = 'tmux-fit-enabled';
+  const fitToggle = document.getElementById('fit-toggle');
+  let fitEnabled = localStorage.getItem(FIT_KEY) === '1';
+
+  // Character measurement probe
   const probe = document.createElement('span');
   probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-family:var(--font-mono);font-size:var(--font-size);line-height:1.5;';
   probe.textContent = 'X';
   document.body.appendChild(probe);
   let charW = 0, lineH = 0;
+
   function measureChar() {
     const r = probe.getBoundingClientRect();
     charW = r.width; lineH = r.height;
   }
+
   function fitPane(paneId) {
-    // Disabled: resizing tmux panes from the webui disrupts the physical
-    // terminal layout (e.g. desktop panes get expanded to webui width,
-    // then content wraps when layout resets on disconnect).
-    // The webui now adapts to tmux's pane size instead.
+    if (!fitEnabled || !charW || !lineH) return;
+    const pe = S.paneEls[paneId];
+    if (!pe) return;
+    const term = pe.terminal;
+    const cols = Math.floor(term.clientWidth / charW);
+    const rows = Math.floor(term.clientHeight / lineH);
+    if (cols > 0 && rows > 0) {
+      window.tmuxWs?.send({ type: 'fit', pane: paneId, cols, rows });
+    }
   }
+
   function fitAllPanes() {
+    if (!fitEnabled) return;
     measureChar();
     const panes = S.paneOrder.length ? S.paneOrder.filter(id => S.paneEls[id]) : Object.keys(S.paneEls);
     for (const id of panes) {
@@ -1020,11 +1034,50 @@ window.addEventListener('resize', () => { if (!S.maximizedPane && S.currentLayou
       if (pe && pe.box.style.display !== 'none' && !pe.box.classList.contains('dragging')) fitPane(id);
     }
   }
+
+  function updateToggleUI() {
+    fitToggle.classList.toggle('active', fitEnabled);
+    fitToggle.title = fitEnabled
+      ? 'Fit mode ON — terminal synced to browser viewport (click to disable)'
+      : 'Sync terminal size to browser viewport';
+  }
+
+  function enableFit() {
+    fitEnabled = true;
+    localStorage.setItem(FIT_KEY, '1');
+    updateToggleUI();
+    window.tmuxWs?.send({ type: 'fit_enable' });
+    measureChar();
+    fitAllPanes();
+  }
+
+  function disableFit() {
+    fitEnabled = false;
+    localStorage.setItem(FIT_KEY, '0');
+    updateToggleUI();
+    window.tmuxWs?.send({ type: 'fit_disable' });
+  }
+
+  fitToggle.addEventListener('click', () => {
+    if (fitEnabled) disableFit(); else enableFit();
+  });
+
+  // On WS connect, re-send fit_enable if toggle is on
+  window._fitOnConnect = function() {
+    updateToggleUI();
+    if (fitEnabled) {
+      window.tmuxWs?.send({ type: 'fit_enable' });
+      setTimeout(fitAllPanes, 200);
+    }
+  };
+
   let fitTimer = null;
   function debouncedFit() { clearTimeout(fitTimer); fitTimer = setTimeout(fitAllPanes, 300); }
   window._fitAllPanes = debouncedFit;
   window._fitPane = function(paneId) { measureChar(); fitPane(paneId); };
   window.addEventListener('resize', debouncedFit);
+
+  updateToggleUI();
 })();
 
 // ========================================================================

@@ -463,6 +463,47 @@ async def _exec_prefix_binding(target: str, key_combo: str) -> bool:
         return False
 
 
+# ── Fit mode: save/restore tmux window layouts ──
+
+
+async def _get_window_layout(session: str, window_idx: int) -> str | None:
+    """Get the layout string for a tmux window (used for restore)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux",
+            "display-message",
+            "-t",
+            f"{session}:{window_idx}",
+            "-p",
+            "#{window_layout}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        layout = stdout.decode().strip()
+        return layout if layout else None
+    except Exception:
+        return None
+
+
+async def _restore_window_layout(session: str, window_idx: int, layout: str) -> bool:
+    """Restore a tmux window to a previously saved layout."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux",
+            "select-layout",
+            "-t",
+            f"{session}:{window_idx}",
+            layout,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.communicate()
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
 # ── WebSocket handler ──
 
 
@@ -480,6 +521,10 @@ async def ws_handler(websocket: WebSocket):
         return
 
     _on_ws_connect(session)
+
+    # Track original tmux window layouts for restore on disconnect
+    fit_mode = False
+    original_layouts: dict[int, str] = {}  # window_index → layout string
 
     cfg = get_config()
     poll_interval = cfg.get("poll_interval", 0.4)
@@ -753,8 +798,26 @@ async def ws_handler(websocket: WebSocket):
             elif action == "fit":
                 cols = data.get("cols")
                 rows = data.get("rows")
-                if cols and rows:
+                if cols and rows and fit_mode:
+                    # Save original layout before first resize of this window
+                    win_idx = int(pane_id.split(".")[0]) if "." in pane_id else 0
+                    if win_idx not in original_layouts:
+                        layout = await _get_window_layout(session, win_idx)
+                        if layout:
+                            original_layouts[win_idx] = layout
                     await resize_pane(target, int(cols), int(rows))
+
+            elif action == "fit_enable":
+                fit_mode = True
+                logger.info("Fit mode enabled for session '%s'", session)
+
+            elif action == "fit_disable":
+                fit_mode = False
+                # Restore all saved layouts
+                for win_idx, layout in original_layouts.items():
+                    await _restore_window_layout(session, win_idx, layout)
+                original_layouts.clear()
+                logger.info("Fit mode disabled, layouts restored for session '%s'", session)
 
             elif action == "select_pane_direction":
                 direction = data.get("direction", "")
@@ -783,6 +846,11 @@ async def ws_handler(websocket: WebSocket):
         poll_task.cancel()
         heartbeat_task.cancel()
         _ws_clients.discard(websocket)
+        # Restore tmux layouts if fit mode was active
+        if fit_mode and original_layouts:
+            for win_idx, layout in original_layouts.items():
+                await _restore_window_layout(session, win_idx, layout)
+            logger.info("Restored %d window layout(s) on disconnect", len(original_layouts))
         _on_ws_disconnect(session)
 
 
