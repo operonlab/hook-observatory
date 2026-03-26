@@ -1361,9 +1361,9 @@ class TmuxRelayClient:
                 except Exception:
                     pass
 
-        # 3. Recycle if busy
+        # 3. Recycle if busy from a PREVIOUS task (not our own acquire)
         st = self._pane_status(pane)
-        if st.startswith("busy"):
+        if st.startswith("busy") and st != "busy:acquired":
             self.recycle(pane)
 
         # 4. Execute relay
