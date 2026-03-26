@@ -18,6 +18,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from workshop.tmux.cli_session import is_process_running_async, start_cli_async
+from workshop.tmux.patterns import CLAUDE_CODE
+from workshop.tmux.primitives import (
+    capture_async,
+    send_enter_async,
+    send_text_async,
+    tmux_run_async,
+)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("capture-console")
@@ -109,72 +117,25 @@ _query_lock = asyncio.Lock()
 
 
 # ---------------------------------------------------------------------------
-# tmux helpers
+# tmux helpers (delegated to workshop.tmux.*)
 # ---------------------------------------------------------------------------
-
-
-async def _tmux(args: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
-    """Run a tmux subcommand."""
-    proc = await asyncio.create_subprocess_exec(
-        "tmux",
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
-    except TimeoutError:
-        proc.kill()
-        return -1, "", "timeout"
-    return proc.returncode or 0, (stdout or b"").decode(), (stderr or b"").decode()
-
-
-async def _capture_pane() -> str:
-    """Capture current visible pane content."""
-    rc, out, _ = await _tmux(["capture-pane", "-t", TMUX_TARGET, "-p"])
-    return out if rc == 0 else ""
 
 
 async def pane_exists() -> bool:
     """Check if the target tmux pane exists."""
-    rc, _, _ = await _tmux(["has-session", "-t", TMUX_SESSION])
-    if rc != 0:
+    r = await tmux_run_async("has-session", "-t", TMUX_SESSION)
+    if not r.ok:
         return False
-    rc, out, _ = await _tmux(
-        [
-            "list-panes",
-            "-t",
-            f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
-            "-F",
-            "#{pane_index}",
-        ]
+    r = await tmux_run_async(
+        "list-panes",
+        "-t",
+        f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
+        "-F",
+        "#{pane_index}",
     )
-    if rc != 0:
+    if not r.ok:
         return False
-    return CAPTURE_PANE in out.strip().split("\n")
-
-
-async def is_claude_running() -> bool:
-    """Check if Claude Code is running in the target pane (node process)."""
-    rc, out, _ = await _tmux(
-        [
-            "display-message",
-            "-t",
-            TMUX_TARGET,
-            "-p",
-            "#{pane_current_command}",
-        ]
-    )
-    if rc != 0:
-        return False
-    cmd = out.strip().lower()
-    # Claude Code shows as "node", "claude", or its version (e.g. "2.1.79")
-    if "node" in cmd or "claude" in cmd:
-        return True
-    # Version string pattern (digits.digits.digits) means Claude Code is running
-    if re.match(r"^\d+\.\d+\.\d+$", cmd):
-        return True
-    return False
+    return CAPTURE_PANE in r.stdout.split("\n")
 
 
 # ---------------------------------------------------------------------------
@@ -185,37 +146,33 @@ async def is_claude_running() -> bool:
 async def _ensure_pane() -> bool:
     """Ensure the tmux window/pane exists. Create if missing."""
     # Check session
-    rc, _, _ = await _tmux(["has-session", "-t", TMUX_SESSION])
-    if rc != 0:
+    r = await tmux_run_async("has-session", "-t", TMUX_SESSION)
+    if not r.ok:
         log.error("tmux session '%s' does not exist", TMUX_SESSION)
         return False
 
     # Check if window exists
-    rc, out, _ = await _tmux(
-        [
-            "list-windows",
-            "-t",
-            TMUX_SESSION,
-            "-F",
-            "#{window_index}",
-        ]
+    r = await tmux_run_async(
+        "list-windows",
+        "-t",
+        TMUX_SESSION,
+        "-F",
+        "#{window_index}",
     )
-    windows = out.strip().split("\n") if rc == 0 else []
+    windows = r.stdout.split("\n") if r.ok else []
 
     if CAPTURE_WINDOW not in windows:
         # Create the window (named "capture")
         log.info("Creating tmux window %s:%s (capture)", TMUX_SESSION, CAPTURE_WINDOW)
-        rc, _, err = await _tmux(
-            [
-                "new-window",
-                "-t",
-                f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
-                "-n",
-                "capture",
-            ]
+        r = await tmux_run_async(
+            "new-window",
+            "-t",
+            f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
+            "-n",
+            "capture",
         )
-        if rc != 0:
-            log.error("Failed to create window: %s", err)
+        if not r.ok:
+            log.error("Failed to create window: %s", r.stderr)
             return False
         await asyncio.sleep(0.5)
 
@@ -223,15 +180,13 @@ async def _ensure_pane() -> bool:
     if not await pane_exists():
         # Window exists but pane index doesn't — split to create it
         log.info("Creating pane %s in window %s", CAPTURE_PANE, CAPTURE_WINDOW)
-        rc, _, err = await _tmux(
-            [
-                "split-window",
-                "-t",
-                f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
-            ]
+        r = await tmux_run_async(
+            "split-window",
+            "-t",
+            f"{TMUX_SESSION}:{CAPTURE_WINDOW}",
         )
-        if rc != 0:
-            log.error("Failed to create pane: %s", err)
+        if not r.ok:
+            log.error("Failed to create pane: %s", r.stderr)
             return False
         await asyncio.sleep(0.3)
 
@@ -243,11 +198,6 @@ async def ensure_claude() -> bool:
     if not await _ensure_pane():
         return False
 
-    if await is_claude_running():
-        return True
-
-    log.info("Starting Claude Code in %s", TMUX_TARGET)
-
     # Write system prompt to file (avoids shell escaping nightmares)
     with open(_PROMPT_FILE, "w") as f:
         f.write(SYSTEM_PROMPT)
@@ -256,20 +206,14 @@ async def ensure_claude() -> bool:
         f"claude --model {CLAUDE_MODEL} --dangerously-skip-permissions"
         f' --system-prompt "$(cat {_PROMPT_FILE})"'
     )
-    await _tmux(["send-keys", "-t", TMUX_TARGET, "-l", start_cmd])
-    await _tmux(["send-keys", "-t", TMUX_TARGET, "Enter"])
-
-    # Wait for Claude Code to initialize
-    for _ in range(20):
-        await asyncio.sleep(0.5)
-        if await is_claude_running():
-            # Extra wait for TUI to fully render
-            await asyncio.sleep(2)
-            log.info("Claude Code started in %s", TMUX_TARGET)
-            return True
-
-    log.error("Failed to start Claude Code in %s", TMUX_TARGET)
-    return False
+    started = await start_cli_async(
+        TMUX_TARGET, start_cmd, CLAUDE_CODE, wait_timeout=10, poll_interval=0.5
+    )
+    if started:
+        log.info("Claude Code ready in %s", TMUX_TARGET)
+    else:
+        log.error("Failed to start Claude Code in %s", TMUX_TARGET)
+    return started
 
 
 # ---------------------------------------------------------------------------
@@ -344,13 +288,13 @@ async def query_claude(message: str) -> str:
             raise RuntimeError("Claude Code 未執行且無法啟動")
         _touch_last_used()
 
-        before = await _capture_pane()
+        before = await capture_async(TMUX_TARGET) or ""
 
         # Send message via tmux (literal mode avoids key-name interpretation)
         safe_msg = message.replace("\n", " ")
-        await _tmux(["send-keys", "-t", TMUX_TARGET, "-l", safe_msg])
+        await send_text_async(TMUX_TARGET, safe_msg)
         await asyncio.sleep(0.1)
-        await _tmux(["send-keys", "-t", TMUX_TARGET, "Enter"])
+        await send_enter_async(TMUX_TARGET)
 
         # Content-stability approach:
         # Claude Code TUI animates during thinking (✻ Cogitating…) — content
@@ -362,7 +306,7 @@ async def query_claude(message: str) -> str:
 
         while time.time() - start < CLAUDE_TIMEOUT:
             await asyncio.sleep(0.3)
-            current = await _capture_pane()
+            current = await capture_async(TMUX_TARGET) or ""
 
             if current == before:
                 continue  # nothing changed yet
@@ -402,7 +346,7 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     pane_ok = await pane_exists()
-    claude_ok = await is_claude_running() if pane_ok else False
+    claude_ok = await is_process_running_async(TMUX_TARGET, CLAUDE_CODE) if pane_ok else False
     return {
         "status": "ok" if claude_ok else ("degraded" if pane_ok else "down"),
         "pane": TMUX_TARGET,

@@ -4,46 +4,24 @@ import asyncio
 import json
 import logging
 
+from workshop.tmux.primitives import capture_async, send_text_async, tmux_run_async
+
 logger = logging.getLogger("tmux-webui")
-
-
-async def _run(args: list[str], timeout: float = 10) -> tuple[int, str, str]:
-    """Run a subprocess and return (returncode, stdout, stderr)."""
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except TimeoutError:
-        proc.kill()
-        await proc.communicate()
-        logger.warning("subprocess timed out after %ss: %s", timeout, args[:3])
-        return (1, "", f"timeout after {timeout}s")
-    return (
-        proc.returncode or 0,
-        stdout.decode("utf-8", errors="replace"),
-        stderr.decode("utf-8", errors="replace"),
-    )
 
 
 # ── Session / Window / Pane queries ──
 
 
 async def list_sessions() -> list[dict]:
-    rc, out, _ = await _run(
-        [
-            "tmux",
-            "list-sessions",
-            "-F",
-            "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}",
-        ]
+    r = await tmux_run_async(
+        "list-sessions",
+        "-F",
+        "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}",
     )
-    if rc != 0:
+    if not r.ok:
         return []
     sessions = []
-    for line in out.strip().splitlines():
+    for line in r.stdout.strip().splitlines():
         parts = line.split("\t")
         if len(parts) >= 3:
             sessions.append(
@@ -57,20 +35,17 @@ async def list_sessions() -> list[dict]:
 
 
 async def list_windows(session: str) -> list[dict]:
-    rc, out, _ = await _run(
-        [
-            "tmux",
-            "list-windows",
-            "-t",
-            session,
-            "-F",
-            "#{window_index}\t#{window_name}\t#{window_active}\t#{window_panes}",
-        ]
+    r = await tmux_run_async(
+        "list-windows",
+        "-t",
+        session,
+        "-F",
+        "#{window_index}\t#{window_name}\t#{window_active}\t#{window_panes}",
     )
-    if rc != 0:
+    if not r.ok:
         return []
     windows = []
-    for line in out.strip().splitlines():
+    for line in r.stdout.strip().splitlines():
         parts = line.split("\t")
         if len(parts) >= 4:
             windows.append(
@@ -85,22 +60,19 @@ async def list_windows(session: str) -> list[dict]:
 
 
 async def list_panes(session: str) -> list[dict]:
-    rc, out, _ = await _run(
-        [
-            "tmux",
-            "list-panes",
-            "-s",
-            "-t",
-            session,
-            "-F",
-            "#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_active}"
-            "\t#{pane_width}\t#{pane_height}\t#{pane_current_command}\t#{pane_title}",
-        ]
+    r = await tmux_run_async(
+        "list-panes",
+        "-s",
+        "-t",
+        session,
+        "-F",
+        "#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_active}"
+        "\t#{pane_width}\t#{pane_height}\t#{pane_current_command}\t#{pane_title}",
     )
-    if rc != 0:
+    if not r.ok:
         return []
     panes = []
-    for line in out.strip().splitlines():
+    for line in r.stdout.strip().splitlines():
         parts = line.split("\t")
         if len(parts) >= 7:
             panes.append(
@@ -123,106 +95,55 @@ async def list_panes(session: str) -> list[dict]:
 
 
 async def capture_pane(target: str, lines: int = 150) -> str:
-    rc, out, _ = await _run(  # noqa: RUF059
-        [
-            "tmux",
-            "capture-pane",
-            "-t",
-            target,
-            "-p",
-            "-e",
-            "-S",
-            f"-{lines}",
-        ]
-    )
-    return out
-
-
-_SEND_KEYS_LIMIT = 512
+    out = await capture_async(target, start_line=-lines, escape_sequences=True)
+    return out or ""
 
 
 async def send_keys(target: str, text: str, literal: bool = True) -> bool:
-    """Send text to a tmux pane.
-
-    Short text (<512 chars): direct send-keys -l.
-    Long text: load-buffer stdin + paste-buffer to avoid truncation.
-    """
-    if literal and len(text) > _SEND_KEYS_LIMIT:
-        return await _paste_text(target, text)
-    args = ["tmux", "send-keys", "-t", target]
-    if literal:
-        args += ["-l", text]
-    else:
-        args.append(text)
-    rc, _, stderr = await _run(args)
-    if rc != 0:
-        logger.warning("send-keys failed for %s: %s", target, stderr.strip())
-    return rc == 0
-
-
-async def _paste_text(target: str, text: str) -> bool:
-    """Send long text via load-buffer + paste-buffer (no length limit)."""
-    buf = "_webui_paste"
-    proc = await asyncio.create_subprocess_exec(
-        "tmux",
-        "load-buffer",
-        "-b",
-        buf,
-        "-",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    await proc.communicate(input=text.encode())
-    if proc.returncode != 0:
-        logger.warning("load-buffer failed for %s", target)
+    """Send text to a tmux pane."""
+    try:
+        await send_text_async(target, text, literal=literal, buf_name="_webui_paste")
+        return True
+    except RuntimeError:
+        logger.warning("send-keys failed for %s", target)
         return False
-    rc, _, stderr = await _run(["tmux", "paste-buffer", "-b", buf, "-t", target, "-d", "-p"])
-    if rc != 0:
-        logger.warning("paste-buffer failed for %s: %s", target, stderr.strip())
-        await _run(["tmux", "delete-buffer", "-b", buf])
-        return False
-    return True
 
 
 # ── Window management ──
 
 
 async def new_window(session: str) -> bool:
-    rc, _, _ = await _run(["tmux", "new-window", "-t", session])
-    return rc == 0
+    r = await tmux_run_async("new-window", "-t", session)
+    return r.ok
 
 
 async def kill_window(session: str, window: int) -> bool:
-    rc, _, _ = await _run(["tmux", "kill-window", "-t", f"{session}:{window}"])
-    return rc == 0
+    r = await tmux_run_async("kill-window", "-t", f"{session}:{window}")
+    return r.ok
 
 
 async def resize_pane(target: str, cols: int, rows: int) -> bool:
     """Resize a tmux pane to the given cols x rows."""
-    rc, _, stderr = await _run(
-        [
-            "tmux",
-            "resize-pane",
-            "-t",
-            target,
-            "-x",
-            str(cols),
-            "-y",
-            str(rows),
-        ]
+    r = await tmux_run_async(
+        "resize-pane",
+        "-t",
+        target,
+        "-x",
+        str(cols),
+        "-y",
+        str(rows),
     )
-    if rc != 0:
-        logger.warning("resize-pane failed for %s: %s", target, stderr.strip())
-    return rc == 0
+    if not r.ok:
+        logger.warning("resize-pane failed for %s: %s", target, r.stderr)
+    return r.ok
 
 
 async def select_layout(target: str, layout: str = "even-horizontal") -> bool:
-    """Apply a tmux layout preset to a window. e.g. even-horizontal, even-vertical, tiled."""
-    rc, _, stderr = await _run(["tmux", "select-layout", "-t", target, layout])
-    if rc != 0:
-        logger.warning("select-layout failed for %s: %s", target, stderr.strip())
-    return rc == 0
+    """Apply a tmux layout preset to a window."""
+    r = await tmux_run_async("select-layout", "-t", target, layout)
+    if not r.ok:
+        logger.warning("select-layout failed for %s: %s", target, r.stderr)
+    return r.ok
 
 
 async def select_pane(session: str, direction: str) -> bool:
@@ -231,8 +152,8 @@ async def select_pane(session: str, direction: str) -> bool:
     flag = flag_map.get(direction.lower())
     if not flag:
         return False
-    rc, _, _ = await _run(["tmux", "select-pane", "-t", session, flag])
-    return rc == 0
+    r = await tmux_run_async("select-pane", "-t", session, flag)
+    return r.ok
 
 
 # ── System metrics ──
@@ -243,13 +164,20 @@ async def status_metrics() -> dict:
     results = {"net": "", "cpu": "", "mem": "", "disk": "", "llm": {}}
 
     try:
-        rc, out, _ = await _run(
-            ["curl", "-sf", "--max-time", "3", "http://127.0.0.1:8795/sysmon/current"]
+        proc = await asyncio.create_subprocess_exec(
+            "curl",
+            "-sf",
+            "--max-time",
+            "3",
+            "http://127.0.0.1:8795/sysmon/current",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        if rc != 0 or not out.strip():
+        stdout_b, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        if proc.returncode != 0 or not stdout_b:
             return results
 
-        data = json.loads(out)
+        data = json.loads(stdout_b.decode("utf-8", errors="replace"))
 
         # System metrics — use pre-formatted display strings from agent-metrics
         results["net"] = data.get("net_display", "")

@@ -27,6 +27,19 @@ from pathlib import Path
 from typing import Any
 
 from workshop.clients._relay_cache import RelayCacheManager
+from workshop.tmux.cli_session import (
+    is_process_running,
+    wait_for_prompt,
+)
+from workshop.tmux.patterns import CLAUDE_CODE
+from workshop.tmux.primitives import (
+    capture,
+    display,
+    send_enter,
+    send_text,
+    tmux_check,
+    tmux_ok,
+)
 
 # ======================== Errors ========================
 
@@ -109,14 +122,6 @@ class TmuxRelayClient:
     INIT_POLL_INTERVAL = 2
     CONTEXT_DIR = Path("/tmp/relay-context")
 
-    # Detection patterns — heuristic text matching on terminal output.
-    # These are fragile UX hints, not semantic analysis. May need updating
-    # if Claude Code changes its spinner/status text in future versions.
-    PROCESSING_INDICATORS = re.compile(r"⏺|✢|✻|Thinking|Processing|Osmosing|Crunching|Deciphering")
-    CLAUDE_INDICATORS = re.compile(r"❯|⏺|✢|✻|╭─|💰")
-    PROMPT_PATTERN = re.compile(r"❯")
-    SHELL_COMMANDS = {"zsh", "bash", "fish"}
-
     IDLE_TIMESTAMPS_DIR = Path("/tmp/relay-idle-ts")
 
     def __init__(
@@ -145,118 +150,8 @@ class TmuxRelayClient:
         return cmd
 
     # ================================================================
-    # tmux primitives — direct subprocess calls
-    # ================================================================
-
-    def _tmux(self, *args: str, timeout: int = 10, check: bool = True) -> str:
-        """Run a tmux command and return stripped stdout."""
-        try:
-            proc = subprocess.run(
-                ["tmux", *args],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired as e:
-            raise TmuxRelayError("tmux", f"Timed out: tmux {' '.join(args)}") from e
-        except FileNotFoundError:
-            raise TmuxRelayError("tmux", "tmux binary not found") from None
-
-        if check and proc.returncode != 0:
-            raise TmuxRelayError("tmux", f"rc={proc.returncode}: {proc.stderr.strip()}")
-        return proc.stdout.strip()
-
-    def _tmux_ok(self, *args: str, timeout: int = 10) -> str | None:
-        """Run a tmux command, return stdout or None on failure."""
-        try:
-            return self._tmux(*args, timeout=timeout)
-        except TmuxRelayError:
-            return None
-
-    def _display(self, pane: str, fmt: str) -> str | None:
-        """tmux display-message for a pane. Returns None on failure."""
-        return self._tmux_ok("display-message", "-t", pane, "-p", fmt)
-
-    def _capture(self, pane: str, start_line: int = -8) -> str | None:
-        """tmux capture-pane. Returns captured text or None."""
-        return self._tmux_ok("capture-pane", "-t", pane, "-p", "-S", str(start_line))
-
-    # Maximum bytes safe for a single send-keys -l argument.
-    # macOS ARG_MAX=1MB but tmux input parsing + shell escaping can fail
-    # well before that.  512 chars is a safe conservative threshold.
-    _SEND_KEYS_LIMIT = 512
-
-    def _send_keys(self, pane: str, text: str, literal: bool = True) -> None:
-        """Send text to a tmux pane.
-
-        Short text (<512 chars): direct ``send-keys -l``.
-        Long text: ``load-buffer`` from stdin + ``paste-buffer`` to bypass
-        command-line length limits that cause silent truncation.
-        """
-        if literal and len(text) > self._SEND_KEYS_LIMIT:
-            self._paste_text(pane, text)
-            return
-        args = ["send-keys", "-t", pane]
-        if literal:
-            args.append("-l")
-        args.append(text)
-        self._tmux(*args)
-
-    def _paste_text(self, pane: str, text: str) -> None:
-        """Send long text via load-buffer + paste-buffer (no length limit)."""
-        buf_name = "_relay_paste"
-        # load-buffer - reads from stdin
-        try:
-            subprocess.run(
-                ["tmux", "load-buffer", "-b", buf_name, "-"],
-                input=text,
-                text=True,
-                capture_output=True,
-                timeout=5,
-                check=True,
-            )
-        except (subprocess.SubprocessError, FileNotFoundError) as e:
-            raise TmuxRelayError("tmux", f"load-buffer failed: {e}") from e
-        try:
-            # -d deletes the buffer after pasting, -p pastes as literal text
-            self._tmux("paste-buffer", "-b", buf_name, "-t", pane, "-d", "-p")
-        except TmuxRelayError:
-            # Cleanup buffer on failure
-            self._tmux_ok("delete-buffer", "-b", buf_name)
-            raise
-
-    def _send_enter(self, pane: str) -> None:
-        """Send Enter key to a pane."""
-        self._tmux("send-keys", "-t", pane, "Enter")
-
-    # ================================================================
     # Pane detection helpers
     # ================================================================
-
-    # Claude Code reports its semver as pane_current_command (e.g. "2.1.78")
-    _SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+")
-
-    def _is_claude_pane(self, pane: str) -> bool:
-        """Check if a pane is running Claude Code.
-
-        Primary: pane_current_command (lightweight, no capture needed).
-        Fallback: capture-pane content check (heavy, only when primary is ambiguous).
-        """
-        cmd = self._display(pane, "#{pane_current_command}")
-        if cmd:
-            if "claude" in cmd:
-                return True
-            # Bare shell = definitely not Claude Code
-            if cmd.split("/")[-1] in self.SHELL_COMMANDS:
-                return False
-            # Claude Code reports semver as process name (e.g. "2.1.78")
-            if self._SEMVER_PATTERN.match(cmd):
-                return True
-        # Fallback: capture pane content (heavy — only for ambiguous cases)
-        content = self._capture(pane, -8)
-        if content and self.CLAUDE_INDICATORS.search(content):
-            return True
-        return False
 
     def _pane_status(self, pane: str) -> str:
         """Determine idle/busy status — reads from Redis cache first.
@@ -264,7 +159,7 @@ class TmuxRelayClient:
         Staleness guard: if cached status is busy but updated_at is older
         than STALE_PENDING_THRESHOLD, fall through to live check to self-heal.
         """
-        pane_id = self._display(pane, "#{pane_id}")
+        pane_id = display(pane, "#{pane_id}")
         if pane_id is None:
             return "not-claude"
         pane_safe = pane_id.replace("%", "")
@@ -296,7 +191,7 @@ class TmuxRelayClient:
     def _pane_status_live(self, pane: str, pane_safe: str = "") -> str:
         """Live pane status detection via tmux subprocess (original logic)."""
         if not pane_safe:
-            pane_id = self._display(pane, "#{pane_id}")
+            pane_id = display(pane, "#{pane_id}")
             if pane_id is None:
                 return "not-claude"
             pane_safe = pane_id.replace("%", "")
@@ -314,16 +209,16 @@ class TmuxRelayClient:
                 return "busy:relay"
 
         # Capture bottom 8 lines
-        bottom = self._capture(pane, -8)
+        bottom = capture(pane, start_line=-8)
         if bottom is None:
             return "busy:unknown"
 
         # Check 2: prompt visible → idle
-        if self.PROMPT_PATTERN.search(bottom):
+        if CLAUDE_CODE.prompt_pattern.search(bottom):
             return "idle"
 
         # Check 3: processing indicators → busy:active
-        if self.PROCESSING_INDICATORS.search(bottom):
+        if CLAUDE_CODE.processing_indicators.search(bottom):
             return "busy:active"
 
         return "busy:unknown"
@@ -344,7 +239,7 @@ class TmuxRelayClient:
         if env_session:
             return env_session
 
-        sessions_raw = self._tmux_ok("list-sessions", "-F", "#{session_name}")
+        sessions_raw = tmux_ok("list-sessions", "-F", "#{session_name}")
         if sessions_raw:
             best_session = None
             best_count = 0
@@ -361,18 +256,18 @@ class TmuxRelayClient:
             if best_session:
                 return best_session
 
-        return self._tmux_ok("display-message", "-p", "#{session_name}") or "default"
+        return tmux_ok("display-message", "-p", "#{session_name}") or "default"
 
     def _list_relay_windows(self, session: str) -> list[str]:
         """List all ⚡relay window names in a session."""
-        raw = self._tmux_ok("list-windows", "-t", session, "-F", "#{window_name}")
+        raw = tmux_ok("list-windows", "-t", session, "-F", "#{window_name}")
         if not raw:
             return []
         return [w for w in raw.splitlines() if w.startswith(self.RELAY_WINDOW_PREFIX)]
 
     def _count_panes_in_window(self, target: str) -> int:
         """Count panes in a specific window."""
-        raw = self._tmux_ok("list-panes", "-t", target, "-F", "#{pane_index}")
+        raw = tmux_ok("list-panes", "-t", target, "-F", "#{pane_index}")
         return len(raw.splitlines()) if raw else 0
 
     def _count_total_relay_panes(self, session: str) -> int:
@@ -418,7 +313,7 @@ class TmuxRelayClient:
         """
         result = []
         for wname in self._list_relay_windows(session):
-            raw = self._tmux_ok(
+            raw = tmux_ok(
                 "list-panes",
                 "-t",
                 f"{session}:{wname}",
@@ -437,7 +332,7 @@ class TmuxRelayClient:
                     {
                         "pane_ref": pane_ref,
                         "pane_id": pane_id,
-                        "is_claude": self._is_claude_pane(pane_ref),
+                        "is_claude": is_process_running(pane_ref, CLAUDE_CODE),
                         "window_name": wname,
                     }
                 )
@@ -446,7 +341,7 @@ class TmuxRelayClient:
     def _find_reusable_pane(self, session: str) -> str | None:
         """Find a non-Claude pane in relay windows that can be reused."""
         for wname in self._list_relay_windows(session):
-            raw = self._tmux_ok(
+            raw = tmux_ok(
                 "list-panes",
                 "-t",
                 f"{session}:{wname}",
@@ -458,7 +353,7 @@ class TmuxRelayClient:
             for idx in raw.splitlines():
                 idx = idx.strip()
                 pane_ref = f"{session}:{wname}.{idx}"
-                if not self._is_claude_pane(pane_ref):
+                if not is_process_running(pane_ref, CLAUDE_CODE):
                     return pane_ref
         return None
 
@@ -485,21 +380,6 @@ class TmuxRelayClient:
         (self.IDLE_TIMESTAMPS_DIR / pane_safe).unlink(missing_ok=True)
 
     # ================================================================
-    # Prompt wait helper
-    # ================================================================
-
-    def _wait_for_prompt(self, pane: str, timeout: int | None = None) -> bool:
-        """Wait for Claude Code ❯ prompt to appear."""
-        timeout = timeout or self.INIT_TIMEOUT
-        max_checks = timeout // self.INIT_POLL_INTERVAL
-        for _ in range(max_checks):
-            time.sleep(self.INIT_POLL_INTERVAL)
-            bottom = self._capture(pane, -5)
-            if bottom and self.PROMPT_PATTERN.search(bottom):
-                return True
-        return False
-
-    # ================================================================
     # tmux hooks registration
     # ================================================================
 
@@ -509,14 +389,14 @@ class TmuxRelayClient:
         python = "/Users/joneshong/.local/bin/python3"
         for wname in self._list_relay_windows(session):
             target = f"{session}:{wname}"
-            self._tmux_ok(
+            tmux_ok(
                 "set-hook",
                 "-t",
                 target,
                 "pane-exited",
                 f"run-shell '{python} {updater} pane-exited'",
             )
-            self._tmux_ok(
+            tmux_ok(
                 "set-hook",
                 "-t",
                 target,
@@ -560,7 +440,7 @@ class TmuxRelayClient:
         session = session or self._resolve_relay_session()
         panes = []
         for wname in self._list_relay_windows(session):
-            raw = self._tmux_ok(
+            raw = tmux_ok(
                 "list-panes",
                 "-t",
                 f"{session}:{wname}",
@@ -573,15 +453,15 @@ class TmuxRelayClient:
                 parts = line.split(None, 1)
                 idx = parts[0]
                 pane_ref = f"{session}:{wname}.{idx}"
-                if self._is_claude_pane(pane_ref):
+                if is_process_running(pane_ref, CLAUDE_CODE):
                     status = self._pane_status_live(pane_ref)
-                    pane_id = self._display(pane_ref, "#{pane_id}") or "?"
+                    pane_id = display(pane_ref, "#{pane_id}") or "?"
                     panes.append(PaneInfo(pane_ref=pane_ref, status=status, pane_id=pane_id))
                 else:
                     # Bare shell in relay window → standby (warm pool, reusable)
                     cmd = parts[1] if len(parts) > 1 else ""
-                    if cmd and cmd.split("/")[-1] in self.SHELL_COMMANDS:
-                        pane_id = self._display(pane_ref, "#{pane_id}") or "?"
+                    if cmd and cmd.split("/")[-1] in _SHELLS:
+                        pane_id = display(pane_ref, "#{pane_id}") or "?"
                         panes.append(PaneInfo(pane_ref=pane_ref, status="standby", pane_id=pane_id))
         return panes
 
@@ -621,7 +501,7 @@ class TmuxRelayClient:
 
     def status(self, pane: str) -> str:
         """Check a single pane's status."""
-        if not self._is_claude_pane(pane):
+        if not is_process_running(pane, CLAUDE_CODE):
             return "not-claude"
         return self._pane_status(pane)
 
@@ -631,8 +511,8 @@ class TmuxRelayClient:
 
         # Verify session exists
         try:
-            self._tmux("has-session", "-t", session)
-        except TmuxRelayError:
+            tmux_check("has-session", "-t", session)
+        except RuntimeError:
             raise TmuxRelayError("spawn", f"tmux session '{session}' not found")
 
         # Check soft limit
@@ -645,7 +525,7 @@ class TmuxRelayClient:
         if reusable:
             target = reusable
             # Only start Claude Code if the pane is a bare shell
-            cmd = self._display(target, "#{pane_current_command}")
+            cmd = display(target, "#{pane_current_command}")
             already_claude = cmd and "claude" in cmd
         else:
             already_claude = False
@@ -653,34 +533,36 @@ class TmuxRelayClient:
             target_window = self._find_window_with_room(session)
 
             if target_window:
-                self._tmux("split-window", "-t", target_window, "-v")
-                new_pane_idx = self._display(target_window, "#{pane_index}")
-                wname = self._display(target_window, "#{window_name}")
+                tmux_check("split-window", "-t", target_window, "-v")
+                new_pane_idx = display(target_window, "#{pane_index}")
+                wname = display(target_window, "#{window_name}")
                 target = f"{session}:{wname}.{new_pane_idx}"
             else:
                 # Priority 3: Create new relay window
                 new_wname = self._next_relay_window_name(session)
-                self._tmux("new-window", "-t", f"{session}:", "-n", new_wname)
-                raw = self._tmux(
+                tmux_check("new-window", "-t", f"{session}:", "-n", new_wname)
+                raw = tmux_check(
                     "list-panes", "-t", f"{session}:{new_wname}", "-F", "#{pane_index}"
                 )
                 first_idx = raw.splitlines()[0].strip()
                 target = f"{session}:{new_wname}.{first_idx}"
 
         # Ensure even layout
-        wname_layout = self._display(target, "#{window_name}")
+        wname_layout = display(target, "#{window_name}")
         if wname_layout:
-            self._tmux_ok("select-layout", "-t", f"{session}:{wname_layout}", "even-horizontal")
+            tmux_ok("select-layout", "-t", f"{session}:{wname_layout}", "even-horizontal")
 
         # Start Claude Code (skip if pane already has it running)
         if not already_claude:
-            self._send_keys(target, self._claude_cmd())
-            self._send_enter(target)
+            send_text(target, self._claude_cmd(), buf_name="_relay_paste")
+            send_enter(target)
 
         # Wait for ❯ prompt
-        if already_claude or self._wait_for_prompt(target):
+        if already_claude or wait_for_prompt(
+            target, CLAUDE_CODE, timeout=self.INIT_TIMEOUT, poll_interval=2.0
+        ):
             # Cache: register new pane as idle
-            pane_id = self._display(target, "#{pane_id}")
+            pane_id = display(target, "#{pane_id}")
             if pane_id:
                 try:
                     self._cache.set_pane(pane_id.replace("%", ""), target, "idle", pane_id)
@@ -718,9 +600,11 @@ class TmuxRelayClient:
             for p in idle[:count]:
                 if p.status == "standby":
                     # Bare shell → start Claude Code before acquiring
-                    self._send_keys(p.pane_ref, self._claude_cmd())
-                    self._send_enter(p.pane_ref)
-                    if not self._wait_for_prompt(p.pane_ref):
+                    send_text(p.pane_ref, self._claude_cmd(), buf_name="_relay_paste")
+                    send_enter(p.pane_ref)
+                    if not wait_for_prompt(
+                        p.pane_ref, CLAUDE_CODE, timeout=self.INIT_TIMEOUT, poll_interval=2.0
+                    ):
                         continue  # failed to start → skip, deficit spawning handles it
 
                 acquired.append(p.pane_ref)
@@ -740,7 +624,7 @@ class TmuxRelayClient:
                 new_pane = self.spawn(session=session)
                 acquired.append(new_pane)
                 # Mark spawned pane as busy (spawn marks it idle, we override)
-                pane_id = self._display(new_pane, "#{pane_id}")
+                pane_id = display(new_pane, "#{pane_id}")
                 if pane_id:
                     try:
                         self._cache.set_pane(
@@ -753,14 +637,14 @@ class TmuxRelayClient:
 
     def context(self, pane: str, lines: int = 30) -> str:
         """Capture recent conversation context from a pane."""
-        result = self._capture(pane, -lines)
+        result = capture(pane, start_line=-lines)
         if result is None:
             raise TmuxRelayError("context", f"Cannot capture pane {pane}")
         return result
 
     def _save_context(self, pane: str, pane_safe: str, reason: str = "") -> str | None:
         """Capture pane context before shutdown, save to /tmp/relay-context/{pane_safe}.json."""
-        content = self._capture(pane, -30)
+        content = capture(pane, start_line=-30)
         if not content:
             return None
         self.CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
@@ -780,28 +664,28 @@ class TmuxRelayClient:
 
     def standby(self, pane: str) -> str:
         """Put a pane into standby: /exit Claude Code, keep pane as bare shell."""
-        cmd = self._display(pane, "#{pane_current_command}")
-        if cmd and cmd.split("/")[-1] in self.SHELL_COMMANDS:
+        cmd = display(pane, "#{pane_current_command}")
+        if cmd and cmd.split("/")[-1] in _SHELLS:
             return "already-standby"
 
         # Save context before exit
-        pane_id_pre = self._display(pane, "#{pane_id}")
+        pane_id_pre = display(pane, "#{pane_id}")
         if pane_id_pre:
             try:
                 self._save_context(pane, pane_id_pre.replace("%", ""), "standby")
             except Exception:
                 pass
 
-        self._send_keys(pane, "/exit")
-        self._send_enter(pane)
+        send_text(pane, "/exit", buf_name="_relay_paste")
+        send_enter(pane)
 
         for _ in range(self.RECYCLE_EXIT_TIMEOUT):
             time.sleep(1)
-            cmd = self._display(pane, "#{pane_current_command}")
-            if cmd and cmd.split("/")[-1] in self.SHELL_COMMANDS:
+            cmd = display(pane, "#{pane_current_command}")
+            if cmd and cmd.split("/")[-1] in _SHELLS:
                 break
 
-        pane_id = self._display(pane, "#{pane_id}")
+        pane_id = display(pane, "#{pane_id}")
         if pane_id:
             self._clear_idle_ts(pane_id)
             try:
@@ -863,10 +747,10 @@ class TmuxRelayClient:
                     self._save_context(target, p.pane_id.replace("%", ""), "auto_standby")
                 except Exception:
                     pass
-                self._send_keys(target, "/exit")
-                self._send_enter(target)
+                send_text(target, "/exit", buf_name="_relay_paste")
+                send_enter(target)
                 time.sleep(3)
-                self._tmux_ok("kill-pane", "-t", target)
+                tmux_ok("kill-pane", "-t", target)
                 self._clear_idle_ts(p.pane_id)
                 try:
                     self._cache.remove_pane(p.pane_id.replace("%", ""))
@@ -881,32 +765,32 @@ class TmuxRelayClient:
                     continue
                 n = self._count_panes_in_window(f"{session}:{wname}")
                 if n == 0:
-                    self._tmux_ok("kill-window", "-t", f"{session}:{wname}")
+                    tmux_ok("kill-window", "-t", f"{session}:{wname}")
 
         return f"Standby: {standby_count}, Killed: {killed_count}"
 
     def recycle(self, pane: str) -> str:
         """Recycle a pane: /exit -> restart Claude Code."""
         # Step 1: Send /exit
-        self._send_keys(pane, "/exit")
-        self._send_enter(pane)
+        send_text(pane, "/exit", buf_name="_relay_paste")
+        send_enter(pane)
 
         # Step 2: Wait for Claude to exit (pane_current_command returns to shell)
         for _ in range(self.RECYCLE_EXIT_TIMEOUT):
             time.sleep(1)
-            cmd = self._display(pane, "#{pane_current_command}")
+            cmd = display(pane, "#{pane_current_command}")
             if cmd is None:
                 raise TmuxRelayError("recycle", f"Pane {pane} disappeared during recycle")
-            if cmd in self.SHELL_COMMANDS:
+            if cmd in _SHELLS:
                 break
 
         # Step 3: Start fresh Claude Code
-        self._send_keys(pane, self._claude_cmd())
-        self._send_enter(pane)
+        send_text(pane, self._claude_cmd(), buf_name="_relay_paste")
+        send_enter(pane)
 
         # Step 4: Wait for ❯ prompt
-        if self._wait_for_prompt(pane):
-            pane_id = self._display(pane, "#{pane_id}")
+        if wait_for_prompt(pane, CLAUDE_CODE, timeout=self.INIT_TIMEOUT, poll_interval=2.0):
+            pane_id = display(pane, "#{pane_id}")
             if pane_id:
                 self._clear_idle_ts(pane_id)
                 # Cache: mark as idle after recycle
@@ -991,10 +875,10 @@ class TmuxRelayClient:
                 except Exception:
                     pass
                 messages.append(f"Reaping Claude pane {target} (idle {idle_secs}s)")
-                self._send_keys(target, "/exit")
-                self._send_enter(target)
+                send_text(target, "/exit", buf_name="_relay_paste")
+                send_enter(target)
                 time.sleep(3)
-                self._tmux_ok("kill-pane", "-t", target)
+                tmux_ok("kill-pane", "-t", target)
                 self._clear_idle_ts(pane_id)
                 try:
                     self._cache.remove_pane(pane_id.replace("%", ""))
@@ -1011,7 +895,7 @@ class TmuxRelayClient:
                 # Use pane_id for stable targeting
                 target = p["pane_id"] or p["pane_ref"]
                 messages.append(f"Killing bare shell {target}")
-                self._tmux_ok("kill-pane", "-t", target)
+                tmux_ok("kill-pane", "-t", target)
                 pane_safe = p["pane_id"].replace("%", "")
                 self._clear_idle_ts(p["pane_id"])
                 try:
@@ -1026,7 +910,7 @@ class TmuxRelayClient:
                 continue
             n = self._count_panes_in_window(f"{session}:{wname}")
             if n == 0:
-                self._tmux_ok("kill-window", "-t", f"{session}:{wname}")
+                tmux_ok("kill-window", "-t", f"{session}:{wname}")
                 messages.append(f"Killed empty window {wname}")
 
         messages.append(
@@ -1077,7 +961,7 @@ class TmuxRelayClient:
         Uses headless Claude (haiku) to compare last_command vs new_command.
         Only called for relay panes (automated, no human in the loop).
         """
-        pane_id = self._display(pane, "#{pane_id}")
+        pane_id = display(pane, "#{pane_id}")
         if not pane_id:
             return False
         pane_safe = pane_id.replace("%", "")
@@ -1137,27 +1021,27 @@ class TmuxRelayClient:
         result_file = signal_file.replace(".done", ".txt")
 
         # Resolve pane_id
-        pane_id = self._display(source, "#{pane_id}")
+        pane_id = display(source, "#{pane_id}")
         if not pane_id:
             raise TmuxRelayError("relay", f"Cannot resolve pane ID for {source}")
         pane_safe = pane_id.replace("%", "")
 
         # Pre-dispatch: check if prior context is stale for this task
         if command and self._should_clear_context(source, command):
-            self._send_keys(source, "/clear")
-            self._send_enter(source)
+            send_text(source, "/clear", buf_name="_relay_paste")
+            send_enter(source)
             time.sleep(2)
 
         # Set session name if role is provided (/rename is a local CLI command, instant)
         if role:
-            self._send_keys(source, f"/rename {role}")
-            self._send_enter(source)
+            send_text(source, f"/rename {role}", buf_name="_relay_paste")
+            send_enter(source)
             time.sleep(0.5)
 
         # Set input bar color if requested (/color is a local CLI command, instant)
         if color:
-            self._send_keys(source, f"/color {color}")
-            self._send_enter(source)
+            send_text(source, f"/color {color}", buf_name="_relay_paste")
+            send_enter(source)
             time.sleep(0.5)
 
         # Cache: mark pane as busy:relay + store command
@@ -1204,15 +1088,15 @@ class TmuxRelayClient:
             timer.start()
 
             # Phase 1.5: Record cursor position before sending command
-            bh = int(self._display(source, "#{history_size}") or "0")
-            bc = int(self._display(source, "#{cursor_y}") or "0")
+            bh = int(display(source, "#{history_size}") or "0")
+            bc = int(display(source, "#{cursor_y}") or "0")
             before_pos = bh + bc
 
             # Phase 2: Send command
             time.sleep(0.5)  # ensure wait-for is registered
-            self._send_keys(source, command)
+            send_text(source, command, buf_name="_relay_paste")
             time.sleep(0.3)
-            self._send_enter(source)
+            send_enter(source)
             send_time = int(time.time())
 
             # Phase 3: Wait for completion signal (ZERO CPU)
@@ -1251,8 +1135,8 @@ class TmuxRelayClient:
             time.sleep(1)
 
             # Phase 4: Capture output — only NEW lines since command was sent
-            ah = int(self._display(source, "#{history_size}") or "0")
-            ac = int(self._display(source, "#{cursor_y}") or "0")
+            ah = int(display(source, "#{history_size}") or "0")
+            ac = int(display(source, "#{cursor_y}") or "0")
             after_pos = ah + ac
             new_lines = after_pos - before_pos
 
@@ -1260,9 +1144,7 @@ class TmuxRelayClient:
             new_lines = max(1, min(new_lines, extract_lines))
 
             start_line = before_pos - ah
-            captured = (
-                self._tmux_ok("capture-pane", "-t", source, "-p", "-S", str(start_line)) or ""
-            )
+            captured = tmux_ok("capture-pane", "-t", source, "-p", "-S", str(start_line)) or ""
             Path(result_file).write_text(captured)
 
             # Phase 5: Forward to target pane (skipped in no_forward mode)
@@ -1271,17 +1153,21 @@ class TmuxRelayClient:
                     lines = captured.splitlines()
                     summary_lines = lines[:40] if len(lines) > 40 else lines
                     summary_text = "\n".join(summary_lines[:38])
-                    self._send_keys(target, f"[Relay from {source}] 結果摘要：")
-                    self._send_enter(target)
+                    send_text(target, f"[Relay from {source}] 結果摘要：", buf_name="_relay_paste")
+                    send_enter(target)
                     for line in summary_text.splitlines():
                         if line.strip():
-                            self._send_keys(target, line)
-                            self._send_enter(target)
+                            send_text(target, line, buf_name="_relay_paste")
+                            send_enter(target)
                 else:
-                    self._send_keys(target, f"[Relay from {source}] 完整結果已存至 {result_file}")
-                    self._send_enter(target)
-                    self._send_keys(target, f"可用 cat {result_file} 查看")
-                    self._send_enter(target)
+                    send_text(
+                        target,
+                        f"[Relay from {source}] 完整結果已存至 {result_file}",
+                        buf_name="_relay_paste",
+                    )
+                    send_enter(target)
+                    send_text(target, f"可用 cat {result_file} 查看", buf_name="_relay_paste")
+                    send_enter(target)
 
             # Phase 6: Write signal file
             ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1350,7 +1236,7 @@ class TmuxRelayClient:
 
         # 2. Write role/task metadata (preserve busy:acquired status from acquire())
         if role or task:
-            pane_id = self._display(pane, "#{pane_id}")
+            pane_id = display(pane, "#{pane_id}")
             if pane_id:
                 try:
                     self._cache.update_pane_meta(
@@ -1416,7 +1302,7 @@ class TmuxRelayClient:
             signal_file = f"/tmp/relay-py-{int(time.time() * 1000)}-{os.getpid()}.done"
 
             # Cache: pre-mark as busy:relay + role/task metadata
-            pane_id_raw = self._display(pane, "#{pane_id}")
+            pane_id_raw = display(pane, "#{pane_id}")
             if pane_id_raw:
                 try:
                     self._cache.set_pane(
