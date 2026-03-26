@@ -23,7 +23,7 @@ LOG_DIR = HOME / "workshop" / "outputs" / "finance" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "billing.log"
 
-CORE_URL = os.getenv("CORE_URL", "http://127.0.0.1:8801")
+CORE_URL = os.getenv("CORE_URL", "http://127.0.0.1:10000")
 ADMIN_COOKIE = os.getenv("WORKSHOP_ADMIN_COOKIE", "")
 
 
@@ -51,7 +51,21 @@ def process_billing() -> dict:
         return {"error": str(e)}
 
 
+def _core_alive() -> bool:
+    """Quick health check — returns False if Core API is unreachable."""
+    try:
+        req = urllib.request.Request(f"{CORE_URL}/status", method="GET")
+        with urllib.request.urlopen(req, timeout=5):
+            return True
+    except Exception:
+        return False
+
+
 def main() -> None:
+    if not _core_alive():
+        log("SKIP: Core API unreachable — will retry next schedule")
+        return
+
     log("Starting finance billing process...")
     result = process_billing()
     if "error" in result:
@@ -65,14 +79,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import fcntl
     import sys
 
-    _lock_path = f"/tmp/{Path(__file__).stem}.lock"
-    _lock_fd = open(_lock_path, "w")
-    try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
-        sys.exit(0)
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from lib.process_lock import acquire_or_exit
+
+    acquire_or_exit()
     main()

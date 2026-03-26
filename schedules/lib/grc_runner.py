@@ -56,7 +56,7 @@ def grc_runner_main(
     module: str,
     stages: list[str],
     space_id: str = "default",
-    core_api: str = "http://localhost:8801",
+    core_api: str = "http://localhost:10000",
     curate_dry_run: bool = False,
     extra_params: dict[str, str] | None = None,
 ) -> None:

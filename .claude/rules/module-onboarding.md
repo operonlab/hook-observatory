@@ -2,7 +2,7 @@
 
 When adding a new frontend module or station, complete ALL applicable items before considering the task done.
 
-## Core Module (runs inside core on port 8801)
+## Core Module (runs inside core on port 10000)
 
 Examples: briefing, finance, memvault, intelflow, notification
 

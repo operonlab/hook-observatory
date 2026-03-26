@@ -42,7 +42,7 @@ class APIConnectionError(Exception):
         self.url = url
         super().__init__(
             f"Cannot connect to Core API at {url}. "
-            "Start server: cd core && uvicorn src.main:app --port 8801"
+            "Start server: cd core && uvicorn src.main:app --port 10000"
         )
 
 
@@ -55,7 +55,7 @@ class BaseClient:
 
     Args:
         module: API module name (e.g. "memvault", "finance").
-        base_url: Core API URL. Defaults to CORE_API_URL env or localhost:8801.
+        base_url: Core API URL. Defaults to CORE_API_URL env or localhost:10000.
         space_id: Space ID. Defaults to WORKSHOP_SPACE_ID env or "default".
         timeout: Default request timeout in seconds.
     """

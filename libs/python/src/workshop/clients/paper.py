@@ -15,7 +15,7 @@ from ._base import BaseClient
 
 
 class PaperClient(BaseClient):
-    """Client for the Paper academic research module (Core API port 8801)."""
+    """Client for the Paper academic research module (Core API port 10000)."""
 
     def __init__(self, **kwargs):
         super().__init__(module="paper", **kwargs)

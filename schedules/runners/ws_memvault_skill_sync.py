@@ -26,7 +26,7 @@ HOME = Path.home()
 LOG_DIR = HOME / "workshop/outputs/memvault/logs"
 LOG_FILE = LOG_DIR / "skill_sync.log"
 ANVIL_API = "http://127.0.0.1:4103/api/anvil"
-CORE_API = "http://localhost:8801/api/memvault"
+CORE_API = "http://localhost:10000/api/memvault"
 SPACE_ID = "default"
 
 
@@ -52,7 +52,8 @@ def http_get(url: str, timeout: int = 10) -> tuple[int | None, dict | list | Non
 def http_put(url: str, body: dict, timeout: int = 10) -> tuple[int | None, dict | None]:
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
-        url, data=payload,
+        url,
+        data=payload,
         headers={"Content-Type": "application/json"},
         method="PUT",
     )
@@ -162,13 +163,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import fcntl
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from lib.process_lock import acquire_or_exit
 
-    _lock_path = f"/tmp/{Path(__file__).stem}.lock"
-    _lock_fd = open(_lock_path, "w")
-    try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
-        sys.exit(0)
+    acquire_or_exit()
     main()

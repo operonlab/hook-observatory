@@ -14,7 +14,7 @@ Usage:
     python3 mcp/memvault/pipelines/synthesis_runner.py --skip-insights
 
 Environment:
-    CORE_API_URL      — defaults to http://localhost:8801
+    CORE_API_URL      — defaults to http://localhost:10000
     MEMVAULT_SPACE_ID — defaults to default
     DEEPSEEK_API_KEY  — required for summary generation (unless --skip-summaries)
 """
@@ -169,7 +169,7 @@ def main() -> None:
         import json
         import urllib.request
 
-        core_api = os.environ.get("CORE_API_URL", "http://localhost:8801")
+        core_api = os.environ.get("CORE_API_URL", "http://localhost:10000")
         t0 = time.monotonic()
         try:
             url = f"{core_api}/api/memvault/kg/interest/generate?space_id={args.space_id}"

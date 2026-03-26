@@ -1,4 +1,4 @@
-"""OCR SDK — HTTP client for OCR station (port 4109).
+"""OCR SDK — HTTP client for OCR station (port 10202).
 
 Usage:
     from workshop.clients.ocr import OCRClient
@@ -19,12 +19,10 @@ from ._base import APIError
 
 
 class OCRClient:
-    """HTTP client for OCR station (port 4109)."""
+    """HTTP client for OCR station (port 10202)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 120):
-        self.base_url = (
-            base_url or os.environ.get("OCR_URL", get_url("ocr"))
-        ).rstrip("/")
+        self.base_url = (base_url or os.environ.get("OCR_URL", get_url("ocr"))).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None
 

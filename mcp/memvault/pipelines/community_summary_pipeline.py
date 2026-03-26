@@ -10,7 +10,7 @@ Usage:
 
 Environment:
     DEEPSEEK_API_KEY  — required for LLM summarization
-    CORE_API_URL      — defaults to http://localhost:8801
+    CORE_API_URL      — defaults to http://localhost:10000
 """
 
 import argparse
@@ -24,7 +24,7 @@ from datetime import datetime
 from urllib.parse import urlencode
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")

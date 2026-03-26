@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 OMLX_PYTHON = Path.home() / ".venvs/omlx/bin/python3"
 OMLX_WORKER = Path.home() / ".venvs/omlx/embed_worker.py"
 EMBED_CHUNK_SIZE = 100

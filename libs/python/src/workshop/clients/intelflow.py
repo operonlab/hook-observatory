@@ -18,7 +18,7 @@ from ._base import BaseClient
 
 
 class IntelflowClient(BaseClient):
-    """Client for the Intelflow intelligence system (Core API port 8801)."""
+    """Client for the Intelflow intelligence system (Core API port 10000)."""
 
     def __init__(self, **kwargs):
         super().__init__(module="intelflow", **kwargs)

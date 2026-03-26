@@ -33,7 +33,7 @@ from datetime import datetime
 from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 EVOLVE_URL_TEMPLATE = "{base}/api/memvault/kg/attitudes/evolve"
 DEFAULT_CORRECTIONS_DIR = Path.home() / "Claude" / "memvault" / "corrections"
 
@@ -43,10 +43,12 @@ def http_post(url: str, body: dict, params: dict | None = None) -> tuple[int, di
     """Returns (http_status_code, response_body)."""
     if params:
         from urllib.parse import urlencode
+
         url = f"{url}?{urlencode(params)}"
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
-        url, data=payload,
+        url,
+        data=payload,
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
@@ -152,8 +154,11 @@ def evolve_correction(correction: dict, space_id: str, dry_run: bool) -> dict:
 
     if dry_run:
         return {
-            "success": True, "status": 0, "dry_run": True,
-            "correction": correction, "payload": body,
+            "success": True,
+            "status": 0,
+            "dry_run": True,
+            "correction": correction,
+            "payload": body,
         }
 
     status, resp = http_post(url, body, params={"space_id": space_id})
@@ -171,30 +176,37 @@ def main() -> None:
         description="Memvault attitude pipeline — evolve attitudes from corrections"
     )
     parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         help="Path to corrections JSONL file or directory. Reads from stdin if omitted.",
     )
     parser.add_argument(
-        "--all", action="store_true",
+        "--all",
+        action="store_true",
         help="When --input is a directory, process all JSONL files recursively.",
     )
     parser.add_argument(
-        "--space-id", default=os.environ.get("MEMVAULT_SPACE_ID", "default"),
+        "--space-id",
+        default=os.environ.get("MEMVAULT_SPACE_ID", "default"),
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Print what would be sent without calling Core API.",
     )
     parser.add_argument(
-        "--stop-on-error", action="store_true",
+        "--stop-on-error",
+        action="store_true",
         help="Stop processing if Core API returns an error.",
     )
     parser.add_argument(
-        "--archive", action="store_true",
+        "--archive",
+        action="store_true",
         help="Move processed JSONL files to corrections/processed/ directory.",
     )
     parser.add_argument(
-        "--notify", action="store_true",
+        "--notify",
+        action="store_true",
         help="Output JSON summary of high-drift corrections (drift_score > 0.3) to stdout.",
     )
     args = parser.parse_args()
@@ -247,7 +259,7 @@ def main() -> None:
         fact_preview = correction.get("fact", "")[:60]
         category = correction.get("category", "?")
 
-        print(f"  [{i+1}/{len(corrections)}] [{category}] {fact_preview}...", end=" ", flush=True)
+        print(f"  [{i + 1}/{len(corrections)}] [{category}] {fact_preview}...", end=" ", flush=True)
 
         result = evolve_correction(correction, args.space_id, args.dry_run)
 
@@ -267,11 +279,13 @@ def main() -> None:
                     except (TypeError, ValueError):
                         pass
             if drift_score > 0.3:
-                high_drift.append({
-                    "fact": correction.get("fact", ""),
-                    "category": correction.get("category", ""),
-                    "drift_score": drift_score,
-                })
+                high_drift.append(
+                    {
+                        "fact": correction.get("fact", ""),
+                        "category": correction.get("category", ""),
+                        "drift_score": drift_score,
+                    }
+                )
             print(f"OK{drift}")
             results["ok"] += 1
         else:
@@ -286,13 +300,13 @@ def main() -> None:
                 break
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  Memvault — Attitude Pipeline Report")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Total corrections : {len(corrections)}")
     print(f"  Evolved (OK)      : {results['ok']}")
     print(f"  Failed            : {results['fail']}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if failed:
         print(f"\n[warn] {len(failed)} failed correction(s):")

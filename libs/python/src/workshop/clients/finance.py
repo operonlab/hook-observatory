@@ -22,7 +22,7 @@ class FinanceClient(BaseClient):
     """HTTP client for the Finance Core API module.
 
     Args:
-        base_url: Core API URL. Defaults to CORE_API_URL env or localhost:8801.
+        base_url: Core API URL. Defaults to CORE_API_URL env or localhost:10000.
         space_id: Space ID. Defaults to WORKSHOP_SPACE_ID env or "default".
         timeout: Default request timeout in seconds.
     """
@@ -76,7 +76,9 @@ class FinanceClient(BaseClient):
 
     def gap_analysis(self, wallet_id: str, from_v: int, to_v: int) -> dict:
         """Run gap analysis between two versions. GET /wallets/{id}/snapshots/gap-analysis"""
-        return self._get(f"/wallets/{wallet_id}/snapshots/gap-analysis", {"from_v": from_v, "to_v": to_v})
+        return self._get(
+            f"/wallets/{wallet_id}/snapshots/gap-analysis", {"from_v": from_v, "to_v": to_v}
+        )
 
     def create_global_snapshot(self) -> dict:
         """Create global snapshot for all active wallets. POST /wallets/global-snapshot"""

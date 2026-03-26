@@ -14,7 +14,7 @@ Modes:
     --dry-run    Parse and display, don't write
 
 Env vars:
-    CORE_API  — Core API base URL (default: http://localhost:8801)
+    CORE_API  — Core API base URL (default: http://localhost:10000)
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ import time
 
 import httpx
 
-CORE_API = os.environ.get("CORE_API", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API", "http://localhost:10000")
 API_PREFIX = "/api/intelflow"
 
 # === Source directories ===

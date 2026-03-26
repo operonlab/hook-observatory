@@ -19,7 +19,7 @@ class AdminClient(BaseClient):
     """HTTP client for the Admin Core API module.
 
     Args:
-        base_url: Core API URL. Defaults to CORE_API_URL env or localhost:8801.
+        base_url: Core API URL. Defaults to CORE_API_URL env or localhost:10000.
         space_id: Space ID. Defaults to WORKSHOP_SPACE_ID env or "default".
         timeout: Default request timeout in seconds.
     """

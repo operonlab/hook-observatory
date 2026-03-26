@@ -37,10 +37,10 @@ AnvilError = APIError
 
 
 class AnvilClient:
-    """HTTP client for Anvil station (port 4103).
+    """HTTP client for Anvil station (port 10301).
 
     Args:
-        base_url: API URL. Defaults to ANVIL_URL env or http://127.0.0.1:4103.
+        base_url: API URL. Defaults to ANVIL_URL env or http://127.0.0.1:10301.
         timeout: Default request timeout in seconds.
     """
 

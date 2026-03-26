@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-API_URL = "http://127.0.0.1:8801/api/intelflow/reports"
+API_URL = "http://127.0.0.1:10000/api/intelflow/reports"
 # Always read from the main workshop vendor dir (canonical source of truth).
 # Override via CANNIBALIZE_JSON env var if needed.
 _default_json = Path.home() / "workshop" / "vendor" / "cannibalization.json"

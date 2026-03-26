@@ -41,7 +41,7 @@ RAW_DIR = OUTPUT_DIR / "raw"
 ANALYSIS_DIR = OUTPUT_DIR / "analysis"
 LOG_DIR = OUTPUT_ROOT / "logs"
 
-API_BASE = os.environ.get("CORE_API_URL", "http://localhost:8801")
+API_BASE = os.environ.get("CORE_API_URL", "http://localhost:10000")
 SPACE_ID = os.environ.get("SPACE_ID", "default")
 INTERNAL_KEY = os.environ.get("CORE_INTERNAL_API_KEY", "")
 
@@ -107,7 +107,10 @@ def api_get(path: str) -> dict | list | None:
                 delay = _backoff_delay(attempt)
                 log.warning(
                     "API GET %s failed (attempt %d/3), retry in %.1fs: %s",
-                    path, attempt + 1, delay, e,
+                    path,
+                    attempt + 1,
+                    delay,
+                    e,
                 )
                 time.sleep(delay)
             else:

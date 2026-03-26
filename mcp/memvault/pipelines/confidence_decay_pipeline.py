@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 LOG_DIR = Path.home() / "Claude" / "memvault" / "logs"
 LOG_FILE = LOG_DIR / "confidence-decay.log"

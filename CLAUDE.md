@@ -3,7 +3,7 @@
 Modular Monolith + Event-Driven workspace.
 
 ## Stack
-- **Backend**: Python 3.12 / FastAPI / uv (Modular Monolith, port 8801)
+- **Backend**: Python 3.12 / FastAPI / uv (Modular Monolith, port 10000)
 - **Frontend**: React 19 / TypeScript / Rsbuild / pnpm (Single App, port 3000)
 - **Database**: PostgreSQL (per-module schema isolation)
 - **Cache/Events**: Redis (cache + event bus)

@@ -1,7 +1,7 @@
 # Architecture Constraints
 
 ## Modular Monolith
-- Single deployable unit: all 13 domain modules in one FastAPI process (port 8801)
+- Single deployable unit: all 13 domain modules in one FastAPI process (port 10000)
 - Two hot-path services run separately: realtime/LiveKit (8830), media/STT-TTS (8831)
 - Frontend: single React app (workbench/, port 3000) — NO micro-frontend, NO Module Federation
 

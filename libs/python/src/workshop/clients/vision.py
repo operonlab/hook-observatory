@@ -1,11 +1,11 @@
-"""STT SDK — HTTP client for STT station (port 10200).
+"""Vision SDK — HTTP client for Vision station (port 10203).
 
 Usage:
-    from workshop.clients.stt import STTClient
+    from workshop.clients.vision import VisionClient
 
-    client = STTClient()
-    result = client.transcribe("/path/to/audio.m4a", language="zh-TW")
-    print(result["text"])
+    client = VisionClient()
+    result = client.analyze("/path/to/photo.jpg", task="describe", engine="smolvlm")
+    print(result["result"])
 """
 
 import os
@@ -13,16 +13,16 @@ from typing import Any
 
 import httpx
 
-from workshop.port_registry import get_url
-
 from ._base import APIError
 
 
-class STTClient:
-    """HTTP client for STT station (port 10200)."""
+class VisionClient:
+    """HTTP client for Vision station (port 10203)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 120):
-        self.base_url = (base_url or os.environ.get("STT_URL", get_url("stt"))).rstrip("/")
+        self.base_url = (base_url or os.environ.get("VISION_URL", "http://127.0.0.1:10203")).rstrip(
+            "/"
+        )
         self._timeout = timeout
         self._client: httpx.Client | None = None
 
@@ -47,12 +47,12 @@ class STTClient:
         except httpx.ConnectError:
             raise APIError(
                 0,
-                f"Cannot connect to STT at {self.base_url}. "
-                "Start server: cd stations/stt && .venv/bin/python3 main.py",
-                module="stt",
+                f"Cannot connect to Vision at {self.base_url}. "
+                "Start server: cd stations/vision && .venv/bin/python3 main.py",
+                module="vision",
             ) from None
         except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500], module="stt") from e
+            raise APIError(e.response.status_code, e.response.text[:500], module="vision") from e
 
     def _get(self, path: str, params: dict | None = None) -> Any:
         filtered = {k: v for k, v in params.items() if v is not None} if params else None
@@ -74,27 +74,20 @@ class STTClient:
         except Exception:
             return False
 
-    # ======================== Transcribe ========================
+    # ======================== Analyze ========================
 
-    def transcribe(
+    def analyze(
         self,
         file_path: str,
-        language: str = "zh-TW",
+        task: str = "describe",
         engine: str = "apple",
-        format: str = "json",
-    ) -> dict | str:
-        """Transcribe audio file. Returns dict for json, str for srt/vtt/text."""
-        params = {
-            "path": file_path,
-            "language": language,
-            "engine": engine,
-            "format": format,
-        }
-        filtered = {k: v for k, v in params.items() if v is not None}
-        resp = self._request("POST", "/transcribe", params=filtered)
-        if format in ("srt", "vtt", "text"):
-            return resp.text
-        return resp.json()
+        prompt: str | None = None,
+    ) -> dict:
+        """Analyze image with specified engine and task."""
+        return self._post(
+            "/analyze",
+            params={"path": file_path, "task": task, "engine": engine, "prompt": prompt},
+        )
 
     # ======================== Engines ========================
 
@@ -110,4 +103,4 @@ class STTClient:
         self.close()
 
     def __repr__(self) -> str:
-        return f"STTClient(base_url={self.base_url!r})"
+        return f"VisionClient(base_url={self.base_url!r})"

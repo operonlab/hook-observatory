@@ -23,7 +23,7 @@ LOG_FILE = LOG_DIR / "attitude.log"
 PYTHON = str(HOME / ".local" / "bin" / "python3")
 PIPELINE_SCRIPT = str(HOME / "workshop" / "mcp" / "memvault" / "pipelines" / "attitude_pipeline.py")
 CORRECTIONS_DIR = HOME / "Claude" / "memvault" / "corrections"
-NOTIFY_API = "http://localhost:8801/api/notification"
+NOTIFY_API = "http://localhost:10000/api/notification"
 SPACE_ID = "default"
 
 
@@ -45,10 +45,7 @@ def main() -> None:
         log("========== Attitude pipeline complete (nothing to do) ==========")
         return
 
-    jsonl_files = [
-        f for f in CORRECTIONS_DIR.rglob("**/*.jsonl")
-        if "processed" not in f.parts
-    ]
+    jsonl_files = [f for f in CORRECTIONS_DIR.rglob("**/*.jsonl") if "processed" not in f.parts]
     if not jsonl_files:
         log("No unprocessed JSONL files found")
         log("========== Attitude pipeline complete (nothing to do) ==========")
@@ -58,12 +55,15 @@ def main() -> None:
 
     # Run attitude_pipeline.py with --all --archive --notify
     cmd = [
-        PYTHON, PIPELINE_SCRIPT,
-        "--input", str(CORRECTIONS_DIR),
+        PYTHON,
+        PIPELINE_SCRIPT,
+        "--input",
+        str(CORRECTIONS_DIR),
         "--all",
         "--archive",
         "--notify",
-        "--space-id", SPACE_ID,
+        "--space-id",
+        SPACE_ID,
     ]
     log(f"Running: {' '.join(cmd)}")
 
@@ -132,13 +132,8 @@ def _send_notification(summary: dict) -> None:
 
 
 if __name__ == "__main__":
-    import fcntl
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from lib.process_lock import acquire_or_exit
 
-    _lock_path = f"/tmp/{Path(__file__).stem}.lock"
-    _lock_fd = open(_lock_path, "w")
-    try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
-        sys.exit(0)
+    acquire_or_exit()
     main()

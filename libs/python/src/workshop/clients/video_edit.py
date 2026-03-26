@@ -1,4 +1,4 @@
-"""Video Edit SDK — HTTP client for Video Edit station (port 4110).
+"""Video Edit SDK — HTTP client for Video Edit station (port 10206).
 
 Usage:
     from workshop.clients.video_edit import VideoEditClient
@@ -25,7 +25,7 @@ class VideoEditError(Exception):
 
 
 class VideoEditClient:
-    """HTTP client for Video Edit station (port 4110)."""
+    """HTTP client for Video Edit station (port 10206)."""
 
     def __init__(
         self,

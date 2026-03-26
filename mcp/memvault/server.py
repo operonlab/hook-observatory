@@ -9,7 +9,7 @@ Configure in ~/.claude.json:
         "command": "python3",
         "args": ["/path/to/workshop/mcp/memvault/server.py"],
         "env": {
-            "CORE_API_URL": "http://localhost:8801",
+            "CORE_API_URL": "http://localhost:10000",
             "MEMVAULT_SPACE_ID": "default"
         }
     }
@@ -141,8 +141,11 @@ async def memvault_kg_cascade_recall(
 ) -> str:
     """Adaptive Cascade Recall：Query Router → L2/L1 Semantic + L0 Triples + Blocks → CRAG Evaluation"""
     result = await to_thread(
-        client.cascade, query, top_k=top_k,
-        skip_routing=skip_routing, evaluate=evaluate,
+        client.cascade,
+        query,
+        top_k=top_k,
+        skip_routing=skip_routing,
+        evaluate=evaluate,
     )
     layers = result.get("layers_searched", [])
 
@@ -154,7 +157,9 @@ async def memvault_kg_cascade_recall(
     # Routing metadata
     routing_intent = result.get("routing_intent")
     if routing_intent:
-        parts.append(f"Routing: {routing_intent} (confidence: {result.get('routing_confidence', '?'):.2f})")
+        parts.append(
+            f"Routing: {routing_intent} (confidence: {result.get('routing_confidence', '?'):.2f})"
+        )
 
     # CRAG metadata
     verdict = result.get("evaluation_verdict")
@@ -486,7 +491,7 @@ async def annotate_insight(
 
     topic = insight[:15]
     all_tags = list(tags or []) + ["realtime-annotation"]
-    api_url = os.environ.get("MEMVAULT_API_URL", "http://127.0.0.1:8801/api/memvault")
+    api_url = os.environ.get("MEMVAULT_API_URL", "http://127.0.0.1:10000/api/memvault")
 
     body: dict = {
         "content": insight,

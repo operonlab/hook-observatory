@@ -19,7 +19,7 @@ from pathlib import Path
 HOME = Path.home()
 LOG_DIR = HOME / "workshop/outputs/intelflow/logs"
 LOG_FILE = LOG_DIR / "grc.log"
-CORE_API = "http://localhost:8801/api/intelflow"
+CORE_API = "http://localhost:10000/api/intelflow"
 SPACE_ID = "default"
 DRY_RUN = False
 
@@ -81,13 +81,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import fcntl
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from lib.process_lock import acquire_or_exit
 
-    _lock_path = f"/tmp/{Path(__file__).stem}.lock"  # noqa: S108
-    _lock_fd = open(_lock_path, "w")
-    try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
-        sys.exit(0)
+    acquire_or_exit()
     main()

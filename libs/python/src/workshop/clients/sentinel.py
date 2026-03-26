@@ -1,4 +1,4 @@
-"""Sentinel API client -- health monitoring station at port 4101.
+"""Sentinel API client -- health monitoring station at port 10100.
 
 Wraps the Sentinel HTTP API (health checks, incidents, operations, uptime).
 Unlike Core API clients (which inherit BaseClient), this wraps a station API.
@@ -35,16 +35,16 @@ class SentinelError(Exception):
 
 
 class SentinelClient:
-    """HTTP client for Sentinel station (port 4101).
+    """HTTP client for Sentinel station (port 10100).
 
     Args:
-        base_url: API URL. Defaults to SENTINEL_URL env or http://localhost:4101.
+        base_url: API URL. Defaults to SENTINEL_URL env or http://localhost:10100.
         timeout: Default request timeout in seconds.
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 15):
         self.base_url = (
-            base_url or os.environ.get("SENTINEL_URL", "http://localhost:4101")
+            base_url or os.environ.get("SENTINEL_URL", "http://localhost:10100")
         ).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None

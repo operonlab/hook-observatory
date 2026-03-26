@@ -12,7 +12,7 @@ Configure in ~/.claude.json:
         "command": "python3",
         "args": ["/path/to/workshop/mcp/finance/server.py"],
         "env": {
-            "CORE_API_URL": "http://localhost:8801",
+            "CORE_API_URL": "http://localhost:10000",
             "FINANCE_SPACE_ID": "default"
         }
     }
@@ -317,7 +317,9 @@ async def finance_manage_categories(
             is_private=is_private or None,
         )
         result = await to_thread(client.create_category, body)
-        return f"Category created: {result.get('icon', '')} {result['name']} (id={result['id'][:8]})"
+        return (
+            f"Category created: {result.get('icon', '')} {result['name']} (id={result['id'][:8]})"
+        )
 
     if action == "update":
         if not id:

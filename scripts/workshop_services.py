@@ -338,8 +338,8 @@ def ensure_dirs() -> None:
     (LOG_BASE / "launcher").mkdir(parents=True, exist_ok=True)
 
 
-def _find_pid_by_port(port: int) -> int | None:
-    """Find the PID listening on a given port via lsof."""
+def _find_pids_by_port(port: int) -> list[int]:
+    """Find ALL PIDs listening on a given port via lsof."""
     try:
         result = subprocess.run(
             ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
@@ -348,17 +348,28 @@ def _find_pid_by_port(port: int) -> int | None:
             timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
-            # lsof may return multiple PIDs; take the first
-            return int(result.stdout.strip().splitlines()[0])
-    except (subprocess.TimeoutExpired, ValueError):
+            pids = []
+            for line in result.stdout.strip().splitlines():
+                line = line.strip()
+                if line.isdigit():
+                    pids.append(int(line))
+            return pids
+    except subprocess.TimeoutExpired:
         pass
-    return None
+    return []
+
+
+def _find_pid_by_port(port: int) -> int | None:
+    """Find the first PID listening on a given port (compat wrapper)."""
+    pids = _find_pids_by_port(port)
+    return pids[0] if pids else None
 
 
 def is_running(name: str, port: int | None = None) -> int | None:
     """Return PID if service is running, else None.
     Detects zombie processes (state Z) as not running.
     Falls back to port-based detection if PID file is stale.
+    Warns on duplicate instances sharing the same port.
     """
     pidfile = PID_DIR / f"{name}.pid"
     if pidfile.exists():
@@ -384,11 +395,22 @@ def is_running(name: str, port: int | None = None) -> int | None:
 
     # Port-based fallback: detect service running without valid PID file
     if port is not None:
-        actual_pid = _find_pid_by_port(port)
-        if actual_pid is not None:
+        pids = _find_pids_by_port(port)
+        if len(pids) > 1:
+            err(f"⚠️  {name} has {len(pids)} instances on :{port}: {pids}")
+            # Kill extra instances, keep the newest (last PID = most recently started)
+            keeper = pids[-1]
+            for stale_pid in pids[:-1]:
+                log(f"  Killing duplicate {name} PID {stale_pid}")
+                try:
+                    os.kill(stale_pid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
+            pids = [keeper]
+        if pids:
             # Re-sync PID file
-            pidfile.write_text(str(actual_pid))
-            return actual_pid
+            pidfile.write_text(str(pids[0]))
+            return pids[0]
 
     return None
 
@@ -555,16 +577,31 @@ def start_service(svc: dict) -> None:
         err(f"  {name} may not be healthy (PID {pid})")
 
 
+def _kill_tree(pid: int, sig: int) -> None:
+    """Send signal to process group (covers all children spawned by start_new_session).
+    Only uses killpg when pid is the group leader (pgid == pid), to avoid
+    accidentally signalling an unrelated process group.
+    Falls back to single-PID kill otherwise."""
+    try:
+        pgid = os.getpgid(pid)
+        if pgid == pid:
+            os.killpg(pgid, sig)
+        else:
+            os.kill(pid, sig)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            pass
+
+
 def stop_service(svc: dict) -> None:
     name = svc["name"]
     pid = is_running(name, svc["port"])
 
     if pid is not None:
         log(f"Stopping {name} (PID {pid})")
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        _kill_tree(pid, signal.SIGTERM)
 
         # Wait up to 10s for graceful shutdown
         waited = 0
@@ -576,14 +613,11 @@ def stop_service(svc: dict) -> None:
             except ProcessLookupError:
                 break
 
-        # Force kill if still running
+        # Force kill process group if still running
         try:
             os.kill(pid, 0)
-            log(f"  Force killing {name} (PID {pid})")
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            log(f"  Force killing {name} process group (PID {pid})")
+            _kill_tree(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
 
@@ -752,7 +786,7 @@ def _check_bind_addresses() -> None:
         parts = line.split()
         if len(parts) < 9:
             continue
-        name_col = parts[8]  # NAME column e.g. "*:8840" or "127.0.0.1:8801"
+        name_col = parts[8]  # NAME column e.g. "*:8840" or "127.0.0.1:10000"
         if ":" not in name_col:
             continue
         host, port_str = name_col.rsplit(":", 1)
@@ -806,6 +840,38 @@ def health_check_all() -> None:
 # ── Daemon Mode ────────────────────────────────────────────────
 
 
+_ORPHAN_SCAN_INTERVAL = 300  # 5 minutes
+
+
+def _scan_and_reap_orphans() -> None:
+    """Scan for orphaned workshop processes and SIGTERM them."""
+    try:
+        reaper_script = Path(__file__).resolve().parent / "workshop_orphan_reaper.py"
+        if not reaper_script.exists():
+            return
+        # Import find_orphans from sibling script
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("workshop_orphan_reaper", reaper_script)
+        if spec is None or spec.loader is None:
+            err("Orphan reaper: failed to load module spec")
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        orphans = mod.find_orphans()
+        for o in orphans:
+            pid = o["pid"]
+            cmd = o["command"][:80]
+            log(f"Reaping orphan PID {pid} (RSS {o['rss_mb']}MB): {cmd}")
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+    except Exception as exc:
+        err(f"Orphan scan failed: {exc}")
+
+
 def daemon_mode() -> None:
     log(f"Workshop Launcher daemon starting (PID {os.getpid()})")
     ensure_dirs()
@@ -814,6 +880,7 @@ def daemon_mode() -> None:
     start_all()
 
     last_rotate_date = ""
+    last_orphan_scan = 0.0
     shutdown_requested = False
 
     def handle_signal(signum, frame):
@@ -832,6 +899,13 @@ def daemon_mode() -> None:
         health_check_all()
         _check_bind_addresses()
         check_log_sizes()
+
+        # Periodic orphan process scan (every 5 min)
+        now = time.time()
+        if now - last_orphan_scan > _ORPHAN_SCAN_INTERVAL:
+            last_orphan_scan = now
+            _scan_and_reap_orphans()
+
         today = date.today().strftime("%Y-%m-%d")
         if today != last_rotate_date:
             compress_old_logs()

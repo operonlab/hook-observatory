@@ -1,6 +1,6 @@
 """Workshop API clients.
 
-Core modules (BaseClient, port 8801):
+Core modules (BaseClient, port 10000):
     from workshop.clients.finance import FinanceClient
     from workshop.clients.intelflow import IntelflowClient
     from workshop.clients.nodeflow import NodeflowClient

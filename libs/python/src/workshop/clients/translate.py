@@ -1,4 +1,4 @@
-"""Translate SDK — HTTP client for Translate station (port 4114).
+"""Translate SDK — HTTP client for Translate station (port 10205).
 
 Usage:
     from workshop.clients.translate import TranslateClient
@@ -19,7 +19,7 @@ from ._base import APIError
 
 
 class TranslateClient:
-    """HTTP client for Translate station (port 4114)."""
+    """HTTP client for Translate station (port 10205)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 60):
         self.base_url = (base_url or os.environ.get("TRANSLATE_URL", get_url("translate"))).rstrip(

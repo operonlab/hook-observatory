@@ -2,7 +2,7 @@
 # Import old daily briefing MD files into the new briefing module.
 set -euo pipefail
 
-BASE_URL="http://localhost:8801/api/briefing"
+BASE_URL="http://localhost:10000/api/briefing"
 DOMAINS="ai finance geopolitics tech weather"
 ANALYSTS="claude codex gemini"
 

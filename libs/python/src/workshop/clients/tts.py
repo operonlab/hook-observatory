@@ -1,11 +1,11 @@
-"""STT SDK — HTTP client for STT station (port 10200).
+"""TTS SDK — HTTP client for TTS station (port 10201).
 
 Usage:
-    from workshop.clients.stt import STTClient
+    from workshop.clients.tts import TTSClient
 
-    client = STTClient()
-    result = client.transcribe("/path/to/audio.m4a", language="zh-TW")
-    print(result["text"])
+    client = TTSClient()
+    result = client.synthesize("Hello world", engine="kokoro")
+    print(result["audio_path"])
 """
 
 import os
@@ -13,16 +13,16 @@ from typing import Any
 
 import httpx
 
-from workshop.port_registry import get_url
-
 from ._base import APIError
 
 
-class STTClient:
-    """HTTP client for STT station (port 10200)."""
+class TTSClient:
+    """HTTP client for TTS station (port 10201)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 120):
-        self.base_url = (base_url or os.environ.get("STT_URL", get_url("stt"))).rstrip("/")
+        self.base_url = (base_url or os.environ.get("TTS_URL", "http://127.0.0.1:10201")).rstrip(
+            "/"
+        )
         self._timeout = timeout
         self._client: httpx.Client | None = None
 
@@ -47,12 +47,12 @@ class STTClient:
         except httpx.ConnectError:
             raise APIError(
                 0,
-                f"Cannot connect to STT at {self.base_url}. "
-                "Start server: cd stations/stt && .venv/bin/python3 main.py",
-                module="stt",
+                f"Cannot connect to TTS at {self.base_url}. "
+                "Start server: cd stations/tts && .venv/bin/python3 main.py",
+                module="tts",
             ) from None
         except httpx.HTTPStatusError as e:
-            raise APIError(e.response.status_code, e.response.text[:500], module="stt") from e
+            raise APIError(e.response.status_code, e.response.text[:500], module="tts") from e
 
     def _get(self, path: str, params: dict | None = None) -> Any:
         filtered = {k: v for k, v in params.items() if v is not None} if params else None
@@ -74,27 +74,32 @@ class STTClient:
         except Exception:
             return False
 
-    # ======================== Transcribe ========================
+    # ======================== Synthesize ========================
 
-    def transcribe(
+    def synthesize(
         self,
-        file_path: str,
-        language: str = "zh-TW",
+        text: str,
+        voice: str = "default",
+        speed: float = 1.0,
         engine: str = "apple",
-        format: str = "json",
-    ) -> dict | str:
-        """Transcribe audio file. Returns dict for json, str for srt/vtt/text."""
-        params = {
-            "path": file_path,
-            "language": language,
-            "engine": engine,
-            "format": format,
-        }
-        filtered = {k: v for k, v in params.items() if v is not None}
-        resp = self._request("POST", "/transcribe", params=filtered)
-        if format in ("srt", "vtt", "text"):
-            return resp.text
-        return resp.json()
+        format: str = "wav",
+    ) -> dict:
+        """Synthesize speech from text."""
+        return self._post(
+            "/synthesize",
+            params={
+                "text": text,
+                "voice": voice,
+                "speed": speed,
+                "engine": engine,
+                "format": format,
+            },
+        )
+
+    # ======================== Voices ========================
+
+    def list_voices(self, engine: str = "apple") -> dict:
+        return self._get("/voices", params={"engine": engine})
 
     # ======================== Engines ========================
 
@@ -110,4 +115,4 @@ class STTClient:
         self.close()
 
     def __repr__(self) -> str:
-        return f"STTClient(base_url={self.base_url!r})"
+        return f"TTSClient(base_url={self.base_url!r})"

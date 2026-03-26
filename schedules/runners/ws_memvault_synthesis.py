@@ -22,6 +22,8 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+# ── Structured Run ─────────────────────────────────────────────
+
 try:
     import psutil
 except ImportError:
@@ -57,7 +59,7 @@ LOG_DIR = HOME / "workshop/outputs/memvault/logs"
 LOG_FILE = LOG_DIR / "synthesis.log"
 CORRECTIONS_DIR = HOME / "workshop/outputs/memvault/corrections"
 COUNTER_FILE = HOME / ".memvault-triple-counter"
-CORE_API = "http://localhost:8801/api/memvault"
+CORE_API = "http://localhost:10000/api/memvault"
 DOMAIN_THRESHOLD = 10
 
 # Extend PATH
@@ -126,19 +128,29 @@ def main() -> None:
     # Step 1: Leiden community detection + LLM summaries (synthesis_runner.py)
     # This also triggers Qdrant auto-indexing for L1 communities and L2 summaries
     log("Step 1/5: synthesis_runner.py (Leiden + summaries)")
-    synthesis_cmd = [
-        str(UV),
-        "run",
-        "--project",
-        str(CORE_PROJECT),
-        str(PIPELINES_DIR / "synthesis_runner.py"),
-    ]
-    with open(LOG_FILE, "a") as f:
-        result = subprocess.run(synthesis_cmd, stdout=f, stderr=f, timeout=900)
-    if result.returncode == 0:
-        log("Step 1 OK")
+    step1 = structured_run(
+        [
+            str(UV),
+            "run",
+            "--project",
+            str(CORE_PROJECT),
+            str(PIPELINES_DIR / "synthesis_runner.py"),
+        ],
+        label="memvault-synthesis",
+        timeout=900,
+    )
+    # 將 stdout 同時輸出到 log file（保持原本的記錄行為）
+    if step1.stdout:
+        with open(LOG_FILE, "a") as f:
+            f.write(step1.stdout)
+        print(step1.stdout, end="", flush=True)
+    if step1.stderr:
+        with open(LOG_FILE, "a") as f:
+            f.write(step1.stderr)
+    if step1.success:
+        log(f"Step 1 OK ({step1.duration_seconds:.1f}s)")
     else:
-        log(f"Step 1 FAILED (exit {result.returncode}) — continuing anyway")
+        log(f"Step 1 FAILED (exit {step1.returncode}) — continuing anyway")
 
     # Step 2: Confidence decay (independent of communities)
     log("Step 2/5: confidence_decay_pipeline.py")
@@ -209,13 +221,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import fcntl
+    from lib.process_lock import acquire_or_exit
 
-    _lock_path = f"/tmp/{Path(__file__).stem}.lock"
-    _lock_fd = open(_lock_path, "w")
-    try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print(f"[SKIP] Another instance already running (lock: {_lock_path})")
-        sys.exit(0)
+    acquire_or_exit()
     main()

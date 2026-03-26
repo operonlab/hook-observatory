@@ -15,7 +15,7 @@ from ._base import BaseClient
 
 
 class BriefingClient(BaseClient):
-    """Client for the Briefing intelligence module (Core API port 8801)."""
+    """Client for the Briefing intelligence module (Core API port 10000)."""
 
     def __init__(self, **kwargs):
         super().__init__(module="briefing", **kwargs)

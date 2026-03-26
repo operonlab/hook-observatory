@@ -13,7 +13,7 @@ Configure in ~/.claude.json:
         "command": "python3",
         "args": ["/path/to/workshop/mcp/capture/server.py"],
         "env": {
-            "CORE_API_URL": "http://localhost:8801",
+            "CORE_API_URL": "http://localhost:10000",
             "CAPTURE_SPACE_ID": "default"
         }
     }

@@ -13,7 +13,7 @@ from ._base import BaseClient
 
 
 class MemvaultClient(BaseClient):
-    """Client for the Memvault memory system (Core API port 8801)."""
+    """Client for the Memvault memory system (Core API port 10000)."""
 
     def __init__(self, **kwargs):
         super().__init__(module="memvault", **kwargs)
