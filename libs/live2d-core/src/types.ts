@@ -7,22 +7,35 @@
  */
 export type MascotState = "idle" | "thinking" | "speaking" | "wave";
 
-/** Options passed to Live2DRenderer on construction. */
-export interface Live2DRendererOptions {
+/**
+ * Options passed to SpriteAnimator on construction.
+ */
+export interface SpriteAnimatorOptions {
   /** Target canvas element to render into. */
   canvas: HTMLCanvasElement;
-  /** URL or local path to the .model3.json file. */
-  modelPath: string;
-  /** Canvas width in pixels. Defaults to canvas.width or 300. */
+  /** Canvas width in pixels. Default 255. */
   width?: number;
-  /** Canvas height in pixels. Defaults to canvas.height or 400. */
+  /** Canvas height in pixels. Default 255. */
   height?: number;
-  /** Enable transparent background. Defaults to true. */
-  transparent?: boolean;
+  /** URL path prefix for layer PNGs (e.g. "/static/mascot/layers"). */
+  layerBasePath: string;
 }
 
 /**
- * Live2D parameter values computed from mouse position.
+ * Per-layer configuration for the sprite animator.
+ */
+export interface LayerConfig {
+  name: string;
+  zIndex: number;
+  anchor?: { x: number; y: number };
+  /** Per-layer Y oscillation override. */
+  idleFloat?: { amplitude: number; period: number; phase: number };
+  /** Per-layer rotation oscillation override. */
+  idleSway?: { angle: number; period: number; phase: number };
+}
+
+/**
+ * Live2D-compatible parameter values computed from mouse position.
  * All values are in the range [-1, 1] unless documented otherwise.
  */
 export interface ParamValues {
@@ -30,10 +43,10 @@ export interface ParamValues {
   eyeX: number;
   /** Vertical eye-tracking angle. Range: [-1, 1]. */
   eyeY: number;
-  /** Head rotation X (yaw). Range: [-30, 30] (Live2D units). */
+  /** Head rotation X (yaw). Range: [-30, 30]. */
   headX: number;
-  /** Head rotation Y (pitch). Range: [-30, 30] (Live2D units). */
+  /** Head rotation Y (pitch). Range: [-30, 30]. */
   headY: number;
-  /** Body sway X. Range: [-10, 10] (Live2D units). */
+  /** Body sway X. Range: [-10, 10]. */
   bodyX: number;
 }
