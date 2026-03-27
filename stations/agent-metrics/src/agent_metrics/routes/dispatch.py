@@ -1,4 +1,4 @@
-"""Maestro dispatch routes — multi-CLI orchestration."""
+"""Maestro dispatch routes — multi-CLI orchestration with tier routing."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ router = APIRouter()
 
 @router.post("/plan")
 async def plan_task(body: PlanRequest) -> dict:
-    """Analyze a task and return recommended orchestration pattern (no execution)."""
+    """Analyze a task and return recommended orchestration pattern + tier (no execution)."""
     analysis = me.analyze_task(body.task, body.budget.value)
     if body.pattern:
         analysis.recommended_pattern = body.pattern.value
@@ -28,6 +28,11 @@ async def plan_task(body: PlanRequest) -> dict:
             analysis.phases = templates.get(
                 primary_cat, templates.get("code_generation", [])
             )
+
+    # Tier selection
+    tier = await me.resolve_tier(analysis, body.tier)
+    analysis.recommended_tier = tier
+
     explicit_clis = me.detect_explicit_clis(body.task)
     result = asdict(analysis)
     if explicit_clis:
@@ -37,11 +42,15 @@ async def plan_task(body: PlanRequest) -> dict:
 
 @router.post("/run")
 async def run_dispatch(body: DispatchRequest) -> dict:
-    """Execute a dispatch — analyze, route, and run CLI agents."""
+    """Execute a dispatch — analyze, route, select tier, and run CLI agents."""
     pool = await get_pool()
     analysis = me.analyze_task(body.task, body.budget.value)
     if body.pattern:
         analysis.recommended_pattern = body.pattern.value
+
+    # Resolve tier (with availability check + fallback)
+    tier = await me.resolve_tier(analysis, body.tier)
+    analysis.recommended_tier = tier
 
     # Honor explicit CLI mentions in task description
     explicit_clis = me.detect_explicit_clis(body.task)
@@ -53,6 +62,7 @@ async def run_dispatch(body: DispatchRequest) -> dict:
         task=body.task,
         budget=body.budget.value,
         cwd=body.cwd or ".",
+        tier=tier,
         phases=analysis.phases,
         started_at=datetime.now(UTC).isoformat(),
     )
@@ -65,20 +75,15 @@ async def run_dispatch(body: DispatchRequest) -> dict:
         cli = explicit_clis[0] if explicit_clis else me.route_to_cli(
             analysis.categories[0], body.budget.value
         )
-        result = await asyncio.to_thread(
-            me.dispatch_agent, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
+        result = await me.dispatch_by_tier(
+            tier, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
         )
         run.results = [asdict(result)]
     elif analysis.recommended_pattern == "pipeline":
         for phase in analysis.phases:
             prompt = f"[{phase['role']}] {body.task}"
-            result = await asyncio.to_thread(
-                me.dispatch_agent,
-                phase["cli"],
-                prompt,
-                cwd,
-                settings.SKILLS_DIR,
-                timeout=timeout,
+            result = await me.dispatch_by_tier(
+                tier, phase["cli"], prompt, cwd, settings.SKILLS_DIR, timeout=timeout
             )
             run.results.append(asdict(result))
             if result.status == "failed":
@@ -86,8 +91,8 @@ async def run_dispatch(body: DispatchRequest) -> dict:
     elif analysis.recommended_pattern == "race":
         clis = explicit_clis if len(explicit_clis) >= 2 else ["claude", "codex", "gemini"]
         tasks = [
-            asyncio.to_thread(
-                me.dispatch_agent, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
+            me.dispatch_by_tier(
+                tier, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
             )
             for cli in clis
         ]
@@ -101,8 +106,8 @@ async def run_dispatch(body: DispatchRequest) -> dict:
         cli = explicit_clis[0] if explicit_clis else me.route_to_cli(
             analysis.categories[0], body.budget.value
         )
-        result = await asyncio.to_thread(
-            me.dispatch_agent, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
+        result = await me.dispatch_by_tier(
+            tier, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
         )
         run.results = [asdict(result)]
 
@@ -114,15 +119,23 @@ async def run_dispatch(body: DispatchRequest) -> dict:
     run.status = "completed"
     await me.save_run(pool, run)
 
-    # Fire-and-forget hook notification
+    # Fire-and-forget hook notification (with tier + machine info)
     asyncio.create_task(
         me.notify_hook(
             "agent-metrics.dispatch.completed",
-            {"name": run.name, "pattern": run.pattern, "duration_s": run.duration_s},
+            {
+                "name": run.name,
+                "pattern": run.pattern,
+                "tier": tier,
+                "machine": "mac-hub" if tier != "fleet" else "win-gpu",
+                "duration_s": run.duration_s,
+            },
         )
     )
 
-    return me.generate_report(run)
+    report = me.generate_report(run)
+    report["tier"] = tier
+    return report
 
 
 @router.get("/runs")
@@ -144,8 +157,10 @@ async def get_run(name: str) -> dict:
 
 @router.get("/routing-table")
 async def routing_table() -> dict:
-    """Return the current CLI routing configuration."""
+    """Return the current CLI + tier routing configuration."""
     return {
         "routing": me.get_cli_routing(),
         "templates": me.get_pipeline_templates(),
+        "tier_routing": me.get_tier_routing(),
+        "tier_keywords": me.get_tier_keywords(),
     }

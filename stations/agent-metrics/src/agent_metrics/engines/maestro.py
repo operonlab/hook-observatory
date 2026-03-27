@@ -8,6 +8,7 @@ Refactored from V1 orchestrator into asyncpg-backed station.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import subprocess
@@ -84,6 +85,7 @@ class TaskAnalysis:
     decomposability: str = "atomic"
     categories: list[str] = field(default_factory=list)
     recommended_pattern: str = "solo"
+    recommended_tier: str = "headless"
     phases: list[dict] = field(default_factory=list)
 
 
@@ -104,6 +106,7 @@ class MaestroRun:
     task: str
     budget: str
     cwd: str
+    tier: str = "headless"
     status: str = "running"
     phases: list[dict] = field(default_factory=list)
     results: list[dict] = field(default_factory=list)
@@ -219,6 +222,165 @@ def route_to_cli(category: str, budget: str = "balanced") -> str:
     routing = get_cli_routing()
     cat_routing = routing.get(category, routing.get("code_generation", {}))
     return cat_routing.get(tier, "claude")
+
+
+# ── Tier Routing (headless / relay / fleet) ──────────────────────
+
+
+def get_tier_routing() -> dict:
+    return load_routing_table().get("tier_routing", {})
+
+
+def get_tier_keywords() -> dict[str, list[str]]:
+    return load_routing_table().get("tier_keywords", {})
+
+
+def select_tier(analysis: TaskAnalysis, tier_override: str | None = None) -> str:
+    """Select execution tier based on task analysis or explicit override."""
+    if tier_override and tier_override in ("headless", "relay", "fleet"):
+        return tier_override
+
+    tier_kw = get_tier_keywords()
+    task_lower = analysis.description.lower()
+
+    # Signal-based detection (highest priority)
+    signals = get_tier_routing().get("signals", {})
+    for signal, tier in signals.items():
+        keywords = tier_kw.get(signal, [])
+        if any(kw.lower() in task_lower for kw in keywords):
+            return tier
+
+    # Category-based default
+    defaults = get_tier_routing().get("defaults", {})
+    primary_cat = analysis.categories[0] if analysis.categories else "code_generation"
+    return defaults.get(primary_cat, "headless")
+
+
+def _tier_fallback_chain(tier: str) -> list[str]:
+    """Return fallback tiers when preferred tier is unavailable."""
+    fallback = get_tier_routing().get("fallback", {})
+    return fallback.get(tier, [])
+
+
+async def _check_tier_available(tier: str) -> bool:
+    """Check if a tier backend is reachable."""
+    if tier == "headless":
+        return True
+    if tier == "relay":
+        try:
+            from workshop.clients.tmux_relay import TmuxRelayClient
+            relay = TmuxRelayClient()
+            panes = relay.list_panes()
+            return panes is not None
+        except Exception:
+            return False
+    if tier == "fleet":
+        try:
+            from workshop.clients.fleet import FleetClient
+            fleet = FleetClient()
+            health = fleet.health()
+            return health.get("status") == "healthy"
+        except Exception:
+            return False
+    return False
+
+
+async def resolve_tier(analysis: TaskAnalysis, tier_override: str | None = None) -> str:
+    """Select tier with fallback if preferred tier is unavailable."""
+    preferred = select_tier(analysis, tier_override)
+    if await _check_tier_available(preferred):
+        return preferred
+    for fallback in _tier_fallback_chain(preferred):
+        if await _check_tier_available(fallback):
+            log.warning("tier_fallback", preferred=preferred, fallback=fallback)
+            return fallback
+    return "headless"
+
+
+async def dispatch_relay(
+    prompt: str, cwd: str | None, *, timeout: int = 300
+) -> AgentResult:
+    """Tier 2: Dispatch via tmux-relay pane pool (full MCP/skill access)."""
+    from workshop.clients.tmux_relay import TmuxRelayClient
+
+    task_id = f"relay-{int(time.time())}"
+    start = time.time()
+    try:
+        relay = TmuxRelayClient()
+        result = await asyncio.to_thread(relay.run, prompt, cwd=cwd, timeout=timeout)
+        elapsed = round(time.time() - start, 1)
+        return AgentResult(
+            task_id=task_id,
+            cli="claude",
+            status="done" if result.status == "completed" else "failed",
+            duration_s=elapsed,
+            output=(result.output or "")[:5000],
+        )
+    except Exception as e:
+        return AgentResult(
+            task_id=task_id, cli="claude", status="failed",
+            duration_s=round(time.time() - start, 1), output=f"Relay error: {e}",
+        )
+
+
+async def dispatch_fleet(
+    prompt: str, *, mode: str = "code", node: str | None = None, timeout: int = 600
+) -> AgentResult:
+    """Tier 3: Dispatch via Fleet station (remote node execution)."""
+    from workshop.clients.fleet import FleetClient
+
+    task_id_local = f"fleet-{int(time.time())}"
+    start = time.time()
+    try:
+        fleet = FleetClient()
+        task = fleet.dispatch(prompt, mode=mode, node=node, timeout=timeout)
+        fleet_task_id = task["id"]
+
+        # Poll for completion (exponential backoff: 5s → 10s → 20s → cap 30s)
+        interval = 5
+        while time.time() - start < timeout:
+            status = fleet.task_status(fleet_task_id)
+            if status["status"] in ("completed", "failed", "timeout", "cancelled"):
+                output = fleet.task_output(fleet_task_id).get("output", "")
+                return AgentResult(
+                    task_id=f"fleet-{fleet_task_id}",
+                    cli="claude",
+                    status="done" if status["status"] == "completed" else status["status"],
+                    duration_s=round(time.time() - start, 1),
+                    output=output[:5000],
+                )
+            await asyncio.sleep(interval)
+            interval = min(interval * 2, 30)
+
+        return AgentResult(
+            task_id=task_id_local, cli="claude",
+            status="timeout", duration_s=timeout, output="Fleet task timed out",
+        )
+    except Exception as e:
+        return AgentResult(
+            task_id=task_id_local, cli="claude", status="failed",
+            duration_s=round(time.time() - start, 1), output=f"Fleet error: {e}",
+        )
+
+
+async def dispatch_by_tier(
+    tier: str,
+    cli: str,
+    prompt: str,
+    cwd: str | None,
+    skills_dir: str,
+    *,
+    timeout: int = 300,
+) -> AgentResult:
+    """Unified dispatch router — select backend by tier."""
+    if tier == "fleet":
+        return await dispatch_fleet(prompt, timeout=timeout)
+    elif tier == "relay":
+        return await dispatch_relay(prompt, cwd, timeout=timeout)
+    else:
+        return await asyncio.to_thread(
+            dispatch_agent, cli, prompt, cwd, skills_dir, timeout=timeout
+        )
 
 
 # ── Project Management ────────────────────────────────────────────

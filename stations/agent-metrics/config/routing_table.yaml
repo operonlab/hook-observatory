@@ -50,3 +50,41 @@ category_keywords:
   backend: [API, server, database, endpoint, backend, REST, 後端, 伺服器, 資料庫]
   security: [vulnerability, XSS, "SQL injection", auth, security, 安全, 漏洞, 認證, 授權]
   research: [research, compare, investigate, explore, survey, 研究, 比較, 調查, 探索]
+
+# ── Tier Routing — execution backend selection ──────────────────
+# Three tiers: headless (subprocess), relay (local tmux pane pool), fleet (remote node)
+
+tier_routing:
+  # Signal → tier mapping (highest priority, keyword-detected)
+  signals:
+    gpu: fleet
+    mcp: relay
+    browser: relay
+    multi_file: fleet
+
+  # Category → default tier (when no signal detected)
+  defaults:
+    code_generation: headless
+    code_review: headless
+    debugging: relay
+    refactoring: fleet
+    architecture: headless
+    testing: headless
+    long_doc_analysis: headless
+    frontend: relay
+    backend: headless
+    security: headless
+    research: headless
+
+  # Fallback chain when preferred tier is unavailable
+  fallback:
+    fleet: [relay, headless]
+    relay: [headless]
+    headless: []
+
+# Bilingual keywords for tier signal detection
+tier_keywords:
+  gpu: [GPU, CUDA, RTX, Florence, "3090", 模型訓練, 推論, inference, embedding, finetune, vram]
+  mcp: [MCP, skill, 技能, memvault, intelflow, capture, paper, recall, 記憶]
+  browser: [Playwright, 瀏覽器, scrape, 截圖, screenshot, PWA, headless browser]
+  multi_file: [重構, refactor, migration, "across modules", 全面修改, 大改, "multi-file"]
