@@ -329,9 +329,10 @@ def dispatch_agent(
         if cwd:
             cmd += ["--cwd", cwd]
     elif cli == "codex":
-        cmd += [prompt, "--full-auto"]
+        cmd += ["--full-auto"]
         if cwd:
             cmd += ["--cd", cwd]
+        cmd.append(prompt)
     elif cli == "gemini":
         cmd += ["-p", prompt, "--approval-mode", "yolo"]
         if cwd:
