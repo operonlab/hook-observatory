@@ -10,7 +10,7 @@ class PaperSettings(BaseSettings):
     debug: bool = False
 
     # Database
-    db_url: str = "postgresql://joneshong:REDACTED@localhost:5432/workshop"
+    db_url: str = ""  # Set via PAPER_DB_URL env var
 
     # Redis (optional — cache degrades gracefully when unavailable)
     redis_url: str = "redis://localhost:6379/0"

@@ -3,10 +3,5 @@ name = "ws-remote-services"
 server = "win-gpu"
 project_name = "ws-remote"
 file_paths = ["infra/docker/docker-compose.remote.yml"]
-environment = """
-AGENT_METRICS_DATABASE_URL=postgresql://joneshong:REDACTED@REDACTED_IP:5432/workshop
-AGENT_METRICS_REDIS_URL=redis://REDACTED_IP:6379/0
-AGENT_METRICS_HOOK_URL=http://REDACTED_IP:10100/api/hooks
-AGENT_METRICS_LITELLM_BASE_URL=http://REDACTED_IP:4000
-AGENT_METRICS_LITELLM_DATABASE_URL=postgresql://joneshong:REDACTED@REDACTED_IP:5432/litellm_spend
-"""
+# Credentials loaded from .env.remote on the Windows host (not checked in)
+# environment = """ ... """
