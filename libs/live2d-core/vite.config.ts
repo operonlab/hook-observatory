@@ -6,19 +6,16 @@ export default defineConfig({
   plugins: [dts({ rollupTypes: true })],
   build: {
     lib: {
-      entry: resolve(__dirname, "src/index.ts"),
-      name: "Live2DCore",
-      formats: ["umd", "es"],
-      fileName: (format) =>
-        format === "es" ? "live2d-core.mjs" : "live2d-core.js",
+      entry: {
+        "live2d-core": resolve(__dirname, "src/index.ts"),
+        "cubism-entry": resolve(__dirname, "src/cubism-entry.ts"),
+      },
+      formats: ["es"],
     },
     rollupOptions: {
-      // Externalize pixi.js and live2d engine so consumers provide them
-      external: ["pixi.js", /^untitled-pixi-live2d-engine/, "live2dcubismcore"],
+      external: ["pixi.js", /^untitled-pixi-live2d-engine/],
       output: {
-        globals: {
-          "pixi.js": "PIXI",
-        },
+        globals: { "pixi.js": "PIXI" },
       },
     },
     minify: "esbuild",

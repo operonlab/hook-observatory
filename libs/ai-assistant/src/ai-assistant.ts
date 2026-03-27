@@ -10,9 +10,24 @@
  */
 
 import { SpriteAnimator } from "@workshop/live2d-core";
+import type { CubismRendererOptions } from "@workshop/live2d-core";
 import { startStream } from "./stream-handler";
 import { STYLES } from "./styles";
 import type { ChatMessage, MascotState } from "./types";
+
+interface MascotRenderer {
+  init(): Promise<void>;
+  destroy(): void;
+  setState(state: MascotState): void;
+  setMousePosition(x: number, y: number): void;
+  setLipSync(amplitude: number): void;
+}
+
+/** Lazy-load CubismRenderer to keep engine out of main bundle */
+async function createCubismRenderer(opts: CubismRendererOptions): Promise<MascotRenderer> {
+  const { CubismRenderer } = await import("@workshop/live2d-core/cubism-entry");
+  return new CubismRenderer(opts);
+}
 
 const DEFAULT_GREETING = "有什麼可以幫忙的嗎？";
 const DEFAULT_MASCOT_BASE = "/static/mascot";
@@ -41,10 +56,16 @@ export class AiAssistantElement extends HTMLElement {
     "language",
     "module",
     "mascot-base",
+    "model-path",
   ];
 
   private shadow: ShadowRoot;
-  private animator: SpriteAnimator | null = null;
+  private animator: MascotRenderer | null = null;
+  private cubismAnimator: MascotRenderer | null = null;
+  private spriteAnimator: MascotRenderer | null = null;
+  private cubismCanvas: HTMLCanvasElement | null = null;
+  private spriteCanvas: HTMLCanvasElement | null = null;
+  private useCubism = false;
   private messages: ChatMessage[] = [];
   private isStreaming = false;
   private mascotState: MascotState = "idle";
@@ -61,6 +82,7 @@ export class AiAssistantElement extends HTMLElement {
   private quickInputEl!: HTMLInputElement;
   private quickSendBtn!: HTMLButtonElement;
   private chatToggleBtn!: HTMLButtonElement;
+  private switchBtn!: HTMLButtonElement;
 
   constructor() {
     super();
@@ -73,24 +95,53 @@ export class AiAssistantElement extends HTMLElement {
     this.setMascotState("idle");
     this.startPhraseRotation();
 
-    const canvas = this.shadow.querySelector('.mascot-canvas') as HTMLCanvasElement;
-    if (canvas) {
-      this.animator = new SpriteAnimator({
-        canvas,
-        width: 510,
-        height: 510,
-        layerBasePath: `${this._mascotBase}/layers`,
-      });
-      // Fire-and-forget async init — PixiJS loads layers then starts rendering.
-      this.animator.init().catch((err) =>
-        console.error("[ai-assistant] SpriteAnimator init failed:", err)
-      );
+    this.cubismCanvas = this.shadow.querySelector('.cubism-canvas') as HTMLCanvasElement;
+    this.spriteCanvas = this.shadow.querySelector('.sprite-canvas') as HTMLCanvasElement;
+    const modelPath = this.getAttribute("model-path");
 
-      // Mouse tracking
-      document.addEventListener('mousemove', this._onMouseMove);
+    if (modelPath && this.cubismCanvas) {
+      this.useCubism = true;
+      this.cubismCanvas.style.display = "";
+      this.spriteCanvas!.style.display = "none";
+      createCubismRenderer({ canvas: this.cubismCanvas, width: 510, height: 510, modelPath })
+        .then((r) => { this.cubismAnimator = r; this.animator = r; return r.init(); })
+        .catch((err) => console.error("[ai-assistant] CubismRenderer init failed:", err));
+    } else if (this.spriteCanvas) {
+      this.useCubism = false;
+      this.cubismCanvas!.style.display = "none";
+      this.spriteCanvas.style.display = "";
+      const r = new SpriteAnimator({ canvas: this.spriteCanvas, width: 510, height: 510, layerBasePath: `${this._mascotBase}/layers` });
+      this.spriteAnimator = r;
+      this.animator = r;
+      r.init().catch((err) => console.error("[ai-assistant] SpriteAnimator init failed:", err));
     }
 
+    document.addEventListener('mousemove', this._onMouseMove);
+
     this.dispatchEvent(new CustomEvent("assistant-ready"));
+  }
+
+  private _switchRenderer() {
+    this.useCubism = !this.useCubism;
+
+    if (this.useCubism) {
+      // Show Cubism, hide Sprite
+      this.cubismCanvas!.style.display = "";
+      this.spriteCanvas!.style.display = "none";
+      this.animator = this.cubismAnimator;
+    } else {
+      // Show Sprite, hide Cubism — lazy init on first switch
+      this.cubismCanvas!.style.display = "none";
+      this.spriteCanvas!.style.display = "";
+      if (!this.spriteAnimator && this.spriteCanvas) {
+        const r = new SpriteAnimator({ canvas: this.spriteCanvas, width: 510, height: 510, layerBasePath: `${this._mascotBase}/layers` });
+        this.spriteAnimator = r;
+        r.init().catch((err) => console.error("[ai-assistant] SpriteAnimator init failed:", err));
+      }
+      this.animator = this.spriteAnimator;
+    }
+
+    this.switchBtn.title = this.useCubism ? "切換為精靈模式" : "切換為 Live2D 模式";
   }
 
   private _onMouseMove = (e: MouseEvent) => {
@@ -186,9 +237,11 @@ export class AiAssistantElement extends HTMLElement {
 
       <div class="mascot-row">
         <div class="mascot">
-          <canvas class="mascot-canvas" width="510" height="510"></canvas>
+          <canvas class="mascot-canvas cubism-canvas" width="510" height="510"></canvas>
+          <canvas class="mascot-canvas sprite-canvas" width="510" height="510" style="display:none"></canvas>
         </div>
         <div class="action-buttons">
+          <button class="action-btn mascot-switch" aria-label="切換角色" title="切換角色模式">🔄</button>
           <button class="action-btn chat-toggle" aria-label="展開輸入框" title="展開輸入框">⋯</button>
         </div>
       </div>
@@ -209,13 +262,15 @@ export class AiAssistantElement extends HTMLElement {
     this.quickInputEl = this.shadow.querySelector(".quick-input input")!;
     this.quickSendBtn = this.shadow.querySelector(".quick-input .send-btn")!;
     this.chatToggleBtn = this.shadow.querySelector(".chat-toggle")!;
+    this.switchBtn = this.shadow.querySelector(".mascot-switch")!;
+    if (!this.getAttribute("model-path")) this.switchBtn.style.display = "none";
   }
 
   // ── Events ──
 
   private bindEvents() {
-    // ⋯ button → toggle input box visibility
     this.chatToggleBtn.addEventListener("click", () => this.toggleInput());
+    this.switchBtn.addEventListener("click", () => this._switchRenderer());
 
     // Click mascot → change phrase (use pointerup to avoid drag conflict)
     let mascotPointerStart = { x: 0, y: 0 };

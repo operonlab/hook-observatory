@@ -4,13 +4,16 @@
   "description": "PixiJS-based layered sprite animator for Workshop AI assistant mascot",
   "type": "module",
   "main": "dist/live2d-core.js",
-  "module": "dist/live2d-core.mjs",
+  "module": "dist/live2d-core.js",
   "types": "dist/live2d-core.d.ts",
   "exports": {
     ".": {
       "types": "./dist/live2d-core.d.ts",
-      "import": "./dist/live2d-core.mjs",
-      "require": "./dist/live2d-core.js"
+      "import": "./dist/live2d-core.js"
+    },
+    "./cubism-entry": {
+      "types": "./dist/cubism-entry.d.ts",
+      "import": "./dist/cubism-entry.js"
     }
   },
   "files": [

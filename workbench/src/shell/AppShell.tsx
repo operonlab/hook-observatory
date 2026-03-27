@@ -39,6 +39,7 @@ export default function AppShell({ children }: AppShellProps) {
         api-url="/api/assistant/chat"
         position="bottom-right"
         greeting="有什麼我可以幫忙的嗎？"
+        model-path="/static/models/kei/kei_basic_free.model3.json"
       />
     </>
   )

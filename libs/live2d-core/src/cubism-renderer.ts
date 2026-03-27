@@ -104,7 +104,8 @@ export class CubismRenderer {
 
     // 3. Load the Live2D model
     this.model = await Live2DModel.from(this.opts.modelPath, {
-      autoInteract: false,
+      autoHitTest: false,
+      autoFocus: false,
     });
 
     // 4. Scale model to fit canvas
@@ -126,8 +127,18 @@ export class CubismRenderer {
 
   destroy(): void {
     this.destroyed = true;
-    this.model?.destroy();
-    this.app?.destroy(true);
+    try {
+      // Remove model from stage FIRST (prevents double-free when app.destroy cleans children)
+      if (this.model && this.container) {
+        this.container.removeChild(this.model);
+      }
+      this.model?.destroy();
+    } catch { /* Cubism assertion on double-free — safe to ignore */ }
+    try {
+      this.app?.destroy(true);
+    } catch { /* PixiJS may throw if not fully initialized */ }
+    this.model = null as any;
+    this.app = null as any;
   }
 
   // -----------------------------------------------------------------------
