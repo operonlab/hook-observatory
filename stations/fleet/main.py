@@ -68,7 +68,8 @@ async def health():
     registry: NodeRegistry = app.state.registry
     nodes = {n.name: n.healthy for n in registry.all_nodes()}
     all_healthy = all(nodes.values()) if nodes else False
-    return {"status": "ok" if all_healthy else "degraded", "nodes": nodes}
+    version = app.state.config.get("version", "unknown")
+    return {"status": "ok" if all_healthy else "degraded", "version": version, "nodes": nodes}
 
 
 @app.get("/nodes")
