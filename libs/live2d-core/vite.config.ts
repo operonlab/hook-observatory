@@ -14,12 +14,10 @@ export default defineConfig({
     },
     rollupOptions: {
       // Externalize pixi.js and live2d engine so consumers provide them
-      external: ["pixi.js", "untitled-pixi-live2d-engine", "live2dcubismcore"],
+      external: ["pixi.js", /^untitled-pixi-live2d-engine/, "live2dcubismcore"],
       output: {
         globals: {
           "pixi.js": "PIXI",
-          "untitled-pixi-live2d-engine": "PIXI_LIVE2D",
-          live2dcubismcore: "Live2DCubismCore",
         },
       },
     },

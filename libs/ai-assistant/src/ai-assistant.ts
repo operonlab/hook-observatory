@@ -79,7 +79,7 @@ export class AiAssistantElement extends HTMLElement {
         canvas,
         width: 510,
         height: 510,
-        layerBasePath: `${this.mascotBase}/layers`,
+        layerBasePath: `${this._mascotBase}/layers`,
       });
       // Fire-and-forget async init — PixiJS loads layers then starts rendering.
       this.animator.init().catch((err) =>
@@ -147,24 +147,27 @@ export class AiAssistantElement extends HTMLElement {
   }
 
   // ── Internal getters ──
+  // NOTE: names MUST NOT match attribute names (mode, greeting, etc.)
+  // because React 19 tries to set properties on custom elements and
+  // getter-only props throw "Attempted to assign to readonly property".
 
-  private get apiUrl(): string {
+  private get _apiUrl(): string {
     return this.getAttribute("api-url") ?? "/api/assistant/chat";
   }
 
-  private get mode(): string {
+  private get _mode(): string {
     return this.getAttribute("mode") ?? "workshop";
   }
 
-  private get module(): string | null {
+  private get _module(): string | null {
     return this.getAttribute("module");
   }
 
-  private get greeting(): string {
+  private get _greeting(): string {
     return this.getAttribute("greeting") ?? DEFAULT_GREETING;
   }
 
-  private get mascotBase(): string {
+  private get _mascotBase(): string {
     return this.getAttribute("mascot-base") ?? DEFAULT_MASCOT_BASE;
   }
 
@@ -178,7 +181,7 @@ export class AiAssistantElement extends HTMLElement {
     root.className = "assistant-root";
     root.innerHTML = `
       <div class="speech-bubble">
-        <span class="speech-text">${this.greeting}</span>
+        <span class="speech-text">${this._greeting}</span>
       </div>
 
       <div class="mascot-row">
@@ -343,13 +346,13 @@ export class AiAssistantElement extends HTMLElement {
 
     const body: Record<string, unknown> = {
       message,
-      mode: this.mode,
+      mode: this._mode,
     };
-    if (this.mode === "workshop" && this.module) {
-      body.module = this.module;
+    if (this._mode === "workshop" && this._module) {
+      body.module = this._module;
     }
 
-    this.abortController = startStream(this.apiUrl, body, {
+    this.abortController = startStream(this._apiUrl, body, {
       onThinking: () => {
         this.setMascotState("thinking");
         this.setSpeechText("思考中...");

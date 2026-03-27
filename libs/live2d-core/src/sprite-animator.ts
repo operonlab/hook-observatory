@@ -1,7 +1,6 @@
 import {
   Application,
   Assets,
-  BlurFilter,
   Container,
   Graphics,
   Sprite,
@@ -32,47 +31,21 @@ const MAX_PARTICLES = 20;
 
 // ---------------------------------------------------------------------------
 // Layer name ordering (bottom → top)
-// Note: body_effects = remainder.png, wing_left/wing_right match actual filenames
 // ---------------------------------------------------------------------------
 
 const LAYER_NAMES = [
   "book",
+  "remainder",
   "legs",
   "dress",
-  "body_effects",
   "face",
   "left_eye",
   "right_eye",
   "silver_hair",
   "star_clip",
-  "wing_left",
-  "wing_right",
 ] as const;
 
 type LayerName = (typeof LAYER_NAMES)[number];
-
-// ---------------------------------------------------------------------------
-// Spring physics
-// ---------------------------------------------------------------------------
-
-class Spring {
-  position = 0;
-  velocity = 0;
-  target   = 0;
-  stiffness: number;
-  damping: number;
-
-  constructor(stiffness: number, damping: number) {
-    this.stiffness = stiffness;
-    this.damping   = damping;
-  }
-
-  update(dt: number): void {
-    const force    = (this.target - this.position) * this.stiffness;
-    this.velocity  = (this.velocity + force) * this.damping;
-    this.position += this.velocity;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Particle helper type
@@ -82,10 +55,10 @@ interface Particle {
   gfx: Graphics;
   x: number;
   y: number;
-  vy: number;       // upward speed px/s
-  vx: number;       // horizontal drift
-  life: number;     // 0-1, decreases over time
-  maxLife: number;  // seconds until fully faded
+  vy: number;        // upward speed px/s
+  vx: number;        // horizontal drift
+  life: number;      // 0-1, decreases over time
+  maxLife: number;   // seconds until fully faded
   active: boolean;
 }
 
@@ -96,24 +69,6 @@ interface Particle {
 /**
  * SpriteAnimator renders the mascot as 11 stacked RGBA PNG layers using
  * PixiJS v8. All animation is driven by a single ticker callback.
- *
- * Scene graph:
- *   app.stage
- *   ├── root Container (centered in canvas)
- *   │   ├── book Sprite (static)
- *   │   ├── bodyGroup Container (slight mouse follow)
- *   │   │   ├── wing_left Sprite (spring physics)
- *   │   │   ├── wing_right Sprite (spring physics)
- *   │   │   ├── legs Sprite
- *   │   │   ├── dress Sprite
- *   │   │   └── body_effects Sprite
- *   │   └── headGroup Container (strong mouse follow)
- *   │       ├── face Sprite
- *   │       ├── left_eye Sprite (eye tracking offset)
- *   │       ├── right_eye Sprite (eye tracking offset)
- *   │       ├── silver_hair Sprite (spring physics)
- *   │       └── star_clip Sprite (spring follows hair)
- *   └── particles (on stage directly)
  *
  * Usage:
  *   const animator = new SpriteAnimator({ canvas, layerBasePath: '/static/mascot/layers' });
@@ -128,70 +83,36 @@ export class SpriteAnimator {
   private app: Application | null = null;
   private ready = false;
 
-  /** Root container that holds bodyGroup + headGroup + book. */
+  /** Root container that holds all layer sprites. */
   private root!: Container;
-  /** Group for body parts: wings, legs, dress, body_effects. */
-  private bodyGroup!: Container;
-  /** Group for head parts: face, eyes, hair, star_clip. */
-  private headGroup!: Container;
   /** Individual layer sprites, keyed by name. */
   private layers: Map<LayerName, Sprite> = new Map();
 
   /** Glow overlay: blurred duplicate of face behind the face sprite. */
   private glowSprite: Sprite | null = null;
 
-  // Smoothed mouse offsets in [-1, 1] range from MouseTracker.
-  private rawMouseX = 0;
-  private rawMouseY = 0;
-  // Lerp targets for head and body groups.
-  private headTargetX  = 0;
-  private headTargetY  = 0;
-  private bodyTargetX  = 0;
-  private bodyTargetY  = 0;
-  // Current smoothed positions for groups.
-  private headCurrentX = 0;
-  private headCurrentY = 0;
-  private bodyCurrentX = 0;
-  private bodyCurrentY = 0;
-
-  // Eye tracking per-sprite offsets (relative to their base position).
-  private eyeTargetX   = 0;
-  private eyeTargetY   = 0;
-  private eyeCurrentX  = 0;
-  private eyeCurrentY  = 0;
-  // Store base positions of eye sprites so we can apply offsets on top.
-  private leftEyeBaseX  = 0;
-  private leftEyeBaseY  = 0;
-  private rightEyeBaseX = 0;
-  private rightEyeBaseY = 0;
-
+  // Mouse-tracking offsets applied to root each tick.
+  private mouseOffsetX = 0;
+  private mouseOffsetY = 0;
   private lipSyncAmplitude = 0;
 
   // Blink state.
-  private blinkTimer    = 0;
-  private blinkTarget   = this.nextBlinkTarget();
-  private blinking      = false;
-  private blinkElapsed  = 0;
+  private blinkTimer   = 0;
+  private blinkTarget  = this.nextBlinkTarget();
+  private blinking     = false;
+  private blinkElapsed = 0;
 
   // Wave one-shot entrance tween.
-  private waveTweenActive  = false;
-  private waveTweenElapsed = 0;
+  private waveTweenActive   = false;
+  private waveTweenElapsed  = 0;
   private readonly WAVE_TWEEN_DURATION = 800; // ms
 
   // Particle pool.
   private particles: Particle[] = [];
   private particleAccum = 0; // fractional particle accumulator
 
-  // Spring physics instances.
-  // Hair springs: X offset (horizontal sway) and rotation.
-  private hairSpringX   = new Spring(0.15, 0.7);
-  private hairSpringRot = new Spring(0.15, 0.7);
-  // Star clip springs (stiffer, follows hair).
-  private starSpringX   = new Spring(0.3, 0.8);
-  private starSpringRot = new Spring(0.3, 0.8);
-  // Wing springs: rotation for left and right (slow, floaty).
-  private wingLeftSpring  = new Spring(0.08, 0.6);
-  private wingRightSpring = new Spring(0.08, 0.6);
+  // Hair base X (reset to 0 each tick before oscillation is added).
+  private hairBaseX = 0;
 
   constructor(options: SpriteAnimatorOptions) {
     this.opts = {
@@ -210,6 +131,7 @@ export class SpriteAnimator {
    * Must be awaited before the first frame is visible.
    */
   async init(): Promise<void> {
+    if (this.ready) return; // guard against double init
     const { canvas, width, height } = this.opts;
 
     this.app = new Application();
@@ -220,17 +142,22 @@ export class SpriteAnimator {
       backgroundAlpha: 0,
       preference: "webgl",
       antialias: true,
+      autoStart: false, // prevent ticker before scene is built
     });
 
+    if (!this.app) return; // destroyed during async init
+
     await this.loadLayers();
+    if (!this.app) return;
+
     this.buildSceneGraph();
     this.initParticlePool();
 
-    // Kick off idle state.
     this.motionManager.setState("idle");
     this.ready = true;
 
     this.app.ticker.add((ticker) => this.onTick(ticker.deltaMS));
+    this.app.start();
   }
 
   /**
@@ -256,14 +183,14 @@ export class SpriteAnimator {
     if (!this.ready) return;
     const rect   = this.opts.canvas.getBoundingClientRect();
     const params = this.mouseTracker.update(x, y, rect);
-    // params.eyeX / eyeY are in [-1, 1].
-    this.rawMouseX = params.eyeX;
-    this.rawMouseY = params.eyeY;
+    // Map [-1,1] eye range to ±2px container shift.
+    this.mouseOffsetX = params.eyeX * 2;
+    this.mouseOffsetY = params.eyeY * 2;
   }
 
   /**
    * Drive lip-sync from normalised audio amplitude [0, 1].
-   * Slightly adjusts face sprite Y position (±1px) for a subtle talking motion.
+   * Currently scales the mouth/face sprite slightly on the Y axis.
    */
   setLipSync(amplitude: number): void {
     this.lipSyncAmplitude = Math.max(0, Math.min(1, amplitude));
@@ -275,7 +202,11 @@ export class SpriteAnimator {
    */
   destroy(): void {
     this.ready = false;
-    this.app?.destroy(false, { children: true });
+    try {
+      this.app?.destroy(false, { children: true });
+    } catch {
+      // PixiJS 8 can throw if destroyed before fully initialised
+    }
     this.app = null;
   }
 
@@ -302,66 +233,35 @@ export class SpriteAnimator {
     if (!this.app) return;
     const { width, height } = this.opts;
 
+    this.root = new Container();
+    this.app.stage.addChild(this.root);
+
     // Scale all layers uniformly to fit the display size.
     const scale = Math.min(width / SRC_W, height / SRC_H);
 
-    // Helper to configure a sprite at center with uniform scale.
-    const setupSprite = (sprite: Sprite): void => {
+    for (const name of LAYER_NAMES) {
+      const sprite = this.layers.get(name)!;
       sprite.anchor.set(0.5, 0.5);
       sprite.scale.set(scale);
+      // Position at center.
       sprite.x = 0;
       sprite.y = 0;
-    };
-
-    this.root = new Container();
-
-    // --- book (static, no group) ---
-    const bookSprite = this.layers.get("book")!;
-    setupSprite(bookSprite);
-    this.root.addChild(bookSprite);
-
-    // --- bodyGroup ---
-    this.bodyGroup = new Container();
-    // Layers in body group (bottom → top within group): wing_left, wing_right, legs, dress, body_effects.
-    for (const name of ["wing_left", "wing_right", "legs", "dress", "body_effects"] as LayerName[]) {
-      const sprite = this.layers.get(name)!;
-      setupSprite(sprite);
-      this.bodyGroup.addChild(sprite);
+      this.root.addChild(sprite);
     }
-    this.root.addChild(this.bodyGroup);
 
-    // --- headGroup ---
-    this.headGroup = new Container();
-    // Layers in head group (bottom → top within group): face, left_eye, right_eye, silver_hair, star_clip.
-    for (const name of ["face", "left_eye", "right_eye", "silver_hair", "star_clip"] as LayerName[]) {
-      const sprite = this.layers.get(name)!;
-      setupSprite(sprite);
-      this.headGroup.addChild(sprite);
-    }
-    this.root.addChild(this.headGroup);
-
-    // Store eye base positions (currently 0,0 relative to headGroup since all sprites centered).
-    this.leftEyeBaseX  = 0;
-    this.leftEyeBaseY  = 0;
-    this.rightEyeBaseX = 0;
-    this.rightEyeBaseY = 0;
-
-    // Glow overlay: blurred duplicate of the face sprite (inserted just below the face layer in headGroup).
+    // Glow overlay: slightly scaled duplicate of face (no blur — BlurFilter crashes PixiJS 8).
     const faceTex = this.layers.get("face")!.texture;
     this.glowSprite = new Sprite(faceTex);
     this.glowSprite.anchor.set(0.5, 0.5);
-    this.glowSprite.scale.set(scale);
+    this.glowSprite.scale.set(scale * 1.05);
     this.glowSprite.alpha = 0;
-    const blur = new BlurFilter({ strength: 12 });
-    this.glowSprite.filters = [blur];
-    // Insert at index 0 in headGroup (below face).
-    this.headGroup.addChildAt(this.glowSprite, 0);
+    const faceSprite = this.layers.get("face")!;
+    const faceIdx = this.root.children.indexOf(faceSprite);
+    this.root.addChildAt(this.glowSprite, Math.max(0, faceIdx));
 
     // Centre the root container in the canvas.
     this.root.x = width  / 2;
     this.root.y = height / 2;
-
-    this.app.stage.addChild(this.root);
   }
 
   private initParticlePool(): void {
@@ -394,26 +294,25 @@ export class SpriteAnimator {
   private onTick(deltaMs: number): void {
     if (!this.ready || !this.root) return;
 
-    const dt = deltaMs / 1000; // seconds
-    const t  = performance.now() / 1000; // seconds
+    const t = performance.now() / 1000; // seconds
 
     // Advance motion manager crossfade.
     this.motionManager.tick(deltaMs);
     const p = this.motionManager.current;
 
-    // --- Float (applied to root Y) ---
+    // --- Float ---
     const floatY = p.float.amplitude > 0
       ? Math.sin((t * 2 * Math.PI) / p.float.period) * p.float.amplitude
       : 0;
 
-    // --- Breathe (uniform scale on root) ---
+    // --- Breathe (uniform scale) ---
     const breatheScale = lerp(
       p.breathe.min,
       p.breathe.max,
       (Math.sin((t * 2 * Math.PI) / p.breathe.period) + 1) / 2,
     );
 
-    // --- Sway (rotation on root) ---
+    // --- Sway (rotation) ---
     const swayRot = p.sway.period > 0.1
       ? Math.sin((t * 2 * Math.PI) / p.sway.period) * (p.sway.angle * DEG_TO_RAD)
       : p.sway.angle * DEG_TO_RAD;
@@ -429,117 +328,38 @@ export class SpriteAnimator {
       if (tw >= 1) this.waveTweenActive = false;
     }
 
-    // Apply float + wave to root container.
-    this.root.y = this.opts.height / 2 - floatY;
-    this.root.x = this.opts.width  / 2;
+    // Apply to root container (keep centered in canvas).
+    const cx = this.opts.width / 2;
+    const cy = this.opts.height / 2;
+    this.root.x = cx + this.mouseOffsetX;
+    this.root.y = cy - floatY + this.mouseOffsetY;
     this.root.scale.set(breatheScale * waveTweenScale);
     this.root.rotation = swayRot + waveTweenRot;
 
-    // --- Mouse tracking targets ---
-    // rawMouseX/Y are in [-1, 1].
-    const headGainX = 8;
-    const headGainY = 5;
-    const bodyGainX = 2;
-    const bodyGainY = 1;
-
-    this.headTargetX = this.rawMouseX * headGainX;
-    this.headTargetY = this.rawMouseY * headGainY;
-    this.bodyTargetX = this.rawMouseX * bodyGainX;
-    this.bodyTargetY = this.rawMouseY * bodyGainY;
-
-    // Lerp head and body group positions (smooth interpolation at 0.08/frame).
-    const LERP_RATE = 0.08;
-    this.headCurrentX = lerp(this.headCurrentX, this.headTargetX, LERP_RATE);
-    this.headCurrentY = lerp(this.headCurrentY, this.headTargetY, LERP_RATE);
-    this.bodyCurrentX = lerp(this.bodyCurrentX, this.bodyTargetX, LERP_RATE);
-    this.bodyCurrentY = lerp(this.bodyCurrentY, this.bodyTargetY, LERP_RATE);
-
-    this.headGroup.x        = this.headCurrentX;
-    this.headGroup.y        = this.headCurrentY;
-    this.headGroup.rotation = (this.headCurrentX / headGainX) * 3 * DEG_TO_RAD;
-
-    this.bodyGroup.x = this.bodyCurrentX;
-    this.bodyGroup.y = this.bodyCurrentY;
-
-    // --- Eye tracking (relative to their base, ±3px X, ±2px Y) ---
-    const eyeGainX = 3;
-    const eyeGainY = 2;
-    this.eyeTargetX  = this.rawMouseX * eyeGainX;
-    this.eyeTargetY  = this.rawMouseY * eyeGainY;
-    this.eyeCurrentX = lerp(this.eyeCurrentX, this.eyeTargetX, 0.1);
-    this.eyeCurrentY = lerp(this.eyeCurrentY, this.eyeTargetY, 0.1);
-
-    const leftEye  = this.layers.get("left_eye");
-    const rightEye = this.layers.get("right_eye");
-    if (leftEye) {
-      leftEye.x  = this.leftEyeBaseX  + this.eyeCurrentX;
-      leftEye.y  = this.leftEyeBaseY  + this.eyeCurrentY;
-    }
-    if (rightEye) {
-      rightEye.x = this.rightEyeBaseX + this.eyeCurrentX;
-      rightEye.y = this.rightEyeBaseY + this.eyeCurrentY;
-    }
-
-    // --- Hair spring physics ---
-    // Spring target driven by head group displacement + motion manager hair sway.
-    const hairSwayBase = p.hairSway.amplitude > 0
-      ? Math.sin((t * 2 * Math.PI) / p.hairSway.period) * p.hairSway.amplitude
-      : 0;
-    this.hairSpringX.target   = this.headCurrentX * 0.3 + hairSwayBase;
-    this.hairSpringRot.target = this.headCurrentX * 0.02; // subtle tilt follows head
-
-    this.hairSpringX.update(dt);
-    this.hairSpringRot.update(dt);
-
+    // --- Hair extra sway ---
     const hairSprite = this.layers.get("silver_hair");
-    if (hairSprite) {
-      hairSprite.x        = this.hairSpringX.position;
-      hairSprite.rotation = clamp(this.hairSpringRot.position, -5, 5) * DEG_TO_RAD;
+    if (hairSprite && p.hairSway.amplitude > 0) {
+      hairSprite.x = this.hairBaseX +
+        Math.sin((t * 2 * Math.PI) / p.hairSway.period) * p.hairSway.amplitude;
     }
-
-    // --- Star clip spring (stiffer, follows hair spring position) ---
-    this.starSpringX.target   = this.hairSpringX.position * 0.8;
-    this.starSpringRot.target = this.hairSpringRot.position * 0.8;
-
-    this.starSpringX.update(dt);
-    this.starSpringRot.update(dt);
 
     const clipSprite = this.layers.get("star_clip");
-    if (clipSprite) {
-      clipSprite.x        = this.starSpringX.position;
-      clipSprite.rotation = clamp(this.starSpringRot.position, -5, 5) * DEG_TO_RAD;
+    if (clipSprite && p.hairSway.amplitude > 0) {
+      clipSprite.x = this.hairBaseX +
+        Math.sin((t * 2 * Math.PI) / p.hairSway.period) * p.hairSway.amplitude * 0.6;
     }
 
-    // --- Wing spring physics ---
-    // Wings driven by body group + idle sin-wave oscillation.
-    const idleWingOscil = Math.sin((t * 2 * Math.PI) / 2.0) * 3; // 2s period, 3° amplitude
-
-    const wingFlap = p.wingFlap.amplitude > 0
-      ? Math.sin((t * 2 * Math.PI) / p.wingFlap.period) *
-        (p.wingFlap.amplitude * DEG_TO_RAD)
-      : 0;
-
-    // Spring target: body displacement tilt + motion flap + idle oscillation.
-    const wingBaseRot = wingFlap + idleWingOscil * DEG_TO_RAD;
-    this.wingLeftSpring.target  = -wingBaseRot - this.bodyCurrentX * 0.005;
-    this.wingRightSpring.target =  wingBaseRot + this.bodyCurrentX * 0.005;
-
-    this.wingLeftSpring.update(dt);
-    this.wingRightSpring.update(dt);
-
-    const lWing = this.layers.get("wing_left");
-    const rWing = this.layers.get("wing_right");
-    if (lWing) {
-      lWing.rotation = this.wingLeftSpring.position;
-    }
-    if (rWing) {
-      rWing.rotation = this.wingRightSpring.position;
+    // --- Remainder (wings+sleeves combined) subtle sway ---
+    const remainder = this.layers.get("remainder");
+    if (remainder && p.wingFlap.amplitude > 0) {
+      remainder.rotation = Math.sin((t * 2 * Math.PI) / p.wingFlap.period) *
+        (p.wingFlap.amplitude * 0.3 * DEG_TO_RAD);
     }
 
-    // --- Lip sync: subtle face Y position shift (±1px) ---
+    // --- Lip sync: subtle face Y scale ---
     const faceSprite = this.layers.get("face");
     if (faceSprite) {
-      faceSprite.y = 0 + this.lipSyncAmplitude * 1;
+      faceSprite.scale.y = faceSprite.scale.x * (1 + this.lipSyncAmplitude * 0.04);
     }
 
     // --- Glow (thinking state) ---
@@ -564,40 +384,27 @@ export class SpriteAnimator {
   private tickBlink(deltaMs: number): void {
     if (this.blinking) {
       this.blinkElapsed += deltaMs;
-      const progress = this.blinkElapsed / BLINK_DURATION; // 0 → 1
-      if (progress >= 1) {
-        // End blink: restore full scaleY.
-        this.setEyeScaleY(1.0);
-        this.blinking    = false;
-        this.blinkTimer  = 0;
-        this.blinkTarget = this.nextBlinkTarget();
-      } else {
-        // Ease in-out: 0 → 0.5 close (scaleY 1→0.1), 0.5 → 1 open (scaleY 0.1→1).
-        let scaleY: number;
-        if (progress < 0.5) {
-          const t = progress / 0.5;
-          scaleY = lerp(1.0, 0.1, easeInOut(t));
-        } else {
-          const t = (progress - 0.5) / 0.5;
-          scaleY = lerp(0.1, 1.0, easeInOut(t));
-        }
-        this.setEyeScaleY(scaleY);
+      if (this.blinkElapsed >= BLINK_DURATION) {
+        // End blink: restore eye sprites.
+        this.setEyeVisible(true);
+        this.blinking     = false;
+        this.blinkTimer   = 0;
+        this.blinkTarget  = this.nextBlinkTarget();
       }
     } else {
       this.blinkTimer += deltaMs;
       if (this.blinkTimer >= this.blinkTarget) {
-        // Start blink.
+        // Start blink: hide eye sprites.
+        this.setEyeVisible(false);
         this.blinking     = true;
         this.blinkElapsed = 0;
       }
     }
   }
 
-  private setEyeScaleY(scaleY: number): void {
-    const leftEye  = this.layers.get("left_eye");
-    const rightEye = this.layers.get("right_eye");
-    if (leftEye)  leftEye.scale.y  = leftEye.scale.x  * scaleY;
-    if (rightEye) rightEye.scale.y = rightEye.scale.x * scaleY;
+  private setEyeVisible(visible: boolean): void {
+    this.layers.get("left_eye")!.visible  = visible;
+    this.layers.get("right_eye")!.visible = visible;
   }
 
   private nextBlinkTarget(): number {
@@ -672,15 +479,6 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
-/** Cubic ease in-out (0→1 input, 0→1 output). */
-function easeInOut(t: number): number {
-  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-}
-
 /** Scale curve for the wave entrance tween: 0.8 → 1.1 → 1.0 */
 function waveScaleCurve(t: number): number {
   if (t < 0.5) return lerp(0.8, 1.1, t / 0.5);
@@ -706,21 +504,13 @@ function drawStar(
   inner: number,
 ): void {
   gfx.clear();
-  gfx.beginFill(0xffffff);
   const step = Math.PI / points;
-  let first = true;
-  for (let i = 0; i < points * 2; i++) {
+  gfx.moveTo(Math.cos(-Math.PI / 2) * outer, Math.sin(-Math.PI / 2) * outer);
+  for (let i = 1; i < points * 2; i++) {
     const r   = i % 2 === 0 ? outer : inner;
     const ang = i * step - Math.PI / 2;
-    const x   = Math.cos(ang) * r;
-    const y   = Math.sin(ang) * r;
-    if (first) {
-      gfx.moveTo(x, y);
-      first = false;
-    } else {
-      gfx.lineTo(x, y);
-    }
+    gfx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
   }
   gfx.closePath();
-  gfx.endFill();
+  gfx.fill({ color: 0xffffff });
 }

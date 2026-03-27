@@ -7,7 +7,7 @@
  */
 
 import { Application, Container } from "pixi.js";
-import { Live2DModel } from "untitled-pixi-live2d-engine";
+import { Live2DModel } from "untitled-pixi-live2d-engine/cubism";
 
 import type { MascotState } from "./types.js";
 
