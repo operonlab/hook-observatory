@@ -164,8 +164,17 @@ def analyze_task(description: str, budget: str = "balanced") -> TaskAnalysis:
 
     word_count = _effective_word_count(description)
     multi_signal_words = [
-        "and", "then", "also", "plus", "with", "including",
-        "並且", "然後", "還有", "以及", "同時",
+        "and",
+        "then",
+        "also",
+        "plus",
+        "with",
+        "including",
+        "並且",
+        "然後",
+        "還有",
+        "以及",
+        "同時",
     ]
     multi_signals = 0
     for w in multi_signal_words:
@@ -269,6 +278,7 @@ async def _check_tier_available(tier: str) -> bool:
     if tier == "relay":
         try:
             from workshop.clients.tmux_relay import TmuxRelayClient
+
             relay = TmuxRelayClient()
             panes = relay.list_panes()
             return panes is not None
@@ -277,6 +287,7 @@ async def _check_tier_available(tier: str) -> bool:
     if tier == "fleet":
         try:
             from workshop.clients.fleet import FleetClient
+
             fleet = FleetClient()
             health = fleet.health()
             return health.get("status") == "healthy"
@@ -297,9 +308,7 @@ async def resolve_tier(analysis: TaskAnalysis, tier_override: str | None = None)
     return "headless"
 
 
-async def dispatch_relay(
-    prompt: str, cwd: str | None, *, timeout: int = 300
-) -> AgentResult:
+async def dispatch_relay(prompt: str, cwd: str | None, *, timeout: int = 300) -> AgentResult:
     """Tier 2: Dispatch via tmux-relay pane pool (full MCP/skill access)."""
     from workshop.clients.tmux_relay import TmuxRelayClient
 
@@ -318,8 +327,11 @@ async def dispatch_relay(
         )
     except Exception as e:
         return AgentResult(
-            task_id=task_id, cli="claude", status="failed",
-            duration_s=round(time.time() - start, 1), output=f"Relay error: {e}",
+            task_id=task_id,
+            cli="claude",
+            status="failed",
+            duration_s=round(time.time() - start, 1),
+            output=f"Relay error: {e}",
         )
 
 
@@ -353,13 +365,19 @@ async def dispatch_fleet(
             interval = min(interval * 2, 30)
 
         return AgentResult(
-            task_id=task_id_local, cli="claude",
-            status="timeout", duration_s=timeout, output="Fleet task timed out",
+            task_id=task_id_local,
+            cli="claude",
+            status="timeout",
+            duration_s=timeout,
+            output="Fleet task timed out",
         )
     except Exception as e:
         return AgentResult(
-            task_id=task_id_local, cli="claude", status="failed",
-            duration_s=round(time.time() - start, 1), output=f"Fleet error: {e}",
+            task_id=task_id_local,
+            cli="claude",
+            status="failed",
+            duration_s=round(time.time() - start, 1),
+            output=f"Fleet error: {e}",
         )
 
 
@@ -406,7 +424,7 @@ def _parse_dt(value: str) -> datetime | None:
 
 async def save_run(pool: asyncpg.Pool, run: MaestroRun) -> None:
     detail = json.dumps(
-        {"phases": run.phases, "results": run.results},
+        {"phases": run.phases, "results": run.results, "tier": run.tier},
         ensure_ascii=False,
     )
     started_at = _parse_dt(run.started_at) or datetime.now(UTC)
@@ -447,7 +465,9 @@ async def load_run(pool: asyncpg.Pool, name: str) -> dict | None:
         return None
     result = dict(row)
     if result.get("detail"):
-        result["detail"] = json.loads(result["detail"]) if isinstance(result["detail"], str) else result["detail"]
+        result["detail"] = (
+            json.loads(result["detail"]) if isinstance(result["detail"], str) else result["detail"]
+        )
     return result
 
 
@@ -528,12 +548,17 @@ def dispatch_agent(
         )
     except subprocess.TimeoutExpired:
         return AgentResult(
-            task_id=task_id, cli=cli, status="timeout",
-            duration_s=timeout, output="Agent timed out",
+            task_id=task_id,
+            cli=cli,
+            status="timeout",
+            duration_s=timeout,
+            output="Agent timed out",
         )
     except Exception as e:
         return AgentResult(
-            task_id=task_id, cli=cli, status="failed",
+            task_id=task_id,
+            cli=cli,
+            status="failed",
             duration_s=round(time.time() - start, 1),
             output=f"Dispatch error: {e}",
         )

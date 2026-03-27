@@ -25,9 +25,7 @@ async def plan_task(body: PlanRequest) -> dict:
         if body.pattern.value == "pipeline":
             primary_cat = analysis.categories[0]
             templates = me.get_pipeline_templates()
-            analysis.phases = templates.get(
-                primary_cat, templates.get("code_generation", [])
-            )
+            analysis.phases = templates.get(primary_cat, templates.get("code_generation", []))
 
     # Tier selection
     tier = await me.resolve_tier(analysis, body.tier)
@@ -72,8 +70,10 @@ async def run_dispatch(body: DispatchRequest) -> dict:
     cwd = body.cwd or None
 
     if analysis.recommended_pattern == "solo":
-        cli = explicit_clis[0] if explicit_clis else me.route_to_cli(
-            analysis.categories[0], body.budget.value
+        cli = (
+            explicit_clis[0]
+            if explicit_clis
+            else me.route_to_cli(analysis.categories[0], body.budget.value)
         )
         result = await me.dispatch_by_tier(
             tier, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
@@ -91,9 +91,7 @@ async def run_dispatch(body: DispatchRequest) -> dict:
     elif analysis.recommended_pattern == "race":
         clis = explicit_clis if len(explicit_clis) >= 2 else ["claude", "codex", "gemini"]
         tasks = [
-            me.dispatch_by_tier(
-                tier, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
-            )
+            me.dispatch_by_tier(tier, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout)
             for cli in clis
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -103,8 +101,10 @@ async def run_dispatch(body: DispatchRequest) -> dict:
             else:
                 run.results.append(asdict(r))
     else:
-        cli = explicit_clis[0] if explicit_clis else me.route_to_cli(
-            analysis.categories[0], body.budget.value
+        cli = (
+            explicit_clis[0]
+            if explicit_clis
+            else me.route_to_cli(analysis.categories[0], body.budget.value)
         )
         result = await me.dispatch_by_tier(
             tier, cli, body.task, cwd, settings.SKILLS_DIR, timeout=timeout
@@ -113,9 +113,7 @@ async def run_dispatch(body: DispatchRequest) -> dict:
 
     run.completed_at = datetime.now(UTC).isoformat()
     started = datetime.fromisoformat(run.started_at)
-    run.duration_s = round(
-        (datetime.fromisoformat(run.completed_at) - started).total_seconds(), 1
-    )
+    run.duration_s = round((datetime.fromisoformat(run.completed_at) - started).total_seconds(), 1)
     run.status = "completed"
     await me.save_run(pool, run)
 
@@ -153,6 +151,39 @@ async def get_run(name: str) -> dict:
     if run is None:
         raise HTTPException(404, f"Run '{name}' not found")
     return run
+
+
+@router.get("/tier-stats")
+async def tier_stats(days: int = 30) -> dict:
+    """Return tier distribution stats for the last N days."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT
+            COALESCE(detail::jsonb->>'tier', 'headless') as tier,
+            COUNT(*) as count,
+            ROUND(AVG(duration_s)::numeric, 1) as avg_duration_s
+        FROM dispatch_runs
+        WHERE started_at > NOW() - make_interval(days => $1)
+        GROUP BY tier
+        ORDER BY count DESC
+        """,
+        days,
+    )
+    total = sum(r["count"] for r in rows)
+    return {
+        "days": days,
+        "total": total,
+        "tiers": [
+            {
+                "tier": r["tier"],
+                "count": r["count"],
+                "pct": round(r["count"] / total * 100, 1) if total > 0 else 0,
+                "avg_duration_s": float(r["avg_duration_s"] or 0),
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/routing-table")
