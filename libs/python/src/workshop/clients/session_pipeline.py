@@ -1,6 +1,7 @@
 """Session Pipeline — orchestrates SessionEnd lifecycle stages.
 
 Stages (in order):
+    0. pre-filter — skip trivially empty / command-only sessions
     1. redact   — clean sensitive data from transcript
     2. extract  — memvault knowledge extraction (via extract_async.py)
     3. archive  — session-archiver scan + score
@@ -106,6 +107,61 @@ class SessionPipelineClient:
     # Public API
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Stage 0 — Pre-filter
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _should_skip(transcript_path: str | None) -> str | None:
+        """Return skip reason if session is trivially empty, else None.
+
+        Skips pipeline for sessions that are clearly not worth processing:
+        - File size < 3 KB (empty shells / pure command sessions)
+        - Zero real user messages AND < 50 KB (opened-and-closed sessions)
+
+        Does NOT skip headless dispatches (0 user msgs but large files),
+        memory auditors / snapshot agents (userType=external, not counted),
+        or repair agents (typically > 100 KB).
+        """
+        if not transcript_path:
+            return None
+        p = Path(transcript_path)
+        if not p.exists():
+            return None
+
+        size = p.stat().st_size
+        if size < 3_000:
+            return f"trivial: file_size={size}B < 3KB"
+
+        # Quick scan first 100 lines for real user messages
+        user_msg_count = 0
+        lines_read = 0
+        try:
+            with open(p) as f:
+                for line in f:
+                    lines_read += 1
+                    if lines_read > 100:
+                        break
+                    try:
+                        obj = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    if obj.get("type") != "user" or obj.get("userType") == "external":
+                        continue
+                    content = obj.get("message", {}).get("content", "")
+                    if isinstance(content, str) and not content.startswith(
+                        ("<local-command-", "<command-name>", "<local-command-stdout>")
+                    ):
+                        if content.strip():
+                            user_msg_count += 1
+        except OSError:
+            return None
+
+        if user_msg_count == 0 and size < 50_000:
+            return f"trivial: 0 user messages, size={size}B"
+
+        return None
+
     def run_pipeline(
         self,
         session_id: str,
@@ -130,6 +186,23 @@ class SessionPipelineClient:
             session_id=session_id,
             transcript_path=resolved_transcript,
         )
+
+        # Stage 0 — pre-filter (skip trivially empty sessions)
+        skip_reason = self._should_skip(resolved_transcript)
+        if skip_reason:
+            log.info("pipeline skipped for %s: %s", session_id, skip_reason)
+            result.stages.append(
+                StageResult(
+                    name="pre-filter",
+                    success=True,
+                    details={"skipped": True, "reason": skip_reason},
+                )
+            )
+            # Still log to observatory so the skip is observable
+            log_result = self._stage_log(session_id, result)
+            result.stages.append(log_result)
+            result.total_duration_ms = int((time.monotonic() - pipeline_start) * 1000)
+            return result
 
         # Stage 1 — redact
         redact_result = self._stage_redact(session_id, resolved_transcript)

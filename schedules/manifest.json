@@ -23,6 +23,16 @@
       "enabled": true
     },
     {
+      "name": "ws-session-cleanup",
+      "label": "com.joneshong.scheduler.ws-session-cleanup",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_session_cleanup.py",
+      "schedule": { "calendar": { "DayOfWeek": 0, "Hour": 4, "Minute": 0 } },
+      "description": "每週日 4AM: 清除 trivial sessions (age > 7d, size < 3KB or quality_score < 0.15)",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "daily-briefing",
       "label": "com.joneshong.scheduler.daily-briefing",
       "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py daily-briefing && ~/.local/bin/python3 ~/workshop/core/cli/briefing/run.py",

@@ -69,6 +69,7 @@ from session_archiver.cli import (
     cmd_archive,
     cmd_freeze,
     cmd_info,
+    cmd_purge_trivial,
     cmd_scan,
     cmd_score,
     cmd_search,
@@ -85,6 +86,7 @@ COMMANDS = {
     "status": cmd_status,
     "search": cmd_search,
     "info": cmd_info,
+    "purge-trivial": cmd_purge_trivial,
 }
 
 
@@ -99,6 +101,7 @@ def main() -> None:
         print("  thaw       Restore an archived session")
         print("  status     Show archive statistics")
         print("  search     Search by summary (semantic → ILIKE fallback)")
+        print("  purge-trivial  Delete trivially empty sessions (dry-run default)")
         print()
         print("Usage: session-archiver <command> [options]")
         print("       uv run python -m session_archiver <command> [options]")

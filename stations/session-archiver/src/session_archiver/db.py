@@ -879,3 +879,66 @@ def update_summary(config: Config, session_id: str, summary: str) -> bool:
         return False
     finally:
         conn.close()
+
+
+def query_low_quality_sessions(config: Config, max_score: float = 0.15) -> list[dict]:
+    """Return sessions with low quality score from reflections table."""
+    conn = get_connection(config)
+    if conn is None:
+        return []
+    try:
+        with conn:
+            rows = conn.execute(
+                """
+                SELECT sr.session_id, sr.quality_score, sr.outcome,
+                       EXTRACT(EPOCH FROM (NOW() - s.updated_at)) / 86400 AS age_days
+                FROM session_reflections sr
+                JOIN sessions s ON s.session_id = sr.session_id
+                WHERE sr.quality_score < %(max_score)s
+                  AND sr.outcome = 'failure'
+                ORDER BY sr.quality_score ASC
+                """,
+                {"max_score": max_score},
+            ).fetchall()
+        return [
+            {
+                "session_id": r[0],
+                "quality_score": float(r[1]) if r[1] is not None else 0.0,
+                "outcome": r[2],
+                "age_days": float(r[3]) if r[3] is not None else 0.0,
+            }
+            for r in rows
+        ]
+    except Exception:
+        log.warning("query_low_quality_failed", exc_info=True)
+        return []
+    finally:
+        conn.close()
+
+
+def delete_session(config: Config, session_id: str) -> bool:
+    """Delete a session and its reflection from DB."""
+    conn = get_connection(config)
+    if conn is None:
+        return False
+    try:
+        with conn:
+            conn.execute(
+                "DELETE FROM session_reflections WHERE session_id = %(sid)s",
+                {"sid": session_id},
+            )
+            conn.execute(
+                "DELETE FROM session_embeddings WHERE session_id = %(sid)s",
+                {"sid": session_id},
+            )
+            conn.execute(
+                "DELETE FROM sessions WHERE session_id = %(sid)s",
+                {"sid": session_id},
+            )
+        log.debug("session_deleted", session_id=session_id)
+        return True
+    except Exception:
+        log.warning("session_delete_failed", session_id=session_id, exc_info=True)
+        return False
+    finally:
+        conn.close()
