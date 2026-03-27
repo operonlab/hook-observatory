@@ -13,11 +13,13 @@ export default defineConfig({
         format === "es" ? "live2d-core.mjs" : "live2d-core.js",
     },
     rollupOptions: {
-      // Externalize pixi.js so consumers can use their own version
-      external: ["pixi.js"],
+      // Externalize pixi.js and live2d engine so consumers provide them
+      external: ["pixi.js", "untitled-pixi-live2d-engine", "live2dcubismcore"],
       output: {
         globals: {
           "pixi.js": "PIXI",
+          "untitled-pixi-live2d-engine": "PIXI_LIVE2D",
+          live2dcubismcore: "Live2DCubismCore",
         },
       },
     },

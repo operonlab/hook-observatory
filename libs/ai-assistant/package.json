@@ -23,7 +23,9 @@
   },
   "dependencies": {
     "@workshop/live2d-core": "workspace:*",
-    "pixi.js": "^8.0.0"
+    "live2dcubismcore": "^1.0.2",
+    "pixi.js": "^8.0.0",
+    "untitled-pixi-live2d-engine": "^1.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
