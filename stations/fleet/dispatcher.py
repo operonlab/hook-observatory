@@ -102,6 +102,11 @@ class Dispatcher:
             if not node:
                 raise ValueError("No healthy node available for requested capabilities")
 
+        # 1.5 Conflict detection: warn if node already has a running task
+        running = self.store.list_tasks(status="running", node=node.name)
+        for t in running:
+            logger.warning("Node %s already has running task %s", node.name, t.id)
+
         # 2. Create task
         task = self.store.create(command=command, mode=mode, node=node.name, timeout=timeout)
         self.store.update_status(task.id, TaskStatus.PREPARING)
