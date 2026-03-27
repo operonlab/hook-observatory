@@ -210,6 +210,17 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/tmux-webui",
     },
     {
+        "name": "fleet",
+        "type": "uvicorn",
+        "cmd": (
+            "/opt/homebrew/bin/uv run python3 -m uvicorn main:app"
+            f" --host 127.0.0.1 --port {get_port('fleet')}"
+        ),
+        "port": get_port("fleet"),
+        "health": get("fleet").health_url,
+        "workdir": "/Users/joneshong/workshop/stations/fleet",
+    },
+    {
         "name": "capture-console",
         "type": "uvicorn",
         "cmd": f"/Users/joneshong/workshop/stations/capture-console/.venv/bin/python3 -m uvicorn server:app --host 127.0.0.1 --port {get_port('capture-console')}",  # noqa: E501

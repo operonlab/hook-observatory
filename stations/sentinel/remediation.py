@@ -21,16 +21,16 @@ logger = logging.getLogger(__name__)
 
 # ── Remediation timeout presets (seconds) ──
 
-_TIMEOUT_SERVICE_RESTART = 45   # workshop_services.py stop/start cycle
-_TIMEOUT_PORT_CHECK = 10        # process status / port availability check
-_TIMEOUT_DOCKER_RESTART = 30    # docker restart container
-_TIMEOUT_INFRA_RESTART = 60     # infrastructure engine restart (e.g. OrbStack)
-_TIMEOUT_BUILD = 120            # frontend pnpm build
-_TIMEOUT_NGINX_RELOAD = 10      # nginx -s reload
-_TIMEOUT_GIT_OP = 15            # git / relay dispatch operations
-_SLEEP_POST_KILL = 2            # settle after process kill / stop
-_SLEEP_POST_RESTART = 5         # settle after service restart
-_SLEEP_ENGINE_STARTUP = 15      # wait for infra engine (OrbStack) to fully start
+_TIMEOUT_SERVICE_RESTART = 45  # workshop_services.py stop/start cycle
+_TIMEOUT_PORT_CHECK = 10  # process status / port availability check
+_TIMEOUT_DOCKER_RESTART = 30  # docker restart container
+_TIMEOUT_INFRA_RESTART = 60  # infrastructure engine restart (e.g. OrbStack)
+_TIMEOUT_BUILD = 120  # frontend pnpm build
+_TIMEOUT_NGINX_RELOAD = 10  # nginx -s reload
+_TIMEOUT_GIT_OP = 15  # git / relay dispatch operations
+_SLEEP_POST_KILL = 2  # settle after process kill / stop
+_SLEEP_POST_RESTART = 5  # settle after service restart
+_SLEEP_ENGINE_STARTUP = 15  # wait for infra engine (OrbStack) to fully start
 
 RELAY_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/relay.sh"
 PANE_POOL_SCRIPT = Path.home() / ".claude/skills/tmux-relay/scripts/pane_pool.sh"
@@ -57,6 +57,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "cronicle": "cronicle",
     "mcpproxy": "mcpproxy",
     "tmux-webui": "tmux-webui",
+    "fleet": "fleet",
     "stt": "stt",
     "ocr": "ocr",
     "voice-gateway": "voice-gateway",
@@ -125,7 +126,9 @@ class SimpleRestarter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _stdout, _ = await asyncio.wait_for(check_proc.communicate(), timeout=_TIMEOUT_PORT_CHECK)
+            _stdout, _ = await asyncio.wait_for(
+                check_proc.communicate(), timeout=_TIMEOUT_PORT_CHECK
+            )
             if check_proc.returncode != 0:
                 logger.warning("Service %s restarted but health check failed", name)
                 return False
@@ -165,7 +168,9 @@ class SimpleRestarter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_INFRA_RESTART)
+            _stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=_TIMEOUT_INFRA_RESTART
+            )
             if proc.returncode == 0:
                 logger.info("Infra restart succeeded for %s", service)
                 # Wait for engine to be fully ready

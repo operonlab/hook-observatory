@@ -202,6 +202,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         url=_url("tmux-webui"),
     ),
     LightCheck(
+        name="fleet",
+        group="external",
+        url=_url("fleet", "/health"),
+    ),
+    LightCheck(
         name="agent-metrics",
         group="external",
         url=_url("agent-metrics", "/health"),
@@ -274,6 +279,13 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="system",
         command="/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/port_audit.py --check",
         expect_contains="PASS",
+        timeout=_TIMEOUT_SECURITY_SCAN,
+    ),
+    LightCheck(
+        name="process-audit",
+        group="system",
+        command="/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/workshop_orphan_reaper.py --json",
+        expect_contains='"count": 0',
         timeout=_TIMEOUT_SECURITY_SCAN,
     ),
 ]
