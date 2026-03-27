@@ -22,6 +22,7 @@ nodes:
     ssh_command: ["ssh", "win-gpu", "wsl", "-d", "Ubuntu", "--", "bash", "-s"]
     gpu: {model: "RTX 3090", vram_gb: 24}
     claude_path: "/home/joneshong/.local/bin/claude"
+    claude_flags: "--dangerously-skip-permissions"
     work_dir: "/home/joneshong/workshop"
     tmux_prefix: "fleet"
     warm_pool_size: 2

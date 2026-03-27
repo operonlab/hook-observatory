@@ -45,8 +45,10 @@ class Dispatcher:
                 logger.error("Failed to create warm session %s on %s", name, node.name)
                 break
             claude_path = node.config.get("claude_path", "claude")
+            claude_flags = node.config.get("claude_flags", "")
             work_dir = node.config.get("work_dir", "~")
-            await loop.run_in_executor(None, rt.send_keys, name, f"cd {work_dir} && {claude_path}")
+            claude_cmd = f"{claude_path} {claude_flags}".strip()
+            await loop.run_in_executor(None, rt.send_keys, name, f"cd {work_dir} && {claude_cmd}")
             await loop.run_in_executor(None, rt.send_enter, name)
             existing.append(name)
             logger.info("Warm session %s created on %s", name, node.name)
@@ -74,8 +76,10 @@ class Dispatcher:
         name = f"{prefix}-{uuid4().hex[:8]}"
         rt.new_session(name)
         claude_path = node.config.get("claude_path", "claude")
+        claude_flags = node.config.get("claude_flags", "")
         work_dir = node.config.get("work_dir", "~")
-        rt.send_keys(name, f"cd {work_dir} && {claude_path}")
+        claude_cmd = f"{claude_path} {claude_flags}".strip()
+        rt.send_keys(name, f"cd {work_dir} && {claude_cmd}")
         rt.send_enter(name)
         return name
 
