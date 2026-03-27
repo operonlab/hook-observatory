@@ -556,6 +556,10 @@ class TmuxRelayClient:
 
         # Start Claude Code (skip if pane already has it running)
         if not already_claude:
+            # Ensure pane is in workshop directory (new panes may inherit / or ~)
+            send_text(target, "cd ~/workshop", buf_name="_relay_paste")
+            send_enter(target)
+            time.sleep(0.3)
             send_text(target, self._claude_cmd(), buf_name="_relay_paste")
             send_enter(target)
 
@@ -610,7 +614,10 @@ class TmuxRelayClient:
                         continue  # already taken by another process
 
                 if p.status == "standby":
-                    # Bare shell → start Claude Code before acquiring
+                    # Bare shell → cd to workshop + start Claude Code before acquiring
+                    send_text(p.pane_ref, "cd ~/workshop", buf_name="_relay_paste")
+                    send_enter(p.pane_ref)
+                    time.sleep(0.3)
                     send_text(p.pane_ref, self._claude_cmd(), buf_name="_relay_paste")
                     send_enter(p.pane_ref)
                     if not wait_for_prompt(
@@ -812,7 +819,10 @@ class TmuxRelayClient:
             if cmd in _SHELLS:
                 break
 
-        # Step 3: Start fresh Claude Code
+        # Step 3: Ensure workshop directory + start fresh Claude Code
+        send_text(pane, "cd ~/workshop", buf_name="_relay_paste")
+        send_enter(pane)
+        time.sleep(0.3)
         send_text(pane, self._claude_cmd(), buf_name="_relay_paste")
         send_enter(pane)
 
