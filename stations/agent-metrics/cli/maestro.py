@@ -46,11 +46,12 @@ def _err(e):
 def cmd_plan(args):
     client = AgentMetricsClient()
     try:
-        result = client.plan(args.task, budget=args.budget, pattern=args.pattern)
+        result = client.plan(args.task, budget=args.budget, pattern=args.pattern, tier=args.tier)
         if args.json:
             _json_out(result, True)
         else:
             print(f"Pattern: {result.get('recommended_pattern', '?')}")
+            print(f"Tier: {result.get('recommended_tier', '?')}")
             print(f"Complexity: {result.get('complexity', '?')}")
             print(f"Categories: {', '.join(result.get('categories', []))}")
             if result.get("explicit_clis"):
@@ -72,12 +73,14 @@ def cmd_run(args):
             pattern=args.pattern,
             cwd=args.cwd,
             timeout=args.timeout,
+            tier=args.tier,
         )
         if args.json:
             _json_out(result, True)
         else:
             print(f"Name: {result.get('name', '?')}")
             print(f"Pattern: {result.get('pattern', '?')}")
+            print(f"Tier: {result.get('tier', '?')}")
             print(f"Duration: {result.get('duration_s', '?')}s")
             print(f"Agents: {result.get('agents_completed', 0)}/{result.get('agents_total', 0)}")
             for r in result.get("results", []):
@@ -353,6 +356,10 @@ def main():
     p_plan.add_argument(
         "--pattern", default=None, choices=["solo", "pipeline", "race", "swarm", "escalation"]
     )
+    p_plan.add_argument(
+        "--tier", default=None, choices=["headless", "relay", "fleet"],
+        help="Execution tier (auto-detected if omitted)"
+    )
     p_plan.set_defaults(func=cmd_plan)
 
     # run
@@ -363,6 +370,10 @@ def main():
     )
     p_run.add_argument(
         "--pattern", default=None, choices=["solo", "pipeline", "race", "swarm", "escalation"]
+    )
+    p_run.add_argument(
+        "--tier", default=None, choices=["headless", "relay", "fleet"],
+        help="Execution tier (auto-detected if omitted)"
     )
     p_run.add_argument("--cwd", default="", help="Working directory for agents")
     p_run.add_argument("--timeout", type=int, default=300, help="Per-agent timeout")

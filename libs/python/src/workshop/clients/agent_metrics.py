@@ -118,14 +118,17 @@ class AgentMetricsClient:
         task: str,
         budget: str = "balanced",
         pattern: str | None = None,
+        tier: str | None = None,
     ) -> dict:
-        """Analyze a task and return recommended orchestration pattern.
+        """Analyze a task and return recommended orchestration pattern + tier.
 
         POST /maestro/plan
         """
         body: dict[str, Any] = {"task": task, "budget": budget}
         if pattern:
             body["pattern"] = pattern
+        if tier:
+            body["tier"] = tier
         return self._post("/maestro/plan", body)
 
     def run(
@@ -135,8 +138,9 @@ class AgentMetricsClient:
         pattern: str | None = None,
         cwd: str = "",
         timeout: int = 300,
+        tier: str | None = None,
     ) -> dict:
-        """Analyze + execute a dispatch.
+        """Analyze + execute a dispatch with tier routing.
 
         POST /maestro/run
         """
@@ -148,6 +152,8 @@ class AgentMetricsClient:
         }
         if pattern:
             body["pattern"] = pattern
+        if tier:
+            body["tier"] = tier
         return self._post("/maestro/run", body, timeout=self._dispatch_timeout)
 
     def list_runs(self, limit: int = 50) -> list[dict]:

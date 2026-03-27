@@ -45,6 +45,7 @@ class PlanRequest(BaseModel):
     task: str
     pattern: OrchePattern | None = None
     budget: Budget = Budget.BALANCED
+    tier: str | None = None  # headless / relay / fleet / None (auto)
 
 
 class DispatchRequest(BaseModel):
@@ -54,6 +55,7 @@ class DispatchRequest(BaseModel):
     cwd: str = ""
     timeout: int = 300
     ratio: str = ""
+    tier: str | None = None  # headless / relay / fleet / None (auto)
 
 
 # ── Team-Task Projects ───────────────────────────────────────────
