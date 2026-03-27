@@ -9,19 +9,10 @@
  *   <ai-assistant mode="blog" api-url="/api/assistant/chat" />
  */
 
-import { SpriteAnimator, CubismRenderer } from "@workshop/live2d-core";
+import { SpriteAnimator } from "@workshop/live2d-core";
 import { startStream } from "./stream-handler";
 import { STYLES } from "./styles";
 import type { ChatMessage, MascotState } from "./types";
-
-/** Common interface for both renderers */
-interface MascotRenderer {
-  init(): Promise<void>;
-  destroy(): void;
-  setState(state: MascotState): void;
-  setMousePosition(x: number, y: number): void;
-  setLipSync(amplitude: number): void;
-}
 
 const DEFAULT_GREETING = "有什麼可以幫忙的嗎？";
 const DEFAULT_MASCOT_BASE = "/static/mascot";
@@ -50,11 +41,10 @@ export class AiAssistantElement extends HTMLElement {
     "language",
     "module",
     "mascot-base",
-    "model-path",
   ];
 
   private shadow: ShadowRoot;
-  private animator: MascotRenderer | null = null;
+  private animator: SpriteAnimator | null = null;
   private messages: ChatMessage[] = [];
   private isStreaming = false;
   private mascotState: MascotState = "idle";
@@ -85,28 +75,16 @@ export class AiAssistantElement extends HTMLElement {
 
     const canvas = this.shadow.querySelector('.mascot-canvas') as HTMLCanvasElement;
     if (canvas) {
-      const modelPath = this.getAttribute("model-path");
-      if (modelPath) {
-        // Cubism moc3 model mode
-        const renderer = new CubismRenderer({
-          canvas,
-          width: 510,
-          height: 510,
-          modelPath,
-        });
-        renderer.init().catch((err) =>
-          console.warn("[ai-assistant] Cubism init failed, falling back to sprites:", err),
-        );
-        this.animator = renderer;
-      } else {
-        // Legacy sprite layer mode
-        this.animator = new SpriteAnimator({
-          canvas,
-          width: 510,
-          height: 510,
-          layerBasePath: `${this.mascotBase}/layers`,
-        });
-      }
+      this.animator = new SpriteAnimator({
+        canvas,
+        width: 510,
+        height: 510,
+        layerBasePath: `${this.mascotBase}/layers`,
+      });
+      // Fire-and-forget async init — PixiJS loads layers then starts rendering.
+      this.animator.init().catch((err) =>
+        console.error("[ai-assistant] SpriteAnimator init failed:", err)
+      );
 
       // Mouse tracking
       document.addEventListener('mousemove', this._onMouseMove);

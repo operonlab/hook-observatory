@@ -1,0 +1,11 @@
+[[stack]]
+name = "ws-paper-svc"
+server = "win-gpu"
+run_build = true
+build_path = "services/paper"
+image = "workshop/paper-svc:latest"
+ports = { "10010" = "10010" }
+environment = """
+PAPER_DB_URL=postgresql://joneshong:REDACTED@REDACTED_IP:5432/workshop
+PAPER_REDIS_URL=redis://REDACTED_IP:6379/0
+"""

@@ -108,6 +108,14 @@ PORTS: list[ServicePort] = [
         env_var="TMUX_WEBUI_URL",
         nginx_path="/apps/tmux/",
     ),
+    ServicePort(
+        "fleet",
+        10106,
+        "station-infra",
+        health_path="/health",
+        env_var="FLEET_URL",
+        nginx_path="/apps/fleet/",
+    ),
     # ── Stations: AI & Media ──
     ServicePort(
         "stt",
@@ -292,6 +300,7 @@ MIGRATION_MAP: dict[str, int] = {
     "agent-metrics": 10103,
     "capture-console": 10104,
     "tmux-webui": 10105,
+    "fleet": 10106,
     # Stations: AI & Media
     "stt": 10200,
     "tts": 10201,

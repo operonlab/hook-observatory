@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.env
+.env.*
+outputs/
+.playwright-cli/
+.ruff_cache/
+*.log

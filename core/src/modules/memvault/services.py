@@ -9,7 +9,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Integer, delete, func, select, text
+from sqlalchemy import Integer, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.types import MemvaultEvents
@@ -277,6 +277,29 @@ class MemoryBlockService(
 
         Returns (results, metadata) tuple.
         """
+        if query_embedding is None:
+            # MLX disabled or oMLX unavailable — skip vector check, go straight to keyword fallback
+            meta = SearchMetadata(vector_used=False, scope=scope)
+            extra_filters = scopes_to_filters(parse_scopes(scope)) if scope else []
+            if date_from:
+                extra_filters.append(MemoryBlock.created_at >= date_from)
+            if date_to:
+                extra_filters.append(MemoryBlock.created_at <= date_to)
+            results: list[SemanticSearchResult] = []
+            if query:
+                results = await self._keyword_search(
+                    db,
+                    space_id,
+                    query,
+                    top_k,
+                    tags,
+                    block_type,
+                    extra_filters=extra_filters,
+                    keywords=keywords,
+                )
+                meta.keyword_used = True
+            return results[:top_k], meta
+
         if len(query_embedding) != EMBEDDING_DIM:
             raise BadRequestError(
                 f"Embedding must be {EMBEDDING_DIM}d, got {len(query_embedding)}d",
@@ -862,31 +885,22 @@ class MemoryBlockService(
     async def update_embedding(
         self, db: AsyncSession, block_id: str, embedding: list[float]
     ) -> None:
-        """Index embedding to Qdrant for a block.
+        """Set or update the embedding vector for a block.
 
-        PG embedding column removed in Qdrant migration — embeddings now live in Qdrant only.
+        Writes to both inline column (backward compat) and sub-table (Phase 2).
         """
-        from src.shared.qdrant_search import index_document
-        from src.shared.search_types import IndexDocument
-
-        # Fetch block for metadata needed by Qdrant indexing
-        block = await self.get(db, block_id)
-        if not block:
+        if len(embedding) != EMBEDDING_DIM:
+            raise BadRequestError(
+                f"Embedding must be {EMBEDDING_DIM}d",
+                code="memvault.invalid_embedding_dim",
+            )
+        result = await db.execute(
+            update(MemoryBlock).where(MemoryBlock.id == block_id).values(embedding=embedding)
+        )
+        if result.rowcount == 0:
             raise NotFoundError("Block not found", code="memvault.block_not_found")
 
-        await index_document(
-            IndexDocument(
-                service_id="memvault",
-                entity_id=block_id,
-                entity_type=block.block_type or "general",
-                space_id=block.space_id,
-                content=block.content,
-                tags=block.tags or [],
-                created_at=block.created_at,
-                updated_at=block.updated_at,
-                metadata={},
-            )
-        )
+        # BlockEmbedding sub-table removed (Qdrant migration) — inline embedding only
 
 
 # ======================== Tag Service ========================

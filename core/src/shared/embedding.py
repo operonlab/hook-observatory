@@ -10,6 +10,8 @@ under concurrent load (see embedding_cache.py for key format and TTL).
 
 import logging
 
+from src.config import settings
+
 from . import embedding_cache, omlx_bridge
 from .chunking import ChunkingStrategy, FixedLengthChunking
 from .search_constants import EMBEDDING_DIM
@@ -27,8 +29,11 @@ async def get_embedding(text: str, task_type: str | None = None) -> list[float] 
         task_type: Optional prefix for task-aware models.
                    Supported: "search_query", "search_document", "clustering", "classification"
 
-    Returns None if oMLX is unavailable (graceful degradation).
+    Returns None if oMLX is unavailable or MLX is disabled (graceful degradation).
     """
+    if not settings.mlx_enabled:
+        return None
+
     cached = await embedding_cache.get_cached(text, task_type)
     if cached is not None:
         return cached
@@ -46,6 +51,9 @@ async def get_embeddings_batch(
     """Generate embeddings for multiple texts with batch cache lookup."""
     if not texts:
         return []
+
+    if not settings.mlx_enabled:
+        return [None] * len(texts)
 
     # Batch cache lookup
     cached = await embedding_cache.get_cached_batch(texts, task_type)

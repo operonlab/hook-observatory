@@ -8,11 +8,37 @@ Architecture:
                                       ◄──stdout──  {JSON AX Tree}
 """
 
-import asyncio
-import json
-import logging
-import subprocess
-from pathlib import Path
+import sys
+
+if not sys.platform.startswith("darwin"):
+    # Non-macOS: stub all public functions so imports succeed on Linux/WSL2
+
+    async def get_app_tree(app_name: str = "", **kwargs) -> dict:  # type: ignore[misc]
+        return {"error": "AX bridge not available on non-macOS"}
+
+    async def find_element(app_name: str = "", **kwargs) -> list:  # type: ignore[misc]
+        return []
+
+    async def get_focused_element(app_name: str | None = None, **kwargs) -> dict:  # type: ignore[misc]
+        return {"error": "AX bridge not available on non-macOS"}
+
+    async def perform_action(
+        app_name: str = "", element_path: str = "", action: str = "AXPress", **kwargs
+    ) -> bool:  # type: ignore[misc]
+        return False
+
+    def list_running_apps() -> list:  # type: ignore[misc]
+        return []
+
+    async def shutdown() -> None:  # type: ignore[misc]
+        pass
+
+else:
+    import asyncio
+    import json
+    import logging
+    import subprocess
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

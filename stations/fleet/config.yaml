@@ -1,0 +1,34 @@
+port: 10106
+host: "127.0.0.1"
+health_interval: 30
+task_timeout: 600
+redis_url: "redis://127.0.0.1:6379/0"
+redis_prefix: "fleet:"
+
+nodes:
+  mac-local:
+    host: null
+    platform: darwin
+    capabilities: [filesystem, cli-agent, browser, mlx]
+    claude_path: "claude"
+    work_dir: "/Users/joneshong/workshop"
+    warm_pool_size: 0
+
+  win-gpu:
+    host: "win-gpu"
+    platform: win32-wsl2
+    capabilities: [gpu, filesystem, cli-agent, browser]
+    ssh_command: ["ssh", "win-gpu", "wsl", "-d", "Ubuntu", "--", "bash", "-c"]
+    gpu: {model: "RTX 3090", vram_gb: 24}
+    claude_path: "/home/joneshong/.local/bin/claude"
+    work_dir: "/home/joneshong/workshop"
+    tmux_prefix: "fleet"
+    warm_pool_size: 2
+
+code:
+  branch_prefix: "fleet/task-"
+  auto_commit: true
+  auto_push: true
+  uv_sync_before: true
+  alembic_allowed: false
+  workshop_dir_mac: "/Users/joneshong/workshop"

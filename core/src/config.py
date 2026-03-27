@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: list[str] = [
-        "http://localhost:10500",
+        "http://localhost:3000",
         "https://workshop.joneshong.com",
     ]
 
@@ -70,6 +70,9 @@ class Settings(BaseSettings):
 
     # Notification dedup
     notification_dedup_ttl: int = 300  # seconds — same-tag window (0 = disabled)
+
+    # Platform capabilities
+    mlx_enabled: bool = True  # Set CORE_MLX_ENABLED=false on Linux/WSL2
 
     # Plugins
     plugin_dir: str = "plugins"
