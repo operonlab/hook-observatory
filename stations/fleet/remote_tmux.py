@@ -27,8 +27,11 @@ class RemoteTmux:
                     timeout=timeout,
                 )
             else:
+                # Pipe command via stdin to avoid multi-layer SSH quoting issues.
+                # ssh_command should end with 'bash -s' (reads from stdin).
                 proc = subprocess.run(
-                    self.ssh_command + [cmd],
+                    self.ssh_command,
+                    input=cmd,
                     capture_output=True,
                     text=True,
                     timeout=timeout,

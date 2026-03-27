@@ -9,8 +9,8 @@ import subprocess
 import time
 from uuid import uuid4
 
-from .node_registry import NodeRegistry, NodeState
-from .task_store import Task, TaskStatus, TaskStore
+from node_registry import NodeRegistry, NodeState
+from task_store import Task, TaskStatus, TaskStore
 
 logger = logging.getLogger(__name__)
 

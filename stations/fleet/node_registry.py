@@ -7,7 +7,7 @@ import logging
 import time
 from dataclasses import dataclass
 
-from .remote_tmux import RemoteTmux
+from remote_tmux import RemoteTmux
 
 logger = logging.getLogger(__name__)
 

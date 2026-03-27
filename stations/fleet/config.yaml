@@ -18,7 +18,7 @@ nodes:
     host: "win-gpu"
     platform: win32-wsl2
     capabilities: [gpu, filesystem, cli-agent, browser]
-    ssh_command: ["ssh", "win-gpu", "wsl", "-d", "Ubuntu", "--", "bash", "-c"]
+    ssh_command: ["ssh", "win-gpu", "wsl", "-d", "Ubuntu", "--", "bash", "-s"]
     gpu: {model: "RTX 3090", vram_gb: 24}
     claude_path: "/home/joneshong/.local/bin/claude"
     work_dir: "/home/joneshong/workshop"
