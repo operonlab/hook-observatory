@@ -806,6 +806,33 @@ class TestDispatcher:
         dispatcher, registry, store = self._make_dispatcher()
         assert await dispatcher.get_output("ghost") == ""
 
+    @pytest.mark.asyncio
+    async def test_dispatch_warns_on_concurrent_node_task(self):
+        """Catches: if conflict detection is removed, operators get no
+        visibility when a node is already busy — risking resource contention.
+        """
+        dispatcher, registry, store = self._make_dispatcher()
+        mac = registry.get("mac-local")
+        mac.healthy = True
+        mac.remote_tmux.list_sessions.return_value = ["fleet-idle"]
+        mac.remote_tmux.new_session.return_value = True
+        mac.remote_tmux._run.return_value = (0, "", "")
+
+        # Pre-existing running task on mac-local
+        existing = store.create("long job", "code", "mac-local")
+        store.update_status(existing.id, TaskStatus.RUNNING, tmux_session="fleet-aaa")
+
+        with patch("subprocess.run", return_value=_make_completed_process(0)):
+            with patch("dispatcher.logger") as mock_logger:
+                task = await dispatcher.dispatch("echo hi", mode="code", node_name="mac-local")
+
+        # Warning must mention the node and the conflicting task id
+        mock_logger.warning.assert_any_call(
+            "Node %s already has running task %s", "mac-local", existing.id
+        )
+        # Dispatch still proceeds (non-blocking)
+        assert task.status in (TaskStatus.RUNNING, TaskStatus.PREPARING)
+
 
 # ════════════════════════════════════════════════
 # 5. TestHealthEndpoint
