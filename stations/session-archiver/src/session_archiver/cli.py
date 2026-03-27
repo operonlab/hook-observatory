@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 import structlog
 
@@ -560,3 +562,170 @@ def cmd_info(args: list[str]) -> None:
                 f"(quality={reflection.get('quality_score', 0):.1f}, "
                 f"tokens={reflection.get('total_tokens', 0):,})"
             )
+
+
+def cmd_purge_trivial(args: list[str]) -> None:
+    """Purge trivially empty / command-only sessions.
+
+    Identifies sessions that are clearly not worth keeping:
+    - File size < threshold (default 3 KB)
+    - DB quality_score < 0.15 AND outcome = 'failure'
+    - Older than min-age-days (default 3)
+
+    Default is dry-run — pass --execute to actually delete.
+    """
+    parser = argparse.ArgumentParser(description="Purge trivial sessions")
+    parser.add_argument(
+        "--execute", action="store_true", help="Actually delete (default is dry-run)"
+    )
+    parser.add_argument(
+        "--threshold-kb",
+        type=int,
+        default=3,
+        help="File size threshold in KB (default 3)",
+    )
+    parser.add_argument(
+        "--min-age-days",
+        type=int,
+        default=3,
+        help="Only purge sessions older than N days (default 3)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip confirmation prompt (for scheduled jobs)",
+    )
+    parser.add_argument("--json", action="store_true", help="JSON output")
+    opts = parser.parse_args(args)
+
+    config = load_config()
+    dry_run = not opts.execute
+    threshold_bytes = opts.threshold_kb * 1024
+    now = datetime.now(UTC)
+
+    from session_archiver.scanner import get_active_session_ids
+
+    active_ids = get_active_session_ids()
+
+    # --- Pass 1: File-based scan (< threshold KB) ---
+    candidates: list[dict] = []
+    projects_dir = Path(config.projects_dir).expanduser()
+    for project_dir in projects_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        for jsonl in project_dir.glob("*.jsonl"):
+            sid = jsonl.stem
+            if sid in active_ids:
+                continue
+            size = jsonl.stat().st_size
+            mtime = datetime.fromtimestamp(jsonl.stat().st_mtime, tz=UTC)
+            age_days = (now - mtime).total_seconds() / 86400
+            if age_days < opts.min_age_days:
+                continue
+            if size < threshold_bytes:
+                candidates.append({
+                    "session_id": sid,
+                    "reason": f"file_size={size}B < {opts.threshold_kb}KB",
+                    "size_bytes": size,
+                    "age_days": round(age_days, 1),
+                    "project_dir": str(project_dir),
+                })
+
+    # --- Pass 2: DB-based scan (low quality score) ---
+    try:
+        from session_archiver import db
+
+        low_quality = db.query_low_quality_sessions(config, max_score=0.15)
+        for row in low_quality:
+            sid = row["session_id"]
+            if sid in active_ids:
+                continue
+            # Check age
+            age_days_val = row.get("age_days", 0)
+            if age_days_val < opts.min_age_days:
+                continue
+            # Avoid duplicates
+            if any(c["session_id"] == sid for c in candidates):
+                continue
+            # Find the JSONL file
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                jsonl = project_dir / f"{sid}.jsonl"
+                if jsonl.exists():
+                    candidates.append({
+                        "session_id": sid,
+                        "reason": f"quality={row.get('quality_score', 0):.2f}, outcome={row.get('outcome', '?')}",
+                        "size_bytes": jsonl.stat().st_size,
+                        "age_days": round(age_days_val, 1),
+                        "project_dir": str(project_dir),
+                    })
+                    break
+    except Exception as e:
+        logger.warning("db_scan_skipped", error=str(e))
+
+    if not candidates:
+        msg = "No trivial sessions found"
+        if opts.json:
+            print(json.dumps({"candidates": 0, "message": msg}))
+        else:
+            print(msg)
+        return
+
+    # Confirmation
+    if not dry_run and not opts.force:
+        print(f"About to DELETE {len(candidates)} sessions:")
+        for c in candidates[:10]:
+            print(f"  {c['session_id'][:12]}  {c['size_bytes']:>6,}B  {c['reason']}")
+        if len(candidates) > 10:
+            print(f"  ... and {len(candidates) - 10} more")
+        resp = input("\nProceed? [y/N] ")
+        if resp.lower() != "y":
+            print("Aborted.")
+            return
+
+    # Execute or dry-run
+    deleted = 0
+    freed_bytes = 0
+    for c in candidates:
+        project_dir = Path(c["project_dir"])
+        jsonl = project_dir / f"{c['session_id']}.jsonl"
+        uuid_dir = project_dir / c["session_id"]
+
+        if not dry_run:
+            if jsonl.exists():
+                freed_bytes += jsonl.stat().st_size
+                jsonl.unlink()
+            if uuid_dir.is_dir():
+                for f in uuid_dir.rglob("*"):
+                    if f.is_file():
+                        freed_bytes += f.stat().st_size
+                shutil.rmtree(uuid_dir)
+            # Clean DB records
+            try:
+                from session_archiver import db as _db
+
+                _db.delete_session(config, c["session_id"])
+            except Exception:
+                pass
+            deleted += 1
+        else:
+            freed_bytes += c["size_bytes"]
+            deleted += 1
+
+    result = {
+        "mode": "dry-run" if dry_run else "execute",
+        "candidates": len(candidates),
+        "deleted": deleted,
+        "freed_bytes": freed_bytes,
+        "freed_mb": round(freed_bytes / 1024 / 1024, 2),
+    }
+
+    if opts.json:
+        result["details"] = candidates
+        print(json.dumps(result, indent=2))
+    else:
+        mode_label = "[DRY RUN] " if dry_run else ""
+        print(f"{mode_label}Purged {deleted} trivial sessions, freed {result['freed_mb']} MB")
+        if dry_run:
+            print("\nTo execute: session-archiver purge-trivial --execute")
