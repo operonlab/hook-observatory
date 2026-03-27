@@ -41,6 +41,8 @@ from workshop.tmux.primitives import (
     tmux_ok,
 )
 
+_SHELLS = {"bash", "zsh", "sh", "fish", "dash"}
+
 # ======================== Errors ========================
 
 
@@ -598,6 +600,15 @@ class TmuxRelayClient:
 
             # Take from idle/standby pool first
             for p in idle[:count]:
+                # Bug fix: live-check pane status to prevent race condition
+                # (cache can be stale by 0.5-1s, allowing two acquires to grab same pane)
+                if p.pane_id:
+                    live = self._pane_status_live(
+                        p.pane_id or p.pane_ref, p.pane_id.replace("%", "")
+                    )
+                    if live not in ("idle", "standby"):
+                        continue  # already taken by another process
+
                 if p.status == "standby":
                     # Bare shell → start Claude Code before acquiring
                     send_text(p.pane_ref, self._claude_cmd(), buf_name="_relay_paste")
@@ -607,16 +618,17 @@ class TmuxRelayClient:
                     ):
                         continue  # failed to start → skip, deficit spawning handles it
 
-                acquired.append(p.pane_ref)
+                # Bug fix: mark busy BEFORE appending (fail = skip this pane)
                 if p.pane_id:
                     self._clear_idle_ts(p.pane_id)
-                    # Mark busy immediately so next concurrent acquire sees it as taken
                     try:
                         self._cache.set_pane(
                             p.pane_id.replace("%", ""), p.pane_ref, "busy:acquired", p.pane_id
                         )
                     except Exception:
-                        pass
+                        continue  # cache update failed → don't acquire this pane
+
+                acquired.append(p.pane_ref)
 
             # Spawn more if needed
             deficit = count - len(acquired)
@@ -717,8 +729,10 @@ class TmuxRelayClient:
                 continue
             ts = self._get_idle_ts(p.pane_id)
             if ts == 0:
+                # Bug fix: stamp idle time but DON'T skip — check duration on same pass
+                # (previously required two auto_standby calls to trigger, letting panes sit idle)
                 self._touch_idle_ts(p.pane_id)
-                continue
+                ts = int(time.time())
             idle_secs = now - ts
             if idle_secs < self.AUTO_STANDBY_IDLE_TIMEOUT:
                 continue
@@ -767,7 +781,21 @@ class TmuxRelayClient:
                 if n == 0:
                     tmux_ok("kill-window", "-t", f"{session}:{wname}")
 
-        return f"Standby: {standby_count}, Killed: {killed_count}"
+        # Bug fix: pool maintenance — restore primary window pane count to MAX_PANES_PER_WINDOW
+        spawned = 0
+        for wname in self._list_relay_windows(session):
+            if not self._is_primary_window(wname):
+                continue
+            current = self._count_panes_in_window(f"{session}:{wname}")
+            deficit = self.MAX_PANES_PER_WINDOW - current
+            for _ in range(deficit):
+                try:
+                    self.spawn(session=session)
+                    spawned += 1
+                except Exception:
+                    break
+
+        return f"Standby: {standby_count}, Killed: {killed_count}, Spawned: {spawned}"
 
     def recycle(self, pane: str) -> str:
         """Recycle a pane: /exit -> restart Claude Code."""
@@ -1033,16 +1061,17 @@ class TmuxRelayClient:
             time.sleep(2)
 
         # Set session name if role is provided (/rename is a local CLI command, instant)
+        # Bug fix: increased delay to 2s to prevent /rename text bleeding into task prompt
         if role:
             send_text(source, f"/rename {role}", buf_name="_relay_paste")
             send_enter(source)
-            time.sleep(0.5)
+            time.sleep(2.0)
 
         # Set input bar color if requested (/color is a local CLI command, instant)
         if color:
             send_text(source, f"/color {color}", buf_name="_relay_paste")
             send_enter(source)
-            time.sleep(0.5)
+            time.sleep(1.0)
 
         # Cache: mark pane as busy:relay + store command
         try:
