@@ -601,13 +601,46 @@ class CommunityService:
     ) -> int:
         """Atomically replace all communities for a space with fresh Leiden results.
 
-        Deletes existing community_triples then communities, inserts new ones.
+        Preserves existing L2 summaries by re-associating them with new communities
+        via name matching. This prevents summary loss when community IDs change.
         Returns count of communities saved.
         """
+        # ── Phase 1: Backup existing summaries keyed by community name ──
+        old_communities = (
+            (await db.execute(select(Community).where(Community.space_id == space_id)))
+            .scalars()
+            .all()
+        )
+        old_id_to_name = {c.id: c.name for c in old_communities}
+
+        old_summaries = (
+            (
+                await db.execute(
+                    select(CommunitySummary).where(CommunitySummary.space_id == space_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # Map community name → summary data for re-association
+        summary_backup: dict[str, dict] = {}
+        for s in old_summaries:
+            comm_name = old_id_to_name.get(s.community_id, "")
+            if comm_name and s.summary:
+                summary_backup[comm_name] = {
+                    "summary": s.summary,
+                    "key_findings": s.key_findings,
+                    "representative_triples": s.representative_triples,
+                    "evidence_count": s.evidence_count,
+                    "tags": s.tags,
+                    "llm_model": s.llm_model,
+                    "generation_batch": s.generation_batch,
+                }
+
+        # ── Phase 2: Delete old data in FK dependency order ──
         existing_community_ids = (
             select(Community.id).where(Community.space_id == space_id).scalar_subquery()
         )
-        # Delete in FK dependency order: summaries → triples → communities
         await db.execute(
             delete(CommunitySummary).where(
                 CommunitySummary.community_id.in_(existing_community_ids)
@@ -618,7 +651,9 @@ class CommunityService:
         )
         await db.execute(delete(Community).where(Community.space_id == space_id))
 
+        # ── Phase 3: Insert new communities ──
         saved = 0
+        new_name_to_id: dict[str, str] = {}
         for c in communities_data:
             community = Community(
                 space_id=space_id,
@@ -635,6 +670,7 @@ class CommunityService:
             )
             db.add(community)
             await db.flush()
+            new_name_to_id[community.name] = community.id
 
             for triple_id in c.get("triple_ids", []):
                 ct = CommunityTriple(
@@ -646,12 +682,20 @@ class CommunityService:
 
             saved += 1
 
+        # ── Phase 4: Re-associate backed-up summaries with new communities ──
+        restored = 0
+        for comm_name, s_data in summary_backup.items():
+            new_id = new_name_to_id.get(comm_name)
+            if new_id:
+                db.add(CommunitySummary(space_id=space_id, community_id=new_id, **s_data))
+                restored += 1
+
         await db.flush()
 
         event_bus.publish_fire_and_forget(
             Event(
                 type=MemvaultEvents.COMMUNITY_REGENERATED,
-                data={"space_id": space_id, "count": saved},
+                data={"space_id": space_id, "count": saved, "summaries_restored": restored},
                 source="memvault",
             )
         )
