@@ -9,6 +9,7 @@ Usage:
     processed_path = run_preprocessing("/path/to/audio.wav", ops)
 
     from audio_ops.diarize import DiarizeOp
+    from audio_ops.extract_audio import ExtractAudioOp
     from audio_ops.merge import MergeOp, find_speaker
 
 Model directory resolution order:
@@ -123,7 +124,7 @@ def register(name: str):
 
 # Import operators to trigger registration
 def _register_builtins():
-    from . import denoise, diarize, merge, normalize, vad_trim  # noqa: F401
+    from . import denoise, diarize, extract_audio, merge, normalize, vad_trim  # noqa: F401
 
 
 _register_builtins()
