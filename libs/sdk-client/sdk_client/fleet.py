@@ -50,7 +50,7 @@ class FleetClient:
         base_url: str | None = None,
         timeout: float = 30,
     ):
-        from workshop import port_registry
+        from sdk_client import port_registry
 
         self.base_url = (
             base_url or os.environ.get("FLEET_URL", port_registry.get_url("fleet"))

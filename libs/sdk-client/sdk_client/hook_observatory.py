@@ -41,7 +41,7 @@ class HookObservatoryClient:
         secret_key: str | None = None,
         timeout: float = 15,
     ):
-        from workshop import port_registry
+        from sdk_client import port_registry
 
         self.base_url = (
             base_url or os.environ.get("HOOK_OBS_URL", port_registry.get_url("hook-observatory"))

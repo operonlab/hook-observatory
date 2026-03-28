@@ -41,7 +41,7 @@ class SystemMonitorClient:
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 30):
-        from workshop import port_registry
+        from sdk_client import port_registry
 
         self.base_url = (
             base_url

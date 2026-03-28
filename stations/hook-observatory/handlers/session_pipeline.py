@@ -49,7 +49,7 @@ def handle(
         # keeps the hook return time near-zero.
         code = (
             "import sys, os; "
-            "sys.path.insert(0, os.path.expanduser('~/workshop/libs/python/src')); "
+            "sys.path.insert(0, os.path.expanduser('~/workshop/libs/sdk-client')); "
             "from sdk_client.session_pipeline import SessionPipelineClient; "
             f"SessionPipelineClient().run_pipeline({session_id!r}, {transcript_path!r})"
         )

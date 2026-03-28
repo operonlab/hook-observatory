@@ -48,7 +48,7 @@ class AgentMetricsClient:
         timeout: float = 15,
         dispatch_timeout: float = 600,
     ):
-        from workshop import port_registry
+        from sdk_client import port_registry
 
         self.base_url = (
             base_url or os.environ.get("AGENT_METRICS_URL", port_registry.get_url("agent-metrics"))

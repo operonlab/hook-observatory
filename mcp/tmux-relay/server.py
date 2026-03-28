@@ -18,8 +18,9 @@ Configure in ~/.claude.json:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from sdk_client.tmux_relay import TmuxRelayClient
+
 from sdk_client.mcp_helpers import mcp_error_handler
+from sdk_client.tmux_relay import TmuxRelayClient
 
 mcp = FastMCP("tmux-relay")
 _default_client = TmuxRelayClient(silent=True)
@@ -123,12 +124,16 @@ async def relay_dispatch(
         task=task,
     )
     return _format_dispatch(dispatched)
+
+
 @mcp.tool()
 @mcp_error_handler("TmuxRelay")
 async def relay_list() -> str:
     """List all relay panes with their idle/busy status (cache-backed, ~0.5ms)."""
     panes = await to_thread(_default_client.list_panes)
     return _format_panes(panes)
+
+
 @mcp.tool()
 @mcp_error_handler("TmuxRelay")
 async def relay_check(signal_file: str) -> str:
@@ -140,6 +145,8 @@ async def relay_check(signal_file: str) -> str:
     status = result.get("status", "unknown").upper()
     meta = result.get("meta", "")
     return f"**Status**: {status}\nSignal: {result.get('signal_file', '')}\n{meta}"
+
+
 @mcp.tool()
 @mcp_error_handler("TmuxRelay")
 async def relay_result(signal_file: str, lines: int = 200) -> str:
@@ -150,5 +157,7 @@ async def relay_result(signal_file: str, lines: int = 200) -> str:
         max_lines=lines,
     )
     return _format_relay_result(result)
+
+
 if __name__ == "__main__":
     mcp.run()

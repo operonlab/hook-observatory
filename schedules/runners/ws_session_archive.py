@@ -55,7 +55,7 @@ def run_step(args: list[str]) -> bool:
 def run_redact_sweep() -> bool:
     """Run session redactor full_sweep via SDK (in-process). Returns True on success."""
     try:
-        sys.path.insert(0, str(HOME / "workshop/libs/python/src"))
+        sys.path.insert(0, str(HOME / "workshop/libs/sdk-client"))
         from sdk_client.session_redactor import SessionRedactorClient
 
         client = SessionRedactorClient()

@@ -91,7 +91,7 @@ class SessionPipelineClient:
         observatory_url: str | None = None,
         core_api_url: str | None = None,
     ) -> None:
-        from workshop import port_registry
+        from sdk_client import port_registry
 
         self.projects_dir = projects_dir or os.path.expanduser("~/.claude/projects")
         self.scripts_dir = scripts_dir or os.path.expanduser("~/workshop/mcp/memvault/scripts")
