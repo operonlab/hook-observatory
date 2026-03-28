@@ -15,8 +15,12 @@ import re
 from collections import Counter
 
 from .search_constants import SERVICE_AVGDL as _SERVICE_AVGDL
+from .text_utils import CJK_PATTERN as _CJK_PATTERN
+from .text_utils import STOPWORDS as _STOPWORDS
 
 logger = logging.getLogger(__name__)
+
+_WORD_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
 
 # Lazy-load jieba to avoid import overhead when not needed
 _jieba = None
@@ -30,26 +34,6 @@ def _get_jieba():
         jieba.setLogLevel(logging.WARNING)
         _jieba = jieba
     return _jieba
-
-
-# CJK Unicode ranges
-_CJK_PATTERN = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]")
-_WORD_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
-
-# Common stopwords (English + Chinese)
-_STOPWORDS = frozenset({
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "shall", "can", "to", "of", "in", "for",
-    "on", "with", "at", "by", "from", "as", "into", "through", "during",
-    "before", "after", "above", "below", "between", "and", "but", "or",
-    "not", "no", "nor", "so", "yet", "both", "either", "neither", "this",
-    "that", "these", "those", "it", "its", "i", "me", "my", "we", "our",
-    "you", "your", "he", "him", "his", "she", "her", "they", "them",
-    "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都",
-    "一", "一個", "上", "也", "很", "到", "說", "要", "去", "你",
-    "會", "著", "沒有", "看", "好", "自己", "這", "他", "她",
-})
 
 # BM25 parameters
 _K1 = 1.5
