@@ -4,6 +4,9 @@
  * A floating AI chat widget with SSE streaming, Shadow DOM isolation,
  * and customizable mascot character.
  *
+ * State management uses a Finite State Machine (FSM):
+ *   idle → thinking → streaming → draining → idle
+ *
  * Usage:
  *   <ai-assistant mode="workshop" api-url="/api/assistant/chat" />
  *   <ai-assistant mode="blog" api-url="/api/assistant/chat" />
@@ -32,6 +35,7 @@ async function createCubismRenderer(opts: CubismRendererOptions): Promise<Mascot
 const DEFAULT_GREETING = "有什麼可以幫忙的嗎？";
 const DEFAULT_MASCOT_BASE = "/static/mascot";
 const PHRASE_INTERVAL = 6000;
+const SAFETY_TIMEOUT_MS = 30000;
 
 const IDLE_PHRASES = [
   "有什麼可以幫忙的嗎？",
@@ -43,6 +47,19 @@ const IDLE_PHRASES = [
   "有新的想法想記錄嗎？",
   "我可以幫你搜尋記憶庫！",
 ];
+
+// ---------------------------------------------------------------------------
+// FSM types
+// ---------------------------------------------------------------------------
+type FsmState = "idle" | "thinking" | "streaming" | "draining";
+type FsmEvent =
+  | "SEND"
+  | "SSE_THINKING"
+  | "SSE_CONTENT"
+  | "SSE_ERROR"
+  | "SSE_DONE"
+  | "TW_CAUGHT_UP"
+  | "TIMEOUT";
 
 let msgIdCounter = 0;
 
@@ -66,9 +83,14 @@ export class AiAssistantElement extends HTMLElement {
   private cubismCanvas: HTMLCanvasElement | null = null;
   private spriteCanvas: HTMLCanvasElement | null = null;
   private useCubism = false;
+  private lipSyncRaf = 0;
+  private speakingTimeout: ReturnType<typeof setTimeout> | null = null;
+  private typewriterTimer: ReturnType<typeof setTimeout> | null = null;
+  private typewriterQueue = "";
+  private typewriterShown = "";
   private messages: ChatMessage[] = [];
-  private isStreaming = false;
-  private mascotState: MascotState = "idle";
+  private fsmState: FsmState = "idle";
+  private mascotVisual: MascotState = "idle";
   private streamingContent = "";
   private abortController: AbortController | null = null;
   private phraseTimer: ReturnType<typeof setInterval> | null = null;
@@ -77,6 +99,7 @@ export class AiAssistantElement extends HTMLElement {
 
   // DOM refs
   private mascotEl!: HTMLDivElement;
+  private speechBubbleEl!: HTMLDivElement;
   private speechTextEl!: HTMLSpanElement;
   private quickInputWrap!: HTMLDivElement;
   private quickInputEl!: HTMLInputElement;
@@ -92,7 +115,7 @@ export class AiAssistantElement extends HTMLElement {
   connectedCallback() {
     this.render();
     this.bindEvents();
-    this.setMascotState("idle");
+    this._setMascotVisual("idle");
     this.startPhraseRotation();
 
     this.cubismCanvas = this.shadow.querySelector('.cubism-canvas') as HTMLCanvasElement;
@@ -125,12 +148,10 @@ export class AiAssistantElement extends HTMLElement {
     this.useCubism = !this.useCubism;
 
     if (this.useCubism) {
-      // Show Cubism, hide Sprite
       this.cubismCanvas!.style.display = "";
       this.spriteCanvas!.style.display = "none";
       this.animator = this.cubismAnimator;
     } else {
-      // Show Sprite, hide Cubism — lazy init on first switch
       this.cubismCanvas!.style.display = "none";
       this.spriteCanvas!.style.display = "";
       if (!this.spriteAnimator && this.spriteCanvas) {
@@ -144,13 +165,236 @@ export class AiAssistantElement extends HTMLElement {
     this.switchBtn.title = this.useCubism ? "切換為精靈模式" : "切換為 Live2D 模式";
   }
 
+  // ---------------------------------------------------------------------------
+  // FSM — Finite State Machine
+  // ---------------------------------------------------------------------------
+
+  private transition(event: FsmEvent, payload?: any) {
+    // SEND from any state → abort + restart
+    if (event === "SEND") {
+      this._enterThinking(payload as string);
+      return;
+    }
+
+    switch (this.fsmState) {
+      case "idle":
+        // Only SEND is valid (handled above)
+        break;
+
+      case "thinking":
+        if (event === "SSE_THINKING") { /* already thinking, no-op */ }
+        else if (event === "SSE_CONTENT") { this._enterStreaming(payload); }
+        else if (event === "SSE_ERROR") { this._enterIdle({ error: payload as string }); }
+        else if (event === "SSE_DONE") { this._enterIdle(); }
+        else if (event === "TIMEOUT") { this._enterIdle(); }
+        break;
+
+      case "streaming":
+        if (event === "SSE_CONTENT") { this._onChunk(payload); }
+        else if (event === "SSE_ERROR") { this._enterIdle({ error: payload as string }); }
+        else if (event === "SSE_DONE") { this._enterDraining(); }
+        else if (event === "TIMEOUT") { this._enterIdle(); }
+        break;
+
+      case "draining":
+        if (event === "TW_CAUGHT_UP") { this._enterIdle(); }
+        else if (event === "TIMEOUT") { this._enterIdle(); }
+        break;
+    }
+  }
+
+  // ── FSM enter actions ──
+
+  private _enterIdle(opts?: { error?: string }) {
+    this.fsmState = "idle";
+    this._stopLipSync();
+    this._stopTypewriter(); // shows full typewriterQueue text
+    this._clearTimeouts();
+    this.abortController = null;
+    this._setMascotVisual("idle");
+
+    if (opts?.error) {
+      this.speechBubbleEl?.classList.remove("streaming");
+      this.setSpeechText(opts.error);
+      this.startPhraseRotation();
+    } else if (this.streamingContent) {
+      // Keep the full text as typewriter displayed it — no truncation
+      // Keep "streaming" class for left-aligned text
+      this.messages.push({
+        id: `msg-${Date.now()}`,
+        role: "assistant",
+        content: this.streamingContent,
+        timestamp: Date.now(),
+      });
+      this.dispatchEvent(
+        new CustomEvent("assistant-message", {
+          detail: { content: this.streamingContent },
+        }),
+      );
+      // Do NOT start phrase rotation — let the answer stay visible
+    } else {
+      this.speechBubbleEl?.classList.remove("streaming");
+      this.startPhraseRotation();
+    }
+  }
+
+  private _enterThinking(message: string) {
+    // Cleanup previous
+    this.abortController?.abort();
+    this._stopLipSync();
+    this._stopTypewriter();
+    this._clearTimeouts();
+
+    this.fsmState = "thinking";
+    this.streamingContent = "";
+    this.typewriterQueue = "";
+    this.typewriterShown = "";
+    this.stopPhraseRotation();
+
+    // Visual
+    this._setMascotVisual("thinking");
+    this.speechBubbleEl?.classList.remove("streaming");
+    this.setSpeechText("思考中...");
+
+    // Start stream
+    const body: Record<string, unknown> = { message, mode: this._mode };
+    if (this._mode === "workshop" && this._module) {
+      body.module = this._module;
+    }
+
+    this.abortController = startStream(this._apiUrl, body, {
+      onThinking: () => this.transition("SSE_THINKING"),
+      onContent: (text, isDelta) => this.transition("SSE_CONTENT", { text, isDelta }),
+      onError: (msg) => this.transition("SSE_ERROR", msg),
+      onDone: () => this.transition("SSE_DONE"),
+    });
+
+    this._resetSafetyTimeout();
+  }
+
+  private _enterStreaming(payload: { text: string; isDelta: boolean }) {
+    this.fsmState = "streaming";
+
+    // Visual
+    this._setMascotVisual("speaking");
+    this._startLipSync();
+    this.speechBubbleEl?.classList.add("streaming");
+
+    // Process first chunk
+    this._appendContent(payload);
+    this._resetSafetyTimeout();
+  }
+
+  private _enterDraining() {
+    this.fsmState = "draining";
+    // Lip sync + typewriter continue running
+    // If typewriter already caught up, go straight to idle
+    if (!this.typewriterTimer && this.typewriterShown.length >= this.typewriterQueue.length) {
+      this._enterIdle();
+    }
+  }
+
+  private _onChunk(payload: { text: string; isDelta: boolean }) {
+    this._appendContent(payload);
+    this._resetSafetyTimeout();
+  }
+
+  private _appendContent(payload: { text: string; isDelta: boolean }) {
+    if (payload.isDelta) {
+      this.streamingContent += payload.text;
+    } else {
+      this.streamingContent = payload.text;
+    }
+    this.typewriterQueue = this.streamingContent;
+    this._startTypewriter();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Typewriter — additive, no truncation, 1 char per 40ms
+  // ---------------------------------------------------------------------------
+
+  private _startTypewriter() {
+    if (this.typewriterTimer) return;
+    const tick = () => {
+      if (this.typewriterShown.length < this.typewriterQueue.length) {
+        this.typewriterShown = this.typewriterQueue.slice(0, this.typewriterShown.length + 1);
+        this.setSpeechText(this.typewriterShown, false);
+        this.speechTextEl.scrollTop = this.speechTextEl.scrollHeight;
+        this.typewriterTimer = setTimeout(tick, 40);
+      } else {
+        // Caught up — wait for more content or finalize if draining
+        this.typewriterTimer = null;
+        if (this.fsmState === "draining") {
+          this.transition("TW_CAUGHT_UP");
+        }
+      }
+    };
+    tick();
+  }
+
+  private _stopTypewriter() {
+    if (this.typewriterTimer) {
+      clearTimeout(this.typewriterTimer);
+      this.typewriterTimer = null;
+    }
+    if (this.typewriterQueue) {
+      this.setSpeechText(this.typewriterQueue, false);
+    }
+    this.typewriterQueue = "";
+    this.typewriterShown = "";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lip sync
+  // ---------------------------------------------------------------------------
+
+  private _startLipSync() {
+    if (this.lipSyncRaf) return;
+    const loop = () => {
+      const t = performance.now() / 1000;
+      const amp = Math.abs(Math.sin(t * 8)) * 0.7 + Math.abs(Math.sin(t * 5.3)) * 0.3;
+      this.animator?.setLipSync(amp);
+      this.lipSyncRaf = requestAnimationFrame(loop);
+    };
+    this.lipSyncRaf = requestAnimationFrame(loop);
+  }
+
+  private _stopLipSync() {
+    if (this.lipSyncRaf) {
+      cancelAnimationFrame(this.lipSyncRaf);
+      this.lipSyncRaf = 0;
+    }
+    this.animator?.setLipSync(0);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Timeouts
+  // ---------------------------------------------------------------------------
+
+  private _resetSafetyTimeout() {
+    if (this.speakingTimeout) clearTimeout(this.speakingTimeout);
+    this.speakingTimeout = setTimeout(() => this.transition("TIMEOUT"), SAFETY_TIMEOUT_MS);
+  }
+
+  private _clearTimeouts() {
+    if (this.speakingTimeout) { clearTimeout(this.speakingTimeout); this.speakingTimeout = null; }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle
+  // ---------------------------------------------------------------------------
+
   private _onMouseMove = (e: MouseEvent) => {
     this.animator?.setMousePosition(e.clientX, e.clientY);
   };
 
   disconnectedCallback() {
     this.abortController?.abort();
+    this._stopLipSync();
+    this._stopTypewriter();
+    this._clearTimeouts();
     if (this.phraseTimer) clearInterval(this.phraseTimer);
+    this.fsmState = "idle";
     this.animator?.destroy();
     this.animator = null;
     document.removeEventListener('mousemove', this._onMouseMove);
@@ -230,6 +474,8 @@ export class AiAssistantElement extends HTMLElement {
 
     const root = document.createElement("div");
     root.className = "assistant-root";
+    // Speech bubble is absolutely positioned above mascot-row,
+    // so its height changes never push the mascot down.
     root.innerHTML = `
       <div class="speech-bubble">
         <span class="speech-text">${this._greeting}</span>
@@ -257,6 +503,7 @@ export class AiAssistantElement extends HTMLElement {
 
     // Cache DOM refs
     this.mascotEl = this.shadow.querySelector(".mascot")!;
+    this.speechBubbleEl = this.shadow.querySelector(".speech-bubble")!;
     this.speechTextEl = this.shadow.querySelector(".speech-text")!;
     this.quickInputWrap = this.shadow.querySelector(".quick-input")!;
     this.quickInputEl = this.shadow.querySelector(".quick-input input")!;
@@ -280,7 +527,7 @@ export class AiAssistantElement extends HTMLElement {
     this.mascotEl.addEventListener("pointerup", (e) => {
       const dx = Math.abs(e.clientX - mascotPointerStart.x);
       const dy = Math.abs(e.clientY - mascotPointerStart.y);
-      if (dx < 5 && dy < 5 && this.mascotState === "idle") {
+      if (dx < 5 && dy < 5 && this.fsmState === "idle") {
         const phrase = IDLE_PHRASES[Math.floor(Math.random() * IDLE_PHRASES.length)];
         this.setSpeechText(phrase);
       }
@@ -322,7 +569,6 @@ export class AiAssistantElement extends HTMLElement {
       this.dragOffset.x = e.clientX - rect.left;
       this.dragOffset.y = e.clientY - rect.top;
 
-      // Don't capture yet — let click events flow normally
       document.addEventListener("pointermove", onPointerMove);
       document.addEventListener("pointerup", onPointerUp);
     };
@@ -333,7 +579,6 @@ export class AiAssistantElement extends HTMLElement {
       const dy = e.clientY - startY;
       if (!this.isDragging && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
 
-      // First real movement — now capture
       if (!captured) {
         try { host.setPointerCapture(pointerId); } catch { /* ok */ }
         captured = true;
@@ -383,116 +628,44 @@ export class AiAssistantElement extends HTMLElement {
 
   private handleSend(input: HTMLInputElement, btn: HTMLButtonElement) {
     const text = input.value.trim();
-    if (!text || this.isStreaming) return;
+    if (!text || this.fsmState !== "idle") return;
 
     this.messages.push({ id: `msg-${Date.now()}`, role: "user", content: text, timestamp: Date.now() });
     input.value = "";
     btn.disabled = true;
     btn.classList.remove("active");
 
-    this.sendToApi(text);
+    this.transition("SEND", text);
   }
 
-  private sendToApi(message: string) {
-    this.isStreaming = true;
-    this.streamingContent = "";
-    this.setMascotState("thinking");
-    this.setSpeechText("思考中...");
+  // ── Mascot Visual (purely cosmetic, driven by FSM) ──
 
-    const body: Record<string, unknown> = {
-      message,
-      mode: this._mode,
-    };
-    if (this._mode === "workshop" && this._module) {
-      body.module = this._module;
-    }
-
-    this.abortController = startStream(this._apiUrl, body, {
-      onThinking: () => {
-        this.setMascotState("thinking");
-        this.setSpeechText("思考中...");
-      },
-
-      onContent: (text, isDelta) => {
-        if (isDelta) {
-          this.streamingContent += text;
-        } else {
-          this.streamingContent = text;
-        }
-        this.setMascotState("speaking");
-        // Show streaming content in speech bubble (truncate for display)
-        const preview =
-          this.streamingContent.length > 60
-            ? this.streamingContent.slice(0, 60) + "..."
-            : this.streamingContent;
-        this.setSpeechText(preview);
-      },
-
-      onError: (msg) => {
-        this.setMascotState("idle");
-        this.setSpeechText(msg);
-      },
-
-      onDone: () => {
-        this.isStreaming = false;
-        this.setMascotState("idle");
-        this.abortController = null;
-
-        // Show final answer in speech bubble (truncated)
-        if (this.streamingContent) {
-          const final =
-            this.streamingContent.length > 80
-              ? this.streamingContent.slice(0, 80) + "..."
-              : this.streamingContent;
-          this.setSpeechText(final);
-          this.messages.push({
-            id: `msg-${Date.now()}`,
-            role: "assistant",
-            content: this.streamingContent,
-            timestamp: Date.now(),
-          });
-        }
-
-        // Resume phrase rotation after 10s
-        setTimeout(() => this.startPhraseRotation(), 10000);
-
-        this.dispatchEvent(
-          new CustomEvent("assistant-message", {
-            detail: { content: this.streamingContent },
-          }),
-        );
-      },
-    });
-  }
-
-  // ── Mascot State ──
-
-  private setMascotState(state: MascotState) {
-    if (this.mascotState === state) return;
-    this.mascotState = state;
-
-    if (state !== "idle") {
-      this.stopPhraseRotation();
-    }
-
+  private _setMascotVisual(state: MascotState) {
+    if (this.mascotVisual === state) return;
+    this.mascotVisual = state;
     this.animator?.setState(state);
   }
 
   // ── Speech Bubble ──
 
-  private setSpeechText(text: string) {
+  private setSpeechText(text: string, animate = true) {
     if (!this.speechTextEl) return;
-    this.speechTextEl.style.opacity = "0";
-    setTimeout(() => {
+    if (animate) {
+      this.speechTextEl.style.opacity = "0";
+      setTimeout(() => {
+        this.speechTextEl.textContent = text;
+        this.speechTextEl.style.opacity = "1";
+      }, 200);
+    } else {
       this.speechTextEl.textContent = text;
       this.speechTextEl.style.opacity = "1";
-    }, 200);
+    }
   }
 
   private startPhraseRotation() {
     this.stopPhraseRotation();
     this.phraseTimer = setInterval(() => {
-      if (this.mascotState !== "idle") return;
+      if (this.fsmState !== "idle") return;
       const phrase =
         IDLE_PHRASES[Math.floor(Math.random() * IDLE_PHRASES.length)];
       this.setSpeechText(phrase);

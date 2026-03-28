@@ -77,7 +77,10 @@ export function startStream(
       // Stream ended normally — ensure done is called
       callbacks.onDone();
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        callbacks.onDone(); // ensure state resets even on abort
+        return;
+      }
 
       if (retryCount < MAX_RETRIES) {
         const delay = BASE_RETRY_MS * 2 ** retryCount;

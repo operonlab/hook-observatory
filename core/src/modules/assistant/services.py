@@ -73,8 +73,8 @@ def _is_ui_chrome(line: str) -> bool:
     # 分隔線
     if s.count("─") > 10:
         return True
-    # 處理中指示符（✻ Crunched, ✳ Reticulating 等）
-    if s.startswith("✻") or s.startswith("✳"):
+    # 處理中指示符（✻ Crunched, ✳ Reticulating, ✶ Bunning 等）
+    if s.startswith(("✻", "✳", "✶")):
         return True
     # Claude Code 橫幅 / pig logo
     if "Claude Code" in s or s.startswith("▐") or s.startswith("▝") or s.startswith("▘"):

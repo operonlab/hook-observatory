@@ -108,20 +108,21 @@ export class CubismRenderer {
       autoFocus: false,
     });
 
-    // 4. Scale model to fit canvas
+    // 4. Scale model to fit canvas (use anchor for centering)
     const scaleX = this.opts.width / this.model.width;
     const scaleY = this.opts.height / this.model.height;
-    const scale = Math.min(scaleX, scaleY) * 0.85;
+    const scale = Math.min(scaleX, scaleY) * 0.45;
+    this.model.anchor.set(0.5, 0.5);
     this.model.scale.set(scale);
-    this.model.x = (this.opts.width - this.model.width * scale) / 2;
-    this.model.y = (this.opts.height - this.model.height * scale) / 2;
+    this.model.x = this.opts.width / 2;
+    this.model.y = this.opts.height / 2;
 
     this.container.addChild(this.model);
 
-    // 5. Per-frame lip sync update
-    this.app.ticker.add(() => {
-      if (this.destroyed) return;
-      this.updateLipSync();
+    // 5. Hook lip sync into the engine's update cycle (before model.update())
+    this.model.internalModel.on("beforeModelUpdate", () => {
+      if (this.destroyed || this.lipSyncValue <= 0) return;
+      this.applyLipSync();
     });
   }
 
@@ -191,22 +192,17 @@ export class CubismRenderer {
   // Internal
   // -----------------------------------------------------------------------
 
-  private updateLipSync(): void {
-    if (!this.model?.internalModel) return;
-    const coreModel = this.model.internalModel.coreModel;
-    if (!coreModel) return;
-
-    // Cubism 4/5 uses setParameterValueById
-    if ("setParameterValueById" in coreModel) {
-      try {
-        (coreModel as any).setParameterValueById("ParamMouthOpenY", this.lipSyncValue);
-      } catch { /* parameter may not exist */ }
-    }
-    // Cubism 2 fallback uses setParamFloat
-    else if ("setParamFloat" in coreModel) {
-      try {
-        (coreModel as any).setParamFloat("PARAM_MOUTH_OPEN_Y", this.lipSyncValue);
-      } catch { /* parameter may not exist */ }
-    }
+  /** Write lip sync value directly to the native Cubism parameter buffer.
+   *  Bypasses CubismIdHandle (which requires CubismId objects, not strings)
+   *  by indexing into the raw Float32Array via string ID lookup. */
+  private applyLipSync(): void {
+    try {
+      const cm = this.model.internalModel.coreModel as any;
+      const nativeModel = cm.getModel(); // Live2DCubismCore.Model
+      const idx = nativeModel.parameters.ids.indexOf("ParamMouthOpenY");
+      if (idx >= 0) {
+        nativeModel.parameters.values[idx] = this.lipSyncValue;
+      }
+    } catch { /* safe to ignore */ }
   }
 }

@@ -30,20 +30,29 @@ export const STYLES = /* css */ `
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── Speech Bubble (always visible, cycling phrases) ── */
-  .speech-bubble {
+  .assistant-root {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── Speech Bubble — absolutely positioned above mascot ── */
+  .speech-bubble {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 8px;
     background: var(--ai-bg);
     border: 1px solid var(--ai-border);
     border-radius: var(--ai-radius);
     padding: 8px 14px;
-    margin-bottom: 15px;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 2px 12px rgba(0,0,0,0.3);
     max-width: 280px;
-    margin-left: auto;
-    margin-right: auto;
+    width: max-content;
   }
   .speech-bubble::after {
     content: '';
@@ -64,6 +73,27 @@ export const STYLES = /* css */ `
     transition: opacity 0.3s ease;
     display: block;
     text-align: center;
+  }
+  .speech-bubble.streaming {
+    padding-right: 6px;
+  }
+  .speech-bubble.streaming .speech-text {
+    text-align: left;
+    max-height: 9em;
+    overflow-y: auto;
+    padding-right: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.2) transparent;
+  }
+  .speech-bubble.streaming .speech-text::-webkit-scrollbar {
+    width: 4px;
+  }
+  .speech-bubble.streaming .speech-text::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .speech-bubble.streaming .speech-text::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
   }
 
   /* ── Mascot Row (character + action buttons) ── */
@@ -136,8 +166,6 @@ export const STYLES = /* css */ `
     gap: 6px;
     margin-top: 10px;
     max-width: 320px;
-    margin-left: auto;
-    margin-right: auto;
   }
   .quick-input.hidden { display: none; }
 
