@@ -251,6 +251,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url=_url("anvil", "/docs"),
     ),
     LightCheck(
+        name="blog",
+        group="external",
+        url=_url("blog", "/zh/"),
+        expect_contains="JonesHong",
+    ),
+    LightCheck(
         name="cronicle",
         group="external",
         url=_url("cronicle", "/api/app/ping"),

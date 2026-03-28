@@ -6,7 +6,7 @@ Nginx serves `workbench/dist/` as static files (NOT proxied to dev server).
 
 Rebuild:
 ```bash
-cd /Users/joneshong/workshop/workbench && /opt/homebrew/Cellar/node@22/22.22.0/lib/node_modules/corepack/shims/pnpm run build
+cd /Users/joneshong/workshop/workbench && /opt/homebrew/opt/node@22/lib/node_modules/corepack/shims/pnpm run build
 ```
 
 The build script automatically injects `git rev-parse --short HEAD` into `dist/sw.js` CACHE_NAME,

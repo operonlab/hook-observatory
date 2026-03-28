@@ -305,11 +305,11 @@ SERVICES = [
     {
         "name": "blog",
         "type": "binary",
-        "cmd": "/opt/homebrew/bin/node dist/server/entry.mjs",
+        "cmd": "/opt/homebrew/opt/node@22/bin/node dist/server/entry.mjs",
         "port": get_port("blog"),
         "health": get("blog").health_url,
         "workdir": "/Users/joneshong/blog",
-        "env": {"PORT": str(get_port("blog"))},
+        "env": {"NODE_ENV": "production", "PORT": str(get_port("blog"))},
     },
 ]
 

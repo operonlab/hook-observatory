@@ -39,7 +39,7 @@ SIGNAL_DIR = Path("/tmp")  # noqa: S108
 WORKSHOP_SERVICES = Path.home() / "workshop/scripts/workshop_services.py"
 PYTHON = Path.home() / ".local/bin/python3"
 WORKBENCH_DIR = Path.home() / "workshop/workbench"
-PNPM = "/opt/homebrew/Cellar/node@22/22.22.0/lib/node_modules/corepack/shims/pnpm"
+PNPM = "/opt/homebrew/opt/node@22/lib/node_modules/corepack/shims/pnpm"
 
 # Map sentinel service names → workshop_services.py service names
 # Only services managed by workshop_services.py are eligible for simple restart
@@ -57,6 +57,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "auto-survey": "auto-survey",
     "capture-console": "capture-console",
     "anvil": "anvil",
+    "blog": "blog",
     "cronicle": "cronicle",
     "mcpproxy": "mcpproxy",
     "tmux-webui": "tmux-webui",
