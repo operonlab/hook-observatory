@@ -28,6 +28,9 @@ _CORE_SRC = Path(__file__).resolve().parents[2] / "core" / "src"
 if str(_CORE_SRC) not in sys.path:
     sys.path.insert(0, str(_CORE_SRC))
 
+# sdk_client is installed as a package (libs/sdk-client)
+from sdk_client.crawl4ai_bridge import crawl_batch, crawl_url  # noqa: E402
+from sdk_client.mcp_helpers import mcp_error_handler  # noqa: E402
 from shared.chunking import (  # noqa: E402
     FixedLengthChunking,
     RegexChunking,
@@ -48,14 +51,6 @@ from shared.url_scorer import (  # noqa: E402
     KeywordScorer,
     PathDepthScorer,
 )
-
-# Workshop libs (libs/python/src)
-_LIBS_SRC = Path(__file__).resolve().parents[2] / "libs" / "python" / "src"
-if str(_LIBS_SRC) not in sys.path:
-    sys.path.insert(0, str(_LIBS_SRC))
-
-from sdk_client.crawl4ai_bridge import crawl_batch, crawl_url  # noqa: E402
-from sdk_client.mcp_helpers import mcp_error_handler  # noqa: E402
 
 mcp = FastMCP("crawl4ai")
 _md_gen = DefaultMarkdownGenerator()
@@ -273,9 +268,7 @@ async def crawl4ai_analyze_url(
             "chunk_strategy": chunk_strategy,
             "chunk_count": len(chunks),
             "chunks_preview": chunks[:3],
-            "top_links": [
-                {"url": u, "score": round(s, 4)} for u, s in scored_links[:10]
-            ],
+            "top_links": [{"url": u, "score": round(s, 4)} for u, s in scored_links[:10]],
             "metadata": crawl_result.metadata,
         }
     )
