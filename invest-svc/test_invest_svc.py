@@ -239,7 +239,7 @@ def mock_db() -> AsyncMock:
 @pytest.fixture
 async def client(mock_db):
     """AsyncClient with get_db overridden to return our mock session."""
-    from shared.database import get_db
+    from svc_shared.database import get_db
 
     async def _override():
         yield mock_db

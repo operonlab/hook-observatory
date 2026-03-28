@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from shared.schemas import SpaceScopedResponse
+from svc_shared.schemas import SpaceScopedResponse
 
 # ======================== Account ========================
 

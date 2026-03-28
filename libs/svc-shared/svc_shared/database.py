@@ -1,6 +1,7 @@
-"""Database engine and session management for paper-svc.
+"""Database engine and session management for standalone microservices.
 
-Reads PAPER_DB_URL from environment (via config.py).
+Each service provides its own DB URL via config.py; this module handles
+engine creation and async session lifecycle.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -13,7 +14,7 @@ def init_db(db_url: str, debug: bool = False) -> None:
     """Initialize the async engine and session factory.
 
     Called once during app lifespan startup.
-    Converts postgresql:// → postgresql+asyncpg:// automatically.
+    Converts postgresql:// to postgresql+asyncpg:// automatically.
     """
     global _engine, _session_factory
 

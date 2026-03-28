@@ -10,8 +10,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.schemas import PaginatedResponse, PaginationParams
-from shared.services import BaseCRUDService
+from svc_shared.schemas import PaginatedResponse, PaginationParams
+from svc_shared.services import BaseCRUDService
 
 from .models import Annotation, Article, Digest
 from .schemas import (

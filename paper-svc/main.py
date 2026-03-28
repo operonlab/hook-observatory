@@ -11,8 +11,8 @@ from fastapi.responses import JSONResponse
 from paper.routes import router as paper_router
 
 from config import settings
-from shared.database import dispose_db, init_db
-from shared.errors import WorkshopError
+from svc_shared.database import dispose_db, init_db
+from svc_shared.errors import WorkshopError
 
 
 @asynccontextmanager

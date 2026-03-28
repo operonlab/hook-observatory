@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from shared.models import SpaceScopedModel
+from svc_shared.models import SpaceScopedModel
 
 SCHEMA = "paper"
 

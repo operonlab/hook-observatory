@@ -20,7 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from shared.models import SpaceScopedModel
+from svc_shared.models import SpaceScopedModel
 
 SCHEMA = "invest"
 
