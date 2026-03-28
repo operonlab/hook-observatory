@@ -75,7 +75,7 @@ def http_post(url: str, body: dict, params: dict | None = None) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=300) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body_txt = e.read().decode("utf-8", errors="replace")[:200]

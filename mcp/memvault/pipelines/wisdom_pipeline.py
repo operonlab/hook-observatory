@@ -21,7 +21,7 @@ from collections import defaultdict
 from datetime import datetime
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 GEMINI_CMD = "gemini"
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
 MIN_CLUSTERS_FOR_BRIDGE = 2  # entity must appear in ≥2 clusters

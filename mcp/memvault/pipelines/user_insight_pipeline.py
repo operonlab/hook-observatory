@@ -10,7 +10,7 @@ Usage:
     python3 mcp/memvault/pipelines/user_insight_pipeline.py --space-id default --dry-run
 
 Environment:
-    CORE_API_URL      — defaults to http://localhost:8801
+    CORE_API_URL      — defaults to http://localhost:10000
     MEMVAULT_SPACE_ID — defaults to default
 """
 
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(WORKSHOP_ROOT, "core"))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-CORE_API_URL = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API_URL = os.environ.get("CORE_API_URL", "http://localhost:10000")
 
 
 async def fetch_attention_profile(space_id: str) -> dict:

@@ -774,12 +774,22 @@ class CommunitySummaryService:
         space_id: str,
         summaries_data: list[dict],
     ) -> int:
-        """Atomically replace all community summaries for a space.
+        """Atomically replace community summaries for the given communities.
 
-        Deletes existing community_summaries, inserts new ones.
+        Only deletes summaries whose community_id appears in summaries_data,
+        preserving summaries from other resolution levels.
         Returns count saved.
         """
-        await db.execute(delete(CommunitySummary).where(CommunitySummary.space_id == space_id))
+        if not summaries_data:
+            return 0
+
+        target_community_ids = [s["community_id"] for s in summaries_data]
+        await db.execute(
+            delete(CommunitySummary).where(
+                CommunitySummary.space_id == space_id,
+                CommunitySummary.community_id.in_(target_community_ids),
+            )
+        )
 
         saved = 0
         for s in summaries_data:
