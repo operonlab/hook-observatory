@@ -10,6 +10,8 @@ members = [
     "core/services/*",
     "libs/sdk-client",
     "libs/audio-ops",
+    "libs/image-ops",
+    "libs/video-ops",
     "libs/tmux-lib",
 ]
 
@@ -19,19 +21,23 @@ package = false
 [tool.uv.sources]
 workshop-sdk-client = { workspace = true }
 workshop-audio-ops = { workspace = true }
+workshop-image-ops = { workspace = true }
+workshop-video-ops = { workspace = true }
 workshop-tmux-lib = { workspace = true }
 
 [dependency-groups]
 dev = [
     "workshop-sdk-client",
     "workshop-audio-ops",
+    "workshop-image-ops",
+    "workshop-video-ops",
     "workshop-tmux-lib",
 ]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["core/src", "mcp", "scripts", "libs/sdk-client", "libs/audio-ops", "libs/tmux-lib"]
+src = ["core/src", "mcp", "scripts", "libs/sdk-client", "libs/audio-ops", "libs/image-ops", "libs/video-ops", "libs/tmux-lib"]
 extend-exclude = [".claude/worktrees", ".worktrees"]
 
 [tool.ruff.lint]
@@ -78,6 +84,7 @@ ignore = [
 "schedules/runners/*.py" = ["S603", "S607"]  # trusted hardcoded runner scripts
 "libs/audio-ops/audio_ops/diarize.py" = ["S603"]  # trusted subprocess to ~/.venvs/diarize/
 "libs/audio-ops/audio_ops/extract_audio.py" = ["S603", "S607"]  # trusted ffmpeg/ffprobe calls
+"libs/video-ops/video_ops/*.py" = ["S603", "S607"]  # trusted ffmpeg/ffprobe subprocess calls
 "scripts/merge_diarization.py" = ["S603"]  # trusted subprocess to mlx_whisper CLI
 "core/src/shared/reactive.py" = ["RUF001", "RUF002"]  # Chinese docstrings (Reactive Protocol)
 
