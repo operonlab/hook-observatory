@@ -132,6 +132,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url=_url("core", "/health"),
         expect_json={"status": "healthy"},
     ),
+    LightCheck(
+        name="paper-svc",
+        group="internal",
+        url=_url("paper-svc", "/health"),
+        expect_json={"status": "ok"},
+    ),
     # V1 gateway retired (2026-03-08)
     LightCheck(
         name="frontend",

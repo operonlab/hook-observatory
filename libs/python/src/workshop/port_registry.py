@@ -59,6 +59,14 @@ PORTS: list[ServicePort] = [
         health_path="/health",
         env_var="CORE_API_URL",
     ),
+    ServicePort(
+        "paper-svc",
+        10010,
+        "core",
+        health_path="/health",
+        env_var="PAPER_SVC_URL",
+        nginx_path="/api/paper/",
+    ),
     # ── Stations: Infra & Ops ──
     ServicePort(
         "hook-observatory",
@@ -293,6 +301,7 @@ def check_conflicts() -> list[str]:
 MIGRATION_MAP: dict[str, int] = {
     # Core
     "core": 10000,
+    "paper-svc": 10010,
     # Stations: Infra & Ops
     "hook-observatory": 10100,
     "session-channel": 10101,

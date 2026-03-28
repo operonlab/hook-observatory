@@ -47,6 +47,18 @@ SERVICES = [
         "health": f"http://127.0.0.1:{get_port('core')}/docs",
         "workdir": "/Users/joneshong/workshop/core",
     },
+    # ── Microservices (extracted from Core) ──
+    {
+        "name": "paper-svc",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/paper-svc/.venv/bin/python3 -m uvicorn"
+            f" main:app --host 127.0.0.1 --port {get_port('paper-svc')}"
+        ),
+        "port": get_port("paper-svc"),
+        "health": get("paper-svc").health_url,
+        "workdir": "/Users/joneshong/workshop/paper-svc",
+    },
     # ── Stations ──
     {
         "name": "agent-vista",
