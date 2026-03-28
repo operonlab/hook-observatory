@@ -21,7 +21,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-ANVIL_BASE = "http://127.0.0.1:4103/api/anvil"
+ANVIL_BASE = "http://127.0.0.1:10301/api/anvil"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 
 # Known CLI builtins (not skills)

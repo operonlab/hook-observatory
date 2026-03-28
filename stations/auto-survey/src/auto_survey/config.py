@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     execution_hour: int = 14  # execute after this hour; before → scheduled
 
-    web_port: int = 4102
+    web_port: int = 10300
     bark_device_key: str = "gx7KnK5f8iAKuqNLWzy5hP"
     bark_server: str = "http://localhost:8090"
 

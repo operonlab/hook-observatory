@@ -387,13 +387,13 @@ def _server_is_up() -> bool:
     import socket
 
     try:
-        with socket.create_connection(("127.0.0.1", 8801), timeout=1):
+        with socket.create_connection(("127.0.0.1", 10000), timeout=1):
             return True
     except OSError:
         return False
 
 
-@pytest.mark.skipif(not _server_is_up(), reason="Core API not running (port 8801)")
+@pytest.mark.skipif(not _server_is_up(), reason="Core API not running (port 10000)")
 class TestSDKIntegration:
     """Live integration tests — only run when the Core API is up."""
 

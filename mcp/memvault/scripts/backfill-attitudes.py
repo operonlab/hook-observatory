@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
 BATCH_SIZE = 5  # blocks per Gemini call

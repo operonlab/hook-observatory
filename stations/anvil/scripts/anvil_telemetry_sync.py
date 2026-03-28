@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:4103")
+ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:10301")
 SPOOL_DIR = Path.home() / ".claude" / "data" / "anvil-telemetry"
 SPOOL_FILE = SPOOL_DIR / "pending.jsonl"
 SYNCED_FILE = SPOOL_DIR / "synced.jsonl"

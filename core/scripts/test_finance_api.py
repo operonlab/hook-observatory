@@ -16,7 +16,7 @@ import httpx
 
 # ---------- Config ----------
 
-DEFAULT_BASE_URL = "http://localhost:8801"
+DEFAULT_BASE_URL = "http://localhost:10000"
 TEST_USER = {"email": "test-finance@example.com", "password": "Test1234", "name": "Finance Tester"}
 
 

@@ -1,6 +1,6 @@
 env_prefix: ANVIL
 
-port: 4103
+port: 10301
 host: "127.0.0.1"
 database_url: "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
 skills_dir: "~/.claude/skills"

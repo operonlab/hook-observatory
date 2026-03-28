@@ -5,7 +5,7 @@ Events:
   SessionStart → announce session join to 'sessions' topic
   Stop         → announce session activity to 'sessions' topic (debounced)
 
-Fire-and-forget HTTP POST to session-channel station (localhost:4106).
+Fire-and-forget HTTP POST to session-channel station (localhost:10101).
 Fails silently if station is not running.
 """
 
@@ -17,7 +17,7 @@ import time
 
 from .base import ALLOW, HookResult, run_background
 
-_BASE_URL = "http://localhost:4106"
+_BASE_URL = "http://localhost:10101"
 _LOCAL_KEY = "change-me-in-production"
 _DEBOUNCE_FILE = "/tmp/session-channel-stop-debounce-{pane}.ts"  # noqa: S108
 _DEBOUNCE_SECONDS = 60  # Don't announce Stop more than once per minute per pane

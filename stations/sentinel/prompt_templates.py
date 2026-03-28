@@ -11,14 +11,14 @@ Your job is to diagnose and fix the failed service.
 - Report what you found and what you did"""
 
 TEMPLATES: dict[str, str] = {
-    "core": """Service 'core' (port 8801) is unhealthy.
+    "core": """Service 'core' (port 10000) is unhealthy.
 Failure: {detail}
 
 Steps:
 1. Check logs: tail -50 /opt/homebrew/var/log/workshop/core/$(date +%Y-%m-%d).log
-2. Check if process is running: lsof -i :8801
+2. Check if process is running: lsof -i :10000
 3. Try restart: /Users/joneshong/workshop/scripts/workshop-services.sh restart core
-4. Verify: curl -s http://127.0.0.1:8801/health
+4. Verify: curl -s http://127.0.0.1:10000/health
 """,
     "frontend": """Frontend (Nginx serving /) is unhealthy.
 Failure: {detail}
@@ -39,14 +39,14 @@ This is likely the same issue as the main frontend. Check:
 2. If main page also fails → rebuild frontend
 3. If main page works but memvault fails → check React router config
 """,
-    "hook-observatory": """Hook Observatory (port 4100) is unhealthy.
+    "hook-observatory": """Hook Observatory (port 10100) is unhealthy.
 Failure: {detail}
 
 Steps:
 1. Check logs: tail -50 /opt/homebrew/var/log/workshop/hook-observatory/$(date +%Y-%m-%d).log
-2. Check process: lsof -i :4100
+2. Check process: lsof -i :10100
 3. Restart: /Users/joneshong/workshop/scripts/workshop-services.sh restart hook-observatory
-4. Verify: curl -s http://127.0.0.1:4100/
+4. Verify: curl -s http://127.0.0.1:10100/
 """,
     "postgres": """PostgreSQL container is unhealthy.
 Failure: {detail}

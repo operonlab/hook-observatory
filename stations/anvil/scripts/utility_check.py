@@ -75,7 +75,7 @@ def dynamic_threshold(n_total: int) -> float:
 def main(session_id: str) -> None:
     from sdk_client.anvil import AnvilClient
 
-    client = AnvilClient(base_url="http://127.0.0.1:4103")
+    client = AnvilClient(base_url="http://127.0.0.1:10301")
 
     # 1. Get skills used in this session (use session_id filter!)
     try:

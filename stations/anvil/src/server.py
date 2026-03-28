@@ -37,7 +37,7 @@ app = FastAPI(
 )
 
 # CORS -- allow workbench and local origins
-setup_cors(app, mode="restricted", extra_origins=["http://localhost:4102"])
+setup_cors(app, mode="restricted")
 
 # Mount routes
 app.include_router(router)

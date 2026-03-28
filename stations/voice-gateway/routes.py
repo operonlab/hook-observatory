@@ -161,7 +161,7 @@ async def sse_stream(request: Request):
 
 # ── STT proxy routes ──
 
-_STT_BASE = "http://127.0.0.1:4108"
+_STT_BASE = "http://127.0.0.1:10200"
 
 
 @router.get("/api/stt/health")

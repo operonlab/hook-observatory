@@ -167,7 +167,7 @@ def seed_manifest_jobs(api_key: str, dry_run: bool = False) -> int:
         if name == "ws-finance-billing":
             event = build_http_event(
                 name=name,
-                url="http://127.0.0.1:8801/api/finance/billing/process?space_id=default",
+                url="http://127.0.0.1:10000/api/finance/billing/process?space_id=default",
                 method="POST",
                 category_id=category_id,
                 plugin_id=url_plugin,
