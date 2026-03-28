@@ -1,6 +1,6 @@
 """Base ORM models — TimestampMixin, SoftDeleteMixin, SpaceScopedModel, GlobalModel.
 
-Minimal copy from core/src/shared/models.py for paper-svc.
+Minimal copy from core/src/shared/models.py for standalone microservices.
 """
 
 from datetime import datetime

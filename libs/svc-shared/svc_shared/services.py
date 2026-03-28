@@ -1,7 +1,7 @@
 """BaseCRUDService — generic CRUD with Template Method hooks and soft delete.
 
-Minimal adaptation from core/src/shared/services.py for paper-svc.
-Key differences:
+Minimal adaptation from core/src/shared/services.py for standalone microservices.
+Key differences from core:
 - No audit trail (no AuditLog dependency on admin module)
 - No EventBus (no cross-module event publishing in standalone svc)
 - Same CRUD interface preserved for API compatibility
@@ -49,7 +49,7 @@ def _serialize_value(value: Any) -> Any:
 class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     """Template Method CRUD — subclass and override hooks.
 
-    Standalone variant for paper-svc:
+    Standalone variant for microservices:
     - No audit trail (removed admin module dependency)
     - No EventBus auto-publish (removed event_bus dependency)
     - Same CRUD method signatures preserved for compatibility

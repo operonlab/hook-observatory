@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from shared.models import Base, SpaceScopedModel
+from svc_shared.models import Base, SpaceScopedModel
 
 SCHEMA = "intelflow"
 

@@ -13,9 +13,9 @@ from decimal import Decimal
 from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.errors import BadRequestError, NotFoundError
-from shared.schemas import PaginatedResponse, PaginationParams
-from shared.services import BaseCRUDService
+from svc_shared.errors import BadRequestError, NotFoundError
+from svc_shared.schemas import PaginatedResponse, PaginationParams
+from svc_shared.services import BaseCRUDService
 
 from .models import Account, Position, Quote, Trade
 from .schemas import (

@@ -1,6 +1,6 @@
 """Structured error hierarchy — WorkshopError and subclasses.
 
-Minimal copy from core/src/shared/errors.py for invest-svc.
+Minimal copy from core/src/shared/errors.py for standalone microservices.
 """
 
 

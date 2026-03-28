@@ -8,9 +8,9 @@ Simplified from core/src/modules/invest/routes.py:
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.database import get_db
-from shared.errors import NotFoundError
-from shared.schemas import PaginatedResponse, PaginationParams
+from svc_shared.database import get_db
+from svc_shared.errors import NotFoundError
+from svc_shared.schemas import PaginatedResponse, PaginationParams
 
 from .schemas import (
     AccountCreate,

@@ -10,7 +10,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-from shared.schemas import SpaceScopedResponse
+from svc_shared.schemas import SpaceScopedResponse
 
 # ======================== Report ========================
 

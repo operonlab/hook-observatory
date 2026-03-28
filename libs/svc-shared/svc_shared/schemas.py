@@ -1,6 +1,6 @@
 """Base Pydantic schemas — shared response/request types.
 
-Minimal copy from core/src/shared/schemas.py for intelflow-svc.
+Minimal copy from core/src/shared/schemas.py for standalone microservices.
 """
 
 from datetime import datetime
