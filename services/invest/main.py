@@ -42,4 +42,4 @@ async def workshop_error_handler(request: Request, exc: WorkshopError):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "invest-svc", "port": settings.PORT}
+    return {"status": "ok", "service": "invest", "port": settings.PORT}

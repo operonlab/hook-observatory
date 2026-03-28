@@ -1,6 +1,6 @@
 """Invest services — CRUD + portfolio management + valuation.
 
-Standalone variant for invest-svc:
+Standalone variant for invest service:
 - No EventBus (no cross-module event publishing)
 - No audit trail (no admin module dependency)
 - No @cached decorators (no Redis)

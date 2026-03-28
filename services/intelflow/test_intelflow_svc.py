@@ -199,11 +199,11 @@ class TestHealthEndpoints:
         """
         # MUTATION: If service name is changed or removed from health response,
         service discovery cannot identify which service responded.
-        Validates: service field equals "intelflow-svc"
+        Validates: service field equals "intelflow"
         """
         resp = await client.get("/health")
         body = resp.json()
-        assert body["service"] == "intelflow-svc"
+        assert body["service"] == "intelflow"
 
     async def test_health_port_is_integer(self, client: AsyncClient):
         """

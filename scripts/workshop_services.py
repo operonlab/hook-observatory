@@ -49,39 +49,39 @@ SERVICES = [
     },
     # ── Microservices (extracted from Core) ──
     {
-        "name": "paper-svc",
+        "name": "paper",
         "type": "uvicorn",
         "cmd": (
-            "/Users/joneshong/workshop/paper-svc/.venv/bin/python3 -m uvicorn"
-            f" main:app --host 127.0.0.1 --port {get_port('paper-svc')}"
+            "/Users/joneshong/workshop/services/paper/.venv/bin/python3 -m uvicorn"
+            f" main:app --host 127.0.0.1 --port {get_port('paper')}"
         ),
-        "port": get_port("paper-svc"),
-        "health": get("paper-svc").health_url,
-        "workdir": "/Users/joneshong/workshop/paper-svc",
+        "port": get_port("paper"),
+        "health": get("paper").health_url,
+        "workdir": "/Users/joneshong/workshop/services/paper",
         "env": {"PAPER_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
     },
     {
-        "name": "intelflow-svc",
+        "name": "intelflow",
         "type": "uvicorn",
         "cmd": (
-            "/Users/joneshong/workshop/intelflow-svc/.venv/bin/python3 -m uvicorn"
-            f" main:app --host 127.0.0.1 --port {get_port('intelflow-svc')}"
+            "/Users/joneshong/workshop/services/intelflow/.venv/bin/python3 -m uvicorn"
+            f" main:app --host 127.0.0.1 --port {get_port('intelflow')}"
         ),
-        "port": get_port("intelflow-svc"),
-        "health": get("intelflow-svc").health_url,
-        "workdir": "/Users/joneshong/workshop/intelflow-svc",
+        "port": get_port("intelflow"),
+        "health": get("intelflow").health_url,
+        "workdir": "/Users/joneshong/workshop/services/intelflow",
         "env": {"INTELFLOW_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
     },
     {
-        "name": "invest-svc",
+        "name": "invest",
         "type": "uvicorn",
         "cmd": (
-            "/Users/joneshong/workshop/invest-svc/.venv/bin/python3 -m uvicorn"
-            f" main:app --host 127.0.0.1 --port {get_port('invest-svc')}"
+            "/Users/joneshong/workshop/services/invest/.venv/bin/python3 -m uvicorn"
+            f" main:app --host 127.0.0.1 --port {get_port('invest')}"
         ),
-        "port": get_port("invest-svc"),
-        "health": get("invest-svc").health_url,
-        "workdir": "/Users/joneshong/workshop/invest-svc",
+        "port": get_port("invest"),
+        "health": get("invest").health_url,
+        "workdir": "/Users/joneshong/workshop/services/invest",
         "env": {"INVEST_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
     },
     # ── Stations ──
