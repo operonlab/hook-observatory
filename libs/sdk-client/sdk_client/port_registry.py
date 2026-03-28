@@ -60,7 +60,7 @@ PORTS: list[ServicePort] = [
         env_var="CORE_API_URL",
     ),
     ServicePort(
-        "paper-svc",
+        "paper",
         10010,
         "core",
         health_path="/health",
@@ -68,7 +68,7 @@ PORTS: list[ServicePort] = [
         nginx_path="/api/paper/",
     ),
     ServicePort(
-        "intelflow-svc",
+        "intelflow",
         10011,
         "core",
         health_path="/health",
@@ -76,7 +76,7 @@ PORTS: list[ServicePort] = [
         nginx_path="/api/intelflow/",
     ),
     ServicePort(
-        "invest-svc",
+        "invest",
         10012,
         "core",
         health_path="/health",
@@ -317,9 +317,9 @@ def check_conflicts() -> list[str]:
 MIGRATION_MAP: dict[str, int] = {
     # Core
     "core": 10000,
-    "paper-svc": 10010,
-    "intelflow-svc": 10011,
-    "invest-svc": 10012,
+    "paper": 10010,
+    "intelflow": 10011,
+    "invest": 10012,
     # Stations: Infra & Ops
     "hook-observatory": 10100,
     "session-channel": 10101,

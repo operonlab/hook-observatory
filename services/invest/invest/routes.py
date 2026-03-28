@@ -1,4 +1,4 @@
-"""Invest routes — REST API endpoints for standalone invest-svc.
+"""Invest routes — REST API endpoints for standalone invest service.
 
 Simplified from core/src/modules/invest/routes.py:
 - No auth middleware (standalone service, auth handled at gateway)
@@ -207,4 +207,4 @@ async def refresh_quotes(
 
 @router.get("/status")
 async def invest_status():
-    return {"module": "invest", "status": "active", "service": "invest-svc"}
+    return {"module": "invest", "status": "active", "service": "invest"}

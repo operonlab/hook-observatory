@@ -99,7 +99,7 @@ docker compose logs -f komodo-periphery
 
 Pre-configured stack definitions are in `infra/komodo/stacks/`:
 
-- `paper-svc.toml` — Paper service on win-gpu
+- `paper.toml` — Paper service on win-gpu
 - `remote-services.toml` — Remote service bundle on win-gpu
 
 Import these via Core dashboard > **Stacks** > **Import**.
@@ -131,7 +131,7 @@ infra/komodo/
   .env.example           # Template for credentials
   .env                   # Actual credentials (gitignored)
   stacks/                # Stack definitions for Komodo
-    paper-svc.toml
+    paper.toml
     remote-services.toml
   periphery/
     docker-compose.yml   # Periphery agent (Windows)

@@ -45,9 +45,9 @@ PNPM = "/opt/homebrew/Cellar/node@22/22.22.0/lib/node_modules/corepack/shims/pnp
 # Only services managed by workshop_services.py are eligible for simple restart
 SIMPLE_RESTART_MAP: dict[str, str] = {
     "core": "core",
-    "paper-svc": "paper-svc",
-    "intelflow-svc": "intelflow-svc",
-    "invest-svc": "invest-svc",
+    "paper": "paper",
+    "intelflow": "intelflow",
+    "invest": "invest",
     "hook-observatory": "hook-observatory",
     "session-channel": "session-channel",
     "system-monitor": "system-monitor",

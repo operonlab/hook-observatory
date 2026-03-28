@@ -1,4 +1,4 @@
-"""Intelflow routes — REST API endpoints for standalone intelflow-svc.
+"""Intelflow routes — REST API endpoints for standalone intelflow service.
 
 Simplified from core/src/modules/intelflow/routes.py:
 - No auth middleware (standalone service, auth handled at gateway)
@@ -245,4 +245,4 @@ async def get_timeline(
 
 @router.get("/status")
 async def intelflow_status():
-    return {"module": "intelflow", "status": "active", "service": "intelflow-svc"}
+    return {"module": "intelflow", "status": "active", "service": "intelflow"}

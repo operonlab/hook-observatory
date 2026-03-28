@@ -1,4 +1,4 @@
-"""Paper routes — REST API endpoints for standalone paper-svc.
+"""Paper routes — REST API endpoints for standalone paper service.
 
 Simplified from core/src/modules/paper/routes.py:
 - No auth middleware (standalone service, auth handled at gateway)
@@ -170,4 +170,4 @@ async def get_dashboard(space_id: str = Query("default"), db: AsyncSession = Dep
 
 @router.get("/status")
 async def paper_status():
-    return {"module": "paper", "status": "active", "service": "paper-svc"}
+    return {"module": "paper", "status": "active", "service": "paper"}

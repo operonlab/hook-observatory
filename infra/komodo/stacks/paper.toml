@@ -1,9 +1,9 @@
 [[stack]]
-name = "ws-paper-svc"
+name = "ws-paper"
 server = "win-gpu"
 run_build = true
 build_path = "services/paper"
-image = "workshop/paper-svc:latest"
+image = "workshop/paper:latest"
 ports = { "10010" = "10010" }
 # Credentials loaded from .env.remote on the Windows host (not checked in)
 # environment = """ ... """

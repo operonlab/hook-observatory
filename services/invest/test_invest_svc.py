@@ -273,12 +273,12 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_health_service_identity(self, client: AsyncClient):
         """
-        # MUTATION: If service name is wrong (e.g., copy-paste from paper-svc), monitoring breaks
-        Validates: service field equals 'invest-svc'
+        # MUTATION: If service name is wrong (e.g., copy-paste from paper), monitoring breaks
+        Validates: service field equals 'invest'
         """
         resp = await client.get("/health")
         body = resp.json()
-        assert body["service"] == "invest-svc"
+        assert body["service"] == "invest"
 
     @pytest.mark.asyncio
     async def test_health_port_is_integer(self, client: AsyncClient):
