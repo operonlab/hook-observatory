@@ -40,7 +40,7 @@ def _err(msg):
 def _get_client():
     """Lazy-import and instantiate RemoteNodeClient."""
     try:
-        from workshop.clients.remote_node import RemoteNodeClient
+        from sdk_client.remote_node import RemoteNodeClient
         return RemoteNodeClient()
     except ImportError:
         _err(

@@ -19,8 +19,8 @@ from asyncio import to_thread
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.finance import FinanceClient
-from workshop.mcp_helpers import fmt_amount, mcp_error_handler
+from sdk_client.finance import FinanceClient
+from sdk_client.mcp_helpers import fmt_amount, mcp_error_handler
 
 mcp = FastMCP("workshop-finance-analytics")
 client = FinanceClient()

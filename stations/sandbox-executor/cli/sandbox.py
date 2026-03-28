@@ -16,7 +16,7 @@ import argparse
 import json
 import sys
 
-from workshop.clients.sandbox import SandboxClient
+from sdk_client.sandbox import SandboxClient
 
 
 def format_result(result, as_json=False):

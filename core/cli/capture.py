@@ -26,8 +26,8 @@ import sys
 from cli.cli_helpers import err, json_out
 from cli.cli_utils import resolve_text_arg
 from cli.exit_codes import EXIT_VALIDATION
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.capture import CaptureClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.capture import CaptureClient
 
 
 def _client():

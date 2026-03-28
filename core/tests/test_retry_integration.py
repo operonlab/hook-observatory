@@ -294,7 +294,7 @@ class TestOmlxDynamicTimeout:
 
     def test_write_timeout_scales_with_input_size(self):
         """omlx write: dynamic_timeout(base=10, factor=0.5, context, cap=30)."""
-        from workshop.timeout import dynamic_timeout
+        from sdk_client.timeout import dynamic_timeout
 
         t_small = dynamic_timeout(base=10, factor=0.5, context=10, cap=30)
         t_large = dynamic_timeout(base=10, factor=0.5, context=1000, cap=30)
@@ -304,7 +304,7 @@ class TestOmlxDynamicTimeout:
 
     def test_read_timeout_scales_with_input_size(self):
         """omlx read: dynamic_timeout(base=30, factor=0.5, context, cap=120)."""
-        from workshop.timeout import dynamic_timeout
+        from sdk_client.timeout import dynamic_timeout
 
         t_small = dynamic_timeout(base=30, factor=0.5, context=10, cap=120)
         t_medium = dynamic_timeout(base=30, factor=0.5, context=100, cap=120)
@@ -314,7 +314,7 @@ class TestOmlxDynamicTimeout:
 
     def test_write_timeout_respects_cap(self):
         """Even enormous input, write timeout ≤ 30."""
-        from workshop.timeout import dynamic_timeout
+        from sdk_client.timeout import dynamic_timeout
 
         t = dynamic_timeout(base=10, factor=0.5, context=100_000, cap=30)
         assert t <= 30

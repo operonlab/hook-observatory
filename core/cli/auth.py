@@ -15,8 +15,8 @@ import argparse
 import sys
 
 from cli.cli_helpers import err, json_out
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.auth import AuthClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.auth import AuthClient
 
 
 # ======================== Commands ========================

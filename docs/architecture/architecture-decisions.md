@@ -229,7 +229,7 @@ resources:
 
 ## AD-8: Station SDK — 工作站共享層
 
-**決策**：Stations 之間的共通邏輯提取到 `libs/python/station-sdk/`，作為輕量 SDK（非框架）提供。
+**決策**：Stations 之間的共通邏輯提取到 `libs/sdk-client/`，作為輕量 SDK（非框架）提供。
 
 **決策理由**：
 - system-monitor 與 agent-metrics 有 4 項重疊邏輯：launchd 排程、Core API 推送、Widget 資料格式、通知整合
@@ -247,7 +247,7 @@ resources:
 
 **SDK 模組**：
 ```
-libs/python/station-sdk/
+libs/sdk-client/
 ├── api_client.py       ← Core API 推送（統一 auth + endpoint discovery）
 ├── scheduler.py        ← launchd plist 生成 / 管理 / 頻率變更
 ├── widget_schema.py    ← Workbench Widget JSON 標準格式

@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from workshop.retry import async_with_backoff
+from sdk_client.retry import async_with_backoff
 
 logger = logging.getLogger(__name__)
 

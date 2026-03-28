@@ -12,8 +12,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.remote_node import RemoteNodeClient
-from workshop.mcp_helpers import json_text, mcp_error_handler
+from sdk_client.remote_node import RemoteNodeClient
+from sdk_client.mcp_helpers import json_text, mcp_error_handler
 
 mcp = FastMCP("remote-node")
 client = RemoteNodeClient()

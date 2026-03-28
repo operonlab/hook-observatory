@@ -19,8 +19,8 @@ Configure in ~/.claude.json:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.nodeflow import NodeflowClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.nodeflow import NodeflowClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("nodeflow")
 client = NodeflowClient()

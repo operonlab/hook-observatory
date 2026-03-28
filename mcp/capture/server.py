@@ -23,8 +23,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.capture import CaptureClient
-from workshop.mcp_helpers import json_text, mcp_error_handler
+from sdk_client.capture import CaptureClient
+from sdk_client.mcp_helpers import json_text, mcp_error_handler
 
 mcp = FastMCP("workshop-capture")
 client = CaptureClient()

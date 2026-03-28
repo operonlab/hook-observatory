@@ -17,7 +17,7 @@ import argparse
 import json
 import sys
 
-from workshop.clients.hook_observatory import HookObservatoryClient, HookObservatoryError
+from sdk_client.hook_observatory import HookObservatoryClient, HookObservatoryError
 
 
 def _json_out(data, as_json=False):

@@ -14,8 +14,8 @@ import argparse
 import json
 import sys
 
-from workshop.clients._base import APIError
-from workshop.clients.tts import TTSClient
+from sdk_client._base import APIError
+from sdk_client.tts import TTSClient
 
 
 def cmd_synthesize(args):

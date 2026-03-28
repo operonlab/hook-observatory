@@ -36,7 +36,7 @@ async def create_report_from_url(
 
     Returns dict with report_id and crawl metadata.
     """
-    from workshop.crawl4ai_bridge import crawl_url
+    from sdk_client.crawl4ai_bridge import crawl_url
 
     from .schemas import ReportCreate
     from .services import report_service

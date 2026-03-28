@@ -11,9 +11,9 @@ import logging
 import time
 from collections.abc import AsyncGenerator, Generator
 
-from workshop.tmux.cli_session import has_prompt, is_shell, wait_for_prompt
-from workshop.tmux.patterns import CLAUDE_CODE
-from workshop.tmux.primitives import capture, send_enter, send_text, tmux_check, tmux_ok
+from tmux_lib.cli_session import has_prompt, is_shell, wait_for_prompt
+from tmux_lib.patterns import CLAUDE_CODE
+from tmux_lib.primitives import capture, send_enter, send_text, tmux_check, tmux_ok
 
 from src.shared.sse import BlockType, StreamBlock
 

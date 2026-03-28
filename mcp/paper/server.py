@@ -19,8 +19,8 @@ from asyncio import to_thread
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.paper import PaperClient
-from workshop.mcp_helpers import build_body, json_text, mcp_error_handler
+from sdk_client.paper import PaperClient
+from sdk_client.mcp_helpers import build_body, json_text, mcp_error_handler
 
 mcp = FastMCP("paper")
 client = PaperClient()

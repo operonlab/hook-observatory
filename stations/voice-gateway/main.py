@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from state_machine import GatewayState, StateMachine
-from workshop.station_bootstrap import setup_logging
+from sdk_client.station_bootstrap import setup_logging
 
 from config import config
 from events import VoiceEventBus

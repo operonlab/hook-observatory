@@ -19,8 +19,8 @@ from asyncio import to_thread
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.dailyos import DailyOSClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.dailyos import DailyOSClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("dailyos")
 client = DailyOSClient()

@@ -232,7 +232,7 @@ mcp/<server-name>/
 
 ### 工作站 (`stations/`)
 
-可獨立運行的本地工具。需要推送資料到 Core API 或提供 Workbench Widget 的 station，可選擇引用 `libs/python/station-sdk/`（參見 [AD-8](./architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
+可獨立運行的本地工具。需要推送資料到 Core API 或提供 Workbench Widget 的 station，可選擇引用 `libs/sdk-client/`（參見 [AD-8](./architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
 
 Station CLI 合併在各 station 目錄下的 `cli/` 子目錄（不再使用獨立的 `*-cli/` 目錄）。Core Module CLI 則集中在 `core/cli/`。
 

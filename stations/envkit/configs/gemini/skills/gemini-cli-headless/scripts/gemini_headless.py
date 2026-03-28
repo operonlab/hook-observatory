@@ -30,7 +30,7 @@ import sys
 import time
 from pathlib import Path
 
-from workshop.tmux.primitives import capture, tmux_check, tmux_ok
+from tmux_lib.primitives import capture, tmux_check, tmux_ok
 
 DEFAULT_GEMINI = os.environ.get("GEMINI_CLI_BIN", "")
 DEFAULT_LOG_DIR = os.path.expanduser("~/.claude/logs/headless")

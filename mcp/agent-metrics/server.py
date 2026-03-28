@@ -21,8 +21,8 @@ Configure in ~/.claude.json:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.agent_metrics import AgentMetricsClient
-from workshop.mcp_helpers import json_text, mcp_error_handler
+from sdk_client.agent_metrics import AgentMetricsClient
+from sdk_client.mcp_helpers import json_text, mcp_error_handler
 
 mcp = FastMCP("agent-metrics")
 client = AgentMetricsClient(dispatch_timeout=600)

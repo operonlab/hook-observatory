@@ -11,8 +11,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.system_monitor import SystemMonitorClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.system_monitor import SystemMonitorClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("system-monitor")
 client = SystemMonitorClient()

@@ -20,7 +20,7 @@ Configure in ~/.claude.json:
 import asyncio
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.anvil import AnvilClient
+from sdk_client.anvil import AnvilClient
 
 mcp = FastMCP("anvil")
 

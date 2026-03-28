@@ -11,8 +11,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.sentinel import SentinelClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.sentinel import SentinelClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("sentinel")
 client = SentinelClient()

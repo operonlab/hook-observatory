@@ -21,7 +21,7 @@ import os
 import sys
 from datetime import datetime
 
-from workshop.clients.fleet import FleetClient, FleetError
+from sdk_client.fleet import FleetClient, FleetError
 
 
 def _client() -> FleetClient:

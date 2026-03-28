@@ -13,8 +13,8 @@ import argparse
 import json
 import sys
 
-from workshop.clients._base import APIError
-from workshop.clients.ocr import OCRClient
+from sdk_client._base import APIError
+from sdk_client.ocr import OCRClient
 
 
 def cmd_extract(args):

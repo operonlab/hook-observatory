@@ -22,7 +22,7 @@ import argparse
 import json
 import sys
 
-from workshop.clients.system_monitor import SystemMonitorClient, SystemMonitorError
+from sdk_client.system_monitor import SystemMonitorClient, SystemMonitorError
 
 
 def _json_out(data, as_json=False):

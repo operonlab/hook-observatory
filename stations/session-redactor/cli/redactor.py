@@ -29,7 +29,7 @@ _workshop_libs = os.path.join(_script_dir, "..", "..", "libs", "python", "src")
 if os.path.isdir(_workshop_libs) and _workshop_libs not in sys.path:
     sys.path.insert(0, _workshop_libs)
 
-from workshop.clients.session_redactor import SessionRedactorClient  # noqa: E402
+from sdk_client.session_redactor import SessionRedactorClient  # noqa: E402
 
 
 def _print(data, as_json: bool) -> None:

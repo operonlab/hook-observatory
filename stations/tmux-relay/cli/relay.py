@@ -26,7 +26,7 @@ import json
 import sys
 from pathlib import Path
 
-from workshop.clients.tmux_relay import TmuxRelayClient, TmuxRelayError
+from sdk_client.tmux_relay import TmuxRelayClient, TmuxRelayError
 
 
 def _json_out(data, as_json=False):

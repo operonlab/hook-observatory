@@ -399,7 +399,7 @@ class TestSDKIntegration:
 
     @pytest.fixture(autouse=True)
     def client(self):
-        from workshop.clients.memvault import MemvaultClient
+        from sdk_client.memvault import MemvaultClient
 
         self.c = MemvaultClient()
 
@@ -464,7 +464,7 @@ class TestSDKIntegration:
 
     def test_signal_validation_rejects_invalid(self):
         """signal must be 'positive' or 'negative' — anything else is rejected."""
-        from workshop.clients._base import APIError
+        from sdk_client._base import APIError
 
         block = self.c.extract(
             "Block for signal validation test",

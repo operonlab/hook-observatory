@@ -26,7 +26,7 @@ import argparse
 import json
 import sys
 
-from workshop.clients.agent_metrics import AgentMetricsClient, AgentMetricsError
+from sdk_client.agent_metrics import AgentMetricsClient, AgentMetricsError
 
 
 def _json_out(data, as_json=False):

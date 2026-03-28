@@ -46,7 +46,7 @@ def _read_text(args: argparse.Namespace) -> str:
 
 def cmd_crawl(args: argparse.Namespace) -> None:
     sys.path.insert(0, _LIBS_SRC)
-    from workshop.crawl4ai_bridge import crawl_url
+    from sdk_client.crawl4ai_bridge import crawl_url
 
     try:
         r = asyncio.run(crawl_url(args.url, timeout=args.timeout))

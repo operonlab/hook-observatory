@@ -56,7 +56,7 @@ def run_redact_sweep() -> bool:
     """Run session redactor full_sweep via SDK (in-process). Returns True on success."""
     try:
         sys.path.insert(0, str(HOME / "workshop/libs/python/src"))
-        from workshop.clients.session_redactor import SessionRedactorClient
+        from sdk_client.session_redactor import SessionRedactorClient
 
         client = SessionRedactorClient()
         result = client.full_sweep(trigger="scheduled")

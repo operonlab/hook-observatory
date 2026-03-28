@@ -16,7 +16,7 @@ import sys
 
 
 def _get_client():
-    from workshop.clients.translate import TranslateClient
+    from sdk_client.translate import TranslateClient
 
     return TranslateClient()
 

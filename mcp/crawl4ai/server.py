@@ -54,8 +54,8 @@ _LIBS_SRC = Path(__file__).resolve().parents[2] / "libs" / "python" / "src"
 if str(_LIBS_SRC) not in sys.path:
     sys.path.insert(0, str(_LIBS_SRC))
 
-from workshop.crawl4ai_bridge import crawl_batch, crawl_url  # noqa: E402
-from workshop.mcp_helpers import mcp_error_handler  # noqa: E402
+from sdk_client.crawl4ai_bridge import crawl_batch, crawl_url  # noqa: E402
+from sdk_client.mcp_helpers import mcp_error_handler  # noqa: E402
 
 mcp = FastMCP("crawl4ai")
 _md_gen = DefaultMarkdownGenerator()

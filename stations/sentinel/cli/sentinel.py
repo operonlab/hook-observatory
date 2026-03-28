@@ -17,7 +17,7 @@ import argparse
 import json
 import sys
 
-from workshop.clients.sentinel import SentinelClient, SentinelError
+from sdk_client.sentinel import SentinelClient, SentinelError
 
 
 def _json_out(data, as_json=False):

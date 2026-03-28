@@ -10,8 +10,8 @@ Usage (via .mcp.json):
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.envkit import EnvkitClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.envkit import EnvkitClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("envkit")
 client = EnvkitClient()

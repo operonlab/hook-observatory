@@ -11,8 +11,8 @@ Usage:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.invest import InvestClient
-from workshop.mcp_helpers import build_body, fmt_amount, mcp_error_handler
+from sdk_client.invest import InvestClient
+from sdk_client.mcp_helpers import build_body, fmt_amount, mcp_error_handler
 
 mcp = FastMCP("workshop-invest")
 client = InvestClient()

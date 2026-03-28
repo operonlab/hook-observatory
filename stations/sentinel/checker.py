@@ -14,7 +14,7 @@ import httpx
 
 # Port registry — single source of truth for all Workshop ports
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "python" / "src"))
-from workshop.port_registry import get_port
+from sdk_client.port_registry import get_port
 
 logger = logging.getLogger(__name__)
 

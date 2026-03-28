@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 
-from workshop.tmux.primitives import capture_async, send_text_async, tmux_run_async
+from tmux_lib.primitives import capture_async, send_text_async, tmux_run_async
 
 logger = logging.getLogger("tmux-webui")
 

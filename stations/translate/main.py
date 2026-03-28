@@ -16,7 +16,7 @@ from fastapi import FastAPI
 # Ensure station root is on sys.path for local imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from workshop.station_bootstrap import setup_cors, setup_logging
+from sdk_client.station_bootstrap import setup_cors, setup_logging
 
 from config import config
 from db import close_db, init_db

@@ -23,8 +23,8 @@ import argparse
 
 from cli.cli_helpers import err, fmt_date, json_out
 from cli.cli_utils import resolve_text_arg
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.invest import InvestClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.invest import InvestClient
 
 
 def _client():

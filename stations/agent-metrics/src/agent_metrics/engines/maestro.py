@@ -277,7 +277,7 @@ async def _check_tier_available(tier: str) -> bool:
         return True
     if tier == "relay":
         try:
-            from workshop.clients.tmux_relay import TmuxRelayClient
+            from sdk_client.tmux_relay import TmuxRelayClient
 
             relay = TmuxRelayClient()
             panes = relay.list_panes()
@@ -286,7 +286,7 @@ async def _check_tier_available(tier: str) -> bool:
             return False
     if tier == "fleet":
         try:
-            from workshop.clients.fleet import FleetClient
+            from sdk_client.fleet import FleetClient
 
             fleet = FleetClient()
             health = fleet.health()
@@ -310,7 +310,7 @@ async def resolve_tier(analysis: TaskAnalysis, tier_override: str | None = None)
 
 async def dispatch_relay(prompt: str, cwd: str | None, *, timeout: int = 300) -> AgentResult:
     """Tier 2: Dispatch via tmux-relay pane pool (full MCP/skill access)."""
-    from workshop.clients.tmux_relay import TmuxRelayClient
+    from sdk_client.tmux_relay import TmuxRelayClient
 
     task_id = f"relay-{int(time.time())}"
     start = time.time()
@@ -339,7 +339,7 @@ async def dispatch_fleet(
     prompt: str, *, mode: str = "code", node: str | None = None, timeout: int = 600
 ) -> AgentResult:
     """Tier 3: Dispatch via Fleet station (remote node execution)."""
-    from workshop.clients.fleet import FleetClient
+    from sdk_client.fleet import FleetClient
 
     task_id_local = f"fleet-{int(time.time())}"
     start = time.time()

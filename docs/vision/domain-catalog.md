@@ -392,7 +392,7 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 
 ### 工作站 (獨立工具 Stations)
 
-> 可獨立運行的本地工具。需要推送資料到 Core API 或提供 Widget 的 Station，引用 `libs/python/station-sdk/` 共享排程、API 推送、Widget 格式、通知整合（參見 [AD-8](../architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
+> 可獨立運行的本地工具。需要推送資料到 Core API 或提供 Widget 的 Station，引用 `libs/sdk-client/` 共享排程、API 推送、Widget 格式、通知整合（參見 [AD-8](../architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
 
 #### system-monitor — 系統監控
 

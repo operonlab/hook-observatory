@@ -31,7 +31,7 @@ Every feature must implement all applicable layers: Backend → SDK → CLI → 
 - Runtime source of truth: Cronicle (port 4105)
 
 ## Port Management
-- Single source of truth: `libs/python/src/workshop/port_registry.py`
+- Single source of truth: `libs/sdk-client/sdk_client/port_registry.py`
 - Port range convention (10000+):
   - 10000-10099: Core services
   - 10100-10199: Stations — Infra & Ops

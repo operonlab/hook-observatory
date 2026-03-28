@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from workshop.retry import async_with_backoff
-from workshop.timeout import dynamic_timeout
+from sdk_client.retry import async_with_backoff
+from sdk_client.timeout import dynamic_timeout
 
 logger = logging.getLogger(__name__)
 

@@ -12,8 +12,8 @@ import subprocess
 from pathlib import Path
 
 try:
-    from workshop.retry import async_with_backoff as _async_with_backoff
-    from workshop.timeout import dynamic_timeout as _dynamic_timeout
+    from sdk_client.retry import async_with_backoff as _async_with_backoff
+    from sdk_client.timeout import dynamic_timeout as _dynamic_timeout
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False

@@ -76,7 +76,7 @@ Workshop 目前有 9 個獨立的 skill-xxx Skills（create-skill, skill-tester,
 │ CLI Layer: stations/anvil/cli/anvil.py                     │
 │   人 + 腳本 + headless agent 通用存取                      │
 ├────────────────────────────────────────────────────────────┤
-│ SDK Layer: libs/python/src/workshop/clients/anvil.py       │
+│ SDK Layer: libs/sdk-client/sdk_client/anvil.py       │
 │   基底層 — CLI 和 MCP 都 import 此 SDK                     │
 ├────────────────────────────────────────────────────────────┤
 │ HTTP Service: stations/anvil/src/server.py                 │
@@ -428,7 +428,7 @@ stations/anvil/
 stations/hook-observatory/handlers/anvil_telemetry.py
 
 # SDK — Standalone HTTP client
-libs/python/src/workshop/clients/anvil.py
+libs/sdk-client/sdk_client/anvil.py
 
 # MCP — SDK adapter
 mcp/anvil/server.py

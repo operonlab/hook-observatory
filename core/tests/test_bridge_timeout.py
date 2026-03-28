@@ -37,7 +37,7 @@ _CORE_ROOT = Path(__file__).resolve().parent.parent
 if str(_CORE_ROOT) not in sys.path:
     sys.path.insert(0, str(_CORE_ROOT))
 
-from workshop.timeout import dynamic_timeout  # noqa: E402
+from sdk_client.timeout import dynamic_timeout  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants — mirror the bridge parameters exactly

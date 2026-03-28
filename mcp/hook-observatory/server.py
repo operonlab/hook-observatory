@@ -19,8 +19,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.hook_observatory import HookObservatoryClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.hook_observatory import HookObservatoryClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("hook-observatory")
 client = HookObservatoryClient()

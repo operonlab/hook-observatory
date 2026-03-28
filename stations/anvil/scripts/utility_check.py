@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 sys.path.insert(0, str(Path.home() / "workshop" / "libs" / "python" / "src"))
 
 if TYPE_CHECKING:
-    from workshop.clients.anvil import AnvilClient
+    from sdk_client.anvil import AnvilClient
 
 PROPOSALS_FILE = Path.home() / ".claude" / "data" / "utility-watchdog" / "proposals.jsonl"
 CREATE_PROPOSALS_FILE = (
@@ -73,7 +73,7 @@ def dynamic_threshold(n_total: int) -> float:
 
 
 def main(session_id: str) -> None:
-    from workshop.clients.anvil import AnvilClient
+    from sdk_client.anvil import AnvilClient
 
     client = AnvilClient(base_url="http://127.0.0.1:4103")
 

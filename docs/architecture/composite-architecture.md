@@ -37,7 +37,7 @@ Python Script ──► SDK ──► Service API
 ### 四層路徑慣例
 
 ```
-libs/python/src/workshop/clients/{name}.py    ← SDK（繼承 BaseClient 或獨立）
+libs/sdk-client/sdk_client/{name}.py    ← SDK（繼承 BaseClient 或獨立）
 stations/{name}/cli/{cmd}.py                   ← Station CLI（合併在 station 內）
 core/cli/{name}.py                             ← Core Module CLI
 mcp/{name}/server.py                           ← MCP（不變）

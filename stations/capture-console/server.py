@@ -18,9 +18,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from workshop.tmux.cli_session import is_process_running_async, start_cli_async
-from workshop.tmux.patterns import CLAUDE_CODE
-from workshop.tmux.primitives import (
+from tmux_lib.cli_session import is_process_running_async, start_cli_async
+from tmux_lib.patterns import CLAUDE_CODE
+from tmux_lib.primitives import (
     capture_async,
     send_enter_async,
     send_text_async,

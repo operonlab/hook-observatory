@@ -21,8 +21,8 @@ import json
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.sandbox import SandboxClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.sandbox import SandboxClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("sandbox-executor")
 client = SandboxClient()

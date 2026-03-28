@@ -14,8 +14,8 @@ Configure in mcpproxy:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.tts import TTSClient
-from workshop.mcp_helpers import json_text, mcp_error_handler
+from sdk_client.tts import TTSClient
+from sdk_client.mcp_helpers import json_text, mcp_error_handler
 
 mcp = FastMCP("tts")
 client = TTSClient()
