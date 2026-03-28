@@ -85,7 +85,7 @@ def _log(msg: str) -> None:
 def _worker(file_path: str) -> None:
     """Read memory file and sync to memvault via SDK client."""
     sys.path.insert(0, os.path.join(HOME, "workshop", "libs", "python", "src"))
-    from workshop.clients.memvault import MemvaultClient
+    from sdk_client.memvault import MemvaultClient
 
     try:
         with open(file_path) as f:

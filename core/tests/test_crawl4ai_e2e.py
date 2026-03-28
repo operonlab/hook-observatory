@@ -274,7 +274,7 @@ class TestCrawlBatchDomainDelay:
         """crawl_batch must accept domain_delay parameter."""
         import inspect
 
-        from workshop.crawl4ai_bridge import crawl_batch
+        from sdk_client.crawl4ai_bridge import crawl_batch
 
         sig = inspect.signature(crawl_batch)
         assert "domain_delay" in sig.parameters
@@ -285,7 +285,7 @@ class TestCrawlBatchDomainDelay:
         """Multiple URLs to the same domain should have delay between them."""
         import time
 
-        from workshop.crawl4ai_bridge import CrawlResult
+        from sdk_client.crawl4ai_bridge import CrawlResult
 
         call_times: list[float] = []
 
@@ -294,7 +294,7 @@ class TestCrawlBatchDomainDelay:
             return CrawlResult(url=url, markdown="ok", success=True)
 
         with patch("workshop.crawl4ai_bridge.crawl_url", side_effect=mock_crawl_url):
-            from workshop.crawl4ai_bridge import crawl_batch
+            from sdk_client.crawl4ai_bridge import crawl_batch
 
             results = await crawl_batch(
                 [
@@ -321,7 +321,7 @@ class TestCrawlBatchDomainDelay:
         """Different domains can run concurrently without delay."""
         import time
 
-        from workshop.crawl4ai_bridge import CrawlResult
+        from sdk_client.crawl4ai_bridge import CrawlResult
 
         call_times: list[float] = []
 
@@ -330,7 +330,7 @@ class TestCrawlBatchDomainDelay:
             return CrawlResult(url=url, markdown="ok", success=True)
 
         with patch("workshop.crawl4ai_bridge.crawl_url", side_effect=mock_crawl_url):
-            from workshop.crawl4ai_bridge import crawl_batch
+            from sdk_client.crawl4ai_bridge import crawl_batch
 
             results = await crawl_batch(
                 [

@@ -38,7 +38,7 @@ from tmux_manager import (
     send_keys,
     status_metrics,
 )
-from workshop.station_bootstrap import setup_logging
+from sdk_client.station_bootstrap import setup_logging
 
 from config import get_config, load_config
 

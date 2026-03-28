@@ -18,8 +18,8 @@ import os
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.finance import FinanceClient
-from workshop.mcp_helpers import build_body, fmt_amount, mcp_error_handler
+from sdk_client.finance import FinanceClient
+from sdk_client.mcp_helpers import build_body, fmt_amount, mcp_error_handler
 
 mcp = FastMCP("workshop-finance-wallet")
 client = FinanceClient()

@@ -25,8 +25,8 @@ from datetime import datetime
 
 from cli.cli_helpers import err, fmt_amount, fmt_date, json_out
 from cli.cli_utils import resolve_text_arg
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.finance import FinanceClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.finance import FinanceClient
 
 
 def _client():

@@ -22,7 +22,7 @@ import json
 import subprocess
 import sys
 
-from workshop.clients.video_edit import VideoEditClient, VideoEditError
+from sdk_client.video_edit import VideoEditClient, VideoEditError
 
 
 def _err(e):

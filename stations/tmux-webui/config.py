@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from workshop.station_bootstrap import load_yaml_config
+from sdk_client.station_bootstrap import load_yaml_config
 
 logger = logging.getLogger("tmux-webui")
 

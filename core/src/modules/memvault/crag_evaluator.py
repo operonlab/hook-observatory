@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from workshop.timeout import dynamic_timeout
+from sdk_client.timeout import dynamic_timeout
 
 if TYPE_CHECKING:
     from .kg_schemas import CascadeRecallResult

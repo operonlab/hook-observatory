@@ -19,8 +19,8 @@ Configure in mcpproxy:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.video_edit import VideoEditClient
-from workshop.mcp_helpers import json_text, mcp_error_handler
+from sdk_client.video_edit import VideoEditClient
+from sdk_client.mcp_helpers import json_text, mcp_error_handler
 
 mcp = FastMCP("video-edit")
 client = VideoEditClient(render_timeout=600)

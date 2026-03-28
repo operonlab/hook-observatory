@@ -15,8 +15,8 @@ import argparse
 import json
 import sys
 
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.notification import NotificationClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.notification import NotificationClient
 
 
 

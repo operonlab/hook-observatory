@@ -12,8 +12,8 @@ Symlink: ln -sf ~/workshop/core/cli/admin.py ~/.local/bin/admin
 import argparse
 
 from cli.cli_helpers import err, json_out
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.admin import AdminClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.admin import AdminClient
 
 
 # ======================== Commands ========================

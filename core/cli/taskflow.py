@@ -32,9 +32,9 @@ import argparse
 
 from cli.cli_helpers import err, fmt_date, json_out
 from cli.cli_utils import resolve_text_arg
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.taskflow import TaskflowClient
-from workshop.fmt_constants import TASKFLOW_PRIORITY_EMOJI, TASKFLOW_STATUS_EMOJI
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.taskflow import TaskflowClient
+from sdk_client.fmt_constants import TASKFLOW_PRIORITY_EMOJI, TASKFLOW_STATUS_EMOJI
 
 # ---------------------------------------------------------------------------
 # Formatting helpers

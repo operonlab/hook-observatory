@@ -30,8 +30,8 @@ import json
 import sys
 
 from cli.cli_utils import resolve_text_arg
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.dailyos import DailyOSClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.dailyos import DailyOSClient
 
 
 

@@ -30,7 +30,7 @@ _LIBS = os.path.expanduser("~/workshop/libs/python/src")
 if _LIBS not in sys.path:
     sys.path.insert(0, _LIBS)
 
-from workshop.clients.session_pipeline import SessionPipelineClient  # noqa: E402
+from sdk_client.session_pipeline import SessionPipelineClient  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Output helpers

@@ -18,9 +18,9 @@ Configure in ~/.claude.json:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.memvault import MemvaultClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.memvault import MemvaultClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("memvault")
 client = MemvaultClient()

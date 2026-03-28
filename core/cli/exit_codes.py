@@ -31,7 +31,7 @@ def exit_code_for(exc) -> int:
     Returns:
         One of the EXIT_* constants defined in this module.
     """
-    from workshop.clients._base import APIConnectionError, APIError
+    from sdk_client._base import APIConnectionError, APIError
 
     if isinstance(exc, APIConnectionError):
         return EXIT_SERVICE

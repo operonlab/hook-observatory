@@ -30,8 +30,8 @@ import sys
 import time
 from pathlib import Path
 
-from workshop.tmux.cli_session import wait_for_text
-from workshop.tmux.primitives import capture, tmux_check, tmux_ok
+from tmux_lib.cli_session import wait_for_text
+from tmux_lib.primitives import capture, tmux_check, tmux_ok
 
 DEFAULT_CLAUDE = os.environ.get(
     "CLAUDE_CODE_BIN",

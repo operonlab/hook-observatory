@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 from src.shared.scoring_stages import cosine_similarity
 
 try:
-    from workshop.retry import with_backoff as _with_backoff
+    from sdk_client.retry import with_backoff as _with_backoff
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False

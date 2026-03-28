@@ -23,8 +23,8 @@ import sys
 
 from cli.cli_helpers import json_out
 from cli.cli_utils import resolve_text_arg
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.intelflow import IntelflowClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.intelflow import IntelflowClient
 
 
 def cmd_reports_list(args):

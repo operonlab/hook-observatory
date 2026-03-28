@@ -143,7 +143,7 @@ stations/system-monitor/
 
 ## Dependencies
 
--   **station-sdk** (`libs/python/station-sdk/`) — Schedule management, Core API push, Widget data format, notification integration (see [AD-8](../../docs/architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層))
+-   **station-sdk** (`libs/sdk-client/`) — Schedule management, Core API push, Widget data format, notification integration (see [AD-8](../../docs/architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層))
 -   **Core API** (optional) — For persisting reports to DB + Workbench Widget
 -   **notification bridge** (optional) — For alert push notifications
 -   V1 launchd scheduling infrastructure

@@ -14,9 +14,9 @@ from asyncio import to_thread
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.taskflow import TaskflowClient
-from workshop.fmt_constants import TASKFLOW_PRIORITY_EMOJI, TASKFLOW_STATUS_EMOJI
-from workshop.mcp_helpers import build_body, mcp_error_handler
+from sdk_client.taskflow import TaskflowClient
+from sdk_client.fmt_constants import TASKFLOW_PRIORITY_EMOJI, TASKFLOW_STATUS_EMOJI
+from sdk_client.mcp_helpers import build_body, mcp_error_handler
 
 mcp = FastMCP("workshop-taskflow")
 client = TaskflowClient()

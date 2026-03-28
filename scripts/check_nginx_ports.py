@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(
     0, str(Path(__file__).resolve().parent.parent / "libs" / "python" / "src")
 )
-from workshop.port_registry import all_ports
+from sdk_client.port_registry import all_ports
 
 NGINX_CONF = Path("/opt/homebrew/etc/nginx/conf.d/workshop-apps.inc")
 
@@ -59,7 +59,7 @@ def check() -> tuple[bool, list[str]]:
             # They might be non-workshop services
 
     # Check if any registered services with nginx_path are missing
-    from workshop.port_registry import PORTS
+    from sdk_client.port_registry import PORTS
     nginx_port_set = {p for _, p in nginx_ports}
     for sp in PORTS:
         if sp.nginx_path and sp.port not in nginx_port_set:

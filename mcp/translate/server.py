@@ -14,8 +14,8 @@ Configure in mcpproxy:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.translate import TranslateClient
-from workshop.mcp_helpers import json_text, mcp_error_handler
+from sdk_client.translate import TranslateClient
+from sdk_client.mcp_helpers import json_text, mcp_error_handler
 
 mcp = FastMCP("translate")
 client = TranslateClient()

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from db import Base, engine
 from fastapi import FastAPI
 from sqlalchemy import text
-from workshop.station_bootstrap import setup_cors, setup_logging
+from sdk_client.station_bootstrap import setup_cors, setup_logging
 
 from config import config
 from routes import router

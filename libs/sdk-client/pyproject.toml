@@ -1,0 +1,13 @@
+[project]
+name = "workshop-sdk-client"
+version = "0.1.0"
+description = "Workshop SDK — API clients and shared utilities"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.27", "redis>=5.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sdk_client"]

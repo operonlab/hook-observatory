@@ -13,7 +13,7 @@ from models import Base, HookEvent
 from spool import SpoolDrainer
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from workshop.station_bootstrap import setup_logging
+from sdk_client.station_bootstrap import setup_logging
 
 from config import config
 from routes import router

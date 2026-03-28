@@ -19,7 +19,7 @@ from pathlib import Path
 
 # ── Expected ports from port_registry (single source of truth) ──
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libs" / "python" / "src"))
-from workshop.port_registry import all_ports
+from sdk_client.port_registry import all_ports
 
 EXPECTED_PORTS: dict[int, str] = all_ports()
 

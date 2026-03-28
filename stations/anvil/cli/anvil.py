@@ -25,7 +25,7 @@ import argparse
 import json
 import sys
 
-from workshop.clients.anvil import AnvilClient, AnvilError
+from sdk_client.anvil import AnvilClient, AnvilError
 
 
 def _json_out(data, as_json=False):

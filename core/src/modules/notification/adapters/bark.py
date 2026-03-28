@@ -11,7 +11,7 @@ import structlog
 from src.config import settings
 
 try:
-    from workshop.retry import with_backoff
+    from sdk_client.retry import with_backoff
 
     _HAS_RETRY = True
 except ImportError:

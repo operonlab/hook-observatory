@@ -53,7 +53,7 @@ Modular Monolith + Event-Driven workspace.
 - **Stations**: Standalone local tools (agent-metrics, agent-vista, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-intelligence, session-pipeline, session-redactor, system-monitor, tmux-relay, tmux-webui)
 - **Vendor**: Third-party community tools (observability)
 - **Compositions**: Service assemblies for specific use cases (Legal Advisor, Church Music, Virtual CS, ERP/POS)
-- **SDK Clients**: `libs/python/src/workshop/clients/` — unified Python SDK layer for all services (20+ clients)
+- **SDK Clients**: `libs/sdk-client/sdk_client/` — unified Python SDK layer for all services (20+ clients)
 
 ## Core Concepts
 - **LEGO Composition**: Services are reusable blocks. Projects = extend services + compose them. No "project vs module" distinction.
@@ -425,7 +425,7 @@ Workshop 透過 `crawl4ai_bridge.py` 用 subprocess + stdin/stdout JSON 通訊�
 Backend → SDK → CLI → MCP → Skill，缺一層就不算完成。
 Crawl4AI 蠶食的 5 層：
 - Backend: rate_limiter, chunking, url_filter, url_scorer, markdown_gen, adaptive, enrichment strategies
-- SDK: `libs/python/src/workshop/clients/crawl4ai.py`
+- SDK: `libs/sdk-client/sdk_client/crawl4ai.py`
 - CLI: `core/cli/crawl4ai_cli.py` (crawl/chunk/filter/score/html2md)
 - MCP: `mcp/crawl4ai/server.py` (8 tools)
 - Skill: `(no skill system)webcrawl/SKILL.md`
@@ -932,7 +932,7 @@ type: feedback
 
 ```
 CLI (argparse)  →  SDK (Python client)  →  HTTP  →  Core API (FastAPI)
-stations/         libs/python/              httpx     core/src/modules/
+stations/         libs/sdk-client/              httpx     core/src/modules/
 ```
 
 - CLI **只 import SDK**，不碰 HTTP — 這樣 SDK bug fix 自動傳播到 CLI
@@ -1027,7 +1027,7 @@ Review 時開 4 個並行 agent 效果最佳：
 
 為新模組（如 finance）建 SDK+CLI 時：
 
-1. `libs/python/src/workshop/clients/{module}.py` — 繼承 BaseClient
+1. `libs/sdk-client/sdk_client/{module}.py` — 繼承 BaseClient
 2. 列 coverage matrix（route → method → command）
 3. `stations/{module}/cli/{module}.py`（Station CLI）或 `core/cli/{module}.py`（Core Module CLI）— import SDK，不碰 HTTP
 4. 跑 ruff check

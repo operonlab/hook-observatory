@@ -20,7 +20,7 @@ from models import Base
 from remediation import Remediator
 from sqlalchemy import text
 from state import InterventionEngine, State
-from workshop.station_bootstrap import setup_cors, setup_logging
+from sdk_client.station_bootstrap import setup_cors, setup_logging
 
 from config import config  # isort: skip
 from push_notify import publish_push  # isort: skip

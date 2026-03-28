@@ -13,8 +13,8 @@ import argparse
 import json
 import sys
 
-from workshop.clients._base import APIError
-from workshop.clients.stt import STTClient
+from sdk_client._base import APIError
+from sdk_client.stt import STTClient
 
 
 def cmd_transcribe(args):

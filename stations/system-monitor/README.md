@@ -136,7 +136,7 @@ stations/system-monitor/
 
 ## 相依
 
-- **station-sdk**（`libs/python/station-sdk/`）— 排程管理、Core API 推送、Widget 資料格式、通知整合（參見 [AD-8](../../docs/architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)）
+- **station-sdk**（`libs/sdk-client/`）— 排程管理、Core API 推送、Widget 資料格式、通知整合（參見 [AD-8](../../docs/architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)）
 - **Core API**（可選）— 若要持久化報告到 DB + Workbench Widget
 - **notification bridge**（可選）— 警報推送
 - V1 launchd 排程基礎設施

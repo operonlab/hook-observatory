@@ -25,8 +25,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "libs", "python", "src"))
 
 from mcp.server.fastmcp import FastMCP
-from workshop.mcp_helpers import mcp_error_handler
-from workshop.clients.session_intelligence import SessionIntelligenceClient
+from sdk_client.mcp_helpers import mcp_error_handler
+from sdk_client.session_intelligence import SessionIntelligenceClient
 
 mcp = FastMCP("workshop-session-intelligence")
 _client = SessionIntelligenceClient()

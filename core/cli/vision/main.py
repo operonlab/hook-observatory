@@ -13,8 +13,8 @@ import argparse
 import json
 import sys
 
-from workshop.clients._base import APIError
-from workshop.clients.vision import VisionClient
+from sdk_client._base import APIError
+from sdk_client.vision import VisionClient
 
 
 def cmd_analyze(args):

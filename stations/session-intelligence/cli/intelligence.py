@@ -21,7 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "libs", "python", "src"))
 
-from workshop.clients.session_intelligence import SessionIntelligenceClient
+from sdk_client.session_intelligence import SessionIntelligenceClient
 
 # ======================== Formatters ========================
 
@@ -301,7 +301,7 @@ def cmd_digest(args: argparse.Namespace, client: SessionIntelligenceClient) -> N
 def _publish_digest_to_memvault(data: dict) -> None:
     """Best-effort push digest to Core memvault intelligence/ingest endpoint."""
     try:
-        from workshop.clients.memvault import MemvaultClient
+        from sdk_client.memvault import MemvaultClient
 
         period = data.get("period", {})
         iso_week = period.get("iso_week", "")

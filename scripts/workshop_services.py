@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Port registry — single source of truth
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "libs" / "python" / "src"))
-from workshop.port_registry import get, get_port
+from sdk_client.port_registry import get, get_port
 
 # ── Daemon PATH (launchd does not inherit .zshenv) ─────────────
 _DAEMON_PATH = (

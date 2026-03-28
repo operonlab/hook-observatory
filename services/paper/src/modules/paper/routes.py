@@ -33,7 +33,7 @@ from src.shared.embedding import get_embedding
 from src.shared.errors import BadRequestError, ConflictError, NotFoundError
 
 try:
-    from workshop.retry import with_backoff as _with_backoff
+    from sdk_client.retry import with_backoff as _with_backoff
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False

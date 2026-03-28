@@ -24,7 +24,7 @@ All of the above, plus:
 
 | # | Item | File |
 |---|------|------|
-| 5 | Port registry | `libs/python/src/workshop/port_registry.py` → `PORTS` |
+| 5 | Port registry | `libs/sdk-client/sdk_client/port_registry.py` → `PORTS` |
 | 6 | Service registry | `scripts/workshop_services.py` → `SERVICES` |
 | 7 | Sentinel remediation map | `stations/sentinel/remediation.py` → `SIMPLE_RESTART_MAP` |
 | 8 | Nginx reverse proxy | `/opt/homebrew/etc/nginx/conf.d/workshop-apps.inc` |

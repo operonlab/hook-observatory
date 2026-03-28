@@ -22,8 +22,8 @@ import sys
 
 from cli.cli_helpers import json_out, err, fmt_date
 from cli.cli_utils import resolve_text_arg
-from workshop.clients._base import APIConnectionError, APIError
-from workshop.clients.paper import PaperClient
+from sdk_client._base import APIConnectionError, APIError
+from sdk_client.paper import PaperClient
 
 
 def cmd_articles_list(args):

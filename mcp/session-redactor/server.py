@@ -33,8 +33,8 @@ if os.path.isdir(_workshop_libs) and _workshop_libs not in sys.path:
     sys.path.insert(0, _workshop_libs)
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
-from workshop.clients.session_redactor import SessionRedactorClient  # noqa: E402
-from workshop.mcp_helpers import mcp_error_handler  # noqa: E402
+from sdk_client.session_redactor import SessionRedactorClient  # noqa: E402
+from sdk_client.mcp_helpers import mcp_error_handler  # noqa: E402
 
 mcp = FastMCP("workshop-session-redactor")
 client = SessionRedactorClient()

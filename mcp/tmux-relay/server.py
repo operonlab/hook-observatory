@@ -18,8 +18,8 @@ Configure in ~/.claude.json:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
-from workshop.clients.tmux_relay import TmuxRelayClient
-from workshop.mcp_helpers import mcp_error_handler
+from sdk_client.tmux_relay import TmuxRelayClient
+from sdk_client.mcp_helpers import mcp_error_handler
 
 mcp = FastMCP("tmux-relay")
 _default_client = TmuxRelayClient(silent=True)

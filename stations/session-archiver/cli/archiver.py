@@ -16,7 +16,7 @@ import argparse
 import json
 import sys
 
-from workshop.clients.session_archiver import SessionArchiverClient, SessionArchiverError
+from sdk_client.session_archiver import SessionArchiverClient, SessionArchiverError
 
 
 def _json_out(data, as_json=False):

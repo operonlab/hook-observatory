@@ -37,7 +37,7 @@ def main() -> None:
     parser.add_argument("--window-days", type=int, default=90, help="Time window")
     args = parser.parse_args()
 
-    from workshop.clients.anvil import AnvilClient
+    from sdk_client.anvil import AnvilClient
 
     client = AnvilClient()
 

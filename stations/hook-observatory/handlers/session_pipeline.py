@@ -50,7 +50,7 @@ def handle(
         code = (
             "import sys, os; "
             "sys.path.insert(0, os.path.expanduser('~/workshop/libs/python/src')); "
-            "from workshop.clients.session_pipeline import SessionPipelineClient; "
+            "from sdk_client.session_pipeline import SessionPipelineClient; "
             f"SessionPipelineClient().run_pipeline({session_id!r}, {transcript_path!r})"
         )
         _log_file = open(_LOG_DIR / "pipeline.log", "a")
