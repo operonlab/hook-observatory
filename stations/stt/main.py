@@ -307,6 +307,107 @@ async def list_engines():
     return {"engines": list(ENGINES.keys()), "default": "apple"}
 
 
+# ======================== Diarization Endpoints ========================
+
+
+@app.post("/diarize")
+async def diarize(
+    path: str = Query(..., description="Absolute path to audio file (WAV, 16kHz mono recommended)"),
+    device: str = Query("auto", description="Compute device: auto, mps, cpu"),
+):
+    """Run speaker diarization on audio file (subprocess-isolated pyannote)."""
+    file_path = Path(path).expanduser()
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    from audio_ops.diarize import DiarizeOp
+
+    op = DiarizeOp(device=device)
+    ctx = {"audio_path": str(file_path)}
+
+    try:
+        ctx = await asyncio.to_thread(op, ctx)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except (RuntimeError, TimeoutError) as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return JSONResponse(content={
+        "segments": ctx["diarization_segments"],
+        "speaker_stats": ctx["speaker_stats"],
+        "audio_path": str(file_path),
+    })
+
+
+@app.post("/diarize-transcribe")
+async def diarize_transcribe(
+    path: str = Query(..., description="Absolute path to audio file"),
+    language: str = Query("zh-TW", description="Language code"),
+    engine: str = Query("mlx-whisper", description="STT engine for transcription"),
+    device: str = Query("auto", description="Diarization device: auto, mps, cpu"),
+    operators: str | None = Query(None, description="Audio preprocessors (e.g. 'denoise,normalize')"),
+    gap_threshold: float = Query(2.0, description="Max gap (s) for same-speaker consolidation"),
+):
+    """Run diarization + transcription + merge in one call."""
+    file_path = Path(path).expanduser()
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    try:
+        eng = get_engine(engine)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    from audio_ops.diarize import DiarizeOp
+    from audio_ops.merge import MergeOp
+
+    # Step 1: Diarize
+    diarize_op = DiarizeOp(device=device)
+    ctx = {"audio_path": str(file_path)}
+    try:
+        ctx = await asyncio.to_thread(diarize_op, ctx)
+    except (FileNotFoundError, RuntimeError, TimeoutError) as e:
+        raise HTTPException(status_code=500, detail=f"Diarization failed: {e}") from e
+
+    # Step 2: Transcribe (with optional preprocessing)
+    actual_path = str(file_path)
+    tmp_preprocessed = None
+    try:
+        if operators:
+            from audio_ops import parse_operators, run_preprocessing
+
+            ops = parse_operators(operators)
+            actual_path = await asyncio.to_thread(run_preprocessing, str(file_path), ops)
+            if actual_path != str(file_path):
+                tmp_preprocessed = actual_path
+
+        result = await asyncio.to_thread(eng.transcribe, actual_path, language)
+    finally:
+        if tmp_preprocessed:
+            try:
+                os.unlink(tmp_preprocessed)
+            except OSError:
+                pass
+
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    ctx["transcription_segments"] = result.get("segments", [])
+
+    # Step 3: Merge
+    merge_op = MergeOp(gap_threshold=gap_threshold)
+    ctx = merge_op(ctx)
+
+    return JSONResponse(content={
+        "attributed_segments": ctx["attributed_segments"],
+        "attributed_markdown": ctx["attributed_markdown"],
+        "speaker_stats": ctx["speaker_stats"],
+        "transcription_text": result.get("text", ""),
+        "engine": engine,
+        "audio_path": str(file_path),
+    })
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("STT_PORT", "10200"))
     uvicorn.run(app, host="127.0.0.1", port=port)
