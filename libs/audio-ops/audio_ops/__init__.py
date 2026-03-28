@@ -1,4 +1,4 @@
-"""Audio preprocessing operators — shared across STT, TTS, voice-gateway, and RVC.
+"""Audio operators — shared across STT, TTS, voice-gateway, and RVC.
 
 RxJS-inspired Operator Protocol — same interface as core/src/shared/reactive.py
 but self-contained for station isolation.
@@ -7,6 +7,9 @@ Usage:
     from audio_ops import parse_operators, run_preprocessing
     ops = parse_operators("denoise,vad-trim:threshold=0.3,normalize")
     processed_path = run_preprocessing("/path/to/audio.wav", ops)
+
+    from audio_ops.diarize import DiarizeOp
+    from audio_ops.merge import MergeOp, find_speaker
 
 Model directory resolution order:
     1. ``model_dir`` kwarg passed to the operator constructor
@@ -22,7 +25,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-import numpy as np
 import soundfile as sf
 
 logger = logging.getLogger(__name__)
@@ -121,7 +123,7 @@ def register(name: str):
 
 # Import operators to trigger registration
 def _register_builtins():
-    from . import denoise, normalize, vad_trim  # noqa: F401
+    from . import denoise, diarize, merge, normalize, vad_trim  # noqa: F401
 
 
 _register_builtins()
@@ -203,3 +205,8 @@ def run_preprocessing(file_path: str, ops: list[AudioOp]) -> str:
     logger.info("Preprocessing: %s (%.1fs -> %.1fs)", pipeline, orig_dur, proc_dur)
 
     return tmp_path
+
+
+# ── Analysis convenience re-exports ──────────────────────────────────────
+
+from .merge import consolidate_segments, find_speaker, format_time, to_markdown  # noqa: E402, F401
