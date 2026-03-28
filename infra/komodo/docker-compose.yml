@@ -33,7 +33,7 @@ services:
       - "127.0.0.1:9120:9120"
     environment:
       ## Core connects to Mongo via Docker network name
-      KOMODO_DATABASE__ADDRESS: "komodo-mongo:27017"
+      KOMODO_DATABASE_ADDRESS: "komodo-mongo:27017"
       ## Auth — override via .env file, never hardcode
       KOMODO_PASSKEY: "${KOMODO_PASSKEY}"
       KOMODO_LOCAL_AUTH: "true"
@@ -45,7 +45,7 @@ services:
       ## General
       KOMODO_TITLE: "Workshop Fleet"
       KOMODO_ENABLE_NEW_USERS: "false"
-      KOMODO_LOGGING__LEVEL: "info"
+      KOMODO_LOGGING_LEVEL: "info"
     volumes:
       - komodo-data:/data
       - /var/run/docker.sock:/var/run/docker.sock

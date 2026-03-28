@@ -20,7 +20,7 @@ services:
       ## Periphery agent port
       KOMODO_PORT: "8120"
       ## Logging
-      KOMODO_LOGGING__LEVEL: "info"
+      KOMODO_LOGGING_LEVEL: "info"
     volumes:
       ## Docker socket so Periphery can manage containers on this host
       - /var/run/docker.sock:/var/run/docker.sock

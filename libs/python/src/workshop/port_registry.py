@@ -67,6 +67,22 @@ PORTS: list[ServicePort] = [
         env_var="PAPER_SVC_URL",
         nginx_path="/api/paper/",
     ),
+    ServicePort(
+        "intelflow-svc",
+        10011,
+        "core",
+        health_path="/health",
+        env_var="INTELFLOW_SVC_URL",
+        nginx_path="/api/intelflow/",
+    ),
+    ServicePort(
+        "invest-svc",
+        10012,
+        "core",
+        health_path="/health",
+        env_var="INVEST_SVC_URL",
+        nginx_path="/api/invest/",
+    ),
     # ── Stations: Infra & Ops ──
     ServicePort(
         "hook-observatory",
@@ -302,6 +318,8 @@ MIGRATION_MAP: dict[str, int] = {
     # Core
     "core": 10000,
     "paper-svc": 10010,
+    "intelflow-svc": 10011,
+    "invest-svc": 10012,
     # Stations: Infra & Ops
     "hook-observatory": 10100,
     "session-channel": 10101,

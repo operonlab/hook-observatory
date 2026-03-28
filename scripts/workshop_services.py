@@ -58,6 +58,31 @@ SERVICES = [
         "port": get_port("paper-svc"),
         "health": get("paper-svc").health_url,
         "workdir": "/Users/joneshong/workshop/paper-svc",
+        "env": {"PAPER_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
+    },
+    {
+        "name": "intelflow-svc",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/intelflow-svc/.venv/bin/python3 -m uvicorn"
+            f" main:app --host 127.0.0.1 --port {get_port('intelflow-svc')}"
+        ),
+        "port": get_port("intelflow-svc"),
+        "health": get("intelflow-svc").health_url,
+        "workdir": "/Users/joneshong/workshop/intelflow-svc",
+        "env": {"INTELFLOW_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
+    },
+    {
+        "name": "invest-svc",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/invest-svc/.venv/bin/python3 -m uvicorn"
+            f" main:app --host 127.0.0.1 --port {get_port('invest-svc')}"
+        ),
+        "port": get_port("invest-svc"),
+        "health": get("invest-svc").health_url,
+        "workdir": "/Users/joneshong/workshop/invest-svc",
+        "env": {"INVEST_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
     },
     # ── Stations ──
     {

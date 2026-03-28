@@ -138,6 +138,18 @@ LIGHT_CHECKS: list[LightCheck] = [
         url=_url("paper-svc", "/health"),
         expect_json={"status": "ok"},
     ),
+    LightCheck(
+        name="intelflow-svc",
+        group="internal",
+        url=_url("intelflow-svc", "/health"),
+        expect_json={"status": "ok"},
+    ),
+    LightCheck(
+        name="invest-svc",
+        group="internal",
+        url=_url("invest-svc", "/health"),
+        expect_json={"status": "ok"},
+    ),
     # V1 gateway retired (2026-03-08)
     LightCheck(
         name="frontend",
