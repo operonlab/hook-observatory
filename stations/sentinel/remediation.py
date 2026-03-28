@@ -41,6 +41,48 @@ PYTHON = Path.home() / ".local/bin/python3"
 WORKBENCH_DIR = Path.home() / "workshop/workbench"
 PNPM = "/opt/homebrew/opt/node@22/lib/node_modules/corepack/shims/pnpm"
 
+
+# ── Shared async subprocess runner ──
+
+
+async def _run_cmd(
+    cmd: list[str],
+    *,
+    timeout: float = 30.0,  # noqa: ASYNC109
+    label: str = "",
+    check: bool = True,
+    cwd: str | None = None,
+) -> tuple[int, str, str]:
+    """Run async subprocess with timeout and logging.
+
+    Returns (returncode, stdout, stderr).
+    Raises TimeoutError if timeout exceeded.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        **({"cwd": cwd} if cwd else {}),
+    )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout
+        )
+    except TimeoutError:
+        proc.kill()
+        raise
+    stdout = stdout_bytes.decode().strip() if stdout_bytes else ""
+    stderr = stderr_bytes.decode().strip() if stderr_bytes else ""
+    if check and proc.returncode != 0:
+        logger.warning(
+            "%s failed (rc=%d): %s",
+            label or " ".join(cmd[:2]),
+            proc.returncode,
+            stderr[:200],
+        )
+    return proc.returncode, stdout, stderr
+
+
 # Map sentinel service names → workshop_services.py service names
 # Only services managed by workshop_services.py are eligible for simple restart
 SIMPLE_RESTART_MAP: dict[str, str] = {
@@ -111,29 +153,21 @@ class SimpleRestarter:
         try:
             # Stop first (kill old process + clean PID), then start
             for action in ("stop", "start"):
-                proc = await asyncio.create_subprocess_exec(
-                    str(PYTHON),
-                    str(WORKSHOP_SERVICES),
-                    action,
-                    name,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                await _run_cmd(
+                    [str(PYTHON), str(WORKSHOP_SERVICES), action, name],
+                    timeout=_TIMEOUT_SERVICE_RESTART,
+                    label=f"workshop_services {action} {name}",
+                    check=False,
                 )
-                await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_SERVICE_RESTART)
             # Brief wait then verify the process came back
             await asyncio.sleep(_SLEEP_POST_KILL)
-            check_proc = await asyncio.create_subprocess_exec(
-                str(PYTHON),
-                str(WORKSHOP_SERVICES),
-                "status",
-                name,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            rc, _, _ = await _run_cmd(
+                [str(PYTHON), str(WORKSHOP_SERVICES), "status", name],
+                timeout=_TIMEOUT_PORT_CHECK,
+                label=f"workshop_services status {name}",
+                check=False,
             )
-            _stdout, _ = await asyncio.wait_for(
-                check_proc.communicate(), timeout=_TIMEOUT_PORT_CHECK
-            )
-            if check_proc.returncode != 0:
+            if rc != 0:
                 logger.warning("Service %s restarted but health check failed", name)
                 return False
             logger.info("Simple restart succeeded for %s", name)
@@ -144,18 +178,16 @@ class SimpleRestarter:
 
     async def _restart_docker(self, container: str) -> bool:
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "docker",
-                "restart",
-                container,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            rc, _, stderr = await _run_cmd(
+                ["docker", "restart", container],
+                timeout=_TIMEOUT_DOCKER_RESTART,
+                label=f"docker restart {container}",
+                check=False,
             )
-            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_DOCKER_RESTART)
-            if proc.returncode == 0:
+            if rc == 0:
                 logger.info("Docker restart succeeded for %s", container)
                 return True
-            logger.error("Docker restart failed for %s: %s", container, stderr.decode()[:200])
+            logger.error("Docker restart failed for %s: %s", container, stderr[:200])
             return False
         except (TimeoutError, FileNotFoundError) as e:
             logger.error("Docker restart failed for %s: %s", container, e)
@@ -167,15 +199,13 @@ class SimpleRestarter:
         if not cmd:
             return False
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            rc, _, stderr = await _run_cmd(
+                cmd,
+                timeout=_TIMEOUT_INFRA_RESTART,
+                label=f"infra restart {service}",
+                check=False,
             )
-            _stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=_TIMEOUT_INFRA_RESTART
-            )
-            if proc.returncode == 0:
+            if rc == 0:
                 logger.info("Infra restart succeeded for %s", service)
                 # Wait for engine to be fully ready
                 await asyncio.sleep(_SLEEP_POST_RESTART)
@@ -183,26 +213,24 @@ class SimpleRestarter:
             # Fallback: if orbctl fails, try opening the app
             if service == "orbstack":
                 logger.warning("orbctl start failed, trying open -a OrbStack")
-                fallback = await asyncio.create_subprocess_exec(
-                    "open",
-                    "-a",
-                    "OrbStack",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                await _run_cmd(
+                    ["open", "-a", "OrbStack"],
+                    timeout=_TIMEOUT_PORT_CHECK,
+                    label="open OrbStack",
+                    check=False,
                 )
-                await asyncio.wait_for(fallback.communicate(), timeout=_TIMEOUT_PORT_CHECK)
                 await asyncio.sleep(_SLEEP_ENGINE_STARTUP)  # Wait for app + engine startup
-                retry = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                retry_rc, _, _ = await _run_cmd(
+                    cmd,
+                    timeout=_TIMEOUT_DOCKER_RESTART,
+                    label=f"infra restart {service} (retry)",
+                    check=False,
                 )
-                _, _ = await asyncio.wait_for(retry.communicate(), timeout=_TIMEOUT_DOCKER_RESTART)
-                if retry.returncode == 0:
+                if retry_rc == 0:
                     logger.info("Infra restart succeeded for %s (fallback)", service)
                     await asyncio.sleep(_SLEEP_POST_RESTART)
                     return True
-            logger.error("Infra restart failed for %s: %s", service, stderr.decode()[:200])
+            logger.error("Infra restart failed for %s: %s", service, stderr[:200])
             return False
         except (TimeoutError, FileNotFoundError) as e:
             logger.error("Infra restart failed for %s: %s", service, e)
@@ -230,32 +258,26 @@ class FrontendRebuilder:
         try:
             # Step 1: pnpm build
             logger.info("Frontend rebuild: running pnpm build...")
-            proc = await asyncio.create_subprocess_exec(
-                PNPM,
-                "run",
-                "build",
+            rc, _, stderr = await _run_cmd(
+                [PNPM, "run", "build"],
+                timeout=_TIMEOUT_BUILD,
+                label="pnpm build",
+                check=False,
                 cwd=str(WORKBENCH_DIR),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_BUILD)  # noqa: RUF059
-
-            if proc.returncode != 0:
-                logger.error("Frontend rebuild failed: %s", stderr.decode()[-500:])
+            if rc != 0:
+                logger.error("Frontend rebuild failed: %s", stderr[-500:])
                 return False
 
             logger.info("Frontend rebuild succeeded")
 
             # Step 2: Nginx reload
-            nginx_proc = await asyncio.create_subprocess_exec(
-                "nginx",
-                "-s",
-                "reload",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            await _run_cmd(
+                ["nginx", "-s", "reload"],
+                timeout=_TIMEOUT_NGINX_RELOAD,
+                label="nginx reload",
+                check=False,
             )
-            await asyncio.wait_for(nginx_proc.communicate(), timeout=_TIMEOUT_NGINX_RELOAD)
-
             return True
 
         except TimeoutError:
@@ -357,18 +379,14 @@ class Remediator:
             return None
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "bash",
-                str(PANE_POOL_SCRIPT),
-                "acquire",
-                "1",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            rc, stdout, _ = await _run_cmd(
+                ["bash", str(PANE_POOL_SCRIPT), "acquire", "1"],
+                timeout=_TIMEOUT_PORT_CHECK,
+                label="pane_pool acquire",
+                check=False,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_PORT_CHECK)
-            if proc.returncode == 0:
-                pane = stdout.decode().strip()
-                return pane if pane else None
+            if rc == 0:
+                return stdout if stdout else None
         except (TimeoutError, FileNotFoundError):
             pass
         return None
@@ -380,19 +398,15 @@ class Remediator:
             return False
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "bash",
-                str(RELAY_SCRIPT),
-                pane,
-                "",
-                command,
-                "--no-forward",
-                "--signal",
-                str(signal_file),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            rc, _, _ = await _run_cmd(
+                [
+                    "bash", str(RELAY_SCRIPT), pane, "",
+                    command, "--no-forward", "--signal", str(signal_file),
+                ],
+                timeout=_TIMEOUT_GIT_OP,
+                label="relay dispatch",
+                check=False,
             )
-            _, _ = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_GIT_OP)
-            return proc.returncode == 0
+            return rc == 0
         except (TimeoutError, FileNotFoundError):
             return False

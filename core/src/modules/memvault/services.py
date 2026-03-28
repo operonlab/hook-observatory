@@ -64,12 +64,7 @@ _GREETING_ONLY = re.compile(
     re.IGNORECASE,
 )
 
-# CJK range pattern retained for should_search char counting only
-_CJK_RANGES = re.compile(
-    r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f"
-    r"\u30a0-\u30ff\uff00-\uffef\uac00-\ud7af]"
-)
-
+# CJK range pattern — from shared single source of truth
 
 # --- Memory intent keywords (force search even for short queries) ---
 
