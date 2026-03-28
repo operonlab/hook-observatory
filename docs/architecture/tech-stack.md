@@ -1,5 +1,5 @@
 ---
-doc_version: 4
+doc_version: 5
 content_hash: pending
 source_version: 4
 target_lang: zh-TW
@@ -19,7 +19,7 @@ translated_at: 2026-03-04
 | 配置 | pydantic-settings | 2.0+ | 型別安全的環境變數配置，支援 `.env` 載入 |
 | 日誌 | structlog | 24.0+ | 結構化 JSON 日誌，OTel 整合 |
 | HTTP 用戶端 | httpx | 0.27+ | 用於外部服務調用的非同步 HTTP |
-| 事件匯流排 | In-process async | -- | 模組間事件（可升級至 Redis Streams） |
+| 事件匯流排 | In-process async + Redis Streams | -- | 模組間事件（`CORE_EVENT_BACKEND=redis` 啟用 Redis Streams） |
 | 掛鉤引擎 | Custom | -- | 插件生命週期掛鉤 (before_*/after_*) |
 
 ## 前端 (Frontend)
@@ -47,18 +47,22 @@ translated_at: 2026-03-04
 ```
 PostgreSQL Instance
 ├── schema: auth         (users, sessions, spaces, permissions)     — 第一階段 (Phase 1)
-├── schema: finance      (transactions, budgets, subscriptions)     — 第一階段 (Phase 1)
-├── schema: taskflow        (quests, tasks, dispatch, rewards)         — 第一階段 (Phase 1)
-├── schema: ideagraph         (sparks, links, knowledge graph)           — 第一階段 (Phase 1)
-├── schema: intelflow        (feeds, briefings, topic tracking)         — 第二階段 (Phase 2)
-├── schema: memvault         (memories, embeddings, profiles)           — 第二階段 (Phase 2)
-├── schema: skillpath         (skill trees, learning paths, assessments) — 第二階段 (Phase 2)
-├── schema: workpool       (resources, schedules, capacity)           — 第三階段 (Phase 3)
-├── schema: matchcore        (match rules, scores, recommendations)     — 第三階段 (Phase 3)
 ├── schema: admin        (audit_logs, settings, system health)      — 第一階段 (Phase 1)
-├── schema: nodeflow       (workflows, DAG nodes, execution runs)     — 第二階段 (Phase 2)
-├── schema: notification   (preferences, log, channels, rules)        — 第二階段 (Phase 2)
-└── schema: invest         (portfolios, transactions, analysis)       — 第二階段 (Phase 2)
+├── schema: finance      (transactions, budgets, subscriptions)     — 第一階段 (Phase 1)
+├── schema: taskflow     (quests, tasks, dispatch, rewards)         — 第一階段 (Phase 1)
+├── schema: ideagraph    (sparks, links, knowledge graph)           — 第一階段 (Phase 1)
+├── schema: capture      (captures, enrichment, promotion)          — 第一階段 (Phase 1)
+├── schema: briefing     (briefings, templates, schedules)          — 第二階段 (Phase 2)
+├── schema: dailyos      (daily routines, habits, strategies)       — 第二階段 (Phase 2)
+├── schema: intelflow    (feeds, briefings, topic tracking)         — 第二階段 (Phase 2)
+├── schema: memvault     (memories, embeddings, profiles)           — 第二階段 (Phase 2)
+├── schema: skillpath    (skill trees, learning paths, assessments) — 第二階段 (Phase 2)
+├── schema: nodeflow     (workflows, DAG nodes, execution runs)     — 第二階段 (Phase 2)
+├── schema: notification (preferences, log, channels, rules)        — 第二階段 (Phase 2)
+├── schema: invest       (portfolios, transactions, analysis)       — 第二階段 (Phase 2)
+├── schema: paper        (papers, digests, arXiv metadata)          — 第二階段 (Phase 2)
+├── schema: workpool     (resources, schedules, capacity)           — 第三階段 (Phase 3)
+└── schema: matchcore    (match rules, scores, recommendations)     — 第三階段 (Phase 3)
 ```
 
 **規則**:
@@ -167,3 +171,39 @@ async def chat_stream():
 | UI 插槽 | React PluginSlot | 前端插件注入點 |
 
 規範詳情請參閱 [插件系統 (Plugin System)](./plugin-system.md)。
+
+## 微服務層 (Microservices Layer)
+
+從 Core 單體漸進拆出的獨立部署模組。選定條件：零跨模組依賴、可獨立運行。
+
+| 模組 | Port | 狀態 |
+|------|------|------|
+| paper | 10010 | ✅ 已拆出 |
+| intelflow | 10011 | ✅ 已拆出 |
+| invest | 10012 | ✅ 已拆出 |
+
+共享 PostgreSQL + Redis，以獨立 FastAPI 進程運行，Nginx 反向代理路由。
+
+## 多機部署 (Multi-Machine Deployment)
+
+| 組件 | 選擇 | 用途 |
+|------|------|------|
+| VPN | Tailscale | 跨機安全連線 |
+| 部署管理 | Komodo | 容器部署、服務編排（Docker Compose 遠端管理） |
+| 任務調度 | Fleet Station | 遠端運算節點任務分派 |
+
+**架構**：Mac 主機（Core + 全部 Stations）+ 遠端 Windows 節點（GPU 運算任務），透過 Tailscale VPN 連線，Komodo 管理容器生命週期。
+
+## 連接埠慣例 (Port Convention)
+
+所有自管服務使用 10000+ 範圍，單一真值源：`libs/sdk-client/sdk_client/port_registry.py`。
+
+| 範圍 | 用途 |
+|------|------|
+| 10000-10099 | Core 服務 |
+| 10100-10199 | 工作站：基礎建設 & 營運 |
+| 10200-10299 | 工作站：AI & 媒體 |
+| 10300-10399 | 工作站：商業 & 工具 |
+| 10500-10599 | 前端 |
+
+第三方 / Docker 服務保留原始埠號（PostgreSQL 5432, Redis 6379, Qdrant 6333 等）。

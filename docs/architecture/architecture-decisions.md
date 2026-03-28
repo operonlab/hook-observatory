@@ -1,5 +1,5 @@
 ---
-doc_version: 3
+doc_version: 4
 content_hash: pending
 source_version: 2
 target_lang: zh-TW
@@ -51,25 +51,40 @@ Claude Code ──► MCP Server ──► SDK Client ──► FastAPI Core ─
 - 超過 10 個 tools 的 MCP Servers 應進行切分 (例如：finance 拆為 finance + finance-wallet + finance-analytics)
 - MCP Server tool 命名規則：`{domain}_{action}` (例如：`finance_add_transaction`)
 
-**現有 MCP Servers（16 個）**：
+**現有 MCP Servers（31 個）**：
 | 名稱 | Tool 數量 | 類型 |
 |-------------|------------|------|
 | `agent-metrics` | 10 | Station |
+| `anvil` | 10 | Station |
+| `capture` | 10 | Core |
+| `crawl4ai` | 8 | Station |
+| `dailyos` | 8 | Core |
 | `envkit` | 4 | Station |
-| `finance` | 9 | Core |
+| `finance` | 10 | Core |
 | `finance-analytics` | 9 | Core |
-| `finance-wallet` | 9 | Core |
+| `finance-wallet` | 12 | Core |
+| `fleet` | 6 | Station |
 | `hook-observatory` | 3 | Station |
-| `intelflow` | 2 | Core |
-| `memvault` | 8 | Core |
-| `nodeflow` | 6 | Core |
-| `sandbox-executor` | 2 | Station |
+| `intelflow` | 7 | Core |
+| `invest` | 8 | Core |
+| `memvault` | 16 | Core |
+| `nodeflow` | 9 | Core |
+| `ocr` | 2 | Station |
+| `paper` | 7 | Core |
+| `remote-node` | 6 | Station |
+| `sandbox` | 2 | Station |
 | `sentinel` | 5 | Station |
-| `session-intelligence` | 3 | Station |
-| `session-redactor` | 3 | Station |
-| `system-monitor` | 4 | Station |
-| `tmux-relay` | 6 | Station |
+| `session-intelligence` | 6 | Station |
+| `session-redactor` | 5 | Station |
+| `stt` | 3 | Station |
+| `system-monitor` | 6 | Station |
+| `taskflow` | 12 | Core |
+| `tmux-relay` | 5 | Station |
 | `tmux-webui` | 3 | Station |
+| `translate` | 3 | Station |
+| `tts` | 3 | Station |
+| `video-edit` | 16 | Station |
+| `vision` | 2 | Station |
 
 ---
 

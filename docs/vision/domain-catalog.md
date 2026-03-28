@@ -1,5 +1,5 @@
 ---
-doc_version: 4
+doc_version: 5
 content_hash: pending
 source_version: 4
 target_lang: zh-TW
@@ -68,7 +68,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 |----------|-------|
 | **依賴項目** | auth, 各目標模組 (finance, taskflow, invest...) |
 | **被依賴於** | 無 (各模組透過 adapter 被動支援) |
-| **MCP 伺服器** | `workshop-capture` (9 tools) |
+| **MCP 伺服器** | `workshop-capture` (10 tools) |
 | **四層架構** | SDK ✅ CLI ✅ MCP ✅ |
 | **DB Schema** | `shared` (跨模組基礎設施) |
 
@@ -92,7 +92,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 |----------|-------|
 | **依賴項目** | auth |
 | **MCP 伺服器** | `workshop-finance` + `workshop-finance-analytics` |
-| **V1 狀態** | MCP 伺服器運作中 (18 個工具) |
+| **V1 狀態** | MCP 伺服器運作中 (31 個工具) |
 
 **功能能力**:
 - 一次性交易（付款方式：現金/信用卡/簽帳卡/電子支付/轉帳，具體卡片名稱）
@@ -103,7 +103,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 - 預算功能（總預算 + 分類預算，即時比對超支警示）
 - 消費分析圖表（圓餅圖、柱狀圖、散佈圖、趨勢線、預算進度）
 - 月度消費報告（LLM 產生 AI 建議）
-- **MCP 拆分**：`workshop-finance`（CRUD ~10 tools）+ `workshop-finance-analytics`（分析+預算 ~8 tools）
+- **MCP 拆分**：`workshop-finance`（CRUD 10 tools）+ `workshop-finance-wallet`（錢包 12 tools）+ `workshop-finance-analytics`（分析+預算 9 tools）
 
 **增長路徑** (漸進式複雜度):
 ```
@@ -124,7 +124,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **依賴項目** | auth, skillpath (用於量化模式) |
 | **雙向連接** | finance (任務 ↔ 訂單) |
 | **MCP 伺服器** | `workshop-taskflow` + `workshop-taskflow-reports` |
-| **V1 狀態** | MCP 伺服器運作中 (15 個工具) |
+| **V1 狀態** | MCP 伺服器運作中 (12 個工具) |
 
 **功能能力**:
 - 統一任務模型（personal / family / company 多來源）
@@ -134,7 +134,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 - 日曆檢視（月/週/日/議程 四種模式）
 - 週期性任務（recurrence JSONB：weekly / monthly / custom）
 - 自動報告產出（日誌、週報、月報 + LLM 觀察建議）
-- **MCP 拆分**：`workshop-taskflow`（CRUD ~10 tools）+ `workshop-taskflow-reports`（報告 ~5 tools）
+- **MCP 拆分**：`workshop-taskflow`（12 tools）
 
 **RPG 隱喻** (保留自 V1 設計):
 - 裝備 = 知識，技能 = 職能，屬性 = 核心特徵
@@ -160,7 +160,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 | **被依賴於** | intelflow（情報→靈感轉入） |
 | **MCP 伺服器** | `workshop-ideagraph` + `workshop-ideagraph-ai` |
 | **整合 Skills** | workshop-muse (V1 MCP) |
-| **V1 狀態** | MCP 伺服器運作中 (8 個工具，僅 CRUD) |
+| **V1 狀態** | MCP 伺服器運作中 (8 個工具) |
 
 **功能能力**:
 - AI 輔助想法孵化管線（Capture → Refine → Connect → Verify）
@@ -170,7 +170,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 - Galaxy 風格知識圖譜視覺化（D3.js force-directed，星星=Spark、星座線=Link）
 - Qdrant 語意搜尋（跨所有 Spark 語意比對）
 - 跨模組事件轉 Spark（finance/taskflow/memvault 事件可轉入）
-- **MCP 拆分**：`workshop-ideagraph`（CRUD ~8 tools）+ `workshop-ideagraph-ai`（AI 輔助 ~5 tools）
+- **MCP 拆分**：`workshop-ideagraph`（CRUD ~8 tools）+ `workshop-ideagraph-ai`（AI 輔助，待建置）
 
 **增長路徑**:
 ```
@@ -210,7 +210,7 @@ space_members: space_id, user_id, role(owner/admin/member/guest), modules[]
 |----------|-------|
 | **依賴項目** | auth |
 | **被依賴於** | skillpath, intelflow |
-| **MCP 伺服器** | `memvault` (16 個工具) |
+| **MCP 伺服器** | `workshop-memvault` (16 個工具) |
 | **整合 Skills** | memvault (MCP), meeting-insights |
 | **V1 狀態** | MCP 伺服器 v0.2.0 (語義搜索 + 個人檔案) |
 
@@ -390,6 +390,20 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 
 ---
 
+### 微服務層 (Microservices)
+
+> 從 Core 單體拆出的獨立部署模組。零跨模組依賴，擁有獨立 port 與進程。
+
+| 模組 | Port | 說明 |
+|------|------|------|
+| paper | 10010 | 學術論文管理、arXiv 自動抓取 |
+| intelflow | 10011 | 情報來源管理、自動摘要、每日簡報 |
+| invest | 10012 | 投資組合追蹤、績效分析 |
+
+這些模組仍共享 Core 的 PostgreSQL 與 Redis，但以獨立 FastAPI 進程運行，可透過 Komodo 部署至遠端節點。
+
+---
+
 ### 工作站 (獨立工具 Stations)
 
 > 可獨立運行的本地工具。需要推送資料到 Core API 或提供 Widget 的 Station，引用 `libs/sdk-client/` 共享排程、API 推送、Widget 格式、通知整合（參見 [AD-8](../architecture/architecture-decisions.md#ad-8-station-sdk--工作站共享層)）。
@@ -433,7 +447,7 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | 屬性 | 數值 |
 |----------|-------|
 | **分類** | 工作站 (Station) |
-| **V1 狀態** | 運作中（`~/workshop/stations/tmux-webui/`，port 8765） |
+| **V1 狀態** | 運作中（`~/workshop/stations/tmux-webui/`，port 10105） |
 
 **功能能力**：
 - 瀏覽器管理 tmux sessions / windows / panes
@@ -555,6 +569,150 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 
 ---
 
+#### fleet — 遠端運算節點調度
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10106 |
+| **四層架構** | MCP (6 tools) ✅ |
+
+**功能能力**：
+- 遠端運算節點任務調度
+- Fleet dispatch 工作分派
+- 節點狀態監控
+
+---
+
+#### voice-gateway — 語音通訊閘道
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10204 |
+
+**功能能力**：
+- LiveKit Agent 語音管線
+- STT/TTS 整合
+- 即時語音互動
+
+---
+
+#### translate — 翻譯服務
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10205 |
+| **四層架構** | MCP (3 tools) ✅ |
+
+**功能能力**：
+- 多語言翻譯
+- LLM 驅動翻譯引擎
+
+---
+
+#### video-edit — 影片編輯工作站
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10206 |
+| **四層架構** | MCP (16 tools) ✅ |
+
+**功能能力**：
+- MLT XML 影片編輯
+- 多軌時間軸（Zustand + undo/redo）
+- 速度/關鍵幀/轉場
+- ProRes 匯出
+- 波形/縮圖預覽
+
+---
+
+#### stt — 語音轉文字
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10200 |
+| **四層架構** | MCP (3 tools) ✅ |
+
+**功能能力**：
+- Whisper 語音辨識
+- 即時 / 批次轉錄
+- 多語言支援
+
+---
+
+#### tts — 文字轉語音
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10201 |
+| **四層架構** | MCP (3 tools) ✅ |
+
+**功能能力**：
+- 文字轉語音合成
+- 多音色支援
+
+---
+
+#### ocr — 光學文字辨識
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10202 |
+| **四層架構** | MCP (2 tools) ✅ |
+
+**功能能力**：
+- 圖片文字辨識
+- PDF/影像 OCR
+
+---
+
+#### vision — 視覺分析
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10203 |
+| **四層架構** | MCP (2 tools) ✅ |
+
+**功能能力**：
+- 影像分析與描述
+- 多模態視覺理解
+
+---
+
+#### capture-console — 捕捉控制台
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10104 |
+
+**功能能力**：
+- Capture 模組的獨立 Web UI
+- 捕捉記錄管理與晉升操作
+
+---
+
+#### session-channel — 跨 Session 通訊
+
+| 屬性 | 數值 |
+|----------|-------|
+| **分類** | 工作站 (Station) |
+| **埠號** | 10101 |
+
+**功能能力**：
+- Redis Streams 跨 session 通訊
+- Hook 自動化整合
+- 頻道訂閱與發布
+
+---
+
 ### 第三方工具 (Vendor)
 
 > 不改造成 V2 架構的第三方社群工具。直接使用，upstream 更新靠 `git pull`。
@@ -635,28 +793,30 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 |---------|------|----------|------------|-------|
 | auth | 基礎層 | ✅ SDK+CLI | — | — |
 | admin | 基礎層 | ✅ SDK+CLI | — | — |
-| capture | 基礎層 | ✅ SDK+CLI+MCP | `capture` | 9 |
-| finance | 領域服務 | ✅ SDK+CLI+MCP+Skill | `finance` + `finance-wallet` + `finance-analytics` | ~27 |
+| capture | 基礎層 | ✅ SDK+CLI+MCP | `capture` | 10 |
+| finance | 領域服務 | ✅ SDK+CLI+MCP+Skill | `finance` + `finance-wallet` + `finance-analytics` | 31 |
 | briefing | 領域服務 | ✅ SDK+CLI（705L svc, 19 API, 13 tsx） | — | — |
-| taskflow | 領域服務 | 🏗 骨架（10L 占位 routes） | — | — |
-| ideagraph | 領域服務 | 🏗 骨架（10L 占位 routes） | — | — |
-| intelflow | 領域服務 | ✅ SDK+CLI+MCP+Skill | `intelflow` | ~2 |
-| memvault | 領域服務 | ✅ SDK+CLI+MCP+Skill | `memvault` | 8 |
+| dailyos | 領域服務 | ✅ prod | `dailyos` | 8 |
+| taskflow | 領域服務 | ⚙️ MCP 已建置 | `taskflow` | 12 |
+| ideagraph | 領域服務 | 🏗 骨架 | — | — |
+| intelflow | 領域服務 | ✅ SDK+CLI+MCP+Skill | `intelflow` | 7 |
+| memvault | 領域服務 | ✅ SDK+CLI+MCP+Skill | `memvault` | 16 |
 | skillpath | 領域服務 | 🏗 骨架（未啟動） | — | — |
 | workpool | 領域服務 | 🏗 骨架（未啟動） | — | — |
 | matchcore | 領域服務 | 🏗 骨架（未啟動） | — | — |
-| nodeflow | 領域服務 | ⚙️ SDK+CLI+MCP+Skill | `nodeflow` | 6 |
+| nodeflow | 領域服務 | ⚙️ SDK+CLI+MCP+Skill | `nodeflow` | 9 |
 | notification | 領域服務 | ✅ SDK+CLI（三通道推播） | — | — |
-| invest | 領域服務 | ⚙️ SDK（428L svc, 8 tsx, 缺 CLI+MCP） | — | — |
+| invest | 領域服務 | ✅ SDK+MCP | `invest` | 8 |
+| paper | 領域服務 | ✅ SDK+CLI+MCP+Skill | `paper` | 7 |
 | social-hooks | 橋接層 | 未開始 | — | — |
 | media | 熱路徑 | core/services/ | — | — |
 | agent-metrics | 工作站 | ✅ SDK+CLI+MCP+Skill | `agent-metrics` | 10 |
-| anvil | 工作站 | ✅ SDK+CLI+MCP（6表, 25 API, 缺 onboarding） | `anvil` | 8 |
-| auto-survey | 工作站 | ✅ Playwright+Gemini, Web UI | — | — |
-| hook-observatory | 工作站 | SDK+CLI+MCP | `hook-observatory` | 4 |
+| anvil | 工作站 | ✅ SDK+CLI+MCP | `anvil` | 10 |
+| auto-survey | 工作站 | ✅ Playwright+LiteLLM, Web UI | — | — |
+| hook-observatory | 工作站 | SDK+CLI+MCP | `hook-observatory` | 3 |
 | sandbox-executor | 工作站 | SDK+CLI+MCP+Skill | `sandbox` | 2 |
 | sentinel | 工作站 | SDK+CLI+MCP+Skill | `sentinel` | 5 |
-| system-monitor | 工作站 | SDK+CLI+MCP+Skill | `system-monitor` | 4 |
+| system-monitor | 工作站 | SDK+CLI+MCP+Skill | `system-monitor` | 6 |
 | tmux-relay | 工作站 | SDK+CLI+MCP+Skill | `tmux-relay` | 5 |
 | tmux-webui | 工作站 | SDK+MCP | `tmux-webui` | 3 |
 | envkit | 工作站 | SDK+MCP+Skill | `envkit` | 4 |
@@ -664,6 +824,16 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | session-archiver | 工作站 | SDK+CLI | — | — |
 | session-pipeline | 工作站 | SDK+CLI+Hook | — | — |
 | session-intelligence | 工作站 | SDK+CLI+MCP+Skill | `session-intelligence` | 6 |
+| session-channel | 工作站 | SDK | — | — |
+| fleet | 工作站 | MCP | `fleet` | 6 |
+| stt | 工作站 | MCP | `stt` | 3 |
+| tts | 工作站 | MCP | `tts` | 3 |
+| ocr | 工作站 | MCP | `ocr` | 2 |
+| vision | 工作站 | MCP | `vision` | 2 |
+| translate | 工作站 | MCP | `translate` | 3 |
+| video-edit | 工作站 | MCP | `video-edit` | 16 |
+| voice-gateway | 工作站 | 獨立服務 | — | — |
+| capture-console | 工作站 | Web UI | — | — |
 | agent-vista | 工作站 | Go 獨立生態 | — | — |
 | observability | 第三方 | 運作中 | — | — |
 
@@ -674,10 +844,10 @@ Core 模組 → EventBus → Notification Router → adapter.py → 外部平台
 | 類型 | 項目 | 資料存放地 |
 |------|-------|---------------|
 | **基礎層 (Foundation)** | auth, admin, capture | PostgreSQL (`shared` schema) |
-| **領域服務 (Domain Service)** | finance, briefing, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest | PostgreSQL (每個模組一個 schema) |
+| **領域服務 (Domain Service)** | finance, briefing, dailyos, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, nodeflow, notification, invest, paper | PostgreSQL (每個模組一個 schema) |
 | **橋接層 (Bridge)** | social-hooks | 外部 + 事件總線 (Event Bus) |
 | **熱路徑服務 (Hot-path Service)** | media (STT/TTS/影像), 即時通訊 (LiveKit) | 無狀態處理 |
-| **工作站 (Station)** | agent-metrics, agent-vista, anvil, auto-survey, envkit, hook-observatory, sandbox-executor, sentinel, session-archiver, session-redactor, session-intelligence, session-pipeline, system-monitor, tmux-relay, tmux-webui | 本地 SQLite / 無狀態 |
+| **工作站 (Station)** | agent-metrics, agent-vista, anvil, auto-survey, capture-console, envkit, fleet, hook-observatory, ocr, sandbox-executor, sentinel, session-archiver, session-channel, session-intelligence, session-pipeline, session-redactor, stt, system-monitor, tmux-relay, tmux-webui, translate, tts, video-edit, vision, voice-gateway | 本地 SQLite / 無狀態 |
 | **第三方 (Vendor)** | observability (@disler) | 獨立運行 |
 | **組合 (Composition)** | 法律顧問, 教會音樂, 虛擬客服, ERP/POS | 上述服務的組合 |
 
@@ -696,7 +866,7 @@ Skill — 意圖路由：何時用、怎麼選。只呼叫 CLI + MCP，不 impor
 
 | 模式 | 適用情境 | 範例 |
 |------|----------|------|
-| BaseClient HTTP | DB-backed 核心模組 (port 8801) | finance, memvault, intelflow |
+| BaseClient HTTP | DB-backed 核心模組 (port 10000) | finance, memvault, intelflow |
 | Standalone HTTP | 有獨立 HTTP server 的工作站 | sentinel, system-monitor |
 | Direct impl | 無 HTTP server 的本地工具 | session-redactor, session-pipeline |
 | Subprocess | CLI-first 工具 | envkit, session-archiver |

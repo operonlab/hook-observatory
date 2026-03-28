@@ -1,5 +1,5 @@
 ---
-doc_version: 1
+doc_version: 2
 content_hash: pending
 target_lang: zh-TW
 ---
@@ -96,37 +96,81 @@ Claude Code ──► MCP Server ──► SDK Client ──► FastAPI Core ─
 
 ## 現狀矩陣
 
-### 已完成黃金標準
+### 已完成黃金標準（SDK + CLI + MCP + Skill 四層齊備）
 
 | 服務 | SDK | CLI | MCP | Skill |
 |------|-----|-----|-----|-------|
 | agent-metrics | `agent_metrics.py` | `maestro.py` | 10 工具 | maestro |
-| sandbox-executor | `sandbox.py` | `sandbox.py` | 2 工具 | sandbox-patterns |
-| hook-observatory | `hook_observatory.py` | `cso.py` | 3 工具 | — |
-| tmux-relay | `tmux_relay.py` | `relay.py` | 6 工具 | tmux-relay |
-| memvault | `memvault.py` | `memvault.py` | 8 工具 | memvault |
+| anvil | `anvil.py` | `anvil/cli/` | 10 工具 | anvil |
+| capture | `capture.py` | `capture.py` | 10 工具 | capture |
+| finance | `finance.py` | `finance.py` | 31 工具 (3 伺服器) | finance |
+| intelflow | `intelflow.py` | `intelflow.py` | 7 工具 | intelflow |
+| memvault | `memvault.py` | `memvault.py` | 16 工具 | memvault |
+| nodeflow | `nodeflow.py` | `nodeflow.py` | 9 工具 | nodeflow |
+| paper | `paper.py` | `paper.py` | 7 工具 | paper-research |
+| sandbox | `sandbox.py` | `sandbox.py` | 2 工具 | sandbox-patterns |
+| sentinel | `sentinel.py` | `sentinel/cli/` | 5 工具 | sentinel |
+| session-intelligence | `session_intelligence.py` | `session-intelligence/cli/` | 6 工具 | session-intelligence |
+| session-redactor | `session_redactor.py` | `session-redactor/cli/` | 5 工具 | session-redactor |
+| system-monitor | `system_monitor.py` | `system-monitor/cli/` | 6 工具 | system-monitor |
+| tmux-relay | `tmux_relay.py` | `tmux-relay/cli/` | 5 工具 | tmux-relay |
+| video-edit | `video_edit.py` | `video-edit/cli/` | 16 工具 | video-edit |
 
 ### 核心模組進度
 
 | 模組 | HTTP API | SDK | CLI | MCP | Skill |
 |------|----------|-----|-----|-----|-------|
-| finance | ✅ | ❌ | ❌ | ✅ (3 伺服器) | ✅ |
-| taskflow | ✅ | ❌ | ❌ | ✅ | ❌ |
-| intelflow | ✅ | ❌ | ❌ | 🔶 (2 工具) | ✅ |
-| nodeflow | ✅ | ❌ | ❌ | ✅ | ✅ |
-| notification | ✅ | ❌ | ❌ | ❌ | ❌ |
-| auth | ✅ | ❌ | ❌ | ❌ | ❌ |
-| admin | ✅ | ❌ | ❌ | ❌ | ❌ |
+| auth | ✅ | ✅ | ✅ | ❌ | ❌ |
+| admin | ✅ | ✅ | ✅ | ❌ | ❌ |
+| briefing | ✅ | ✅ | ❌ | ❌ | ❌ |
+| capture | ✅ | ✅ | ✅ | ✅ (10 工具) | ✅ |
+| dailyos | ✅ | ✅ | ✅ | ✅ (8 工具) | ❌ |
+| finance | ✅ | ✅ | ✅ | ✅ (3 伺服器, 31 工具) | ✅ |
+| ideagraph | 🏗 | ❌ | ❌ | ❌ | ❌ |
+| intelflow | ✅ | ✅ | ✅ | ✅ (7 工具) | ✅ |
+| invest | ✅ | ✅ | ✅ | ✅ (8 工具) | ❌ |
+| matchcore | 🏗 | ❌ | ❌ | ❌ | ❌ |
+| memvault | ✅ | ✅ | ✅ | ✅ (16 工具) | ✅ |
+| nodeflow | ✅ | ✅ | ✅ | ✅ (9 工具) | ✅ |
+| notification | ✅ | ✅ | ✅ | ❌ | ❌ |
+| paper | ✅ | ✅ | ✅ | ✅ (7 工具) | ✅ |
+| skillpath | 🏗 | ❌ | ❌ | ❌ | ❌ |
+| taskflow | ✅ | ✅ | ✅ | ✅ (12 工具) | ❌ |
+| workpool | 🏗 | ❌ | ❌ | ❌ | ❌ |
 
 ### 工作站進度
 
 | 工作站 | HTTP API | SDK | CLI | MCP | Skill |
 |--------|----------|-----|-----|-----|-------|
-| sentinel | ✅ | ❌ | ❌ | ✅ | ✅ |
-| system-monitor | ✅ | ❌ | ❌ | ✅ | ✅ (system-map) |
-| envkit | ❌ | ❌ | ✅ | ✅ | ✅ |
-| tmux-webui | ✅+WS | ❌ | ❌ | ✅ | ✅ (tmux-expert) |
-| session-archiver | 🔶 | ❌ | ❌ | ❌ | ❌ |
+| agent-metrics | ✅ | ✅ | ✅ | ✅ (10 工具) | ✅ (maestro) |
+| agent-vista | 🔶 | ❌ | ❌ | ❌ | ❌ |
+| anvil | ✅ | ✅ | ✅ | ✅ (10 工具) | ✅ |
+| auto-survey | ✅ | ❌ | ❌ | ❌ | ❌ |
+| capture-console | 🔶 | ❌ | ❌ | ❌ | ❌ |
+| ccusage-rs | ❌ | ❌ | ❌ | ❌ | ❌ |
+| envkit | ❌ | ✅ | ❌ | ✅ (4 工具) | ✅ |
+| fleet | ✅ | ✅ | ✅ | ✅ (6 工具) | ❌ |
+| hook-observatory | ✅ | ✅ | ✅ | ✅ (3 工具) | ❌ |
+| ocr | ✅ | ✅ | ❌ | ✅ (2 工具) | ✅ |
+| remote-node | ✅ | ✅ | ✅ | ✅ (6 工具) | ❌ |
+| rlm | 🔶 | ❌ | ❌ | ❌ | ❌ |
+| sandbox-executor | ✅ | ✅ | ✅ | ✅ (2 工具) | ✅ |
+| scheduler | ✅ | ❌ | ❌ | ❌ | ✅ |
+| sentinel | ✅ | ✅ | ✅ | ✅ (5 工具) | ✅ |
+| session-archiver | 🔶 | ✅ | ✅ | ❌ | ❌ |
+| session-channel | ✅ | ❌ | ✅ | ❌ | ❌ |
+| session-intelligence | ✅ | ✅ | ✅ | ✅ (6 工具) | ✅ |
+| session-pipeline | 🔶 | ✅ | ✅ | ❌ | ❌ |
+| session-redactor | ✅ | ✅ | ✅ | ✅ (5 工具) | ✅ |
+| stt | ✅ | ✅ | ❌ | ✅ (3 工具) | ✅ |
+| system-monitor | ✅ | ✅ | ✅ | ✅ (6 工具) | ✅ (system-map) |
+| tmux-relay | ✅ | ✅ | ✅ | ✅ (5 工具) | ✅ |
+| tmux-webui | ✅+WS | ✅ | ❌ | ✅ (3 工具) | ✅ (tmux-expert) |
+| translate | ✅ | ✅ | ✅ | ✅ (3 工具) | ❌ |
+| tts | ✅ | ✅ | ❌ | ✅ (3 工具) | ✅ |
+| video-edit | ✅ | ✅ | ✅ | ✅ (16 工具) | ✅ |
+| vision | ✅ | ✅ | ❌ | ✅ (2 工具) | ❌ |
+| voice-gateway | 🔶 | ❌ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -134,11 +178,18 @@ Claude Code ──► MCP Server ──► SDK Client ──► FastAPI Core ─
 
 三波推進策略，詳見 [composite-architecture-roadmap.md](../plans/composite-architecture-roadmap.md)。
 
-| 波次 | 目標 | 服務 |
-|------|------|------|
-| P1 | 高價值日常使用 | finance, intelflow, sentinel |
-| P2 | 基礎設施與知識 | nodeflow, system-monitor, envkit |
-| P3 | 支援服務 | notification, auth, admin, tmux-webui, session-archiver |
+| 波次 | 目標 | 服務 | 狀態 |
+|------|------|------|------|
+| P1 | 高價值日常使用 | finance, intelflow, sentinel | ✅ 完成 |
+| P2 | 基礎設施與知識 | nodeflow, system-monitor, envkit | ✅ 完成 |
+| P3 | 支援服務 | notification, auth, admin, tmux-webui, session-archiver | 🔶 部分完成 |
+
+**統計（截至 2026-03-28）**：
+- 核心模組：17 個（13 個有 HTTP API，4 個骨架階段）
+- 工作站：29 個（含 infra、AI/media、business 三類）
+- MCP Servers：31 個（11 Core + 20 Station）
+- SDK 客戶端：38 個（`libs/sdk-client/sdk_client/`）
+- Skills：109 個（`~/.claude/skills/`）
 
 ---
 

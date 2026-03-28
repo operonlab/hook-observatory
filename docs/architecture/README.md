@@ -1,5 +1,5 @@
 ---
-doc_version: 1
+doc_version: 2
 content_hash: pending
 target_lang: zh-TW
 ---
@@ -34,7 +34,7 @@ target_lang: zh-TW
 
 | 文件 | 內容 |
 |------|------|
-| [modular-monolith.md](./modular-monolith.md) | 模組化單體架構、模組邊界規則、13 模組權限歸屬 |
+| [modular-monolith.md](./modular-monolith.md) | 模組化單體架構、模組邊界規則、17 模組權限歸屬、微服務層 |
 | [event-driven.md](./event-driven.md) | 事件結構、命名規範、EventBus API、事件流範例 |
 | [event-resilience-patterns.md](./event-resilience-patterns.md) | 6 個事件韌性模式（P1-P6）— 時效分類、冪等投影、WAL 分離等 |
 | [shared-layer-patterns.md](./shared-layer-patterns.md) | OOP 模式：BaseCRUDService、SpaceScopedModel、SoftDeleteMixin、PaginatedResponse |
@@ -60,7 +60,7 @@ target_lang: zh-TW
 | 文件 | 內容 |
 |------|------|
 | [tech-stack.md](./tech-stack.md) | 技術選型：Python 3.12、FastAPI、React 19、PostgreSQL 17 |
-| [folder-structure.md](./folder-structure.md) | 目錄結構、命名規則、三層分類（Core / Stations / Bridges） |
+| [folder-structure.md](./folder-structure.md) | 目錄結構、命名規則、四層分類（Core / Services / Stations / Bridges） |
 | [observability.md](./observability.md) | OpenTelemetry + LGTM (dev) / SigNoz (prod) |
 | [plugin-system.md](./plugin-system.md) | Hook 引擎 + 插件 Manifest + 沙盒執行 |
 

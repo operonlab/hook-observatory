@@ -1,5 +1,5 @@
 ---
-doc_version: 4
+doc_version: 5
 content_hash: pending
 source_version: 4
 target_lang: zh-TW
@@ -15,35 +15,47 @@ translated_at: 2026-03-04
 後端是一個**單一的可部署單元**，具有清晰分離的領域模組。每個模組擁有其業務邏輯、資料庫 schema 和 API 路由——但它們都運行在同一個程序（process）中。
 
 ```
-                    ┌─────────────────────────────────────┐
-                    │          Core Monolith (port 8800)   │
-                    │                                     │
-                    │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │  auth  │ │finance │ │  taskflow │  │
-                    │  └────────┘ └────────┘ └────────┘  │
-                    │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │  ideagraph  │ │ intelflow  │ │  memvault  │  │
-                    │  └────────┘ └────────┘ └────────┘  │
-                    │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │  skillpath  │ │ workpool │ │ matchcore  │  │
-                    │  └────────┘ └────────┘ └────────┘  │
-                    │  ┌────────┐ ┌────────┐ ┌────────┐  │
-                    │  │nodeflow│ │notific.│ │ invest │  │
-                    │  └────────┘ └────────┘ └────────┘  │
-                    │  ┌────────┐                        │
-                    │  │ admin  │                        │
-                    │  └────────┘                        │
-                    │                                     │
-                    │  ┌─────────────────────────────┐    │
-                    │  │  Event Bus  │  Hook Engine  │    │
-                    │  └─────────────────────────────┘    │
-                    └─────────────────────────────────────┘
-                              │            │
-                    ┌─────────┴──┐   ┌─────┴────────┐
-                    │  Realtime  │   │    Media      │
-                    │  (LiveKit) │   │  (STT/TTS)   │
-                    │  port 8830 │   │  port 8831   │
-                    └────────────┘   └──────────────┘
+                    ┌──────────────────────────────────────────┐
+                    │          Core Monolith (port 10000)       │
+                    │                                          │
+                    │  ┌────────┐ ┌────────┐ ┌─────────┐      │
+                    │  │  auth  │ │finance │ │taskflow │      │
+                    │  └────────┘ └────────┘ └─────────┘      │
+                    │  ┌──────────┐ ┌──────────┐ ┌─────────┐  │
+                    │  │ideagraph │ │intelflow │ │memvault │  │
+                    │  └──────────┘ └──────────┘ └─────────┘  │
+                    │  ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+                    │  │skillpath │ │workpool  │ │matchcore │ │
+                    │  └──────────┘ └──────────┘ └──────────┘ │
+                    │  ┌────────┐ ┌────────┐ ┌────────┐       │
+                    │  │nodeflow│ │notific.│ │ invest │       │
+                    │  └────────┘ └────────┘ └────────┘       │
+                    │  ┌────────┐ ┌─────────┐ ┌────────┐      │
+                    │  │ admin  │ │briefing │ │capture │      │
+                    │  └────────┘ └─────────┘ └────────┘      │
+                    │  ┌─────────┐ ┌────────┐                  │
+                    │  │dailyos  │ │ paper  │                  │
+                    │  └─────────┘ └────────┘                  │
+                    │                                          │
+                    │  ┌──────────────────────────────────┐    │
+                    │  │  Event Bus  │  Hook Engine       │    │
+                    │  └──────────────────────────────────┘    │
+                    └──────────────────────────────────────────┘
+                        │            │              │
+              ┌─────────┴──┐   ┌─────┴────────┐    │
+              │  Realtime  │   │    Media      │    │
+              │  (LiveKit) │   │  (STT/TTS)   │    │
+              │  port 8830 │   │  port 8831   │    │
+              └────────────┘   └──────────────┘    │
+                                                   │
+                    ┌──────────────────────────────────────────┐
+                    │          微服務 (Services)                 │
+                    │  ┌────────┐ ┌──────────┐ ┌────────┐      │
+                    │  │ paper  │ │intelflow │ │ invest │      │
+                    │  │ 10010  │ │  10011   │ │ 10012  │      │
+                    │  └────────┘ └──────────┘ └────────┘      │
+                    │  (共用 Core PostgreSQL，各自 schema 隔離)   │
+                    └──────────────────────────────────────────┘
 ```
 
 **為何選擇模組化單體而非微服務：**
@@ -63,15 +75,19 @@ translated_at: 2026-03-04
 | `finance` | Transactions, budgets, subscriptions | `finance` | 1 |
 | `taskflow` | Quests, tasks, dispatch, rewards | `taskflow` | 1 |
 | `ideagraph` | Sparks, links, knowledge graph | `ideagraph` | 1 |
+| `admin` | Platform management, audit logs, system health | `admin` | 1 |
 | `intelflow` | RSS feeds, daily briefings, topic tracking | `intelflow` | 2 |
 | `memvault` | LLM memories, semantic search, profiles | `memvault` | 2 |
 | `skillpath` | Skill trees, learning paths, assessments | `skillpath` | 2 |
 | `nodeflow` | Workflows, DAG execution, triggers | `nodeflow` | 2 |
 | `notification` | Multi-channel notifications, preferences | `notification` | 2 |
 | `invest` | Investment tracking, portfolio analysis | `invest` | 2 |
+| `briefing` | Daily briefings, morning digest | `briefing` | 2 |
+| `capture` | Fuzzy intent capture, progressive enrichment | `capture` | 2 |
+| `dailyos` | Daily planning, schedule management | `dailyos` | 2 |
+| `paper` | Academic paper research, arXiv digest | `paper` | 2 |
 | `workpool` | Resources (human/machine/agent), scheduling | `workpool` | 3 |
 | `matchcore` | Talent-job matching, task pairing | `matchcore` | 3 |
-| `admin` | Platform management, audit logs, system health | `admin` | 1 |
 
 ### 3. 模組邊界規則
 
@@ -97,19 +113,23 @@ from src.modules.finance.models import Transaction  # 禁止行為
 所有模組共享一個 PostgreSQL 實例，但使用**獨立的 schemas**：
 
 ```sql
-CREATE SCHEMA auth;       -- 由 auth 模組擁有 (Phase 1)
-CREATE SCHEMA finance;    -- 由 finance 模組擁有 (Phase 1)
-CREATE SCHEMA taskflow;      -- 由 taskflow 模組擁有 (Phase 1)
-CREATE SCHEMA ideagraph;       -- 由 ideagraph 模組擁有 (Phase 1)
-CREATE SCHEMA intelflow;      -- 由 intelflow 模組擁有 (Phase 2)
-CREATE SCHEMA memvault;       -- 由 memvault 模組擁有 (Phase 2)
-CREATE SCHEMA skillpath;       -- 由 skillpath 模組擁有 (Phase 2)
-CREATE SCHEMA workpool;     -- 由 workpool 模組擁有 (Phase 3)
-CREATE SCHEMA matchcore;      -- 由 matchcore 模組擁有 (Phase 3)
-CREATE SCHEMA admin;      -- 由 admin 模組擁有 (Phase 1)
+CREATE SCHEMA auth;         -- 由 auth 模組擁有 (Phase 1)
+CREATE SCHEMA finance;      -- 由 finance 模組擁有 (Phase 1)
+CREATE SCHEMA taskflow;     -- 由 taskflow 模組擁有 (Phase 1)
+CREATE SCHEMA ideagraph;    -- 由 ideagraph 模組擁有 (Phase 1)
+CREATE SCHEMA admin;        -- 由 admin 模組擁有 (Phase 1)
+CREATE SCHEMA intelflow;    -- 由 intelflow 模組擁有 (Phase 2)
+CREATE SCHEMA memvault;     -- 由 memvault 模組擁有 (Phase 2)
+CREATE SCHEMA skillpath;    -- 由 skillpath 模組擁有 (Phase 2)
 CREATE SCHEMA nodeflow;     -- 由 nodeflow 模組擁有 (Phase 2)
 CREATE SCHEMA notification; -- 由 notification 模組擁有 (Phase 2)
 CREATE SCHEMA invest;       -- 由 invest 模組擁有 (Phase 2)
+CREATE SCHEMA briefing;     -- 由 briefing 模組擁有 (Phase 2)
+CREATE SCHEMA capture;      -- 由 capture 模組擁有 (Phase 2)
+CREATE SCHEMA dailyos;      -- 由 dailyos 模組擁有 (Phase 2)
+CREATE SCHEMA paper;        -- 由 paper 模組擁有 (Phase 2)
+CREATE SCHEMA workpool;     -- 由 workpool 模組擁有 (Phase 3)
+CREATE SCHEMA matchcore;    -- 由 matchcore 模組擁有 (Phase 3)
 ```
 
 跨 schema 查詢在技術上是可行的，但在**架構上是被禁止的**。如果模組 A 需要來自模組 B 的資料，它必須調用 B 的 service 層。
@@ -162,7 +182,10 @@ core/src/modules/<name>/
 
 | 埠位 | 服務 |
 |------|---------|
-| 8800 | 核心單體 (Core Monolith) |
+| 10000 | 核心單體 (Core Monolith) |
+| 10010 | 微服務 — paper |
+| 10011 | 微服務 — intelflow |
+| 10012 | 微服務 — invest |
 | 8830 | 實時服務 (LiveKit) |
 | 8831 | 媒體服務 (STT/TTS) |
 | 3000 | 前端開發伺服器 |
@@ -197,15 +220,19 @@ class CoreSettings(BaseSettings):
     "finance": "healthy",
     "taskflow": "healthy",
     "ideagraph": "healthy",
+    "admin": "healthy",
     "intelflow": "healthy",
     "memvault": "healthy",
     "skillpath": "healthy",
-    "workpool": "healthy",
-    "matchcore": "healthy",
-    "admin": "healthy",
     "nodeflow": "healthy",
     "notification": "healthy",
-    "invest": "healthy"
+    "invest": "healthy",
+    "briefing": "healthy",
+    "capture": "healthy",
+    "dailyos": "healthy",
+    "paper": "healthy",
+    "workpool": "healthy",
+    "matchcore": "healthy"
   }
 }
 ```
@@ -216,7 +243,12 @@ class CoreSettings(BaseSettings):
 
 ```python
 # core/src/app.py
-from src.modules import auth, finance, taskflow, ideagraph, intelflow, memvault, skillpath, workpool, matchcore, admin, nodeflow, notification, invest
+from src.modules import (
+    auth, finance, taskflow, ideagraph, admin,
+    intelflow, memvault, skillpath, nodeflow, notification, invest,
+    briefing, capture, dailyos, paper,
+    workpool, matchcore,
+)
 
 def create_app() -> FastAPI:
     app = FastAPI()
@@ -235,6 +267,10 @@ def create_app() -> FastAPI:
     app.include_router(nodeflow.router, prefix="/api/nodeflow", tags=["nodeflow"])
     app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
     app.include_router(invest.router, prefix="/api/invest", tags=["invest"])
+    app.include_router(briefing.router, prefix="/api/briefing", tags=["briefing"])
+    app.include_router(capture.router, prefix="/api/capture", tags=["capture"])
+    app.include_router(dailyos.router, prefix="/api/dailyos", tags=["dailyos"])
+    app.include_router(paper.router, prefix="/api/paper", tags=["paper"])
 
     # 註冊模組路由 (Phase 3)
     app.include_router(workpool.router, prefix="/api/workpool", tags=["workpool"])
@@ -252,9 +288,40 @@ def create_app() -> FastAPI:
     return app
 ```
 
-## 未來展望：提取模組
+## 微服務層 (`services/`)
 
-如果某個模組的規模超出了單體的負荷（例如，媒體處理需要 GPU 擴展），提取路徑如下：
+部分零跨模組依賴的 Core 模組已被提取為獨立的 FastAPI 微服務。它們共用同一個 PostgreSQL（各自 schema 隔離），但運行在獨立的程序中，可部署到不同機器（例如遠端 GPU 節點）。
+
+### 現有微服務
+
+| 服務 | 埠位 | Schema | 說明 |
+|------|------|--------|------|
+| `paper` | 10010 | `paper` | 論文研究 |
+| `intelflow` | 10011 | `intelflow` | 情報研究 |
+| `invest` | 10012 | `invest` | 投資追蹤 |
+
+### 提取條件
+
+- 零跨模組依賴（不 import 其他 Core 模組的 services/models）
+- 移除 EventBus、@cached、audit trail、auth middleware
+- Auth 在 Nginx gateway 層處理
+
+### Nginx 路由
+
+微服務的 `location ^~ /api/<name>/` block 必須放在通用 `/api/` block **之前**（Nginx 最長前綴匹配）：
+
+```nginx
+location ^~ /api/paper/     { proxy_pass http://127.0.0.1:10010; }
+location ^~ /api/intelflow/ { proxy_pass http://127.0.0.1:10011; }
+location ^~ /api/invest/    { proxy_pass http://127.0.0.1:10012; }
+location ^~ /api/           { proxy_pass http://127.0.0.1:10000; }  # Core
+```
+
+前端 UI 不動（仍在 workbench SPA 內），路由透明切換。
+
+## 未來展望：提取更多模組
+
+上述三個微服務已驗證了模組提取路徑：
 
 1. 模組已經具有清晰的邊界（service 層、事件、無跨模型導入）
 2. 將進程內服務導入替換為 HTTP 用戶端調用
