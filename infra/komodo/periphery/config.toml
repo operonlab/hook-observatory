@@ -1,0 +1,18 @@
+## Komodo Periphery Agent Configuration
+## NOTE: Like core.config.toml, this is a reference file.
+## The docker-compose.yml passes config via KOMODO_* env vars.
+
+## Agent port — Core connects to this
+port = 8120
+
+## Allowed actions — what Core can do on this node
+## Komodo manages this via the web UI after registration;
+## these are sane defaults for a GPU worker node.
+# allowed_actions = ["RunContainer", "StopContainer", "RemoveContainer", "PullImage", "RunBuild"]
+
+[logging]
+level = "info"
+
+## Stats reporting interval (seconds)
+## Periphery sends CPU/RAM/disk/GPU stats to Core
+# stats_polling_rate = 15

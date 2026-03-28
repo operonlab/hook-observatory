@@ -1,0 +1,31 @@
+## Komodo Periphery Agent (Windows GPU Node)
+## Usage: docker compose up -d
+##
+## Required env vars (set in .env or export before running):
+##   KOMODO_PASSKEY       — must match Core's passkey
+##   KOMODO_HOST          — Core's Tailscale address (e.g. http://100.x.x.x:9120)
+
+services:
+  komodo-periphery:
+    image: ghcr.io/moghtech/komodo-periphery:latest
+    container_name: komodo-periphery
+    restart: unless-stopped
+    ports:
+      ## Periphery listens on 8120 for Core to connect
+      ## Bind to 0.0.0.0 so Core can reach it via Tailscale
+      - "8120:8120"
+    environment:
+      ## Shared secret — must match Core's KOMODO_PASSKEY
+      KOMODO_PASSKEY: "${KOMODO_PASSKEY}"
+      ## Periphery agent port
+      KOMODO_PORT: "8120"
+      ## Logging
+      KOMODO_LOGGING__LEVEL: "info"
+    volumes:
+      ## Docker socket so Periphery can manage containers on this host
+      - /var/run/docker.sock:/var/run/docker.sock
+      ## Persistent data
+      - periphery-data:/data
+
+volumes:
+  periphery-data:

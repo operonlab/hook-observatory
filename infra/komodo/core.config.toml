@@ -1,0 +1,25 @@
+## Komodo Core Configuration
+## NOTE: This file is kept as a reference. The docker-compose.yml passes
+## configuration via environment variables (KOMODO_* prefix), which take
+## precedence over this file. You can mount this file for any settings
+## that don't have env var equivalents.
+
+title = "Workshop Fleet"
+
+## Use Tailscale IP so Periphery agents can reach Core
+## Set via KOMODO_HOST env var in docker-compose.yml
+# host = "http://<MAC_TAILSCALE_IP>:9120"
+
+port = 9120
+
+## Auth — set via env vars, NOT here
+## KOMODO_PASSKEY, KOMODO_INIT_ADMIN_USERNAME, KOMODO_INIT_ADMIN_PASSWORD
+local_auth = true
+enable_new_users = false
+
+[database]
+## Docker internal hostname (Mongo container name)
+address = "komodo-mongo:27017"
+
+[logging]
+level = "info"
