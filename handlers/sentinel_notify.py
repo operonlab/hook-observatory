@@ -24,8 +24,8 @@ _SENTINEL_BASE = "http://127.0.0.1:4101/api/sentinel"
 PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"workshop-services\.sh\s+(restart|stop|start)"), "workshop-services"),
     (re.compile(r"docker\s+(restart|stop|start)\s+ws-infra"), "docker-infra"),
-    (re.compile(r"uvicorn.*--port\s+880[0-9]"), "core"),
-    (re.compile(r"kill\s.*880[1-9]|kill\s.*4100|kill\s.*8840"), "kill-service"),
+    (re.compile(r"uvicorn.*--port\s+(880[0-9]|10[0-3]\d{2})"), "core"),
+    (re.compile(r"kill\s.*880[1-9]|kill\s.*10[0-3]\d{2}"), "kill-service"),
     (re.compile(r"nginx\s+-s\s+(reload|stop|quit)"), "nginx"),
     (re.compile(r"pnpm\s+run\s+build"), "frontend-build"),
     (re.compile(r"docker\s+restart\s+ws-infra-postgres"), "postgres"),
