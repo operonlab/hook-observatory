@@ -9,8 +9,8 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.Port != 8840 {
-		t.Errorf("expected port 8840, got %d", cfg.Port)
+	if cfg.Port != 10207 {
+		t.Errorf("expected port 10207, got %d", cfg.Port)
 	}
 	if cfg.Verbose {
 		t.Error("expected verbose=false")

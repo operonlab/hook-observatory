@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """skill_tracker.py — PostToolUse hook for Skill invocations.
 Triggered by Claude Code PostToolUse (matcher: "Skill").
-POSTs to Core API (localhost:8801), falls back to JSONL.
+POSTs to Core API (localhost:10000), falls back to JSONL.
 
 stdin: Hook JSON payload from Claude Code
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-CORE_API_URL = "http://localhost:8801"
+CORE_API_URL = "http://localhost:10000"
 SPACE_ID = "default"
 FALLBACK_FILE = Path.home() / "Claude" / "memvault" / "skill-invocations.jsonl"
 LOG_FILE = Path.home() / "Claude" / "memvault" / "logs" / "skill-tracker.log"

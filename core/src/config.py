@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
-    port: int = 8801
+    port: int = 10000
     debug: bool = False
 
     # Database & Cache
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     github_client_id: str = ""
     github_client_secret: str = ""
-    oauth_redirect_base: str = "http://localhost:8801"
+    oauth_redirect_base: str = "http://localhost:10000"
 
     # Auth seed
     admin_email: str = ""

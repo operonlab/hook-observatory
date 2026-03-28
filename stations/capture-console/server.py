@@ -61,7 +61,7 @@ TMUX_SESSION = os.getenv("CAPTURE_TMUX_SESSION", "default")
 CAPTURE_WINDOW = os.getenv("CAPTURE_WINDOW", "3")
 CAPTURE_PANE = os.getenv("CAPTURE_PANE", "1")
 HOST = os.getenv("CAPTURE_HOST", "127.0.0.1")
-PORT = int(os.getenv("CAPTURE_PORT", "4104"))
+PORT = int(os.getenv("CAPTURE_PORT", "10104"))
 CLAUDE_TIMEOUT = float(os.getenv("CAPTURE_CLAUDE_TIMEOUT", "30"))
 CLAUDE_MODEL = os.getenv("CAPTURE_CLAUDE_MODEL", "haiku")
 

@@ -39,7 +39,7 @@ type MonitorConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		Host:       "127.0.0.1",
-		Port:       8840,
+		Port:       10207,
 		Verbose:    false,
 		NoBrowser:  false,
 		LayoutPath: "",

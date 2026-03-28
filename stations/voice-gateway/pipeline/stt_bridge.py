@@ -1,4 +1,4 @@
-"""STT bridge — WebSocket client to STT station (:4108)."""
+"""STT bridge — WebSocket client to STT station (:10200)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class STTBridge:
 
     def __init__(
         self,
-        ws_url: str = "ws://127.0.0.1:4108/transcribe/stream",
+        ws_url: str = "ws://127.0.0.1:10200/transcribe/stream",
         engine: str = "mlx-whisper",
         language: str = "zh-TW",
     ):

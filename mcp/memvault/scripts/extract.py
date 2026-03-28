@@ -33,7 +33,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "extract-v2.log"
 FALLBACK_DIR = Path.home() / "Claude" / "memvault" / "extractions"
 
-MEMVAULT_API_URL = os.environ.get("MEMVAULT_API_URL", "http://localhost:8801")
+MEMVAULT_API_URL = os.environ.get("MEMVAULT_API_URL", "http://localhost:10000")
 MEMVAULT_SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 
 

@@ -19,14 +19,14 @@ cd stations/anvil
 uv run anvil-server
 ```
 
-預設監聽 `127.0.0.1:4102`。
+預設監聽 `127.0.0.1:10301`。
 
 ## 設定
 
 設定檔路徑：`~/.anvil/config.toml`
 
 ```toml
-port = 4102
+port = 10301
 host = "127.0.0.1"
 database_url = "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
 skills_dir = "~/.claude/skills"

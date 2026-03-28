@@ -29,7 +29,7 @@ PROMPT_TEMPLATE = SCRIPT_DIR / "prompts" / "triple-extraction.txt"
 VALIDATOR = SCRIPT_DIR / "validate-triples.py"
 PYTHON = str(Path.home() / ".local" / "bin" / "python3")
 
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 KG_BATCH_URL = f"{CORE_API}/api/memvault/kg/triples/batch"
 

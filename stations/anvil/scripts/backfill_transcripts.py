@@ -24,7 +24,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-ANVIL_BASE = "http://127.0.0.1:4103/api/anvil"
+ANVIL_BASE = "http://127.0.0.1:10301/api/anvil"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 
 # Tool registry for CLI/MCP backfill
@@ -247,7 +247,7 @@ def main() -> None:
     if not args.dry_run:
         if not check_anvil_alive():
             print(
-                "[error] Anvil API is not reachable at http://127.0.0.1:4103. "
+                "[error] Anvil API is not reachable at http://127.0.0.1:10301. "
                 "Start Anvil first or use --dry-run.",
                 file=sys.stderr,
             )

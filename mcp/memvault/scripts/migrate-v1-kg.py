@@ -2,7 +2,7 @@
 """migrate-v1-kg.py — One-shot migration from V1 SQLite KG to V2 PostgreSQL via Core API.
 
 V1 source:  ~/Claude/projects/kas-memory/kas-kg.db
-V2 target:  Core API (http://localhost:8801)
+V2 target:  Core API (http://localhost:10000)
 
 Migration order (respects FK dependencies):
   1. triple          → POST /api/memvault/kg/triples/batch  (batch 50)
@@ -16,7 +16,7 @@ Usage:
 
 Options:
     --db-path    Path to V1 kas-kg.db  (default: ~/Claude/projects/kas-memory/kas-kg.db)
-    --api-base   Core API base URL      (default: http://localhost:8801)
+    --api-base   Core API base URL      (default: http://localhost:10000)
     --space-id   Target space ID        (default: default)
     --dry-run    Read-only mode — print stats, no writes
 """
@@ -47,7 +47,7 @@ except ImportError:
 # ======================== CLI Args ========================
 
 DEFAULT_DB = Path.home() / "Claude" / "kas-memory" / "kas-kg.db"
-DEFAULT_API = "http://localhost:8801"
+DEFAULT_API = "http://localhost:10000"
 DEFAULT_SPACE = "default"
 
 
@@ -568,7 +568,7 @@ def main() -> None:
         if not check_api_health(api_base):
             print("FAILED")
             print(f"[ERROR] Cannot reach Core API at {api_base}")
-            print("        Start the server: cd core && uvicorn src.main:app --port 8801")
+            print("        Start the server: cd core && uvicorn src.main:app --port 10000")
             sys.exit(1)
         print("OK")
 

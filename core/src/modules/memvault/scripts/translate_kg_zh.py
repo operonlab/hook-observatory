@@ -30,7 +30,7 @@ for _env_path in [_core_root / ".env", _core_root.parent / ".env"]:
         load_dotenv(_env_path)
         break
 
-CORE_API = os.environ.get("CORE_API_URL", "http://localhost:8801")
+CORE_API = os.environ.get("CORE_API_URL", "http://localhost:10000")
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")

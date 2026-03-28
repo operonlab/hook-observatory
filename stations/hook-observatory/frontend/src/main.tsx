@@ -5,7 +5,7 @@ import App from "./App.tsx";
 import "./index.css";
 
 // Detect basename from current path: if served under /apps/hook/, use that.
-// Falls back to "/" for local dev (localhost:4101).
+// Falls back to "/" for local dev (localhost:4101 vite dev server).
 const BASE_PATH = window.location.pathname.match(/^(\/apps\/hook)\/?/)?.[1] ?? "";
 
 createRoot(document.getElementById("root")!).render(

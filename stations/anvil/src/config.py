@@ -13,7 +13,7 @@ _DEFAULT_CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 @dataclass
 class Config:
-    port: int = 4103
+    port: int = 10301
     host: str = "127.0.0.1"
     database_url: str = "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
     skills_dir: Path = Path.home() / ".claude" / "skills"
@@ -25,7 +25,7 @@ def load_config(path: Path | None = None) -> Config:
     raw = load_yaml_config(
         yaml_path,
         defaults={
-            "port": 4103,
+            "port": 10301,
             "host": "127.0.0.1",
             "database_url": "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop",
             "skills_dir": str(Path.home() / ".claude" / "skills"),

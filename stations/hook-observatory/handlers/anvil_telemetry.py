@@ -25,7 +25,7 @@ import urllib.request
 
 from .base import ALLOW, HookResult, run_background
 
-ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:4103")
+ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:10301")
 SPOOL_DIR = os.path.join(os.path.expanduser("~"), ".claude", "data", "anvil-telemetry")
 SPOOL_FILE = os.path.join(SPOOL_DIR, "pending.jsonl")
 
