@@ -16,6 +16,25 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
+// --- Tier Stats (agent-metrics) ---
+
+export interface TierStat {
+  tier: string
+  count: number
+  pct: number
+  avg_duration: number
+}
+
+export interface TierStatsResponse {
+  stats: TierStat[]
+  total: number
+  days: number
+}
+
+export function fetchTierStats(days = 30): Promise<TierStatsResponse> {
+  return request(`/api/agent-metrics/maestro/tier-stats?days=${days}`)
+}
+
 export function listUsers(params: {
   page?: number
   page_size?: number
