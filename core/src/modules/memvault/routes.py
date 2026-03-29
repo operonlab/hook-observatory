@@ -360,8 +360,8 @@ async def list_tags(
 async def sync_tags(
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
-    _user: dict = require_permission("memvault.write"),
 ):
+    # No auth — internal pipeline endpoint (matches /communities/regenerate pattern)
     count = await tag_service.sync_tags(db, space_id)
     await db.commit()
     return {"synced": count}

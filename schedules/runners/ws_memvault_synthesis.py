@@ -138,7 +138,7 @@ def main() -> None:
             str(PIPELINES_DIR / "synthesis_runner.py"),
         ],
         label="memvault-synthesis",
-        timeout=900,
+        timeout=2400,  # 3 levels × 600s + Leiden ~120s + margin
     )
     # 將 stdout 同時輸出到 log file（保持原本的記錄行為）
     if step1.stdout:
