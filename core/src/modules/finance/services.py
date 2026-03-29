@@ -1589,7 +1589,7 @@ class BudgetService(BaseCRUDService[Budget, BudgetCreate, BudgetUpdate, BudgetRe
             )
 
             if actual > b.budget_amount:
-                await event_bus.publish(
+                await event_bus.publish_reliable(
                     Event(
                         type=FinanceEvents.BUDGET_EXCEEDED,
                         data={

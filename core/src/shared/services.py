@@ -60,6 +60,9 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     event_fields: tuple[str, ...] = ()
     event_id_alias: str = ""
 
+    # --- Critical events: use publish_reliable() with retry instead of fire-and-forget ---
+    critical_events: frozenset[str] = frozenset()
+
     # --- Template Method hooks (override in subclass) ---
 
     def before_create(self, data: CreateT, **kwargs: Any) -> dict:
@@ -109,21 +112,30 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     def _auto_publish_event(
         self, action: str, instance: ModelT, changes: dict | None = None
     ) -> None:
-        """Publish event if event_types has a mapping for this action."""
+        """Publish event if event_types has a mapping for this action.
+
+        Uses publish_reliable() with retry for events listed in critical_events,
+        fire-and-forget for everything else.
+        """
         event_type = self.event_types.get(action)
         if not event_type:
             return
         from src.events.bus import Event, event_bus
 
         data = self._build_event_data(instance, action, changes)
-        event_bus.publish_fire_and_forget(
-            Event(
-                type=event_type,
-                data=data,
-                source=self.audit_module,
-                user_id=getattr(instance, "created_by", None),
-            )
+        event = Event(
+            type=event_type,
+            data=data,
+            source=self.audit_module,
+            user_id=getattr(instance, "created_by", None),
         )
+
+        if event_type in self.critical_events:
+            import asyncio
+
+            asyncio.ensure_future(event_bus.publish_reliable(event))  # noqa: RUF006
+        else:
+            event_bus.publish_fire_and_forget(event)
 
     def to_response(self, instance: ModelT) -> ResponseT:
         """Convert ORM instance to response schema. Must override."""
