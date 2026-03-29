@@ -135,7 +135,11 @@ async def get_task_output(task_id: str, lines: int = Query(200, le=1000)):
 
 @app.post("/tasks/{task_id}/signal")
 async def signal_task_completion(task_id: str, request: Request):
-    """HTTP callback endpoint for remote nodes to signal task completion."""
+    """HTTP callback endpoint for remote nodes to signal task completion.
+
+    Late callbacks (monitor finished, signal TTL-expired) return 200 silently
+    to prevent remote hook scripts from retrying on 404.
+    """
     dispatcher: Dispatcher = app.state.dispatcher
     fleet_secret = app.state.config.get("fleet_secret", "")
     if fleet_secret:
@@ -144,7 +148,10 @@ async def signal_task_completion(task_id: str, request: Request):
             raise HTTPException(status_code=403, detail="Invalid fleet secret")
     ok = dispatcher.signal_completion(task_id)
     if not ok:
-        raise HTTPException(status_code=404, detail="No active monitor for this task")
+        logger.debug(
+            "Late callback for task %s (no active monitor), silently accepted", task_id[:8]
+        )
+        return {"status": "accepted", "task_id": task_id, "late": True}
     return {"status": "signaled", "task_id": task_id}
 
 

@@ -274,7 +274,7 @@ class Dispatcher:
             )
             node.active_tasks = max(0, node.active_tasks - 1)
         finally:
-            # Delay signal cleanup to handle late-arriving callbacks gracefully
+            # Delay 60s signal cleanup so late HTTP callbacks are silently accepted
             asyncio.get_event_loop().call_later(
                 60, lambda tid=task.id: self._completion_signals.pop(tid, None)
             )

@@ -46,7 +46,10 @@ EVENT_PUSH_MAP: dict[str, dict] = {
 
 
 async def on_mapped_event(event: Event) -> None:
-    """Push notification for mapped EventBus events. Retries up to 3 times."""
+    """Push notification for mapped EventBus events.
+
+    Retries up to 3 times with exponential backoff (1s/2s/4s).
+    """
     mapping = EVENT_PUSH_MAP.get(event.type)
     if not mapping:
         return
@@ -63,6 +66,7 @@ async def on_mapped_event(event: Event) -> None:
     )
 
     max_retries = 3
+    backoff_seconds = [1, 2, 4]
     for attempt in range(1, max_retries + 1):
         try:
             async with async_session_factory() as db:
@@ -74,11 +78,16 @@ async def on_mapped_event(event: Event) -> None:
                 "event_push_retry",
                 event_type=event.type,
                 attempt=attempt,
+                max_retries=max_retries,
                 error=str(e),
             )
             if attempt < max_retries:
-                await asyncio.sleep(0.5 * attempt)
-    logger.error("event_push_exhausted", event_type=event.type, attempts=max_retries)
+                await asyncio.sleep(backoff_seconds[attempt - 1])
+    logger.error(
+        "notification permanently failed",
+        event_type=event.type,
+        attempts=max_retries,
+    )
 
 
 for _evt_type in EVENT_PUSH_MAP:
