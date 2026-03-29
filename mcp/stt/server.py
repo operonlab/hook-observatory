@@ -27,13 +27,18 @@ async def stt_transcribe(
     file_path: str,
     language: str = "zh-TW",
     engine: str = "apple",
+    operators: str | None = None,
 ) -> str:
-    """Transcribe audio file to text. Returns text, segments, and metadata."""
+    """Transcribe audio file to text. Returns text, segments, and metadata.
+
+    operators: Comma-separated preprocessors, e.g. "denoise,vad-trim,normalize"
+    """
     result = await to_thread(
         client.transcribe,
         file_path=file_path,
         language=language,
         engine=engine,
+        operators=operators,
     )
     text = result.get("text", "")
     segments = result.get("segments", [])
@@ -48,6 +53,14 @@ async def stt_transcribe(
 async def stt_engines() -> str:
     """List available speech-to-text engines (e.g. Apple, Whisper) with supported languages and capabilities."""
     result = await to_thread(client.list_engines)
+    return json_text(result)
+
+
+@mcp.tool()
+@mcp_error_handler("STT")
+async def stt_operators() -> str:
+    """List available audio preprocessing operators for STT (e.g. denoise, vad-trim, normalize)."""
+    result = await to_thread(client.list_operators)
     return json_text(result)
 
 

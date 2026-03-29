@@ -2023,11 +2023,20 @@ dependencies = [
     { name = "redis" },
 ]
 
+[package.optional-dependencies]
+audio = [
+    { name = "numpy" },
+    { name = "soundfile" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
+    { name = "numpy", marker = "extra == 'audio'", specifier = ">=2.0" },
     { name = "redis", specifier = ">=5.0" },
+    { name = "soundfile", marker = "extra == 'audio'", specifier = ">=0.13" },
 ]
+provides-extras = ["audio"]
 
 [[package]]
 name = "workshop-tmux-lib"
