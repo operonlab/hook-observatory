@@ -5,6 +5,7 @@ This is the PUBLIC API of the briefing module.
 
 import asyncio
 import logging
+import re
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -15,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.shared.embedding import get_embedding
-from src.shared.errors import NotFoundError
+from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.fsm import emit_state_changed, validate_transition
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -53,6 +54,31 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
+# ======================== Prompt Security ========================
+
+# Dangerous prompt patterns (Prompt Injection guard)
+_DANGEROUS_PROMPT_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"ignore\s+(previous|all|prior)\s+instructions?", re.IGNORECASE),
+    re.compile(r"disregard\s+(previous|all|prior)\s+instructions?", re.IGNORECASE),
+    re.compile(r"forget\s+(everything|all|your\s+instructions?)", re.IGNORECASE),
+    re.compile(r"you\s+are\s+now\s+(?!a\s+briefing)", re.IGNORECASE),
+    re.compile(r"(system|assistant)\s*:\s*", re.IGNORECASE),
+    re.compile(r"<\s*(system|human|assistant)\s*>", re.IGNORECASE),
+]
+
+
+def _validate_prompt(value: str | None, field_name: str = "prompt") -> None:
+    """檢查 prompt 欄位是否包含危險的指令注入模式。"""
+    if value is None:
+        return
+    for pattern in _DANGEROUS_PROMPT_PATTERNS:
+        if pattern.search(value):
+            raise BadRequestError(
+                f"{field_name} 包含不允許的指令注入模式",
+                code="briefing.prompt_injection_detected",
+            )
+
+
 # ======================== Topic Service ========================
 
 
@@ -62,6 +88,14 @@ class BriefingTopicService(
     model = BriefingTopic
     audit_module = "briefing"
     audit_entity_type = "briefing_topics"
+
+    def before_create(self, data: BriefingTopicCreate, **kwargs: Any) -> dict:
+        _validate_prompt(data.prompt_template, "prompt_template")
+        return data.model_dump()
+
+    def before_update(self, instance: BriefingTopic, data: BriefingTopicUpdate) -> dict:
+        _validate_prompt(data.prompt_template, "prompt_template")
+        return data.model_dump(exclude_unset=True)
 
     def to_response(self, instance: BriefingTopic) -> BriefingTopicResponse:
         subtopics = []
@@ -317,6 +351,14 @@ class AnalystService(
     model = BriefingAnalyst
     audit_module = "briefing"
     audit_entity_type = "briefing_analysts"
+
+    def before_create(self, data: AnalystCreate, **kwargs: Any) -> dict:
+        _validate_prompt(data.system_prompt, "system_prompt")
+        return data.model_dump()
+
+    def before_update(self, instance: BriefingAnalyst, data: AnalystUpdate) -> dict:
+        _validate_prompt(data.system_prompt, "system_prompt")
+        return data.model_dump(exclude_unset=True)
 
     def to_response(self, instance: BriefingAnalyst) -> AnalystResponse:
         return AnalystResponse(
@@ -808,9 +850,7 @@ class FollowUpService:
         await db.flush()
 
         try:
-            answer = await asyncio.to_thread(
-                self._run_claude_answer, prompt
-            )
+            answer = await asyncio.to_thread(self._run_claude_answer, prompt)
             fu.answer = answer
             fu.status = "answered"
         except Exception:

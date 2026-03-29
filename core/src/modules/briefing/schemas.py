@@ -15,7 +15,7 @@ class BriefingTopicCreate(BaseModel):
     description: str | None = None
     enabled: bool = True
     priority: int = 0
-    prompt_template: str | None = None
+    prompt_template: str | None = Field(default=None, max_length=5000)
     sources: list[dict] = Field(default_factory=list)
     schedule: str = "daily"
     search_config: dict = Field(default_factory=dict)
@@ -27,7 +27,7 @@ class BriefingTopicUpdate(BaseModel):
     description: str | None = None
     enabled: bool | None = None
     priority: int | None = None
-    prompt_template: str | None = None
+    prompt_template: str | None = Field(default=None, max_length=5000)
     sources: list[dict] | None = None
     schedule: str | None = None
     search_config: dict | None = None
@@ -78,7 +78,7 @@ class AnalystCreate(BaseModel):
     display_name: str
     color: str = "#c4a7e7"
     model_id: str | None = None
-    system_prompt: str | None = None
+    system_prompt: str | None = Field(default=None, max_length=5000)
     cli_command: str | None = None
 
 
@@ -87,7 +87,7 @@ class AnalystUpdate(BaseModel):
     color: str | None = None
     avatar_url: str | None = None
     model_id: str | None = None
-    system_prompt: str | None = None
+    system_prompt: str | None = Field(default=None, max_length=5000)
     cli_command: str | None = None
     enabled: bool | None = None
     priority: int | None = None
