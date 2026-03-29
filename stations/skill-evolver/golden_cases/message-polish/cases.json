@@ -1,0 +1,39 @@
+{
+  "skill": "message-polish",
+  "description": "Golden test cases for message-polish skill evolution",
+  "cases": [
+    {
+      "id": "mp-01",
+      "input": "幫我潤飾這段訊息：我想跟你說一下那個東西的事情，就是之前提到的那個專案，我覺得可能需要再多花一些時間才能完成，希望你能理解。",
+      "expected_traits": [
+        "Preserves the original meaning (project delay notification)",
+        "More professional and concise tone",
+        "Output length ≤ 1.5x input length",
+        "Uses Traditional Chinese"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "mp-02",
+      "input": "Polish this message: Hey, so I was thinking maybe we could push back the deadline a bit? I know it's not ideal but things have been crazy busy and I think we need more time to do it right.",
+      "expected_traits": [
+        "Preserves intent (requesting deadline extension)",
+        "Professional business tone",
+        "Clear and direct without being abrupt",
+        "Maintains English language"
+      ],
+      "weight": 1.0
+    },
+    {
+      "id": "mp-03",
+      "input": "潤飾：客戶說他們不喜歡目前的設計方案，覺得太複雜了，想要更簡單的版本",
+      "expected_traits": [
+        "Diplomatic framing of client feedback",
+        "Actionable next steps implied",
+        "Respects original sentiment without diluting the feedback",
+        "Concise"
+      ],
+      "weight": 1.0
+    }
+  ]
+}

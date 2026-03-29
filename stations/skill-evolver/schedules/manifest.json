@@ -1,0 +1,19 @@
+{
+  "events": [
+    {
+      "title": "ws-skill-evolution",
+      "enabled": true,
+      "category": "workshop",
+      "plugin": "shellplug",
+      "target": "allgrp",
+      "timing": {
+        "hours": [2],
+        "minutes": [0]
+      },
+      "params": {
+        "script": "#!/bin/bash\nset -u\n\nPYTHON=~/.local/bin/python3\nCLI=~/workshop/stations/skill-evolver/cli/skill_evolver.py\nLOG=~/workshop/outputs/skill-evolver/logs\n\nmkdir -p \"$LOG\"\n\nDATE=$(date +%Y-%m-%d)\n\"$PYTHON\" \"$CLI\" run --json > \"$LOG/evolution-${DATE}.log\" 2>&1\nEXIT=$?\n\nif [ $EXIT -ne 0 ]; then\n  echo \"Evolution run failed with exit code $EXIT\"\nfi\n\nexit 0"
+      },
+      "notes": "Nightly skill evolution — AutoResearch-inspired keep/discard optimization loop"
+    }
+  ]
+}
