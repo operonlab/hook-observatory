@@ -238,9 +238,11 @@ class Dispatcher:
                     return
 
                 # Push-primary: wait for signal with fallback interval timeout
+                remaining = timeout - elapsed
+                wait_timeout = min(POLL_FALLBACK_INTERVAL, remaining)
                 try:
                     if signal:
-                        await asyncio.wait_for(signal.wait(), timeout=POLL_FALLBACK_INTERVAL)
+                        await asyncio.wait_for(signal.wait(), timeout=wait_timeout)
                         # Signal received — do final capture and complete
                         logger.info("Task %s received push signal", task.id[:8])
                         output = await loop.run_in_executor(
@@ -251,8 +253,8 @@ class Dispatcher:
                         return
                     else:
                         # No signal registered (local node) — use legacy polling
-                        await asyncio.sleep(POLL_FALLBACK_INTERVAL)
-                except asyncio.TimeoutError:
+                        await asyncio.sleep(wait_timeout)
+                except TimeoutError:
                     pass  # Fall through to poll-fallback
 
                 # Poll-fallback: single SSH capture check
@@ -265,7 +267,10 @@ class Dispatcher:
         except Exception as e:
             logger.error("Monitor error for task %s: %s", task.id[:8], e)
             self.store.update_status(
-                task.id, TaskStatus.FAILED, error=str(e), completed_at=time.time(),
+                task.id,
+                TaskStatus.FAILED,
+                error=str(e),
+                completed_at=time.time(),
             )
             node.active_tasks = max(0, node.active_tasks - 1)
         finally:
@@ -311,8 +316,12 @@ class Dispatcher:
         return f"http://{callback_host}:{port}/tasks/{task_id}/signal"
 
     async def _register_remote_hook(
-        self, node: NodeState, session: str, task_id: str,
-        callback_url: str, secret: str,
+        self,
+        node: NodeState,
+        session: str,
+        task_id: str,
+        callback_url: str,
+        secret: str,
     ) -> None:
         """Set env vars and tmux hook on remote node for push-based completion."""
         rt = node.remote_tmux
@@ -356,7 +365,8 @@ class Dispatcher:
                 None,
                 lambda: subprocess.run(
                     ["scp", "-q", str(HOOK_SCRIPT), f"{host}:~/fleet_signal_hook.sh"],
-                    timeout=10, capture_output=True,
+                    timeout=10,
+                    capture_output=True,
                 ),
             )
         except Exception as e:

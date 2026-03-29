@@ -1,5 +1,7 @@
 """Notification event subscribers — map EventBus events to push notifications."""
 
+import asyncio
+
 import structlog
 
 from src.events.bus import Event, event_bus
@@ -75,7 +77,6 @@ async def on_mapped_event(event: Event) -> None:
                 error=str(e),
             )
             if attempt < max_retries:
-                import asyncio
                 await asyncio.sleep(0.5 * attempt)
     logger.error("event_push_exhausted", event_type=event.type, attempts=max_retries)
 
