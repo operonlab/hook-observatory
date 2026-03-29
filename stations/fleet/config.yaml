@@ -1,10 +1,16 @@
 port: 10106
-version: "0.1.0"
+version: "0.2.0"
 host: "127.0.0.1"
 health_interval: 30
 task_timeout: 600
 redis_url: "redis://127.0.0.1:6379/0"
 redis_prefix: "fleet:"
+
+# Push-based completion: remote nodes HTTP POST to this callback
+# callback_host: Mac's Tailscale hostname/IP (set in .env or override here)
+callback_host: ""  # e.g. "100.x.x.x" or "mac.tailnet-name.ts.net"
+fleet_secret: ""   # shared secret for x-fleet-secret header
+poll_fallback_interval: 30  # seconds between SSH capture checks when push unavailable
 
 nodes:
   mac-local:

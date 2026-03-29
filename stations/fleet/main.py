@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 from dispatcher import Dispatcher
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from node_registry import NodeRegistry
 from pydantic import BaseModel
 from task_store import TaskStore
@@ -131,6 +131,21 @@ async def get_task_output(task_id: str, lines: int = Query(200, le=1000)):
         raise HTTPException(status_code=404, detail="Task not found")
     output = await dispatcher.get_output(task_id, lines=lines)
     return {"task_id": task_id, "status": task.status.value, "output": output}
+
+
+@app.post("/tasks/{task_id}/signal")
+async def signal_task_completion(task_id: str, request: Request):
+    """HTTP callback endpoint for remote nodes to signal task completion."""
+    dispatcher: Dispatcher = app.state.dispatcher
+    fleet_secret = app.state.config.get("fleet_secret", "")
+    if fleet_secret:
+        provided = request.headers.get("x-fleet-secret", "")
+        if provided != fleet_secret:
+            raise HTTPException(status_code=403, detail="Invalid fleet secret")
+    ok = dispatcher.signal_completion(task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="No active monitor for this task")
+    return {"status": "signaled", "task_id": task_id}
 
 
 @app.post("/tasks/{task_id}/cancel")
