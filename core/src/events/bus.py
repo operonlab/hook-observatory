@@ -125,8 +125,34 @@ class EventBus:
         except Exception:
             _log.warning("EventBus.publish failed for %s", event.type, exc_info=True)
 
+    async def publish_reliable(
+        self, event: Event, *, max_retries: int = 3, base_delay: float = 0.5
+    ) -> bool:
+        """Publish with retry for critical events. Returns True on success."""
+        for attempt in range(1, max_retries + 1):
+            try:
+                await self._backend.publish(event)
+                return True
+            except Exception:
+                _log.warning(
+                    "EventBus.publish_reliable retry %d/%d for %s",
+                    attempt,
+                    max_retries,
+                    event.type,
+                    exc_info=True,
+                )
+                if attempt < max_retries:
+                    import asyncio
+
+                    await asyncio.sleep(base_delay * attempt)
+        _log.error("EventBus.publish_reliable exhausted for %s", event.type)
+        return False
+
     def publish_fire_and_forget(self, event: Event) -> None:
-        """Schedule event publish without awaiting. Safe for sync hooks (after_create etc.)."""
+        """Schedule event publish without awaiting. Safe for sync hooks (after_create etc.).
+
+        NOTE: Use publish_reliable() for critical events (finance alerts, notifications).
+        """
         import asyncio
 
         def _on_done(fut: asyncio.Future) -> None:

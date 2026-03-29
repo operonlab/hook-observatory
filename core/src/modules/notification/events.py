@@ -44,7 +44,7 @@ EVENT_PUSH_MAP: dict[str, dict] = {
 
 
 async def on_mapped_event(event: Event) -> None:
-    """Push notification for mapped EventBus events."""
+    """Push notification for mapped EventBus events. Retries up to 3 times."""
     mapping = EVENT_PUSH_MAP.get(event.type)
     if not mapping:
         return
@@ -60,12 +60,24 @@ async def on_mapped_event(event: Event) -> None:
         user_id=event.user_id,
     )
 
-    try:
-        async with async_session_factory() as db:
-            await notification_service.send_notification(db, payload)
-            await db.commit()
-    except Exception as e:
-        logger.error("event_push_failed", event_type=event.type, error=str(e))
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with async_session_factory() as db:
+                await notification_service.send_notification(db, payload)
+                await db.commit()
+            return
+        except Exception as e:
+            logger.warning(
+                "event_push_retry",
+                event_type=event.type,
+                attempt=attempt,
+                error=str(e),
+            )
+            if attempt < max_retries:
+                import asyncio
+                await asyncio.sleep(0.5 * attempt)
+    logger.error("event_push_exhausted", event_type=event.type, attempts=max_retries)
 
 
 for _evt_type in EVENT_PUSH_MAP:

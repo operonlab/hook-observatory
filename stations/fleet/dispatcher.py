@@ -269,7 +269,10 @@ class Dispatcher:
             )
             node.active_tasks = max(0, node.active_tasks - 1)
         finally:
-            self._completion_signals.pop(task.id, None)
+            # Delay signal cleanup to handle late-arriving callbacks gracefully
+            asyncio.get_event_loop().call_later(
+                60, lambda tid=task.id: self._completion_signals.pop(tid, None)
+            )
 
     async def _check_idle(self, task: Task, node: NodeState) -> bool:
         """SSH capture-pane and check for idle prompt. Returns True if idle detected."""
