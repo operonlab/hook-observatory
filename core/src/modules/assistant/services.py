@@ -11,17 +11,29 @@ import logging
 import time
 from collections.abc import AsyncGenerator, Generator
 
+from src.shared.sse import BlockType, StreamBlock
 from tmux_lib.cli_session import has_prompt, is_shell, wait_for_prompt
 from tmux_lib.patterns import CLAUDE_CODE
 from tmux_lib.primitives import capture, send_enter, send_text, tmux_check, tmux_ok
-
-from src.shared.sse import BlockType, StreamBlock
 
 logger = logging.getLogger(__name__)
 
 # ── Config ──
 TMUX_TARGET = "assistant"
-_CLAUDE_CMD = "CLAUDE_VOICE=0 claude --dangerously-skip-permissions --model haiku"
+_PROMPT_FILE = "/tmp/assistant-system-prompt.txt"
+SYSTEM_PROMPT = (
+    "你是 Workshop 助手精靈。\n\n"
+    "## 行為準則\n"
+    "- 用繁體中文直接回答，稱呼使用者為「少爺」\n"
+    "- 不反問、不列選項，直接給答案\n"
+    "- 回覆 3-5 句，每句要有具體資訊\n"
+    "- 主動用 memvault recall 搜尋相關記憶來輔助回答\n"
+    "- 語氣簡潔自信，像管家般貼心"
+)
+_CLAUDE_CMD = (
+    "CLAUDE_VOICE=0 claude --dangerously-skip-permissions --model haiku"
+    f' --system-prompt "$(cat {_PROMPT_FILE})"'
+)
 _POLL_INTERVAL = 0.3  # 縮短 polling 間隔：0.8s → 0.3s，讓 delta 更即時
 _TIMEOUT = 90
 _REDIS_LAST_USED_KEY = "assistant:haiku:last_used"
@@ -45,6 +57,8 @@ def _ensure_assistant_window() -> bool:
 
     if is_shell(TMUX_TARGET):
         logger.info("assistant: starting Claude Code")
+        with open(_PROMPT_FILE, "w") as f:
+            f.write(SYSTEM_PROMPT)
         send_text(TMUX_TARGET, _CLAUDE_CMD, buf_name="_assistant_paste")
         send_enter(TMUX_TARGET)
         if not wait_for_prompt(TMUX_TARGET, CLAUDE_CODE, timeout=30, poll_interval=0.3):
@@ -140,16 +154,17 @@ def _extract_response(before: str, after: str) -> str:
 
     使用 -J 旗標時，每行都是完整的邏輯行（無自動換行分割）。
     策略：
-    1. 找最後一個包含「用戶問」的 ❯ 行
+    1. 找最後一個有文字的 ❯ 行（使用者輸入行）
     2. 收集提示行到下一個空白 ❯ 之間的行
     3. 只保留 ⏺ 文字行（跳過工具呼叫、工具輸出、UI chrome）
     """
     lines = after.strip().splitlines()
 
-    # 1. 找最後一個提示行
+    # 1. 找最後一個提示行（❯ 後有實際文字）
     prompt_idx = -1
     for i, line in enumerate(lines):
-        if "用戶問" in line and "❯" in line:
+        s = line.strip()
+        if s.startswith("❯") and len(s) > 2:
             prompt_idx = i
 
     if prompt_idx == -1:
@@ -212,7 +227,8 @@ def _extract_visible_lines_after_prompt(
     lines = pane_content.strip().splitlines()
     prompt_idx = -1
     for i, line in enumerate(lines):
-        if "用戶問" in line and "❯" in line:
+        s = line.strip()
+        if s.startswith("❯") and len(s) > 2:
             prompt_idx = i
     if prompt_idx == -1:
         return [], -1
@@ -314,7 +330,7 @@ def _iter_chat(prompt: str) -> Generator[_DeltaEvent, None, None]:
     send_enter(TMUX_TARGET)
 
     # 從 prompt 裡提取使用者問題作為識別標記
-    user_question = prompt.split("用戶問：")[-1][:20] if "用戶問：" in prompt else prompt[-20:]
+    user_question = prompt[-20:]
 
     # 等待我們的 prompt 出現在 pane 裡（而非只等 content change）
     deadline = time.time() + _TIMEOUT
@@ -388,7 +404,7 @@ def _iter_chat(prompt: str) -> Generator[_DeltaEvent, None, None]:
             tail_lines = lines_after[-5:] if len(lines_after) > 5 else lines_after
             for line in tail_lines:
                 s = line.strip()
-                if s == "❯" or (s.startswith("❯") and "用戶問" not in s):
+                if s == "❯":
                     is_done = True
                     print(
                         f"[ASSISTANT DEBUG] DONE! text={len(accumulated_text)} chars",
@@ -445,12 +461,8 @@ async def stream_chat(messages: list[dict]) -> AsyncGenerator[StreamBlock, None]
         yield StreamBlock(type=BlockType.ERROR, data={"message": "沒有收到問題"})
         return
 
-    # 單行 prompt — paste-buffer 中的換行會觸發 Claude Code 的 Enter
-    prompt = (
-        f"你是Workshop助手精靈，用繁體中文直接回答，不要反問不要列選項。"
-        f"主動用memvault recall搜相關記憶，3-5句有具體資訊。"
-        f"用戶問：{user_msg.replace(chr(10), ' ')}"
-    )
+    # 指令已移至 --system-prompt，這裡只送使用者訊息
+    prompt = user_msg.replace(chr(10), " ")
 
     # 使用 queue 橋接 sync generator 與 async generator
     queue: asyncio.Queue[_DeltaEvent | None] = asyncio.Queue()
