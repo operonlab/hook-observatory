@@ -210,6 +210,56 @@ def _call_deepseek(triples_text: str, api_key: str) -> dict:
             time.sleep(LLM_RETRY_DELAY * attempt)
 
 
+def _fetch_existing_summaries(space_id: str) -> dict[str, dict]:
+    """Fetch all existing summaries, keyed by community_id."""
+    url = f"{CORE_API}/api/memvault/kg/summaries"
+    page_size = 200
+    page = 1
+    result: dict[str, dict] = {}
+
+    while True:
+        params = {"space_id": space_id, "page_size": page_size, "page": page}
+        try:
+            data = http_get(url, params)
+        except SystemExit:
+            # http_get calls sys.exit on error — catch and return empty
+            return {}
+        items = data.get("items", []) if isinstance(data, dict) else data
+        if not items:
+            break
+        for s in items:
+            cid = s.get("community_id")
+            if cid:
+                result[cid] = s
+        if len(items) < page_size:
+            break
+        page += 1
+
+    return result
+
+
+def _needs_regeneration(community: dict, existing_summary: dict) -> bool:
+    """Check if community content changed since last summary generation.
+
+    Two signals:
+    1. Timestamp: community updated after summary was created
+    2. Size: triple count mismatch (community grew or shrank)
+    """
+    # Timestamp comparison (ISO 8601 strings are lexicographically comparable)
+    comm_updated = community.get("updated_at", "")
+    summ_created = existing_summary.get("created_at", "")
+    if comm_updated and summ_created and comm_updated > summ_created:
+        return True
+
+    # Size mismatch
+    comm_size = community.get("size", -1)
+    summ_evidence = existing_summary.get("evidence_count", -2)
+    if comm_size != summ_evidence:
+        return True
+
+    return False
+
+
 def generate_summaries(
     communities: list[dict],
     space_id: str,
@@ -217,11 +267,25 @@ def generate_summaries(
     dry_run: bool,
     *,
     max_runtime: int = MAX_RUNTIME,
+    force: bool = False,
 ) -> list[dict]:
-    """Generate LLM summaries for each community."""
+    """Generate LLM summaries for each community.
+
+    Skips communities whose content hasn't changed since last summary,
+    unless force=True.
+    """
     summaries: list[dict] = []
     total = len(communities)
     t0 = time.monotonic()
+
+    # Fetch existing summaries for skip-if-unchanged logic
+    existing_map: dict[str, dict] = {}
+    if not force and not dry_run:
+        print("[Phase 2.5] Fetching existing summaries for delta check ...")
+        existing_map = _fetch_existing_summaries(space_id)
+        print(f"[Phase 2.5] Found {len(existing_map)} existing summaries")
+
+    skipped_unchanged = 0
 
     print(f"\n[Phase 3] Generating LLM summaries for {total} communities (max {max_runtime}s) ...")
 
@@ -235,6 +299,12 @@ def generate_summaries(
             break
         comm_id = community.get("community_id", community.get("id", f"comm_{idx}"))
         name = community.get("name", comm_id)
+
+        # Skip if unchanged
+        if comm_id in existing_map and not _needs_regeneration(community, existing_map[comm_id]):
+            skipped_unchanged += 1
+            continue
+
         print(f"  [{idx}/{total}] {comm_id}: {name[:50]}", end=" ... ", flush=True)
 
         # Use embedded triples first; fall back to community metadata
@@ -315,31 +385,52 @@ def generate_summaries(
             )
 
     succeeded = sum(1 for s in summaries if not s.get("skipped"))
-    print(f"[Phase 3] Done: {succeeded}/{total} summaries generated")
+    print(
+        f"[Phase 3] Done: {succeeded} generated, "
+        f"{skipped_unchanged} unchanged (skipped), "
+        f"{total - succeeded - skipped_unchanged} other"
+    )
     return summaries
 
 
 # ── Phase 4: POST Summaries to Core API ──────────────────────────────────────
 def save_summaries(summaries: list[dict], space_id: str, dry_run: bool) -> bool:
-    url = f"{CORE_API}/api/memvault/kg/summaries/regenerate"
+    # Filter out skipped entries — only save actual new/updated summaries
+    to_save = [s for s in summaries if not s.get("skipped")]
+
+    if not to_save:
+        print("\n[Phase 4] No new summaries to save (all unchanged or skipped)")
+        return True
+
+    url = f"{CORE_API}/api/memvault/kg/summaries/upsert"
     payload = {
         "space_id": space_id,
-        "summaries": summaries,
+        "summaries": to_save,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }
 
     if dry_run:
-        print(f"\n[Phase 4] DRY RUN — would POST {len(summaries)} summaries to {url}")
+        print(f"\n[Phase 4] DRY RUN — would POST {len(to_save)} summaries to {url}")
         print(json.dumps(payload, ensure_ascii=False, indent=2)[:800])
         return True
 
-    print(f"\n[Phase 4] POSTing {len(summaries)} summaries to Core API ...")
+    print(f"\n[Phase 4] POSTing {len(to_save)} new/updated summaries to Core API ...")
     result = http_post(url, payload, params={"space_id": space_id})
     if "error" in result:
-        print(f"[Phase 4] Core API save failed: {result}", file=sys.stderr)
-        return False
+        # Fallback to regenerate endpoint if upsert not available
+        print("[Phase 4] upsert failed, falling back to regenerate ...")
+        url_fallback = f"{CORE_API}/api/memvault/kg/summaries/regenerate"
+        payload_fb = {
+            "space_id": space_id,
+            "summaries": to_save,
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        result = http_post(url_fallback, payload_fb, params={"space_id": space_id})
+        if "error" in result:
+            print(f"[Phase 4] Core API save failed: {result}", file=sys.stderr)
+            return False
 
-    print("[Phase 4] Summaries saved to Core API")
+    print(f"[Phase 4] {len(to_save)} summaries saved to Core API")
     return True
 
 
@@ -418,6 +509,11 @@ def main() -> None:
         default=MAX_RUNTIME,
         help=f"Max runtime in seconds before saving partial results (default: {MAX_RUNTIME})",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate all summaries, even if community content hasn't changed",
+    )
     args = parser.parse_args()
 
     api_key = DEEPSEEK_API_KEY
@@ -443,6 +539,7 @@ def main() -> None:
         api_key,
         args.dry_run,
         max_runtime=args.max_runtime,
+        force=args.force,
     )
 
     # Phase 4
