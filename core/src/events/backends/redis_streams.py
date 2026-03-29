@@ -33,6 +33,8 @@ _DLQ_STREAM = "workshop:events:__dlq"
 _CONSUMER_NAME = f"core-{socket.gethostname()}"
 _BLOCK_MS = 2_000  # XREADGROUP block timeout
 _XREAD_COUNT = 50  # max messages per XREADGROUP call
+_RECONNECT_BASE_DELAY = 5  # initial reconnect delay in seconds
+_RECONNECT_MAX_DELAY = 60  # max reconnect delay (exponential backoff cap)
 
 
 class RedisStreamsBackend(EventBackend):
@@ -53,7 +55,9 @@ class RedisStreamsBackend(EventBackend):
         self._middleware: list[Callable] = []
         self._redis = None
         self._consumer_task: asyncio.Task | None = None
+        self._reconnect_task: asyncio.Task | None = None
         self._degraded = False  # True when Redis is unreachable
+        self._reconnect_attempts = 0
 
     # ------------------------------------------------------------------ properties
 
@@ -88,18 +92,22 @@ class RedisStreamsBackend(EventBackend):
         await self._fallback.start()
 
         if not self._degraded:
-            # Ensure consumer groups exist for all already-subscribed streams
-            for event_type in self._handlers:
-                if event_type == "*":
-                    continue
-                stream = _STREAM_PREFIX + event_type
-                await self._ensure_group(stream)
-
-            self._consumer_task = asyncio.create_task(
-                self._consume_loop(), name="redis-streams-consumer"
+            await self._activate_consumer()
+        else:
+            # Start background reconnection loop
+            self._reconnect_task = asyncio.create_task(
+                self._reconnect_loop(), name="redis-streams-reconnect"
             )
 
     async def stop(self) -> None:
+        if self._reconnect_task is not None:
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except asyncio.CancelledError:
+                pass
+            self._reconnect_task = None
+
         if self._consumer_task is not None:
             self._consumer_task.cancel()
             try:
@@ -188,11 +196,64 @@ class RedisStreamsBackend(EventBackend):
             finally:
                 _current_trace_id.reset(token)
 
+    # ------------------------------------------------------------------ reconnection
+
+    async def _activate_consumer(self) -> None:
+        """Ensure consumer groups and start the consumer loop."""
+        for event_type in self._handlers:
+            if event_type == "*":
+                continue
+            stream = _STREAM_PREFIX + event_type
+            await self._ensure_group(stream)
+
+        self._consumer_task = asyncio.create_task(
+            self._consume_loop(), name="redis-streams-consumer"
+        )
+
+    async def _reconnect_loop(self) -> None:
+        """Background task: periodically retry Redis connection with exponential backoff."""
+        logger.info("redis_streams_reconnect_loop_started")
+        try:
+            while self._degraded:
+                self._reconnect_attempts += 1
+                delay = min(
+                    _RECONNECT_BASE_DELAY * (2 ** (self._reconnect_attempts - 1)),
+                    _RECONNECT_MAX_DELAY,
+                )
+                await asyncio.sleep(delay)
+
+                try:
+                    import redis.asyncio as aioredis
+
+                    self._redis = aioredis.from_url(
+                        self._redis_url,
+                        decode_responses=True,
+                        socket_connect_timeout=3,
+                    )
+                    await self._redis.ping()
+                    self._degraded = False
+                    self._reconnect_attempts = 0
+                    logger.info(
+                        "redis_streams_reconnected",
+                        attempts=self._reconnect_attempts,
+                    )
+                    await self._activate_consumer()
+                except Exception as e:
+                    logger.debug(
+                        "redis_streams_reconnect_failed",
+                        attempt=self._reconnect_attempts,
+                        delay=delay,
+                        error=str(e),
+                    )
+        except asyncio.CancelledError:
+            logger.info("redis_streams_reconnect_loop_stopped")
+
     # ------------------------------------------------------------------ consumer loop
 
     async def _consume_loop(self) -> None:
         """Background task: XREADGROUP on all subscribed streams."""
         logger.info("redis_streams_consumer_started", consumer=_CONSUMER_NAME)
+        consecutive_errors = 0
         try:
             while True:
                 streams = [_STREAM_PREFIX + et for et in self._handlers if et != "*"]
@@ -208,11 +269,25 @@ class RedisStreamsBackend(EventBackend):
                         count=_XREAD_COUNT,
                         block=_BLOCK_MS,
                     )
+                    consecutive_errors = 0  # reset on success
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    logger.warning("redis_streams_xreadgroup_error", error=str(e))
-                    await asyncio.sleep(1)
+                    consecutive_errors += 1
+                    logger.warning(
+                        "redis_streams_xreadgroup_error",
+                        error=str(e),
+                        consecutive=consecutive_errors,
+                    )
+                    if consecutive_errors >= 5:
+                        # Redis likely down — degrade and start reconnect loop
+                        logger.warning("redis_streams_degrading_after_errors")
+                        self._degraded = True
+                        self._reconnect_task = asyncio.create_task(
+                            self._reconnect_loop(), name="redis-streams-reconnect"
+                        )
+                        return
+                    await asyncio.sleep(min(1 * consecutive_errors, 5))
                     continue
 
                 if not results:
