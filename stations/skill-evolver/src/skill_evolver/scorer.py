@@ -12,9 +12,9 @@ from .executor import ExecutionResult, GoldenCase
 
 @dataclass
 class Score:
-    quality: float    # 0-100, LLM-as-Judge
-    efficiency: float # 0-100, token efficiency
-    brevity: float    # 0-100, SKILL.md conciseness
+    quality: float  # 0-100, LLM-as-Judge
+    efficiency: float  # 0-100, token efficiency
+    brevity: float  # 0-100, SKILL.md conciseness
     composite: float  # weighted average
 
     def to_dict(self) -> dict:
@@ -35,7 +35,7 @@ def load_frozen_judge_prompt() -> str:
     return (
         "You are a quality evaluator for AI skill outputs. "
         "Score the output 0-100 based on the expected traits. "
-        "Return ONLY a JSON object: {\"score\": N, \"reason\": \"brief\"}"
+        'Return ONLY a JSON object: {"score": N, "reason": "brief"}'
     )
 
 
@@ -74,10 +74,13 @@ Return ONLY a JSON object: {{"score": N, "reason": "brief explanation"}}"""
     try:
         result = subprocess.run(  # noqa: S603
             [
-                config.claude_bin, "-p",
+                config.claude_bin,
+                "-p",
                 f"System: {judge_prompt}\n\nUser: {user_prompt}",
-                "--model", config.judge_model,
-                "--max-turns", "1",
+                "--model",
+                config.judge_model,
+                "--max-turns",
+                "1",
             ],
             capture_output=True,
             text=True,
@@ -148,6 +151,32 @@ def compute_brevity(current_lines: int, baseline_lines: int) -> float:
     return score
 
 
+def extract_tools_list(skill_md: str) -> set[str]:
+    """Extract tools from YAML frontmatter."""
+    import re
+
+    match = re.search(r"^tools:\s*(.+)$", skill_md, re.MULTILINE)
+    if not match:
+        return set()
+    raw = match.group(1).strip()
+    return {t.strip() for t in raw.split(",") if t.strip()}
+
+
+def check_capability_preserved(original_md: str, variant_md: str) -> bool:
+    """Verify the variant didn't lose tools or key integrations.
+
+    Returns True if capabilities are preserved, False if degraded.
+    """
+    original_tools = extract_tools_list(original_md)
+    variant_tools = extract_tools_list(variant_md)
+
+    # Tools must not decrease
+    if original_tools and not original_tools.issubset(variant_tools):
+        return False
+
+    return True
+
+
 def score_skill(
     exec_results: list[ExecutionResult],
     golden_cases: list[GoldenCase],
@@ -155,6 +184,8 @@ def score_skill(
     baseline_tokens: int,
     baseline_lines: int,
     config: Config,
+    original_md: str = "",
+    variant_md: str = "",
 ) -> Score:
     """Compute the composite score for a skill variant.
 
@@ -162,7 +193,13 @@ def score_skill(
     1. Quality: LLM-as-Judge per golden case (weighted average)
     2. Efficiency: Token consumption relative to baseline
     3. Brevity: SKILL.md line count relative to baseline
+
+    Plus a capability guard: if tools list shrinks, score is zeroed.
     """
+    # Capability guard: if tools were removed, reject immediately
+    if original_md and variant_md:
+        if not check_capability_preserved(original_md, variant_md):
+            return Score(quality=0, efficiency=0, brevity=0, composite=0)
     weights = config.scoring_weights
 
     # Quality: weighted average of per-case judge scores
@@ -175,19 +212,13 @@ def score_skill(
             quality_scores.append((0.0, case.weight))
 
     total_weight = sum(w for _, w in quality_scores)
-    quality = (
-        sum(s * w for s, w in quality_scores) / total_weight
-        if total_weight > 0
-        else 0.0
-    )
+    quality = sum(s * w for s, w in quality_scores) / total_weight if total_weight > 0 else 0.0
 
     efficiency = compute_efficiency(exec_results, baseline_tokens)
     brevity = compute_brevity(skill_md_lines, baseline_lines)
 
     composite = (
-        quality * weights.quality
-        + efficiency * weights.efficiency
-        + brevity * weights.brevity
+        quality * weights.quality + efficiency * weights.efficiency + brevity * weights.brevity
     )
 
     return Score(

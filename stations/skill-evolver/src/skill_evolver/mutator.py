@@ -55,8 +55,14 @@ Theme definitions:
 3. Never modify lines marked with MANDATORY or CRITICAL.
 4. Never change the skill's fundamental purpose or io schema.
 5. Keep the overall structure recognizable — this is refinement, not rewriting.
-6. If simplifying, prefer removing redundant examples or verbose explanations.
-7. Output ONLY the modified SKILL.md content — no explanation, no markdown fences.
+6. NEVER remove functional content — tool integrations, search routes, API endpoints,
+   external service references (Playwright, Perplexity, MCP tools, CLI commands),
+   workflow branches, or fallback paths. These are capabilities, not decoration.
+7. If simplifying, ONLY remove: redundant explanations, verbose prose that restates
+   what the code/commands already show, comparison tables with other skills,
+   "Agent Delegation" sections that just say "runs in main context".
+8. The tools: list in frontmatter must never lose entries.
+9. Output ONLY the modified SKILL.md content — no explanation, no markdown fences.
 {prior_context}
 
 ## Current SKILL.md (round {round_num})
@@ -79,16 +85,18 @@ def mutate(
     Returns the mutated content, or None if mutation failed.
     """
     directions = load_evolution_directions(evolution_path)
-    prompt = build_mutation_prompt(
-        skill_md, theme, directions, round_num, prior_results
-    )
+    prompt = build_mutation_prompt(skill_md, theme, directions, round_num, prior_results)
 
     try:
         result = subprocess.run(  # noqa: S603
             [
-                config.claude_bin, "-p", prompt,
-                "--model", config.judge_model,
-                "--max-turns", "1",
+                config.claude_bin,
+                "-p",
+                prompt,
+                "--model",
+                config.judge_model,
+                "--max-turns",
+                "1",
             ],
             capture_output=True,
             text=True,
@@ -131,7 +139,7 @@ def select_theme(round_num: int, prior_results: list[dict] | None = None) -> str
     """
     failed_themes = set()
     if prior_results:
-        for r in prior_results[-len(MUTATION_THEMES):]:
+        for r in prior_results[-len(MUTATION_THEMES) :]:
             if r.get("verdict") == "discard":
                 failed_themes.add(r.get("theme", ""))
 

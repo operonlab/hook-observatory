@@ -113,9 +113,12 @@ def evolve_skill(skill: SkillTarget, config: Config, eval_budget: list[int]) -> 
     if not golden_cases:
         return EvolutionResult(
             skill_name=skill.name,
-            rounds_run=0, rounds_kept=0,
-            baseline_composite=0, final_composite=0,
-            improvement=0, best_theme="none",
+            rounds_run=0,
+            rounds_kept=0,
+            baseline_composite=0,
+            final_composite=0,
+            improvement=0,
+            best_theme="none",
         )
 
     # Backup original
@@ -127,13 +130,14 @@ def evolve_skill(skill: SkillTarget, config: Config, eval_budget: list[int]) -> 
     eval_budget[0] -= len(golden_cases)
 
     baseline_tokens = sum(r.token_count for r in baseline_results if r.success)
-    baseline_avg_tokens = (
-        baseline_tokens // max(1, len([r for r in baseline_results if r.success]))
-    )
+    baseline_avg_tokens = baseline_tokens // max(1, len([r for r in baseline_results if r.success]))
 
     baseline_score = score_skill(
-        baseline_results, golden_cases,
-        original_lines, baseline_avg_tokens, original_lines,
+        baseline_results,
+        golden_cases,
+        original_lines,
+        baseline_avg_tokens,
+        original_lines,
         config,
     )
 
@@ -155,17 +159,25 @@ def evolve_skill(skill: SkillTarget, config: Config, eval_budget: list[int]) -> 
 
         # Mutate
         variant = mutate(
-            current_content, theme, config, evolution_path,
+            current_content,
+            theme,
+            config,
+            evolution_path,
             round_num=round_num,
             prior_results=[r.to_dict() for r in round_results],
         )
 
         if variant is None:
-            round_results.append(RoundResult(
-                round=round_num, theme=theme, verdict="error",
-                baseline_score=current_score.composite,
-                variant_score=0, delta=0,
-            ))
+            round_results.append(
+                RoundResult(
+                    round=round_num,
+                    theme=theme,
+                    verdict="error",
+                    baseline_score=current_score.composite,
+                    variant_score=0,
+                    delta=0,
+                )
+            )
             continue
 
         # Apply variant
@@ -176,11 +188,16 @@ def evolve_skill(skill: SkillTarget, config: Config, eval_budget: list[int]) -> 
         variant_results = execute_all_cases(skill.name, config)
         eval_budget[0] -= len(golden_cases)
 
-        # Score variant
+        # Score variant (with capability guard)
         variant_score = score_skill(
-            variant_results, golden_cases,
-            variant_lines, baseline_avg_tokens, original_lines,
+            variant_results,
+            golden_cases,
+            variant_lines,
+            baseline_avg_tokens,
+            original_lines,
             config,
+            original_md=original_content,
+            variant_md=variant,
         )
 
         delta = variant_score.composite - current_score.composite
@@ -201,9 +218,12 @@ def evolve_skill(skill: SkillTarget, config: Config, eval_budget: list[int]) -> 
             verdict = "discard"
 
         rr = RoundResult(
-            round=round_num, theme=theme, verdict=verdict,
+            round=round_num,
+            theme=theme,
+            verdict=verdict,
             baseline_score=(
-                current_score.composite if verdict == "discard"
+                current_score.composite
+                if verdict == "discard"
                 else (current_score.composite - delta)
             ),
             variant_score=variant_score.composite,
@@ -213,16 +233,18 @@ def evolve_skill(skill: SkillTarget, config: Config, eval_budget: list[int]) -> 
         round_results.append(rr)
 
         # Record to ledger
-        append_ledger({
-            "timestamp": datetime.now(UTC).isoformat(),
-            "skill": skill.name,
-            "round": round_num,
-            "theme": theme,
-            "verdict": verdict,
-            "delta": round(delta, 2),
-            "composite": round(variant_score.composite, 2),
-            "detail": variant_score.to_dict(),
-        })
+        append_ledger(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "skill": skill.name,
+                "round": round_num,
+                "theme": theme,
+                "verdict": verdict,
+                "delta": round(delta, 2),
+                "composite": round(variant_score.composite, 2),
+                "detail": variant_score.to_dict(),
+            }
+        )
 
     # If no improvement, restore original
     if rounds_kept == 0:
