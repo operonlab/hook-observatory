@@ -25,7 +25,7 @@ class PolicyDataProvider:
     """Provides usage data in model-policy.py compatible format.
 
     Data source priority:
-    1. agent-metrics station API (http://127.0.0.1:8795/usage/subscription)
+    1. agent-metrics station API (http://127.0.0.1:10103/usage/subscription)
     2. latest.json on disk
     3. Sysmon API direct (fallback)
     """

@@ -77,10 +77,10 @@ def _read_from_file(field: str, max_age: float) -> str | None:
 
 def _read_from_api(metric: str, field: str) -> str | None:
     if metric in QUOTA_METRICS:
-        url = "http://127.0.0.1:8795/quota/formatted"
+        url = "http://127.0.0.1:10103/quota/formatted"
         key = metric
     else:
-        url = "http://127.0.0.1:8795/sysmon/current"
+        url = "http://127.0.0.1:10103/sysmon/current"
         key = field
     try:
         with urlopen(url, timeout=1) as resp:

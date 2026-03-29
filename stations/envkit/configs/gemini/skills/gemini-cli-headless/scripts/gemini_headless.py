@@ -35,7 +35,7 @@ from tmux_lib.primitives import capture, tmux_check, tmux_ok
 DEFAULT_GEMINI = os.environ.get("GEMINI_CLI_BIN", "")
 DEFAULT_LOG_DIR = os.path.expanduser("~/.claude/logs/headless")
 AGENT_METRICS_URL = os.environ.get(
-    "AGENT_METRICS_URL", "http://127.0.0.1:8797/api/agent-metrics/ingest"
+    "AGENT_METRICS_URL", "http://127.0.0.1:10103/api/agent-metrics/ingest"
 )
 
 # Gemini pricing per 1M tokens (approximate, updated 2025-Q1)

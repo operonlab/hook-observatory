@@ -9,15 +9,15 @@ export default defineConfig({
     port: 10500,
     proxy: {
       "/auth": {
-        target: "http://127.0.0.1:8801",
+        target: "http://127.0.0.1:10000",
         changeOrigin: true,
       },
       "/api": {
-        target: "http://127.0.0.1:8801",
+        target: "http://127.0.0.1:10000",
         changeOrigin: true,
       },
       "/health": {
-        target: "http://127.0.0.1:8801",
+        target: "http://127.0.0.1:10000",
         changeOrigin: true,
       },
     },

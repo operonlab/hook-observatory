@@ -25,7 +25,7 @@ from pathlib import Path
 HOME = Path.home()
 LOG_DIR = HOME / "workshop/outputs/memvault/logs"
 LOG_FILE = LOG_DIR / "skill_sync.log"
-ANVIL_API = "http://127.0.0.1:4103/api/anvil"
+ANVIL_API = "http://127.0.0.1:10301/api/anvil"
 CORE_API = "http://localhost:10000/api/memvault"
 SPACE_ID = "default"
 

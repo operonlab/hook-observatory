@@ -34,7 +34,7 @@ from tmux_lib.primitives import capture, tmux_check, tmux_ok
 DEFAULT_CODEX = os.environ.get("CODEX_BIN", "")
 DEFAULT_LOG_DIR = os.path.expanduser("~/.claude/logs/headless")
 AGENT_METRICS_URL = os.environ.get(
-    "AGENT_METRICS_URL", "http://127.0.0.1:8797/api/agent-metrics/ingest"
+    "AGENT_METRICS_URL", "http://127.0.0.1:10103/api/agent-metrics/ingest"
 )
 
 # OpenAI pricing per 1M tokens (approximate, updated 2025-Q1)

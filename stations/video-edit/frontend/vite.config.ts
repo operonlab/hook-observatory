@@ -7,8 +7,8 @@ export default defineConfig({
   server: {
     port: 4111,
     proxy: {
-      "/projects": "http://localhost:4110",
-      "/health": "http://localhost:4110",
+      "/projects": "http://localhost:10206",
+      "/health": "http://localhost:10206",
     },
   },
   build: {

@@ -23,7 +23,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-GATE_URL = "http://127.0.0.1:8795/api/quota/gate"
+GATE_URL = "http://127.0.0.1:10103/api/quota/gate"
 BARK_URL = "http://127.0.0.1:8090"
 
 

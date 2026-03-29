@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter()
 log = logging.getLogger("sentinel")
 
-SYSMON_BASE = "http://127.0.0.1:9526"
+SYSMON_BASE = "http://127.0.0.1:10102"
 
 # Will be injected by main.py at startup
 _engine = None

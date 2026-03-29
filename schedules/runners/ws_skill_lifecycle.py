@@ -29,7 +29,7 @@ SKILLS_DIR = Path.home() / ".claude" / "skills"
 TESTER_SCRIPT = SKILLS_DIR / "skill-tester" / "scripts" / "run_all.py"
 SECURITY_SCRIPT = SKILLS_DIR / "skill-security-scan" / "scripts" / "security-scan.py"
 CATALOG_SCRIPT = SKILLS_DIR / "skill-catalog" / "scripts" / "extract_catalog.py"
-ANVIL_URL = "http://127.0.0.1:4103"
+ANVIL_URL = "http://127.0.0.1:10301"
 
 # LLM-only phases, always skipped in automation
 SKIPPED_PHASES = ["audit", "optimize", "publish"]

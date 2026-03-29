@@ -169,7 +169,7 @@ async def status_metrics() -> dict:
             "-sf",
             "--max-time",
             "3",
-            "http://127.0.0.1:8795/sysmon/current",
+            "http://127.0.0.1:10103/sysmon/current",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

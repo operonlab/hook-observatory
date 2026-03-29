@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+
 from tmux_lib.cli_session import is_process_running_async, start_cli_async
 from tmux_lib.patterns import CLAUDE_CODE
 from tmux_lib.primitives import (

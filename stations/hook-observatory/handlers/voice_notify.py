@@ -73,17 +73,34 @@ _INTERMEDIATE_PATTERNS = [
 _INTERMEDIATE_RE = re.compile("|".join(_INTERMEDIATE_PATTERNS), re.IGNORECASE)
 
 # Known sub-agent / teammate types that should NEVER trigger TTS on Stop
-_TEAMMATE_TYPES = frozenset({
-    # Agent Teams built-in roles
-    "Plan", "Explore", "Code", "Debug", "Review",
-    # Custom sub-agent types (from ~/.claude/agents/)
-    "worker", "explorer", "reviewer", "designer",
-    "foreman", "researcher", "browser", "media",
-    "codex-dispatcher", "gemini-dispatcher", "copilot-dispatcher",
-    "writer", "statusline-setup", "claude-code-guide",
-    "audit-context-building:function-analyzer",
-    "chaos-engineer", "general-purpose",
-})
+_TEAMMATE_TYPES = frozenset(
+    {
+        # Agent Teams built-in roles
+        "Plan",
+        "Explore",
+        "Code",
+        "Debug",
+        "Review",
+        # Custom sub-agent types (from ~/.claude/agents/)
+        "worker",
+        "explorer",
+        "reviewer",
+        "designer",
+        "foreman",
+        "researcher",
+        "browser",
+        "media",
+        "codex-dispatcher",
+        "gemini-dispatcher",
+        "copilot-dispatcher",
+        "writer",
+        "statusline-setup",
+        "claude-code-guide",
+        "audit-context-building:function-analyzer",
+        "chaos-engineer",
+        "general-purpose",
+    }
+)
 
 # Sub-agent completion sound effect (macOS system sound)
 # Opt-in: set CLAUDE_SUBAGENT_SOUND=1 to enable Pop.aiff on SubagentStop
@@ -92,7 +109,7 @@ _SUBAGENT_SOUND_ENABLED = os.environ.get("CLAUDE_SUBAGENT_SOUND", "0") == "1"
 _SUBAGENT_VOLUME = os.environ.get("CLAUDE_SUBAGENT_VOLUME", "0.3")
 
 # --- Configuration (env-overridable) ---
-TTS_URL = os.environ.get("CLAUDE_TTS_URL", "http://localhost:8841/api/tts/speak")
+TTS_URL = os.environ.get("CLAUDE_TTS_URL", "http://localhost:10201/api/tts/speak")
 VOICE = os.environ.get("CLAUDE_VOICE_ID", "zh-CN-YunjianNeural")
 RATE = os.environ.get("CLAUDE_VOICE_RATE", "+20%")
 PLAYBACK_VOL = os.environ.get("CLAUDE_VOICE_VOLUME", "0.4")
@@ -101,7 +118,7 @@ PYTHON_BIN = os.path.join(HOME, ".local", "bin", "python3")
 QUEUE_FILE = "/tmp/claude-tts-queue.jsonl"
 PID_FILE = "/tmp/claude-tts-consumer.pid"
 DEBOUNCE_TTL = int(os.environ.get("CLAUDE_VOICE_DEBOUNCE", "10"))  # seconds, 0=disable
-WEBUI_URL = os.environ.get("TMUX_WEBUI_URL", "http://127.0.0.1:8765")
+WEBUI_URL = os.environ.get("TMUX_WEBUI_URL", "http://127.0.0.1:10105")
 
 # Activity tracking — deferred announcement settings
 SETTLE_WINDOW = int(os.environ.get("CLAUDE_VOICE_SETTLE", "8"))  # seconds
@@ -446,7 +463,7 @@ def _build_checker_script(ident: str) -> str:
 import fcntl, json, os, shutil, subprocess, sys, time
 
 IDENT = {ident!r}
-PID_FILE = "/tmp/tts-checker-{ident.replace('%', '')}.pid"
+PID_FILE = "/tmp/tts-checker-{ident.replace("%", "")}.pid"
 QUEUE_FILE = {QUEUE_FILE!r}
 CONSUMER_PID = {PID_FILE!r}
 CHECK_INTERVAL = {_CHECKER_INTERVAL}
