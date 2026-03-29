@@ -1,14 +1,15 @@
-"""Workshop Reactive Protocol — 六概念統一合約。
+"""Workshop Reactive Protocol — 七概念統一合約。
 
-受 RxJS 六核心概念 + DataFlow compile() 啟發。
+受 RxJS 六核心概念 + DataFlow compile() 啟發，加上 Workshop 原創的 CompletionSource。
 
-六概念：
+七概念：
   1. Observable  — 可訂閱的異步數據流
   2. Observer    — 接收數據的回呼三件組
   3. Subscription — 執行控制句柄（取消、清理）
   4. Operator    — 純函數式數據變換（最大公因數）
   5. Subject     — 多播 EventEmitter（Observable + Observer）
   6. Scheduler   — 集中式並發調度策略
+  7. CompletionSource — exactly-once 完成信號（AsyncSubject 語意）
 """
 
 from __future__ import annotations
@@ -427,3 +428,35 @@ class ScheduledOp:
 
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
         return await self._scheduler.schedule(self._op, ctx)
+
+
+# ─── 7. CompletionSource ────────────────────────────────────────────────────
+
+
+@runtime_checkable
+class CompletionSource(Protocol[T_co]):
+    """Exactly-once 完成信號——AsyncSubject 語意。
+
+    與 Observable 不同：最多發一次值，支援遲到訂閱 replay。
+    具體實作：completion.TaskCompletion
+
+    Workshop: 統一 headless subprocess、tmux wait-for、fleet HTTP callback 的完成通知。
+    """
+
+    @property
+    def task_id(self) -> str:
+        """任務識別碼。"""
+        ...
+
+    @property
+    def status(self) -> str:
+        """pending / running / completed / failed / timeout"""
+        ...
+
+    def subscribe(self, observer: Observer[T_co]) -> Subscription:
+        """訂閱完成信號。已完成時立即 replay。"""
+        ...
+
+    async def wait(self, timeout: float | None = None) -> T_co:
+        """阻塞直到完成、失敗或超時。"""
+        ...

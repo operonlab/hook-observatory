@@ -222,3 +222,13 @@ class PaperEvents:
 class SystemEvents:
     HEALTH_CHECKED = "system.health.checked"
     CONFIG_CHANGED = "system.config.changed"
+
+
+class CompletionEvents:
+    """Task completion signals from all execution tiers."""
+
+    TASK_DISPATCHED = "completion.task.dispatched"
+    TASK_RUNNING = "completion.task.running"
+    TASK_COMPLETED = "completion.task.completed"
+    TASK_FAILED = "completion.task.failed"
+    TASK_TIMEOUT = "completion.task.timeout"

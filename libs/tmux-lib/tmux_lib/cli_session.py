@@ -136,14 +136,16 @@ def wait_for_prompt(
     profile: CLIProfile,
     *,
     timeout: int = 30,
-    poll_interval: float = 2.0,
+    poll_interval: float = 0.5,
 ) -> bool:
     """Block until the CLI prompt appears. Returns True if found within timeout."""
     deadline = time.time() + timeout
+    interval = poll_interval
     while time.time() < deadline:
         if has_prompt(pane, profile):
             return True
-        time.sleep(poll_interval)
+        time.sleep(interval)
+        interval = min(interval * 2, 2.0)
     return False
 
 
@@ -152,15 +154,17 @@ async def wait_for_prompt_async(
     profile: CLIProfile,
     *,
     timeout: int = 30,
-    poll_interval: float = 2.0,
+    poll_interval: float = 0.5,
 ) -> bool:
     import asyncio as _aio
 
     deadline = time.time() + timeout
+    interval = poll_interval
     while time.time() < deadline:
         if await has_prompt_async(pane, profile):
             return True
-        await _aio.sleep(poll_interval)
+        await _aio.sleep(interval)
+        interval = min(interval * 2, 2.0)
     return False
 
 
