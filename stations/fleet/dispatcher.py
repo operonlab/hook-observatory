@@ -55,13 +55,26 @@ class Dispatcher:
 
     # ── Session Acquisition ──
 
-    def _acquire_session(self, node: NodeState) -> str:
-        """Get an idle session from the warm pool, or create a new one."""
+    def _acquire_session(self, node: NodeState, mode: str = "code") -> str:
+        """Get an idle session from the warm pool, or create a new one.
+
+        For code mode: reuse warm pool sessions (pre-started Claude Code).
+        For gpu mode: always create a fresh raw shell session.
+        """
         rt = node.remote_tmux
         prefix = node.config.get("tmux_prefix", "fleet")
-        sessions = rt.list_sessions(prefix=prefix)
+        work_dir = node.config.get("work_dir", "~")
 
-        # Find sessions not currently assigned to running tasks
+        # GPU mode: always create a raw shell session (no Claude Code)
+        if mode == "gpu":
+            name = f"{prefix}-gpu-{uuid4().hex[:8]}"
+            rt.new_session(name)
+            rt.send_keys(name, f"cd {work_dir}")
+            rt.send_enter(name)
+            return name
+
+        # Code mode: try warm pool first
+        sessions = rt.list_sessions(prefix=prefix)
         active_sessions = {
             t.tmux_session
             for t in self.store.list_tasks(status="running", node=node.name)
@@ -72,12 +85,11 @@ class Dispatcher:
             if s not in active_sessions:
                 return s
 
-        # No idle session — create a new one
+        # No idle session — create a new one with Claude Code
         name = f"{prefix}-{uuid4().hex[:8]}"
         rt.new_session(name)
         claude_path = node.config.get("claude_path", "claude")
         claude_flags = node.config.get("claude_flags", "")
-        work_dir = node.config.get("work_dir", "~")
         claude_cmd = f"{claude_path} {claude_flags}".strip()
         rt.send_keys(name, f"cd {work_dir} && {claude_cmd}")
         rt.send_enter(name)
@@ -130,7 +142,7 @@ class Dispatcher:
 
         # 4. Acquire session + send command
         loop = asyncio.get_event_loop()
-        session = await loop.run_in_executor(None, self._acquire_session, node)
+        session = await loop.run_in_executor(None, self._acquire_session, node, mode)
         task.tmux_session = session
         self.store.update_status(
             task.id,
