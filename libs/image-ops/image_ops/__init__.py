@@ -111,6 +111,7 @@ def _register_builtins():
         contrast,
         denoise,
         deskew,
+        detect,
         grayscale,
         invert,
         resize,

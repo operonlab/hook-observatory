@@ -109,12 +109,15 @@ def register(name: str):
 def _register_builtins():
     from . import (  # noqa: F401
         assemble_frames,
+        detect_scenes,
         extract_frames,
         map_frames,
         probe,
         thumbnail,
         transcode,
         trim,
+        yolo_overlay,
+        zoom_pan,
     )
 
 
