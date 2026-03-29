@@ -232,11 +232,11 @@ class RedisStreamsBackend(EventBackend):
                     )
                     await self._redis.ping()
                     self._degraded = False
-                    self._reconnect_attempts = 0
                     logger.info(
                         "redis_streams_reconnected",
                         attempts=self._reconnect_attempts,
                     )
+                    self._reconnect_attempts = 0
                     await self._activate_consumer()
                 except Exception as e:
                     logger.debug(
