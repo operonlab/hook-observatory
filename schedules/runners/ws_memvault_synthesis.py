@@ -32,6 +32,7 @@ except ImportError:
 # ── Quota Gate ─────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.quota_gate import request_clearance
+from lib.structured_run import structured_run
 
 request_clearance("ws-memvault-synthesis")
 
