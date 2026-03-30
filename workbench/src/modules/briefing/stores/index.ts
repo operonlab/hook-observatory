@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
+import { withJournal } from '@/shared/utils/journalMiddleware'
 
 type NavPage = 'today' | 'history' | 'config'
 
@@ -19,22 +20,25 @@ function todayStr() {
 
 export const useBriefingStore = create<BriefingState>()(
   devtools(
-    persist(
-      (set) => ({
-        activePage: 'today',
-        selectedDate: todayStr(),
-        briefingsPage: 1,
+    withJournal(
+      persist(
+        (set) => ({
+          activePage: 'today',
+          selectedDate: todayStr(),
+          briefingsPage: 1,
 
-        setActivePage: (page) => set({ activePage: page }),
-        setSelectedDate: (date) => set({ selectedDate: date }),
-        setBriefingsPage: (page) => set({ briefingsPage: page }),
-      }),
-      {
-        name: 'briefing-cache',
-        partialize: (state) => ({
-          selectedDate: state.selectedDate,
+          setActivePage: (page) => set({ activePage: page }, false, 'briefing/setActivePage'),
+          setSelectedDate: (date) => set({ selectedDate: date }, false, 'briefing/setSelectedDate'),
+          setBriefingsPage: (page) =>
+            set({ briefingsPage: page }, false, 'briefing/setBriefingsPage'),
         }),
-      },
+        {
+          name: 'briefing-cache',
+          partialize: (state) => ({
+            selectedDate: state.selectedDate,
+          }),
+        },
+      ),
     ),
     { name: 'briefingStore' },
   ),

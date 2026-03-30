@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { withJournal } from '@/shared/utils/journalMiddleware'
 
 export interface ChatMessage {
   id: string
@@ -25,24 +26,28 @@ let msgCounter = 0
 
 export const useChatStore = create<ChatState>()(
   devtools(
-    (set, _get) => ({
+    withJournal((set, _get) => ({
       open: false,
       messages: [],
       currentModule: null,
 
-      toggle: () => set((s) => ({ open: !s.open })),
-      setOpen: (v) => set({ open: v }),
-      setCurrentModule: (m) => set({ currentModule: m }),
+      toggle: () => set((s) => ({ open: !s.open }), false, 'chat/toggle'),
+      setOpen: (v) => set({ open: v }, false, 'chat/setOpen'),
+      setCurrentModule: (m) => set({ currentModule: m }, false, 'chat/setCurrentModule'),
 
       addMessage: (msg) => {
         const id = `msg-${Date.now()}-${++msgCounter}`
-        set((s) => ({
-          messages: [...s.messages, { ...msg, id, timestamp: Date.now() }],
-        }))
+        set(
+          (s) => ({
+            messages: [...s.messages, { ...msg, id, timestamp: Date.now() }],
+          }),
+          false,
+          'chat/addMessage',
+        )
       },
 
-      clearMessages: () => set({ messages: [] }),
-    }),
+      clearMessages: () => set({ messages: [] }, false, 'chat/clearMessages'),
+    })),
     { name: 'chatStore' },
   ),
 )

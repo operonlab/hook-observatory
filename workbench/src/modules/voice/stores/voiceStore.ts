@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { withJournal } from '@/shared/utils/journalMiddleware'
 import type {
   TranscriptEntry,
   VoiceClientConfig,
@@ -30,7 +31,7 @@ interface VoiceStore {
 
 export const useVoiceStore = create<VoiceStore>()(
   devtools(
-    (set) => ({
+    withJournal((set) => ({
       state: 'IDLE',
       mode: 'server',
       enabled: false,
@@ -38,46 +39,54 @@ export const useVoiceStore = create<VoiceStore>()(
       transcripts: [],
       config: null,
 
-      setState: (state) => set({ state }),
-      setMode: (mode) => set({ mode }),
-      setEnabled: (enabled) => set({ enabled }),
-      setConnected: (connected) => set({ connected }),
+      setState: (state) => set({ state }, false, 'voice/setState'),
+      setMode: (mode) => set({ mode }, false, 'voice/setMode'),
+      setEnabled: (enabled) => set({ enabled }, false, 'voice/setEnabled'),
+      setConnected: (connected) => set({ connected }, false, 'voice/setConnected'),
       addTranscript: (entry) =>
-        set((s) => ({
-          transcripts: [entry, ...s.transcripts].slice(0, 50),
-        })),
-      setConfig: (config) => set({ config }),
-      clearTranscripts: () => set({ transcripts: [] }),
+        set(
+          (s) => ({
+            transcripts: [entry, ...s.transcripts].slice(0, 50),
+          }),
+          false,
+          'voice/addTranscript',
+        ),
+      setConfig: (config) => set({ config }, false, 'voice/setConfig'),
+      clearTranscripts: () => set({ transcripts: [] }, false, 'voice/clearTranscripts'),
 
       handleEvent: (event) =>
-        set((s) => {
-          const updates: Partial<VoiceStore> = {}
+        set(
+          (s) => {
+            const updates: Partial<VoiceStore> = {}
 
-          switch (event.type) {
-            case 'voice.state.changed':
-              updates.state = (event.to as VoiceState) || s.state
-              break
-            case 'voice.mode.switched':
-              updates.mode = (event.current as VoiceMode) || s.mode
-              break
-            case 'voice.transcript.completed':
-              if (typeof event.text === 'string' && event.text) {
-                updates.transcripts = [
-                  {
-                    text: event.text,
-                    timestamp: Date.now(),
-                    source_path: (event.source_path as 'client' | 'server') || 'server',
-                    engine: event.engine as string | undefined,
-                  },
-                  ...s.transcripts,
-                ].slice(0, 50)
-              }
-              break
-          }
+            switch (event.type) {
+              case 'voice.state.changed':
+                updates.state = (event.to as VoiceState) || s.state
+                break
+              case 'voice.mode.switched':
+                updates.mode = (event.current as VoiceMode) || s.mode
+                break
+              case 'voice.transcript.completed':
+                if (typeof event.text === 'string' && event.text) {
+                  updates.transcripts = [
+                    {
+                      text: event.text,
+                      timestamp: Date.now(),
+                      source_path: (event.source_path as 'client' | 'server') || 'server',
+                      engine: event.engine as string | undefined,
+                    },
+                    ...s.transcripts,
+                  ].slice(0, 50)
+                }
+                break
+            }
 
-          return updates
-        }),
-    }),
+            return updates
+          },
+          false,
+          'voice/handleEvent',
+        ),
+    })),
     { name: 'voiceStore' },
   ),
 )

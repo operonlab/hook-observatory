@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { paperApi } from '@/modules/paper/api/client'
 import type { AnnotationCreate } from '@/modules/paper/types'
+import { logMutation } from '@/shared/utils/actionJournal'
 
 export const paperKeys = {
   all: ['paper'] as const,
@@ -92,7 +93,8 @@ export function useDeleteArticleMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => paperApi.delete(id),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      logMutation('paper/deleteArticle', variables)
       queryClient.invalidateQueries({ queryKey: paperKeys.all })
     },
   })
@@ -102,7 +104,8 @@ export function useAddAnnotationMutation(articleId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (data: AnnotationCreate) => paperApi.createAnnotation(articleId, data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      logMutation('paper/addAnnotation', variables)
       queryClient.invalidateQueries({ queryKey: paperKeys.annotations(articleId) })
     },
   })
