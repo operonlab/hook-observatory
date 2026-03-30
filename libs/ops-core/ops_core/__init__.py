@@ -281,6 +281,185 @@ class CatchOp:
         return self._name
 
 
+# ── DelayOp (RxJS: delay — rate-limit between ops) ──────────────────────
+
+
+class DelayOp:
+    """Pause execution for a fixed duration — rate-limit external API calls.
+
+    RxJS equivalent: delay(ms)
+    """
+
+    name = "delay"
+    input_keys: tuple[str, ...] = ()
+    output_keys: tuple[str, ...] = ()
+
+    def __init__(self, seconds: float = 1.0, name: str = "delay"):
+        self._seconds = seconds
+        self.name = name  # type: ignore[assignment]
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        import time
+
+        time.sleep(self._seconds)
+        return ctx
+
+    def __repr__(self) -> str:
+        return f"delay({self._seconds}s)"
+
+
+# ── RetryOp (RxJS: retry — retry N times on failure) ────────────────────
+
+
+class RetryOp:
+    """Retry a failing op up to N times with optional backoff.
+
+    RxJS equivalent: retry({ count: 3, delay: 1000 })
+    """
+
+    def __init__(
+        self,
+        op: Op,
+        *,
+        count: int = 3,
+        backoff: float = 1.0,
+        name: str | None = None,
+    ):
+        self._op = op
+        self._count = count
+        self._backoff = backoff
+        self._name = name or f"retry({op.name}, {count}x)"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return self._op.input_keys
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        return self._op.output_keys
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        import time
+
+        last_err: Exception | None = None
+        for attempt in range(self._count):
+            try:
+                return self._op(ctx)
+            except Exception as e:
+                last_err = e
+                if attempt < self._count - 1:
+                    wait = self._backoff * (2**attempt)
+                    logger.warning(
+                        "RetryOp: %s attempt %d/%d failed: %s (wait %.1fs)",
+                        self._op.name,
+                        attempt + 1,
+                        self._count,
+                        e,
+                        wait,
+                    )
+                    time.sleep(wait)
+        raise last_err  # type: ignore[misc]
+
+    def __repr__(self) -> str:
+        return self._name
+
+
+# ── FinalizeOp (RxJS: finalize — cleanup after pipeline) ────────────────
+
+
+class FinalizeOp:
+    """Cleanup callback that runs after an op, regardless of success/failure.
+
+    RxJS equivalent: finalize(() => cleanup())
+    """
+
+    def __init__(
+        self,
+        op: Op,
+        cleanup: Callable[[dict[str, Any]], None],
+        *,
+        name: str | None = None,
+    ):
+        self._op = op
+        self._cleanup = cleanup
+        self._name = name or f"finalize({op.name})"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return self._op.input_keys
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        return self._op.output_keys
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self._op(ctx)
+        finally:
+            try:
+                self._cleanup(ctx)
+            except Exception as e:
+                logger.warning("FinalizeOp: cleanup failed: %s", e)
+
+    def __repr__(self) -> str:
+        return self._name
+
+
+# ── TimeoutOp (RxJS: timeout — abort if op exceeds duration) ────────────
+
+
+class TimeoutOp:
+    """Abort an op if it exceeds the specified duration.
+
+    RxJS equivalent: timeout(ms)
+    Uses a thread to enforce the deadline on CPU-bound ops.
+    """
+
+    def __init__(
+        self,
+        op: Op,
+        *,
+        seconds: float = 30.0,
+        name: str | None = None,
+    ):
+        self._op = op
+        self._seconds = seconds
+        self._name = name or f"timeout({op.name}, {seconds}s)"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return self._op.input_keys
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        return self._op.output_keys
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(self._op, ctx)
+            try:
+                return future.result(timeout=self._seconds)
+            except TimeoutError:
+                raise TimeoutError(f"{self._op.name} exceeded {self._seconds}s timeout") from None
+
+    def __repr__(self) -> str:
+        return self._name
+
+
 # ── Parser Utilities ─────────────────────────────────────────────────────
 
 _PARALLEL_RE = re.compile(r"^\[(.+)]$")
