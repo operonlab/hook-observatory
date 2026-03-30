@@ -21,6 +21,7 @@ FlowRunCompleted = create_action("nodeflow.flow_run.completed")
 FlowRunFailed = create_action("nodeflow.flow_run.failed")
 NodeExecuted = create_action("nodeflow.node.executed")
 NodeFailed = create_action("nodeflow.node.failed")
+StateTransitioned = create_action("nodeflow.state.transitioned")
 
 # ── Reducer ──────────────────────────────────────────────────────────────
 
@@ -95,6 +96,10 @@ nodeflow_reducer = create_reducer(
         NodeFailed,
         lambda s, a: s,  # node failures tracked at run level
     ),
+    on(
+        StateTransitioned,
+        lambda s, a: s,  # state transition is side-effect only — no store state change
+    ),
 )
 
 # ── Store ─────────────────────────────────────────────────────────────────
@@ -165,9 +170,41 @@ async def on_node_failed(action, store):
     )
 
 
+@effect(StateTransitioned, store=nodeflow_store)
+async def publish_state_changed(action, store) -> None:
+    """Publish state_changed event to EventBus (replaces emit_state_changed)."""
+    payload = action.payload or {}
+    module_name = payload.get("module", "nodeflow")
+    entity_type = payload.get("entity_type", "")
+    event_type = f"{module_name}.{entity_type}.state_changed"
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type=event_type,
+                data={
+                    "entity_id": payload.get("entity_id"),
+                    "old_state": payload.get("old_state"),
+                    "new_state": payload.get("new_state"),
+                    **{
+                        k: v
+                        for k, v in payload.items()
+                        if k not in ("module", "entity_type", "entity_id", "old_state", "new_state")
+                    },
+                },
+                source=f"{module_name}.store",
+                user_id=payload.get("user_id"),
+            )
+        )
+    except Exception:
+        logger.debug("EventBus publish failed for %s", event_type, exc_info=True)
+
+
 register_effects(
     nodeflow_store,
     on_flow_completed,
     on_flow_failed,
     on_node_failed,
+    publish_state_changed,
 )

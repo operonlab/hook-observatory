@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.shared.errors import BadRequestError, ConflictError, NotFoundError
-from src.shared.fsm import emit_state_changed, validate_transition
+from src.shared.fsm import validate_transition
 
 from .deps import hash_password, verify_password
 from .lifecycle import UserLifecycle
@@ -257,9 +257,7 @@ class UserService:
             raise NotFoundError("User not found", code="auth.user_not_found")
         return user.preferences or {}
 
-    async def update_preferences(
-        self, db: AsyncSession, user_id: str, patch: dict
-    ) -> dict:
+    async def update_preferences(self, db: AsyncSession, user_id: str, patch: dict) -> dict:
         user = await db.get(User, user_id)
         if not user:
             raise NotFoundError("User not found", code="auth.user_not_found")
@@ -331,7 +329,17 @@ class UserService:
         await db.refresh(user)
 
         if status is not None and old_status != status:
-            await emit_state_changed("auth", "user", user.id, old_status, status)
+            from .store import StateTransitioned, auth_store
+
+            await auth_store.dispatch(
+                StateTransitioned(
+                    module="auth",
+                    entity_type="user",
+                    entity_id=str(user.id),
+                    old_state=old_status,
+                    new_state=status,
+                )
+            )
 
         return user
 

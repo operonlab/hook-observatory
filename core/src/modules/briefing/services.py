@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.shared.embedding import get_embedding
 from src.shared.errors import BadRequestError, NotFoundError
-from src.shared.fsm import emit_state_changed, validate_transition
+from src.shared.fsm import validate_transition
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
@@ -636,7 +636,17 @@ class BriefingService:
         await db.refresh(instance)
 
         if data.status and old_status != data.status:
-            await emit_state_changed("briefing", "briefing", instance.id, old_status, data.status)
+            from .store import StateTransitioned, briefing_store
+
+            await briefing_store.dispatch(
+                StateTransitioned(
+                    module="briefing",
+                    entity_type="briefing",
+                    entity_id=str(instance.id),
+                    old_state=old_status,
+                    new_state=data.status,
+                )
+            )
 
         return self._to_response(instance)
 

@@ -24,7 +24,7 @@ from src.modules.finance.store import (
 )
 from src.shared.cache import cached
 from src.shared.errors import BadRequestError, NotFoundError
-from src.shared.fsm import emit_state_changed, validate_transition
+from src.shared.fsm import validate_transition
 from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -1070,8 +1070,17 @@ class TransactionService(
         await db.refresh(instance)
 
         if old_status != instance.status:
-            await emit_state_changed(
-                "finance", "transaction", entity_id, old_status, instance.status, user_id
+            from .store import StateTransitioned, finance_store
+
+            await finance_store.dispatch(
+                StateTransitioned(
+                    module="finance",
+                    entity_type="transaction",
+                    entity_id=str(entity_id),
+                    old_state=old_status,
+                    new_state=instance.status,
+                    user_id=user_id,
+                )
             )
 
         # Audit diff

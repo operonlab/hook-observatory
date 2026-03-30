@@ -23,6 +23,7 @@ FollowUpAsked = create_action("briefing.follow_up.asked")
 FollowUpAnswered = create_action("briefing.follow_up.answered")
 AnalystCreated = create_action("briefing.analyst.created")
 TopicUpdated = create_action("briefing.topic.updated")
+StateTransitioned = create_action("briefing.state.transitioned")
 
 # ── 2. Reducer ────────────────────────────────────────────────────────────
 
@@ -115,6 +116,7 @@ briefing_reducer = create_reducer(
     on(FollowUpAsked, _handle_follow_up_asked),
     on(FollowUpAnswered, _handle_follow_up_answered),
     on(TopicUpdated, lambda s, a: s),
+    on(StateTransitioned, lambda s, a: s),
 )
 
 # ── 3. Selectors ─────────────────────────────────────────────────────────
@@ -162,4 +164,30 @@ async def log_daily_failed(action, store) -> None:
     )
 
 
-register_effects(briefing_store, log_daily_completed, log_daily_failed)
+@effect(StateTransitioned, store=briefing_store)
+async def publish_state_changed(action, store) -> None:
+    """Publish state_changed event to EventBus (replaces emit_state_changed)."""
+    payload = action.payload or {}
+    module_name = payload.get("module", "briefing")
+    entity_type = payload.get("entity_type", "")
+    event_type = f"{module_name}.{entity_type}.state_changed"
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type=event_type,
+                data={
+                    "entity_id": payload.get("entity_id"),
+                    "old_state": payload.get("old_state"),
+                    "new_state": payload.get("new_state"),
+                },
+                source=f"{module_name}.store",
+                user_id=payload.get("user_id"),
+            )
+        )
+    except Exception:
+        logger.debug("EventBus publish failed for %s", event_type, exc_info=True)
+
+
+register_effects(briefing_store, log_daily_completed, log_daily_failed, publish_state_changed)

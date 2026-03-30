@@ -17,6 +17,7 @@ TaskCompleted = create_action("taskflow.task.completed")
 TaskStatusChanged = create_action("taskflow.task.status_changed")
 TaskDeleted = create_action("taskflow.task.deleted")
 ReportGenerated = create_action("taskflow.report.generated")
+StateTransitioned = create_action("taskflow.state.transitioned")
 
 # ── Reducer ──────────────────────────────────────────────────────────────
 
@@ -61,6 +62,10 @@ taskflow_reducer = create_reducer(
         ReportGenerated,
         lambda s, a: s,  # report generation is side-effect only — no state change
     ),
+    on(
+        StateTransitioned,
+        lambda s, a: s,  # state transition is side-effect only — no store state change
+    ),
 )
 
 # ── Store ─────────────────────────────────────────────────────────────────
@@ -102,7 +107,39 @@ async def on_task_completed(action, store):
     )
 
 
+@effect(StateTransitioned, store=taskflow_store)
+async def publish_state_changed(action, store) -> None:
+    """Publish state_changed event to EventBus (replaces emit_state_changed)."""
+    payload = action.payload or {}
+    module_name = payload.get("module", "taskflow")
+    entity_type = payload.get("entity_type", "")
+    event_type = f"{module_name}.{entity_type}.state_changed"
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type=event_type,
+                data={
+                    "entity_id": payload.get("entity_id"),
+                    "old_state": payload.get("old_state"),
+                    "new_state": payload.get("new_state"),
+                    **{
+                        k: v
+                        for k, v in payload.items()
+                        if k not in ("module", "entity_type", "entity_id", "old_state", "new_state")
+                    },
+                },
+                source=f"{module_name}.store",
+                user_id=payload.get("user_id"),
+            )
+        )
+    except Exception:
+        logger.debug("EventBus publish failed for %s", event_type, exc_info=True)
+
+
 register_effects(
     taskflow_store,
     on_task_completed,
+    publish_state_changed,
 )

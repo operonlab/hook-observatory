@@ -12,7 +12,7 @@ from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import batch_update, to_immutable, update_in
 from src.shared.middleware import AuditMiddleware
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ RoleAssigned = create_action("auth.role.assigned")
 OAuthLinked = create_action("auth.oauth.linked")
 SessionCreated = create_action("auth.session.created")
 SessionRevoked = create_action("auth.session.revoked")
+StateTransitioned = create_action("auth.state.transitioned")
 
 # ── 2. Reducer ────────────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ auth_reducer = create_reducer(
     on(UserRegistered, lambda s, a: s),
     on(RoleAssigned, lambda s, a: s),
     on(OAuthLinked, lambda s, a: s),
+    on(StateTransitioned, lambda s, a: s),  # FSM transitions tracked via EventBus effect
 )
 
 # ── 3. Selectors ─────────────────────────────────────────────────────────
@@ -162,6 +164,7 @@ _AUDIT_TYPES = {
     OAuthLinked.type,
     SessionCreated.type,
     SessionRevoked.type,
+    StateTransitioned.type,
 }
 
 auth_store: FeatureStore = FeatureStore(
@@ -177,7 +180,7 @@ auth_store: FeatureStore = FeatureStore(
 async def notify_login_effect(action, store) -> None:
     """登入成功 → 透過 EventBus 發布跨模組通知。
 
-    讓 notification 模組可以做登入提醒（新裝置 / 異常 IP）。
+    讓 notification 模組可以做登入提醒 (新裝置 / 異常 IP)。
     """
     payload = action.payload or {}
     user_id = payload.get("user_id")
@@ -212,9 +215,9 @@ async def notify_login_effect(action, store) -> None:
 
 @effect(UserLoggedOut, store=auth_store)
 async def cleanup_session_effect(action, store) -> None:
-    """登出 → 記錄 session 清理日誌，並通知跨模組做必要收尾。
+    """登出 → 記錄 session 清理日誌, 並通知跨模組做必要收尾。
 
-    AuditMiddleware 已寫 audit log，這裡補充跨模組 EventBus 通知。
+    AuditMiddleware 已寫 audit log, 這裡補充跨模組 EventBus 通知。
     """
     payload = action.payload or {}
     user_id = payload.get("user_id")
@@ -245,9 +248,9 @@ async def cleanup_session_effect(action, store) -> None:
 
 @effect(UserStatusChanged, store=auth_store)
 async def notify_status_change_effect(action, store) -> None:
-    """用戶狀態變更（suspend/ban/activate）→ 跨模組廣播。
+    """用戶狀態變更 (suspend/ban/activate) → 跨模組廣播。
 
-    downstream（notification、taskflow 等）可訂閱此事件做各自處理。
+    downstream (notification, taskflow 等) 可訂閱此事件做各自處理。
     """
     payload = action.payload or {}
     user_id = payload.get("user_id")
@@ -313,10 +316,42 @@ async def notify_registration_effect(action, store) -> None:
         logger.warning("auth.effect.notify_registration_failed", error=str(exc))
 
 
+@effect(StateTransitioned, store=auth_store)
+async def publish_state_changed(action, store) -> None:
+    """Publish state_changed event to EventBus (replaces emit_state_changed)."""
+    payload = action.payload or {}
+    module_name = payload.get("module", "auth")
+    entity_type = payload.get("entity_type", "")
+    event_type = f"{module_name}.{entity_type}.state_changed"
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type=event_type,
+                data={
+                    "entity_id": payload.get("entity_id"),
+                    "old_state": payload.get("old_state"),
+                    "new_state": payload.get("new_state"),
+                    **{
+                        k: v
+                        for k, v in payload.items()
+                        if k not in ("module", "entity_type", "entity_id", "old_state", "new_state")
+                    },
+                },
+                source=f"{module_name}.store",
+                user_id=payload.get("user_id"),
+            )
+        )
+    except Exception:
+        logger.debug("EventBus publish failed for %s", event_type, exc_info=True)
+
+
 register_effects(
     auth_store,
     notify_login_effect,
     cleanup_session_effect,
     notify_status_change_effect,
     notify_registration_effect,
+    publish_state_changed,
 )

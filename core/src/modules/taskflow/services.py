@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.events.types import TaskflowEvents
 from src.shared.errors import BadRequestError, NotFoundError
-from src.shared.fsm import emit_state_changed, validate_transition
+from src.shared.fsm import validate_transition
 from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
@@ -193,8 +193,17 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
         await db.flush()
 
         # Emit events
-        await emit_state_changed(
-            "taskflow", "task", task_id, old_status, new_status, user_id=user_id
+        from .store import StateTransitioned, taskflow_store
+
+        await taskflow_store.dispatch(
+            StateTransitioned(
+                module="taskflow",
+                entity_type="task",
+                entity_id=str(task_id),
+                old_state=old_status,
+                new_state=new_status,
+                user_id=user_id,
+            )
         )
 
         if new_status == "done":

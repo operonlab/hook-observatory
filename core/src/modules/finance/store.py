@@ -70,6 +70,9 @@ GlobalSnapshotCreated = create_action("finance.snapshot.global_created")
 # Privacy
 PrivacyToggled = create_action("finance.privacy.toggled")
 
+# FSM
+StateTransitioned = create_action("finance.state.transitioned")
+
 # Cross-module (invest)
 InvestValuationUpdated = create_action("invest.valuation.updated")
 
@@ -258,6 +261,8 @@ finance_reducer = create_reducer(
     on(SubscriptionRenewed, lambda s, a: s),
     on(GlobalSnapshotCreated, lambda s, a: s),
     on(PrivacyToggled, lambda s, a: s),
+    # FSM
+    on(StateTransitioned, lambda s, a: s),
 )
 
 # ── 3. Selectors ──────────────────────────────────────────────────────────
@@ -370,3 +375,29 @@ async def sync_invest_wallet(action, store) -> None:
         except Exception:
             await db.rollback()
             logger.exception("invest_valuation_sync_via_store_failed", space_id=space_id)
+
+
+@effect(StateTransitioned, store=finance_store)
+async def publish_state_changed(action, store) -> None:
+    """Publish state_changed event to EventBus (replaces emit_state_changed)."""
+    payload = action.payload or {}
+    module_name = payload.get("module", "finance")
+    entity_type = payload.get("entity_type", "")
+    event_type = f"{module_name}.{entity_type}.state_changed"
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type=event_type,
+                data={
+                    "entity_id": payload.get("entity_id"),
+                    "old_state": payload.get("old_state"),
+                    "new_state": payload.get("new_state"),
+                },
+                source=f"{module_name}.store",
+                user_id=payload.get("user_id"),
+            )
+        )
+    except Exception:
+        logger.debug("EventBus publish failed for %s", event_type, exc_info=True)
