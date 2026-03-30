@@ -6,11 +6,15 @@ Does NOT replicate DB — thin reactive layer on top of services.py.
 
 from __future__ import annotations
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import batch_update, to_immutable, update_in
 from src.shared.middleware import AuditMiddleware
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore
+
+logger = logging.getLogger(__name__)
 
 # ── 1. Actions ────────────────────────────────────────────────────────────
 
@@ -164,4 +168,155 @@ auth_store: FeatureStore = FeatureStore(
     "auth",
     auth_reducer,
     middlewares=[AuditMiddleware(audit_types=_AUDIT_TYPES)],
+)
+
+# ── 5. Effects ────────────────────────────────────────────────────────────
+
+
+@effect(UserLoggedIn, store=auth_store)
+async def notify_login_effect(action, store) -> None:
+    """登入成功 → 透過 EventBus 發布跨模組通知。
+
+    讓 notification 模組可以做登入提醒（新裝置 / 異常 IP）。
+    """
+    payload = action.payload or {}
+    user_id = payload.get("user_id")
+    if not user_id:
+        return
+
+    logger.info(
+        "auth.effect.user_logged_in",
+        user_id=user_id,
+        ip=payload.get("ip"),
+        email=payload.get("email"),
+    )
+
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type="auth.user.logged_in.notify",
+                data={
+                    "user_id": user_id,
+                    "email": payload.get("email"),
+                    "ip": payload.get("ip"),
+                    "timestamp": payload.get("timestamp"),
+                },
+                source="auth_store",
+            )
+        )
+    except Exception as exc:
+        logger.warning("auth.effect.notify_login_failed", error=str(exc))
+
+
+@effect(UserLoggedOut, store=auth_store)
+async def cleanup_session_effect(action, store) -> None:
+    """登出 → 記錄 session 清理日誌，並通知跨模組做必要收尾。
+
+    AuditMiddleware 已寫 audit log，這裡補充跨模組 EventBus 通知。
+    """
+    payload = action.payload or {}
+    user_id = payload.get("user_id")
+    session_id = payload.get("session_id")
+
+    logger.info(
+        "auth.effect.user_logged_out",
+        user_id=user_id,
+        session_id=session_id,
+    )
+
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type="auth.session.cleanup",
+                data={
+                    "user_id": user_id,
+                    "session_id": session_id,
+                },
+                source="auth_store",
+            )
+        )
+    except Exception as exc:
+        logger.warning("auth.effect.cleanup_session_failed", error=str(exc))
+
+
+@effect(UserStatusChanged, store=auth_store)
+async def notify_status_change_effect(action, store) -> None:
+    """用戶狀態變更（suspend/ban/activate）→ 跨模組廣播。
+
+    downstream（notification、taskflow 等）可訂閱此事件做各自處理。
+    """
+    payload = action.payload or {}
+    user_id = payload.get("user_id")
+    new_status = payload.get("new_status")
+    old_status = payload.get("old_status")
+
+    logger.info(
+        "auth.effect.user_status_changed",
+        user_id=user_id,
+        old_status=old_status,
+        new_status=new_status,
+    )
+
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type="auth.user.status_changed.notify",
+                data={
+                    "user_id": user_id,
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "timestamp": payload.get("timestamp"),
+                },
+                source="auth_store",
+            )
+        )
+    except Exception as exc:
+        logger.warning("auth.effect.notify_status_change_failed", error=str(exc))
+
+
+@effect(UserRegistered, store=auth_store)
+async def notify_registration_effect(action, store) -> None:
+    """新用戶註冊 → 記錄日誌 + 廣播歡迎事件。
+
+    notification 模組可訂閱以發送歡迎信或 onboarding 流程。
+    """
+    payload = action.payload or {}
+    user_id = payload.get("user_id") or payload.get("id")
+    email = payload.get("email")
+
+    logger.info(
+        "auth.effect.user_registered",
+        user_id=user_id,
+        email=email,
+    )
+
+    try:
+        from src.events.bus import Event, event_bus
+
+        await event_bus.publish(
+            Event(
+                type="auth.user.registered.notify",
+                data={
+                    "user_id": user_id,
+                    "email": email,
+                },
+                source="auth_store",
+            )
+        )
+    except Exception as exc:
+        logger.warning("auth.effect.notify_registration_failed", error=str(exc))
+
+
+register_effects(
+    auth_store,
+    notify_login_effect,
+    cleanup_session_effect,
+    notify_status_change_effect,
+    notify_registration_effect,
 )
