@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { intelflowApi } from '@/modules/intelflow/api/client'
+import { logMutation } from '@/shared/utils/actionJournal'
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -80,7 +81,8 @@ export function useDeleteReport() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => intelflowApi.delete(id),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      logMutation('intelflow/deleteReport', variables)
       queryClient.invalidateQueries({ queryKey: intelflowKeys.all })
     },
   })

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { withJournal } from '@/shared/utils/journalMiddleware'
 
 interface PaperUIState {
   // Article filters
@@ -22,20 +23,23 @@ interface PaperUIState {
 
 export const usePaperStore = create<PaperUIState>()(
   devtools(
-    (set) => ({
+    withJournal((set) => ({
       activeCategory: null,
       activeTag: null,
       activeRelevance: null,
       articlesPage: 1,
       searchQuery: '',
 
-      setActiveCategory: (category) => set({ activeCategory: category, articlesPage: 1 }),
-      setActiveTag: (tag) => set({ activeTag: tag, articlesPage: 1 }),
-      setActiveRelevance: (relevance) => set({ activeRelevance: relevance, articlesPage: 1 }),
-      setArticlesPage: (page) => set({ articlesPage: page }),
-      setSearchQuery: (query) => set({ searchQuery: query }),
-      clearSearch: () => set({ searchQuery: '' }),
-    }),
+      setActiveCategory: (category) =>
+        set({ activeCategory: category, articlesPage: 1 }, false, 'paper/setActiveCategory'),
+      setActiveTag: (tag) =>
+        set({ activeTag: tag, articlesPage: 1 }, false, 'paper/setActiveTag'),
+      setActiveRelevance: (relevance) =>
+        set({ activeRelevance: relevance, articlesPage: 1 }, false, 'paper/setActiveRelevance'),
+      setArticlesPage: (page) => set({ articlesPage: page }, false, 'paper/setArticlesPage'),
+      setSearchQuery: (query) => set({ searchQuery: query }, false, 'paper/setSearchQuery'),
+      clearSearch: () => set({ searchQuery: '' }, false, 'paper/clearSearch'),
+    })),
     { name: 'paperStore' },
   ),
 )

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { withJournal } from '@/shared/utils/journalMiddleware'
 import type { MemoryBlock } from '@/types'
 import type { BlockFilters, BrowserTab, GalaxyLayer, ViewMode } from '../types'
 
@@ -32,7 +33,7 @@ interface MemvaultState {
 
 export const useMemvaultStore = create<MemvaultState>()(
   devtools(
-    (set) => ({
+    withJournal((set) => ({
       viewMode: 'grid',
       filters: DEFAULT_FILTERS,
       page: 1,
@@ -42,16 +43,21 @@ export const useMemvaultStore = create<MemvaultState>()(
       kg_activeTab: 'blocks',
       kg_galaxyLayers: new Set<GalaxyLayer>(['blocks', 'summaries', 'communities']),
 
-      selectBlock: (block) => set({ selectedBlock: block }),
-      setPage: (page) => set({ page }),
+      selectBlock: (block) => set({ selectedBlock: block }, false, 'memvault/selectBlock'),
+      setPage: (page) => set({ page }, false, 'memvault/setPage'),
       setFilters: (filters) =>
-        set((state) => ({ filters: { ...state.filters, ...filters }, page: 1 })),
-      setViewMode: (mode) => set({ viewMode: mode }),
-      setSearchQuery: (query) => set({ searchQuery: query }),
-      clearSearch: () => set({ searchQuery: '' }),
-      setKgActiveTab: (tab) => set({ kg_activeTab: tab }),
-      setKgGalaxyLayers: (layers) => set({ kg_galaxyLayers: layers }),
-    }),
+        set(
+          (state) => ({ filters: { ...state.filters, ...filters }, page: 1 }),
+          false,
+          'memvault/setFilters',
+        ),
+      setViewMode: (mode) => set({ viewMode: mode }, false, 'memvault/setViewMode'),
+      setSearchQuery: (query) => set({ searchQuery: query }, false, 'memvault/setSearchQuery'),
+      clearSearch: () => set({ searchQuery: '' }, false, 'memvault/clearSearch'),
+      setKgActiveTab: (tab) => set({ kg_activeTab: tab }, false, 'memvault/setKgActiveTab'),
+      setKgGalaxyLayers: (layers) =>
+        set({ kg_galaxyLayers: layers }, false, 'memvault/setKgGalaxyLayers'),
+    })),
     { name: 'memvaultStore' },
   ),
 )

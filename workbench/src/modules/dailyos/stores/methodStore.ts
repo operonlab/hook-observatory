@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { withJournal } from '@/shared/utils/journalMiddleware'
 import { handleStoreError } from '@/shared/utils/storeHelpers'
 import { configApi, methodApi, planApi, recurringApi, spanApi, taskGroupApi } from '../api'
 import type {
@@ -179,73 +180,87 @@ const initialState = {
 
 function optimisticPlanUpdate(
   get: () => MethodStore,
-  set: (partial: Partial<MethodStore>) => void,
+  // biome-ignore lint/suspicious/noExplicitAny: Zustand set overloads are complex; any is intentional here
+  set: (...args: any[]) => void,
   transform: (items: PlanItem[]) => PlanItem[],
+  actionName: string,
 ) {
   const { currentPlan, planItems } = get()
   if (!currentPlan) return
   const updatedItems = transform(planItems)
-  set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+  set(
+    { planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } },
+    false,
+    `dailyos/${actionName}`,
+  )
   planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
     console.error('Operation failed:', err)
-    set({ planItems: currentPlan.items, currentPlan })
+    set({ planItems: currentPlan.items, currentPlan }, false, `dailyos/${actionName}:rollback`)
   })
 }
 
 export const useMethodStore = create<MethodStore>()(
   devtools(
-    (set, get) => ({
+    withJournal((set, get) => ({
       ...initialState,
 
       fetchActiveMethod: async () => {
-        set({ loading: true, error: null })
+        set({ loading: true, error: null }, false, 'dailyos/fetchActiveMethod:start')
         try {
           const selections = await configApi.getActive().catch(() => [] as MethodSelection[])
           const primary = selections.length > 0 ? selections[0]?.method || null : null
-          set({
-            activeSelections: selections,
-            primaryMethod: primary,
-            layoutType: primary?.layout_type || 'list',
-            compositeConfig: buildCompositeConfig(selections),
-          })
+          set(
+            {
+              activeSelections: selections,
+              primaryMethod: primary,
+              layoutType: primary?.layout_type || 'list',
+              compositeConfig: buildCompositeConfig(selections),
+            },
+            false,
+            'dailyos/fetchActiveMethod:success',
+          )
         } catch (err) {
           handleStoreError(set, err, 'Failed to fetch active method')
         } finally {
-          set({ loading: false })
+          set({ loading: false }, false, 'dailyos/fetchActiveMethod:done')
         }
       },
 
       fetchPlan: async (date?: string) => {
-        set({ planLoading: true, error: null })
+        set({ planLoading: true, error: null }, false, 'dailyos/fetchPlan:start')
         try {
           const todayFallback = new Date().toISOString().slice(0, 10)
           const plan = date
             ? await planApi.forDate(date).catch(() => null)
             : await planApi.today().catch(() => null)
-          set({
-            currentDate: date || plan?.plan_date || todayFallback,
-            currentPlan: plan,
-            planItems: plan?.items || [],
-          })
+          set(
+            {
+              currentDate: date || plan?.plan_date || todayFallback,
+              currentPlan: plan,
+              planItems: plan?.items || [],
+            },
+            false,
+            'dailyos/fetchPlan:success',
+          )
         } catch (err) {
           handleStoreError(set, err, 'Failed to fetch plan')
         } finally {
-          set({ planLoading: false })
+          set({ planLoading: false }, false, 'dailyos/fetchPlan:done')
         }
       },
 
       fetchMethods: async (includePresets = true) => {
-        set({ methodsLoading: true, error: null })
+        set({ methodsLoading: true, error: null }, false, 'dailyos/fetchMethods:start')
         try {
           const result = await methodApi.listAll({
             include_presets: includePresets,
             page_size: 50,
           })
-          set({ methods: result.items })
+          set({ methods: result.items }, false, 'dailyos/fetchMethods:success')
         } catch (err) {
           handleStoreError(set, err, 'Failed to fetch methods')
         } finally {
-          set({ methodsLoading: false })
+          set({ methodsLoading: false }, false, 'dailyos/fetchMethods:done')
         }
       },
 
@@ -256,148 +271,199 @@ export const useMethodStore = create<MethodStore>()(
         const method = sel.method
         // Reorder: move this selection to front so it becomes primary
         const reordered = [sel, ...activeSelections.filter((s) => s.id !== sel.id)]
-        set({
-          activeSelections: reordered,
-          primaryMethod: method,
-          layoutType: method.layout_type || 'list',
-          compositeConfig: buildCompositeConfig(reordered),
-        })
+        set(
+          {
+            activeSelections: reordered,
+            primaryMethod: method,
+            layoutType: method.layout_type || 'list',
+            compositeConfig: buildCompositeConfig(reordered),
+          },
+          false,
+          'dailyos/setPrimary',
+        )
       },
 
       activateMethod: async (methodId: string, overrides?: Record<string, unknown>) => {
-        set({ loading: true, error: null })
+        set({ loading: true, error: null }, false, 'dailyos/activateMethod:start')
         try {
           await configApi.activate({ method_id: methodId, overrides })
           await get().fetchActiveMethod()
         } catch (err) {
           handleStoreError(set, err, 'Failed to activate method')
-          set({ loading: false })
+          set({ loading: false }, false, 'dailyos/activateMethod:done')
         }
       },
 
       addItem: (title: string, extra?: Partial<PlanItem>) => {
-        optimisticPlanUpdate(get, set, (items) => {
-          const maxOrder = items.reduce((max, i) => Math.max(max, i.sort_order), 0)
-          const newItem: PlanItem = {
-            id: crypto.randomUUID(),
-            title,
-            status: 'pending',
-            sort_order: maxOrder + 1,
-            ...extra,
-          }
-          return [...items, newItem]
-        })
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) => {
+            const maxOrder = items.reduce((max, i) => Math.max(max, i.sort_order), 0)
+            const newItem: PlanItem = {
+              id: crypto.randomUUID(),
+              title,
+              status: 'pending',
+              sort_order: maxOrder + 1,
+              ...extra,
+            }
+            return [...items, newItem]
+          },
+          'addItem',
+        )
       },
 
       removeItem: (itemId: string) => {
-        optimisticPlanUpdate(get, set, (items) => items.filter((i) => i.id !== itemId))
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) => items.filter((i) => i.id !== itemId),
+          'removeItem',
+        )
       },
 
       editItem: (itemId: string, updates: Partial<PlanItem>) => {
-        optimisticPlanUpdate(get, set, (items) =>
-          items.map((i) => (i.id === itemId ? { ...i, ...updates } : i)),
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) => items.map((i) => (i.id === itemId ? { ...i, ...updates } : i)),
+          'editItem',
         )
       },
 
       reorderItem: (itemId: string, direction: 'up' | 'down') => {
-        optimisticPlanUpdate(get, set, (items) => {
-          const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order)
-          const idx = sorted.findIndex((i) => i.id === itemId)
-          if (idx < 0) return items
-          const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-          if (swapIdx < 0 || swapIdx >= sorted.length) return items
-          const temp = sorted[idx].sort_order
-          sorted[idx] = { ...sorted[idx], sort_order: sorted[swapIdx].sort_order }
-          sorted[swapIdx] = { ...sorted[swapIdx], sort_order: temp }
-          return sorted
-        })
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) => {
+            const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order)
+            const idx = sorted.findIndex((i) => i.id === itemId)
+            if (idx < 0) return items
+            const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+            if (swapIdx < 0 || swapIdx >= sorted.length) return items
+            const temp = sorted[idx].sort_order
+            sorted[idx] = { ...sorted[idx], sort_order: sorted[swapIdx].sort_order }
+            sorted[swapIdx] = { ...sorted[swapIdx], sort_order: temp }
+            return sorted
+          },
+          'reorderItem',
+        )
       },
 
       reorderItems: (orderedIds: string[]) => {
-        optimisticPlanUpdate(get, set, (items) =>
-          items.map((item) => {
-            const newOrder = orderedIds.indexOf(item.id)
-            return newOrder >= 0 ? { ...item, sort_order: newOrder } : item
-          }),
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) =>
+            items.map((item) => {
+              const newOrder = orderedIds.indexOf(item.id)
+              return newOrder >= 0 ? { ...item, sort_order: newOrder } : item
+            }),
+          'reorderItems',
         )
       },
 
       toggleItem: (itemId: string) => {
-        optimisticPlanUpdate(get, set, (items) =>
-          items.map((i) =>
-            i.id === itemId
-              ? {
-                  ...i,
-                  status: (i.status === 'done' ? 'pending' : 'done') as PlanItem['status'],
-                }
-              : i,
-          ),
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) =>
+            items.map((i) =>
+              i.id === itemId
+                ? {
+                    ...i,
+                    status: (i.status === 'done' ? 'pending' : 'done') as PlanItem['status'],
+                  }
+                : i,
+            ),
+          'toggleItem',
         )
       },
 
       assignCategory: (itemId: string, categoryId: string) => {
-        optimisticPlanUpdate(get, set, (items) =>
-          items.map((i) => (i.id === itemId ? { ...i, category: categoryId || undefined } : i)),
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) =>
+            items.map((i) => (i.id === itemId ? { ...i, category: categoryId || undefined } : i)),
+          'assignCategory',
         )
       },
 
       scheduleItem: (itemId: string, time: string | undefined) => {
-        optimisticPlanUpdate(get, set, (items) =>
-          items.map((i) => (i.id === itemId ? { ...i, scheduled_time: time } : i)),
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) => items.map((i) => (i.id === itemId ? { ...i, scheduled_time: time } : i)),
+          'scheduleItem',
         )
       },
 
       moveRight: (itemId: string) => {
-        optimisticPlanUpdate(get, set, (items) => {
-          const item = items.find((i) => i.id === itemId)
-          if (!item) return items
-          if (item.category === 'doing') {
-            return items.map((i) =>
-              i.id === itemId
-                ? { ...i, status: 'done' as PlanItem['status'], category: undefined }
-                : i,
-            )
-          }
-          return items.map((i) => (i.id === itemId ? { ...i, category: 'doing' } : i))
-        })
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) => {
+            const item = items.find((i) => i.id === itemId)
+            if (!item) return items
+            if (item.category === 'doing') {
+              return items.map((i) =>
+                i.id === itemId
+                  ? { ...i, status: 'done' as PlanItem['status'], category: undefined }
+                  : i,
+              )
+            }
+            return items.map((i) => (i.id === itemId ? { ...i, category: 'doing' } : i))
+          },
+          'moveRight',
+        )
       },
 
       moveLeft: (itemId: string) => {
-        optimisticPlanUpdate(get, set, (items) => {
-          const item = items.find((i) => i.id === itemId)
-          if (!item) return items
-          if (item.status === 'done') {
-            // Undo done → back to doing
-            return items.map((i) =>
-              i.id === itemId
-                ? { ...i, status: 'pending' as PlanItem['status'], category: 'doing' }
-                : i,
-            )
-          } else if (item.category === 'doing') {
-            // Doing → todo (remove category)
-            return items.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
-          } else {
-            return items.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
-          }
-        })
+        optimisticPlanUpdate(
+          get,
+          set,
+          (items) => {
+            const item = items.find((i) => i.id === itemId)
+            if (!item) return items
+            if (item.status === 'done') {
+              // Undo done → back to doing
+              return items.map((i) =>
+                i.id === itemId
+                  ? { ...i, status: 'pending' as PlanItem['status'], category: 'doing' }
+                  : i,
+              )
+            } else if (item.category === 'doing') {
+              // Doing → todo (remove category)
+              return items.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
+            } else {
+              return items.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
+            }
+          },
+          'moveLeft',
+        )
       },
 
       fetchRecurringItems: async () => {
-        set({ recurringLoading: true })
+        set({ recurringLoading: true }, false, 'dailyos/fetchRecurringItems:start')
         try {
           const items = await recurringApi.list()
-          set({ recurringItems: items })
+          set({ recurringItems: items }, false, 'dailyos/fetchRecurringItems:success')
         } catch (err) {
           handleStoreError(set, err, 'Failed to fetch recurring items')
         } finally {
-          set({ recurringLoading: false })
+          set({ recurringLoading: false }, false, 'dailyos/fetchRecurringItems:done')
         }
       },
 
       addRecurringItem: async (data: RecurringItemCreate) => {
         try {
           const item = await recurringApi.create(data)
-          set({ recurringItems: [...get().recurringItems, item] })
+          set(
+            { recurringItems: [...get().recurringItems, item] },
+            false,
+            'dailyos/addRecurringItem:success',
+          )
         } catch (err) {
           handleStoreError(set, err, 'Failed to add recurring item')
         }
@@ -405,28 +471,40 @@ export const useMethodStore = create<MethodStore>()(
 
       updateRecurringItem: async (id: string, data: RecurringItemUpdate) => {
         const prev = get().recurringItems
-        set({
-          recurringItems: prev.map((i) => (i.id === id ? { ...i, ...data } : i)),
-        })
+        set(
+          {
+            recurringItems: prev.map((i) => (i.id === id ? { ...i, ...data } : i)),
+          },
+          false,
+          'dailyos/updateRecurringItem:optimistic',
+        )
         try {
           const updated = await recurringApi.update(id, data)
-          set({
-            recurringItems: get().recurringItems.map((i) => (i.id === id ? updated : i)),
-          })
+          set(
+            {
+              recurringItems: get().recurringItems.map((i) => (i.id === id ? updated : i)),
+            },
+            false,
+            'dailyos/updateRecurringItem:success',
+          )
         } catch (err) {
           handleStoreError(set, err, 'Failed to update recurring item')
-          set({ recurringItems: prev })
+          set({ recurringItems: prev }, false, 'dailyos/updateRecurringItem:rollback')
         }
       },
 
       removeRecurringItem: async (id: string) => {
         const prev = get().recurringItems
-        set({ recurringItems: prev.filter((i) => i.id !== id) })
+        set(
+          { recurringItems: prev.filter((i) => i.id !== id) },
+          false,
+          'dailyos/removeRecurringItem:optimistic',
+        )
         try {
           await recurringApi.remove(id)
         } catch (err) {
           handleStoreError(set, err, 'Failed to remove recurring item')
-          set({ recurringItems: prev })
+          set({ recurringItems: prev }, false, 'dailyos/removeRecurringItem:rollback')
         }
       },
 
@@ -435,7 +513,11 @@ export const useMethodStore = create<MethodStore>()(
         if (!currentPlan) return
         try {
           const updated = await planApi.transition(currentPlan.id, status)
-          set({ currentPlan: updated, planItems: updated.items })
+          set(
+            { currentPlan: updated, planItems: updated.items },
+            false,
+            'dailyos/transitionPlan:success',
+          )
         } catch (err) {
           handleStoreError(set, err, 'Failed to transition plan')
         }
@@ -447,7 +529,11 @@ export const useMethodStore = create<MethodStore>()(
         try {
           await planApi.update(currentPlan.id, { reflection })
           const updated = await planApi.transition(currentPlan.id, 'completed')
-          set({ currentPlan: updated, planItems: updated.items })
+          set(
+            { currentPlan: updated, planItems: updated.items },
+            false,
+            'dailyos/completeReview:success',
+          )
         } catch (err) {
           handleStoreError(set, err, 'Failed to complete review')
         }
@@ -456,31 +542,39 @@ export const useMethodStore = create<MethodStore>()(
       updatePlanItems: async (items: PlanItem[]) => {
         const { currentPlan } = get()
         if (!currentPlan) return
-        set({ planItems: items, currentPlan: { ...currentPlan, items } })
+        set(
+          { planItems: items, currentPlan: { ...currentPlan, items } },
+          false,
+          'dailyos/updatePlanItems:optimistic',
+        )
         try {
           await planApi.update(currentPlan.id, { items })
         } catch (err) {
-          set({ planItems: currentPlan.items, currentPlan })
+          set(
+            { planItems: currentPlan.items, currentPlan },
+            false,
+            'dailyos/updatePlanItems:rollback',
+          )
           handleStoreError(set, err, 'Failed to update plan items')
         }
       },
 
       fetchTaskGroups: async () => {
-        set({ taskGroupsLoading: true })
+        set({ taskGroupsLoading: true }, false, 'dailyos/fetchTaskGroups:start')
         try {
           const groups = await taskGroupApi.list()
-          set({ taskGroups: groups })
+          set({ taskGroups: groups }, false, 'dailyos/fetchTaskGroups:success')
         } catch (err) {
           handleStoreError(set, err, 'Failed to fetch task groups')
         } finally {
-          set({ taskGroupsLoading: false })
+          set({ taskGroupsLoading: false }, false, 'dailyos/fetchTaskGroups:done')
         }
       },
 
       addTaskGroup: async (data: TaskGroupCreate) => {
         try {
           const group = await taskGroupApi.create(data)
-          set({ taskGroups: [...get().taskGroups, group] })
+          set({ taskGroups: [...get().taskGroups, group] }, false, 'dailyos/addTaskGroup:success')
         } catch (err) {
           handleStoreError(set, err, 'Failed to create task group')
         }
@@ -488,28 +582,48 @@ export const useMethodStore = create<MethodStore>()(
 
       updateTaskGroup: async (id: string, data: TaskGroupUpdate) => {
         const prev = get().taskGroups
-        set({ taskGroups: prev.map((g) => (g.id === id ? { ...g, ...data } : g)) })
+        set(
+          { taskGroups: prev.map((g) => (g.id === id ? { ...g, ...data } : g)) },
+          false,
+          'dailyos/updateTaskGroup:optimistic',
+        )
         try {
           const updated = await taskGroupApi.update(id, data)
-          set({ taskGroups: get().taskGroups.map((g) => (g.id === id ? updated : g)) })
+          set(
+            { taskGroups: get().taskGroups.map((g) => (g.id === id ? updated : g)) },
+            false,
+            'dailyos/updateTaskGroup:success',
+          )
         } catch (err) {
-          set({
-            taskGroups: prev,
-            error: err instanceof Error ? err.message : 'Failed to update task group',
-          })
+          set(
+            {
+              taskGroups: prev,
+              error: err instanceof Error ? err.message : 'Failed to update task group',
+            },
+            false,
+            'dailyos/updateTaskGroup:rollback',
+          )
         }
       },
 
       removeTaskGroup: async (id: string) => {
         const prev = get().taskGroups
-        set({ taskGroups: prev.filter((g) => g.id !== id) })
+        set(
+          { taskGroups: prev.filter((g) => g.id !== id) },
+          false,
+          'dailyos/removeTaskGroup:optimistic',
+        )
         try {
           await taskGroupApi.remove(id)
         } catch (err) {
-          set({
-            taskGroups: prev,
-            error: err instanceof Error ? err.message : 'Failed to remove task group',
-          })
+          set(
+            {
+              taskGroups: prev,
+              error: err instanceof Error ? err.message : 'Failed to remove task group',
+            },
+            false,
+            'dailyos/removeTaskGroup:rollback',
+          )
         }
       },
 
@@ -521,25 +635,29 @@ export const useMethodStore = create<MethodStore>()(
           hidden.add(groupId)
         }
         saveHiddenGroupIds(hidden)
-        set({ hiddenGroupIds: hidden })
+        set({ hiddenGroupIds: hidden }, false, 'dailyos/toggleGroupVisibility')
       },
 
       fetchActivitySpans: async (dateFrom?: string, dateTo?: string) => {
-        set({ spansLoading: true })
+        set({ spansLoading: true }, false, 'dailyos/fetchActivitySpans:start')
         try {
           const spans = await spanApi.list({ date_from: dateFrom, date_to: dateTo })
-          set({ activitySpans: spans })
+          set({ activitySpans: spans }, false, 'dailyos/fetchActivitySpans:success')
         } catch (err) {
           handleStoreError(set, err, 'Failed to fetch activity spans')
         } finally {
-          set({ spansLoading: false })
+          set({ spansLoading: false }, false, 'dailyos/fetchActivitySpans:done')
         }
       },
 
       addActivitySpan: async (data: ActivitySpanCreate) => {
         try {
           const span = await spanApi.create(data)
-          set({ activitySpans: [...get().activitySpans, span] })
+          set(
+            { activitySpans: [...get().activitySpans, span] },
+            false,
+            'dailyos/addActivitySpan:success',
+          )
         } catch (err) {
           handleStoreError(set, err, 'Failed to add activity span')
         }
@@ -547,37 +665,57 @@ export const useMethodStore = create<MethodStore>()(
 
       updateActivitySpan: async (id: string, data: ActivitySpanUpdate) => {
         const prev = get().activitySpans
-        set({
-          activitySpans: prev.map((s) => (s.id === id ? { ...s, ...data } : s)),
-        })
+        set(
+          {
+            activitySpans: prev.map((s) => (s.id === id ? { ...s, ...data } : s)),
+          },
+          false,
+          'dailyos/updateActivitySpan:optimistic',
+        )
         try {
           const updated = await spanApi.update(id, data)
-          set({
-            activitySpans: get().activitySpans.map((s) => (s.id === id ? updated : s)),
-          })
+          set(
+            {
+              activitySpans: get().activitySpans.map((s) => (s.id === id ? updated : s)),
+            },
+            false,
+            'dailyos/updateActivitySpan:success',
+          )
         } catch (err) {
-          set({
-            activitySpans: prev,
-            error: err instanceof Error ? err.message : 'Failed to update activity span',
-          })
+          set(
+            {
+              activitySpans: prev,
+              error: err instanceof Error ? err.message : 'Failed to update activity span',
+            },
+            false,
+            'dailyos/updateActivitySpan:rollback',
+          )
         }
       },
 
       removeActivitySpan: async (id: string) => {
         const prev = get().activitySpans
-        set({ activitySpans: prev.filter((s) => s.id !== id) })
+        set(
+          { activitySpans: prev.filter((s) => s.id !== id) },
+          false,
+          'dailyos/removeActivitySpan:optimistic',
+        )
         try {
           await spanApi.remove(id)
         } catch (err) {
-          set({
-            activitySpans: prev,
-            error: err instanceof Error ? err.message : 'Failed to remove activity span',
-          })
+          set(
+            {
+              activitySpans: prev,
+              error: err instanceof Error ? err.message : 'Failed to remove activity span',
+            },
+            false,
+            'dailyos/removeActivitySpan:rollback',
+          )
         }
       },
 
-      reset: () => set(initialState),
-    }),
+      reset: () => set(initialState, false, 'dailyos/reset'),
+    })),
     { name: 'methodStore' },
   ),
 )

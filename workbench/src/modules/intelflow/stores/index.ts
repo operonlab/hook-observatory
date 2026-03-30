@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { withJournal } from '@/shared/utils/journalMiddleware'
 
 interface IntelflowUIState {
   activeTag: string | null
@@ -16,18 +17,19 @@ interface IntelflowUIState {
 
 export const useIntelflowStore = create<IntelflowUIState>()(
   devtools(
-    (set) => ({
+    withJournal((set) => ({
       activeTag: null,
       reportsPage: 1,
       searchQuery: '',
       activeTopic: null,
 
-      setActiveTag: (tag) => set({ activeTag: tag, reportsPage: 1 }),
-      setReportsPage: (page) => set({ reportsPage: page }),
-      setSearchQuery: (query) => set({ searchQuery: query }),
-      setActiveTopic: (topic) => set({ activeTopic: topic }),
-      clearSearch: () => set({ searchQuery: '' }),
-    }),
+      setActiveTag: (tag) =>
+        set({ activeTag: tag, reportsPage: 1 }, false, 'intelflow/setActiveTag'),
+      setReportsPage: (page) => set({ reportsPage: page }, false, 'intelflow/setReportsPage'),
+      setSearchQuery: (query) => set({ searchQuery: query }, false, 'intelflow/setSearchQuery'),
+      setActiveTopic: (topic) => set({ activeTopic: topic }, false, 'intelflow/setActiveTopic'),
+      clearSearch: () => set({ searchQuery: '' }, false, 'intelflow/clearSearch'),
+    })),
     { name: 'intelflowStore' },
   ),
 )
