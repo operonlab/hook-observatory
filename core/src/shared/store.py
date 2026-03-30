@@ -223,13 +223,11 @@ class FeatureStore[S]:
         """Read-only access to the attached ActionJournal (or None)."""
         return self._journal
 
-    def replay(self, from_idx: int = 0) -> S:
+    def replay(self, target_idx: int | None = None) -> S:
         """Replay journal actions and return resulting state.
 
-        Requires a journal to be attached (journal= parameter at init).
-
         Args:
-            from_idx: Number of actions to replay (0 = all).
+            target_idx: Replay up to this index (None = all).
 
         Raises:
             RuntimeError: If no journal is attached.
@@ -239,7 +237,7 @@ class FeatureStore[S]:
                 f"Store[{self.feature_key}] has no journal attached. "
                 "Pass journal=ActionJournal() at init."
             )
-        return self._journal.replay(self._reducer, from_idx=from_idx)
+        return self._journal.replay(self._reducer, target_idx=target_idx)
 
     def undo(self, n: int = 1) -> S:
         """Undo last N actions and update store state.

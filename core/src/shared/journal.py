@@ -69,18 +69,19 @@ class ActionJournal:
 
     # ── Read / Replay ─────────────────────────────────────────────────────
 
-    def replay(self, reducer: ReducerFn, from_idx: int = 0) -> Any:
+    def replay(self, reducer: ReducerFn, target_idx: int | None = None) -> Any:
         """Forward replay actions and return resulting state.
 
         Args:
             reducer: Pure reducer function (must have .initial_state).
-            from_idx: Number of actions to replay (0 = all actions).
+            target_idx: Replay up to this action index.
+                None = replay ALL actions (current state).
+                0 = initial state (no actions replayed).
 
         Returns:
             State after replaying the specified number of actions.
         """
-        # from_idx=0 means "replay all", otherwise replay exactly from_idx actions
-        end = len(self._actions) if from_idx == 0 else from_idx
+        end = len(self._actions) if target_idx is None else target_idx
 
         # Find nearest checkpoint with cp_idx <= end
         state: Any = reducer.initial_state
@@ -106,8 +107,8 @@ class ActionJournal:
         Returns:
             State as if the last n actions never happened.
         """
-        target_idx = max(0, len(self._actions) - n)
-        return self.replay(reducer, from_idx=target_idx)
+        target = max(0, len(self._actions) - n)
+        return self.replay(reducer, target_idx=target)
 
     # ── Query ─────────────────────────────────────────────────────────────
 
