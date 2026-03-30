@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
+import { handleStoreError } from '@/shared/utils/storeHelpers'
 import { paperApi } from '../api/client'
 import type {
   Annotation,
@@ -120,7 +121,7 @@ export const usePaperStore = create<PaperState>()(
             const data = await paperApi.getDashboard()
             set({ dashboard: data, dashboardFetchedAt: Date.now() })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch dashboard' })
+            handleStoreError(set, err, 'Failed to fetch dashboard')
           } finally {
             set({ dashboardLoading: false })
           }
@@ -158,7 +159,7 @@ export const usePaperStore = create<PaperState>()(
               }
             })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch articles' })
+            handleStoreError(set, err, 'Failed to fetch articles')
           } finally {
             set({ articlesLoading: false })
           }
@@ -170,7 +171,7 @@ export const usePaperStore = create<PaperState>()(
             const article = await paperApi.get(id)
             set({ selectedArticle: article })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch article' })
+            handleStoreError(set, err, 'Failed to fetch article')
           } finally {
             set({ articleDetailLoading: false })
           }
@@ -186,7 +187,7 @@ export const usePaperStore = create<PaperState>()(
               selectedArticle: state.selectedArticle?.id === id ? null : state.selectedArticle,
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to delete article' })
+            handleStoreError(set, err, 'Failed to delete article')
           }
         },
 
@@ -233,7 +234,7 @@ export const usePaperStore = create<PaperState>()(
             const list = Array.isArray(res) ? res : ((res as any).items ?? [])
             set({ annotations: list })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch annotations' })
+            handleStoreError(set, err, 'Failed to fetch annotations')
           } finally {
             set({ annotationsLoading: false })
           }
@@ -245,7 +246,7 @@ export const usePaperStore = create<PaperState>()(
             const annotation = await paperApi.createAnnotation(articleId, data)
             set((state) => ({ annotations: [...state.annotations, annotation] }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to add annotation' })
+            handleStoreError(set, err, 'Failed to add annotation')
           }
         },
 
@@ -260,7 +261,7 @@ export const usePaperStore = create<PaperState>()(
             const results = await paperApi.search(query, 10, 0.3)
             set({ searchResults: results })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Search failed' })
+            handleStoreError(set, err, 'Search failed')
           } finally {
             set({ searchLoading: false })
           }

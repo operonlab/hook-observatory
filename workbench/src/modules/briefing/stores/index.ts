@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
+import { handleStoreError } from '@/shared/utils/storeHelpers'
 import { briefingApi } from '../api/client'
 import type { Analyst, Briefing, BriefingTopic, DailySummary } from '../types'
 
@@ -103,7 +104,7 @@ export const useBriefingStore = create<BriefingState>()(
             set({ todaySummary: summary, todayFetchedAt: Date.now() })
           } catch (err) {
             console.error('fetchTodaySummary failed:', err)
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch summary' })
+            handleStoreError(set, err, 'Failed to fetch summary')
           } finally {
             set({ todayLoading: false })
           }
@@ -115,7 +116,7 @@ export const useBriefingStore = create<BriefingState>()(
             const result = await briefingApi.getBriefingsByDate(date)
             set({ selectedBriefings: result })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch briefing' })
+            handleStoreError(set, err, 'Failed to fetch briefing')
           } finally {
             set({ detailLoading: false })
           }
@@ -130,7 +131,7 @@ export const useBriefingStore = create<BriefingState>()(
             const res = await briefingApi.listBriefings(p, 20)
             set({ briefings: res.items, briefingsTotal: res.total, briefingsFetchedAt: Date.now() })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch briefings' })
+            handleStoreError(set, err, 'Failed to fetch briefings')
           } finally {
             set({ briefingsLoading: false })
           }
@@ -142,7 +143,7 @@ export const useBriefingStore = create<BriefingState>()(
             const res = await briefingApi.listTopics(1, 100)
             set({ topics: res.items, topicsFetchedAt: Date.now() })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch topics' })
+            handleStoreError(set, err, 'Failed to fetch topics')
           } finally {
             set({ topicsLoading: false })
           }
@@ -154,7 +155,7 @@ export const useBriefingStore = create<BriefingState>()(
             const result = await briefingApi.listAnalysts()
             set({ analysts: result, analystsFetchedAt: Date.now() })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch analysts' })
+            handleStoreError(set, err, 'Failed to fetch analysts')
           } finally {
             set({ analystsLoading: false })
           }

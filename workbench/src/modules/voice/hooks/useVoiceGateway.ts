@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
+import type { ReconnectingSource } from '@/shared/utils/reconnectingSource'
+import { createReconnectingSource } from '@/shared/utils/reconnectingSource'
 import { useVoiceStore } from '../stores/voiceStore'
 import type { VoiceClientConfig, VoiceEvent, VoiceStatus } from '../types'
 
@@ -25,7 +27,7 @@ async function postEvent(type: string, payload: Record<string, unknown> = {}) {
  */
 export function useVoiceGateway() {
   const { enabled, setConnected, handleEvent, setConfig, setState, setMode } = useVoiceStore()
-  const esRef = useRef<EventSource | null>(null)
+  const sourceRef = useRef<ReconnectingSource | null>(null)
   const heartbeatRef = useRef<ReturnType<typeof setInterval>>()
 
   // Fetch initial status + config
@@ -47,46 +49,33 @@ export function useVoiceGateway() {
   // SSE connection
   useEffect(() => {
     if (!enabled) {
-      esRef.current?.close()
-      esRef.current = null
+      sourceRef.current?.close()
+      sourceRef.current = null
       return
     }
 
-    let retryCount = 0
-    let retryTimer: ReturnType<typeof setTimeout>
-
-    function connect() {
-      const es = new EventSource(`${GATEWAY_BASE}/api/voice/stream`)
-      esRef.current = es
-
-      es.onmessage = (e) => {
-        try {
-          const event: VoiceEvent = JSON.parse(e.data)
-          if (event.type === 'heartbeat') return
-          retryCount = 0
-          handleEvent(event)
-        } catch {
-          /* ignore parse errors */
+    const source = createReconnectingSource(`${GATEWAY_BASE}/api/voice/stream`, {
+      onSetup: (es) => {
+        es.onmessage = (e) => {
+          try {
+            const event: VoiceEvent = JSON.parse(e.data)
+            if (event.type === 'heartbeat') return
+            handleEvent(event)
+          } catch {
+            /* ignore parse errors */
+          }
         }
-      }
-
-      es.onerror = () => {
-        es.close()
-        esRef.current = null
-        setConnected(false)
-        const delay = Math.min(1000 * 2 ** retryCount, 30000)
-        retryCount++
-        retryTimer = setTimeout(connect, delay)
-      }
-
-      es.onopen = () => {
-        retryCount = 0
+      },
+      onOpen: () => {
         setConnected(true)
         refresh()
-      }
-    }
+      },
+      onError: () => {
+        setConnected(false)
+      },
+    })
 
-    connect()
+    sourceRef.current = source
 
     // Client heartbeat every 30s
     heartbeatRef.current = setInterval(() => {
@@ -94,9 +83,8 @@ export function useVoiceGateway() {
     }, 30_000)
 
     return () => {
-      esRef.current?.close()
-      esRef.current = null
-      clearTimeout(retryTimer)
+      source.close()
+      sourceRef.current = null
       clearInterval(heartbeatRef.current)
     }
   }, [enabled, handleEvent, setConnected, refresh])

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { handleStoreError } from '@/shared/utils/storeHelpers'
 import { configApi, methodApi, planApi, recurringApi, spanApi, taskGroupApi } from '../api'
 import type {
   ActivitySpan,
@@ -208,9 +209,7 @@ export const useMethodStore = create<MethodStore>()(
             compositeConfig: buildCompositeConfig(selections),
           })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to fetch active method',
-          })
+          handleStoreError(set, err, 'Failed to fetch active method')
         } finally {
           set({ loading: false })
         }
@@ -229,9 +228,7 @@ export const useMethodStore = create<MethodStore>()(
             planItems: plan?.items || [],
           })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to fetch plan',
-          })
+          handleStoreError(set, err, 'Failed to fetch plan')
         } finally {
           set({ planLoading: false })
         }
@@ -246,9 +243,7 @@ export const useMethodStore = create<MethodStore>()(
           })
           set({ methods: result.items })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to fetch methods',
-          })
+          handleStoreError(set, err, 'Failed to fetch methods')
         } finally {
           set({ methodsLoading: false })
         }
@@ -275,10 +270,8 @@ export const useMethodStore = create<MethodStore>()(
           await configApi.activate({ method_id: methodId, overrides })
           await get().fetchActiveMethod()
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to activate method',
-            loading: false,
-          })
+          handleStoreError(set, err, 'Failed to activate method')
+          set({ loading: false })
         }
       },
 
@@ -395,9 +388,7 @@ export const useMethodStore = create<MethodStore>()(
           const items = await recurringApi.list()
           set({ recurringItems: items })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to fetch recurring items',
-          })
+          handleStoreError(set, err, 'Failed to fetch recurring items')
         } finally {
           set({ recurringLoading: false })
         }
@@ -408,9 +399,7 @@ export const useMethodStore = create<MethodStore>()(
           const item = await recurringApi.create(data)
           set({ recurringItems: [...get().recurringItems, item] })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to add recurring item',
-          })
+          handleStoreError(set, err, 'Failed to add recurring item')
         }
       },
 
@@ -425,10 +414,8 @@ export const useMethodStore = create<MethodStore>()(
             recurringItems: get().recurringItems.map((i) => (i.id === id ? updated : i)),
           })
         } catch (err) {
-          set({
-            recurringItems: prev,
-            error: err instanceof Error ? err.message : 'Failed to update recurring item',
-          })
+          handleStoreError(set, err, 'Failed to update recurring item')
+          set({ recurringItems: prev })
         }
       },
 
@@ -438,10 +425,8 @@ export const useMethodStore = create<MethodStore>()(
         try {
           await recurringApi.remove(id)
         } catch (err) {
-          set({
-            recurringItems: prev,
-            error: err instanceof Error ? err.message : 'Failed to remove recurring item',
-          })
+          handleStoreError(set, err, 'Failed to remove recurring item')
+          set({ recurringItems: prev })
         }
       },
 
@@ -452,9 +437,7 @@ export const useMethodStore = create<MethodStore>()(
           const updated = await planApi.transition(currentPlan.id, status)
           set({ currentPlan: updated, planItems: updated.items })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to transition plan',
-          })
+          handleStoreError(set, err, 'Failed to transition plan')
         }
       },
 
@@ -466,9 +449,7 @@ export const useMethodStore = create<MethodStore>()(
           const updated = await planApi.transition(currentPlan.id, 'completed')
           set({ currentPlan: updated, planItems: updated.items })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to complete review',
-          })
+          handleStoreError(set, err, 'Failed to complete review')
         }
       },
 
@@ -480,9 +461,7 @@ export const useMethodStore = create<MethodStore>()(
           await planApi.update(currentPlan.id, { items })
         } catch (err) {
           set({ planItems: currentPlan.items, currentPlan })
-          set({
-            error: err instanceof Error ? err.message : 'Failed to update plan items',
-          })
+          handleStoreError(set, err, 'Failed to update plan items')
         }
       },
 
@@ -492,9 +471,7 @@ export const useMethodStore = create<MethodStore>()(
           const groups = await taskGroupApi.list()
           set({ taskGroups: groups })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to fetch task groups',
-          })
+          handleStoreError(set, err, 'Failed to fetch task groups')
         } finally {
           set({ taskGroupsLoading: false })
         }
@@ -505,9 +482,7 @@ export const useMethodStore = create<MethodStore>()(
           const group = await taskGroupApi.create(data)
           set({ taskGroups: [...get().taskGroups, group] })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to create task group',
-          })
+          handleStoreError(set, err, 'Failed to create task group')
         }
       },
 
@@ -555,9 +530,7 @@ export const useMethodStore = create<MethodStore>()(
           const spans = await spanApi.list({ date_from: dateFrom, date_to: dateTo })
           set({ activitySpans: spans })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to fetch activity spans',
-          })
+          handleStoreError(set, err, 'Failed to fetch activity spans')
         } finally {
           set({ spansLoading: false })
         }
@@ -568,9 +541,7 @@ export const useMethodStore = create<MethodStore>()(
           const span = await spanApi.create(data)
           set({ activitySpans: [...get().activitySpans, span] })
         } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Failed to add activity span',
-          })
+          handleStoreError(set, err, 'Failed to add activity span')
         }
       },
 

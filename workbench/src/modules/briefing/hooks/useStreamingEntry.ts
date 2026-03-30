@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReconnectingSource } from '@/shared/utils/reconnectingSource'
+import { createReconnectingSource } from '@/shared/utils/reconnectingSource'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,28 +46,20 @@ export function useStreamingEntry(): UseStreamingEntryReturn {
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const esRef = useRef<EventSource | null>(null)
-  const retryCountRef = useRef(0)
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sourceRef = useRef<ReconnectingSource | null>(null)
   const entryIdRef = useRef<string | null>(null)
 
   // ---------------------------------------------------------------------------
-  // Internal: teardown EventSource without triggering reconnect
+  // Internal: teardown reconnecting source
   // ---------------------------------------------------------------------------
 
   const _teardown = useCallback(() => {
-    if (retryTimerRef.current !== null) {
-      clearTimeout(retryTimerRef.current)
-      retryTimerRef.current = null
-    }
-    if (esRef.current) {
-      esRef.current.close()
-      esRef.current = null
-    }
+    sourceRef.current?.close()
+    sourceRef.current = null
   }, [])
 
   // ---------------------------------------------------------------------------
-  // Internal: attach EventSource for a given entry ID
+  // Internal: attach reconnecting source for a given entry ID
   // ---------------------------------------------------------------------------
 
   const _attach = useCallback(
@@ -73,8 +67,6 @@ export function useStreamingEntry(): UseStreamingEntryReturn {
       _teardown()
 
       const url = `/api/briefing/entries/${entryId}/stream`
-      const es = new EventSource(url, { withCredentials: true })
-      esRef.current = es
 
       setIsStreaming(true)
       setError(null)
@@ -124,28 +116,25 @@ export function useStreamingEntry(): UseStreamingEntryReturn {
         }
       }
 
-      es.addEventListener('thinking', (e) => handleBlock(e, 'thinking'))
-      es.addEventListener('content', (e) => handleBlock(e, 'content'))
-      es.addEventListener('source', (e) => handleBlock(e, 'source'))
-      es.addEventListener('progress', (e) => handleBlock(e, 'progress'))
-      es.addEventListener('error', (e) => handleBlock(e, 'error'))
-      es.addEventListener('done', (e) => handleBlock(e, 'done'))
-
-      es.onerror = () => {
-        // Only attempt reconnect if we haven't reached max retries and the
-        // stream has not yet completed.
-        if (retryCountRef.current < MAX_RETRIES && entryIdRef.current) {
-          const delay = BASE_RETRY_DELAY_MS * 2 ** retryCountRef.current
-          retryCountRef.current += 1
-          retryTimerRef.current = setTimeout(() => {
-            if (entryIdRef.current) _attach(entryIdRef.current)
-          }, delay)
-        } else {
+      const source = createReconnectingSource(url, {
+        maxRetries: MAX_RETRIES,
+        baseDelay: BASE_RETRY_DELAY_MS,
+        eventSourceInit: { withCredentials: true },
+        onSetup: (es) => {
+          es.addEventListener('thinking', (e) => handleBlock(e, 'thinking'))
+          es.addEventListener('content', (e) => handleBlock(e, 'content'))
+          es.addEventListener('source', (e) => handleBlock(e, 'source'))
+          es.addEventListener('progress', (e) => handleBlock(e, 'progress'))
+          es.addEventListener('error', (e) => handleBlock(e, 'error'))
+          es.addEventListener('done', (e) => handleBlock(e, 'done'))
+        },
+        onMaxRetriesReached: () => {
           setError('Connection lost')
           setIsStreaming(false)
-          _teardown()
-        }
-      }
+        },
+      })
+
+      sourceRef.current = source
     },
     [_teardown],
   )
@@ -157,7 +146,6 @@ export function useStreamingEntry(): UseStreamingEntryReturn {
   const connect = useCallback(
     (entryId: string) => {
       entryIdRef.current = entryId
-      retryCountRef.current = 0
 
       // Reset state for new stream
       setBlocks([])
@@ -177,7 +165,6 @@ export function useStreamingEntry(): UseStreamingEntryReturn {
 
   const disconnect = useCallback(() => {
     entryIdRef.current = null
-    retryCountRef.current = MAX_RETRIES // prevent any pending retry
     _teardown()
     setIsStreaming(false)
   }, [_teardown])

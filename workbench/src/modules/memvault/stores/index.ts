@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
+import { handleStoreError } from '@/shared/utils/storeHelpers'
 import type {
   KASProfile,
   MemoryBlock,
@@ -206,7 +207,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _fetchedAt: { ...s._fetchedAt, blocks: Date.now() },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch blocks' })
+            handleStoreError(set, err, 'Failed to fetch blocks')
           } finally {
             set({ loading: false })
           }
@@ -221,7 +222,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _fetchedAt: { ...s._fetchedAt, profile: Date.now() },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch profile' })
+            handleStoreError(set, err, 'Failed to fetch profile')
           } finally {
             set({ loading: false })
           }
@@ -233,7 +234,7 @@ export const useMemvaultStore = create<MemvaultState>()(
             await memvaultApi.create(data)
             await get().fetchBlocks()
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to create block' })
+            handleStoreError(set, err, 'Failed to create block')
           } finally {
             set({ loading: false })
           }
@@ -248,7 +249,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               selectedBlock: state.selectedBlock?.id === id ? updated : state.selectedBlock,
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to update block' })
+            handleStoreError(set, err, 'Failed to update block')
           } finally {
             set({ loading: false })
           }
@@ -264,7 +265,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               selectedBlock: state.selectedBlock?.id === id ? null : state.selectedBlock,
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to delete block' })
+            handleStoreError(set, err, 'Failed to delete block')
           } finally {
             set({ loading: false })
           }
@@ -303,7 +304,7 @@ export const useMemvaultStore = create<MemvaultState>()(
             const results = await memvaultApi.searchSemantic(searchQuery)
             set({ searchResults: results })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Semantic search failed' })
+            handleStoreError(set, err, 'Semantic search failed')
           } finally {
             set({ isSearching: false })
           }
@@ -335,7 +336,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _fetchedAt: { ...s._fetchedAt, kg_triples: Date.now() },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch triples' })
+            handleStoreError(set, err, 'Failed to fetch triples')
           } finally {
             set({ kg_loading: false })
           }
@@ -350,7 +351,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _fetchedAt: { ...s._fetchedAt, kg_communities: Date.now() },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch communities' })
+            handleStoreError(set, err, 'Failed to fetch communities')
           } finally {
             set({ kg_loading: false })
           }
@@ -370,7 +371,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _communityDetailCache: { ...s._communityDetailCache, [id]: detail },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch community detail' })
+            handleStoreError(set, err, 'Failed to fetch community detail')
           } finally {
             set({ kg_loading: false })
           }
@@ -385,7 +386,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _fetchedAt: { ...s._fetchedAt, kg_summaries: Date.now() },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch summaries' })
+            handleStoreError(set, err, 'Failed to fetch summaries')
           } finally {
             set({ kg_loading: false })
           }
@@ -400,7 +401,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _fetchedAt: { ...s._fetchedAt, kg_attitudes: Date.now() },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch attitudes' })
+            handleStoreError(set, err, 'Failed to fetch attitudes')
           } finally {
             set({ kg_loading: false })
           }
@@ -420,7 +421,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _attitudeHistoryCache: { ...s._attitudeHistoryCache, [factId]: history },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch attitude history' })
+            handleStoreError(set, err, 'Failed to fetch attitude history')
           } finally {
             set({ kg_loading: false })
           }
@@ -435,7 +436,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _fetchedAt: { ...s._fetchedAt, kg_skills: Date.now() },
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch skills' })
+            handleStoreError(set, err, 'Failed to fetch skills')
           } finally {
             set({ kg_loading: false })
           }
@@ -447,7 +448,7 @@ export const useMemvaultStore = create<MemvaultState>()(
             const result = await kgApi.cascadeRecall(q)
             set({ kg_cascadeResult: result })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Cascade recall failed' })
+            handleStoreError(set, err, 'Cascade recall failed')
           } finally {
             set({ kg_loading: false })
           }
@@ -467,7 +468,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               kg_triplesTotal: state.kg_triplesTotal - 1,
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to delete triple' })
+            handleStoreError(set, err, 'Failed to delete triple')
           }
         },
 
@@ -479,7 +480,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _attitudeHistoryCache: {},
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to delete attitude' })
+            handleStoreError(set, err, 'Failed to delete attitude')
           }
         },
 
@@ -491,7 +492,7 @@ export const useMemvaultStore = create<MemvaultState>()(
               _attitudeHistoryCache: {},
             }))
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to update attitude' })
+            handleStoreError(set, err, 'Failed to update attitude')
           }
         },
 

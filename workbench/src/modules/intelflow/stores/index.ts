@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
+import { handleStoreError } from '@/shared/utils/storeHelpers'
 import type { PaginatedResponse } from '@/types'
 import { intelflowApi } from '../api/client'
 import type { DashboardData, Report, SearchResult, TimelineEntry, Topic } from '../types'
@@ -131,7 +132,7 @@ export const useIntelflowStore = create<IntelflowState>()(
             const data = await intelflowApi.getDashboard()
             set({ dashboard: data, dashboardFetchedAt: Date.now() })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch dashboard' })
+            handleStoreError(set, err, 'Failed to fetch dashboard')
           } finally {
             set({ dashboardLoading: false })
           }
@@ -143,7 +144,7 @@ export const useIntelflowStore = create<IntelflowState>()(
             const data = await intelflowApi.getTimeline(days)
             set({ timeline: data.entries, timelineFetchedAt: Date.now() })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch timeline' })
+            handleStoreError(set, err, 'Failed to fetch timeline')
           } finally {
             set({ timelineLoading: false })
           }
@@ -172,7 +173,7 @@ export const useIntelflowStore = create<IntelflowState>()(
               return { allTags: Array.from(merged).sort() }
             })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch reports' })
+            handleStoreError(set, err, 'Failed to fetch reports')
           } finally {
             set({ reportsLoading: false })
           }
@@ -184,7 +185,7 @@ export const useIntelflowStore = create<IntelflowState>()(
             const report = await intelflowApi.get(id)
             set({ selectedReport: report })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch report' })
+            handleStoreError(set, err, 'Failed to fetch report')
           } finally {
             set({ reportDetailLoading: false })
           }
@@ -201,7 +202,7 @@ export const useIntelflowStore = create<IntelflowState>()(
             }))
           } catch (err) {
             console.error('deleteReport failed:', err)
-            set({ error: err instanceof Error ? err.message : 'Failed to delete report' })
+            handleStoreError(set, err, 'Failed to delete report')
           }
         },
 
@@ -220,7 +221,7 @@ export const useIntelflowStore = create<IntelflowState>()(
             const res = await intelflowApi.listTopics(1, 200)
             set({ topics: res.items, topicsTotal: res.total, topicsFetchedAt: Date.now() })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Failed to fetch topics' })
+            handleStoreError(set, err, 'Failed to fetch topics')
           } finally {
             set({ topicsLoading: false })
           }
@@ -239,7 +240,7 @@ export const useIntelflowStore = create<IntelflowState>()(
             const results = await intelflowApi.search(query, 10, 0.3)
             set({ searchResults: results })
           } catch (err) {
-            set({ error: err instanceof Error ? err.message : 'Search failed' })
+            handleStoreError(set, err, 'Search failed')
           } finally {
             set({ searchLoading: false })
           }
