@@ -12,6 +12,7 @@ dependencies = [
     "tomli>=2.2.0",
     "aiofiles>=24.1.0",
     "pydantic>=2.10.0",
+    "immutables>=0.20",
 ]
 
 [project.scripts]

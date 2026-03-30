@@ -20,6 +20,17 @@ from models import Base
 from remediation import Remediator
 from sqlalchemy import text
 from state import InterventionEngine, State
+from store import (
+    HealthChecked,
+    InterventionCompleted,
+    InterventionEscalated,
+    InterventionStarted,
+    RepairDispatched,
+    ServiceDown,
+    ServiceRecovered,
+    sentinel_store,
+)
+
 from sdk_client.station_bootstrap import setup_cors, setup_logging
 
 from config import config  # isort: skip
@@ -30,10 +41,10 @@ logger = setup_logging("sentinel")
 
 # ── Timeout presets by operation type (seconds) ──
 
-_TIMEOUT_INITIAL_DELAY = 5     # startup settling before first light check
-_SLEEP_BETWEEN_ROUNDS = 15     # inter-round pause in repair monitor loop
-_SLEEP_AFTER_LAYER1 = 10       # settle time after Layer 1 simple restart
-_SLEEP_AFTER_LAYER2 = 5        # settle time after Layer 2 frontend rebuild
+_TIMEOUT_INITIAL_DELAY = 5  # startup settling before first light check
+_SLEEP_BETWEEN_ROUNDS = 15  # inter-round pause in repair monitor loop
+_SLEEP_AFTER_LAYER1 = 10  # settle time after Layer 1 simple restart
+_SLEEP_AFTER_LAYER2 = 5  # settle time after Layer 2 frontend rebuild
 
 # ── Global State ──
 
@@ -113,7 +124,56 @@ async def _light_check_loop() -> None:
         try:
             results = await run_all_light_checks()
             for r in results:
+                prev_tracker = intervention_engine.get_tracker(r.service)
+                prev_state = prev_tracker.state
+
                 intervention_engine.update_light(r.service, r.status, r.response_ms)
+
+                curr_tracker = intervention_engine.get_tracker(r.service)
+                curr_state = curr_tracker.state
+
+                # Dispatch HealthChecked for every result
+                try:
+                    await sentinel_store.dispatch(
+                        HealthChecked(
+                            service=r.service,
+                            status=r.status,
+                            response_ms=r.response_ms,
+                            check_type=r.check_type,
+                        )
+                    )
+                except Exception:
+                    logger.debug("store.dispatch HealthChecked failed", exc_info=True)
+
+                # Dispatch ServiceDown when first entering OBSERVING/INTERVENING
+                if r.status in ("unhealthy", "timeout") and prev_state == State.HEALTHY:
+                    try:
+                        await sentinel_store.dispatch(
+                            ServiceDown(
+                                service=r.service,
+                                light_status=r.status,
+                                response_ms=r.response_ms,
+                            )
+                        )
+                    except Exception:
+                        logger.debug("store.dispatch ServiceDown failed", exc_info=True)
+
+                # Dispatch ServiceRecovered when transitioning back to HEALTHY
+                if (
+                    r.status == "healthy"
+                    and prev_state not in (State.HEALTHY,)
+                    and curr_state == State.HEALTHY
+                ):
+                    try:
+                        await sentinel_store.dispatch(
+                            ServiceRecovered(
+                                service=r.service,
+                                downtime_start=prev_tracker.first_failure_at,
+                            )
+                        )
+                    except Exception:
+                        logger.debug("store.dispatch ServiceRecovered failed", exc_info=True)
+
                 await _persist_check(r)
 
             healthy = sum(1 for r in results if r.status == "healthy")
@@ -157,6 +217,16 @@ async def _repair_monitor_loop() -> None:
                     if result and result != "running":
                         success = result == "success"
                         intervention_engine.set_repair_done(service, success)
+
+                        # Dispatch InterventionCompleted
+                        try:
+                            await sentinel_store.dispatch(
+                                InterventionCompleted(service=service, success=success)
+                            )
+                        except Exception:
+                            logger.debug(
+                                "store.dispatch InterventionCompleted failed", exc_info=True
+                            )
 
                         # Record incident resolution
                         if tracker.incident_id:
@@ -210,8 +280,27 @@ async def _repair_monitor_loop() -> None:
                             service,
                             _NOTIFICATION_COOLDOWN - (_now_ts - tracker.last_notified_at),
                         )
+
+                        # Dispatch InterventionEscalated due to cooldown
+                        try:
+                            await sentinel_store.dispatch(
+                                InterventionEscalated(service=service, reason="cooldown")
+                            )
+                        except Exception:
+                            logger.debug(
+                                "store.dispatch InterventionEscalated failed", exc_info=True
+                            )
+
                         continue
                     tracker.last_notified_at = _now_ts
+
+                    # Dispatch InterventionStarted
+                    try:
+                        await sentinel_store.dispatch(
+                            InterventionStarted(service=service, started_at=_now_ts)
+                        )
+                    except Exception:
+                        logger.debug("store.dispatch InterventionStarted failed", exc_info=True)
 
                     # Build detail with deep check info for richer diagnosis
                     detail_parts = []
@@ -296,6 +385,15 @@ async def _repair_monitor_loop() -> None:
                                 result = await run_light_check(check)
                                 if result.status == "healthy":
                                     intervention_engine.set_repair_done(service, True)
+                                    try:
+                                        await sentinel_store.dispatch(
+                                            InterventionCompleted(service=service, success=True)
+                                        )
+                                    except Exception:
+                                        logger.debug(
+                                            "store.dispatch InterventionCompleted failed",
+                                            exc_info=True,
+                                        )
                                     await publish_push(
                                         title=f"{service} 已修復（簡單重啟）",  # noqa: RUF001
                                         body="Layer 1: 直接重啟成功",
@@ -327,6 +425,15 @@ async def _repair_monitor_loop() -> None:
                                 result = await run_deep_check(dc)
                                 if result.status == "healthy":
                                     intervention_engine.set_repair_done(service, True)
+                                    try:
+                                        await sentinel_store.dispatch(
+                                            InterventionCompleted(service=service, success=True)
+                                        )
+                                    except Exception:
+                                        logger.debug(
+                                            "store.dispatch InterventionCompleted failed",
+                                            exc_info=True,
+                                        )
                                     await publish_push(
                                         title=f"{service} 已修復（前端重建）",  # noqa: RUF001
                                         body="Layer 2: pnpm build + nginx reload 成功",
@@ -350,6 +457,18 @@ async def _repair_monitor_loop() -> None:
                     pane = await remediator.dispatch(service, detail, url=check_url)
                     if pane:
                         intervention_engine.set_repairing(service, pane)
+
+                        # Dispatch RepairDispatched
+                        try:
+                            await sentinel_store.dispatch(
+                                RepairDispatched(
+                                    service=service,
+                                    pane=pane,
+                                    incident_id=tracker.incident_id,
+                                )
+                            )
+                        except Exception:
+                            logger.debug("store.dispatch RepairDispatched failed", exc_info=True)
 
                         # Notify subscribers
                         try:
@@ -384,6 +503,16 @@ async def _repair_monitor_loop() -> None:
                         # Can't get pane, escalate
                         intervention_engine.set_repair_done(service, False)
 
+                        # Dispatch InterventionEscalated
+                        try:
+                            await sentinel_store.dispatch(
+                                InterventionEscalated(service=service, reason="no_pane_available")
+                            )
+                        except Exception:
+                            logger.debug(
+                                "store.dispatch InterventionEscalated failed", exc_info=True
+                            )
+
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -410,6 +539,9 @@ async def lifespan(app: FastAPI):
         logger.warning("Database unavailable — running in spool-only mode")
 
     set_engine(engine)
+
+    # Attach store to app state
+    app.state.store = sentinel_store
 
     # Start background loops
     _light_task = asyncio.create_task(_light_check_loop())

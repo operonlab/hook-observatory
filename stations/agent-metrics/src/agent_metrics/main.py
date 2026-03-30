@@ -49,6 +49,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     _sysmon_task = asyncio.create_task(sysmon_loop())
 
+    # Wire reactive store
+    import sys as _sys
+
+    _sys.path.insert(0, str(STATION_DIR))
+    from store import metrics_store
+
+    _app.state.store = metrics_store
+
     log.info(
         "starting",
         service=settings.SERVICE_NAME,

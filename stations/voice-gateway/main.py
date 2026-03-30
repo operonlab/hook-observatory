@@ -14,11 +14,11 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from state_machine import GatewayState, StateMachine
-from sdk_client.station_bootstrap import setup_logging
 
 from config import config
 from events import VoiceEventBus
 from routes import router, sse_broadcast
+from sdk_client.station_bootstrap import setup_logging
 
 logger = setup_logging("voice-gateway")
 
@@ -327,6 +327,11 @@ async def lifespan(app: FastAPI):
     app.state.arbiter = ModeArbiter(server_enabled=config.server.enabled)
     app.state.pipeline_active = False
     app.state.metrics = {}
+
+    # Wire reactive store
+    from store import voice_store
+
+    app.state.store = voice_store
 
     # Redis
     event_bus = None

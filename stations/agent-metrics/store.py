@@ -43,10 +43,15 @@ from pathlib import Path
 # ── Path bootstrap — stations don't inherit core's Python path ──
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import to_immutable
+from src.shared.middleware import PerformanceMiddleware
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -306,4 +311,36 @@ select_total_tokens_today = create_selector(
 metrics_store = FeatureStore(
     "agent-metrics",
     metrics_reducer,
+    middlewares=[PerformanceMiddleware(warn_threshold_ms=200.0)],
 )
+
+# ── Effects ──────────────────────────────────────────────────────────────────
+
+
+@effect(SessionEnded, store=metrics_store)
+async def log_session_summary(action, store) -> None:
+    """Log session end summary for audit."""
+    payload = action.payload or {}
+    logger.info(
+        "agent_metrics.session.ended",
+        extra={
+            "session_key": payload.get("session_key"),
+            "cost_usd": payload.get("cost_usd"),
+            "duration_s": payload.get("duration_s"),
+        },
+    )
+
+
+@effect(QuotaChecked, store=metrics_store)
+async def log_quota_status(action, store) -> None:
+    """Log quota check result."""
+    payload = action.payload or {}
+    remaining = payload.get("remaining_usd")
+    if remaining is not None and remaining < 5.0:
+        logger.warning(
+            "agent_metrics.quota.low",
+            extra={"remaining_usd": remaining},
+        )
+
+
+register_effects(metrics_store, log_session_summary, log_quota_status)

@@ -486,3 +486,13 @@ async def proxy_guardian(_user: dict = Depends(require_auth)):
 @router.post("/api/sentinel/sysmon/guardian/run")
 async def proxy_guardian_run(_user: dict = Depends(require_auth)):
     return await _proxy_post("guardian/run")
+
+
+# ── Store State ──
+
+
+@router.get("/api/sentinel/store")
+async def get_store_state(request: Request, _user: dict = Depends(require_auth)):
+    """Return the current NgRx-style store state for Sentinel."""
+    store = request.app.state.store
+    return store.get_state()

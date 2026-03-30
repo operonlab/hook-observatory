@@ -9,15 +9,15 @@ from __future__ import annotations
 
 import logging
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "core"))
 
-from src.shared.actions import Action, create_action, create_reducer, on
+from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import batch_update, to_immutable
+from src.shared.middleware import PerformanceMiddleware
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
 
 logger = logging.getLogger(__name__)
 
@@ -118,30 +118,72 @@ select_pipeline_summary = create_selector(
     },
 )
 
-# ── Performance Middleware ────────────────────────────────────────────────────
-
-
-class PerformanceMiddleware:
-    """Log dispatch latency for each action through the voice store."""
-
-    async def before_dispatch(self, action: Action, state) -> Action:
-        action._ts_start = time.perf_counter()  # type: ignore[attr-defined]
-        return action
-
-    async def after_dispatch(self, action: Action, old_state, new_state) -> None:
-        ts_start = getattr(action, "_ts_start", None)
-        if ts_start is not None:
-            elapsed_ms = (time.perf_counter() - ts_start) * 1000
-            logger.debug("voice_store dispatch: type=%s latency=%.2fms", action.type, elapsed_ms)
-
-    async def on_error(self, action: Action, state, exc: Exception) -> None:
-        logger.error("voice_store error: type=%s error=%s", action.type, exc)
-
-
 # ── Store ─────────────────────────────────────────────────────────────────────
 
 voice_store = FeatureStore(
     "voice-gateway",
     voice_reducer,
-    middlewares=[PerformanceMiddleware()],
+    middlewares=[PerformanceMiddleware(warn_threshold_ms=500.0)],
+)
+
+# ── Effects ───────────────────────────────────────────────────────────────────
+
+
+@effect(VoiceSessionEnded, store=voice_store)
+async def log_session_duration(action, store) -> None:
+    """Log session duration when a voice session ends."""
+    state = store.get_state()
+    transitions = state.get("transitions", 0)
+    chunks = state.get("chunks_processed", 0)
+    logger.info(
+        "voice_session_ended",
+        extra={
+            "transitions": transitions,
+            "chunks_processed": chunks,
+        },
+    )
+
+
+@effect(STTResultReceived, store=voice_store)
+async def log_transcription(action, store) -> None:
+    """Log STT transcription result for observability."""
+    p = action.payload or {}
+    text = p.get("text", "") if isinstance(p, dict) else ""
+    language = p.get("language", "") if isinstance(p, dict) else ""
+    engine = p.get("engine", "") if isinstance(p, dict) else ""
+    latency_ms = p.get("latency_ms", 0) if isinstance(p, dict) else 0
+    logger.info(
+        "voice_stt_result",
+        extra={
+            "text_length": len(text),
+            "language": language,
+            "engine": engine,
+            "latency_ms": latency_ms,
+        },
+    )
+
+
+@effect(CommandRecognized, store=voice_store)
+async def log_command(action, store) -> None:
+    """Log recognized command for audit trail."""
+    p = action.payload or {}
+    command = p.get("command", "") if isinstance(p, dict) else ""
+    confidence = p.get("confidence", 0.0) if isinstance(p, dict) else 0.0
+    state = store.get_state()
+    count = state.get("commands_recognized", 0)
+    logger.info(
+        "voice_command_recognized",
+        extra={
+            "command": command,
+            "confidence": confidence,
+            "total_commands": count,
+        },
+    )
+
+
+register_effects(
+    voice_store,
+    log_session_duration,
+    log_transcription,
+    log_command,
 )

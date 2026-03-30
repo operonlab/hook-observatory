@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "core"))
 
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import update_in
+from src.shared.middleware import PerformanceMiddleware
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore, effect, register_effects
 
@@ -150,7 +151,11 @@ select_healthy_count = create_selector(
 
 # ── Store Singleton ───────────────────────────────────────────────────────
 
-fleet_store: FeatureStore = FeatureStore("fleet", fleet_reducer)
+fleet_store: FeatureStore = FeatureStore(
+    "fleet",
+    fleet_reducer,
+    middlewares=[PerformanceMiddleware(warn_threshold_ms=200.0)],
+)
 
 # ── Effects ───────────────────────────────────────────────────────────────
 

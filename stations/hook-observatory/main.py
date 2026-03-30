@@ -13,10 +13,10 @@ from models import Base, HookEvent
 from spool import SpoolDrainer
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sdk_client.station_bootstrap import setup_logging
 
 from config import config
 from routes import router
+from sdk_client.station_bootstrap import setup_logging
 
 logger = setup_logging("hook-observatory")
 
@@ -74,6 +74,11 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
 
     logger.info("Database schema ready")
+
+    # Wire reactive store
+    from store import hook_store
+
+    app.state.store = hook_store
 
     # Start spool drainer
     _drainer = SpoolDrainer(

@@ -12,6 +12,7 @@ from dispatcher import Dispatcher
 from fastapi import FastAPI, HTTPException, Query, Request
 from node_registry import NodeRegistry
 from pydantic import BaseModel
+from store import NodeRegistered, fleet_store
 from task_store import TaskStore
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,14 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     app.state.store = store
     app.state.dispatcher = dispatcher
+    app.state.fleet_store = fleet_store
+
+    # Register known nodes into fleet_store
+    for node in registry.all_nodes():
+        try:
+            fleet_store.dispatch(NodeRegistered(payload={"node_id": node.name, "host": node.host}))
+        except Exception:
+            logger.debug("store dispatch failed", exc_info=True)
 
     # Background health check loop
     health_task = asyncio.create_task(registry.health_check_loop(config.get("health_interval", 30)))
@@ -90,6 +99,9 @@ async def check_node_health(name: str):
 
 @app.post("/tasks/dispatch")
 async def dispatch_task(req: DispatchRequest):
+    from store import TaskDispatched
+    from store import fleet_store as _fs
+
     dispatcher: Dispatcher = app.state.dispatcher
     try:
         task = await dispatcher.dispatch(
@@ -98,9 +110,13 @@ async def dispatch_task(req: DispatchRequest):
             node_name=req.node,
             timeout=req.timeout,
         )
+        try:
+            _fs.dispatch(TaskDispatched(payload={"task_id": task.id, "node_id": task.node}))
+        except Exception:
+            logger.debug("store dispatch failed", exc_info=True)
         return task.to_dict()
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/tasks")
@@ -140,6 +156,9 @@ async def signal_task_completion(task_id: str, request: Request):
     Late callbacks (monitor finished, signal TTL-expired) return 200 silently
     to prevent remote hook scripts from retrying on 404.
     """
+    from store import TaskCompleted
+    from store import fleet_store as _fs
+
     dispatcher: Dispatcher = app.state.dispatcher
     fleet_secret = app.state.config.get("fleet_secret", "")
     if fleet_secret:
@@ -152,6 +171,10 @@ async def signal_task_completion(task_id: str, request: Request):
             "Late callback for task %s (no active monitor), silently accepted", task_id[:8]
         )
         return {"status": "accepted", "task_id": task_id, "late": True}
+    try:
+        _fs.dispatch(TaskCompleted(payload={"task_id": task_id}))
+    except Exception:
+        logger.debug("store dispatch failed", exc_info=True)
     return {"status": "signaled", "task_id": task_id}
 
 
