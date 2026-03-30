@@ -7,8 +7,6 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -36,6 +34,8 @@ from .schemas import (
     TaskGroupResponse,
 )
 from .strategies.base import MethodStrategy
+
+logger = logging.getLogger(__name__)
 
 # ======================== Method Service ========================
 
@@ -464,10 +464,11 @@ class DailyPlanService:
         # Publish PLAN_CREATED for Qdrant indexing (best-effort)
         _method_name = selection.method.name if selection.method else None
         try:
-            await event_bus.publish(
-                Event(
-                    type=DailyosEvents.PLAN_CREATED,
-                    data={
+            from .store import PlanCreated, dailyos_store
+
+            await dailyos_store.dispatch(
+                PlanCreated(
+                    {
                         "plan_id": plan.id,
                         "id": plan.id,
                         "space_id": plan.space_id,
@@ -477,9 +478,7 @@ class DailyPlanService:
                         "plan_date": str(plan.plan_date),
                         "created_at": plan.created_at.isoformat() if plan.created_at else None,
                         "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
-                    },
-                    source="dailyos",
-                    user_id=user_id,
+                    }
                 )
             )
         except Exception:

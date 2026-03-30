@@ -16,6 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.bus import Event, event_bus
 from src.events.types import FinanceEvents
 from src.modules.finance.lifecycle import TransactionLifecycle
+from src.modules.finance.store import (
+    WalletCashGap,
+    WalletReconciled,
+    WalletSynced,
+    finance_store,
+)
 from src.shared.cache import cached
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.fsm import emit_state_changed, validate_transition
@@ -236,10 +242,9 @@ async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decima
                     gap,
                 )
                 try:
-                    await event_bus.publish(
-                        Event(
-                            type=FinanceEvents.WALLET_CASH_GAP,
-                            data={
+                    await finance_store.dispatch(
+                        WalletCashGap(
+                            {
                                 "wallet_id": wallet_id,
                                 "wallet_name": wallet.name,
                                 "current_balance": str(wallet.current_balance),
@@ -249,8 +254,7 @@ async def _adjust_wallet_balance(db: AsyncSession, wallet_id: str, delta: Decima
                                     f"現金錢包「{wallet.name}」餘額不足"
                                     f"（差額 ${gap:,.0f}），請補登現金來源"
                                 ),
-                            },
-                            source="finance",
+                            }
                         )
                     )
                 except Exception:
@@ -484,12 +488,12 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         await db.refresh(snapshot)
 
         try:
-            await event_bus.publish(
-                Event(
-                    type=FinanceEvents.WALLET_SYNCED,
-                    data={"wallet_id": wallet_id, "synced_balance": str(data.synced_balance)},
-                    source="finance",
-                    user_id=user_id,
+            await finance_store.dispatch(
+                WalletSynced(
+                    {
+                        "wallet_id": wallet_id,
+                        "synced_balance": str(data.synced_balance),
+                    }
                 )
             )
         except Exception:
@@ -521,16 +525,13 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
             )
         ).scalar_one()
 
-        await event_bus.publish(
-            Event(
-                type=FinanceEvents.WALLET_RECONCILED,
-                data={
+        await finance_store.dispatch(
+            WalletReconciled(
+                {
                     "wallet_id": wallet_id,
                     "current_balance": str(wallet.current_balance),
                     "calculated_balance": str(calculated),
-                },
-                source="finance",
-                user_id=user_id,
+                }
             )
         )
 

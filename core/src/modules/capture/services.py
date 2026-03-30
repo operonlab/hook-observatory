@@ -10,7 +10,6 @@ from typing import Any
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.events.bus import Event, event_bus
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.rerank_utils import rerank_generic
 
@@ -94,19 +93,18 @@ class CaptureService:
         await db.flush()
 
         try:
-            await event_bus.publish(
-                Event(
-                    type="capture.created",
-                    data={
+            from .store import CaptureCreated, capture_store
+
+            await capture_store.dispatch(
+                CaptureCreated(
+                    {
                         "capture_id": capture.id,
                         "space_id": capture.space_id,
                         "module": capture.module,
                         "entity_type": capture.entity_type,
                         "raw_input": capture.raw_input,
                         "completeness": capture.completeness,
-                    },
-                    source="capture",
-                    user_id=user_id,
+                    }
                 )
             )
         except Exception:
@@ -194,10 +192,11 @@ class CaptureService:
                 db.add(enrichment)
 
                 try:
-                    await event_bus.publish(
-                        Event(
-                            type="capture.enriched",
-                            data={
+                    from .store import CaptureEnriched, capture_store
+
+                    await capture_store.dispatch(
+                        CaptureEnriched(
+                            {
                                 "capture_id": capture_id,
                                 "space_id": capture.space_id,
                                 "module": capture.module,
@@ -205,8 +204,7 @@ class CaptureService:
                                 "agent_id": agent_id or "user",
                                 "delta_fields": list(delta.keys()),
                                 "completeness": capture.completeness,
-                            },
-                            source="capture",
+                            }
                         )
                     )
                 except Exception:
@@ -347,17 +345,16 @@ class CaptureService:
         await db.flush()
 
         try:
-            await event_bus.publish(
-                Event(
-                    type="capture.promoted",
-                    data={
+            from .store import CapturePromoted, capture_store
+
+            await capture_store.dispatch(
+                CapturePromoted(
+                    {
                         "capture_id": capture.id,
                         "module": capture.module,
                         "entity_type": capture.entity_type,
                         "promoted_id": promoted_id,
-                    },
-                    source="capture",
-                    user_id=user_id,
+                    }
                 )
             )
         except Exception:
