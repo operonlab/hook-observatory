@@ -10,10 +10,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "core"))
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import batch_update, to_immutable
+from src.shared.middleware import PerformanceMiddleware
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -82,4 +87,36 @@ select_recent_failures = create_selector(lambda s: s["recent_failures"])
 
 # ── Store ─────────────────────────────────────────────────────────────────────
 
-hook_store = FeatureStore("hook-observatory", hooks_reducer)
+hook_store = FeatureStore(
+    "hook-observatory",
+    hooks_reducer,
+    middlewares=[PerformanceMiddleware(warn_threshold_ms=100.0)],
+)
+
+# ── Effects ───────────────────────────────────────────────────────────────────
+
+
+@effect(HandlerFailed, store=hook_store)
+async def log_handler_failure(action, store) -> None:
+    """Log handler failure for observability."""
+    payload = action.payload or {}
+    logger.warning(
+        "hook_observatory.handler.failed",
+        extra={
+            "handler": payload.get("handler"),
+            "error": payload.get("error"),
+        },
+    )
+
+
+@effect(SpoolDrained, store=hook_store)
+async def log_spool_drained(action, store) -> None:
+    """Log spool drain completion."""
+    payload = action.payload or {}
+    logger.info(
+        "hook_observatory.spool.drained",
+        extra={"count": payload.get("count", 0)},
+    )
+
+
+register_effects(hook_store, log_handler_failure, log_spool_drained)
