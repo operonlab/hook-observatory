@@ -99,14 +99,19 @@ def on(action_creator_or_type: ActionCreator | str, handler):
 def create_reducer[S](initial_state: S, *handlers) -> ReducerFn:
     """Create a pure reducer function from action→handler mappings.
 
+    State is stored as immutables.Map for structural sharing.
+    Handlers receive Map and should return Map (use s.set() or to_immutable()).
+
     Usage:
         reducer = create_reducer(
             {"count": 0},
-            on(Increment, lambda s, a: {**s, "count": s["count"] + 1}),
-            on(Reset, lambda s, a: {"count": 0}),
+            on(Increment, lambda s, a: s.set("count", s["count"] + 1)),
+            on(Reset, lambda s, a: to_immutable({"count": 0})),
         )
-        new_state = reducer(state, action)
     """
+    from src.shared.immutable_utils import to_immutable
+
+    immutable_initial = to_immutable(initial_state)
     action_handlers: dict[str, Any] = defaultdict(lambda: lambda state, _: state)
 
     for handler in handlers:
@@ -117,11 +122,19 @@ def create_reducer[S](initial_state: S, *handlers) -> ReducerFn:
 
     def reducer(state=None, action=None):
         if state is None:
-            state = initial_state
+            state = immutable_initial
         if action is None:
             return state
-        return action_handlers[action.type](state, action)
+        result = action_handlers[action.type](state, action)
+        # Ensure result is always Map
+        if result is state:
+            return state
+        from immutables import Map
 
-    reducer.initial_state = initial_state  # type: ignore[attr-defined]
+        if isinstance(result, Map):
+            return result
+        return to_immutable(result)
+
+    reducer.initial_state = immutable_initial  # type: ignore[attr-defined]
     reducer.handlers = dict(action_handlers)  # type: ignore[attr-defined]
     return reducer

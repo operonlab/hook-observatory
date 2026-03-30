@@ -64,6 +64,8 @@ class FeatureStore[S]:
         reducer: ReducerFn,
         *,
         event_bus: Any | None = None,
+        middlewares: list[Any] | None = None,
+        journal: Any | None = None,
     ) -> None:
         self.feature_key = feature_key
         self._reducer = reducer
@@ -71,52 +73,90 @@ class FeatureStore[S]:
         self._event_bus = event_bus
         self._effects: list[_EffectRegistration] = []
         self._listeners: list[Callable[[S, S], None]] = []
+        self._middlewares: list[Any] = list(middlewares) if middlewares else []
+        self._journal: Any | None = journal
 
     def _get_event_bus(self):
         """Lazy EventBus resolution — avoids circular imports at module load."""
         if self._event_bus is None:
             from src.events.bus import event_bus
+
             self._event_bus = event_bus
         return self._event_bus
 
     # ── State ────────────────────────────────────────────────────────
 
-    def get_state(self) -> S:
-        """Get current state snapshot."""
+    def get_state(self) -> dict:
+        """Get current state as plain dict (for external consumers)."""
+        from src.shared.immutable_utils import to_dict
+
+        return to_dict(self._state)
+
+    def get_state_raw(self):
+        """Get current state as immutables.Map (zero-copy, for internal use)."""
         return self._state
 
     def select(self, selector: Callable[[S], Any]) -> Any:
-        """Apply a (memoized) selector to current state."""
+        """Apply a (memoized) selector to current state (Map)."""
         return selector(self._state)
+
+    # ── Middleware ───────────────────────────────────────────────────
+
+    def use(self, middleware: Any) -> None:
+        """Add a middleware to the pipeline at runtime."""
+        self._middlewares.append(middleware)
 
     # ── Dispatch ─────────────────────────────────────────────────────
 
     async def dispatch(self, action: Action) -> None:
-        """Dispatch action → reducer → state update → EventBus publish.
+        """Dispatch action → middleware → reducer → state update → EventBus publish.
 
         Flow:
-        1. Run reducer (pure, sync) to compute new state
-        2. Update internal state
-        3. Notify state listeners
-        4. Publish to EventBus (async, for cross-module effects)
-        5. Run registered effects (async)
+        1. Run before_dispatch chain (middlewares can modify action or abort)
+        2. Run reducer (pure, sync) to compute new state
+        3. Update internal state + notify listeners
+        4. Run after_dispatch chain
+        5. Publish to EventBus (async, for cross-module effects)
+        6. Run registered effects (async)
         """
+        # 1. before_dispatch chain
+        for mw in self._middlewares:
+            action = await mw.before_dispatch(action, self._state)
+
         old_state = self._state
-        new_state = self._reducer(old_state, action)
+        try:
+            new_state = self._reducer(old_state, action)
 
-        if new_state is not old_state:
-            self._state = new_state
-            for listener in self._listeners:
-                try:
-                    listener(old_state, new_state)
-                except Exception as e:
-                    logger.warning(
-                        "Store[%s] listener error: %s", self.feature_key, e,
-                    )
+            if new_state is not old_state:
+                self._state = new_state
+                for listener in self._listeners:
+                    try:
+                        listener(old_state, new_state)
+                    except Exception as e:
+                        logger.warning(
+                            "Store[%s] listener error: %s",
+                            self.feature_key,
+                            e,
+                        )
 
-        # Bridge to EventBus
+            # Journal — record after state update
+            if self._journal is not None:
+                self._journal.append(action, self._state)
+
+            # 4. after_dispatch chain
+            for mw in self._middlewares:
+                await mw.after_dispatch(action, old_state, new_state)
+
+        except Exception as exc:
+            # on_error chain — then re-raise
+            for mw in self._middlewares:
+                await mw.on_error(action, old_state, exc)
+            raise
+
+        # 5. Bridge to EventBus
         bus = self._get_event_bus()
         from src.events.bus import Event
+
         event = Event(
             type=action.type,
             data=action.payload
@@ -126,7 +166,7 @@ class FeatureStore[S]:
         )
         bus.publish_fire_and_forget(event)
 
-        # Run effects
+        # 6. Run effects
         for eff in self._effects:
             if eff.action_type == action.type or eff.action_type == "*":
                 try:
@@ -136,7 +176,9 @@ class FeatureStore[S]:
                 except Exception as e:
                     logger.warning(
                         "Store[%s] effect %s error: %s",
-                        self.feature_key, eff.name, e,
+                        self.feature_key,
+                        eff.name,
+                        e,
                     )
 
     def dispatch_sync(self, action: Action) -> None:
@@ -154,8 +196,13 @@ class FeatureStore[S]:
                 except Exception as e:
                     logger.warning(
                         "Store[%s] listener error: %s",
-                        self.feature_key, e,
+                        self.feature_key,
+                        e,
                     )
+
+        # Journal — record after state update (even if state unchanged)
+        if self._journal is not None:
+            self._journal.append(action, self._state)
 
     # ── Effects ──────────────────────────────────────────────────────
 
@@ -168,6 +215,57 @@ class FeatureStore[S]:
         """Subscribe to state changes. Returns unsubscribe function."""
         self._listeners.append(listener)
         return lambda: self._listeners.remove(listener)
+
+    # ── Journal ──────────────────────────────────────────────────────
+
+    @property
+    def journal(self) -> Any | None:
+        """Read-only access to the attached ActionJournal (or None)."""
+        return self._journal
+
+    def replay(self, from_idx: int = 0) -> S:
+        """Replay journal actions and return resulting state.
+
+        Requires a journal to be attached (journal= parameter at init).
+
+        Args:
+            from_idx: Number of actions to replay (0 = all).
+
+        Raises:
+            RuntimeError: If no journal is attached.
+        """
+        if self._journal is None:
+            raise RuntimeError(
+                f"Store[{self.feature_key}] has no journal attached. "
+                "Pass journal=ActionJournal() at init."
+            )
+        return self._journal.replay(self._reducer, from_idx=from_idx)
+
+    def undo(self, n: int = 1) -> S:
+        """Undo last N actions and update store state.
+
+        Replays all actions except the last n, then sets store state
+        to the result. Does NOT re-dispatch or publish to EventBus.
+
+        Args:
+            n: Number of actions to undo.
+
+        Returns:
+            The new (rolled-back) state.
+
+        Raises:
+            RuntimeError: If no journal is attached.
+        """
+        if self._journal is None:
+            raise RuntimeError(
+                f"Store[{self.feature_key}] has no journal attached. "
+                "Pass journal=ActionJournal() at init."
+            )
+        new_state = self._journal.undo(self._reducer, n=n)
+        self._state = new_state
+        from src.shared.immutable_utils import to_dict
+
+        return to_dict(new_state)
 
     # ── Repr ─────────────────────────────────────────────────────────
 
