@@ -3,7 +3,7 @@
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import update_in
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -92,4 +92,46 @@ select_invest_stats = create_selector(
         "open_positions": len([v for v in s["positions"].values() if v is not None]),
         "account_count": len(s["accounts"]),
     }
+)
+
+# ── Effects ───────────────────────────────────────────────────────────────
+
+
+@effect(TradeExecuted)
+async def on_trade_executed(action, store):
+    """Log trade execution for audit trail."""
+    pass  # placeholder — actual audit logic wired via EventBus handler
+
+
+@effect(DividendReceived)
+async def on_dividend_received(action, store):
+    """Log dividend receipt for audit trail."""
+    pass  # placeholder — finance reconciliation triggered via EventBus
+
+
+@effect(ValuationUpdated)
+async def on_valuation_updated(action, store):
+    """Trigger cross-module sync (finance wallet update)."""
+    pass  # handled by finance module's EventBus handler on invest.valuation.updated
+
+
+@effect(PositionOpened)
+async def on_position_opened(action, store):
+    """Track position open event — future: notify, update risk exposure."""
+    pass  # placeholder — risk/notification hooks go here
+
+
+@effect(PositionClosed)
+async def on_position_closed(action, store):
+    """Track position close event — future: P&L calculation, notify."""
+    pass  # placeholder — P&L calculation and reporting hooks go here
+
+
+register_effects(
+    invest_store,
+    on_trade_executed,
+    on_dividend_received,
+    on_valuation_updated,
+    on_position_opened,
+    on_position_closed,
 )

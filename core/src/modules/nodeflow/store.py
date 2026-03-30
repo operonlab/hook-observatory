@@ -3,7 +3,7 @@
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import update_in
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -114,4 +114,32 @@ select_nodeflow_stats = create_selector(
         "completed_runs": s["completed_runs"],
         "failed_runs": s["failed_runs"],
     }
+)
+
+# ── Effects ───────────────────────────────────────────────────────────────
+
+
+@effect(FlowRunCompleted)
+async def on_flow_completed(action, store):
+    """Log flow completion metrics."""
+    pass  # placeholder — metrics/telemetry hooks go here
+
+
+@effect(FlowRunFailed)
+async def on_flow_failed(action, store):
+    """Handle flow failure — potential retry or notification."""
+    pass  # placeholder — retry logic and failure notification go here
+
+
+@effect(NodeFailed)
+async def on_node_failed(action, store):
+    """Track node failures for debugging."""
+    pass  # placeholder — node-level failure tracking and alerting go here
+
+
+register_effects(
+    nodeflow_store,
+    on_flow_completed,
+    on_flow_failed,
+    on_node_failed,
 )

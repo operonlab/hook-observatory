@@ -1,10 +1,9 @@
-"""Intelflow state management — selectors for dashboard/topic caching.
+"""Intelflow state management — FeatureStore for reports, topics, and feeds."""
 
-State comes from DB — selectors cache computed projections (no reducer needed).
-"""
-
-from src.shared.actions import create_action
+from src.shared.actions import create_action, create_reducer, on
+from src.shared.immutable_utils import batch_update
 from src.shared.selectors import create_selector
+from src.shared.store import FeatureStore, effect, register_effects
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -15,18 +14,100 @@ TopicCreated = create_action("intelflow.topic.created")
 FeedAdded = create_action("intelflow.feed.added")
 FeedFetched = create_action("intelflow.feed.fetched")
 
-# ── Selectors (DB-backed — no reducer, selectors cache computations) ──────
+# ── Reducer ──────────────────────────────────────────────────────────────
 
-select_report_count = create_selector(lambda s: s.get("report_count", 0))
+intelflow_reducer = create_reducer(
+    {"report_count": 0, "topic_count": 0, "tags": (), "recent_reports": []},
+    on(
+        ReportCreated,
+        lambda s, a: batch_update(
+            s,
+            {
+                "report_count": s["report_count"] + 1,
+                "recent_reports": (a.payload, *tuple(s["recent_reports"])[:49]),
+            },
+        ),
+    ),
+    on(
+        ReportDeleted,
+        lambda s, a: s.set("report_count", max(0, s["report_count"] - 1)),
+    ),
+    on(
+        TopicCreated,
+        lambda s, a: s.set("topic_count", s["topic_count"] + 1),
+    ),
+    on(
+        ReportUpdated,
+        lambda s, a: s,  # updates are transient — list queries hit DB
+    ),
+    on(
+        FeedAdded,
+        lambda s, a: s,  # feed count derived from DB — no in-memory state
+    ),
+    on(
+        FeedFetched,
+        lambda s, a: s,  # fetch events are transient — no state change
+    ),
+)
 
-select_all_tags = create_selector(lambda s: s.get("tags", []))
+# ── Store ─────────────────────────────────────────────────────────────────
 
-select_topic_graph = create_selector(lambda s: s.get("topic_graph", {}))
+intelflow_store: FeatureStore = FeatureStore("intelflow", intelflow_reducer)
 
-select_feed_count = create_selector(lambda s: s.get("feed_count", 0))
+# ── Selectors ─────────────────────────────────────────────────────────────
 
-select_latest_report_id = create_selector(lambda s: s.get("latest_report_id"))
+select_report_count = create_selector(
+    lambda s: s.get("report_count", 0) if isinstance(s, dict) else s["report_count"]
+)
+
+select_all_tags = create_selector(
+    lambda s: s.get("tags", []) if isinstance(s, dict) else list(s["tags"])
+)
+
+select_topic_graph = create_selector(
+    lambda s: s.get("topic_graph", {}) if isinstance(s, dict) else {}
+)
+
+select_feed_count = create_selector(lambda s: s.get("feed_count", 0) if isinstance(s, dict) else 0)
+
+select_latest_report_id = create_selector(
+    lambda s: s.get("latest_report_id") if isinstance(s, dict) else None
+)
 
 select_active_topics = create_selector(
-    lambda s: [t for t in s.get("topics", []) if t.get("active", True)]
+    lambda s: [
+        t for t in (s.get("topics", []) if isinstance(s, dict) else []) if t.get("active", True)
+    ]
+)
+
+select_recent_reports = create_selector(
+    lambda s: list(s["recent_reports"]) if not isinstance(s, dict) else s.get("recent_reports", [])
+)
+
+select_intelflow_stats = create_selector(
+    lambda s: {
+        "report_count": s["report_count"] if not isinstance(s, dict) else s.get("report_count", 0),
+        "topic_count": s["topic_count"] if not isinstance(s, dict) else s.get("topic_count", 0),
+    }
+)
+
+# ── Effects ───────────────────────────────────────────────────────────────
+
+
+@effect(ReportCreated)
+async def on_report_created(action, store):
+    """Invalidate caches on new report — future: notify subscribers."""
+    pass  # cache invalidation handled by events.py register_invalidation
+
+
+@effect(TopicCreated)
+async def on_topic_created(action, store):
+    """Invalidate topic list cache on new topic."""
+    pass  # cache invalidation handled by events.py register_invalidation
+
+
+register_effects(
+    intelflow_store,
+    on_report_created,
+    on_topic_created,
 )
