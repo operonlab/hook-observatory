@@ -103,8 +103,6 @@ class VideoPipe(BasePipe):
 
 
 # Backward compat
-VideoPipeline = VideoPipe
-VideoStream = VideoPipe
 
 
 # ── Registry ────────────────────────────────────────────────────────────

@@ -47,7 +47,7 @@ class MapFramesOp:
             return ctx
 
         # Lazy import to avoid hard dependency when image_ops not installed
-        from image_ops import ImagePipeline, parse_operators
+        from image_ops import ImagePipe, parse_operators
 
         ops = parse_operators(self.image_ops_spec, sep="|")
         if not ops:
@@ -58,8 +58,7 @@ class MapFramesOp:
 
         # Collect and sort frames naturally
         frame_files = sorted(
-            f for f in os.listdir(frames_dir)
-            if f.startswith("frame_") and "." in f
+            f for f in os.listdir(frames_dir) if f.startswith("frame_") and "." in f
         )
 
         if not frame_files:
@@ -91,7 +90,7 @@ class MapFramesOp:
             }
 
             # Each thread gets its own pipeline instance
-            pipeline = ImagePipeline().pipe(*ops)
+            pipeline = ImagePipe().pipe(*ops)
             image_ctx = pipeline.execute(image_ctx)
 
             _save_image(output_path, image_ctx["image"], ext)
@@ -101,24 +100,24 @@ class MapFramesOp:
         # Process frames in parallel
         completed = 0
         with ThreadPoolExecutor(max_workers=self.workers) as pool:
-            futures = {
-                pool.submit(_process_frame, fname): fname
-                for fname in frame_files
-            }
+            futures = {pool.submit(_process_frame, fname): fname for fname in frame_files}
             for future in as_completed(futures):
                 future.result()  # Raise on error
                 completed += 1
                 if completed % 100 == 0:
                     logger.info(
                         "map-frames: %d/%d frames processed",
-                        completed, len(frame_files),
+                        completed,
+                        len(frame_files),
                     )
 
         ctx["frames_dir"] = output_dir
 
         logger.info(
             "map-frames: processed %d frames with [%s] (%d workers)",
-            len(frame_files), self.image_ops_spec, self.workers,
+            len(frame_files),
+            self.image_ops_spec,
+            self.workers,
         )
 
         return ctx
@@ -128,6 +127,7 @@ def _load_image(path: str):
     """Load image as numpy array. Tries cv2 first, falls back to Pillow."""
     try:
         import cv2
+
         return cv2.imread(path)
     except ImportError:
         pass
@@ -135,6 +135,7 @@ def _load_image(path: str):
     try:
         import numpy as np
         from PIL import Image
+
         img = Image.open(path)
         return np.array(img.convert("RGB"))[:, :, ::-1]  # RGB -> BGR for consistency
     except ImportError as e:
@@ -147,6 +148,7 @@ def _save_image(path: str, img, ext: str) -> None:
     """Save numpy array image. Tries cv2 first, falls back to Pillow."""
     try:
         import cv2
+
         cv2.imwrite(path, img)
         return
     except ImportError:
@@ -154,6 +156,7 @@ def _save_image(path: str, img, ext: str) -> None:
 
     try:
         from PIL import Image
+
         # img is BGR numpy array, convert to RGB for Pillow
         rgb = img[:, :, ::-1] if img.ndim == 3 and img.shape[2] == 3 else img
         Image.fromarray(rgb).save(path)

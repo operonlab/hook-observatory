@@ -213,8 +213,6 @@ def _lift_to_stream(
 
 
 # Backward compat aliases
-BasePipeline = BasePipe
-BaseStream = BasePipe
 
 
 # ── Batch Combinators ────────────────────────────────────────────────────

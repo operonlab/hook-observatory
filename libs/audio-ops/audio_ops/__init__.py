@@ -140,8 +140,6 @@ class AudioPipe(BasePipe):
 
 
 # Backward compat
-AudioPipeline = AudioPipe
-AudioStream = AudioPipe
 
 
 # ── Registry ──────────────────────────────────────────────────────────────

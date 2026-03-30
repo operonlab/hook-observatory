@@ -134,8 +134,6 @@ class ImagePipe(BasePipe):
 
 
 # Backward compat
-ImagePipeline = ImagePipe
-ImageStream = ImagePipe
 
 
 # ── Registry ─────────────────────────────────────────────────────────────
