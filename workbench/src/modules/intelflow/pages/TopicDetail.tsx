@@ -1,50 +1,21 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Hash } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { intelflowApi } from '../api/client'
 import ReportRow from '../components/ReportRow'
-import type { Report, Topic } from '../types'
+import { useIntelflowTopics, useTopicReports } from '../hooks/queries'
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-
-  const [topic, setTopic] = useState<Topic | null>(null)
-  const [reports, setReports] = useState<Report[]>([])
-  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
   const pageSize = 20
 
-  const fetchReports = useCallback(
-    async (p: number) => {
-      if (!id) return
-      setLoading(true)
-      try {
-        const res = await intelflowApi.listByTopic(id, p, pageSize)
-        setReports(res.items)
-        setTotal(res.total)
-        setPage(p)
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false)
-      }
-    },
-    [id],
-  )
+  const { data: topicsData } = useIntelflowTopics()
+  const topic = topicsData?.items.find((t) => t.id === id) ?? null
 
-  useEffect(() => {
-    // Find topic info from the topics list
-    async function loadTopic() {
-      const res = await intelflowApi.listTopics(1, 200)
-      const found = res.items.find((t) => t.id === id)
-      if (found) setTopic(found)
-    }
-    loadTopic()
-    fetchReports(1)
-  }, [id, fetchReports])
-
+  const { data: reportsData, isLoading } = useTopicReports(id, page, pageSize)
+  const reports = reportsData?.items ?? []
+  const total = reportsData?.total ?? 0
   const totalPages = Math.ceil(total / pageSize)
 
   return (
@@ -92,7 +63,7 @@ export default function TopicDetail() {
           borderColor: 'var(--if-border)',
         }}
       >
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center h-32">
             <div
               className="h-5 w-5 animate-spin border-2 border-t-transparent"
@@ -119,7 +90,7 @@ export default function TopicDetail() {
           </span>
           <div className="flex gap-1">
             <button
-              onClick={() => fetchReports(page - 1)}
+              onClick={() => setPage(page - 1)}
               disabled={page <= 1}
               className="p-2.5 border disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"
               style={{
@@ -130,7 +101,7 @@ export default function TopicDetail() {
               <ChevronLeft size={14} />
             </button>
             <button
-              onClick={() => fetchReports(page + 1)}
+              onClick={() => setPage(page + 1)}
               disabled={page >= totalPages}
               className="p-2.5 border disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"
               style={{
