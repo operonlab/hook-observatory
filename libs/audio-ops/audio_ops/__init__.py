@@ -20,9 +20,12 @@ Model directory resolution order:
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
+import re
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -107,6 +110,54 @@ class AudioPipeline:
         return len(self._ops)
 
 
+# ── ParallelOp (sync fork+merge, mirrors core/shared/reactive.ParallelOp) ──
+
+
+class ParallelOp:
+    """Fork ctx to multiple ops, execute concurrently, merge results.
+
+    Sync equivalent of core reactive's async ParallelOp.
+    Uses ThreadPoolExecutor because numpy/ONNX ops release the GIL.
+
+    Usage:
+        pipeline.pipe(ParallelOp(DiarizeOp(), EmotionOp()))
+        # or via spec: "denoise,[diarize+emotion]"
+    """
+
+    def __init__(self, *ops: AudioOp, name: str | None = None):
+        if len(ops) < 2:
+            raise ValueError("ParallelOp requires at least 2 operators")
+        self._ops = ops
+        self._name = name or f"parallel({'+'.join(op.name for op in ops)})"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return tuple(sorted({k for op in self._ops for k in op.input_keys}))
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        return tuple(sorted({k for op in self._ops for k in op.output_keys}))
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        with ThreadPoolExecutor(max_workers=len(self._ops)) as pool:
+            futures = [pool.submit(op, copy.deepcopy(ctx)) for op in self._ops]
+            results = [f.result() for f in futures]
+
+        merged = dict(ctx)
+        for result in results:
+            for key in result:
+                if key not in ctx or key in {k for op in self._ops for k in op.output_keys}:
+                    merged[key] = result[key]
+        return merged
+
+    def __repr__(self) -> str:
+        return self._name
+
+
 # ── Registry ──────────────────────────────────────────────────────────────
 
 OPERATORS: dict[str, type] = {}
@@ -124,7 +175,7 @@ def register(name: str):
 
 # Import operators to trigger registration
 def _register_builtins():
-    from . import denoise, diarize, extract_audio, merge, normalize, vad_trim  # noqa: F401
+    from . import denoise, diarize, emotion, extract_audio, merge, normalize, vad_trim  # noqa: F401
 
 
 _register_builtins()
@@ -132,31 +183,67 @@ _register_builtins()
 
 # ── Parser ────────────────────────────────────────────────────────────────
 
+# Regex for parallel group: [op1+op2+op3]
+_PARALLEL_RE = re.compile(r"^\[(.+)]$")
+
 
 def parse_operators(spec: str) -> list[AudioOp]:
     """Parse operator spec string into instantiated operators.
 
-    Format: "denoise,vad-trim:threshold=0.3;min_silence_duration=0.8,normalize:target_db=-6"
+    Format: "denoise,vad-trim:threshold=0.3,normalize:target_db=-6,[diarize+emotion]"
+
+    Parallel groups use [op1+op2] syntax — executes ops concurrently via ParallelOp.
     """
     ops = []
-    for token in spec.split(","):
+    for token in _split_top_level(spec):
         token = token.strip()
         if not token:
             continue
-        if ":" in token:
-            name, params_str = token.split(":", 1)
-            kwargs = {}
-            for pair in params_str.split(";"):
-                if "=" in pair:
-                    k, v = pair.split("=", 1)
-                    try:
-                        kwargs[k.strip()] = float(v.strip())
-                    except ValueError:
-                        kwargs[k.strip()] = v.strip()
-            ops.append(_make_op(name.strip(), kwargs))
+
+        parallel_match = _PARALLEL_RE.match(token)
+        if parallel_match:
+            inner = parallel_match.group(1)
+            sub_ops = [_parse_single(t.strip()) for t in inner.split("+") if t.strip()]
+            ops.append(ParallelOp(*sub_ops))
         else:
-            ops.append(_make_op(token, {}))
+            ops.append(_parse_single(token))
     return ops
+
+
+def _split_top_level(spec: str) -> list[str]:
+    """Split by comma, but respect [...] groups."""
+    tokens = []
+    depth = 0
+    current = []
+    for ch in spec:
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            tokens.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
+
+def _parse_single(token: str) -> AudioOp:
+    """Parse a single operator token like 'normalize:target_db=-6'."""
+    if ":" in token:
+        name, params_str = token.split(":", 1)
+        kwargs = {}
+        for pair in params_str.split(";"):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                try:
+                    kwargs[k.strip()] = float(v.strip())
+                except ValueError:
+                    kwargs[k.strip()] = v.strip()
+        return _make_op(name.strip(), kwargs)
+    return _make_op(token.strip(), {})
 
 
 def _make_op(name: str, kwargs: dict) -> AudioOp:
