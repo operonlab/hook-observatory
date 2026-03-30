@@ -1,16 +1,17 @@
-"""Shared operator protocol, pipeline base, and combinators.
+"""Shared operator protocol, unified pipe, and combinators.
 
 The GCD (greatest common factor) of audio-ops, image-ops, and video-ops.
 Sync equivalents of core/src/shared/reactive.py (async).
 
-All three media libs inherit from this base:
-    from ops_core import Op, BasePipeline, ParallelOp, TapOp, ...
+Two execution modes in ONE class:
+    Batch:     of/from_file → pipe() → execute()        (one ctx in, one out)
+    Streaming: from_iter/from_* → pipe() → subscribe()  (many in, many out)
 
-    class AudioPipeline(BasePipeline["AudioOp"]):
-        @classmethod
+All three media libs inherit from BasePipe:
+    class AudioPipe(BasePipe):
         def of(cls, audio, sr): ...
-        @classmethod
         def from_file(cls, path): ...
+        def from_chunks(cls, gen, sr): ...   # streaming source
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class Op(Protocol):
-    """Pure function transform on a ctx dict — the atomic unit of all pipelines.
+    """Pure function transform on a ctx dict — the atomic unit of all pipes.
 
     Sync __call__ because all media operators are CPU-bound (no async I/O).
     """
@@ -47,41 +48,84 @@ class Op(Protocol):
     def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]: ...
 
 
-# ── BasePipeline ─────────────────────────────────────────────────────────
+# ── StreamOp Protocol ────────────────────────────────────────────────────
 
 
-class BasePipeline:
-    """Composable operator chain with static key validation.
+@runtime_checkable
+class StreamOp(Protocol):
+    """Transform on a stream of ctx dicts — generator in, generator out."""
 
-    Subclasses add domain-specific creation methods (of, from_file).
-    RxJS-style: Creation → pipe() → execute().
+    @property
+    def name(self) -> str: ...
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]: ...
+
+
+# ── BasePipe (unified batch + streaming) ─────────────────────────────────
+
+
+class BasePipe:
+    """Unified pipe — batch or streaming, decided by source.
+
+    Batch sources (of, from_file) → execute() returns one ctx.
+    Streaming sources (from_iter, from_chunks) → subscribe()/collect().
+
+    RxJS-style: Source → pipe() → consume.
     """
 
     def __init__(self) -> None:
-        self._ops: list[Op] = []
+        self._ops: list[Op | StreamOp] = []
+        # Batch mode
         self._initial_ctx: dict[str, Any] | None = None
+        # Streaming mode
+        self._source: Iterable[dict[str, Any]] | None = None
 
-    # ── Creation helper (used by subclass of/from_file) ──────────────
+    @property
+    def _is_streaming(self) -> bool:
+        return self._source is not None
+
+    # ── Creation helpers (used by subclass factories) ────────────────
 
     @classmethod
-    def _create(cls, ctx: dict[str, Any]) -> BasePipeline:
-        """Internal factory — create a pipeline with pre-loaded ctx."""
+    def _create_batch(cls, ctx: dict[str, Any]) -> BasePipe:
+        """Internal: create batch pipe with pre-loaded ctx."""
         p = cls()
         p._initial_ctx = ctx
         return p
 
-    # ── Operators ────────────────────────────────────────────────────────
+    @classmethod
+    def _create_stream(cls, source: Iterable[dict[str, Any]]) -> BasePipe:
+        """Internal: create streaming pipe from generator."""
+        p = cls()
+        p._source = source
+        return p
 
-    def pipe(self, *ops: Op) -> BasePipeline:
+    # Backward compat alias
+    _create = _create_batch
+
+    @classmethod
+    def from_iter(cls, source: Iterable[dict[str, Any]]) -> BasePipe:
+        """from() — create stream from any iterable of ctx dicts."""
+        return cls._create_stream(source)
+
+    # ── Operators ────────────────────────────────────────────────────
+
+    def pipe(self, *ops: Op | StreamOp) -> BasePipe:
         self._ops.extend(ops)
         return self
 
     def compile(self, initial_keys: set[str] | None = None) -> list[str]:
+        """Static key validation (batch mode only)."""
         available = set(initial_keys) if initial_keys else set()
         if self._initial_ctx:
             available |= set(self._initial_ctx.keys())
         missing: list[str] = []
         for op in self._ops:
+            if not hasattr(op, "input_keys"):
+                continue  # stream-only ops skip validation
             for key in op.input_keys:
                 if key not in available:
                     missing.append(f"{op.name}: requires '{key}'")
@@ -89,39 +133,97 @@ class BasePipeline:
                 available.add(key)
         return missing
 
+    # ── Batch consumption ────────────────────────────────────────────
+
     def execute(self, ctx: dict[str, Any] | None = None) -> dict[str, Any]:
+        """execute() — run batch pipeline, return one ctx."""
         ctx = ctx if ctx is not None else (self._initial_ctx or {})
         for op in self._ops:
             ctx = op(ctx)
         return ctx
 
+    # ── Streaming consumption ────────────────────────────────────────
+
+    def _build_chain(self) -> Iterable[dict[str, Any]]:
+        """Build the generator chain — lazy, nothing runs until consumed."""
+        stream: Iterable[dict[str, Any]] = self._source or []
+        for op in self._ops:
+            if isinstance(op, StreamOp) and not isinstance(op, Op):
+                stream = op(stream)
+            elif hasattr(op, "input_keys"):
+                stream = _lift_to_stream(op, stream)
+            else:
+                stream = op(stream)
+        return stream
+
+    def subscribe(
+        self,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> int:
+        """subscribe() — consume stream, call callback for each item.
+
+        Returns the number of items processed.
+        """
+        count = 0
+        for ctx in self._build_chain():
+            callback(ctx)
+            count += 1
+        return count
+
+    def collect(self) -> list[dict[str, Any]]:
+        """toArray() — collect all stream items into a list."""
+        return list(self._build_chain())
+
+    def first(self) -> dict[str, Any] | None:
+        """first() — get the first item or None."""
+        for ctx in self._build_chain():
+            return ctx
+        return None
+
+    def __iter__(self) -> Iterable[dict[str, Any]]:
+        """Allow direct iteration over the stream."""
+        return iter(self._build_chain())
+
+    # ── Repr ─────────────────────────────────────────────────────────
+
     def _repr_source(self) -> str:
         """Override in subclass for domain-specific repr."""
         if self._initial_ctx and "source_path" in self._initial_ctx:
             return f"from({self._initial_ctx['source_path']}) -> "
+        if self._is_streaming:
+            return "stream -> "
         return ""
 
     def __repr__(self) -> str:
         source = self._repr_source()
-        names = " -> ".join(op.name for op in self._ops)
+        names = " -> ".join(getattr(op, "name", op.__class__.__name__) for op in self._ops)
         return f"{self.__class__.__name__}({source}{names})"
 
     def __len__(self) -> int:
         return len(self._ops)
 
 
-# ── Combinators ──────────────────────────────────────────────────────────
+def _lift_to_stream(
+    op: Op,
+    source: Iterable[dict[str, Any]],
+) -> Iterable[dict[str, Any]]:
+    """Lift a batch Op (ctx→ctx) into a stream transform (map)."""
+    for ctx in source:
+        yield op(ctx)
+
+
+# Backward compat aliases
+BasePipeline = BasePipe
+BaseStream = BasePipe
+
+
+# ── Batch Combinators ────────────────────────────────────────────────────
 
 
 class ParallelOp:
     """Fork ctx to multiple ops, execute concurrently, merge results.
 
     RxJS equivalent: forkJoin(op1(ctx), op2(ctx))
-    Uses ThreadPoolExecutor because numpy/ONNX ops release the GIL.
-
-    Usage:
-        pipeline.pipe(ParallelOp(DiarizeOp(), EmotionOp()))
-        # or via spec: "denoise,[diarize+emotion]"
     """
 
     def __init__(self, *ops: Op, name: str | None = None):
@@ -160,10 +262,7 @@ class ParallelOp:
 
 
 class TapOp:
-    """Side-effect observer — runs callback without modifying ctx.
-
-    RxJS equivalent: tap(x => console.log(x))
-    """
+    """Side-effect observer — runs callback without modifying ctx."""
 
     name = "tap"
     input_keys: tuple[str, ...] = ()
@@ -186,10 +285,7 @@ class TapOp:
 
 
 class ConditionalOp:
-    """Conditional branch — run then_op if predicate is true, else else_op.
-
-    RxJS equivalent: iif(() => condition, thenObs$, elseObs$)
-    """
+    """Conditional branch — run then_op if predicate is true, else else_op."""
 
     def __init__(
         self,
@@ -236,10 +332,7 @@ class ConditionalOp:
 
 
 class CatchOp:
-    """Error recovery wrapper — catches exceptions and runs fallback.
-
-    RxJS equivalent: catchError(err => of(fallbackValue))
-    """
+    """Error recovery wrapper — catches exceptions and runs fallback."""
 
     def __init__(
         self,
@@ -281,14 +374,8 @@ class CatchOp:
         return self._name
 
 
-# ── DelayOp (RxJS: delay — rate-limit between ops) ──────────────────────
-
-
 class DelayOp:
-    """Pause execution for a fixed duration — rate-limit external API calls.
-
-    RxJS equivalent: delay(ms)
-    """
+    """Pause execution for a fixed duration — rate-limit external API calls."""
 
     name = "delay"
     input_keys: tuple[str, ...] = ()
@@ -308,14 +395,8 @@ class DelayOp:
         return f"delay({self._seconds}s)"
 
 
-# ── RetryOp (RxJS: retry — retry N times on failure) ────────────────────
-
-
 class RetryOp:
-    """Retry a failing op up to N times with optional backoff.
-
-    RxJS equivalent: retry({ count: 3, delay: 1000 })
-    """
+    """Retry a failing op up to N times with exponential backoff."""
 
     def __init__(
         self,
@@ -368,14 +449,8 @@ class RetryOp:
         return self._name
 
 
-# ── FinalizeOp (RxJS: finalize — cleanup after pipeline) ────────────────
-
-
 class FinalizeOp:
-    """Cleanup callback that runs after an op, regardless of success/failure.
-
-    RxJS equivalent: finalize(() => cleanup())
-    """
+    """Cleanup callback that runs after an op, regardless of success/failure."""
 
     def __init__(
         self,
@@ -413,15 +488,8 @@ class FinalizeOp:
         return self._name
 
 
-# ── TimeoutOp (RxJS: timeout — abort if op exceeds duration) ────────────
-
-
 class TimeoutOp:
-    """Abort an op if it exceeds the specified duration.
-
-    RxJS equivalent: timeout(ms)
-    Uses a thread to enforce the deadline on CPU-bound ops.
-    """
+    """Abort an op if it exceeds the specified duration."""
 
     def __init__(
         self,
@@ -460,137 +528,11 @@ class TimeoutOp:
         return self._name
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# STREAMING PIPELINE — generator-based (pull model, lazy evaluation)
-#
-# Batch:     ctx → Op → ctx               (one item in, one item out)
-# Streaming: Iterable[ctx] → StreamOp → Iterable[ctx]  (many in, many out)
-#
-# Batch ops auto-lift into streaming via map() — no changes needed.
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-# ── StreamOp Protocol ────────────────────────────────────────────────────
-
-
-@runtime_checkable
-class StreamOp(Protocol):
-    """Transform on a stream of ctx dicts — generator in, generator out."""
-
-    @property
-    def name(self) -> str: ...
-
-    def __call__(
-        self,
-        source: Iterable[dict[str, Any]],
-    ) -> Iterable[dict[str, Any]]: ...
-
-
-# ── BaseStream ───────────────────────────────────────────────────────────
-
-
-class BaseStream:
-    """Generator-based streaming pipeline — the Observable of ops_core.
-
-    Pull model: consumer drives evaluation (backpressure is free).
-    Batch ops (Op protocol) are auto-lifted via map().
-
-    Usage:
-        BaseStream.from_iter(chunks).pipe(
-            BufferCount(16000),
-            NormalizeOp(),       # batch op, auto-lifted
-            EmotionOp(),         # batch op, auto-lifted
-        ).subscribe(print)
-    """
-
-    def __init__(self, source: Iterable[dict[str, Any]]) -> None:
-        self._source = source
-        self._ops: list[StreamOp | Op] = []
-
-    # ── Creation ─────────────────────────────────────────────────────
-
-    @classmethod
-    def from_iter(
-        cls,
-        source: Iterable[dict[str, Any]],
-    ) -> BaseStream:
-        """from() — create stream from any iterable of ctx dicts."""
-        return cls(source)
-
-    # ── Operators ────────────────────────────────────────────────────
-
-    def pipe(self, *ops: StreamOp | Op) -> BaseStream:
-        self._ops.extend(ops)
-        return self
-
-    def _build_chain(self) -> Iterable[dict[str, Any]]:
-        """Build the generator chain — lazy, nothing runs until consumed."""
-        stream: Iterable[dict[str, Any]] = self._source
-        for op in self._ops:
-            if isinstance(op, StreamOp) and not isinstance(op, Op):
-                stream = op(stream)
-            elif hasattr(op, "input_keys"):
-                # Auto-lift batch Op into streaming via map
-                stream = _lift_to_stream(op, stream)
-            else:
-                stream = op(stream)
-        return stream
-
-    # ── Subscription (consume the stream) ────────────────────────────
-
-    def subscribe(
-        self,
-        callback: Callable[[dict[str, Any]], None],
-    ) -> int:
-        """subscribe() — consume stream, call callback for each item.
-
-        Returns the number of items processed.
-        """
-        count = 0
-        for ctx in self._build_chain():
-            callback(ctx)
-            count += 1
-        return count
-
-    def collect(self) -> list[dict[str, Any]]:
-        """toArray() — collect all stream items into a list."""
-        return list(self._build_chain())
-
-    def first(self) -> dict[str, Any] | None:
-        """first() — get the first item or None."""
-        for ctx in self._build_chain():
-            return ctx
-        return None
-
-    def __iter__(self) -> Iterable[dict[str, Any]]:
-        """Allow direct iteration over the stream."""
-        return iter(self._build_chain())
-
-    def __repr__(self) -> str:
-        names = " -> ".join(getattr(op, "name", op.__class__.__name__) for op in self._ops)
-        return f"{self.__class__.__name__}({names})"
-
-
-def _lift_to_stream(
-    op: Op,
-    source: Iterable[dict[str, Any]],
-) -> Iterable[dict[str, Any]]:
-    """Lift a batch Op (ctx→ctx) into a stream transform (map)."""
-    for ctx in source:
-        yield op(ctx)
-
-
 # ── Stream Combinators ───────────────────────────────────────────────────
 
 
 class BufferCount:
-    """Accumulate N items, emit as a merged batch ctx.
-
-    RxJS equivalent: bufferCount(N)
-
-    Merges N ctx dicts by concatenating array values and keeping
-    the last scalar value.
-    """
+    """Accumulate N items, emit as a merged batch ctx."""
 
     name = "buffer-count"
 
@@ -621,7 +563,6 @@ class BufferCount:
                 merged[self._merge_key] = np.concatenate(arrays)
             return merged
 
-        # Default: take last item's scalars, concat arrays
         merged = {}
         for it in items:
             for k, v in it.items():
@@ -637,16 +578,12 @@ class BufferCount:
 
 
 class BufferTime:
-    """Accumulate items for a time window, emit as batch.
-
-    RxJS equivalent: bufferTime(ms)
-    """
+    """Accumulate items for a time window, emit as batch."""
 
     name = "buffer-time"
 
     def __init__(self, seconds: float, merge_key: str | None = None):
         self._seconds = seconds
-        self._merge_key = merge_key
         self._bc = BufferCount(count=999999, merge_key=merge_key)
 
     def __call__(
@@ -673,16 +610,12 @@ class BufferTime:
 
 
 class Window:
-    """Sliding window of N items — emit overlapping batches.
-
-    RxJS equivalent: windowCount(N, 1)
-    """
+    """Sliding window of N items — emit overlapping batches."""
 
     name = "window"
 
     def __init__(self, size: int, merge_key: str | None = None):
         self._size = size
-        self._merge_key = merge_key
         self._bc = BufferCount(count=size, merge_key=merge_key)
 
     def __call__(
@@ -702,10 +635,7 @@ class Window:
 
 
 class Scan:
-    """Running accumulation — emit intermediate results.
-
-    RxJS equivalent: scan((acc, val) => ..., seed)
-    """
+    """Running accumulation — emit intermediate results."""
 
     name = "scan"
 
@@ -731,10 +661,7 @@ class Scan:
 
 
 class Filter:
-    """Only pass through items matching predicate.
-
-    RxJS equivalent: filter(predicate)
-    """
+    """Only pass through items matching predicate."""
 
     name = "filter"
 
@@ -754,10 +681,7 @@ class Filter:
 
 
 class Take:
-    """Take first N items then stop.
-
-    RxJS equivalent: take(N)
-    """
+    """Take first N items then stop."""
 
     name = "take"
 
@@ -778,10 +702,7 @@ class Take:
 
 
 class Skip:
-    """Skip first N items.
-
-    RxJS equivalent: skip(N)
-    """
+    """Skip first N items."""
 
     name = "skip"
 
@@ -801,10 +722,7 @@ class Skip:
 
 
 class Throttle:
-    """Emit at most once per interval — drop intermediate items.
-
-    RxJS equivalent: throttleTime(ms)
-    """
+    """Emit at most once per interval — drop intermediate items."""
 
     name = "throttle"
 
@@ -829,14 +747,7 @@ class Throttle:
 
 
 class Debounce:
-    """Emit only after a silence period — requires buffered source.
-
-    RxJS equivalent: debounceTime(ms)
-
-    Note: In a pull-based generator model, debounce works on
-    timestamped items. Items must have a '_ts' key (float, seconds)
-    or arrival time is used.
-    """
+    """Emit only after a silence period."""
 
     name = "debounce"
 
@@ -859,7 +770,6 @@ class Debounce:
             pending = ctx
             pending_time = now
 
-        # Emit the last pending item
         if pending is not None:
             yield pending
 
@@ -868,10 +778,7 @@ class Debounce:
 
 
 class DistinctUntilChanged:
-    """Skip consecutive duplicates based on a key function.
-
-    RxJS equivalent: distinctUntilChanged(keySelector)
-    """
+    """Skip consecutive duplicates based on a key function."""
 
     name = "distinct-until-changed"
 
@@ -943,13 +850,7 @@ def parse_spec(
     make_op: Callable[[str, dict], Op],
     sep: str = ",",
 ) -> list[Op]:
-    """Parse operator spec string with [a+b] parallel group support.
-
-    Args:
-        spec: e.g. "denoise,normalize,[diarize+emotion]"
-        make_op: Factory fn(name, kwargs) -> Op (from each lib's registry)
-        sep: Token separator. Defaults to comma.
-    """
+    """Parse operator spec string with [a+b] parallel group support."""
     ops: list[Op] = []
     for token in split_top_level(spec, sep):
         token = token.strip()

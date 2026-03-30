@@ -1,15 +1,15 @@
 """Video operators — composable ffmpeg-based video transforms.
 
-Inherits from ops_core (shared protocol + combinators).
+Inherits from ops_core.BasePipe (unified batch + streaming).
 
 Usage:
-    from video_ops import parse_operators, VideoPipeline
-    ops = parse_operators("probe,extract-frames:fps=2")
-    pipeline = VideoPipeline().pipe(*ops)
-    ctx = pipeline.execute({"video_path": "/path/to/video.mp4"})
+    # Batch
+    VideoPipe.from_file("vid.mp4").pipe(ProbeOp(), TrimOp(start=10)).execute()
 
-    # Or fluent style:
-    VideoPipeline.from_file("vid.mp4").pipe(ProbeOp(), TrimOp(start=10)).execute()
+    # Streaming
+    VideoPipe.from_frames(frame_gen).pipe(
+        Throttle(1/24), GrayscaleOp(),
+    ).subscribe(callback)
 """
 
 from __future__ import annotations
@@ -21,8 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from ops_core import (  # noqa: F401 — re-export for backward compat
-    BasePipeline,
-    BaseStream,
+    BasePipe,
     BufferCount,
     CatchOp,
     ConditionalOp,
@@ -34,35 +33,29 @@ from ops_core import (  # noqa: F401 — re-export for backward compat
     Throttle,
     parse_spec,
 )
-from ops_core import (
-    Op as VideoOp,
-)
+from ops_core import Op as VideoOp
 
 logger = logging.getLogger(__name__)
-
-# ── Backend abstraction (future: gstreamer | deepstream) ──────────────
 
 BACKEND = "ffmpeg"
 
 
 def get_backend() -> str:
-    """Get video processing backend. Future: 'gstreamer' | 'deepstream'."""
     return os.environ.get("VIDEO_OPS_BACKEND", "ffmpeg")
 
 
-# ── VideoPipeline ────────────────────────────────────────────────────────
+# ── VideoPipe ────────────────────────────────────────────────────────────
 
 
-class VideoPipeline(BasePipeline):
-    """Video-specific pipeline with from_file(path).
+class VideoPipe(BasePipe):
+    """Unified video pipe — batch or streaming, decided by source."""
 
-    No of() — video is always file-based (ffmpeg subprocess).
-    """
+    # ── Batch sources ────────────────────────────────────────────────
 
     @classmethod
-    def from_file(cls, path: str | Path, **extra) -> VideoPipeline:
-        """from() — create pipeline from video file path."""
-        return cls._create(
+    def from_file(cls, path: str | Path, **extra) -> VideoPipe:
+        """from() — create pipe from video file path."""
+        return cls._create_batch(
             {
                 "video_path": str(path),
                 "source_path": str(path),
@@ -70,31 +63,11 @@ class VideoPipeline(BasePipeline):
             }
         )
 
-    def _repr_source(self) -> str:
-        if self._initial_ctx and "source_path" in self._initial_ctx:
-            return f"from({self._initial_ctx['source_path']}) -> "
-        return ""
-
-
-# ── VideoStream (streaming pipeline) ─────────────────────────────────────
-
-
-class VideoStream(BaseStream):
-    """Streaming video pipeline — for frame-by-frame processing.
-
-    Usage:
-        VideoStream.from_frames(frame_gen).pipe(
-            Throttle(1/24),
-            GrayscaleOp(),
-        ).subscribe(lambda ctx: display(ctx["image"]))
-    """
+    # ── Streaming sources ────────────────────────────────────────────
 
     @classmethod
-    def from_frames(cls, source: Iterable) -> VideoStream:
-        """Create stream from video frame generator.
-
-        Source yields np.ndarray frames or dicts with 'image' key.
-        """
+    def from_frames(cls, source: Iterable) -> VideoPipe:
+        """from_frames() — stream from video frame generator."""
 
         def _wrap():
             for i, item in enumerate(source):
@@ -104,7 +77,21 @@ class VideoStream(BaseStream):
                     h, w = item.shape[:2]
                     yield {"image": item, "width": w, "height": h, "frame_idx": i}
 
-        return cls(_wrap())
+        return cls._create_stream(_wrap())
+
+    # ── Repr ─────────────────────────────────────────────────────────
+
+    def _repr_source(self) -> str:
+        if self._initial_ctx and "source_path" in self._initial_ctx:
+            return f"from({self._initial_ctx['source_path']}) -> "
+        elif self._is_streaming:
+            return "frames -> "
+        return ""
+
+
+# Backward compat
+VideoPipeline = VideoPipe
+VideoStream = VideoPipe
 
 
 # ── Registry ────────────────────────────────────────────────────────────
@@ -113,8 +100,6 @@ OPERATORS: dict[str, type] = {}
 
 
 def register(name: str):
-    """Decorator to register an operator class."""
-
     def wrapper(cls):
         OPERATORS[name] = cls
         return cls
@@ -122,7 +107,6 @@ def register(name: str):
     return wrapper
 
 
-# Import operators to trigger registration
 def _register_builtins():
     from . import (  # noqa: F401
         assemble_frames,
@@ -151,7 +135,6 @@ def _make_op(name: str, kwargs: dict) -> VideoOp:
 
 
 def parse_operators(spec: str, sep: str = ",") -> list[VideoOp]:
-    """Parse operator spec string with [a+b] parallel support."""
     return parse_spec(spec, _make_op, sep=sep)
 
 
@@ -159,25 +142,15 @@ def parse_operators(spec: str, sep: str = ",") -> list[VideoOp]:
 
 
 def run_processing(file_path: str, ops: list[VideoOp]) -> str:
-    """Run video operator pipeline on a file.
-
-    Returns the final video_path from context (may be a temp file).
-    Returns original file_path if ops is empty.
-    """
     if not ops:
         return file_path
 
-    ctx: dict[str, Any] = {
-        "video_path": file_path,
-        "source_path": file_path,
-    }
+    ctx: dict[str, Any] = {"video_path": file_path, "source_path": file_path}
 
-    pipeline = VideoPipeline().pipe(*ops)
+    pipeline = VideoPipe().pipe(*ops)
     missing = pipeline.compile(set(ctx.keys()))
     if missing:
         raise ValueError(f"Pipeline key validation failed: {missing}")
 
     ctx = pipeline.execute(ctx)
-    logger.info("Processing: %s → %s", pipeline, ctx.get("video_path", file_path))
-
     return ctx.get("video_path", file_path)

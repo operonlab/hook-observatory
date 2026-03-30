@@ -1,14 +1,16 @@
 """Image operators — OCR preprocessing pipeline for vision, capture, and paper modules.
 
-Inherits from ops_core (shared protocol + combinators).
+Inherits from ops_core.BasePipe (unified batch + streaming).
 
 Usage:
-    from image_ops import parse_operators, run_preprocessing
-    ops = parse_operators("grayscale,clahe,denoise,deskew")
-    processed_path = run_preprocessing("/path/to/scan.png", ops)
+    # Batch
+    ImagePipe.from_file("scan.png").pipe(GrayscaleOp(), ClaheOp()).execute()
+    ImagePipe.of(img_array).pipe(ResizeOp(width=800)).execute()
 
-    from image_ops import ImagePipeline
-    ImagePipeline.from_file("scan.png").pipe(GrayscaleOp(), ClaheOp()).execute()
+    # Streaming
+    ImagePipe.from_frames(camera_gen).pipe(
+        Throttle(1/30), GrayscaleOp(),
+    ).subscribe(callback)
 """
 
 from __future__ import annotations
@@ -21,8 +23,7 @@ from typing import Any
 
 import numpy as np
 from ops_core import (  # noqa: F401 — re-export for backward compat
-    BasePipeline,
-    BaseStream,
+    BasePipe,
     BufferCount,
     CatchOp,
     ConditionalOp,
@@ -34,24 +35,24 @@ from ops_core import (  # noqa: F401 — re-export for backward compat
     Throttle,
     parse_spec,
 )
-from ops_core import (
-    Op as ImageOp,
-)
+from ops_core import Op as ImageOp
 
 logger = logging.getLogger(__name__)
 
 
-# ── ImagePipeline ────────────────────────────────────────────────────────
+# ── ImagePipe ────────────────────────────────────────────────────────────
 
 
-class ImagePipeline(BasePipeline):
-    """Image-specific pipeline with of(array) and from_file(path)."""
+class ImagePipe(BasePipe):
+    """Unified image pipe — batch or streaming, decided by source."""
+
+    # ── Batch sources ────────────────────────────────────────────────
 
     @classmethod
-    def of(cls, image: np.ndarray, **extra) -> ImagePipeline:
-        """of() — wrap in-memory image array into a pipeline."""
+    def of(cls, image: np.ndarray, **extra) -> ImagePipe:
+        """of() — wrap in-memory image array."""
         h, w = image.shape[:2]
-        return cls._create(
+        return cls._create_batch(
             {
                 "image": image,
                 "width": w,
@@ -62,8 +63,8 @@ class ImagePipeline(BasePipeline):
         )
 
     @classmethod
-    def from_file(cls, path: str, **extra) -> ImagePipeline:
-        """from() — read image file into a pipeline."""
+    def from_file(cls, path: str, **extra) -> ImagePipe:
+        """from() — read image file."""
         try:
             import cv2
 
@@ -77,7 +78,7 @@ class ImagePipeline(BasePipeline):
         if img is None:
             raise ValueError(f"Failed to load image: {path}")
         h, w = img.shape[:2]
-        return cls._create(
+        return cls._create_batch(
             {
                 "image": img,
                 "width": w,
@@ -89,36 +90,11 @@ class ImagePipeline(BasePipeline):
             }
         )
 
-    def _repr_source(self) -> str:
-        if self._initial_ctx and "source_path" in self._initial_ctx:
-            return f"from({self._initial_ctx['source_path']}) -> "
-        elif self._initial_ctx:
-            w = self._initial_ctx.get("width", "?")
-            h = self._initial_ctx.get("height", "?")
-            return f"of({w}x{h}) -> "
-        return ""
-
-
-# ── ImageStream (streaming pipeline) ─────────────────────────────────────
-
-
-class ImageStream(BaseStream):
-    """Streaming image pipeline — for frame-by-frame processing.
-
-    Usage:
-        ImageStream.from_frames(camera_gen).pipe(
-            Throttle(1/30),      # 30 fps cap
-            GrayscaleOp(),       # batch op, auto-lifted
-            DetectOp(),
-        ).subscribe(lambda ctx: overlay(ctx))
-    """
+    # ── Streaming sources ────────────────────────────────────────────
 
     @classmethod
-    def from_frames(cls, source: Iterable) -> ImageStream:
-        """Create stream from image frame generator.
-
-        Source yields np.ndarray frames or dicts with 'image' key.
-        """
+    def from_frames(cls, source: Iterable) -> ImagePipe:
+        """from_frames() — stream from image frame generator."""
 
         def _wrap():
             for item in source:
@@ -128,7 +104,25 @@ class ImageStream(BaseStream):
                     h, w = item.shape[:2]
                     yield {"image": item, "width": w, "height": h, "color_space": "rgb"}
 
-        return cls(_wrap())
+        return cls._create_stream(_wrap())
+
+    # ── Repr ─────────────────────────────────────────────────────────
+
+    def _repr_source(self) -> str:
+        if self._initial_ctx and "source_path" in self._initial_ctx:
+            return f"from({self._initial_ctx['source_path']}) -> "
+        elif self._initial_ctx:
+            w = self._initial_ctx.get("width", "?")
+            h = self._initial_ctx.get("height", "?")
+            return f"of({w}x{h}) -> "
+        elif self._is_streaming:
+            return "frames -> "
+        return ""
+
+
+# Backward compat
+ImagePipeline = ImagePipe
+ImageStream = ImagePipe
 
 
 # ── Registry ─────────────────────────────────────────────────────────────
@@ -137,8 +131,6 @@ OPERATORS: dict[str, type] = {}
 
 
 def register(name: str):
-    """Decorator to register an operator class."""
-
     def wrapper(cls):
         OPERATORS[name] = cls
         return cls
@@ -146,7 +138,6 @@ def register(name: str):
     return wrapper
 
 
-# Import operators to trigger registration
 def _register_builtins():
     from . import (  # noqa: F401
         auto_enhance,
@@ -174,12 +165,6 @@ def _make_op(name: str, kwargs: dict) -> ImageOp:
 
 
 def parse_operators(spec: str, sep: str = ",") -> list[ImageOp]:
-    """Parse operator spec string with [a+b] parallel support.
-
-    Args:
-        spec: e.g. "grayscale,clahe:clip_limit=3.0,[denoise+deskew]"
-        sep: Token separator. Defaults to comma; use "|" for MapFramesOp.
-    """
     return parse_spec(spec, _make_op, sep=sep)
 
 
@@ -187,11 +172,6 @@ def parse_operators(spec: str, sep: str = ",") -> list[ImageOp]:
 
 
 def run_preprocessing(file_path: str, ops: list[ImageOp]) -> str:
-    """Load image, run operator pipeline, write temp file.
-
-    Returns the original file_path if ops is empty,
-    otherwise a temp PNG path (caller must clean up).
-    """
     if not ops:
         return file_path
 
@@ -219,7 +199,7 @@ def run_preprocessing(file_path: str, ops: list[ImageOp]) -> str:
         "source_path": file_path,
     }
 
-    pipeline = ImagePipeline().pipe(*ops)
+    pipeline = ImagePipe().pipe(*ops)
     missing = pipeline.compile(set(ctx.keys()))
     if missing:
         raise ValueError(f"Pipeline key validation failed: {missing}")
@@ -237,8 +217,5 @@ def run_preprocessing(file_path: str, ops: list[ImageOp]) -> str:
         from PIL import Image
 
         Image.fromarray(ctx["image"]).save(tmp_path)
-
-    new_w, new_h = ctx.get("width", w), ctx.get("height", h)
-    logger.info("Preprocessing: %s (%dx%d -> %dx%d)", pipeline, w, h, new_w, new_h)
 
     return tmp_path
