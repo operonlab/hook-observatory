@@ -21,16 +21,29 @@ from pathlib import Path
 from typing import Any
 
 from ops_core import (  # noqa: F401 — re-export for backward compat
+    # Base
     BasePipe,
+    # Stream combinators
     BufferCount,
+    BufferTime,
+    # Batch combinators
     CatchOp,
     ConditionalOp,
+    Debounce,
+    DelayOp,
+    DistinctUntilChanged,
     Filter,
+    FinalizeOp,
     ParallelOp,
+    RetryOp,
+    Scan,
     Skip,
     Take,
     TapOp,
     Throttle,
+    TimeoutOp,
+    Window,
+    # Parser
     parse_spec,
 )
 from ops_core import Op as VideoOp
