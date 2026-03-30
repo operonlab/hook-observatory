@@ -127,10 +127,18 @@ async def publish_state_changed(action, store) -> None:
                     **{
                         k: v
                         for k, v in payload.items()
-                        if k not in ("module", "entity_type", "entity_id", "old_state", "new_state")
+                        if k
+                        not in (
+                            "module",
+                            "entity_type",
+                            "entity_id",
+                            "old_state",
+                            "new_state",
+                            "user_id",
+                        )
                     },
                 },
-                source=f"{module_name}.store",
+                source=f"{module_name}.fsm",
                 user_id=payload.get("user_id"),
             )
         )
