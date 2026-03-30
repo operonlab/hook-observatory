@@ -16,15 +16,22 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 from ops_core import (  # noqa: F401 — re-export for backward compat
     BasePipeline,
+    BaseStream,
+    BufferCount,
     CatchOp,
     ConditionalOp,
+    Filter,
     ParallelOp,
+    Skip,
+    Take,
     TapOp,
+    Throttle,
     parse_spec,
 )
 from ops_core import (
@@ -67,6 +74,37 @@ class VideoPipeline(BasePipeline):
         if self._initial_ctx and "source_path" in self._initial_ctx:
             return f"from({self._initial_ctx['source_path']}) -> "
         return ""
+
+
+# ── VideoStream (streaming pipeline) ─────────────────────────────────────
+
+
+class VideoStream(BaseStream):
+    """Streaming video pipeline — for frame-by-frame processing.
+
+    Usage:
+        VideoStream.from_frames(frame_gen).pipe(
+            Throttle(1/24),
+            GrayscaleOp(),
+        ).subscribe(lambda ctx: display(ctx["image"]))
+    """
+
+    @classmethod
+    def from_frames(cls, source: Iterable) -> VideoStream:
+        """Create stream from video frame generator.
+
+        Source yields np.ndarray frames or dicts with 'image' key.
+        """
+
+        def _wrap():
+            for i, item in enumerate(source):
+                if isinstance(item, dict):
+                    yield item
+                else:
+                    h, w = item.shape[:2]
+                    yield {"image": item, "width": w, "height": h, "frame_idx": i}
+
+        return cls(_wrap())
 
 
 # ── Registry ────────────────────────────────────────────────────────────

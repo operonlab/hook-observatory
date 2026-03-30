@@ -21,16 +21,28 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 from ops_core import (  # noqa: F401 — re-export for backward compat
     BasePipeline,
+    BaseStream,
+    BufferCount,
+    BufferTime,
     CatchOp,
     ConditionalOp,
+    Debounce,
+    DistinctUntilChanged,
+    Filter,
     ParallelOp,
+    Scan,
+    Skip,
+    Take,
     TapOp,
+    Throttle,
+    Window,
     parse_spec,
 )
 from ops_core import (
@@ -98,6 +110,41 @@ class AudioPipeline(BasePipeline):
             sr = self._initial_ctx.get("sample_rate", "?")
             return f"of(sr={sr}) -> "
         return ""
+
+
+# ── AudioStream (streaming pipeline) ─────────────────────────────────────
+
+
+class AudioStream(BaseStream):
+    """Streaming audio pipeline — for real-time chunk processing.
+
+    Usage:
+        AudioStream.from_chunks(websocket_gen, sr=16000).pipe(
+            BufferCount(16000, merge_key="audio"),  # 1s buffer
+            NormalizeOp(),
+            EmotionOp(),
+        ).subscribe(lambda ctx: send(ctx["emotions"]))
+    """
+
+    @classmethod
+    def from_chunks(
+        cls,
+        source: Iterable,
+        sample_rate: int = 16000,
+    ) -> AudioStream:
+        """Create stream from audio chunk generator.
+
+        Source yields np.ndarray chunks or dicts with 'audio' key.
+        """
+
+        def _wrap():
+            for item in source:
+                if isinstance(item, dict):
+                    yield item
+                else:
+                    yield {"audio": item, "sample_rate": sample_rate}
+
+        return cls(_wrap())
 
 
 # ── Registry ──────────────────────────────────────────────────────────────

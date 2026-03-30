@@ -18,7 +18,7 @@ from __future__ import annotations
 import copy
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, runtime_checkable
 
@@ -458,6 +458,443 @@ class TimeoutOp:
 
     def __repr__(self) -> str:
         return self._name
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STREAMING PIPELINE — generator-based (pull model, lazy evaluation)
+#
+# Batch:     ctx → Op → ctx               (one item in, one item out)
+# Streaming: Iterable[ctx] → StreamOp → Iterable[ctx]  (many in, many out)
+#
+# Batch ops auto-lift into streaming via map() — no changes needed.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+# ── StreamOp Protocol ────────────────────────────────────────────────────
+
+
+@runtime_checkable
+class StreamOp(Protocol):
+    """Transform on a stream of ctx dicts — generator in, generator out."""
+
+    @property
+    def name(self) -> str: ...
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]: ...
+
+
+# ── BaseStream ───────────────────────────────────────────────────────────
+
+
+class BaseStream:
+    """Generator-based streaming pipeline — the Observable of ops_core.
+
+    Pull model: consumer drives evaluation (backpressure is free).
+    Batch ops (Op protocol) are auto-lifted via map().
+
+    Usage:
+        BaseStream.from_iter(chunks).pipe(
+            BufferCount(16000),
+            NormalizeOp(),       # batch op, auto-lifted
+            EmotionOp(),         # batch op, auto-lifted
+        ).subscribe(print)
+    """
+
+    def __init__(self, source: Iterable[dict[str, Any]]) -> None:
+        self._source = source
+        self._ops: list[StreamOp | Op] = []
+
+    # ── Creation ─────────────────────────────────────────────────────
+
+    @classmethod
+    def from_iter(
+        cls,
+        source: Iterable[dict[str, Any]],
+    ) -> BaseStream:
+        """from() — create stream from any iterable of ctx dicts."""
+        return cls(source)
+
+    # ── Operators ────────────────────────────────────────────────────
+
+    def pipe(self, *ops: StreamOp | Op) -> BaseStream:
+        self._ops.extend(ops)
+        return self
+
+    def _build_chain(self) -> Iterable[dict[str, Any]]:
+        """Build the generator chain — lazy, nothing runs until consumed."""
+        stream: Iterable[dict[str, Any]] = self._source
+        for op in self._ops:
+            if isinstance(op, StreamOp) and not isinstance(op, Op):
+                stream = op(stream)
+            elif hasattr(op, "input_keys"):
+                # Auto-lift batch Op into streaming via map
+                stream = _lift_to_stream(op, stream)
+            else:
+                stream = op(stream)
+        return stream
+
+    # ── Subscription (consume the stream) ────────────────────────────
+
+    def subscribe(
+        self,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> int:
+        """subscribe() — consume stream, call callback for each item.
+
+        Returns the number of items processed.
+        """
+        count = 0
+        for ctx in self._build_chain():
+            callback(ctx)
+            count += 1
+        return count
+
+    def collect(self) -> list[dict[str, Any]]:
+        """toArray() — collect all stream items into a list."""
+        return list(self._build_chain())
+
+    def first(self) -> dict[str, Any] | None:
+        """first() — get the first item or None."""
+        for ctx in self._build_chain():
+            return ctx
+        return None
+
+    def __iter__(self) -> Iterable[dict[str, Any]]:
+        """Allow direct iteration over the stream."""
+        return iter(self._build_chain())
+
+    def __repr__(self) -> str:
+        names = " -> ".join(getattr(op, "name", op.__class__.__name__) for op in self._ops)
+        return f"{self.__class__.__name__}({names})"
+
+
+def _lift_to_stream(
+    op: Op,
+    source: Iterable[dict[str, Any]],
+) -> Iterable[dict[str, Any]]:
+    """Lift a batch Op (ctx→ctx) into a stream transform (map)."""
+    for ctx in source:
+        yield op(ctx)
+
+
+# ── Stream Combinators ───────────────────────────────────────────────────
+
+
+class BufferCount:
+    """Accumulate N items, emit as a merged batch ctx.
+
+    RxJS equivalent: bufferCount(N)
+
+    Merges N ctx dicts by concatenating array values and keeping
+    the last scalar value.
+    """
+
+    name = "buffer-count"
+
+    def __init__(self, count: int, merge_key: str | None = None):
+        self._count = count
+        self._merge_key = merge_key
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        buffer: list[dict[str, Any]] = []
+        for ctx in source:
+            buffer.append(ctx)
+            if len(buffer) >= self._count:
+                yield self._merge(buffer)
+                buffer = []
+        if buffer:
+            yield self._merge(buffer)
+
+    def _merge(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        import numpy as np
+
+        if self._merge_key:
+            arrays = [it[self._merge_key] for it in items if self._merge_key in it]
+            merged = dict(items[-1])
+            if arrays and isinstance(arrays[0], np.ndarray):
+                merged[self._merge_key] = np.concatenate(arrays)
+            return merged
+
+        # Default: take last item's scalars, concat arrays
+        merged = {}
+        for it in items:
+            for k, v in it.items():
+                if isinstance(v, np.ndarray) and k in merged and isinstance(merged[k], np.ndarray):
+                    merged[k] = np.concatenate([merged[k], v])
+                else:
+                    merged[k] = v
+        merged["_buffer_size"] = len(items)
+        return merged
+
+    def __repr__(self) -> str:
+        return f"buffer-count({self._count})"
+
+
+class BufferTime:
+    """Accumulate items for a time window, emit as batch.
+
+    RxJS equivalent: bufferTime(ms)
+    """
+
+    name = "buffer-time"
+
+    def __init__(self, seconds: float, merge_key: str | None = None):
+        self._seconds = seconds
+        self._merge_key = merge_key
+        self._bc = BufferCount(count=999999, merge_key=merge_key)
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        import time
+
+        buffer: list[dict[str, Any]] = []
+        window_start = time.monotonic()
+
+        for ctx in source:
+            buffer.append(ctx)
+            if time.monotonic() - window_start >= self._seconds:
+                if buffer:
+                    yield self._bc._merge(buffer)
+                    buffer = []
+                window_start = time.monotonic()
+        if buffer:
+            yield self._bc._merge(buffer)
+
+    def __repr__(self) -> str:
+        return f"buffer-time({self._seconds}s)"
+
+
+class Window:
+    """Sliding window of N items — emit overlapping batches.
+
+    RxJS equivalent: windowCount(N, 1)
+    """
+
+    name = "window"
+
+    def __init__(self, size: int, merge_key: str | None = None):
+        self._size = size
+        self._merge_key = merge_key
+        self._bc = BufferCount(count=size, merge_key=merge_key)
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        from collections import deque
+
+        window: deque[dict[str, Any]] = deque(maxlen=self._size)
+        for ctx in source:
+            window.append(ctx)
+            if len(window) == self._size:
+                yield self._bc._merge(list(window))
+
+    def __repr__(self) -> str:
+        return f"window({self._size})"
+
+
+class Scan:
+    """Running accumulation — emit intermediate results.
+
+    RxJS equivalent: scan((acc, val) => ..., seed)
+    """
+
+    name = "scan"
+
+    def __init__(
+        self,
+        accumulator: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]],
+        seed: dict[str, Any] | None = None,
+    ):
+        self._acc_fn = accumulator
+        self._seed = seed or {}
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        acc = dict(self._seed)
+        for ctx in source:
+            acc = self._acc_fn(acc, ctx)
+            yield dict(acc)
+
+    def __repr__(self) -> str:
+        return "scan"
+
+
+class Filter:
+    """Only pass through items matching predicate.
+
+    RxJS equivalent: filter(predicate)
+    """
+
+    name = "filter"
+
+    def __init__(self, predicate: Callable[[dict[str, Any]], bool]):
+        self._predicate = predicate
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        for ctx in source:
+            if self._predicate(ctx):
+                yield ctx
+
+    def __repr__(self) -> str:
+        return "filter"
+
+
+class Take:
+    """Take first N items then stop.
+
+    RxJS equivalent: take(N)
+    """
+
+    name = "take"
+
+    def __init__(self, count: int):
+        self._count = count
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        for i, ctx in enumerate(source):
+            if i >= self._count:
+                break
+            yield ctx
+
+    def __repr__(self) -> str:
+        return f"take({self._count})"
+
+
+class Skip:
+    """Skip first N items.
+
+    RxJS equivalent: skip(N)
+    """
+
+    name = "skip"
+
+    def __init__(self, count: int):
+        self._count = count
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        for i, ctx in enumerate(source):
+            if i >= self._count:
+                yield ctx
+
+    def __repr__(self) -> str:
+        return f"skip({self._count})"
+
+
+class Throttle:
+    """Emit at most once per interval — drop intermediate items.
+
+    RxJS equivalent: throttleTime(ms)
+    """
+
+    name = "throttle"
+
+    def __init__(self, seconds: float):
+        self._seconds = seconds
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        import time
+
+        last_emit = 0.0
+        for ctx in source:
+            now = time.monotonic()
+            if now - last_emit >= self._seconds:
+                yield ctx
+                last_emit = now
+
+    def __repr__(self) -> str:
+        return f"throttle({self._seconds}s)"
+
+
+class Debounce:
+    """Emit only after a silence period — requires buffered source.
+
+    RxJS equivalent: debounceTime(ms)
+
+    Note: In a pull-based generator model, debounce works on
+    timestamped items. Items must have a '_ts' key (float, seconds)
+    or arrival time is used.
+    """
+
+    name = "debounce"
+
+    def __init__(self, seconds: float):
+        self._seconds = seconds
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        import time
+
+        pending: dict[str, Any] | None = None
+        pending_time = 0.0
+
+        for ctx in source:
+            now = ctx.get("_ts", time.monotonic())
+            if pending is not None and now - pending_time >= self._seconds:
+                yield pending
+            pending = ctx
+            pending_time = now
+
+        # Emit the last pending item
+        if pending is not None:
+            yield pending
+
+    def __repr__(self) -> str:
+        return f"debounce({self._seconds}s)"
+
+
+class DistinctUntilChanged:
+    """Skip consecutive duplicates based on a key function.
+
+    RxJS equivalent: distinctUntilChanged(keySelector)
+    """
+
+    name = "distinct-until-changed"
+
+    def __init__(
+        self,
+        key_fn: Callable[[dict[str, Any]], Any] | None = None,
+    ):
+        self._key_fn = key_fn
+
+    def __call__(
+        self,
+        source: Iterable[dict[str, Any]],
+    ) -> Iterable[dict[str, Any]]:
+        _sentinel = object()
+        prev = _sentinel
+        for ctx in source:
+            key = self._key_fn(ctx) if self._key_fn else ctx
+            if key != prev:
+                yield ctx
+                prev = key
+
+    def __repr__(self) -> str:
+        return "distinct-until-changed"
 
 
 # ── Parser Utilities ─────────────────────────────────────────────────────

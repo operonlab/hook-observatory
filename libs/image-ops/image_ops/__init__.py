@@ -16,15 +16,22 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
 from ops_core import (  # noqa: F401 — re-export for backward compat
     BasePipeline,
+    BaseStream,
+    BufferCount,
     CatchOp,
     ConditionalOp,
+    Filter,
     ParallelOp,
+    Skip,
+    Take,
     TapOp,
+    Throttle,
     parse_spec,
 )
 from ops_core import (
@@ -90,6 +97,38 @@ class ImagePipeline(BasePipeline):
             h = self._initial_ctx.get("height", "?")
             return f"of({w}x{h}) -> "
         return ""
+
+
+# ── ImageStream (streaming pipeline) ─────────────────────────────────────
+
+
+class ImageStream(BaseStream):
+    """Streaming image pipeline — for frame-by-frame processing.
+
+    Usage:
+        ImageStream.from_frames(camera_gen).pipe(
+            Throttle(1/30),      # 30 fps cap
+            GrayscaleOp(),       # batch op, auto-lifted
+            DetectOp(),
+        ).subscribe(lambda ctx: overlay(ctx))
+    """
+
+    @classmethod
+    def from_frames(cls, source: Iterable) -> ImageStream:
+        """Create stream from image frame generator.
+
+        Source yields np.ndarray frames or dicts with 'image' key.
+        """
+
+        def _wrap():
+            for item in source:
+                if isinstance(item, dict):
+                    yield item
+                else:
+                    h, w = item.shape[:2]
+                    yield {"image": item, "width": w, "height": h, "color_space": "rgb"}
+
+        return cls(_wrap())
 
 
 # ── Registry ─────────────────────────────────────────────────────────────
