@@ -102,7 +102,14 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 
         task = _read_task_state()
         if task:
-            _send_async("sessions", f"done: {task}", tag="stop")
+            # Detect relay pane — pending file exists when relay is waiting
+            relay_meta = ""
+            pane = os.environ.get("TMUX_PANE", "")
+            if pane:
+                pane_safe = pane.replace("%", "")
+                if os.path.isfile(f"/tmp/relay-pending-{pane_safe}.channel"):  # noqa: S108
+                    relay_meta = f" [relay:%{pane_safe}]"
+            _send_async("sessions", f"done: {task}{relay_meta}", tag="stop")
         return ALLOW
 
     return ALLOW
