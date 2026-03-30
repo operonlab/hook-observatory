@@ -8,6 +8,7 @@ NgRx-style store for the capture module:
 
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import update_in
+from src.shared.middleware import PerformanceMiddleware
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore, effect, register_effects
 
@@ -42,7 +43,11 @@ capture_reducer = create_reducer(
 
 # ── Store ─────────────────────────────────────────────────────────────────
 
-capture_store: FeatureStore = FeatureStore("capture", capture_reducer)
+capture_store: FeatureStore = FeatureStore(
+    "capture",
+    capture_reducer,
+    middlewares=[PerformanceMiddleware(warn_threshold_ms=150.0)],
+)
 
 # ── Effects ───────────────────────────────────────────────────────────────
 

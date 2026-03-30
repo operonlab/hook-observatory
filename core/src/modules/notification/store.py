@@ -1,8 +1,12 @@
 """Notification state management — FeatureStore with push delivery effects."""
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -45,33 +49,49 @@ notification_store: FeatureStore = FeatureStore("notification", notification_red
 
 @effect(PushDelivered, store=notification_store)
 async def on_push_delivered(action, store):
-    """Bridge: mirrors EventBus on_mapped_event for finance.budget.exceeded push."""
-    # Delivery tracking only — actual push handled by events.py EventBus subscriber
-    pass
+    """Log successful push delivery."""
+    payload = action.payload or {}
+    logger.info(
+        "notification.push.delivered",
+        extra={
+            "target_user_id": payload.get("user_id"),
+            "channel": payload.get("channel"),
+        },
+    )
 
 
 @effect(PushFailed, store=notification_store)
 async def on_push_failed(action, store):
-    """Bridge: log failed push attempts for observability."""
-    import logging
-
-    logger = logging.getLogger(__name__)
+    """Log failed push attempts for observability."""
+    payload = action.payload or {}
     logger.warning(
         "notification.push.failed",
-        extra={"payload": action.payload},
+        extra={
+            "target_user_id": payload.get("user_id"),
+            "channel": payload.get("channel"),
+            "error": payload.get("error"),
+        },
     )
 
 
 @effect(SubscriptionCreated, store=notification_store)
 async def on_subscription_created(action, store):
-    """Bridge: mirrors EventBus subscription tracking."""
-    pass
+    """Log new push subscription."""
+    payload = action.payload or {}
+    logger.info(
+        "notification.subscription.created",
+        extra={"user_id": payload.get("user_id"), "endpoint": payload.get("endpoint")},
+    )
 
 
 @effect(SubscriptionRemoved, store=notification_store)
 async def on_subscription_removed(action, store):
-    """Bridge: mirrors EventBus subscription removal tracking."""
-    pass
+    """Log push subscription removal."""
+    payload = action.payload or {}
+    logger.info(
+        "notification.subscription.removed",
+        extra={"user_id": payload.get("user_id")},
+    )
 
 
 register_effects(

@@ -6,10 +6,14 @@ Does NOT replicate DB — thin reactive layer on top of services.py.
 
 from __future__ import annotations
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import batch_update, to_immutable, update_in
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── 1. Actions ────────────────────────────────────────────────────────────
 
@@ -127,3 +131,35 @@ select_pending_follow_ups = create_selector(
 # ── 4. Store ──────────────────────────────────────────────────────────────
 
 briefing_store: FeatureStore = FeatureStore("briefing", briefing_reducer)
+
+# ── 5. Effects ────────────────────────────────────────────────────────────
+
+
+@effect(DailyCompleted, store=briefing_store)
+async def log_daily_completed(action, store) -> None:
+    """Log briefing completion for observability."""
+    payload = action.payload or {}
+    logger.info(
+        "briefing.daily.completed",
+        extra={
+            "briefing_id": payload.get("id"),
+            "date": payload.get("date"),
+            "topic_count": payload.get("topic_count"),
+        },
+    )
+
+
+@effect(DailyFailed, store=briefing_store)
+async def log_daily_failed(action, store) -> None:
+    """Log briefing failure as warning."""
+    payload = action.payload or {}
+    logger.warning(
+        "briefing.daily.failed",
+        extra={
+            "date": payload.get("date"),
+            "reason": payload.get("reason", "unknown"),
+        },
+    )
+
+
+register_effects(briefing_store, log_daily_completed, log_daily_failed)

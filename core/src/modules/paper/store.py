@@ -6,10 +6,14 @@ Does NOT replicate DB — thin reactive layer on top of services.py.
 
 from __future__ import annotations
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import to_immutable, update_in
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── 1. Actions ────────────────────────────────────────────────────────────
 
@@ -110,3 +114,35 @@ select_article_count = create_selector(
 # ── 4. Store ──────────────────────────────────────────────────────────────
 
 paper_store: FeatureStore = FeatureStore("paper", paper_reducer)
+
+# ── 5. Effects ────────────────────────────────────────────────────────────
+
+
+@effect(ArticleCreated, store=paper_store)
+async def log_article_created(action, store) -> None:
+    """Log new article ingestion."""
+    payload = action.payload or {}
+    logger.info(
+        "paper.article.created",
+        extra={
+            "article_id": payload.get("id"),
+            "title": payload.get("title"),
+            "arxiv_id": payload.get("arxiv_id"),
+        },
+    )
+
+
+@effect(DigestGenerated, store=paper_store)
+async def log_digest_generated(action, store) -> None:
+    """Log digest generation completion."""
+    payload = action.payload or {}
+    logger.info(
+        "paper.digest.generated",
+        extra={
+            "article_id": payload.get("article_id"),
+            "digest_id": payload.get("id"),
+        },
+    )
+
+
+register_effects(paper_store, log_article_created, log_digest_generated)

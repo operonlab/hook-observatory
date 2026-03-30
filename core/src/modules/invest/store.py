@@ -1,9 +1,13 @@
 """Invest state management — FeatureStore for portfolio and trading."""
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import update_in
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -100,31 +104,68 @@ select_invest_stats = create_selector(
 @effect(TradeExecuted)
 async def on_trade_executed(action, store):
     """Log trade execution for audit trail."""
-    pass  # placeholder — actual audit logic wired via EventBus handler
+    payload = action.payload or {}
+    logger.info(
+        "invest.trade.executed",
+        extra={
+            "trade_id": payload.get("id"),
+            "symbol": payload.get("symbol"),
+            "side": payload.get("side"),
+            "quantity": payload.get("quantity"),
+        },
+    )
 
 
 @effect(DividendReceived)
 async def on_dividend_received(action, store):
     """Log dividend receipt for audit trail."""
-    pass  # placeholder — finance reconciliation triggered via EventBus
+    payload = action.payload or {}
+    logger.info(
+        "invest.dividend.received",
+        extra={
+            "symbol": payload.get("symbol"),
+            "amount": payload.get("amount"),
+        },
+    )
 
 
 @effect(ValuationUpdated)
 async def on_valuation_updated(action, store):
-    """Trigger cross-module sync (finance wallet update)."""
-    pass  # handled by finance module's EventBus handler on invest.valuation.updated
+    """Log valuation update (cross-module sync handled by EventBus)."""
+    payload = action.payload or {}
+    logger.info(
+        "invest.valuation.updated",
+        extra={
+            "account_id": payload.get("account_id"),
+            "valuation": payload.get("valuation"),
+        },
+    )
 
 
 @effect(PositionOpened)
 async def on_position_opened(action, store):
-    """Track position open event — future: notify, update risk exposure."""
-    pass  # placeholder — risk/notification hooks go here
+    """Log position open event."""
+    payload = action.payload or {}
+    logger.info(
+        "invest.position.opened",
+        extra={
+            "position_id": payload.get("id"),
+            "symbol": payload.get("symbol"),
+        },
+    )
 
 
 @effect(PositionClosed)
 async def on_position_closed(action, store):
-    """Track position close event — future: P&L calculation, notify."""
-    pass  # placeholder — P&L calculation and reporting hooks go here
+    """Log position close event."""
+    payload = action.payload or {}
+    logger.info(
+        "invest.position.closed",
+        extra={
+            "position_id": payload.get("id"),
+            "symbol": payload.get("symbol"),
+        },
+    )
 
 
 register_effects(

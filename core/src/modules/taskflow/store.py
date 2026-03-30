@@ -1,9 +1,13 @@
 """Taskflow state management — FeatureStore for task dispatch and quests."""
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import update_in
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -86,8 +90,16 @@ select_taskflow_stats = create_selector(
 
 @effect(TaskCompleted)
 async def on_task_completed(action, store):
-    """Handle task completion — future: rewards, notifications."""
-    pass  # Currently a stub, mirrors events.py on_task_completed handler
+    """Log task completion for rewards and notification tracking."""
+    payload = action.payload or {}
+    logger.info(
+        "taskflow.task.completed",
+        extra={
+            "task_id": payload.get("id"),
+            "title": payload.get("title"),
+            "completed_by": payload.get("completed_by"),
+        },
+    )
 
 
 register_effects(

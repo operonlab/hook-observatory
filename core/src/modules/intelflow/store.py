@@ -1,9 +1,14 @@
 """Intelflow state management — FeatureStore for reports, topics, and feeds."""
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import batch_update
+from src.shared.middleware import PerformanceMiddleware
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -52,7 +57,11 @@ intelflow_reducer = create_reducer(
 
 # ── Store ─────────────────────────────────────────────────────────────────
 
-intelflow_store: FeatureStore = FeatureStore("intelflow", intelflow_reducer)
+intelflow_store: FeatureStore = FeatureStore(
+    "intelflow",
+    intelflow_reducer,
+    middlewares=[PerformanceMiddleware(warn_threshold_ms=200.0)],
+)
 
 # ── Selectors ─────────────────────────────────────────────────────────────
 
@@ -96,14 +105,22 @@ select_intelflow_stats = create_selector(
 
 @effect(ReportCreated)
 async def on_report_created(action, store):
-    """Invalidate caches on new report — future: notify subscribers."""
-    pass  # cache invalidation handled by events.py register_invalidation
+    """Log new report creation for cache invalidation tracking."""
+    payload = action.payload or {}
+    logger.info(
+        "intelflow.report.created",
+        extra={"report_id": payload.get("id"), "title": payload.get("title")},
+    )
 
 
 @effect(TopicCreated)
 async def on_topic_created(action, store):
-    """Invalidate topic list cache on new topic."""
-    pass  # cache invalidation handled by events.py register_invalidation
+    """Log new topic creation."""
+    payload = action.payload or {}
+    logger.info(
+        "intelflow.topic.created",
+        extra={"topic_id": payload.get("id"), "name": payload.get("name")},
+    )
 
 
 register_effects(

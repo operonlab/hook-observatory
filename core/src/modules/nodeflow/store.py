@@ -1,9 +1,13 @@
 """Nodeflow state management — FeatureStore for workflow orchestration."""
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import update_in
 from src.shared.selectors import create_selector
 from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────
 
@@ -122,19 +126,43 @@ select_nodeflow_stats = create_selector(
 @effect(FlowRunCompleted)
 async def on_flow_completed(action, store):
     """Log flow completion metrics."""
-    pass  # placeholder — metrics/telemetry hooks go here
+    payload = action.payload or {}
+    logger.info(
+        "nodeflow.flow_run.completed",
+        extra={
+            "run_id": payload.get("run_id"),
+            "flow_id": payload.get("flow_id"),
+            "duration_ms": payload.get("duration_ms"),
+        },
+    )
 
 
 @effect(FlowRunFailed)
 async def on_flow_failed(action, store):
-    """Handle flow failure — potential retry or notification."""
-    pass  # placeholder — retry logic and failure notification go here
+    """Log flow failure as warning."""
+    payload = action.payload or {}
+    logger.warning(
+        "nodeflow.flow_run.failed",
+        extra={
+            "run_id": payload.get("run_id"),
+            "flow_id": payload.get("flow_id"),
+            "error": payload.get("error"),
+        },
+    )
 
 
 @effect(NodeFailed)
 async def on_node_failed(action, store):
-    """Track node failures for debugging."""
-    pass  # placeholder — node-level failure tracking and alerting go here
+    """Log node failure for debugging."""
+    payload = action.payload or {}
+    logger.warning(
+        "nodeflow.node.failed",
+        extra={
+            "node_id": payload.get("node_id"),
+            "run_id": payload.get("run_id"),
+            "error": payload.get("error"),
+        },
+    )
 
 
 register_effects(
