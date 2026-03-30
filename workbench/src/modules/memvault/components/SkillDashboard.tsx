@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useMemvaultStore } from '../stores'
+import { useState } from 'react'
+import { useSkills } from '../hooks/queries'
 import type { SkillProfile } from '../types'
 import InfoTip from './InfoTip'
 
@@ -263,21 +263,14 @@ function SkillBar({
 }
 
 export default function SkillDashboard() {
-  const { kg_skills, kg_loading, fetchSkillProfiles } = useMemvaultStore()
-
+  const { data: skills = [], isLoading } = useSkills()
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
-
-  const isStale = useMemvaultStore((s) => s.isStale)
-
-  useEffect(() => {
-    if (isStale('kg_skills')) fetchSkillProfiles()
-  }, [fetchSkillProfiles, isStale])
 
   const handleToggle = (name: string) => {
     setExpandedSkill(expandedSkill === name ? null : name)
   }
 
-  const sorted = [...kg_skills].sort((a, b) => b.total_uses - a.total_uses)
+  const sorted = [...skills].sort((a, b) => b.total_uses - a.total_uses)
 
   return (
     <div>
@@ -295,18 +288,18 @@ export default function SkillDashboard() {
           }
         />
         <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
-          {kg_skills.length} 項
+          {skills.length} 項
         </span>
       </div>
 
-      {kg_loading && kg_skills.length === 0 ? (
+      {isLoading && skills.length === 0 ? (
         <div className="flex justify-center py-8">
           <div
             className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
             style={{ borderColor: 'var(--green)', borderTopColor: 'transparent' }}
           />
         </div>
-      ) : kg_skills.length === 0 ? (
+      ) : skills.length === 0 ? (
         <div
           className="flex flex-col items-center justify-center py-12 gap-2 rounded-xl border"
           style={{ backgroundColor: 'var(--mantle)', borderColor: 'var(--surface0)' }}

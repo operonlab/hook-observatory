@@ -1,8 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import type { MemoryBlock } from '@/types'
 import { relativeTime } from '../../../shared/utils/time'
 const GalaxyCanvas = lazy(() => import('../components/GalaxyCanvas'))
 import LayerToggle from '../components/LayerToggle'
+import { useBlocks, useCommunities, useSummaries, useTriples } from '../hooks/queries'
 import { useGalaxy } from '../hooks/useGalaxy'
 import { useMemvaultStore } from '../stores'
 import type { GalaxyNode } from '../types'
@@ -223,42 +224,28 @@ function BlockDetailPanel({ block, onClose }: { block: MemoryBlock; onClose: () 
 }
 
 export default function GalaxyPage() {
-  const {
-    blocks,
-    fetchBlocks,
-    loading,
-    selectBlock,
-    selectedBlock,
-    kg_triples,
-    kg_communities,
-    kg_summaries,
-    kg_galaxyLayers,
-    fetchTriples,
-    fetchCommunities,
-    fetchSummaries,
-    setKgGalaxyLayers,
-  } = useMemvaultStore()
+  const { page, pageSize, filters, selectedBlock, selectBlock, kg_galaxyLayers, setKgGalaxyLayers } =
+    useMemvaultStore()
+
+  const blocksQuery = useBlocks(page, pageSize, filters)
+  const triplesQuery = useTriples(1)
+  const communitiesQuery = useCommunities()
+  const summariesQuery = useSummaries()
+
+  const blocks = blocksQuery.data?.items ?? []
+  const triples = triplesQuery.data?.items ?? []
+  const communities = communitiesQuery.data ?? []
+  const summaries = summariesQuery.data ?? []
 
   const [showLayerPanel, setShowLayerPanel] = useState(false)
 
   const { nodes, links } = useGalaxy({
     blocks,
-    triples: kg_triples,
-    communities: kg_communities,
-    summaries: kg_summaries,
+    triples,
+    communities,
+    summaries,
     visibleLayers: kg_galaxyLayers,
   })
-
-  const isStale = useMemvaultStore((s) => s.isStale)
-
-  useEffect(() => {
-    if (isStale('blocks')) fetchBlocks()
-    if (isStale('kg_communities')) fetchCommunities()
-    if (isStale('kg_summaries')) fetchSummaries()
-    if (kg_galaxyLayers.has('triples') && isStale('kg_triples')) {
-      fetchTriples(1)
-    }
-  }, [fetchBlocks, fetchCommunities, fetchSummaries, fetchTriples, kg_galaxyLayers, isStale])
 
   const handleNodeClick = useCallback(
     (node: GalaxyNode) => {
@@ -277,6 +264,8 @@ export default function GalaxyPage() {
   const handleEmptyClick = useCallback(() => {
     selectBlock(null)
   }, [selectBlock])
+
+  const isLoading = blocksQuery.isLoading
 
   return (
     <div className="flex flex-col h-full px-3 py-3 sm:px-4 sm:py-4 lg:p-6">
@@ -347,7 +336,7 @@ export default function GalaxyPage() {
           className="flex-1 min-h-0 relative rounded-xl overflow-hidden border"
           style={{ borderColor: 'var(--surface0)' }}
         >
-          {loading && nodes.length === 0 ? (
+          {isLoading && nodes.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div
                 className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
