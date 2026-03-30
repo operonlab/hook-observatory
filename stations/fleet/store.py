@@ -40,6 +40,12 @@ _INITIAL_STATE = {
     "active_count": 0,
 }
 
+
+def _p(action):
+    """Safe payload accessor — returns empty dict if payload is None."""
+    return action.payload or {}
+
+
 fleet_reducer = create_reducer(
     _INITIAL_STATE,
     # Task lifecycle
@@ -47,15 +53,15 @@ fleet_reducer = create_reducer(
         TaskDispatched,
         lambda s, a: update_in(
             s,
-            ["tasks", a.payload.get("task_id", "")],
-            lambda _: {**a.payload, "status": "dispatched"},
+            ["tasks", _p(a).get("task_id", "")],
+            lambda _: {**_p(a), "status": "dispatched"},
         ),
     ),
     on(
         TaskRunning,
         lambda s, a: update_in(
             s,
-            ["tasks", a.payload.get("task_id", ""), "status"],
+            ["tasks", _p(a).get("task_id", ""), "status"],
             lambda _: "running",
         ),
     ),
@@ -63,7 +69,7 @@ fleet_reducer = create_reducer(
         TaskCompleted,
         lambda s, a: update_in(
             s,
-            ["tasks", a.payload.get("task_id", ""), "status"],
+            ["tasks", _p(a).get("task_id", ""), "status"],
             lambda _: "completed",
         ),
     ),
@@ -71,7 +77,7 @@ fleet_reducer = create_reducer(
         TaskFailed,
         lambda s, a: update_in(
             s,
-            ["tasks", a.payload.get("task_id", ""), "status"],
+            ["tasks", _p(a).get("task_id", ""), "status"],
             lambda _: "failed",
         ),
     ),
@@ -79,7 +85,7 @@ fleet_reducer = create_reducer(
         TaskCancelled,
         lambda s, a: update_in(
             s,
-            ["tasks", a.payload.get("task_id", ""), "status"],
+            ["tasks", _p(a).get("task_id", ""), "status"],
             lambda _: "cancelled",
         ),
     ),
@@ -88,23 +94,23 @@ fleet_reducer = create_reducer(
         NodeRegistered,
         lambda s, a: update_in(
             s,
-            ["nodes", a.payload.get("node_id", "")],
-            lambda _: {**a.payload, "healthy": False},
+            ["nodes", _p(a).get("node_id", "")],
+            lambda _: {**_p(a), "healthy": False},
         ),
     ),
     on(
         NodeHealthUpdated,
         lambda s, a: update_in(
             s,
-            ["nodes", a.payload.get("node_id", "")],
-            lambda prev: {**(prev or {}), **a.payload},
+            ["nodes", _p(a).get("node_id", "")],
+            lambda prev: {**(prev or {}), **_p(a)},
         ),
     ),
     on(
         NodeOffline,
         lambda s, a: update_in(
             s,
-            ["nodes", a.payload.get("node_id", ""), "healthy"],
+            ["nodes", _p(a).get("node_id", ""), "healthy"],
             lambda _: False,
         ),
     ),
