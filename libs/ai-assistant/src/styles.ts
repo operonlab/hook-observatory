@@ -73,6 +73,8 @@ export const STYLES = /* css */ `
     transition: opacity 0.3s ease;
     display: block;
     text-align: center;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
   .speech-bubble.streaming {
     padding-right: 6px;

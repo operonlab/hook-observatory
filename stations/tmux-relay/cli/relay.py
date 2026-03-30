@@ -47,6 +47,7 @@ def cmd_run(args):
             role=getattr(args, "role", "") or "",
             task=getattr(args, "task", "") or "",
             color=getattr(args, "color", "") or "",
+            cwd=getattr(args, "cwd", "") or "",
         )
         if args.json:
             _json_out(result.to_dict(), True)
@@ -74,6 +75,7 @@ def cmd_dispatch(args):
             role=getattr(args, "role", "") or "",
             task=getattr(args, "task", "") or "",
             color=getattr(args, "color", "") or "",
+            cwd=getattr(args, "cwd", "") or "",
         )
         if args.json:
             _json_out(dispatched, True)
@@ -408,6 +410,7 @@ def main():
     p_run.add_argument(
         "--color", default="", help="Input bar color (sent as /color to Claude Code)"
     )
+    p_run.add_argument("--cwd", default="", help="Working directory for relay pane")
     p_run.set_defaults(func=cmd_run)
 
     # dispatch
@@ -420,6 +423,7 @@ def main():
     p_dispatch.add_argument(
         "--color", default="", help="Input bar color (sent as /color to Claude Code)"
     )
+    p_dispatch.add_argument("--cwd", default="", help="Working directory for relay pane")
     p_dispatch.set_defaults(func=cmd_dispatch)
 
     # check

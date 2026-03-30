@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -33,7 +34,7 @@ class Config:
     port: int = 4101
     host: str = "127.0.0.1"
     database_url: str = "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
-    secret_key: str = "change-me-in-production"
+    secret_key: str = os.environ.get("CORE_SECRET_KEY", "change-me-in-production")
     session_cookie_name: str = "workshop_session"
     session_max_age: int = 604800  # 7 days
     login_url: str = "/login"

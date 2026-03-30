@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="canonical" href="https://blog.joneshong.com/zh/blog/hello-world/" />
+  <title>別讓 Google 找不到你的文章 — SSR Blog 的 SEO 踩坑實錄</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-2: #232736;
+      --border: #2e3348;
+      --text: #e2e4ed;
+      --text-dim: #8b8fa3;
+      --accent: #4ade80;
+      --accent-glow: rgba(74, 222, 128, 0.15);
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --cyan: #22d3ee;
+      --purple: #a78bfa;
+      --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Typography ===== */
+    h1 { font-size: 2.8rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; }
+    h2 { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1rem; }
+    h3 { font-size: 1.2rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--accent); }
+    p { color: var(--text-dim); margin-bottom: 1rem; }
+    strong { color: var(--text); font-weight: 600; }
+
+    /* ===== Layout ===== */
+    .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+
+    section {
+      padding: 5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      padding: 8rem 0 5rem;
+      text-align: center;
+      background: radial-gradient(ellipse at 50% 0%, var(--accent-glow) 0%, transparent 60%);
+    }
+
+    .hero .subtitle {
+      font-size: 1.25rem;
+      color: var(--text-dim);
+      margin-top: 1.5rem;
+      max-width: 640px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.35rem 1rem;
+      border-radius: 100px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      background: var(--accent-glow);
+      color: var(--accent);
+      border: 1px solid rgba(74, 222, 128, 0.25);
+    }
+
+    /* ===== Pain Points ===== */
+    .pain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .pain-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      transition: border-color 0.2s;
+    }
+
+    .pain-card:hover { border-color: var(--red); }
+
+    .pain-card .icon {
+      font-size: 1.8rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .pain-card h3 { color: var(--red); }
+
+    .pain-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(248, 113, 113, 0.15);
+      color: var(--red);
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+
+    /* ===== Architecture Diagram ===== */
+    .arch-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 2.5rem 0;
+    }
+
+    .arch-layer {
+      display: grid;
+      grid-template-columns: 180px 1fr 220px;
+      align-items: center;
+      gap: 1.5rem;
+      padding: 1.5rem 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .arch-layer:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+    .arch-layer:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+    .arch-layer:not(:last-child) { border-bottom: none; }
+    .arch-layer:hover { background: var(--surface-2); }
+
+    .arch-layer .layer-name {
+      font-weight: 700;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .arch-layer .layer-desc {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+    }
+
+    .arch-layer .layer-consumer {
+      text-align: right;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .layer-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .dot-1 { background: var(--green); }
+    .dot-2 { background: var(--cyan); }
+    .dot-3 { background: var(--purple); }
+    .dot-4 { background: var(--amber); }
+    .dot-5 { background: var(--accent); }
+
+    /* ===== Comparison Table ===== */
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 2rem 0;
+      font-size: 0.95rem;
+    }
+
+    .comparison-table th {
+      text-align: left;
+      padding: 1rem;
+      background: var(--surface);
+      border-bottom: 2px solid var(--accent);
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .comparison-table td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+
+    .comparison-table tr:hover td { background: var(--surface); }
+
+    .comparison-table .highlight { color: var(--green); font-weight: 600; }
+    .comparison-table .dim { color: var(--text-dim); }
+    .comparison-table .warn { color: var(--amber); font-weight: 600; }
+
+    /* ===== Timeline ===== */
+    .timeline {
+      position: relative;
+      margin: 3rem 0;
+      padding-left: 3rem;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--accent), var(--green));
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 2.5rem;
+    }
+
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -2.35rem;
+      top: 0.5rem;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg);
+    }
+
+    .timeline-item:last-child::before { background: var(--green); }
+
+    .timeline-item h3 { color: var(--text); font-size: 1.05rem; }
+    .timeline-item .date { color: var(--accent); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; }
+
+    /* ===== Code Block ===== */
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.88rem;
+      line-height: 1.8;
+      color: var(--text-dim);
+    }
+
+    .code-block .comment { color: #5c6378; }
+    .code-block .keyword { color: var(--purple); }
+    .code-block .string { color: var(--green); }
+    .code-block .number { color: var(--amber); }
+    .code-block .fn { color: var(--cyan); }
+
+    /* ===== Stat Cards ===== */
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      text-align: center;
+    }
+
+    .stat-card .stat-value {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-card .stat-label {
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+    }
+
+    .stat-card .stat-sublabel {
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      margin-top: 0.1rem;
+    }
+
+    .stat-green { color: var(--green); }
+    .stat-amber { color: var(--amber); }
+    .stat-red { color: var(--red); }
+    .stat-cyan { color: var(--cyan); }
+    .stat-accent { color: var(--accent); }
+    .stat-purple { color: var(--purple); }
+
+    /* ===== Callout ===== */
+    .callout {
+      background: var(--accent-glow);
+      border: 1px solid rgba(74, 222, 128, 0.25);
+      border-radius: var(--radius);
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+    }
+
+    .callout p { color: var(--text); margin: 0; }
+
+    .callout-amber {
+      background: rgba(251, 191, 36, 0.08);
+      border-color: rgba(251, 191, 36, 0.25);
+    }
+
+    /* ===== Quote ===== */
+    blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 1rem 1.5rem;
+      margin: 2rem 0;
+      background: var(--surface);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    blockquote p {
+      color: var(--text);
+      font-size: 1.1rem;
+      font-style: italic;
+      margin: 0;
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      padding: 3rem 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 768px) {
+      h1 { font-size: 2rem; }
+      .hero { padding: 5rem 0 3rem; }
+      section { padding: 3rem 0; }
+      .arch-layer { grid-template-columns: 1fr; gap: 0.5rem; padding: 1.25rem; }
+      .arch-layer .layer-consumer { text-align: left; }
+      .stat-card .stat-value { font-size: 1.75rem; }
+    }
+
+    /* ===== Animate on scroll ===== */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ===== HERO ===== -->
+  <section class="hero">
+    <div class="container">
+      <div class="badge">SSR Blog 實戰</div>
+      <h1>別讓 Google 找不到你的文章</h1>
+      <h1 style="color: var(--accent);">SSR Blog 的 SEO 踩坑實錄</h1>
+      <p class="subtitle">
+        用 Astro + PostgreSQL 建 Blog 過程中，每一個 SEO 決策背後的原因——以及那些差點讓文章消失在搜尋結果裡的坑。
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== PAIN POINTS ===== -->
+  <section>
+    <div class="container">
+      <div class="badge">問題</div>
+      <h2 class="fade-up">SSR Blog 的 SEO 為什麼跟靜態站不一樣？</h2>
+
+      <div class="pain-grid">
+        <div class="pain-card fade-up">
+          <div class="pain-number">1</div>
+          <h3>動態內容不在 Sitemap</h3>
+          <p>SSR 頁面是 runtime 產生的，<code style="color:var(--text);background:var(--surface-2);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.85rem;">@astrojs/sitemap</code> 只收錄 build-time 的靜態頁。</p>
+          <p><strong>文章發了卻不在 sitemap = Google 根本不知道它存在。</strong></p>
+        </div>
+
+        <div class="pain-card fade-up">
+          <div class="pain-number">2</div>
+          <h3>Tool Schema 不是唯一的隱形成本</h3>
+          <p>跟 MCP token 一樣，SEO 也有「隱形成本」：meta tag 缺失、hreflang 錯誤、canonical 不一致。</p>
+          <p style="text-align:center;margin-top:0.5rem">
+            <span style="font-size:1.75rem;font-weight:800;color:var(--amber)">67%</span>
+            <span style="color:var(--text-dim);font-size:0.85rem;display:block">多語言站 hreflang 實作有錯誤</span>
+          </p>
+        </div>
+
+        <div class="pain-card fade-up">
+          <div class="pain-number">3</div>
+          <h3>SSR 的效能雙面刃</h3>
+          <p>SSR 讓內容即時更新，但也讓 TTFB 受 DB 查詢時間影響。</p>
+          <p><strong>沒有快取策略 = 每次 request 都跑 DB query。</strong></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 技術棧 ===== -->
+  <section>
+    <div class="container">
+      <div class="badge">技術棧</div>
+      <h2 class="fade-up">這個 Blog 的組成</h2>
+
+      <div class="stat-row fade-up">
+        <div class="stat-card">
+          <div class="stat-value stat-cyan">Astro 5</div>
+          <div class="stat-label">框架</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-green">PostgreSQL</div>
+          <div class="stat-label">資料庫</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-amber">Drizzle</div>
+          <div class="stat-label">ORM 查詢層</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-purple">Tailwind</div>
+          <div class="stat-label">樣式</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-accent">Cloudflare</div>
+          <div class="stat-label">Tunnel 部署</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SEO 決策 ===== -->
+  <section>
+    <div class="container">
+      <div class="badge">SEO 決策</div>
+      <h2 class="fade-up">我們做了哪些事？</h2>
+      <p class="fade-up">每一層處理一個 SEO 面向，由上到下各有明確的消費者。</p>
+
+      <div class="arch-flow fade-up">
+        <div class="arch-layer">
+          <div class="layer-name"><span class="layer-dot dot-1"></span> 動態 Sitemap</div>
+          <div class="layer-desc"><code style="font-family:inherit;color:var(--cyan);">sitemap-posts.xml</code> 從 DB 即時查詢已發布文章，build 時自動 patch 進 <code style="font-family:inherit;color:var(--cyan);">sitemap-index.xml</code></div>
+          <div class="layer-consumer">🔍 Google / Bing 爬蟲</div>
+        </div>
+        <div class="arch-layer">
+          <div class="layer-name"><span class="layer-dot dot-2"></span> JSON-LD 結構化資料</div>
+          <div class="layer-desc">每篇文章自動生成 BlogPosting schema——標題、作者、發布時間、語言全從 DB 欄位對應</div>
+          <div class="layer-consumer">📊 搜尋結果豐富摘要</div>
+        </div>
+        <div class="arch-layer">
+          <div class="layer-name"><span class="layer-dot dot-3"></span> Canonical URL</div>
+          <div class="layer-desc">SSR 頁面自動設定 canonical，指向自己。避免 <code style="font-family:inherit;color:var(--amber);">http://localhost</code> 和 <code style="font-family:inherit;color:var(--amber);">https://blog.joneshong.com</code> 被判定重複</div>
+          <div class="layer-consumer">🔗 去重機制</div>
+        </div>
+        <div class="arch-layer">
+          <div class="layer-name"><span class="layer-dot dot-4"></span> hreflang 多語言</div>
+          <div class="layer-desc">zh-TW ↔ en 雙向 alternate link，加 x-default fallback。67% 的站做錯這步</div>
+          <div class="layer-consumer">🌐 多語言搜尋</div>
+        </div>
+        <div class="arch-layer">
+          <div class="layer-name"><span class="layer-dot dot-5"></span> robots.txt</div>
+          <div class="layer-desc">允許爬蟲存取所有公開頁面，阻擋 <code style="font-family:inherit;color:var(--red)">/admin/</code> 和 <code style="font-family:inherit;color:var(--red)">/api/</code>。指向兩份 sitemap</div>
+          <div class="layer-consumer">🤖 爬蟲控制</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 效能優化 ===== -->
+  <section>
+    <div class="container">
+      <div class="badge">效能</div>
+      <h2 class="fade-up">Core Web Vitals 優化</h2>
+
+      <div class="stat-row fade-up">
+        <div class="stat-card">
+          <div class="stat-value stat-green">0 KB</div>
+          <div class="stat-label">JS baseline</div>
+          <div class="stat-sublabel">Astro 預設零 JS</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-cyan">按需</div>
+          <div class="stat-label">React island hydration</div>
+          <div class="stat-sublabel">搜尋、圖譜</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-amber">延遲</div>
+          <div class="stat-label">字體載入策略</div>
+          <div class="stat-sublabel">CJK 系統字體 + Latin lazy load</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-accent">SSR</div>
+          <div class="stat-label">動態內容</div>
+          <div class="stat-sublabel">即時更新</div>
+        </div>
+      </div>
+
+      <div class="callout fade-up">
+        <p><strong>Astro 的殺手鐧：</strong>預設不送任何 JavaScript。React 元件只在需要互動的地方 hydrate（<code style="color:var(--cyan);font-family:monospace;">client:only</code>），其餘全是靜態 HTML。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 踩坑紀錄 ===== -->
+  <section>
+    <div class="container">
+      <div class="badge">踩坑紀錄</div>
+      <h2 class="fade-up">我們怎麼發現問題的？</h2>
+      <p class="fade-up">不是預先設計好 SEO 再實作——是每個坑踩下去才發現的。</p>
+
+      <div class="timeline fade-up">
+        <div class="timeline-item">
+          <div class="date">文章發了 → Google 搜不到</div>
+          <h3><code style="font-family:monospace;font-size:0.95rem;">sitemap-posts.xml</code> 沒人引用</h3>
+          <p><code style="color:var(--text);background:var(--surface-2);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.85rem;">@astrojs/sitemap</code> 生成 <code style="color:var(--text);background:var(--surface-2);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.85rem;">sitemap-index.xml</code> 時只包含靜態頁。動態的 <code style="color:var(--text);background:var(--surface-2);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.85rem;">sitemap-posts.xml</code> 被無視了。修法：build 後自動 patch sitemap-index 加入 posts sitemap。</p>
+          <p><strong>領悟：</strong>自動化工具不一定覆蓋所有 case，SSR 動態頁需要手動補漏。</p>
+        </div>
+
+        <div class="timeline-item">
+          <div class="date">12 分鐘的文章顯示 73 min read</div>
+          <h3>Rich HTML 的 <code style="font-family:monospace;font-size:0.95rem;">content.length</code> 包含整個 CSS</h3>
+          <p><code style="color:var(--text);background:var(--surface-2);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.85rem;">content.length / 400</code> 算閱讀時間，但 Rich HTML 格式的 content 有 25000+ 字元的 CSS + HTML tags。Strip tags 後才正確。</p>
+          <p><strong>領悟：</strong>任何跟 content 長度相關的邏輯，都要先想清楚「這個 content 是什麼格式」。</p>
+        </div>
+
+        <div class="timeline-item">
+          <div class="date">Nginx subpath proxy 下頁面空白</div>
+          <h3>Vite dev server + subpath = 死路</h3>
+          <p>Vite 的 ES module import 用絕對路徑，nginx <code style="color:var(--text);background:var(--surface-2);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.85rem;">sub_filter</code> 改不完。解法：dev preview 不用 Vite dev server，改用 built SSR server。</p>
+          <p><strong>領悟：</strong>Astro islands 的 <code style="color:var(--text);background:var(--surface-2);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.85rem;">component-url</code> 屬性也需要被 sub_filter 改寫。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 帶走這段 ===== -->
+  <section id="copy-prompt">
+    <div class="container">
+      <div class="badge" style="background:rgba(251,191,36,0.1);color:var(--amber);border-color:rgba(251,191,36,0.25)">帶走這段</div>
+      <h2 class="fade-up">複製給你的 AI Agent</h2>
+      <p class="fade-up">把下面這段話貼給你的 AI coding agent，讓它幫你評估 SSR Blog 的 SEO 設定。</p>
+
+      <div class="fade-up" style="position:relative;margin-top:1.5rem;">
+        <button onclick="navigator.clipboard.writeText(document.getElementById('agent-prompt').innerText).then(()=>{this.textContent='✓ 已複製';setTimeout(()=>this.textContent='複製',2000)})" style="position:absolute;top:0.75rem;right:0.75rem;background:var(--accent);color:#0f1117;border:none;padding:0.4rem 1rem;border-radius:8px;font-size:0.8rem;font-weight:600;cursor:pointer;z-index:1;transition:all 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">複製</button>
+
+        <div id="agent-prompt" class="code-block" style="padding:1.5rem;font-size:0.85rem;line-height:1.8;white-space:pre-wrap;max-height:none;">幫我評估這個 SSR Blog 的 SEO 設定有沒有遺漏。
+
+目前已做的：
+- 動態 sitemap（DB 查詢已發布文章，build 時 patch 進 sitemap-index）
+- JSON-LD BlogPosting schema（自動從文章欄位生成）
+- Canonical URL（每頁自動指向自己）
+- hreflang（zh-TW ↔ en 雙向 alternate）
+- robots.txt（允許公開頁，阻擋 admin/api）
+- Astro 零 JS baseline + React islands 按需 hydrate
+
+請幫我檢查：
+- 有沒有遺漏的 meta tags（og:image, twitter:card 等）？
+- 結構化資料還能加什麼（FAQ schema, BreadcrumbList）？
+- 多語言 SEO 有沒有常見的錯誤模式需要注意？
+- Core Web Vitals 有哪些快速改善的方向？
+- 內部連結策略怎麼規劃？
+
+先列出優先順序最高的 3-5 項改善建議。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 參考資料 ===== -->
+  <section style="border-bottom:none;">
+    <div class="container">
+      <div class="badge">參考資料</div>
+      <h2 class="fade-up">延伸閱讀</h2>
+      <p class="fade-up">這些是在過程中實際參考過、借鑑過的資源。</p>
+
+      <div class="fade-up" style="margin-top:1.5rem;">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>文章</th>
+              <th>為什麼重要</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="https://www.apideck.com/blog/mcp-server-eating-context-window-cli-alternative" target="_blank" rel="noopener" style="color:var(--accent)">Apideck: Your MCP Server Is Eating Your Context Window</a></td>
+              <td>啟發了「隱形成本」的類比</td>
+            </tr>
+            <tr>
+              <td><a href="https://dev.to/cookieduster_n/seo-for-astro-how-to-make-the-fastest-framework-also-the-smartest-501o" target="_blank" rel="noopener" style="color:var(--accent)">SEO for Astro: How to Make the Fastest Framework Also the Smartest</a></td>
+              <td>Astro SEO 實作的完整指南</td>
+            </tr>
+            <tr>
+              <td><a href="https://jsonld.com/blog-post/" target="_blank" rel="noopener" style="color:var(--accent)">JSON-LD Blog Post Example</a></td>
+              <td>BlogPosting schema 的參考實作</td>
+            </tr>
+            <tr>
+              <td><a href="https://www.specbee.com/blogs/multilingual-seo-and-hreflang-how-drupal-makes-it-easier" target="_blank" rel="noopener" style="color:var(--accent)">Multilingual SEO and Hreflang Guide</a></td>
+              <td>67% 錯誤率數據的來源</td>
+            </tr>
+            <tr>
+              <td><a href="https://strapi.io/blog/how-to-improve-core-web-vitals" target="_blank" rel="noopener" style="color:var(--accent)">How to Improve Core Web Vitals</a></td>
+              <td>SSR 效能優化的具體方法</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 結論 ===== -->
+  <section>
+    <div class="container" style="text-align:center;">
+      <div class="badge" style="background:rgba(74,222,128,0.1);color:var(--green);border-color:rgba(74,222,128,0.25)">結論</div>
+      <h2 class="fade-up" style="font-size:2rem;">SEO 是工程，不是玄學</h2>
+      <p class="fade-up" style="font-size:1.15rem;max-width:640px;margin:1rem auto 2rem;">
+        每一個決策都有原因，每一個坑都有教訓。<br>
+        SSR Blog 的 SEO 不是設完 meta tag 就結束——是一個持續迭代的工程問題。
+      </p>
+
+      <div class="code-block fade-up" style="text-align:left;max-width:600px;margin:0 auto;">
+        <span class="comment">// 決策鏈</span><br><br>
+        <span class="string">問題 1</span>: 動態文章不在 sitemap<br>
+        &nbsp;&nbsp;→ 手動補 <span class="fn">sitemap-posts.xml</span><br><br>
+        <span class="string">問題 2</span>: SSR 無快取<br>
+        &nbsp;&nbsp;→ 靜態頁 <span class="keyword">prerender</span> + 動態頁 <span class="keyword">SSR</span><br><br>
+        <span class="string">問題 3</span>: 多語言 SEO 易出錯<br>
+        &nbsp;&nbsp;→ <span class="fn">hreflang</span> 雙向 + <span class="fn">x-default</span><br><br>
+        <span class="string">驗證</span>: Google Search Console 手動提交 + 監控<br><br>
+        <span class="comment">// 歸納</span><br>
+        Astro SSR + 自動化 SEO pipeline<br>
+        <span class="string">不漏收錄、不重複、不延遲</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <div class="container">
+      Blog SEO · 2026
+    </div>
+  </footer>
+
+  <script>
+    // Fade-up on scroll
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>

@@ -23,6 +23,7 @@ from . import (
     cleanup_versions,
     context_inject,
     external,
+    instinct_distiller,
     memory_sync,
     observability,
     pm_autopilot,
@@ -31,6 +32,7 @@ from . import (
     schedule_sync,
     sentinel_notify,
     session_channel,
+    session_cost,
     session_namer,
     session_pipeline,
     skill_security,
@@ -82,6 +84,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, session_channel.handle),
         (None, pm_autopilot.handle),
         (None, voice_notify.handle),
+        (None, session_cost.handle),  # response counter — before observability
         # context_supervisor: disabled
         (None, observability.handle),
     ],
@@ -91,6 +94,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     ],
     "SessionEnd": [
         (None, session_pipeline.handle),
+        (None, instinct_distiller.handle),
         (None, utility_watchdog.handle),
         (None, attitude_signal.handle),
         (None, observability.handle),
@@ -107,6 +111,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, anvil_telemetry.handle),
         (None, session_channel.handle),
         (None, claudemd_suggest.handle),
+        (None, instinct_distiller.handle),
         (None, cleanup_versions.handle),
         (None, pm_autopilot.handle),
         (None, utility_watchdog.handle),

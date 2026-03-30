@@ -114,19 +114,17 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/session-channel",
         "env": {"SESSION_CHANNEL_PORT": str(get_port("session-channel"))},
     },
-    # Sentinel: scheduled-only (Cronicle every 5min), not persistent
-    # API/SSE unavailable — light checks + Bark notifications via runner
-    # {
-    #     "name": "sentinel",
-    #     "type": "uvicorn",
-    #     "cmd": (
-    #         "/Users/joneshong/workshop/stations/sentinel/.venv/bin/python3"
-    #         " -m uvicorn main:app --host 127.0.0.1 --port 4101"
-    #     ),
-    #     "port": 4101,
-    #     "health": "http://127.0.0.1:4101/health",
-    #     "workdir": "/Users/joneshong/workshop/stations/sentinel",
-    # },
+    {
+        "name": "sentinel",
+        "type": "uvicorn",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/sentinel/.venv/bin/python3"
+            f" -m uvicorn main:app --host 127.0.0.1 --port {get_port('sentinel')}"
+        ),
+        "port": get_port("sentinel"),
+        "health": get("sentinel").health_url,
+        "workdir": "/Users/joneshong/workshop/stations/sentinel",
+    },
     {
         "name": "system-monitor",
         "type": "uvicorn",
@@ -250,7 +248,7 @@ SERVICES = [
         "name": "fleet",
         "type": "uvicorn",
         "cmd": (
-            "/opt/homebrew/bin/uv run python3 -m uvicorn main:app"
+            "/Users/joneshong/workshop/stations/fleet/.venv/bin/python -m uvicorn main:app"
             f" --host 127.0.0.1 --port {get_port('fleet')}"
         ),
         "port": get_port("fleet"),

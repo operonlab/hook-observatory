@@ -1,31 +1,17 @@
-"""Workshop cookie auth — validates workshop_session cookie."""
+"""Workshop auth — nginx auth_request handles authentication.
+
+All requests through nginx are pre-authenticated via /_v2_auth_check.
+This dependency is a no-op passthrough; it exists so routes remain
+annotated with Depends(require_auth) for documentation purposes.
+
+For direct access (dev/testing without nginx), no auth is enforced.
+"""
 
 from __future__ import annotations
 
-from fastapi import HTTPException, Request
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-
-from config import config
-
-_serializer = URLSafeTimedSerializer(config.secret_key)
+from fastapi import Request
 
 
 async def require_auth(request: Request) -> dict:
-    """FastAPI dependency — validate workshop_session cookie."""
-    cookie = request.cookies.get(config.session_cookie_name)
-    if not cookie:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    try:
-        data = _serializer.loads(cookie, max_age=config.session_max_age)
-    except (BadSignature, SignatureExpired):
-        raise HTTPException(status_code=401, detail="Session expired")
-
-    if isinstance(data, str):
-        return {"status": "active", "source": "v2-token"}
-
-    user = data.get("user") if isinstance(data, dict) else None
-    if not user or user.get("status") != "active":
-        raise HTTPException(status_code=401, detail="Invalid session")
-
-    return user
+    """No-op: nginx auth_request already validated the session."""
+    return {"status": "active", "source": "nginx-passthrough"}

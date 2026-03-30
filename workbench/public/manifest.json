@@ -1,9 +1,9 @@
 {
-  "id": "/apps",
+  "id": "/",
   "name": "Workshop",
   "short_name": "Workshop",
   "start_url": "/apps/",
-  "scope": "/apps/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1e1e2e",
   "theme_color": "#89b4fa",

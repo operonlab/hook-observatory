@@ -35,7 +35,7 @@ async function createCubismRenderer(opts: CubismRendererOptions): Promise<Mascot
 const DEFAULT_GREETING = "有什麼可以幫忙的嗎？";
 const DEFAULT_MASCOT_BASE = "/static/mascot";
 const PHRASE_INTERVAL = 6000;
-const SAFETY_TIMEOUT_MS = 30000;
+// No safety timeout — only user-initiated dismiss returns to idle
 
 const IDLE_PHRASES = [
   "有什麼可以幫忙的嗎？",
@@ -58,8 +58,7 @@ type FsmEvent =
   | "SSE_CONTENT"
   | "SSE_ERROR"
   | "SSE_DONE"
-  | "TW_CAUGHT_UP"
-  | "TIMEOUT";
+  | "TW_CAUGHT_UP";
 
 let msgIdCounter = 0;
 
@@ -93,6 +92,7 @@ export class AiAssistantElement extends HTMLElement {
   private mascotVisual: MascotState = "idle";
   private streamingContent = "";
   private abortController: AbortController | null = null;
+  private sessionId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   private phraseTimer: ReturnType<typeof setInterval> | null = null;
   private isDragging = false;
   private dragOffset = { x: 0, y: 0 };
@@ -186,19 +186,16 @@ export class AiAssistantElement extends HTMLElement {
         else if (event === "SSE_CONTENT") { this._enterStreaming(payload); }
         else if (event === "SSE_ERROR") { this._enterIdle({ error: payload as string }); }
         else if (event === "SSE_DONE") { this._enterIdle(); }
-        else if (event === "TIMEOUT") { this._enterIdle(); }
         break;
 
       case "streaming":
         if (event === "SSE_CONTENT") { this._onChunk(payload); }
         else if (event === "SSE_ERROR") { this._enterIdle({ error: payload as string }); }
         else if (event === "SSE_DONE") { this._enterDraining(); }
-        else if (event === "TIMEOUT") { this._enterIdle(); }
         break;
 
       case "draining":
         if (event === "TW_CAUGHT_UP") { this._enterIdle(); }
-        else if (event === "TIMEOUT") { this._enterIdle(); }
         break;
     }
   }
@@ -256,8 +253,8 @@ export class AiAssistantElement extends HTMLElement {
     this.speechBubbleEl?.classList.remove("streaming");
     this.setSpeechText("思考中...");
 
-    // Start stream
-    const body: Record<string, unknown> = { message, mode: this._mode };
+    // Start stream — reuse persistent session_id (generated once per component lifecycle)
+    const body: Record<string, unknown> = { message, mode: this._mode, session_id: this.sessionId };
     if (this._mode === "workshop" && this._module) {
       body.module = this._module;
     }
@@ -268,8 +265,6 @@ export class AiAssistantElement extends HTMLElement {
       onError: (msg) => this.transition("SSE_ERROR", msg),
       onDone: () => this.transition("SSE_DONE"),
     });
-
-    this._resetSafetyTimeout();
   }
 
   private _enterStreaming(payload: { text: string; isDelta: boolean }) {
@@ -282,7 +277,6 @@ export class AiAssistantElement extends HTMLElement {
 
     // Process first chunk
     this._appendContent(payload);
-    this._resetSafetyTimeout();
   }
 
   private _enterDraining() {
@@ -296,7 +290,6 @@ export class AiAssistantElement extends HTMLElement {
 
   private _onChunk(payload: { text: string; isDelta: boolean }) {
     this._appendContent(payload);
-    this._resetSafetyTimeout();
   }
 
   private _appendContent(payload: { text: string; isDelta: boolean }) {
@@ -370,11 +363,6 @@ export class AiAssistantElement extends HTMLElement {
   // ---------------------------------------------------------------------------
   // Timeouts
   // ---------------------------------------------------------------------------
-
-  private _resetSafetyTimeout() {
-    if (this.speakingTimeout) clearTimeout(this.speakingTimeout);
-    this.speakingTimeout = setTimeout(() => this.transition("TIMEOUT"), SAFETY_TIMEOUT_MS);
-  }
 
   private _clearTimeouts() {
     if (this.speakingTimeout) { clearTimeout(this.speakingTimeout); this.speakingTimeout = null; }

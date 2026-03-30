@@ -48,7 +48,7 @@ async def chat(
     messages = context_messages + [{"role": "user", "content": body.message}]
 
     async def event_generator():
-        async for block in stream_chat(messages):
+        async for block in stream_chat(messages, session_id=body.session_id):
             yield format_sse(block)
 
     return EventSourceResponse(event_generator())

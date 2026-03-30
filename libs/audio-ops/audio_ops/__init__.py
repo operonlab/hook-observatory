@@ -156,7 +156,16 @@ def register(name: str):
 
 
 def _register_builtins():
-    from . import denoise, diarize, emotion, extract_audio, merge, normalize, vad_trim  # noqa: F401
+    from . import (  # noqa: F401
+        analyze,
+        denoise,
+        diarize,
+        emotion,
+        extract_audio,
+        merge,
+        normalize,
+        vad_trim,
+    )
 
 
 _register_builtins()

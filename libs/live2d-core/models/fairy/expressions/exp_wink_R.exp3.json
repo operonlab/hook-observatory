@@ -1,0 +1,6 @@
+{
+  "Type": "Live2D Expression",
+  "Parameters": [
+    { "Id": "ParamEyeROpen", "Value": 0, "Blend": "Override" }
+  ]
+}

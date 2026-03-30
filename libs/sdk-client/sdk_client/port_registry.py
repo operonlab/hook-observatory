@@ -133,6 +133,14 @@ PORTS: list[ServicePort] = [
         nginx_path="/apps/tmux/",
     ),
     ServicePort(
+        "sentinel",
+        4101,
+        "station-infra",
+        health_path="/api/sentinel/health",
+        env_var="SENTINEL_URL",
+        nginx_path="/apps/sentinel/",
+    ),
+    ServicePort(
         "fleet",
         10106,
         "station-infra",
@@ -327,6 +335,7 @@ MIGRATION_MAP: dict[str, int] = {
     "agent-metrics": 10103,
     "capture-console": 10104,
     "tmux-webui": 10105,
+    "sentinel": 4101,
     "fleet": 10106,
     # Stations: AI & Media
     "stt": 10200,

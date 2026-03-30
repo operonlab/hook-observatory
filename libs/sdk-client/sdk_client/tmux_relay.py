@@ -151,6 +151,49 @@ class TmuxRelayClient:
             cmd = f"CLAUDE_VOICE=0 {cmd}"
         return cmd
 
+    # Session-channel fire-and-forget notification (team coordination)
+    _CHANNEL_URL = "http://localhost:10101"
+    _CHANNEL_KEY = "change-me-in-production"
+
+    def _notify_channel(
+        self, topic: str, text: str, tag: str = "", priority: str = "normal"
+    ) -> None:
+        """Fire-and-forget POST to session-channel. Never blocks, never fails."""
+        try:
+            body = json.dumps(
+                {
+                    "topic": topic,
+                    "text": text,
+                    "sender": f"relay:{os.environ.get('TMUX_PANE', 'sdk')}",
+                    "priority": priority,
+                    **({"tag": tag} if tag else {}),
+                }
+            )
+            subprocess.Popen(
+                [
+                    "curl",
+                    "-s",
+                    "-o",
+                    "/dev/null",
+                    "-m",
+                    "2",
+                    "-X",
+                    "POST",
+                    f"{self._CHANNEL_URL}/api/messages",
+                    "-H",
+                    "Content-Type: application/json",
+                    "-H",
+                    f"x-local-key: {self._CHANNEL_KEY}",
+                    "-d",
+                    body,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception:
+            pass  # Advisory — never block relay operations
+
     # ================================================================
     # Pane detection helpers
     # ================================================================
@@ -578,22 +621,33 @@ class TmuxRelayClient:
             self._ensure_hooks_registered(session)
             return target
 
+        self._notify_channel(
+            "relay-activity",
+            f"❌ spawn timeout: {target} after {self.INIT_TIMEOUT}s",
+            tag="error",
+            priority="high",
+        )
         raise TmuxRelayError(
             "spawn", f"Claude Code init timeout after {self.INIT_TIMEOUT}s in {target}"
         )
 
     _ACQUIRE_LOCK = Path("/tmp/relay-acquire.lock")
 
-    def acquire(self, count: int = 1, session: str | None = None) -> list[str]:
+    def acquire(self, count: int = 1, session: str | None = None, cwd: str = "") -> list[str]:
         """Acquire N panes (auto-spawn if needed). Returns pane refs.
 
         Uses file lock to prevent race conditions when multiple processes
         call acquire() concurrently.
+
+        Args:
+            cwd: Working directory for CC. Standby panes will start CC in this dir.
+                 Idle panes with a different cwd will be recycled first.
         """
         if count < 1:
             raise TmuxRelayError("acquire", "count must be >= 1")
 
         session = session or self._resolve_relay_session()
+        start_dir = cwd or "/Users/joneshong/workshop"
 
         # Cross-process lock — prevents parallel acquire() from grabbing the same pane
         with open(self._ACQUIRE_LOCK, "w") as lock_fd:
@@ -601,6 +655,10 @@ class TmuxRelayClient:
 
             idle = [p for p in self.list_panes(session) if p.status in ("idle", "standby")]
             acquired = []
+
+            # When cwd is specified, prefer standby panes (can start CC in the right dir)
+            if cwd:
+                idle.sort(key=lambda p: 0 if p.status == "standby" else 1)
 
             # Take from idle/standby pool first
             for p in idle[:count]:
@@ -613,12 +671,19 @@ class TmuxRelayClient:
                     if live not in ("idle", "standby"):
                         continue  # already taken by another process
 
+                if p.status == "idle" and cwd:
+                    # CC already running but we need a different cwd →
+                    # standby it first, then restart in the right directory
+                    self.standby(p.pane_ref)
+                    p.status = "standby"
+
                 if p.status == "standby":
-                    # Bare shell → cd to workshop + start Claude Code before acquiring
-                    send_text(p.pane_ref, "cd ~/workshop", buf_name="_relay_paste")
-                    send_enter(p.pane_ref)
-                    time.sleep(0.3)
-                    send_text(p.pane_ref, self._claude_cmd(), buf_name="_relay_paste")
+                    # Bare shell → cd to target dir + start Claude Code
+                    send_text(
+                        p.pane_ref,
+                        f"cd {start_dir} && " + self._claude_cmd(),
+                        buf_name="_relay_paste",
+                    )
                     send_enter(p.pane_ref)
                     if not wait_for_prompt(
                         p.pane_ref, CLAUDE_CODE, timeout=self.INIT_TIMEOUT, poll_interval=2.0
@@ -1037,6 +1102,44 @@ class TmuxRelayClient:
             return False  # Safe default: don't clear on error
 
     # ================================================================
+    # Idle watchdog — fallback for prompts that don't trigger Stop hook
+    # ================================================================
+
+    def _idle_watchdog(
+        self,
+        pane: str,
+        channel: str,
+        wait_proc: subprocess.Popen,
+        interval: float = 5.0,
+        min_wait: float = 15.0,
+    ) -> None:
+        """Detect prompt idle when Stop hook doesn't fire (e.g., simple prompts).
+
+        Runs as daemon thread. Uses has_prompt() + not is_busy() from cli_session.
+        Two consecutive prompt-idle detections = task complete.
+        Signals the wait-for channel to unblock _relay_execute.
+        """
+        from tmux_lib.cli_session import has_prompt, is_busy
+
+        time.sleep(min_wait)  # Don't check too early — give Claude time to process
+        idle_count = 0
+        while wait_proc.poll() is None:
+            try:
+                prompt_visible = has_prompt(pane, CLAUDE_CODE, lines=5)
+                busy = is_busy(pane, CLAUDE_CODE, lines=8)
+                if prompt_visible and not busy:
+                    idle_count += 1
+                    if idle_count >= 2:
+                        # Stable idle: prompt visible + not busy for 2 consecutive checks
+                        tmux_ok("wait-for", "-S", channel)
+                        break
+                else:
+                    idle_count = 0  # Reset — still processing
+            except Exception:
+                pass
+            time.sleep(interval)
+
+    # ================================================================
     # Relay execution (was relay.sh)
     # ================================================================
 
@@ -1052,6 +1155,7 @@ class TmuxRelayClient:
         summary_mode: bool = False,
         color: str = "",
         role: str = "",
+        cwd: str = "",
     ) -> RelayResult:
         """Core relay execution — pure Python equivalent of relay.sh."""
         if not signal_file:
@@ -1070,8 +1174,13 @@ class TmuxRelayClient:
             send_enter(source)
             time.sleep(2)
 
+        # Ensure CC is ready before sending any commands.
+        # CC may show ❯ in the welcome screen before its input handler is fully
+        # initialized. An extra delay prevents text from being lost or merged.
+        wait_for_prompt(source, CLAUDE_CODE, timeout=15, poll_interval=1.0)
+        time.sleep(3.0)
+
         # Set session name if role is provided (/rename is a local CLI command, instant)
-        # Bug fix: increased delay to 2s to prevent /rename text bleeding into task prompt
         if role:
             send_text(source, f"/rename {role}", buf_name="_relay_paste")
             send_enter(source)
@@ -1131,14 +1240,30 @@ class TmuxRelayClient:
             bc = int(display(source, "#{cursor_y}") or "0")
             before_pos = bh + bc
 
-            # Phase 2: Send command
+            # Phase 2: Send command — verify prompt ready first
             time.sleep(0.5)  # ensure wait-for is registered
+            if not wait_for_prompt(source, CLAUDE_CODE, timeout=10, poll_interval=1.0):
+                pass  # Best effort — send anyway even if prompt not detected
             send_text(source, command, buf_name="_relay_paste")
             time.sleep(0.3)
             send_enter(source)
             send_time = int(time.time())
 
+            self._notify_channel(
+                "relay-activity",
+                f"⚡ dispatched → {source}: {command[:80]}",
+                tag="dispatched",
+            )
+
             # Phase 3: Wait for completion signal (ZERO CPU)
+            # Also start idle watchdog as fallback for prompts that don't trigger Stop hook
+            idle_watchdog = threading.Thread(
+                target=self._idle_watchdog,
+                args=(source, channel, wait_proc),
+                daemon=True,
+            )
+            idle_watchdog.start()
+
             wait_proc.wait()
             timer.cancel()
 
@@ -1162,6 +1287,12 @@ class TmuxRelayClient:
                 except Exception:
                     pass
                 self._touch_idle_ts(pane_id)
+                self._notify_channel(
+                    "relay-activity",
+                    f"⏰ timeout ← {source}: {command[:60]} ({timeout}s)",
+                    tag="timeout",
+                    priority="high",
+                )
                 return RelayResult(
                     pane=source,
                     signal_file=signal_file,
@@ -1235,6 +1366,12 @@ class TmuxRelayClient:
             # Start idle countdown immediately (don't wait for auto_standby to discover)
             self._touch_idle_ts(pane_id)
 
+            self._notify_channel(
+                "relay-activity",
+                f"✅ completed ← {source}: {command[:60]} ({elapsed}s)",
+                tag="completed",
+            )
+
             return RelayResult(
                 pane=source,
                 signal_file=signal_file,
@@ -1263,12 +1400,13 @@ class TmuxRelayClient:
         role: str = "",
         task: str = "",
         color: str = "",
+        cwd: str = "",
     ) -> RelayResult:
         """Blocking relay: acquire pane -> send command -> wait -> return result."""
         timeout = timeout or self.default_timeout
 
-        # 1. Acquire a pane
-        panes = self.acquire(1)
+        # 1. Acquire a pane (with cwd if specified — CC starts in the right dir)
+        panes = self.acquire(1, cwd=cwd)
         if not panes:
             raise TmuxRelayError("run", "Failed to acquire relay pane. Is tmux running?")
         pane = panes[0]
@@ -1300,6 +1438,7 @@ class TmuxRelayClient:
             no_forward=True,
             color=color,
             role=role,
+            cwd=cwd,
         )
 
         # Truncate output if needed
@@ -1319,6 +1458,7 @@ class TmuxRelayClient:
         role: str = "",
         task: str = "",
         color: str = "",
+        cwd: str = "",
     ) -> list[dict[str, str]]:
         """Fire-and-forget dispatch. Returns list of {pane, signal_file, pid}.
 
@@ -1326,7 +1466,7 @@ class TmuxRelayClient:
         process that survives the parent exiting (critical for CLI usage).
         """
         timeout = timeout or self.default_timeout
-        panes = self.acquire(count)
+        panes = self.acquire(count, cwd=cwd)
         dispatched = []
 
         for pane in panes:
@@ -1375,6 +1515,7 @@ class TmuxRelayClient:
                         no_forward=True,
                         color=color,
                         role=role,
+                        cwd=cwd,
                     )
                 except Exception:
                     pass

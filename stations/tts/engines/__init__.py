@@ -90,9 +90,19 @@ def to_simplified(text: str) -> str:
 
 
 def register(name: str):
-    """Decorator to register an engine implementation."""
+    """Decorator to register an engine implementation.
+
+    Wraps synthesize() to auto-run AnalyzeOp on output audio.
+    """
 
     def decorator(cls):
+        original_synthesize = cls.synthesize
+
+        def _wrapped_synthesize(self, *args, **kwargs):
+            result = original_synthesize(self, *args, **kwargs)
+            return _post_synthesize_analyze(result, name)
+
+        cls.synthesize = _wrapped_synthesize
         ENGINES[name] = cls()
         return cls
 
@@ -105,6 +115,32 @@ def get_engine(name: str = "apple") -> TTSEngine:
         available = list(ENGINES.keys())
         raise ValueError(f"Unknown TTS engine: {name}. Available: {available}")
     return ENGINES[name]
+
+
+def _post_synthesize_analyze(result: dict, engine_name: str) -> dict:
+    """Run AnalyzeOp on synthesize output. Adds analysis to result dict."""
+    audio_path = result.get("audio_path")
+    if not audio_path or "error" in result:
+        return result
+    try:
+        from audio_ops import OPERATORS, AudioPipe
+
+        AnalyzeOp = OPERATORS.get("analyze")
+        if AnalyzeOp is None:
+            return result
+        ctx = (
+            AudioPipe.from_file(audio_path)
+            .pipe(AnalyzeOp(generate_png=False, label=engine_name))
+            .execute()
+        )
+        result["analysis_pass"] = ctx.get("analysis_pass", True)
+        result["analysis_issues"] = ctx.get("analysis_issues", [])
+        if not result["analysis_pass"]:
+            issues = ", ".join(result["analysis_issues"][:3])
+            logger.warning("TTS output FAILED quality check [%s]: %s", engine_name, issues)
+    except Exception:
+        pass  # audio-ops not installed — skip silently
+    return result
 
 
 # ── Always-available engines ──

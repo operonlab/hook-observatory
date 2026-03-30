@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     model_config = {"env_prefix": "AUTO_SURVEY_"}
 
-    database_url: str = "postgresql://joneshong:REDACTED@localhost/workshop"
+    database_url: str = "postgresql://joneshong:REDACTED@127.0.0.1/workshop"
     schema_name: str = "auto_survey"
 
     llm_backend: str = "litellm"  # litellm | gemini | claude | codex
