@@ -1,5 +1,6 @@
 import type { KASProfile } from '@/types'
-import { useMemvaultStore } from '../stores'
+import { useRecalculateProfile } from '../hooks/mutations'
+import { useAttitudes, useCommunities, useSummaries, useTriples } from '../hooks/queries'
 import InfoTip from './InfoTip'
 
 interface ProfileWidgetProps {
@@ -83,14 +84,18 @@ function KgStatsRow({ label, count, color }: { label: string; count: number; col
 }
 
 export default function ProfileWidget({ profile, loading = false }: ProfileWidgetProps) {
-  const { kg_summaries, kg_communities, kg_triplesTotal, kg_attitudes, recalculateProfile } =
-    useMemvaultStore()
+  const recalculateProfileMutation = useRecalculateProfile()
+  const { data: summaries = [] } = useSummaries()
+  const { data: communities = [] } = useCommunities()
+  const { data: triplesData } = useTriples(1)
+  const { data: attitudes = [] } = useAttitudes()
+  const triplesTotal = triplesData?.total ?? 0
 
   const hasKgData =
-    kg_summaries.length > 0 ||
-    kg_communities.length > 0 ||
-    kg_triplesTotal > 0 ||
-    kg_attitudes.length > 0
+    summaries.length > 0 ||
+    communities.length > 0 ||
+    triplesTotal > 0 ||
+    attitudes.length > 0
 
   return (
     <div
@@ -109,7 +114,8 @@ export default function ProfileWidget({ profile, loading = false }: ProfileWidge
           />
         </div>
         <button
-          onClick={() => recalculateProfile()}
+          onClick={() => recalculateProfileMutation.mutate()}
+          disabled={recalculateProfileMutation.isPending}
           className="rounded-lg px-2.5 py-1.5 text-xs transition-colors"
           style={{
             backgroundColor: 'var(--surface0)',
@@ -118,7 +124,7 @@ export default function ProfileWidget({ profile, loading = false }: ProfileWidge
           }}
           title="從 KG 數據重新計算分數"
         >
-          重新計算
+          {recalculateProfileMutation.isPending ? '計算中...' : '重新計算'}
         </button>
       </div>
 
@@ -163,10 +169,10 @@ export default function ProfileWidget({ profile, loading = false }: ProfileWidge
           </p>
           {/* Mobile: 2-column grid for compact display */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:block sm:space-y-1.5">
-            <KgStatsRow label="社群摘要" count={kg_summaries.length} color="var(--peach)" />
-            <KgStatsRow label="知識社群" count={kg_communities.length} color="var(--blue)" />
-            <KgStatsRow label="三元組" count={kg_triplesTotal} color="var(--teal)" />
-            <KgStatsRow label="態度" count={kg_attitudes.length} color="var(--mauve)" />
+            <KgStatsRow label="社群摘要" count={summaries.length} color="var(--peach)" />
+            <KgStatsRow label="知識社群" count={communities.length} color="var(--blue)" />
+            <KgStatsRow label="三元組" count={triplesTotal} color="var(--teal)" />
+            <KgStatsRow label="態度" count={attitudes.length} color="var(--mauve)" />
           </div>
         </div>
       )}

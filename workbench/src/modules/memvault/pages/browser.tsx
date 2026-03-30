@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { MemoryBlock } from '@/types'
 import { memvaultApi, type SyncScanResult, type SyncStats } from '../api'
 import AttitudeTimeline from '../components/AttitudeTimeline'
@@ -10,6 +11,8 @@ import MemoryCard from '../components/MemoryCard'
 import ProfileWidget from '../components/ProfileWidget'
 import SearchBar from '../components/SearchBar'
 import SkillDashboard from '../components/SkillDashboard'
+import { useDeleteBlock } from '../hooks/mutations'
+import { useBlocks, useProfile } from '../hooks/queries'
 import { useMemorySearch } from '../hooks/useMemorySearch'
 import { useMemvaultStore } from '../stores'
 import type { BrowserTab } from '../types'
@@ -327,20 +330,12 @@ function BlockDetailDrawer({ block, onClose }: { block: MemoryBlock; onClose: ()
 
 export default function MemoryBrowser() {
   const {
-    blocks,
-    total,
     page,
     pageSize,
     selectedBlock,
-    profile,
     viewMode,
     filters,
-    loading,
-    error,
-    fetchBlocks,
-    fetchProfile,
     selectBlock,
-    deleteBlock,
     setPage,
     setFilters,
     setViewMode,
@@ -348,21 +343,26 @@ export default function MemoryBrowser() {
     setKgActiveTab,
   } = useMemvaultStore()
 
-  const handleDeleteBlock = async (id: string) => {
+  const blocksQuery = useBlocks(page, pageSize, filters)
+  const profileQuery = useProfile()
+  const queryClient = useQueryClient()
+  const deleteBlockMutation = useDeleteBlock()
+
+  const blocks = blocksQuery.data?.items ?? []
+  const total = blocksQuery.data?.total ?? 0
+
+  const handleDeleteBlock = (id: string) => {
     if (!window.confirm('確定要刪除這筆記憶嗎？')) return
-    await deleteBlock(id)
+    deleteBlockMutation.mutate(id, {
+      onSuccess: () => {
+        if (selectedBlock?.id === id) selectBlock(null)
+      },
+    })
   }
 
   const { query, results, isSearching, setQuery, searchNow, clear } = useMemorySearch()
 
   const [showSidebar, setShowSidebar] = useState(false)
-
-  const isStale = useMemvaultStore((s) => s.isStale)
-
-  useEffect(() => {
-    if (isStale('blocks')) fetchBlocks()
-    if (isStale('profile')) fetchProfile()
-  }, [fetchBlocks, fetchProfile, isStale])
 
   const showSearchResults = query.trim() && results.length > 0
   const displayBlocks = showSearchResults ? results.map((r) => r.block) : blocks
@@ -411,7 +411,7 @@ export default function MemoryBrowser() {
         {/* Main content */}
         <div className="flex-1 min-w-0">
           {/* Error */}
-          {error && (
+          {blocksQuery.error && (
             <div
               className="rounded-lg border px-4 py-3 mb-4 text-sm"
               style={{
@@ -420,7 +420,9 @@ export default function MemoryBrowser() {
                 color: 'var(--red)',
               }}
             >
-              {error}
+              {blocksQuery.error instanceof Error
+                ? blocksQuery.error.message
+                : 'Failed to fetch blocks'}
             </div>
           )}
 
@@ -449,8 +451,8 @@ export default function MemoryBrowser() {
                 </div>
               )}
 
-              {/* Loading — only show spinner when no cached data */}
-              {loading && blocks.length === 0 && (
+              {/* Loading — only show spinner on initial load */}
+              {blocksQuery.isLoading && (
                 <div className="flex items-center justify-center py-20">
                   <div
                     className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
@@ -460,7 +462,7 @@ export default function MemoryBrowser() {
               )}
 
               {/* Empty state */}
-              {!loading && displayBlocks.length === 0 && (
+              {!blocksQuery.isLoading && displayBlocks.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 gap-2">
                   <p className="text-base" style={{ color: 'var(--subtext0)' }}>
                     {showSearchResults ? '未找到相關記憶' : '尚無記憶區塊'}
@@ -538,8 +540,10 @@ export default function MemoryBrowser() {
 
         {/* Desktop Sidebar */}
         <div className="hidden lg:flex lg:w-72 lg:flex-col lg:gap-4 lg:shrink-0">
-          <ProfileWidget profile={profile} loading={loading && !profile} />
-          <SyncWidget onSynced={() => fetchBlocks()} />
+          <ProfileWidget profile={profileQuery.data ?? null} loading={profileQuery.isLoading} />
+          <SyncWidget
+            onSynced={() => queryClient.invalidateQueries({ queryKey: ['memvault', 'blocks'] })}
+          />
 
           {/* Block detail panel (desktop) */}
           {selectedBlock && (
@@ -646,10 +650,10 @@ export default function MemoryBrowser() {
               </button>
             </div>
             <div className="space-y-4">
-              <ProfileWidget profile={profile} loading={loading && !profile} />
+              <ProfileWidget profile={profileQuery.data ?? null} loading={profileQuery.isLoading} />
               <SyncWidget
                 onSynced={() => {
-                  fetchBlocks()
+                  queryClient.invalidateQueries({ queryKey: ['memvault', 'blocks'] })
                   setShowSidebar(false)
                 }}
               />

@@ -12,10 +12,10 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { briefingApi } from '../api/client'
 import { useAnalysts, useTopics } from '../hooks/useBriefing'
-import { useBriefingStore } from '../stores'
+import { useInvalidateBriefing, useRunStatusQuery } from '../hooks/queries'
 import type {
   Analyst,
   AnalystCreate,
@@ -677,11 +677,7 @@ function AnalystCard({ analyst, onRefresh }: { analyst: Analyst; onRefresh: () =
 
 /* ── Run Status Badge ── */
 function RunStatusBadge() {
-  const { runStatus, fetchRunStatus } = useBriefingStore()
-
-  useEffect(() => {
-    fetchRunStatus()
-  }, [fetchRunStatus])
+  const { data: runStatus } = useRunStatusQuery()
 
   if (!runStatus) return null
 
@@ -736,7 +732,7 @@ function RunStatusBadge() {
 export default function BriefingConfig() {
   const { topics, fetchTopics } = useTopics()
   const { analysts, fetchAnalysts } = useAnalysts()
-  const { fetchRunStatus } = useBriefingStore()
+  const { invalidateRunStatus } = useInvalidateBriefing()
   const [showAddTopic, setShowAddTopic] = useState(false)
   const [showAddAnalyst, setShowAddAnalyst] = useState(false)
   const [newTopic, setNewTopic] = useState({ name: '', display_name: '', description: '' })
@@ -747,7 +743,7 @@ export default function BriefingConfig() {
     setTriggering(true)
     try {
       await briefingApi.triggerGeneration()
-      await fetchRunStatus()
+      invalidateRunStatus()
     } catch {
       // handled by store
     } finally {

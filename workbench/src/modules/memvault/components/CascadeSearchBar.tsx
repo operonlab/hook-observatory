@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { useMemvaultStore } from '../stores'
+import { useCascadeRecall } from '../hooks/queries'
 
 function hexToRgba(cssVar: string, alpha: number): string {
   return `color-mix(in srgb, ${cssVar} ${Math.round(alpha * 100)}%, transparent)`
@@ -97,7 +97,8 @@ function LayerSection({
 
 export default function CascadeSearchBar() {
   const [query, setQuery] = useState('')
-  const { kg_cascadeResult, kg_loading, cascadeRecall, clearCascadeResult } = useMemvaultStore()
+  const [searchQuery, setSearchQuery] = useState('')
+  const { data: result, isFetching } = useCascadeRecall(searchQuery)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     summaries: true,
     communities: true,
@@ -106,17 +107,16 @@ export default function CascadeSearchBar() {
   })
 
   const handleSearch = useCallback(() => {
-    if (query.trim()) cascadeRecall(query.trim())
-  }, [query, cascadeRecall])
+    if (query.trim()) setSearchQuery(query.trim())
+  }, [query])
 
   const handleClear = useCallback(() => {
     setQuery('')
-    clearCascadeResult()
-  }, [clearCascadeResult])
+    setSearchQuery('')
+  }, [])
 
   const toggleLayer = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  const result = kg_cascadeResult
   const totalHits = result
     ? result.summaries.length +
       result.communities.length +
@@ -150,17 +150,17 @@ export default function CascadeSearchBar() {
         />
         <button
           onClick={handleSearch}
-          disabled={kg_loading || !query.trim()}
+          disabled={isFetching || !query.trim()}
           className="rounded-lg px-3 sm:px-4 py-2 text-sm font-medium transition-colors shrink-0"
           style={{
-            backgroundColor: kg_loading ? 'var(--surface0)' : 'var(--peach)',
-            color: kg_loading ? 'var(--subtext0)' : 'var(--base)',
-            cursor: kg_loading ? 'wait' : 'pointer',
+            backgroundColor: isFetching ? 'var(--surface0)' : 'var(--peach)',
+            color: isFetching ? 'var(--subtext0)' : 'var(--base)',
+            cursor: isFetching ? 'wait' : 'pointer',
             opacity: !query.trim() ? 0.5 : 1,
             minHeight: 44,
           }}
         >
-          {kg_loading ? '搜尋中...' : '跨層搜尋'}
+          {isFetching ? '搜尋中...' : '跨層搜尋'}
         </button>
       </div>
 

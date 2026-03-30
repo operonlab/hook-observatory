@@ -23,7 +23,7 @@ export default function ReportList() {
     loading,
     activeTag,
     allTags,
-    fetchReports,
+    setPage,
     deleteReport,
     setActiveTag,
   } = useReports()
@@ -225,7 +225,7 @@ export default function ReportList() {
           <div className="flex gap-1">
             <button
               type="button"
-              onClick={() => fetchReports(page - 1)}
+              onClick={() => setPage(page - 1)}
               disabled={page <= 1}
               className="p-2.5 border disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"
               style={{ borderColor: 'var(--if-border)', color: 'var(--if-text-secondary)' }}
@@ -234,7 +234,7 @@ export default function ReportList() {
             </button>
             <button
               type="button"
-              onClick={() => fetchReports(page + 1)}
+              onClick={() => setPage(page + 1)}
               disabled={page >= totalPages}
               className="p-2.5 border disabled:opacity-30 min-w-[44px] min-h-[44px] flex items-center justify-center"
               style={{ borderColor: 'var(--if-border)', color: 'var(--if-text-secondary)' }}

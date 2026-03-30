@@ -1,66 +1,54 @@
-import { useEffect } from 'react'
 import { useBriefingStore } from '../stores'
-
-const STALE_MS = 5 * 60 * 1000
+import {
+  useAnalystsQuery,
+  useBriefingsListQuery,
+  useBriefingsByDateQuery,
+  useInvalidateBriefing,
+  useTodaySummaryQuery,
+  useTopicsQuery,
+} from './queries'
 
 export function useTodaySummary() {
-  const { todaySummary, todayLoading, todayFetchedAt, selectedDate, fetchTodaySummary } =
-    useBriefingStore()
-
-  useEffect(() => {
-    if (!todaySummary || Date.now() - todayFetchedAt > STALE_MS) {
-      fetchTodaySummary(selectedDate)
-    }
-  }, [todaySummary, todayFetchedAt, selectedDate, fetchTodaySummary])
-
-  return { summary: todaySummary, loading: todayLoading && !todaySummary }
+  const selectedDate = useBriefingStore((s) => s.selectedDate)
+  const { data, isLoading } = useTodaySummaryQuery(selectedDate)
+  return { summary: data ?? null, loading: isLoading && !data }
 }
 
 export function useBriefingDetail(date: string | undefined) {
-  const { selectedBriefings, detailLoading, fetchBriefingsByDate, clearSelectedBriefings } =
-    useBriefingStore()
-
-  useEffect(() => {
-    if (date) fetchBriefingsByDate(date)
-    return () => clearSelectedBriefings()
-  }, [date, fetchBriefingsByDate, clearSelectedBriefings])
-
-  return { briefings: selectedBriefings, loading: detailLoading }
+  const { data, isLoading } = useBriefingsByDateQuery(date)
+  return { briefings: data ?? [], loading: isLoading }
 }
 
 export function useBriefingHistory() {
-  const { briefings, briefingsTotal, briefingsPage, briefingsLoading, briefingsFetchedAt, fetchBriefings } =
-    useBriefingStore()
-
-  useEffect(() => {
-    if (briefings.length === 0 || Date.now() - briefingsFetchedAt > STALE_MS) fetchBriefings()
-  }, [briefings.length, briefingsFetchedAt, fetchBriefings])
+  const briefingsPage = useBriefingStore((s) => s.briefingsPage)
+  const setBriefingsPage = useBriefingStore((s) => s.setBriefingsPage)
+  const { data, isLoading } = useBriefingsListQuery(briefingsPage)
 
   return {
-    briefings,
-    total: briefingsTotal,
+    briefings: data?.items ?? [],
+    total: data?.total ?? 0,
     page: briefingsPage,
-    loading: briefingsLoading && briefings.length === 0,
-    fetchBriefings,
+    loading: isLoading && !data,
+    fetchBriefings: setBriefingsPage,
   }
 }
 
 export function useTopics() {
-  const { topics, topicsLoading, topicsFetchedAt, fetchTopics } = useBriefingStore()
-
-  useEffect(() => {
-    if (topics.length === 0 || Date.now() - topicsFetchedAt > STALE_MS) fetchTopics()
-  }, [topics.length, topicsFetchedAt, fetchTopics])
-
-  return { topics, loading: topicsLoading && topics.length === 0, fetchTopics }
+  const { data, isLoading } = useTopicsQuery()
+  const { invalidateTopics } = useInvalidateBriefing()
+  return {
+    topics: data?.items ?? [],
+    loading: isLoading && !data,
+    fetchTopics: invalidateTopics,
+  }
 }
 
 export function useAnalysts() {
-  const { analysts, analystsLoading, analystsFetchedAt, fetchAnalysts } = useBriefingStore()
-
-  useEffect(() => {
-    if (analysts.length === 0 || Date.now() - analystsFetchedAt > STALE_MS) fetchAnalysts()
-  }, [analysts.length, analystsFetchedAt, fetchAnalysts])
-
-  return { analysts, loading: analystsLoading && analysts.length === 0, fetchAnalysts }
+  const { data, isLoading } = useAnalystsQuery()
+  const { invalidateAnalysts } = useInvalidateBriefing()
+  return {
+    analysts: data ?? [],
+    loading: isLoading && !data,
+    fetchAnalysts: invalidateAnalysts,
+  }
 }

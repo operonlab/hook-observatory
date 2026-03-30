@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React, { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
@@ -384,12 +385,24 @@ function AppRoutes() {
   )
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes — matches existing _fetchedAt STALE_TTL
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter basename={__BASE_PATH__ || '/'}>
-        <AppRoutes />
-      </BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter basename={__BASE_PATH__ || '/'}>
+          <AppRoutes />
+        </BrowserRouter>
+      </QueryClientProvider>
     </ErrorBoundary>
   )
 }

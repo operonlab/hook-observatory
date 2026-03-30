@@ -1,106 +1,76 @@
-import { useEffect } from 'react'
-import { useIntelflowStore } from '../stores'
-
-const STALE_MS = 5 * 60 * 1000
+import { useIntelflowStore } from '@/modules/intelflow/stores'
+import {
+  useDeleteReport as useDeleteReportMutation,
+  useIntelflowDashboard,
+  useIntelflowReport,
+  useIntelflowReports,
+  useIntelflowSearch,
+  useIntelflowTimeline,
+  useIntelflowTopics,
+} from './queries'
 
 export function useDashboard() {
-  const { dashboard, dashboardLoading, dashboardFetchedAt, fetchDashboard } = useIntelflowStore()
-
-  useEffect(() => {
-    if (!dashboard || Date.now() - dashboardFetchedAt > STALE_MS) fetchDashboard()
-  }, [dashboard, dashboardFetchedAt, fetchDashboard])
-
-  return { dashboard, loading: dashboardLoading && !dashboard }
+  const { data: dashboard, isLoading } = useIntelflowDashboard()
+  return { dashboard: dashboard ?? null, loading: isLoading }
 }
 
 export function useTimeline(days = 30) {
-  const { timeline, timelineLoading, timelineFetchedAt, fetchTimeline } = useIntelflowStore()
-
-  useEffect(() => {
-    if (timeline.length === 0 || Date.now() - timelineFetchedAt > STALE_MS) fetchTimeline(days)
-  }, [timeline.length, timelineFetchedAt, fetchTimeline, days])
-
-  return { timeline, loading: timelineLoading && timeline.length === 0 }
+  const { data: timeline = [], isLoading } = useIntelflowTimeline(days)
+  return { timeline, loading: isLoading }
 }
 
 export function useReports() {
-  const {
-    reports,
-    reportsTotal,
-    reportsPage,
-    reportsPageSize,
-    reportsLoading,
-    activeTag,
-    allTags,
-    fetchReports,
-    deleteReport,
-    setActiveTag,
-  } = useIntelflowStore()
+  const { activeTag, reportsPage, setActiveTag, setReportsPage } = useIntelflowStore()
+  const pageSize = 20
+  const { data, isLoading } = useIntelflowReports(reportsPage, activeTag, pageSize)
+  const deleteMutation = useDeleteReportMutation()
 
-  useEffect(() => {
-    fetchReports()
-  }, [fetchReports])
+  const reports = data?.items ?? []
+  const total = data?.total ?? 0
+  const allTags = [...new Set(reports.flatMap((r) => r.tags))].sort()
 
   return {
     reports,
-    total: reportsTotal,
+    total,
     page: reportsPage,
-    pageSize: reportsPageSize,
-    loading: reportsLoading && reports.length === 0,
+    pageSize,
+    loading: isLoading,
     activeTag,
     allTags,
-    fetchReports,
-    deleteReport,
     setActiveTag,
+    setPage: setReportsPage,
+    deleteReport: deleteMutation.mutateAsync,
   }
 }
 
 export function useReportDetail(id: string | undefined) {
-  const { selectedReport, reportDetailLoading, fetchReportById, clearSelectedReport } =
-    useIntelflowStore()
-
-  useEffect(() => {
-    if (id) fetchReportById(id)
-    return () => clearSelectedReport()
-  }, [id, fetchReportById, clearSelectedReport])
-
-  return { report: selectedReport, loading: reportDetailLoading }
+  const { data: report, isLoading } = useIntelflowReport(id)
+  return { report: report ?? null, loading: isLoading }
 }
 
 export function useTopics() {
-  const {
-    topics,
-    topicsTotal,
-    topicsLoading,
-    topicsFetchedAt,
-    activeTopic,
-    fetchTopics,
-    setActiveTopic,
-  } = useIntelflowStore()
-
-  useEffect(() => {
-    if (topics.length === 0 || Date.now() - topicsFetchedAt > STALE_MS) fetchTopics()
-  }, [topics.length, topicsFetchedAt, fetchTopics])
+  const { activeTopic, setActiveTopic } = useIntelflowStore()
+  const { data, isLoading } = useIntelflowTopics()
 
   return {
-    topics,
-    total: topicsTotal,
-    loading: topicsLoading && topics.length === 0,
+    topics: data?.items ?? [],
+    total: data?.total ?? 0,
+    loading: isLoading,
     activeTopic,
     setActiveTopic,
   }
 }
 
 export function useSearch() {
-  const { searchQuery, searchResults, searchLoading, setSearchQuery, searchReports, clearSearch } =
-    useIntelflowStore()
+  const { searchQuery, setSearchQuery, clearSearch } = useIntelflowStore()
+  const { data: results = [], isLoading } = useIntelflowSearch(searchQuery)
 
   return {
     query: searchQuery,
-    results: searchResults,
-    loading: searchLoading,
+    results: searchQuery.trim() ? results : [],
+    loading: isLoading,
     setQuery: setSearchQuery,
-    search: searchReports,
+    search: setSearchQuery,
     clear: clearSearch,
   }
 }

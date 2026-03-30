@@ -1,55 +1,62 @@
-import { useEffect } from 'react'
-import { usePaperStore } from '../stores'
-import type { AnnotationCreate } from '../types'
-
-const STALE_MS = 5 * 60 * 1000
+import { usePaperStore } from '@/modules/paper/stores'
+import type { AnnotationCreate } from '@/modules/paper/types'
+import {
+  ARTICLES_PAGE_SIZE,
+  useAddAnnotationMutation,
+  useAnnotationsQuery,
+  useArticleQuery,
+  useArticlesQuery,
+  useDashboardQuery,
+  useDeleteArticleMutation,
+  useDigestQuery,
+  useSearchArticlesQuery,
+} from './queries'
 
 export function useDashboard() {
-  const { dashboard, dashboardLoading, dashboardFetchedAt, fetchDashboard } = usePaperStore()
-
-  useEffect(() => {
-    if (!dashboard || Date.now() - dashboardFetchedAt > STALE_MS) fetchDashboard()
-  }, [dashboard, dashboardFetchedAt, fetchDashboard])
-
-  return { dashboard, loading: dashboardLoading && !dashboard }
+  const { data: dashboard, isLoading } = useDashboardQuery()
+  return { dashboard: dashboard ?? null, loading: isLoading }
 }
 
 export function useArticles() {
   const {
-    articles,
-    articlesTotal,
     articlesPage,
-    articlesPageSize,
-    articlesLoading,
     activeCategory,
     activeTag,
     activeRelevance,
-    allCategories,
-    allTags,
-    fetchArticles,
-    deleteArticle,
     setActiveCategory,
     setActiveTag,
     setActiveRelevance,
+    setArticlesPage,
   } = usePaperStore()
 
-  useEffect(() => {
-    fetchArticles()
-  }, [fetchArticles])
+  const { data, isLoading } = useArticlesQuery({
+    page: articlesPage,
+    category: activeCategory,
+    tag: activeTag,
+    relevance: activeRelevance,
+  })
+
+  const deleteMutation = useDeleteArticleMutation()
+
+  const articles = data?.items ?? []
+  const total = data?.total ?? 0
+
+  const allCategories = [...new Set(articles.flatMap((a) => a.categories))].sort()
+  const allTags = [...new Set(articles.flatMap((a) => a.tags))].sort()
 
   return {
     articles,
-    total: articlesTotal,
+    total,
     page: articlesPage,
-    pageSize: articlesPageSize,
-    loading: articlesLoading && articles.length === 0,
+    pageSize: ARTICLES_PAGE_SIZE,
+    loading: isLoading && articles.length === 0,
     activeCategory,
     activeTag,
     activeRelevance,
     allCategories,
     allTags,
-    fetchArticles,
-    deleteArticle,
+    fetchArticles: setArticlesPage,
+    deleteArticle: (id: string) => deleteMutation.mutate(id),
     setActiveCategory,
     setActiveTag,
     setActiveRelevance,
@@ -57,50 +64,32 @@ export function useArticles() {
 }
 
 export function useArticleDetail(id: string | undefined) {
-  const {
-    selectedArticle,
-    articleDetailLoading,
-    fetchArticleById,
-    clearSelectedArticle,
-    selectedDigest,
-    digestLoading,
-    fetchDigest,
-    annotations,
-    annotationsLoading,
-    fetchAnnotations,
-    addAnnotation,
-  } = usePaperStore()
-
-  useEffect(() => {
-    if (id) {
-      fetchArticleById(id)
-      fetchDigest(id)
-      fetchAnnotations(id)
-    }
-    return () => clearSelectedArticle()
-  }, [id, fetchArticleById, fetchDigest, fetchAnnotations, clearSelectedArticle])
+  const { data: article, isLoading: articleLoading } = useArticleQuery(id)
+  const { data: digest, isLoading: digestLoading } = useDigestQuery(id)
+  const { data: annotations = [] } = useAnnotationsQuery(id)
+  const addMutation = useAddAnnotationMutation(id ?? '')
 
   return {
-    article: selectedArticle,
-    loading: articleDetailLoading,
-    digest: selectedDigest,
+    article: article ?? null,
+    loading: articleLoading,
+    digest: digest ?? null,
     digestLoading,
     annotations,
-    annotationsLoading,
-    addAnnotation: (data: AnnotationCreate) => (id ? addAnnotation(id, data) : Promise.resolve()),
+    addAnnotation: (data: AnnotationCreate) =>
+      id ? addMutation.mutateAsync(data) : Promise.resolve(),
   }
 }
 
 export function useSearch() {
-  const { searchQuery, searchResults, searchLoading, setSearchQuery, searchArticles, clearSearch } =
-    usePaperStore()
+  const { searchQuery, setSearchQuery, clearSearch } = usePaperStore()
+  const { data: results = [], isLoading } = useSearchArticlesQuery(searchQuery)
 
   return {
     query: searchQuery,
-    results: searchResults,
-    loading: searchLoading,
+    results,
+    loading: isLoading,
     setQuery: setSearchQuery,
-    search: searchArticles,
+    search: setSearchQuery,
     clear: clearSearch,
   }
 }

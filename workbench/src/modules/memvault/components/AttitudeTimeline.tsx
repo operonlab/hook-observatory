@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { relativeTime } from '../../../shared/utils/time'
-import { useMemvaultStore } from '../stores'
+import { useDeleteAttitude, useUpdateAttitude } from '../hooks/mutations'
+import { useAttitudeHistory, useAttitudes } from '../hooks/queries'
 import type { AttitudeFact } from '../types'
 import InfoTip from './InfoTip'
 
@@ -236,41 +237,25 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 export default function AttitudeTimeline() {
-  const {
-    kg_attitudes,
-    kg_attitudeHistory,
-    kg_loading,
-    fetchAttitudes,
-    fetchAttitudeHistory,
-    deleteAttitude,
-    updateAttitude,
-  } = useMemvaultStore()
-
+  const { data: attitudes = [], isLoading } = useAttitudes()
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const { data: attitudeHistory = [] } = useAttitudeHistory(expandedId)
+  const deleteAttitudeMutation = useDeleteAttitude()
+  const updateAttitudeMutation = useUpdateAttitude()
+
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
-
-  const isStale = useMemvaultStore((s) => s.isStale)
-
-  useEffect(() => {
-    if (isStale('kg_attitudes')) fetchAttitudes()
-  }, [fetchAttitudes, isStale])
 
   const grouped = useMemo(() => {
     const map: Record<string, AttitudeFact[]> = {}
-    for (const a of kg_attitudes) {
+    for (const a of attitudes) {
       if (!map[a.category]) map[a.category] = []
       map[a.category].push(a)
     }
     return Object.entries(map).sort((a, b) => b[1].length - a[1].length)
-  }, [kg_attitudes])
+  }, [attitudes])
 
   const handleShowHistory = (id: string) => {
-    if (expandedId === id) {
-      setExpandedId(null)
-    } else {
-      setExpandedId(id)
-      fetchAttitudeHistory(id)
-    }
+    setExpandedId(expandedId === id ? null : id)
   }
 
   const toggleCategory = (category: string) => {
@@ -297,18 +282,18 @@ export default function AttitudeTimeline() {
         </h3>
         <InfoTip text="態度是從對話中自動提煉的偏好、習慣與工作原則。每條態度有信心度（隨時間衰減）和版本鏈（記錄 ADD/UPDATE 演進歷程）。按類別分組顯示：工作流程、工具行為、設定、架構等。" />
         <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
-          {kg_attitudes.length} 條
+          {attitudes.length} 條
         </span>
       </div>
 
-      {kg_loading && kg_attitudes.length === 0 ? (
+      {isLoading && attitudes.length === 0 ? (
         <div className="flex justify-center py-8">
           <div
             className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
             style={{ borderColor: 'var(--mauve)', borderTopColor: 'transparent' }}
           />
         </div>
-      ) : kg_attitudes.length === 0 ? (
+      ) : attitudes.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-2">
           <p className="text-sm" style={{ color: 'var(--subtext0)' }}>
             尚無態度記錄
@@ -319,7 +304,7 @@ export default function AttitudeTimeline() {
         </div>
       ) : (
         <div className="space-y-3">
-          {grouped.map(([category, attitudes]) => {
+          {grouped.map(([category, categoryAttitudes]) => {
             const isCollapsed = collapsedCategories.has(category)
             const label = CATEGORY_LABELS[category] ?? category
             return (
@@ -367,22 +352,24 @@ export default function AttitudeTimeline() {
                       color: 'var(--mauve)',
                     }}
                   >
-                    {attitudes.length}
+                    {categoryAttitudes.length}
                   </span>
                 </button>
 
                 {/* Collapsible content */}
                 {!isCollapsed && (
                   <div className="px-3 pb-3 pt-1 space-y-2 sm:px-4">
-                    {attitudes.map((a) => (
+                    {categoryAttitudes.map((a) => (
                       <AttitudeCard
                         key={a.id}
                         attitude={a}
                         onShowHistory={() => handleShowHistory(a.id)}
-                        historyData={expandedId === a.id ? kg_attitudeHistory : []}
+                        historyData={expandedId === a.id ? attitudeHistory : []}
                         showHistory={expandedId === a.id}
-                        onDelete={deleteAttitude}
-                        onUpdate={(id, fact, category) => updateAttitude(id, { fact, category })}
+                        onDelete={(id) => deleteAttitudeMutation.mutate(id)}
+                        onUpdate={(id, fact, cat) =>
+                          updateAttitudeMutation.mutate({ id, data: { fact, category: cat } })
+                        }
                       />
                     ))}
                   </div>

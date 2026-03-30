@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { relativeTime } from '../../../shared/utils/time'
-import { useMemvaultStore } from '../stores'
+import { useDeleteTriple } from '../hooks/mutations'
+import { useCommunities, useCommunityDetail, useSummaries, useTriples } from '../hooks/queries'
 import type { Community, CommunityDetail, CommunitySummary } from '../types'
 import InfoTip from './InfoTip'
 
@@ -417,22 +418,14 @@ function CommunityCard({
 // ── Triple Table (L0) ──
 
 function TripleTable() {
-  const {
-    kg_triples,
-    kg_triplesTotal,
-    kg_triplesPage,
-    kg_loading,
-    fetchTriples,
-    deleteTriple,
-    isStale: isStaleCheck,
-  } = useMemvaultStore()
+  const [page, setPage] = useState(1)
   const [filterPredicate, setFilterPredicate] = useState('')
+  const { data: triplesData, isLoading } = useTriples(page)
+  const deleteTripleMutation = useDeleteTriple()
 
-  useEffect(() => {
-    if (isStaleCheck('kg_triples')) fetchTriples(1)
-  }, [fetchTriples, isStaleCheck])
-
-  const totalPages = Math.ceil(kg_triplesTotal / 20)
+  const triples = triplesData?.items ?? []
+  const total = triplesData?.total ?? 0
+  const totalPages = Math.ceil(total / 20)
 
   return (
     <div>
@@ -451,11 +444,11 @@ function TripleTable() {
           }}
         />
         <span className="text-xs shrink-0" style={{ color: 'var(--subtext0)' }}>
-          共 {kg_triplesTotal} 筆
+          共 {total} 筆
         </span>
       </div>
 
-      {kg_loading && kg_triples.length === 0 ? (
+      {isLoading && triples.length === 0 ? (
         <div className="flex justify-center py-8">
           <div
             className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
@@ -464,7 +457,7 @@ function TripleTable() {
         </div>
       ) : (
         <div className="space-y-1.5">
-          {kg_triples
+          {triples
             .filter(
               (t) =>
                 !filterPredicate ||
@@ -511,7 +504,7 @@ function TripleTable() {
                   <button
                     onClick={() => {
                       if (confirm(`刪除三元組：${t.subject} → ${t.predicate} → ${t.object}？`))
-                        deleteTriple(t.id)
+                        deleteTripleMutation.mutate(t.id)
                     }}
                     className="rounded px-2 py-1 text-xs transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
                     style={{ color: 'var(--red)', minHeight: 36 }}
@@ -529,29 +522,29 @@ function TripleTable() {
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 mt-4">
           <button
-            onClick={() => fetchTriples(kg_triplesPage - 1)}
-            disabled={kg_triplesPage <= 1}
+            onClick={() => setPage(page - 1)}
+            disabled={page <= 1}
             className="rounded-lg px-3 py-2 text-xs transition-colors"
             style={{
               backgroundColor: 'var(--surface0)',
-              color: kg_triplesPage <= 1 ? 'var(--subtext0)' : 'var(--text)',
-              opacity: kg_triplesPage <= 1 ? 0.5 : 1,
+              color: page <= 1 ? 'var(--subtext0)' : 'var(--text)',
+              opacity: page <= 1 ? 0.5 : 1,
               minHeight: 44,
             }}
           >
             上一頁
           </button>
           <span className="text-xs" style={{ color: 'var(--subtext0)' }}>
-            {kg_triplesPage} / {totalPages}
+            {page} / {totalPages}
           </span>
           <button
-            onClick={() => fetchTriples(kg_triplesPage + 1)}
-            disabled={kg_triplesPage >= totalPages}
+            onClick={() => setPage(page + 1)}
+            disabled={page >= totalPages}
             className="rounded-lg px-3 py-2 text-xs transition-colors"
             style={{
               backgroundColor: 'var(--surface0)',
-              color: kg_triplesPage >= totalPages ? 'var(--subtext0)' : 'var(--text)',
-              opacity: kg_triplesPage >= totalPages ? 0.5 : 1,
+              color: page >= totalPages ? 'var(--subtext0)' : 'var(--text)',
+              opacity: page >= totalPages ? 0.5 : 1,
               minHeight: 44,
             }}
           >
@@ -566,37 +559,21 @@ function TripleTable() {
 // ── Main KG Explorer Panel ──
 
 export default function KgExplorerPanel() {
-  const {
-    kg_summaries,
-    kg_communities,
-    kg_selectedCommunity,
-    kg_triplesTotal,
-    kg_loading,
-    fetchSummaries,
-    fetchCommunities,
-    fetchCommunityDetail,
-  } = useMemvaultStore()
+  const { data: summaries = [], isLoading: summariesLoading } = useSummaries()
+  const { data: communities = [], isLoading: communitiesLoading } = useCommunities()
 
   const [expandedSummary, setExpandedSummary] = useState<string | null>(null)
   const [expandedCommunity, setExpandedCommunity] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
 
+  const { data: selectedCommunityDetail } = useCommunityDetail(expandedCommunity)
+  const { data: triplesData } = useTriples(1)
+  const triplesTotal = triplesData?.total ?? 0
+
   const communitySectionRef = useRef<HTMLElement>(null)
 
-  const isStale = useMemvaultStore((s) => s.isStale)
-
-  useEffect(() => {
-    if (isStale('kg_summaries')) fetchSummaries()
-    if (isStale('kg_communities')) fetchCommunities()
-  }, [fetchSummaries, fetchCommunities, isStale])
-
   const handleCommunityExpand = (id: string) => {
-    if (expandedCommunity === id) {
-      setExpandedCommunity(null)
-    } else {
-      setExpandedCommunity(id)
-      fetchCommunityDetail(id)
-    }
+    setExpandedCommunity(expandedCommunity === id ? null : id)
   }
 
   const toggleSection = useCallback((key: string) => {
@@ -608,24 +585,20 @@ export default function KgExplorerPanel() {
     })
   }, [])
 
-  const handleCommunityNav = useCallback(
-    (communityId: string) => {
-      setCollapsedSections((prev) => {
-        const next = new Set(prev)
-        next.delete('communities')
-        return next
+  const handleCommunityNav = useCallback((communityId: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev)
+      next.delete('communities')
+      return next
+    })
+    setExpandedCommunity(communityId)
+    setTimeout(() => {
+      communitySectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
       })
-      setExpandedCommunity(communityId)
-      fetchCommunityDetail(communityId)
-      setTimeout(() => {
-        communitySectionRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        })
-      }, 100)
-    },
-    [fetchCommunityDetail],
-  )
+    }, 100)
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -634,7 +607,7 @@ export default function KgExplorerPanel() {
         <LayerHeader
           color="var(--peach)"
           label="社群摘要 (L2)"
-          count={kg_summaries.length}
+          count={summaries.length}
           countUnit="條"
           collapsed={collapsedSections.has('summaries')}
           onToggle={() => toggleSection('summaries')}
@@ -642,26 +615,26 @@ export default function KgExplorerPanel() {
         />
 
         {!collapsedSections.has('summaries') &&
-          (kg_loading && kg_summaries.length === 0 ? (
+          (summariesLoading && summaries.length === 0 ? (
             <div className="flex justify-center py-6">
               <div
                 className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
                 style={{ borderColor: 'var(--peach)', borderTopColor: 'transparent' }}
               />
             </div>
-          ) : kg_summaries.length === 0 ? (
+          ) : summaries.length === 0 ? (
             <p className="text-sm py-4" style={{ color: 'var(--subtext0)' }}>
               尚未產生社群摘要
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {kg_summaries.map((s) => (
+              {summaries.map((s) => (
                 <CommunitySummaryCard
                   key={s.id}
                   summary={s}
                   expanded={expandedSummary === s.id}
                   onExpand={() => setExpandedSummary(expandedSummary === s.id ? null : s.id)}
-                  relatedCommunity={kg_communities.find((c) => c.id === s.community_id)}
+                  relatedCommunity={communities.find((c) => c.id === s.community_id)}
                   onCommunityNav={handleCommunityNav}
                 />
               ))}
@@ -674,7 +647,7 @@ export default function KgExplorerPanel() {
         <LayerHeader
           color="var(--blue)"
           label="知識社群 (L1)"
-          count={kg_communities.length}
+          count={communities.length}
           countUnit="個"
           collapsed={collapsedSections.has('communities')}
           onToggle={() => toggleSection('communities')}
@@ -682,19 +655,19 @@ export default function KgExplorerPanel() {
         />
 
         {!collapsedSections.has('communities') &&
-          (kg_communities.length === 0 ? (
+          (communities.length === 0 ? (
             <p className="text-sm py-4" style={{ color: 'var(--subtext0)' }}>
               尚未產生知識社群
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {kg_communities.map((c) => (
+              {communities.map((c) => (
                 <CommunityCard
                   key={c.id}
                   community={c}
                   expanded={expandedCommunity === c.id}
                   onExpand={() => handleCommunityExpand(c.id)}
-                  detail={expandedCommunity === c.id ? kg_selectedCommunity : null}
+                  detail={expandedCommunity === c.id ? selectedCommunityDetail ?? null : null}
                 />
               ))}
             </div>
@@ -706,7 +679,7 @@ export default function KgExplorerPanel() {
         <LayerHeader
           color="var(--teal)"
           label="知識三元組 (L0)"
-          count={kg_triplesTotal}
+          count={triplesTotal}
           countUnit="筆"
           collapsed={collapsedSections.has('triples')}
           onToggle={() => toggleSection('triples')}
