@@ -33,12 +33,19 @@ async def _model_unloader_loop():
     except ImportError:
         kokoro = None
 
+    try:
+        from engines import f5_tts
+    except ImportError:
+        f5_tts = None
+
     while True:
         await asyncio.sleep(60)
         if kokoro and kokoro.is_idle():
             kokoro.unload_model()
         if qwen3_tts.is_idle():
             qwen3_tts.unload_model()
+        if f5_tts and f5_tts.is_idle():
+            f5_tts.unload_model()
 
 
 @asynccontextmanager

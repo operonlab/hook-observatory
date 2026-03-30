@@ -45,15 +45,17 @@ dotclaude
 # Worktrees
 .worktrees/
 
+# Checkpoints (session state snapshots)
+.checkpoints/
+
 # Data (runtime state, not source code)
 data/
 
 # Outputs (skill/script working artifacts, not source code)
 outputs/
 
-# Lab (POC experiments) - relaxed rules
-lab/*/outputs/*.tmp
-lab/*/outputs/*.bin
+# Lab (POC experiments) - third-party clones, not tracked
+lab/
 
 # External / standalone
 clients/

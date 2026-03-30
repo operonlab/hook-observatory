@@ -1,8 +1,19 @@
-"""TTS Engine Registry — Strategy pattern for text-to-speech backends."""
+"""TTS Engine Registry — Strategy pattern for text-to-speech backends.
+
+Device capability detection:
+- MLX engines (qwen3-tts, kokoro): only load on Apple Silicon
+- Torch-MPS engines (f5-tts): only load when torch + MPS available
+- Torch-CUDA engines (cosyvoice, gpt-sovits): only load when torch + CUDA available
+- Subprocess bridges (index-tts): always register, fail gracefully at runtime
+"""
 
 from __future__ import annotations
 
+import logging
+import platform
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class TTSEngine(Protocol):
@@ -35,6 +46,48 @@ class TTSEngine(Protocol):
 
 ENGINES: dict[str, TTSEngine] = {}
 
+# --- Device capability detection (checked once at import) ---
+
+_HAS_MLX = False
+_HAS_TORCH_MPS = False
+_HAS_TORCH_CUDA = False
+
+# MLX: Apple Silicon only
+if platform.machine() == "arm64" and platform.system() == "Darwin":
+    try:
+        import mlx.core  # noqa: F401
+
+        _HAS_MLX = True
+    except ImportError:
+        pass
+
+# Torch: check MPS and CUDA
+try:
+    import torch
+
+    _HAS_TORCH_MPS = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    _HAS_TORCH_CUDA = torch.cuda.is_available()
+except ImportError:
+    pass
+
+# Engines that perform best with Simplified Chinese input (all mainland China models)
+_SIMPLIFIED_CHINESE_ENGINES = {"f5-tts", "index-tts", "cosyvoice", "gpt-sovits", "qwen3-tts"}
+
+_t2s = None
+
+
+def to_simplified(text: str) -> str:
+    """Convert Traditional Chinese to Simplified for mainland TTS engines."""
+    global _t2s
+    if _t2s is None:
+        try:
+            from opencc import OpenCC
+
+            _t2s = OpenCC("t2s")
+        except ImportError:
+            return text
+    return _t2s.convert(text)
+
 
 def register(name: str):
     """Decorator to register an engine implementation."""
@@ -54,13 +107,46 @@ def get_engine(name: str = "apple") -> TTSEngine:
     return ENGINES[name]
 
 
-# Auto-import engines to trigger registration
+# ── Always-available engines ──
 from . import apple as _apple  # noqa: F401, E402
 from . import elevenlabs_api as _elevenlabs  # noqa: F401, E402
-from . import qwen3_tts as _qwen3_tts  # noqa: F401, E402
 
-# Kokoro: optional — requires misaki+phonemizer+espeak (dependency chain unstable)
+# ── MLX engines (Apple Silicon only) ──
+if _HAS_MLX:
+    from . import qwen3_tts as _qwen3_tts  # noqa: F401
+
+    try:
+        from . import kokoro as _kokoro  # noqa: F401
+    except ImportError:
+        pass
+else:
+    logger.info("MLX not available — skipping qwen3-tts, kokoro")
+
+# ── Torch-MPS engines (Mac with MPS) ──
+if _HAS_TORCH_MPS or _HAS_TORCH_CUDA:
+    try:
+        from . import f5_tts as _f5_tts  # noqa: F401
+    except ImportError:
+        pass
+else:
+    logger.info("No torch GPU (MPS/CUDA) — skipping f5-tts")
+
+# ── Torch-CUDA engines (GPU server only) ──
+if _HAS_TORCH_CUDA:
+    try:
+        from . import cosyvoice as _cosyvoice  # noqa: F401
+    except ImportError:
+        pass
+else:
+    logger.info("No CUDA — skipping cosyvoice (MPS incompatible)")
+
+# ── Subprocess bridge engines (always register, runtime check) ──
 try:
-    from . import kokoro as _kokoro  # noqa: F401
+    from . import index_tts as _index_tts  # noqa: F401
+except ImportError:
+    pass
+
+try:
+    from . import gpt_sovits as _gpt_sovits  # noqa: F401
 except ImportError:
     pass

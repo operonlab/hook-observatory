@@ -88,7 +88,10 @@ class Qwen3TTSEngine:
             import numpy as np
             import soundfile as sf
 
+            from . import to_simplified
+
             out_path = output_path or tempfile.mktemp(suffix=".wav", prefix="tts_qwen3_")
+            text = to_simplified(text)
 
             # Workaround: split long text manually (split_pattern bug)
             chunks = self._split_text(text, max_chars=200)
