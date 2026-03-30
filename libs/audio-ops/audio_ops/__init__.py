@@ -25,10 +25,12 @@ import logging
 import os
 import re
 import tempfile
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+import numpy as np
 import soundfile as sf
 
 logger = logging.getLogger(__name__)
@@ -77,10 +79,49 @@ class AudioOp(Protocol):
 
 
 class AudioPipeline:
-    """Composable operator chain with static key validation."""
+    """Composable operator chain with static key validation.
+
+    RxJS-style creation + pipe + execute:
+        AudioPipeline.from_file("a.wav").pipe(DenoiseOp(), EmotionOp()).execute()
+        AudioPipeline.of(audio, sr).pipe(NormalizeOp()).execute()
+    """
 
     def __init__(self) -> None:
         self._ops: list[AudioOp] = []
+        self._initial_ctx: dict[str, Any] | None = None
+
+    # ── Creation (RxJS: of / from) ───────────────────────────────────────
+
+    @classmethod
+    def of(cls, audio: np.ndarray, sample_rate: int, **extra) -> AudioPipeline:
+        """of() — wrap in-memory audio array into a pipeline."""
+        p = cls()
+        if audio.ndim > 1:
+            audio = audio[:, 0]
+        p._initial_ctx = {
+            "audio": audio,
+            "sample_rate": int(sample_rate),
+            **extra,
+        }
+        return p
+
+    @classmethod
+    def from_file(cls, path: str | Path, **extra) -> AudioPipeline:
+        """from() — read audio file into a pipeline."""
+        path = str(path)
+        audio, sr = sf.read(path, dtype="float32")
+        if audio.ndim > 1:
+            audio = audio[:, 0]
+        p = cls()
+        p._initial_ctx = {
+            "audio": audio,
+            "sample_rate": int(sr),
+            "source_path": path,
+            **extra,
+        }
+        return p
+
+    # ── Operators ────────────────────────────────────────────────────────
 
     def pipe(self, *ops: AudioOp) -> AudioPipeline:
         self._ops.extend(ops)
@@ -88,6 +129,8 @@ class AudioPipeline:
 
     def compile(self, initial_keys: set[str] | None = None) -> list[str]:
         available = set(initial_keys) if initial_keys else set()
+        if self._initial_ctx:
+            available |= set(self._initial_ctx.keys())
         missing: list[str] = []
         for op in self._ops:
             for key in op.input_keys:
@@ -97,14 +140,21 @@ class AudioPipeline:
                 available.add(key)
         return missing
 
-    def execute(self, ctx: dict[str, Any]) -> dict[str, Any]:
+    def execute(self, ctx: dict[str, Any] | None = None) -> dict[str, Any]:
+        ctx = ctx if ctx is not None else (self._initial_ctx or {})
         for op in self._ops:
             ctx = op(ctx)
         return ctx
 
     def __repr__(self) -> str:
+        source = ""
+        if self._initial_ctx and "source_path" in self._initial_ctx:
+            source = f"from({self._initial_ctx['source_path']}) -> "
+        elif self._initial_ctx:
+            sr = self._initial_ctx.get("sample_rate", "?")
+            source = f"of(sr={sr}) -> "
         names = " -> ".join(op.name for op in self._ops)
-        return f"AudioPipeline({names})"
+        return f"AudioPipeline({source}{names})"
 
     def __len__(self) -> int:
         return len(self._ops)
@@ -153,6 +203,151 @@ class ParallelOp:
                 if key not in ctx or key in {k for op in self._ops for k in op.output_keys}:
                     merged[key] = result[key]
         return merged
+
+    def __repr__(self) -> str:
+        return self._name
+
+
+# ── TapOp (RxJS: tap — side-effect without modifying ctx) ────────────────
+
+
+class TapOp:
+    """Side-effect observer — runs a callback without modifying the ctx.
+
+    RxJS equivalent: tap(x => console.log(x))
+
+    Usage:
+        pipeline.pipe(
+            DenoiseOp(),
+            TapOp(lambda ctx: logger.info("after denoise: %s", ctx.keys())),
+            EmotionOp(),
+        )
+    """
+
+    name = "tap"
+    input_keys: tuple[str, ...] = ()
+    output_keys: tuple[str, ...] = ()
+
+    def __init__(self, fn: Callable[[dict[str, Any]], None], name: str = "tap"):
+        self._fn = fn
+        self.name = name  # type: ignore[assignment]
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        self._fn(ctx)
+        return ctx
+
+    def __repr__(self) -> str:
+        return self.name
+
+
+# ── ConditionalOp (RxJS: iif / filter — branch on predicate) ────────────
+
+
+class ConditionalOp:
+    """Conditional branch — run then_op if predicate is true, else else_op.
+
+    RxJS equivalent: iif(() => condition, thenObs$, elseObs$)
+
+    Usage:
+        ConditionalOp(
+            lambda ctx: "diarization_segments" in ctx,
+            then_op=EmotionOp(),   # per-segment
+            else_op=NormalizeOp(), # fallback
+        )
+    """
+
+    def __init__(
+        self,
+        predicate: Callable[[dict[str, Any]], bool],
+        then_op: AudioOp,
+        else_op: AudioOp | None = None,
+        *,
+        name: str = "conditional",
+    ):
+        self._predicate = predicate
+        self._then_op = then_op
+        self._else_op = else_op
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        keys: set[str] = set(self._then_op.input_keys)
+        if self._else_op:
+            keys |= set(self._else_op.input_keys)
+        return tuple(sorted(keys))
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        keys: set[str] = set(self._then_op.output_keys)
+        if self._else_op:
+            keys |= set(self._else_op.output_keys)
+        return tuple(sorted(keys))
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        if self._predicate(ctx):
+            return self._then_op(ctx)
+        elif self._else_op:
+            return self._else_op(ctx)
+        return ctx
+
+    def __repr__(self) -> str:
+        then_name = self._then_op.name
+        else_name = self._else_op.name if self._else_op else "pass"
+        return f"{self._name}({then_name}|{else_name})"
+
+
+# ── CatchOp (RxJS: catchError — error recovery) ─────────────────────────
+
+
+class CatchOp:
+    """Error recovery wrapper — catches exceptions and runs fallback.
+
+    RxJS equivalent: catchError(err => of(fallbackValue))
+
+    Usage:
+        CatchOp(EmotionOp(), fallback_ctx={"emotions": []})
+        CatchOp(EmotionOp(), handler=lambda ctx, e: {**ctx, "emotions": []})
+    """
+
+    def __init__(
+        self,
+        op: AudioOp,
+        *,
+        fallback_ctx: dict[str, Any] | None = None,
+        handler: Callable[[dict, Exception], dict] | None = None,
+        name: str | None = None,
+    ):
+        self._op = op
+        self._fallback = fallback_ctx
+        self._handler = handler
+        self._name = name or f"catch({op.name})"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return self._op.input_keys
+
+    @property
+    def output_keys(self) -> tuple[str, ...]:
+        return self._op.output_keys
+
+    def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self._op(ctx)
+        except Exception as e:
+            logger.warning("CatchOp: %s failed: %s", self._op.name, e)
+            if self._handler:
+                return self._handler(ctx, e)
+            if self._fallback:
+                return {**ctx, **self._fallback}
+            return ctx
 
     def __repr__(self) -> str:
         return self._name
