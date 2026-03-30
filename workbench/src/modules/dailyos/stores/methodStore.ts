@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { devtools } from 'zustand/middleware'
 import { configApi, methodApi, planApi, recurringApi, spanApi, taskGroupApi } from '../api'
 import type {
   ActivitySpan,
@@ -175,480 +176,437 @@ const initialState = {
   error: null as string | null,
 }
 
-export const useMethodStore = create<MethodStore>()((set, get) => ({
-  ...initialState,
+function optimisticPlanUpdate(
+  get: () => MethodStore,
+  set: (partial: Partial<MethodStore>) => void,
+  transform: (items: PlanItem[]) => PlanItem[],
+) {
+  const { currentPlan, planItems } = get()
+  if (!currentPlan) return
+  const updatedItems = transform(planItems)
+  set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
+  planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
+    console.error('Operation failed:', err)
+    set({ planItems: currentPlan.items, currentPlan })
+  })
+}
 
-  fetchActiveMethod: async () => {
-    set({ loading: true, error: null })
-    try {
-      const selections = await configApi.getActive().catch(() => [] as MethodSelection[])
-      const primary = selections.length > 0 ? selections[0]?.method || null : null
-      set({
-        activeSelections: selections,
-        primaryMethod: primary,
-        layoutType: primary?.layout_type || 'list',
-        compositeConfig: buildCompositeConfig(selections),
-      })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to fetch active method',
-      })
-    } finally {
-      set({ loading: false })
-    }
-  },
+export const useMethodStore = create<MethodStore>()(
+  devtools(
+    (set, get) => ({
+      ...initialState,
 
-  fetchPlan: async (date?: string) => {
-    set({ planLoading: true, error: null })
-    try {
-      const todayFallback = new Date().toISOString().slice(0, 10)
-      const plan = date
-        ? await planApi.forDate(date).catch(() => null)
-        : await planApi.today().catch(() => null)
-      set({
-        currentDate: date || plan?.plan_date || todayFallback,
-        currentPlan: plan,
-        planItems: plan?.items || [],
-      })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to fetch plan',
-      })
-    } finally {
-      set({ planLoading: false })
-    }
-  },
+      fetchActiveMethod: async () => {
+        set({ loading: true, error: null })
+        try {
+          const selections = await configApi.getActive().catch(() => [] as MethodSelection[])
+          const primary = selections.length > 0 ? selections[0]?.method || null : null
+          set({
+            activeSelections: selections,
+            primaryMethod: primary,
+            layoutType: primary?.layout_type || 'list',
+            compositeConfig: buildCompositeConfig(selections),
+          })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to fetch active method',
+          })
+        } finally {
+          set({ loading: false })
+        }
+      },
 
-  fetchMethods: async (includePresets = true) => {
-    set({ methodsLoading: true, error: null })
-    try {
-      const result = await methodApi.listAll({
-        include_presets: includePresets,
-        page_size: 50,
-      })
-      set({ methods: result.items })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to fetch methods',
-      })
-    } finally {
-      set({ methodsLoading: false })
-    }
-  },
+      fetchPlan: async (date?: string) => {
+        set({ planLoading: true, error: null })
+        try {
+          const todayFallback = new Date().toISOString().slice(0, 10)
+          const plan = date
+            ? await planApi.forDate(date).catch(() => null)
+            : await planApi.today().catch(() => null)
+          set({
+            currentDate: date || plan?.plan_date || todayFallback,
+            currentPlan: plan,
+            planItems: plan?.items || [],
+          })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to fetch plan',
+          })
+        } finally {
+          set({ planLoading: false })
+        }
+      },
 
-  setPrimary: (methodId: string) => {
-    const { activeSelections } = get()
-    const sel = activeSelections.find((s) => s.method_id === methodId)
-    if (!sel?.method) return
-    const method = sel.method
-    // Reorder: move this selection to front so it becomes primary
-    const reordered = [sel, ...activeSelections.filter((s) => s.id !== sel.id)]
-    set({
-      activeSelections: reordered,
-      primaryMethod: method,
-      layoutType: method.layout_type || 'list',
-      compositeConfig: buildCompositeConfig(reordered),
-    })
-  },
+      fetchMethods: async (includePresets = true) => {
+        set({ methodsLoading: true, error: null })
+        try {
+          const result = await methodApi.listAll({
+            include_presets: includePresets,
+            page_size: 50,
+          })
+          set({ methods: result.items })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to fetch methods',
+          })
+        } finally {
+          set({ methodsLoading: false })
+        }
+      },
 
-  activateMethod: async (methodId: string, overrides?: Record<string, unknown>) => {
-    set({ loading: true, error: null })
-    try {
-      await configApi.activate({ method_id: methodId, overrides })
-      await get().fetchActiveMethod()
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to activate method',
-        loading: false,
-      })
-    }
-  },
+      setPrimary: (methodId: string) => {
+        const { activeSelections } = get()
+        const sel = activeSelections.find((s) => s.method_id === methodId)
+        if (!sel?.method) return
+        const method = sel.method
+        // Reorder: move this selection to front so it becomes primary
+        const reordered = [sel, ...activeSelections.filter((s) => s.id !== sel.id)]
+        set({
+          activeSelections: reordered,
+          primaryMethod: method,
+          layoutType: method.layout_type || 'list',
+          compositeConfig: buildCompositeConfig(reordered),
+        })
+      },
 
-  addItem: (title: string, extra?: Partial<PlanItem>) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const maxOrder = planItems.reduce((max, i) => Math.max(max, i.sort_order), 0)
-    const newItem: PlanItem = {
-      id: crypto.randomUUID(),
-      title,
-      status: 'pending',
-      sort_order: maxOrder + 1,
-      ...extra,
-    }
-    const updatedItems = [...planItems, newItem]
-    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
+      activateMethod: async (methodId: string, overrides?: Record<string, unknown>) => {
+        set({ loading: true, error: null })
+        try {
+          await configApi.activate({ method_id: methodId, overrides })
+          await get().fetchActiveMethod()
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to activate method',
+            loading: false,
+          })
+        }
+      },
 
-  removeItem: (itemId: string) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const updatedItems = planItems.filter((i) => i.id !== itemId)
-    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
-
-  editItem: (itemId: string, updates: Partial<PlanItem>) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, ...updates } : i))
-    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
-
-  reorderItem: (itemId: string, direction: 'up' | 'down') => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const sorted = [...planItems].sort((a, b) => a.sort_order - b.sort_order)
-    const idx = sorted.findIndex((i) => i.id === itemId)
-    if (idx < 0) return
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= sorted.length) return
-    const temp = sorted[idx].sort_order
-    sorted[idx] = { ...sorted[idx], sort_order: sorted[swapIdx].sort_order }
-    sorted[swapIdx] = { ...sorted[swapIdx], sort_order: temp }
-    set({ planItems: sorted, currentPlan: { ...currentPlan, items: sorted } })
-    planApi.update(currentPlan.id, { items: sorted }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
-
-  reorderItems: (orderedIds: string[]) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const updatedItems = planItems.map((item) => {
-      const newOrder = orderedIds.indexOf(item.id)
-      return newOrder >= 0 ? { ...item, sort_order: newOrder } : item
-    })
-    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
-
-  toggleItem: (itemId: string) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const updatedItems = planItems.map((i) =>
-      i.id === itemId
-        ? {
-            ...i,
-            status: (i.status === 'done' ? 'pending' : 'done') as PlanItem['status'],
+      addItem: (title: string, extra?: Partial<PlanItem>) => {
+        optimisticPlanUpdate(get, set, (items) => {
+          const maxOrder = items.reduce((max, i) => Math.max(max, i.sort_order), 0)
+          const newItem: PlanItem = {
+            id: crypto.randomUUID(),
+            title,
+            status: 'pending',
+            sort_order: maxOrder + 1,
+            ...extra,
           }
-        : i,
-    )
-    set({
-      planItems: updatedItems,
-      currentPlan: { ...currentPlan, items: updatedItems },
-    })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
+          return [...items, newItem]
+        })
+      },
 
-  assignCategory: (itemId: string, categoryId: string) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const updatedItems = planItems.map((i) =>
-      i.id === itemId ? { ...i, category: categoryId || undefined } : i,
-    )
-    set({
-      planItems: updatedItems,
-      currentPlan: { ...currentPlan, items: updatedItems },
-    })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
+      removeItem: (itemId: string) => {
+        optimisticPlanUpdate(get, set, (items) => items.filter((i) => i.id !== itemId))
+      },
 
-  scheduleItem: (itemId: string, time: string | undefined) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const updatedItems = planItems.map((i) =>
-      i.id === itemId ? { ...i, scheduled_time: time } : i,
-    )
-    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
+      editItem: (itemId: string, updates: Partial<PlanItem>) => {
+        optimisticPlanUpdate(get, set, (items) =>
+          items.map((i) => (i.id === itemId ? { ...i, ...updates } : i)),
+        )
+      },
 
-  moveRight: (itemId: string) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const item = planItems.find((i) => i.id === itemId)
-    if (!item) return
-    let updatedItems: PlanItem[]
-    if (item.category === 'doing') {
-      updatedItems = planItems.map((i) =>
-        i.id === itemId ? { ...i, status: 'done' as PlanItem['status'], category: undefined } : i,
-      )
-    } else {
-      updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, category: 'doing' } : i))
-    }
-    set({
-      planItems: updatedItems,
-      currentPlan: { ...currentPlan, items: updatedItems },
-    })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
+      reorderItem: (itemId: string, direction: 'up' | 'down') => {
+        optimisticPlanUpdate(get, set, (items) => {
+          const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order)
+          const idx = sorted.findIndex((i) => i.id === itemId)
+          if (idx < 0) return items
+          const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+          if (swapIdx < 0 || swapIdx >= sorted.length) return items
+          const temp = sorted[idx].sort_order
+          sorted[idx] = { ...sorted[idx], sort_order: sorted[swapIdx].sort_order }
+          sorted[swapIdx] = { ...sorted[swapIdx], sort_order: temp }
+          return sorted
+        })
+      },
 
-  moveLeft: (itemId: string) => {
-    const { currentPlan, planItems } = get()
-    if (!currentPlan) return
-    const item = planItems.find((i) => i.id === itemId)
-    if (!item) return
-    let updatedItems: PlanItem[]
-    if (item.status === 'done') {
-      // Undo done → back to doing
-      updatedItems = planItems.map((i) =>
-        i.id === itemId ? { ...i, status: 'pending' as PlanItem['status'], category: 'doing' } : i,
-      )
-    } else if (item.category === 'doing') {
-      // Doing → todo (remove category)
-      updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
-    } else {
-      updatedItems = planItems.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
-    }
-    set({ planItems: updatedItems, currentPlan: { ...currentPlan, items: updatedItems } })
-    planApi.update(currentPlan.id, { items: updatedItems }).catch((err) => {
-      console.error('Operation failed:', err)
-      set({ planItems: currentPlan.items, currentPlan })
-    })
-  },
+      reorderItems: (orderedIds: string[]) => {
+        optimisticPlanUpdate(get, set, (items) =>
+          items.map((item) => {
+            const newOrder = orderedIds.indexOf(item.id)
+            return newOrder >= 0 ? { ...item, sort_order: newOrder } : item
+          }),
+        )
+      },
 
-  fetchRecurringItems: async () => {
-    set({ recurringLoading: true })
-    try {
-      const items = await recurringApi.list()
-      set({ recurringItems: items })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to fetch recurring items',
-      })
-    } finally {
-      set({ recurringLoading: false })
-    }
-  },
+      toggleItem: (itemId: string) => {
+        optimisticPlanUpdate(get, set, (items) =>
+          items.map((i) =>
+            i.id === itemId
+              ? {
+                  ...i,
+                  status: (i.status === 'done' ? 'pending' : 'done') as PlanItem['status'],
+                }
+              : i,
+          ),
+        )
+      },
 
-  addRecurringItem: async (data: RecurringItemCreate) => {
-    try {
-      const item = await recurringApi.create(data)
-      set({ recurringItems: [...get().recurringItems, item] })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to add recurring item',
-      })
-    }
-  },
+      assignCategory: (itemId: string, categoryId: string) => {
+        optimisticPlanUpdate(get, set, (items) =>
+          items.map((i) => (i.id === itemId ? { ...i, category: categoryId || undefined } : i)),
+        )
+      },
 
-  updateRecurringItem: async (id: string, data: RecurringItemUpdate) => {
-    const prev = get().recurringItems
-    set({
-      recurringItems: prev.map((i) => (i.id === id ? { ...i, ...data } : i)),
-    })
-    try {
-      const updated = await recurringApi.update(id, data)
-      set({
-        recurringItems: get().recurringItems.map((i) => (i.id === id ? updated : i)),
-      })
-    } catch (err) {
-      set({
-        recurringItems: prev,
-        error: err instanceof Error ? err.message : 'Failed to update recurring item',
-      })
-    }
-  },
+      scheduleItem: (itemId: string, time: string | undefined) => {
+        optimisticPlanUpdate(get, set, (items) =>
+          items.map((i) => (i.id === itemId ? { ...i, scheduled_time: time } : i)),
+        )
+      },
 
-  removeRecurringItem: async (id: string) => {
-    const prev = get().recurringItems
-    set({ recurringItems: prev.filter((i) => i.id !== id) })
-    try {
-      await recurringApi.remove(id)
-    } catch (err) {
-      set({
-        recurringItems: prev,
-        error: err instanceof Error ? err.message : 'Failed to remove recurring item',
-      })
-    }
-  },
+      moveRight: (itemId: string) => {
+        optimisticPlanUpdate(get, set, (items) => {
+          const item = items.find((i) => i.id === itemId)
+          if (!item) return items
+          if (item.category === 'doing') {
+            return items.map((i) =>
+              i.id === itemId
+                ? { ...i, status: 'done' as PlanItem['status'], category: undefined }
+                : i,
+            )
+          }
+          return items.map((i) => (i.id === itemId ? { ...i, category: 'doing' } : i))
+        })
+      },
 
-  transitionPlan: async (status: string) => {
-    const { currentPlan } = get()
-    if (!currentPlan) return
-    try {
-      const updated = await planApi.transition(currentPlan.id, status)
-      set({ currentPlan: updated, planItems: updated.items })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to transition plan',
-      })
-    }
-  },
+      moveLeft: (itemId: string) => {
+        optimisticPlanUpdate(get, set, (items) => {
+          const item = items.find((i) => i.id === itemId)
+          if (!item) return items
+          if (item.status === 'done') {
+            // Undo done → back to doing
+            return items.map((i) =>
+              i.id === itemId
+                ? { ...i, status: 'pending' as PlanItem['status'], category: 'doing' }
+                : i,
+            )
+          } else if (item.category === 'doing') {
+            // Doing → todo (remove category)
+            return items.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
+          } else {
+            return items.map((i) => (i.id === itemId ? { ...i, category: undefined } : i))
+          }
+        })
+      },
 
-  completeReview: async (reflection: string) => {
-    const { currentPlan } = get()
-    if (!currentPlan) return
-    try {
-      await planApi.update(currentPlan.id, { reflection })
-      const updated = await planApi.transition(currentPlan.id, 'completed')
-      set({ currentPlan: updated, planItems: updated.items })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to complete review',
-      })
-    }
-  },
+      fetchRecurringItems: async () => {
+        set({ recurringLoading: true })
+        try {
+          const items = await recurringApi.list()
+          set({ recurringItems: items })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to fetch recurring items',
+          })
+        } finally {
+          set({ recurringLoading: false })
+        }
+      },
 
-  updatePlanItems: async (items: PlanItem[]) => {
-    const { currentPlan } = get()
-    if (!currentPlan) return
-    set({ planItems: items, currentPlan: { ...currentPlan, items } })
-    try {
-      await planApi.update(currentPlan.id, { items })
-    } catch (err) {
-      set({ planItems: currentPlan.items, currentPlan })
-      set({
-        error: err instanceof Error ? err.message : 'Failed to update plan items',
-      })
-    }
-  },
+      addRecurringItem: async (data: RecurringItemCreate) => {
+        try {
+          const item = await recurringApi.create(data)
+          set({ recurringItems: [...get().recurringItems, item] })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to add recurring item',
+          })
+        }
+      },
 
-  fetchTaskGroups: async () => {
-    set({ taskGroupsLoading: true })
-    try {
-      const groups = await taskGroupApi.list()
-      set({ taskGroups: groups })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to fetch task groups',
-      })
-    } finally {
-      set({ taskGroupsLoading: false })
-    }
-  },
+      updateRecurringItem: async (id: string, data: RecurringItemUpdate) => {
+        const prev = get().recurringItems
+        set({
+          recurringItems: prev.map((i) => (i.id === id ? { ...i, ...data } : i)),
+        })
+        try {
+          const updated = await recurringApi.update(id, data)
+          set({
+            recurringItems: get().recurringItems.map((i) => (i.id === id ? updated : i)),
+          })
+        } catch (err) {
+          set({
+            recurringItems: prev,
+            error: err instanceof Error ? err.message : 'Failed to update recurring item',
+          })
+        }
+      },
 
-  addTaskGroup: async (data: TaskGroupCreate) => {
-    try {
-      const group = await taskGroupApi.create(data)
-      set({ taskGroups: [...get().taskGroups, group] })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to create task group',
-      })
-    }
-  },
+      removeRecurringItem: async (id: string) => {
+        const prev = get().recurringItems
+        set({ recurringItems: prev.filter((i) => i.id !== id) })
+        try {
+          await recurringApi.remove(id)
+        } catch (err) {
+          set({
+            recurringItems: prev,
+            error: err instanceof Error ? err.message : 'Failed to remove recurring item',
+          })
+        }
+      },
 
-  updateTaskGroup: async (id: string, data: TaskGroupUpdate) => {
-    const prev = get().taskGroups
-    set({ taskGroups: prev.map((g) => (g.id === id ? { ...g, ...data } : g)) })
-    try {
-      const updated = await taskGroupApi.update(id, data)
-      set({ taskGroups: get().taskGroups.map((g) => (g.id === id ? updated : g)) })
-    } catch (err) {
-      set({
-        taskGroups: prev,
-        error: err instanceof Error ? err.message : 'Failed to update task group',
-      })
-    }
-  },
+      transitionPlan: async (status: string) => {
+        const { currentPlan } = get()
+        if (!currentPlan) return
+        try {
+          const updated = await planApi.transition(currentPlan.id, status)
+          set({ currentPlan: updated, planItems: updated.items })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to transition plan',
+          })
+        }
+      },
 
-  removeTaskGroup: async (id: string) => {
-    const prev = get().taskGroups
-    set({ taskGroups: prev.filter((g) => g.id !== id) })
-    try {
-      await taskGroupApi.remove(id)
-    } catch (err) {
-      set({
-        taskGroups: prev,
-        error: err instanceof Error ? err.message : 'Failed to remove task group',
-      })
-    }
-  },
+      completeReview: async (reflection: string) => {
+        const { currentPlan } = get()
+        if (!currentPlan) return
+        try {
+          await planApi.update(currentPlan.id, { reflection })
+          const updated = await planApi.transition(currentPlan.id, 'completed')
+          set({ currentPlan: updated, planItems: updated.items })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to complete review',
+          })
+        }
+      },
 
-  toggleGroupVisibility: (groupId: string) => {
-    const hidden = new Set(get().hiddenGroupIds)
-    if (hidden.has(groupId)) {
-      hidden.delete(groupId)
-    } else {
-      hidden.add(groupId)
-    }
-    saveHiddenGroupIds(hidden)
-    set({ hiddenGroupIds: hidden })
-  },
+      updatePlanItems: async (items: PlanItem[]) => {
+        const { currentPlan } = get()
+        if (!currentPlan) return
+        set({ planItems: items, currentPlan: { ...currentPlan, items } })
+        try {
+          await planApi.update(currentPlan.id, { items })
+        } catch (err) {
+          set({ planItems: currentPlan.items, currentPlan })
+          set({
+            error: err instanceof Error ? err.message : 'Failed to update plan items',
+          })
+        }
+      },
 
-  fetchActivitySpans: async (dateFrom?: string, dateTo?: string) => {
-    set({ spansLoading: true })
-    try {
-      const spans = await spanApi.list({ date_from: dateFrom, date_to: dateTo })
-      set({ activitySpans: spans })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to fetch activity spans',
-      })
-    } finally {
-      set({ spansLoading: false })
-    }
-  },
+      fetchTaskGroups: async () => {
+        set({ taskGroupsLoading: true })
+        try {
+          const groups = await taskGroupApi.list()
+          set({ taskGroups: groups })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to fetch task groups',
+          })
+        } finally {
+          set({ taskGroupsLoading: false })
+        }
+      },
 
-  addActivitySpan: async (data: ActivitySpanCreate) => {
-    try {
-      const span = await spanApi.create(data)
-      set({ activitySpans: [...get().activitySpans, span] })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to add activity span',
-      })
-    }
-  },
+      addTaskGroup: async (data: TaskGroupCreate) => {
+        try {
+          const group = await taskGroupApi.create(data)
+          set({ taskGroups: [...get().taskGroups, group] })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to create task group',
+          })
+        }
+      },
 
-  updateActivitySpan: async (id: string, data: ActivitySpanUpdate) => {
-    const prev = get().activitySpans
-    set({
-      activitySpans: prev.map((s) => (s.id === id ? { ...s, ...data } : s)),
-    })
-    try {
-      const updated = await spanApi.update(id, data)
-      set({
-        activitySpans: get().activitySpans.map((s) => (s.id === id ? updated : s)),
-      })
-    } catch (err) {
-      set({
-        activitySpans: prev,
-        error: err instanceof Error ? err.message : 'Failed to update activity span',
-      })
-    }
-  },
+      updateTaskGroup: async (id: string, data: TaskGroupUpdate) => {
+        const prev = get().taskGroups
+        set({ taskGroups: prev.map((g) => (g.id === id ? { ...g, ...data } : g)) })
+        try {
+          const updated = await taskGroupApi.update(id, data)
+          set({ taskGroups: get().taskGroups.map((g) => (g.id === id ? updated : g)) })
+        } catch (err) {
+          set({
+            taskGroups: prev,
+            error: err instanceof Error ? err.message : 'Failed to update task group',
+          })
+        }
+      },
 
-  removeActivitySpan: async (id: string) => {
-    const prev = get().activitySpans
-    set({ activitySpans: prev.filter((s) => s.id !== id) })
-    try {
-      await spanApi.remove(id)
-    } catch (err) {
-      set({
-        activitySpans: prev,
-        error: err instanceof Error ? err.message : 'Failed to remove activity span',
-      })
-    }
-  },
+      removeTaskGroup: async (id: string) => {
+        const prev = get().taskGroups
+        set({ taskGroups: prev.filter((g) => g.id !== id) })
+        try {
+          await taskGroupApi.remove(id)
+        } catch (err) {
+          set({
+            taskGroups: prev,
+            error: err instanceof Error ? err.message : 'Failed to remove task group',
+          })
+        }
+      },
 
-  reset: () => set(initialState),
-}))
+      toggleGroupVisibility: (groupId: string) => {
+        const hidden = new Set(get().hiddenGroupIds)
+        if (hidden.has(groupId)) {
+          hidden.delete(groupId)
+        } else {
+          hidden.add(groupId)
+        }
+        saveHiddenGroupIds(hidden)
+        set({ hiddenGroupIds: hidden })
+      },
+
+      fetchActivitySpans: async (dateFrom?: string, dateTo?: string) => {
+        set({ spansLoading: true })
+        try {
+          const spans = await spanApi.list({ date_from: dateFrom, date_to: dateTo })
+          set({ activitySpans: spans })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to fetch activity spans',
+          })
+        } finally {
+          set({ spansLoading: false })
+        }
+      },
+
+      addActivitySpan: async (data: ActivitySpanCreate) => {
+        try {
+          const span = await spanApi.create(data)
+          set({ activitySpans: [...get().activitySpans, span] })
+        } catch (err) {
+          set({
+            error: err instanceof Error ? err.message : 'Failed to add activity span',
+          })
+        }
+      },
+
+      updateActivitySpan: async (id: string, data: ActivitySpanUpdate) => {
+        const prev = get().activitySpans
+        set({
+          activitySpans: prev.map((s) => (s.id === id ? { ...s, ...data } : s)),
+        })
+        try {
+          const updated = await spanApi.update(id, data)
+          set({
+            activitySpans: get().activitySpans.map((s) => (s.id === id ? updated : s)),
+          })
+        } catch (err) {
+          set({
+            activitySpans: prev,
+            error: err instanceof Error ? err.message : 'Failed to update activity span',
+          })
+        }
+      },
+
+      removeActivitySpan: async (id: string) => {
+        const prev = get().activitySpans
+        set({ activitySpans: prev.filter((s) => s.id !== id) })
+        try {
+          await spanApi.remove(id)
+        } catch (err) {
+          set({
+            activitySpans: prev,
+            error: err instanceof Error ? err.message : 'Failed to remove activity span',
+          })
+        }
+      },
+
+      reset: () => set(initialState),
+    }),
+    { name: 'methodStore' },
+  ),
+)

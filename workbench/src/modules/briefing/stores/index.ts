@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { devtools, persist } from 'zustand/middleware'
 import { briefingApi } from '../api/client'
 import type { Analyst, Briefing, BriefingTopic, DailySummary } from '../types'
 
@@ -64,125 +64,128 @@ function todayStr() {
 }
 
 export const useBriefingStore = create<BriefingState>()(
-  persist(
-    (set, get) => ({
-      activePage: 'today',
-      todaySummary: null,
-      todayLoading: false,
-      todayFetchedAt: 0,
-      selectedDate: todayStr(),
+  devtools(
+    persist(
+      (set, get) => ({
+        activePage: 'today',
+        todaySummary: null,
+        todayLoading: false,
+        todayFetchedAt: 0,
+        selectedDate: todayStr(),
 
-      selectedBriefings: [],
-      detailLoading: false,
+        selectedBriefings: [],
+        detailLoading: false,
 
-      briefings: [],
-      briefingsTotal: 0,
-      briefingsPage: 1,
-      briefingsLoading: false,
-      briefingsFetchedAt: 0,
+        briefings: [],
+        briefingsTotal: 0,
+        briefingsPage: 1,
+        briefingsLoading: false,
+        briefingsFetchedAt: 0,
 
-      topics: [],
-      topicsLoading: false,
-      topicsFetchedAt: 0,
-      analysts: [],
-      analystsLoading: false,
-      analystsFetchedAt: 0,
+        topics: [],
+        topicsLoading: false,
+        topicsFetchedAt: 0,
+        analysts: [],
+        analystsLoading: false,
+        analystsFetchedAt: 0,
 
-      runStatus: null,
+        runStatus: null,
 
-      error: null,
+        error: null,
 
-      setActivePage: (page) => set({ activePage: page }),
-      setSelectedDate: (date) => set({ selectedDate: date }),
+        setActivePage: (page) => set({ activePage: page }),
+        setSelectedDate: (date) => set({ selectedDate: date }),
 
-      fetchTodaySummary: async (date: string) => {
-        set({ todayLoading: true, error: null })
-        try {
-          const summary = await briefingApi.getDailySummary(date)
-          set({ todaySummary: summary, todayFetchedAt: Date.now() })
-        } catch (err) {
-          console.error('fetchTodaySummary failed:', err)
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch summary' })
-        } finally {
-          set({ todayLoading: false })
-        }
-      },
+        fetchTodaySummary: async (date: string) => {
+          set({ todayLoading: true, error: null })
+          try {
+            const summary = await briefingApi.getDailySummary(date)
+            set({ todaySummary: summary, todayFetchedAt: Date.now() })
+          } catch (err) {
+            console.error('fetchTodaySummary failed:', err)
+            set({ error: err instanceof Error ? err.message : 'Failed to fetch summary' })
+          } finally {
+            set({ todayLoading: false })
+          }
+        },
 
-      fetchBriefingsByDate: async (date: string) => {
-        set({ detailLoading: true, error: null })
-        try {
-          const result = await briefingApi.getBriefingsByDate(date)
-          set({ selectedBriefings: result })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch briefing' })
-        } finally {
-          set({ detailLoading: false })
-        }
-      },
+        fetchBriefingsByDate: async (date: string) => {
+          set({ detailLoading: true, error: null })
+          try {
+            const result = await briefingApi.getBriefingsByDate(date)
+            set({ selectedBriefings: result })
+          } catch (err) {
+            set({ error: err instanceof Error ? err.message : 'Failed to fetch briefing' })
+          } finally {
+            set({ detailLoading: false })
+          }
+        },
 
-      clearSelectedBriefings: () => set({ selectedBriefings: [] }),
+        clearSelectedBriefings: () => set({ selectedBriefings: [] }),
 
-      fetchBriefings: async (page?: number) => {
-        const p = page ?? get().briefingsPage
-        set({ briefingsLoading: true, error: null, briefingsPage: p })
-        try {
-          const res = await briefingApi.listBriefings(p, 20)
-          set({ briefings: res.items, briefingsTotal: res.total, briefingsFetchedAt: Date.now() })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch briefings' })
-        } finally {
-          set({ briefingsLoading: false })
-        }
-      },
+        fetchBriefings: async (page?: number) => {
+          const p = page ?? get().briefingsPage
+          set({ briefingsLoading: true, error: null, briefingsPage: p })
+          try {
+            const res = await briefingApi.listBriefings(p, 20)
+            set({ briefings: res.items, briefingsTotal: res.total, briefingsFetchedAt: Date.now() })
+          } catch (err) {
+            set({ error: err instanceof Error ? err.message : 'Failed to fetch briefings' })
+          } finally {
+            set({ briefingsLoading: false })
+          }
+        },
 
-      fetchTopics: async () => {
-        set({ topicsLoading: true, error: null })
-        try {
-          const res = await briefingApi.listTopics(1, 100)
-          set({ topics: res.items, topicsFetchedAt: Date.now() })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch topics' })
-        } finally {
-          set({ topicsLoading: false })
-        }
-      },
+        fetchTopics: async () => {
+          set({ topicsLoading: true, error: null })
+          try {
+            const res = await briefingApi.listTopics(1, 100)
+            set({ topics: res.items, topicsFetchedAt: Date.now() })
+          } catch (err) {
+            set({ error: err instanceof Error ? err.message : 'Failed to fetch topics' })
+          } finally {
+            set({ topicsLoading: false })
+          }
+        },
 
-      fetchAnalysts: async () => {
-        set({ analystsLoading: true, error: null })
-        try {
-          const result = await briefingApi.listAnalysts()
-          set({ analysts: result, analystsFetchedAt: Date.now() })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch analysts' })
-        } finally {
-          set({ analystsLoading: false })
-        }
-      },
+        fetchAnalysts: async () => {
+          set({ analystsLoading: true, error: null })
+          try {
+            const result = await briefingApi.listAnalysts()
+            set({ analysts: result, analystsFetchedAt: Date.now() })
+          } catch (err) {
+            set({ error: err instanceof Error ? err.message : 'Failed to fetch analysts' })
+          } finally {
+            set({ analystsLoading: false })
+          }
+        },
 
-      fetchRunStatus: async () => {
-        try {
-          const result = await briefingApi.getRunStatus()
-          set({ runStatus: result })
-        } catch (err) {
-          console.error('fetchRunStatus failed:', err)
-        }
-      },
-    }),
-    {
-      name: 'briefing-cache',
-      partialize: (state) => ({
-        todaySummary: state.todaySummary,
-        todayFetchedAt: state.todayFetchedAt,
-        selectedDate: state.selectedDate,
-        briefings: state.briefings,
-        briefingsTotal: state.briefingsTotal,
-        briefingsFetchedAt: state.briefingsFetchedAt,
-        topics: state.topics,
-        topicsFetchedAt: state.topicsFetchedAt,
-        analysts: state.analysts,
-        analystsFetchedAt: state.analystsFetchedAt,
-        runStatus: state.runStatus,
+        fetchRunStatus: async () => {
+          try {
+            const result = await briefingApi.getRunStatus()
+            set({ runStatus: result })
+          } catch (err) {
+            console.error('fetchRunStatus failed:', err)
+          }
+        },
       }),
-    },
+      {
+        name: 'briefing-cache',
+        partialize: (state) => ({
+          todaySummary: state.todaySummary,
+          todayFetchedAt: state.todayFetchedAt,
+          selectedDate: state.selectedDate,
+          briefings: state.briefings,
+          briefingsTotal: state.briefingsTotal,
+          briefingsFetchedAt: state.briefingsFetchedAt,
+          topics: state.topics,
+          topicsFetchedAt: state.topicsFetchedAt,
+          analysts: state.analysts,
+          analystsFetchedAt: state.analystsFetchedAt,
+          runStatus: state.runStatus,
+        }),
+      },
+    ),
+    { name: 'briefingStore' },
   ),
 )
