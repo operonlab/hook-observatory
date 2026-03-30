@@ -1,18 +1,23 @@
 """Main orchestrator — coordinates recon, analyze, and fill phases."""
 
 import random
+import sys
 import time
+from pathlib import Path
 
 import click
 from sqlalchemy.orm import Session
 
 from .analyzer import analyze_quiz, reanalyze_wrong
+from .config import settings
 from .db import get_session
 from .filler import fill_form
 from .models import Person, Submission, Survey
 from .pw import cleanup_session, create_session
 from .recon import classify_subjects, recon_survey, save_survey
-from .config import settings
+
+# Wire reactive store
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 
 def _log(msg: str):
@@ -37,13 +42,26 @@ def run_quiz(url: str, dry_run: bool = False):
         db.close()
 
 
+def _dispatch_store(action_creator, **kwargs):
+    """Fire-and-forget store dispatch (sync context)."""
+    try:
+        from store import survey_store
+
+        survey_store.dispatch_sync(action_creator(**kwargs))
+    except Exception:
+        pass  # noqa: S110 — store dispatch is best-effort
+
+
 def _run_pipeline(db: Session, url: str, survey_type: str, dry_run: bool = False):
+    from store import SurveyStarted
+
     people = db.query(Person).filter(Person.active.is_(True)).all()
     if not people:
         _log("No active people found. Import with: auto-survey people import <csv>")
         return
 
     _log(f"Found {len(people)} active people")
+    _dispatch_store(SurveyStarted, survey_type=survey_type, url=url, people_count=len(people))
 
     # Phase 1: Recon
     _log("Phase 1: Recon — extracting form structure...")
@@ -147,7 +165,17 @@ def _run_pipeline(db: Session, url: str, survey_type: str, dry_run: bool = False
             err_str = f" — {sub.error_message}" if sub.error_message else ""
             _log(f"    Result: {status}{score_str}{err_str}")
 
-    # Summary
+    # Summary + store dispatch
+    subs = db.query(Submission).filter(Submission.survey_id == survey.id).all()
+    success = sum(1 for s in subs if s.status == "success")
+    from store import SurveyCompleted
+
+    _dispatch_store(
+        SurveyCompleted,
+        survey_type=survey_type,
+        success_count=success,
+        total_count=len(subs),
+    )
     _print_summary(db, survey)
 
 
