@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { devtools } from 'zustand/middleware'
 import type { WidgetInstance } from '../types/widget'
 
 const STORAGE_KEY = 'dashboard-widgets'
@@ -33,36 +34,41 @@ interface DashboardState {
   ) => void
 }
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
-  widgets: loadWidgets(),
-  editing: false,
+export const useDashboardStore = create<DashboardState>()(
+  devtools(
+    (set, get) => ({
+      widgets: loadWidgets(),
+      editing: false,
 
-  setEditing: (v) => set({ editing: v }),
+      setEditing: (v) => set({ editing: v }),
 
-  addWidget: (widget) => {
-    const next = [...get().widgets, widget]
-    saveWidgets(next)
-    set({ widgets: next })
-  },
+      addWidget: (widget) => {
+        const next = [...get().widgets, widget]
+        saveWidgets(next)
+        set({ widgets: next })
+      },
 
-  removeWidget: (id) => {
-    const next = get().widgets.filter((w) => w.id !== id)
-    saveWidgets(next)
-    set({ widgets: next })
-  },
+      removeWidget: (id) => {
+        const next = get().widgets.filter((w) => w.id !== id)
+        saveWidgets(next)
+        set({ widgets: next })
+      },
 
-  updateLayout: (id, layout) => {
-    const next = get().widgets.map((w) => (w.id === id ? { ...w, layout } : w))
-    saveWidgets(next)
-    set({ widgets: next })
-  },
+      updateLayout: (id, layout) => {
+        const next = get().widgets.map((w) => (w.id === id ? { ...w, layout } : w))
+        saveWidgets(next)
+        set({ widgets: next })
+      },
 
-  updateAllLayouts: (layouts) => {
-    const next = get().widgets.map((w) => {
-      const l = layouts.find((item) => item.i === w.id)
-      return l ? { ...w, layout: { x: l.x, y: l.y, w: l.w, h: l.h } } : w
-    })
-    saveWidgets(next)
-    set({ widgets: next })
-  },
-}))
+      updateAllLayouts: (layouts) => {
+        const next = get().widgets.map((w) => {
+          const l = layouts.find((item) => item.i === w.id)
+          return l ? { ...w, layout: { x: l.x, y: l.y, w: l.w, h: l.h } } : w
+        })
+        saveWidgets(next)
+        set({ widgets: next })
+      },
+    }),
+    { name: 'dashboardStore' },
+  ),
+)

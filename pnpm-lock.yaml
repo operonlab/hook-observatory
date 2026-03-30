@@ -68,9 +68,15 @@ importers:
       '@workshop/live2d-core':
         specifier: workspace:*
         version: link:../live2d-core
+      live2dcubismcore:
+        specifier: ^1.0.2
+        version: 1.0.2
       pixi.js:
         specifier: ^8.0.0
         version: 8.17.1
+      untitled-pixi-live2d-engine:
+        specifier: ^1.0.1
+        version: 1.0.1(@pixi/sound@6.0.1(pixi.js@8.17.1))(pixi.js@8.17.1)
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -84,9 +90,15 @@ importers:
 
   libs/live2d-core:
     dependencies:
+      live2dcubismcore:
+        specifier: ^1.0.2
+        version: 1.0.2
       pixi.js:
         specifier: ^8.0.0
         version: 8.17.1
+      untitled-pixi-live2d-engine:
+        specifier: ^1.0.1
+        version: 1.0.1(@pixi/sound@6.0.1(pixi.js@8.17.1))(pixi.js@8.17.1)
     devDependencies:
       typescript:
         specifier: ^5.9.0
@@ -158,46 +170,6 @@ importers:
         version: 19.2.3(@types/react@19.2.14)
       '@vitejs/plugin-react':
         specifier: 'catalog:'
-        version: 4.7.0(vite@6.4.1(@types/node@20.19.35)(jiti@1.21.7)(terser@5.46.0))
-      autoprefixer:
-        specifier: 'catalog:'
-        version: 10.4.27(postcss@8.5.6)
-      postcss:
-        specifier: 'catalog:'
-        version: 8.5.6
-      tailwindcss:
-        specifier: 'catalog:'
-        version: 3.4.19
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-      vite:
-        specifier: 'catalog:'
-        version: 6.4.1(@types/node@20.19.35)(jiti@1.21.7)(terser@5.46.0)
-
-  stations/video-edit/frontend:
-    dependencies:
-      immer:
-        specifier: ^11.1.4
-        version: 11.1.4
-      react:
-        specifier: 'catalog:'
-        version: 19.2.4
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.2.4(react@19.2.4)
-      zustand:
-        specifier: 'catalog:'
-        version: 5.0.11(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
-    devDependencies:
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.2.3(@types/react@19.2.14)
-      '@vitejs/plugin-react':
-        specifier: 'catalog:'
         version: 4.7.0(vite@6.4.1(@types/node@20.19.35)(jiti@2.6.1)(terser@5.46.0))
       autoprefixer:
         specifier: 'catalog:'
@@ -214,6 +186,49 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 6.4.1(@types/node@20.19.35)(jiti@2.6.1)(terser@5.46.0)
+
+  stations/video-edit/frontend:
+    dependencies:
+      immer:
+        specifier: ^11.1.4
+        version: 11.1.4
+      react:
+        specifier: 'catalog:'
+        version: 19.2.4
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.4(react@19.2.4)
+      zundo:
+        specifier: ^2.3.0
+        version: 2.3.0(zustand@5.0.11(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)))
+      zustand:
+        specifier: 'catalog:'
+        version: 5.0.11(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: 'catalog:'
+        version: 4.7.0(vite@6.4.1(@types/node@20.19.35)(jiti@1.21.7)(terser@5.46.0))
+      autoprefixer:
+        specifier: 'catalog:'
+        version: 10.4.27(postcss@8.5.6)
+      postcss:
+        specifier: 'catalog:'
+        version: 8.5.6
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 3.4.19
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: 'catalog:'
+        version: 6.4.1(@types/node@20.19.35)(jiti@1.21.7)(terser@5.46.0)
 
   workbench:
     dependencies:
@@ -238,18 +253,12 @@ importers:
       '@workshop/ai-assistant':
         specifier: workspace:*
         version: link:../libs/ai-assistant
-      '@workshop/live2d-core':
-        specifier: workspace:*
-        version: link:../libs/live2d-core
       '@xyflow/react':
         specifier: ^12.10.1
         version: 12.10.1(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       lucide-react:
         specifier: ^0.575.0
         version: 0.575.0(react@19.2.4)
-      pixi.js:
-        specifier: ^8.0.0
-        version: 8.17.1
       react:
         specifier: 'catalog:'
         version: 19.2.4
@@ -1233,6 +1242,11 @@ packages:
 
   '@pixi/colord@2.9.6':
     resolution: {integrity: sha512-nezytU2pw587fQstUu1AsJZDVEynjskwOL+kibwcdxsMBFqPsFFNA7xl0ii/gXuDi6M0xj3mfRJj8pBSc2jCfA==}
+
+  '@pixi/sound@6.0.1':
+    resolution: {integrity: sha512-hpFlQSScAR2L/CsEoIvDi7s1oGsu8y9Zd742Vd3982N+q3IF2vFuIfV9HN4ryjlGnhCT8yBlEgs1gp4G9Rt9TA==}
+    peerDependencies:
+      pixi.js: ^8.0.0
 
   '@react-three/drei@10.7.7':
     resolution: {integrity: sha512-ff+J5iloR0k4tC++QtD/j9u3w5fzfgFAWDtAGQah9pF2B1YgOq/5JxqY0/aVoQG5r3xSZz0cv5tk2YuBob4xEQ==}
@@ -2826,6 +2840,9 @@ packages:
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
 
+  live2dcubismcore@1.0.2:
+    resolution: {integrity: sha512-nABJjQb6XqzQ6JDWINtu8w9a1wTHvmxh85FafeIJ6xwUTFP+TVhq81dTeB2VKLesDyIuZ7CZ1X/Vi8nin3PSIA==}
+
   local-pkg@1.1.2:
     resolution: {integrity: sha512-arhlxbFRmoQHl33a0Zkle/YWlmNwoyt6QNZEIJcqNbdrsix5Lvc4HyyI3EnwxTYlZYc32EbYrQ8SzEZ7dqgg9A==}
     engines: {node: '>=14'}
@@ -3808,6 +3825,12 @@ packages:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
     engines: {node: '>= 10.0.0'}
 
+  untitled-pixi-live2d-engine@1.0.1:
+    resolution: {integrity: sha512-feTQ5Rd2+eGiaov2EgDS+a6WVWmSDSUxkKKTAKuM9QF3d0topuqsqHWXO/8i9E+/4m9l8R9vOvF9JLGdayfp3g==}
+    peerDependencies:
+      '@pixi/sound': ^6.0.1
+      pixi.js: ^8.13.1
+
   upath@1.2.0:
     resolution: {integrity: sha512-aZwGpamFO61g3OlfT7OQCHqhGnW43ieH9WZeP7QxN/G/jS4jfqUkZxoryvJgVPEcrl5NL/ggHsSmLMHuH64Lhg==}
     engines: {node: '>=4'}
@@ -4029,6 +4052,11 @@ packages:
 
   yallist@4.0.0:
     resolution: {integrity: sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==}
+
+  zundo@2.3.0:
+    resolution: {integrity: sha512-4GXYxXA17SIKYhVbWHdSEU04P697IMyVGXrC2TnzoyohEAWytFNOKqOp5gTGvaW93F/PM5Y0evbGtOPF0PWQwQ==}
+    peerDependencies:
+      zustand: ^4.3.0 || ^5.0.0
 
   zustand@4.5.7:
     resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
@@ -5066,6 +5094,10 @@ snapshots:
       fastq: 1.20.1
 
   '@pixi/colord@2.9.6': {}
+
+  '@pixi/sound@6.0.1(pixi.js@8.17.1)':
+    dependencies:
+      pixi.js: 8.17.1
 
   '@react-three/drei@10.7.7(@react-three/fiber@9.5.0(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.183.2))(@types/react@19.2.14)(@types/three@0.183.1)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(three@0.183.2)':
     dependencies:
@@ -6681,6 +6713,8 @@ snapshots:
 
   lines-and-columns@1.2.4: {}
 
+  live2dcubismcore@1.0.2: {}
+
   local-pkg@1.1.2:
     dependencies:
       mlly: 1.8.2
@@ -8018,6 +8052,11 @@ snapshots:
 
   universalify@2.0.1: {}
 
+  untitled-pixi-live2d-engine@1.0.1(@pixi/sound@6.0.1(pixi.js@8.17.1))(pixi.js@8.17.1):
+    dependencies:
+      '@pixi/sound': 6.0.1(pixi.js@8.17.1)
+      pixi.js: 8.17.1
+
   upath@1.2.0: {}
 
   update-browserslist-db@1.2.3(browserslist@4.28.1):
@@ -8336,6 +8375,10 @@ snapshots:
   yallist@3.1.1: {}
 
   yallist@4.0.0: {}
+
+  zundo@2.3.0(zustand@5.0.11(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))):
+    dependencies:
+      zustand: 5.0.11(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
 
   zustand@4.5.7(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4):
     dependencies:

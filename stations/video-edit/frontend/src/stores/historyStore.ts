@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 
 export interface Command {
   readonly type: string;
@@ -24,59 +25,62 @@ interface HistoryActions {
 }
 
 export const useHistoryStore = create<HistoryState & HistoryActions>()(
-  (set, get) => ({
-    undoStack: [],
-    redoStack: [],
-    canUndo: false,
-    canRedo: false,
+  devtools(
+    (set, get) => ({
+      undoStack: [],
+      redoStack: [],
+      canUndo: false,
+      canRedo: false,
 
-    execute: async (command) => {
-      await command.execute();
-      set((s) => {
-        const undoStack = [...s.undoStack, command];
-        if (undoStack.length > MAX_HISTORY) undoStack.shift();
-        return {
-          undoStack,
-          redoStack: [],
-          canUndo: true,
-          canRedo: false,
-        };
-      });
-    },
+      execute: async (command) => {
+        await command.execute();
+        set((s) => {
+          const undoStack = [...s.undoStack, command];
+          if (undoStack.length > MAX_HISTORY) undoStack.shift();
+          return {
+            undoStack,
+            redoStack: [],
+            canUndo: true,
+            canRedo: false,
+          };
+        });
+      },
 
-    undo: async () => {
-      const { undoStack } = get();
-      if (undoStack.length === 0) return;
-      const command = undoStack[undoStack.length - 1];
-      await command.undo();
-      set((s) => {
-        const newUndo = s.undoStack.slice(0, -1);
-        return {
-          undoStack: newUndo,
-          redoStack: [...s.redoStack, command],
-          canUndo: newUndo.length > 0,
-          canRedo: true,
-        };
-      });
-    },
+      undo: async () => {
+        const { undoStack } = get();
+        if (undoStack.length === 0) return;
+        const command = undoStack[undoStack.length - 1];
+        await command.undo();
+        set((s) => {
+          const newUndo = s.undoStack.slice(0, -1);
+          return {
+            undoStack: newUndo,
+            redoStack: [...s.redoStack, command],
+            canUndo: newUndo.length > 0,
+            canRedo: true,
+          };
+        });
+      },
 
-    redo: async () => {
-      const { redoStack } = get();
-      if (redoStack.length === 0) return;
-      const command = redoStack[redoStack.length - 1];
-      await command.execute();
-      set((s) => {
-        const newRedo = s.redoStack.slice(0, -1);
-        return {
-          undoStack: [...s.undoStack, command],
-          redoStack: newRedo,
-          canUndo: true,
-          canRedo: newRedo.length > 0,
-        };
-      });
-    },
+      redo: async () => {
+        const { redoStack } = get();
+        if (redoStack.length === 0) return;
+        const command = redoStack[redoStack.length - 1];
+        await command.execute();
+        set((s) => {
+          const newRedo = s.redoStack.slice(0, -1);
+          return {
+            undoStack: [...s.undoStack, command],
+            redoStack: newRedo,
+            canUndo: true,
+            canRedo: newRedo.length > 0,
+          };
+        });
+      },
 
-    clear: () =>
-      set({ undoStack: [], redoStack: [], canUndo: false, canRedo: false }),
-  }),
+      clear: () =>
+        set({ undoStack: [], redoStack: [], canUndo: false, canRedo: false }),
+    }),
+    { name: "historyStore" },
+  ),
 );

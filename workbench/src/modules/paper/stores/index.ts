@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { devtools, persist } from 'zustand/middleware'
+import { handleStoreError } from '@/shared/utils/storeHelpers'
 import { paperApi } from '../api/client'
 import type {
   Annotation,
@@ -73,211 +74,214 @@ interface PaperState {
 }
 
 export const usePaperStore = create<PaperState>()(
-  persist(
-    (set, get) => ({
-      // Dashboard
-      dashboard: null,
-      dashboardLoading: false,
-      dashboardFetchedAt: 0,
+  devtools(
+    persist(
+      (set, get) => ({
+        // Dashboard
+        dashboard: null,
+        dashboardLoading: false,
+        dashboardFetchedAt: 0,
 
-      // Articles
-      articles: [],
-      articlesTotal: 0,
-      articlesPage: 1,
-      articlesPageSize: 20,
-      articlesLoading: false,
-      articlesFetchedAt: 0,
-      selectedArticle: null,
-      articleDetailLoading: false,
-      activeCategory: null,
-      activeTag: null,
-      activeRelevance: null,
-      allCategories: [],
-      allTags: [],
+        // Articles
+        articles: [],
+        articlesTotal: 0,
+        articlesPage: 1,
+        articlesPageSize: 20,
+        articlesLoading: false,
+        articlesFetchedAt: 0,
+        selectedArticle: null,
+        articleDetailLoading: false,
+        activeCategory: null,
+        activeTag: null,
+        activeRelevance: null,
+        allCategories: [],
+        allTags: [],
 
-      // Digest
-      selectedDigest: null,
-      digestLoading: false,
+        // Digest
+        selectedDigest: null,
+        digestLoading: false,
 
-      // Annotations
-      annotations: [],
-      annotationsLoading: false,
+        // Annotations
+        annotations: [],
+        annotationsLoading: false,
 
-      // Search
-      searchQuery: '',
-      searchResults: [],
-      searchLoading: false,
+        // Search
+        searchQuery: '',
+        searchResults: [],
+        searchLoading: false,
 
-      // Global
-      error: null,
+        // Global
+        error: null,
 
-      // ── Dashboard ──
+        // ── Dashboard ──
 
-      fetchDashboard: async () => {
-        set({ dashboardLoading: true, error: null })
-        try {
-          const data = await paperApi.getDashboard()
-          set({ dashboard: data, dashboardFetchedAt: Date.now() })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch dashboard' })
-        } finally {
-          set({ dashboardLoading: false })
-        }
-      },
+        fetchDashboard: async () => {
+          set({ dashboardLoading: true, error: null })
+          try {
+            const data = await paperApi.getDashboard()
+            set({ dashboard: data, dashboardFetchedAt: Date.now() })
+          } catch (err) {
+            handleStoreError(set, err, 'Failed to fetch dashboard')
+          } finally {
+            set({ dashboardLoading: false })
+          }
+        },
 
-      // ── Articles ──
+        // ── Articles ──
 
-      fetchArticles: async (page?: number) => {
-        const p = page ?? get().articlesPage
-        const { articlesPageSize, activeCategory, activeTag, activeRelevance } = get()
-        set({ articlesLoading: true, error: null, articlesPage: p })
-        try {
-          const res = await paperApi.listFiltered({
-            category: activeCategory ?? undefined,
-            tag: activeTag ?? undefined,
-            relevance: activeRelevance ?? undefined,
-            page: p,
-            pageSize: articlesPageSize,
-          })
-          set({ articles: res.items, articlesTotal: res.total, articlesFetchedAt: Date.now() })
+        fetchArticles: async (page?: number) => {
+          const p = page ?? get().articlesPage
+          const { articlesPageSize, activeCategory, activeTag, activeRelevance } = get()
+          set({ articlesLoading: true, error: null, articlesPage: p })
+          try {
+            const res = await paperApi.listFiltered({
+              category: activeCategory ?? undefined,
+              tag: activeTag ?? undefined,
+              relevance: activeRelevance ?? undefined,
+              page: p,
+              pageSize: articlesPageSize,
+            })
+            set({ articles: res.items, articlesTotal: res.total, articlesFetchedAt: Date.now() })
 
-          // Extract unique categories and tags
-          const cats = new Set<string>()
-          const tags = new Set<string>()
-          res.items.forEach((a) => {
-            a.categories.forEach((c) => cats.add(c))
-            a.tags.forEach((t) => tags.add(t))
-          })
-          set((state) => {
-            const mergedCats = new Set([...state.allCategories, ...cats])
-            const mergedTags = new Set([...state.allTags, ...tags])
-            return {
-              allCategories: Array.from(mergedCats).sort(),
-              allTags: Array.from(mergedTags).sort(),
-            }
-          })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch articles' })
-        } finally {
-          set({ articlesLoading: false })
-        }
-      },
+            // Extract unique categories and tags
+            const cats = new Set<string>()
+            const tags = new Set<string>()
+            res.items.forEach((a) => {
+              a.categories.forEach((c) => cats.add(c))
+              a.tags.forEach((t) => tags.add(t))
+            })
+            set((state) => {
+              const mergedCats = new Set([...state.allCategories, ...cats])
+              const mergedTags = new Set([...state.allTags, ...tags])
+              return {
+                allCategories: Array.from(mergedCats).sort(),
+                allTags: Array.from(mergedTags).sort(),
+              }
+            })
+          } catch (err) {
+            handleStoreError(set, err, 'Failed to fetch articles')
+          } finally {
+            set({ articlesLoading: false })
+          }
+        },
 
-      fetchArticleById: async (id: string) => {
-        set({ articleDetailLoading: true, error: null })
-        try {
-          const article = await paperApi.get(id)
-          set({ selectedArticle: article })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch article' })
-        } finally {
-          set({ articleDetailLoading: false })
-        }
-      },
+        fetchArticleById: async (id: string) => {
+          set({ articleDetailLoading: true, error: null })
+          try {
+            const article = await paperApi.get(id)
+            set({ selectedArticle: article })
+          } catch (err) {
+            handleStoreError(set, err, 'Failed to fetch article')
+          } finally {
+            set({ articleDetailLoading: false })
+          }
+        },
 
-      deleteArticle: async (id: string) => {
-        set({ error: null })
-        try {
-          await paperApi.delete(id)
-          set((state) => ({
-            articles: state.articles.filter((a) => a.id !== id),
-            articlesTotal: state.articlesTotal - 1,
-            selectedArticle: state.selectedArticle?.id === id ? null : state.selectedArticle,
-          }))
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to delete article' })
-        }
-      },
+        deleteArticle: async (id: string) => {
+          set({ error: null })
+          try {
+            await paperApi.delete(id)
+            set((state) => ({
+              articles: state.articles.filter((a) => a.id !== id),
+              articlesTotal: state.articlesTotal - 1,
+              selectedArticle: state.selectedArticle?.id === id ? null : state.selectedArticle,
+            }))
+          } catch (err) {
+            handleStoreError(set, err, 'Failed to delete article')
+          }
+        },
 
-      setActiveCategory: (category) => {
-        set({ activeCategory: category, articlesPage: 1 })
-        get().fetchArticles(1)
-      },
+        setActiveCategory: (category) => {
+          set({ activeCategory: category, articlesPage: 1 })
+          get().fetchArticles(1)
+        },
 
-      setActiveTag: (tag) => {
-        set({ activeTag: tag, articlesPage: 1 })
-        get().fetchArticles(1)
-      },
+        setActiveTag: (tag) => {
+          set({ activeTag: tag, articlesPage: 1 })
+          get().fetchArticles(1)
+        },
 
-      setActiveRelevance: (relevance) => {
-        set({ activeRelevance: relevance, articlesPage: 1 })
-        get().fetchArticles(1)
-      },
+        setActiveRelevance: (relevance) => {
+          set({ activeRelevance: relevance, articlesPage: 1 })
+          get().fetchArticles(1)
+        },
 
-      clearSelectedArticle: () =>
-        set({ selectedArticle: null, selectedDigest: null, annotations: [] }),
+        clearSelectedArticle: () =>
+          set({ selectedArticle: null, selectedDigest: null, annotations: [] }),
 
-      // ── Digest ──
+        // ── Digest ──
 
-      fetchDigest: async (articleId: string) => {
-        set({ digestLoading: true })
-        try {
-          const digest = await paperApi.getDigest(articleId)
-          set({ selectedDigest: digest })
-        } catch {
-          // 404 is expected when no digest exists yet — silently clear
-          set({ selectedDigest: null })
-        } finally {
-          set({ digestLoading: false })
-        }
-      },
+        fetchDigest: async (articleId: string) => {
+          set({ digestLoading: true })
+          try {
+            const digest = await paperApi.getDigest(articleId)
+            set({ selectedDigest: digest })
+          } catch {
+            // 404 is expected when no digest exists yet — silently clear
+            set({ selectedDigest: null })
+          } finally {
+            set({ digestLoading: false })
+          }
+        },
 
-      // ── Annotations ──
+        // ── Annotations ──
 
-      fetchAnnotations: async (articleId: string) => {
-        set({ annotationsLoading: true, error: null })
-        try {
-          const res = await paperApi.getAnnotations(articleId)
-          // Handle both paginated { items: [...] } and plain array responses
-          const list = Array.isArray(res) ? res : ((res as any).items ?? [])
-          set({ annotations: list })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to fetch annotations' })
-        } finally {
-          set({ annotationsLoading: false })
-        }
-      },
+        fetchAnnotations: async (articleId: string) => {
+          set({ annotationsLoading: true, error: null })
+          try {
+            const res = await paperApi.getAnnotations(articleId)
+            // Handle both paginated { items: [...] } and plain array responses
+            const list = Array.isArray(res) ? res : ((res as any).items ?? [])
+            set({ annotations: list })
+          } catch (err) {
+            handleStoreError(set, err, 'Failed to fetch annotations')
+          } finally {
+            set({ annotationsLoading: false })
+          }
+        },
 
-      addAnnotation: async (articleId: string, data: AnnotationCreate) => {
-        set({ error: null })
-        try {
-          const annotation = await paperApi.createAnnotation(articleId, data)
-          set((state) => ({ annotations: [...state.annotations, annotation] }))
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Failed to add annotation' })
-        }
-      },
+        addAnnotation: async (articleId: string, data: AnnotationCreate) => {
+          set({ error: null })
+          try {
+            const annotation = await paperApi.createAnnotation(articleId, data)
+            set((state) => ({ annotations: [...state.annotations, annotation] }))
+          } catch (err) {
+            handleStoreError(set, err, 'Failed to add annotation')
+          }
+        },
 
-      // ── Search ──
+        // ── Search ──
 
-      setSearchQuery: (query) => set({ searchQuery: query }),
+        setSearchQuery: (query) => set({ searchQuery: query }),
 
-      searchArticles: async (query: string) => {
-        if (!query.trim()) return
-        set({ searchLoading: true, searchQuery: query, error: null })
-        try {
-          const results = await paperApi.search(query, 10, 0.3)
-          set({ searchResults: results })
-        } catch (err) {
-          set({ error: err instanceof Error ? err.message : 'Search failed' })
-        } finally {
-          set({ searchLoading: false })
-        }
-      },
+        searchArticles: async (query: string) => {
+          if (!query.trim()) return
+          set({ searchLoading: true, searchQuery: query, error: null })
+          try {
+            const results = await paperApi.search(query, 10, 0.3)
+            set({ searchResults: results })
+          } catch (err) {
+            handleStoreError(set, err, 'Search failed')
+          } finally {
+            set({ searchLoading: false })
+          }
+        },
 
-      clearSearch: () => set({ searchQuery: '', searchResults: [] }),
-    }),
-    {
-      name: 'paper-cache',
-      partialize: (state) => ({
-        dashboard: state.dashboard,
-        dashboardFetchedAt: state.dashboardFetchedAt,
-        articles: state.articles,
-        articlesTotal: state.articlesTotal,
-        articlesFetchedAt: state.articlesFetchedAt,
-        allCategories: state.allCategories,
-        allTags: state.allTags,
+        clearSearch: () => set({ searchQuery: '', searchResults: [] }),
       }),
-    },
+      {
+        name: 'paper-cache',
+        partialize: (state) => ({
+          dashboard: state.dashboard,
+          dashboardFetchedAt: state.dashboardFetchedAt,
+          articles: state.articles,
+          articlesTotal: state.articlesTotal,
+          articlesFetchedAt: state.articlesFetchedAt,
+          allCategories: state.allCategories,
+          allTags: state.allTags,
+        }),
+      },
+    ),
+    { name: 'paperStore' },
   ),
 )
