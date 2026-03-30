@@ -39,11 +39,15 @@ from pathlib import Path
 # ── Path bootstrap — stations don't inherit core's Python path ──
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "core"))
 
+import logging
+
 from src.shared.actions import create_action, create_reducer, on
 from src.shared.immutable_utils import to_immutable
 from src.shared.middleware import LoggerMiddleware, PerformanceMiddleware
 from src.shared.selectors import create_selector
-from src.shared.store import FeatureStore
+from src.shared.store import FeatureStore, effect, register_effects
+
+logger = logging.getLogger(__name__)
 
 # ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -450,6 +454,79 @@ sentinel_store = FeatureStore(
         LoggerMiddleware("sentinel"),
         PerformanceMiddleware(),
     ],
+)
+
+# ── Effects ───────────────────────────────────────────────────────────────────
+
+
+@effect(ServiceDown, store=sentinel_store)
+async def log_service_down_alert(action, store) -> None:
+    """Log alert when a service goes down for on-call visibility."""
+    p = action.payload or {}
+    service = p.get("service", "unknown")
+    light_status = p.get("light_status", "unhealthy")
+    response_ms = p.get("response_ms", 0.0)
+    logger.warning(
+        "sentinel.service_down",
+        extra={
+            "service": service,
+            "light_status": light_status,
+            "response_ms": response_ms,
+        },
+    )
+
+
+@effect(InterventionEscalated, store=sentinel_store)
+async def log_escalation_warning(action, store) -> None:
+    """Log WARNING when manual intervention is required."""
+    p = action.payload or {}
+    service = p.get("service", "unknown")
+    reason = p.get("reason", "")
+
+    # Extract intervention info (attempt count)
+    state = store.get_state()
+    iv_entry = state.get("interventions", {}).get(service, {})
+    attempts = iv_entry.get("attempts", 0) if isinstance(iv_entry, dict) else 0
+
+    logger.warning(
+        "sentinel.intervention_escalated — manual intervention required",
+        extra={
+            "service": service,
+            "reason": reason,
+            "attempts": attempts,
+        },
+    )
+
+
+@effect(ServiceRecovered, store=sentinel_store)
+async def log_recovery_with_duration(action, store) -> None:
+    """Log recovery and calculate downtime duration in seconds."""
+    p = action.payload or {}
+    service = p.get("service", "unknown")
+
+    # Use downtime_start from payload since reducer already cleared it in state
+    downtime_start = p.get("downtime_start", 0.0)
+    if downtime_start:
+        duration_s = round(time.time() - downtime_start, 1)
+        logger.info(
+            "sentinel.service_recovered",
+            extra={
+                "service": service,
+                "downtime_seconds": duration_s,
+            },
+        )
+    else:
+        logger.info(
+            "sentinel.service_recovered",
+            extra={"service": service},
+        )
+
+
+register_effects(
+    sentinel_store,
+    log_service_down_alert,
+    log_escalation_warning,
+    log_recovery_with_duration,
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
