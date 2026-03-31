@@ -11,9 +11,7 @@ logger = structlog.get_logger()
 
 
 class ActionExecutor(BaseNodeExecutor):
-    async def execute(
-        self, config: dict[str, Any], ctx: ExecutionContext
-    ) -> ExecutionResult:
+    async def execute(self, config: dict[str, Any], ctx: ExecutionContext) -> ExecutionResult:
         """Call module.action with resolved params.
 
         Config schema:
@@ -35,11 +33,14 @@ class ActionExecutor(BaseNodeExecutor):
         resolved = _resolve_params(params, ctx.input_data)
 
         # Call the service method with standard args
-        result = await handler(
-            ctx.db,
-            ctx.space_id,
-            **resolved,
-        )
+        try:
+            result = await handler(
+                ctx.db,
+                ctx.space_id,
+                **resolved,
+            )
+        except TypeError as exc:
+            return ExecutionResult(status="error", error=f"Action parameter mismatch: {exc}")
 
         # Normalize result to dict
         if hasattr(result, "model_dump"):

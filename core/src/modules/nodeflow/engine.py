@@ -203,6 +203,10 @@ def _topological_sort(nodes: dict[str, Node], edges: list[Edge]) -> list[Node]:
             if in_degree[neighbor] == 0:
                 queue.append(neighbor)
 
+    if len(result) < len(nodes):
+        cycle_nodes = set(nodes.keys()) - {n.id for n in result}
+        raise ValueError(f"DAG contains a cycle involving nodes: {cycle_nodes}")
+
     return result
 
 
