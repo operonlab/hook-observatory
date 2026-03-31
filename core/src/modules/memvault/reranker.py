@@ -16,9 +16,11 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-_GATE_FORCE_DISABLED = os.environ.get(
-    "MEMVAULT_RERANKER_GATE_DISABLED", ""
-).lower() in ("1", "true", "yes")
+_GATE_FORCE_DISABLED = os.environ.get("MEMVAULT_RERANKER_GATE_DISABLED", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 
 @dataclass
@@ -34,10 +36,10 @@ class RerankerConfig:
     # Attention-gated computation: skip reranker when scoring pipeline
     # output indicates high confidence (cheap signal gates expensive work)
     gate_enabled: bool = True
-    gate_min_top_score: float = 0.45  # top-1 must exceed this
-    gate_min_score_gap: float = 0.15  # gap between #1 and #2
-    gate_max_candidates: int = 5  # skip if <= this many survive scoring
-    gate_min_cluster_tightness: float = 0.05  # top-5 std_dev below this = skip
+    gate_min_top_score: float = 0.55  # top-1 must exceed this (conservative: prefer rerank)
+    gate_min_score_gap: float = 0.25  # gap between #1 and #2 (wide gap = clear winner)
+    gate_max_candidates: int = 2  # skip only when ≤2 survive (1 result = nothing to rerank)
+    gate_min_cluster_tightness: float = 0.03  # top-5 std_dev below this = skip (very tight)
 
 
 class CircuitBreaker:
@@ -201,8 +203,6 @@ class LocalReranker:
 _reranker = LocalReranker()
 
 
-async def rerank_results(
-    query: str, results: list[dict]
-) -> tuple[list[dict], bool, str | None]:
+async def rerank_results(query: str, results: list[dict]) -> tuple[list[dict], bool, str | None]:
     """Convenience function using module singleton."""
     return await _reranker.rerank(query, results)
