@@ -29,34 +29,53 @@ async def redis_push_listener() -> None:
         "severity": "critical",
         "user_id": null  // null = broadcast
     }
-    """
-    redis = get_redis()
-    pubsub = redis.pubsub()
-    await pubsub.subscribe(CHANNEL)
-    logger.info("redis_push_listener_started", channel=CHANNEL)
 
-    try:
-        async for message in pubsub.listen():
-            if message["type"] != "message":
-                continue
+    Reconnects automatically on Redis disconnection with exponential backoff
+    (max 60s). CancelledError propagates cleanly to stop the task.
+    """
+    attempt = 0
+    while True:
+        try:
+            redis = get_redis()
+            pubsub = redis.pubsub()
+            await pubsub.subscribe(CHANNEL)
+            logger.info("redis_push_listener_started", channel=CHANNEL, attempt=attempt)
+            attempt = 0  # reset on successful connect
 
             try:
-                data = json.loads(message["data"])
-                payload = PushPayload(**data)
+                async for message in pubsub.listen():
+                    if message["type"] != "message":
+                        continue
 
-                async with async_session_factory() as db:
-                    await notification_service.send_notification(db, payload)
-                    await db.commit()
+                    try:
+                        data = json.loads(message["data"])
+                        payload = PushPayload(**data)
 
-            except json.JSONDecodeError:
-                logger.warning("redis_push_invalid_json", data=message["data"])
-            except Exception as e:
-                logger.error("redis_push_handler_error", error=str(e))
+                        async with async_session_factory() as db:
+                            await notification_service.send_notification(db, payload)
+                            await db.commit()
 
-            # Small yield to prevent tight loop
-            await asyncio.sleep(0.01)
-    except asyncio.CancelledError:
-        logger.info("redis_push_listener_stopped")
-    finally:
-        await pubsub.unsubscribe(CHANNEL)
-        await pubsub.close()
+                    except json.JSONDecodeError:
+                        logger.warning("redis_push_invalid_json", data=message["data"])
+                    except Exception as e:
+                        logger.error("redis_push_handler_error", error=str(e))
+
+                    # Small yield to prevent tight loop
+                    await asyncio.sleep(0.01)
+            finally:
+                await pubsub.unsubscribe(CHANNEL)
+                await pubsub.close()
+
+        except asyncio.CancelledError:
+            logger.info("redis_push_listener_stopped")
+            return
+        except Exception:
+            attempt += 1
+            wait = min(2**attempt, 60)
+            logger.warning(
+                "redis_push_listener_disconnected",
+                reconnect_in=wait,
+                attempt=attempt,
+                exc_info=True,
+            )
+            await asyncio.sleep(wait)
