@@ -24,13 +24,15 @@ from .services import _adjust_wallet_balance, wallet_service
 logger = structlog.get_logger()
 
 
-async def process_installment_due(db: AsyncSession) -> int:
-    """Process all installment transactions that are due.
+async def process_installment_due(db: AsyncSession, space_id: str) -> int:
+    """Process all installment transactions that are due for a given space.
 
     Finds transactions where:
+    - space_id = space_id
     - status = 'scheduled'
     - transacted_at <= now()
     - installment_plan_id IS NOT NULL
+    - deleted_at IS NULL
 
     For each due transaction:
     1. Update status to 'completed'
@@ -45,18 +47,21 @@ async def process_installment_due(db: AsyncSession) -> int:
 
     Args:
         db: Async database session. Caller manages commit/rollback.
+        space_id: The space to process installments for.
 
     Returns:
         Count of processed (newly completed) transactions.
     """
     now = datetime.now(UTC)
 
-    # Find all due installment transactions
+    # Find all due installment transactions (exclude deleted, scope to space)
     due_q = select(Transaction).where(
+        Transaction.space_id == space_id,
         Transaction.status == "scheduled",
         Transaction.transacted_at <= now,
         Transaction.installment_plan_id != None,  # noqa: E711
-    )
+        Transaction.deleted_at.is_(None),
+    ).with_for_update(skip_locked=True)
     due_txns = (await db.execute(due_q)).scalars().all()
 
     if not due_txns:
@@ -75,7 +80,7 @@ async def process_installment_due(db: AsyncSession) -> int:
         await _adjust_wallet_balance(db, txn.wallet_id, delta)
 
         # Deduct fee if present
-        if txn.fee and txn.fee > 0:
+        if txn.fee is not None and txn.fee != 0:
             await _adjust_wallet_balance(db, txn.wallet_id, -txn.fee)
 
         affected_plan_ids.add(txn.installment_plan_id)
@@ -103,10 +108,11 @@ async def process_installment_due(db: AsyncSession) -> int:
         if not plan or plan.status != "active":
             continue
 
-        # Count remaining scheduled transactions for this plan
+        # Count remaining scheduled transactions for this plan (exclude deleted)
         remaining_q = select(func.count()).where(
             Transaction.installment_plan_id == plan_id,
             Transaction.status == "scheduled",
+            Transaction.deleted_at.is_(None),
         )
         remaining = (await db.execute(remaining_q)).scalar_one()
 
@@ -194,7 +200,8 @@ async def process_subscription_billing(db: AsyncSession, space_id: str) -> int:
         Subscription.status == "active",
         Subscription.next_billing != None,  # noqa: E711
         Subscription.next_billing <= today,
-    )
+        Subscription.deleted_at.is_(None),
+    ).with_for_update(skip_locked=True)
     subs = (await db.execute(subs_q)).scalars().all()
 
     if not subs:
@@ -317,7 +324,7 @@ async def run_all_cron(db: AsyncSession, space_id: str) -> dict:
     """
     logger.info("finance_cron_start", space_id=space_id)
 
-    installments_processed = await process_installment_due(db)
+    installments_processed = await process_installment_due(db, space_id)
     subscriptions_processed = await process_subscription_billing(db, space_id)
 
     summary = {

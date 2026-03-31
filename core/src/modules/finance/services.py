@@ -930,6 +930,11 @@ class TransactionService(
     audit_entity_type = "transactions"
 
     def before_create(self, data: TransactionCreate, **kwargs: Any) -> dict:
+        if data.type == "transfer":
+            raise BadRequestError(
+                "Transfers must use POST /transfer endpoint",
+                code="finance.transfer_via_crud_forbidden",
+            )
         d = data.model_dump(exclude={"tags"})
         return d
 
@@ -986,7 +991,7 @@ class TransactionService(
         if instance.status == "completed":
             delta = _balance_delta(instance.type, instance.amount)
             await _adjust_wallet_balance(db, instance.wallet_id, delta)
-            if instance.fee:
+            if instance.fee is not None and instance.fee != 0:
                 await _adjust_wallet_balance(db, instance.wallet_id, -instance.fee)
 
         await db.flush()
@@ -1063,7 +1068,7 @@ class TransactionService(
             # Apply new delta
             new_delta = _balance_delta(instance.type, instance.amount)
             await _adjust_wallet_balance(db, instance.wallet_id, new_delta)
-            if instance.fee:
+            if instance.fee is not None and instance.fee != 0:
                 await _adjust_wallet_balance(db, instance.wallet_id, -instance.fee)
 
         await db.flush()
@@ -1127,11 +1132,17 @@ class TransactionService(
         if not instance:
             return False
 
+        if instance.type == "transfer":
+            raise BadRequestError(
+                "Transfer transactions must be deleted via DELETE /transfer endpoint",
+                code="finance.transfer_via_crud_forbidden",
+            )
+
         # Reverse balance delta before soft delete
         if instance.status == "completed":
             delta = _balance_delta(instance.type, instance.amount)
             await _adjust_wallet_balance(db, instance.wallet_id, -delta)
-            if instance.fee:
+            if instance.fee is not None and instance.fee != 0:
                 await _adjust_wallet_balance(db, instance.wallet_id, instance.fee)
 
         snapshot = self._snapshot(instance)
@@ -1173,6 +1184,12 @@ class TransactionService(
         if not instance or instance.deleted_at is None:
             return None
 
+        if instance.type == "transfer":
+            raise BadRequestError(
+                "Transfer transactions must be restored via the transfer endpoint",
+                code="finance.transfer_via_crud_forbidden",
+            )
+
         instance.deleted_at = None
         await db.flush()
 
@@ -1180,7 +1197,7 @@ class TransactionService(
         if instance.status == "completed":
             delta = _balance_delta(instance.type, instance.amount)
             await _adjust_wallet_balance(db, instance.wallet_id, delta)
-            if instance.fee:
+            if instance.fee is not None and instance.fee != 0:
                 await _adjust_wallet_balance(db, instance.wallet_id, -instance.fee)
 
         await db.flush()
