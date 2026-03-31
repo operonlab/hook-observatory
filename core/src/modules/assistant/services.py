@@ -123,11 +123,18 @@ def _resolve_session_jsonl() -> Path | None:
             return None
         child_pid = int(result.stdout.strip().splitlines()[0])
 
-        # Check cache
+        # Check cache (validate against session file to detect PID reuse)
         if child_pid in _session_cache:
             cached = _session_cache[child_pid]
-            if cached.exists():
-                return cached
+            session_file_check = _CLAUDE_SESSIONS_DIR / f"{child_pid}.json"
+            if cached.exists() and session_file_check.exists():
+                try:
+                    sid = json.loads(session_file_check.read_text()).get("sessionId", "")
+                    if sid and sid in cached.name:
+                        return cached
+                except Exception:
+                    pass
+            del _session_cache[child_pid]  # Invalidate stale cache
 
         session_file = _CLAUDE_SESSIONS_DIR / f"{child_pid}.json"
         if not session_file.exists():
@@ -238,19 +245,24 @@ def _iter_chat_jsonl(
     while time.time() < deadline:
         time.sleep(_POLL_INTERVAL)
 
-        # Read new JSONL lines
+        # Read new JSONL lines (preserve offset on partial/malformed lines)
         new_entries = []
         try:
             with open(jsonl_path, encoding="utf-8") as f:
                 f.seek(last_offset)
                 for raw in f:
+                    line_start = f.tell() - len(raw.encode("utf-8"))
                     raw = raw.strip()
-                    if raw:
-                        try:
-                            new_entries.append(json.loads(raw))
-                        except json.JSONDecodeError:
-                            pass
-                last_offset = f.tell()
+                    if not raw:
+                        continue
+                    try:
+                        new_entries.append(json.loads(raw))
+                        last_offset = f.tell()
+                    except json.JSONDecodeError:
+                        # Partial line (still being written) — rewind to
+                        # line start so it gets re-read next iteration.
+                        last_offset = line_start
+                        break
         except OSError:
             pass
 
