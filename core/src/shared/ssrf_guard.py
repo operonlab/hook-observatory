@@ -26,6 +26,11 @@ def validate_url(url: str) -> str:
     """Validate URL is not targeting internal/private networks.
 
     Returns the validated URL. Raises BadRequestError if blocked.
+    Defenses:
+    - Blocks known internal hostnames
+    - Resolves DNS and checks all returned IPs
+    - Normalizes IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1 → 127.0.0.1)
+    - Uses Python built-in is_private/is_loopback/is_reserved/is_link_local as primary check
     """
     parsed = urlparse(url)
 
@@ -45,6 +50,13 @@ def validate_url(url: str) -> str:
         addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         for _family, _, _, _, sockaddr in addr_info:
             ip = ipaddress.ip_address(sockaddr[0])
+            # Normalize IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1 → 127.0.0.1)
+            if hasattr(ip, "ipv4_mapped") and ip.ipv4_mapped:
+                ip = ip.ipv4_mapped
+            # Use Python's built-in checks as primary defense (more comprehensive than manual list)
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+                raise BadRequestError("URL resolves to a private/internal network address")
+            # Fallback: explicit network list for any edge cases not caught above
             for network in _BLOCKED_NETWORKS:
                 if ip in network:
                     raise BadRequestError("URL resolves to a private/internal network address")

@@ -92,11 +92,13 @@ class UserService:
     # --- Authentication ---
 
     async def authenticate(self, db: AsyncSession, email: str, password: str) -> User | None:
-        """Verify credentials. Returns User if valid, None otherwise."""
+        """Verify credentials. Returns User if valid and active, None otherwise."""
         user = await self.get_by_email(db, email)
         if not user or not user.password_hash:
             return None
         if not verify_password(password, user.password_hash):
+            return None
+        if user.status != "active":
             return None
         return user
 
@@ -111,10 +113,12 @@ class UserService:
         name: str | None,
         avatar_url: str | None,
         raw_data: dict | None,
+        email_verified: bool = False,
     ) -> tuple[User, bool]:
         """OAuth login: find or create user + link OAuthAccount.
 
         Returns (user, is_new_user).
+        email_verified must be True to auto-link by email (prevents account takeover).
         """
         # 1. Check existing OAuth link
         q = select(OAuthAccount).where(
@@ -128,10 +132,10 @@ class UserService:
                 raise NotFoundError("Linked user not found", code="auth.user_not_found")
             return user, False
 
-        # 2. Check existing user by email (auto-link)
+        # 2. Check existing user by email (auto-link only if email verified by provider)
         user: User | None = None
         is_new = False
-        if email:
+        if email and email_verified:
             user = await self.get_by_email(db, email)
 
         # 3. Create new user if needed
@@ -302,16 +306,21 @@ class UserService:
         self,
         db: AsyncSession,
         user_id: str,
+        redis=None,
         *,
         display_name: str | None = None,
         role: str | None = None,
         status: str | None = None,
     ) -> User:
-        """Update user fields. Validates role/status values."""
+        """Update user fields. Validates role/status values.
+
+        Pass redis= to enable automatic session revocation on status/role changes.
+        """
         user = await db.get(User, user_id)
         if not user:
             raise NotFoundError("User not found", code="auth.user_not_found")
 
+        old_role = user.role
         if display_name is not None:
             user.display_name = display_name
         if role is not None:
@@ -327,6 +336,27 @@ class UserService:
 
         await db.flush()
         await db.refresh(user)
+
+        # Revoke all sessions when status or role changes (stale session prevention)
+        if redis is not None:
+            if status is not None and old_status != status:
+                try:
+                    await self.revoke_all_sessions(db, redis, user_id)
+                except Exception:
+                    logger.warning(
+                        "Failed to revoke sessions after status change for user=%s",
+                        user_id,
+                        exc_info=True,
+                    )
+            elif role is not None and old_role != role:
+                try:
+                    await self.revoke_all_sessions(db, redis, user_id)
+                except Exception:
+                    logger.warning(
+                        "Failed to revoke sessions after role change for user=%s",
+                        user_id,
+                        exc_info=True,
+                    )
 
         if status is not None and old_status != status:
             from .store import StateTransitioned, auth_store

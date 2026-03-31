@@ -21,11 +21,16 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 def get_current_user(request: Request) -> dict:
-    """Extract authenticated user from request state; raise 401 if absent."""
+    """Extract authenticated user from request state; raise 401/403 if absent or inactive."""
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
+        )
+    if user.get("status") != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is not active",
         )
     return user
