@@ -37,12 +37,13 @@ SYSTEM_PROMPT = (
 )
 _CLAUDE_CMD = (
     "CLAUDE_VOICE=0 claude --dangerously-skip-permissions --model haiku"
-    " --effort low --max-turns 3"
+    " --effort medium --max-turns 3"
     f' --system-prompt "$(cat {_PROMPT_FILE})"'
 )
+_POLL_INTERVAL = 0.3
+_TIMEOUT = 180
 _REDIS_LAST_USED_KEY = "assistant:haiku:last_used"
 _CHAT_LOG = "/tmp/assistant-chat.log"
-
 
 _active_sessions: set[str] = set()
 
@@ -50,65 +51,69 @@ _active_sessions: set[str] = set()
 def _log_chat(
     *,
     session_id: str = "",
-    event: str = "qa",
     prompt: str | None = None,
     response: str | None = None,
     duration_s: float = 0,
-    input_tokens: int = 0,
-    output_tokens: int = 0,
 ) -> None:
-    """Append formatted entry to the chat log (visible via tail -f in tmux)."""
+    """Append formatted Q&A to the chat log."""
     from datetime import datetime
 
     now = datetime.now().strftime("%H:%M:%S")
     sid = session_id[:12] if session_id else "—"
 
     with open(_CHAT_LOG, "a") as f:
-        # Auto-emit session start on first QA for a new session_id
-        if event == "qa" and sid not in _active_sessions and sid != "—":
+        if sid not in _active_sessions and sid != "—":
             _active_sessions.add(sid)
             f.write(f"\n{'─' * 50}\n")
             f.write(f"  SESSION {sid}  started {now}\n")
             f.write(f"{'─' * 50}\n")
-
-        if event == "qa":
-            if prompt is not None:
-                f.write(f"\n  [{now}] 少爺\n")
-                f.write(f"  {prompt}\n")
-            if response is not None:
-                f.write(f"\n  [{now}] 助手\n")
-                for line in response.splitlines():
-                    f.write(f"  {line}\n")
-                parts = [f"⏱ {duration_s:.1f}s"]
-                if input_tokens or output_tokens:
-                    parts.append(f"📊 {input_tokens}in/{output_tokens}out")
-                f.write(f"  {'  '.join(parts)}\n")
-
-        elif event == "end":
-            _active_sessions.discard(sid)
-            f.write(f"\n{'─' * 50}\n")
-            f.write(f"  SESSION {sid}  ended {now}\n")
-            f.write(f"{'─' * 50}\n\n")
+        if prompt is not None:
+            f.write(f"\n  [{now}] 少爺\n")
+            f.write(f"  {prompt}\n")
+        if response is not None:
+            f.write(f"\n  [{now}] 助手\n")
+            for line in response.splitlines():
+                f.write(f"  {line}\n")
+            f.write(f"  ⏱ {duration_s:.1f}s\n")
 
 
-def _ensure_log_tail() -> None:
-    """Ensure tmux assistant pane runs tail -f on the chat log (best-effort)."""
-    try:
-        import pathlib
+def _ensure_assistant_window() -> bool:
+    """Ensure tmux assistant window exists with Claude Code running."""
+    with _startup_lock:
+        return _ensure_assistant_window_inner()
 
-        pathlib.Path(_CHAT_LOG).touch(exist_ok=True)
-        windows = tmux_ok("list-windows", "-F", "#{window_name}")
-        if windows is None:
-            return
-        if TMUX_TARGET not in (windows or "").split("\n"):
+
+def _ensure_assistant_window_inner() -> bool:
+    from tmux_lib.cli_session import wait_for_prompt
+    from tmux_lib.patterns import CLAUDE_CODE
+
+    windows = tmux_ok("list-windows", "-F", "#{window_name}")
+    if windows is None:
+        return False
+    if TMUX_TARGET not in windows.split("\n"):
+        try:
             tmux_check("new-window", "-n", TMUX_TARGET)
+            time.sleep(1)
+        except RuntimeError:
+            return False
+    if is_shell(TMUX_TARGET):
+        with open(_PROMPT_FILE, "w") as f:
+            f.write(SYSTEM_PROMPT)
+        send_text(TMUX_TARGET, _CLAUDE_CMD, buf_name="_assistant_paste")
+        time.sleep(0.15)
+        send_enter(TMUX_TARGET)
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            if not is_shell(TMUX_TARGET):
+                break
             time.sleep(0.5)
-        if is_shell(TMUX_TARGET):
-            send_text(TMUX_TARGET, f"tail -f {_CHAT_LOG}")
-            time.sleep(0.1)
-            send_enter(TMUX_TARGET)
-    except Exception:
-        logger.debug("assistant: failed to setup log tail", exc_info=True)
+        else:
+            return False
+        if not wait_for_prompt(TMUX_TARGET, CLAUDE_CODE, timeout=30, poll_interval=0.3):
+            return False
+        time.sleep(1.0)
+        logger.info("assistant: CC ready")
+    return True
 
 
 # ── FSM Parser ──────────────────────────────────────────────────────────────
@@ -178,13 +183,30 @@ _PROCESSING_SUFFIX_RE = re.compile(
 _SOURCES_HEADING_RE = re.compile(r"^\s*(?:Sources?|References?|Learn more)\s*:\s*$", re.IGNORECASE)
 
 
-def _strip_sources(text: str) -> str:
-    """Remove trailing Sources/References section from CC response text."""
+_CC_NOISE_RE = re.compile(
+    r"(?:\n|^)\s*[✢✻✳✶].*$"  # CC processing indicators (Concocting, Crunching, etc.)
+    r"|(?:\n)\s*(?:Sources?|References?|Learn more)\s*:.*",
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def _strip_cc_noise(text: str) -> str:
+    """Remove CC processing indicators and trailing Sources sections."""
+    # Strip processing indicators line-by-line first
+    lines = text.splitlines()
+    cleaned = []
+    for line in lines:
+        s = line.strip()
+        if s and s[0] in "✢✻✳✶":
+            continue  # CC processing indicator
+        cleaned.append(line)
+    text = "\n".join(cleaned)
+    # Strip Sources section
     for marker in ("\nSources:", "\nSource:", "\nReferences:", "\nLearn more:"):
         idx = text.find(marker)
-        if idx > 0:  # only strip if there's content before it
-            return text[:idx].rstrip()
-    return text
+        if idx > 0:
+            text = text[:idx]
+    return text.rstrip()
 
 
 # Tool name → friendly progress label (regex-based)
@@ -405,122 +427,135 @@ class _DeltaEvent:
 
 
 def _iter_chat(prompt: str, *, session_id: str = "") -> Generator[_DeltaEvent, None, None]:
-    """One-shot CC subprocess with stream-json + log file visibility."""
-    import json
-    import os
-    import subprocess
+    """Tmux TUI: send prompt to persistent CC, poll + FSM parse.
 
-    cmd = [
-        "claude",
-        "-p",
-        prompt,
-        "--dangerously-skip-permissions",
-        "--model",
-        "haiku",
-        "--effort",
-        "medium",
-        "--max-turns",
-        "3",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--system-prompt",
-        SYSTEM_PROMPT,
-    ]
-    env = {**os.environ, "CLAUDE_VOICE": "0"}
-    env.pop("CLAUDECODE", None)
+    Done detection waits for ❯ then drains until text stabilizes.
+    """
+    from tmux_lib.cli_session import has_prompt, wait_for_prompt
+    from tmux_lib.patterns import CLAUDE_CODE
+    from tmux_lib.primitives import capture
 
-    _log_chat(session_id=session_id, prompt=prompt)
-    _ensure_log_tail()
-    t0 = time.time()
-
-    logger.info("assistant: starting CC subprocess sid=%s", session_id)
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=env,
-        )
-    except FileNotFoundError:
-        yield _DeltaEvent(text_delta="助手服務暫時無法使用（claude 未安裝）", is_done=True)
+    if not _ensure_assistant_window():
+        yield _DeltaEvent(text_delta="助手服務暫時無法使用", is_done=True)
         return
 
-    collected_text: list[str] = []
+    if not has_prompt(TMUX_TARGET, CLAUDE_CODE, lines=5):
+        if not wait_for_prompt(TMUX_TARGET, CLAUDE_CODE, timeout=15, poll_interval=0.3):
+            yield _DeltaEvent(text_delta="助手正在處理其他請求，請稍後再試", is_done=True)
+            return
 
-    try:
-        for raw_line in proc.stdout:
-            line = raw_line.strip()
-            if not line:
-                continue
+    _log_chat(session_id=session_id, prompt=prompt)
+    t0 = time.time()
+
+    # Reset pane to avoid stale ❯ from previous Q&A
+    tmux_ok("send-keys", "-t", TMUX_TARGET, "-R")
+    tmux_ok("clear-history", "-t", TMUX_TARGET)
+    time.sleep(0.3)
+    before = capture(TMUX_TARGET, start_line=-200, join_wrapped=True) or ""
+
+    # Send prompt with retry
+    user_q = prompt[-20:]
+    visible = False
+    for attempt in range(1, 4):
+        send_text(TMUX_TARGET, prompt, buf_name="_assistant_paste")
+        time.sleep(0.15)
+        send_enter(TMUX_TARGET)
+        dl = time.time() + 5
+        while time.time() < dl:
+            time.sleep(0.3)
+            cur = capture(TMUX_TARGET, start_line=-200, join_wrapped=True) or ""
+            if user_q in cur and cur != before:
+                visible = True
+                break
+        if visible:
+            break
+        time.sleep(1.0)
+    if not visible:
+        yield _DeltaEvent(text_delta="助手沒有回應，請再試一次", is_done=True)
+        return
+
+    time.sleep(1.0)
+    deadline = time.time() + _TIMEOUT
+    sent_len = 0
+    last_prog: str | None = None
+
+    while time.time() < deadline:
+        time.sleep(_POLL_INTERVAL)
+        try:
+            cur = capture(TMUX_TARGET, start_line=-200, join_wrapped=True) or ""
+        except Exception:
+            break
+
+        lines_after, pidx = _extract_visible_lines_after_prompt(cur)
+        if pidx == -1:
+            continue
+
+        try:
+            text, prog = _parse_delta_lines(lines_after)
+        except Exception:
+            continue
+        text = _strip_cc_noise(text)
+
+        # Detect done (❯ reappeared in tail)
+        done = False
+        if text:
+            for line in lines_after[-5:] if len(lines_after) > 5 else lines_after:
+                if line.strip() == "❯":
+                    done = True
+                    break
+
+        # Emit delta
+        if len(text) > sent_len:
+            yield _DeltaEvent(text_delta=text[sent_len:])
+            sent_len = len(text)
+
+        if prog and prog != last_prog:
+            last_prog = prog
+            yield _DeltaEvent(tool_progress=prog)
+
+        if done:
+            # Drain: poll until text stabilizes (CC TUI render catch-up)
+            for _ in range(10):
+                time.sleep(0.3)
+                try:
+                    d = capture(TMUX_TARGET, start_line=-200, join_wrapped=True) or ""
+                    dl2, _ = _extract_visible_lines_after_prompt(d)
+                    if dl2:
+                        dt, _ = _parse_delta_lines(dl2)
+                        dt = _strip_cc_noise(dt)
+                        if len(dt) > sent_len:
+                            yield _DeltaEvent(text_delta=dt[sent_len:])
+                            sent_len = len(dt)
+                            text = dt
+                        else:
+                            break
+                except Exception:
+                    break
+
+            elapsed = time.time() - t0
+            _log_chat(session_id=session_id, response=text, duration_s=elapsed)
             try:
-                ev = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+                import redis as _redis
 
-            etype = ev.get("type")
-
-            if etype == "assistant":
-                for block in ev.get("message", {}).get("content", []):
-                    if block.get("type") == "text":
-                        text = block.get("text", "")
-                        if text:
-                            text = _strip_sources(text)
-                        if text:
-                            collected_text.append(text)
-                            yield _DeltaEvent(text_delta=text)
-
-            elif etype == "result":
-                elapsed = time.time() - t0
-                usage = ev.get("usage", {})
-                in_tok = usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
-                out_tok = usage.get("output_tokens", 0)
-                if ev.get("is_error"):
-                    err = ev.get("error", "未知錯誤")
-                    _log_chat(session_id=session_id, response=f"[ERROR] {err}", duration_s=elapsed)
-                    yield _DeltaEvent(text_delta=f"助手回應時發生錯誤：{err}", is_done=True)
-                else:
-                    try:
-                        import redis as _redis
-
-                        r = _redis.Redis(decode_responses=True)
-                        r.set(_REDIS_LAST_USED_KEY, str(int(time.time())))
-                    except Exception:
-                        pass
-                    cost = ev.get("total_cost_usd", 0)
-                    turns = ev.get("num_turns", 0)
-                    logger.info(
-                        "assistant: done sid=%s cost=$%.4f turns=%d", session_id, cost, turns
-                    )
-                    _log_chat(
-                        session_id=session_id,
-                        response="".join(collected_text),
-                        duration_s=elapsed,
-                        input_tokens=in_tok,
-                        output_tokens=out_tok,
-                    )
-                yield _DeltaEvent(is_done=True)
-                return
-
-        proc.wait(timeout=5)
-        if proc.returncode != 0:
-            stderr = (proc.stderr.read() or "").strip()[:200]
-            logger.warning("assistant: CC exited %d: %s", proc.returncode, stderr)
-            yield _DeltaEvent(text_delta="助手回應時發生錯誤", is_done=True)
-        else:
+                _redis.Redis(decode_responses=True).set(_REDIS_LAST_USED_KEY, str(int(time.time())))
+            except Exception:
+                pass
+            logger.info("assistant: done, %d chars, %.1fs", sent_len, elapsed)
             yield _DeltaEvent(is_done=True)
+            return
 
+    # Timeout fallback
+    elapsed = time.time() - t0
+    try:
+        cur = capture(TMUX_TARGET, start_line=-200, join_wrapped=True) or ""
+        fb = _extract_response(before, cur)
+        fb = _strip_cc_noise(fb)
     except Exception:
-        logger.error("assistant: subprocess error", exc_info=True)
-        yield _DeltaEvent(text_delta="助手回應時發生錯誤", is_done=True)
-    finally:
-        if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        fb = ""
+    if fb and len(fb) > sent_len:
+        yield _DeltaEvent(text_delta=fb[sent_len:])
+        _log_chat(session_id=session_id, response=fb, duration_s=elapsed)
+    yield _DeltaEvent(is_done=True)
 
 
 # ── Public async API ──
