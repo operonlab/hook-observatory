@@ -378,8 +378,10 @@ async def auto_evolve_kg(
                             points.append(
                                 PointStruct(
                                     id=triple.id,
-                                    vector=emb,
+                                    vector={"dense": emb},
                                     payload={
+                                        "service_id": "memvault_kg",
+                                        "entity_type": "triple",
                                         "space_id": space_id,
                                         "subject": triple.subject,
                                         "predicate": triple.predicate,
@@ -389,8 +391,10 @@ async def auto_evolve_kg(
                                 )
                             )
                     if points:
+                        from src.shared.qdrant_search import COLLECTION_NAME
+
                         client.upsert(
-                            collection_name="memvault_triples",
+                            collection_name=COLLECTION_NAME,
                             points=points,
                         )
                         logger.debug("KG auto-evolve: indexed %d triples in Qdrant", len(points))

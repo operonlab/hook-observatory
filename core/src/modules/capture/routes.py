@@ -167,8 +167,8 @@ async def batch_promote(
     # H3: Verify ownership and space membership for every capture before promoting.
     # Prevents a user from promoting captures that belong to another space or owner.
     for cid in capture_ids:
-        capture = await capture_service.get(db, cid)
-        if not capture or capture.space_id != space_id:
+        capture = await capture_service.get_in_space(db, cid, space_id)
+        if not capture:
             raise ForbiddenError(
                 f"Capture {cid} not found or not in space {space_id}",
                 code="capture.forbidden",

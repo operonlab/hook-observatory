@@ -319,7 +319,7 @@ async def create_annotation(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("paper.write"),
 ):
-    article = await article_service.get(db, article_id)
+    article = await article_service.get_in_space(db, article_id, space_id)
     if not article:
         raise NotFoundError("Article not found", code="paper.article_not_found")
 

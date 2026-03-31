@@ -221,17 +221,18 @@ async def delete_task(
 @router.get("/tasks/{task_id}/subtasks", response_model=PaginatedResponse[TaskResponse])
 async def list_subtasks(
     task_id: str,
+    space_id: str = Query("default"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("taskflow.read"),
 ):
-    parent = await task_service.get(db, task_id)
+    parent = await task_service.get_in_space(db, task_id, space_id)
     if not parent:
         raise NotFoundError("Task not found", code="taskflow.task_not_found")
     return await task_service.list(
         db,
-        parent.space_id,
+        space_id,
         PaginationParams(page=page, page_size=page_size),
         parent_id=task_id,
     )

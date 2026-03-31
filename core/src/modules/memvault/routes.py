@@ -78,10 +78,11 @@ async def list_blocks(
 @router.get("/blocks/{block_id}", response_model=MemoryBlockResponse)
 async def get_block(
     block_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.read"),
 ):
-    instance = await memory_block_service.get(db, block_id)
+    instance = await memory_block_service.get_in_space(db, block_id, space_id)
     if not instance:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
     return memory_block_service.to_response(instance)
