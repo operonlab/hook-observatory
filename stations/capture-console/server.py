@@ -12,17 +12,16 @@ import asyncio
 import json
 import logging
 import os
-import re
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from tmux_lib.cc_reader import aiter_cc_response, resolve_session_jsonl
 from tmux_lib.cli_session import is_process_running_async, start_cli_async
 from tmux_lib.patterns import CLAUDE_CODE
 from tmux_lib.primitives import (
-    capture_async,
     send_enter_async,
     send_text_async,
     tmux_run_async,
@@ -104,14 +103,6 @@ SYSTEM_PROMPT = (
 
 # Prompt file for Claude startup command (avoids shell escaping)
 _PROMPT_FILE = "/tmp/capture-console-system-prompt.txt"
-
-# JSON extraction patterns
-_JSON_BLOCK_RE = re.compile(r"```json\s*([\s\S]*?)```")
-_JSON_OBJECT_RE = re.compile(r"\{[\s\S]*?\"module\"[\s\S]*?\"payload\"[\s\S]*?\}")
-
-# Claude Code TUI detection
-_BORDER_RE = re.compile(r"^[─━]{20,}$")
-_TUI_NOISE = re.compile(r"🔖|🤖|⏵⏵|bypass|Checking for update|shift\+tab|💰|✍️|📁|⎇")
 
 # Serialization lock — one tmux interaction at a time
 _query_lock = asyncio.Lock()
@@ -204,7 +195,7 @@ async def ensure_claude() -> bool:
         f.write(SYSTEM_PROMPT)
 
     start_cmd = (
-        f"claude --model {CLAUDE_MODEL} --dangerously-skip-permissions"
+        f"claude --model {CLAUDE_MODEL} --effort low --dangerously-skip-permissions"
         f' --system-prompt "$(cat {_PROMPT_FILE})"'
     )
     started = await start_cli_async(
@@ -218,63 +209,32 @@ async def ensure_claude() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Response extraction
+# Response post-processing
 # ---------------------------------------------------------------------------
 
 
-def _extract_response(content: str) -> str:
-    """Extract Claude's latest response from pane content.
+def _wrap_as_json_block(text: str) -> str:
+    """Wrap structured JSON responses in a ```json code fence for the frontend.
 
-    Claude Code TUI renders responses with ⏺ (record) prefix and ⎿ (continuation).
-    JSON may appear raw (no ```json fences) in the TUI output.
+    If the text already contains a json code block, return as-is.
+    If it looks like a raw JSON object with 'module' and 'payload' keys,
+    pretty-print and wrap it. Otherwise return the text unchanged.
     """
-    # Strategy 1: ```json code block (if Claude wrapped it)
-    blocks = _JSON_BLOCK_RE.findall(content)
-    if blocks:
-        return f"```json\n{blocks[-1].strip()}\n```"
+    stripped = text.strip()
 
-    # Strategy 2: extract response lines from TUI (between last ❯ input and idle prompt)
-    lines = content.split("\n")
-    response_lines: list[str] = []
-    last_input_idx = -1
+    # Already wrapped in a code fence
+    if "```json" in stripped:
+        return stripped
 
-    # Find the LAST user input line (❯ followed by text)
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("❯") and stripped not in ("❯", "❯ "):
-            last_input_idx = i
+    # Try to parse as raw JSON object
+    try:
+        obj = json.loads(stripped)
+        if "module" in obj and "payload" in obj:
+            return f"```json\n{json.dumps(obj, ensure_ascii=False, indent=2)}\n```"
+    except (json.JSONDecodeError, TypeError):
+        pass
 
-    if last_input_idx >= 0:
-        # Collect everything after the input line until the idle prompt border
-        for i in range(last_input_idx + 1, len(lines)):
-            stripped = lines[i].strip()
-            if _BORDER_RE.match(stripped):
-                # Could be end-of-response or start of idle prompt
-                # Check if next non-empty line is ❯ (idle prompt)
-                for j in range(i + 1, min(i + 4, len(lines))):
-                    if lines[j].strip() in ("❯", "❯ "):
-                        break  # reached idle prompt, stop collecting
-                else:
-                    continue  # border within response, keep going
-                break
-            if _TUI_NOISE.search(stripped):
-                continue
-            # Clean TUI prefixes
-            cleaned = re.sub(r"^\s*[⏺⎿]\s?", "", lines[i])
-            response_lines.append(cleaned)
-
-    text = "\n".join(response_lines).strip()
-
-    # Try to parse as JSON and wrap in code fence for the frontend
-    if text:
-        try:
-            obj = json.loads(text)
-            if "module" in obj and "payload" in obj:
-                return f"```json\n{json.dumps(obj, ensure_ascii=False, indent=2)}\n```"
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-    return text or "(空回應)"
+    return stripped or "(空回應)"
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +249,14 @@ async def query_claude(message: str) -> str:
             raise RuntimeError("Claude Code 未執行且無法啟動")
         _touch_last_used()
 
-        before = await capture_async(TMUX_TARGET) or ""
+        # Discover JSONL path before sending (establishes baseline offset)
+        jsonl_path = await asyncio.to_thread(resolve_session_jsonl, TMUX_TARGET)
+        baseline_offset = 0
+        if jsonl_path:
+            try:
+                baseline_offset = jsonl_path.stat().st_size
+            except OSError:
+                pass
 
         # Send message via tmux (literal mode avoids key-name interpretation)
         safe_msg = message.replace("\n", " ")
@@ -297,31 +264,26 @@ async def query_claude(message: str) -> str:
         await asyncio.sleep(0.1)
         await send_enter_async(TMUX_TARGET)
 
-        # Content-stability approach:
-        # Claude Code TUI animates during thinking (✻ Cogitating…) — content
-        # keeps changing. Once response is complete, content stabilizes.
-        # Wait for 3 consecutive identical captures (~0.9s of no change).
-        start = time.time()
-        prev = before
-        stable = 0
+        # Use shared hybrid reader (JSONL primary + stability fallback)
+        full_text = ""
+        async for delta in aiter_cc_response(
+            TMUX_TARGET,
+            jsonl_path=jsonl_path,
+            baseline_offset=baseline_offset,
+            timeout=CLAUDE_TIMEOUT,
+        ):
+            if delta.text:
+                full_text += delta.text
+            if delta.is_done:
+                break
 
-        while time.time() - start < CLAUDE_TIMEOUT:
-            await asyncio.sleep(0.3)
-            current = await capture_async(TMUX_TARGET) or ""
+        if not full_text:
+            raise TimeoutError("Claude Code 回應逾時")
 
-            if current == before:
-                continue  # nothing changed yet
+        log.info("Response received (%d chars)", len(full_text))
 
-            if current == prev:
-                stable += 1
-                if stable >= 3:
-                    log.info("Response stable (%.1fs)", time.time() - start)
-                    return _extract_response(current)
-            else:
-                stable = 0
-                prev = current
-
-        raise TimeoutError("Claude Code 回應逾時")
+        # Capture-console specific: wrap JSON in code fence for the frontend
+        return _wrap_as_json_block(full_text)
 
 
 # ---------------------------------------------------------------------------
