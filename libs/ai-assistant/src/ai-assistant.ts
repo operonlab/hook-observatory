@@ -55,6 +55,7 @@ type FsmState = "idle" | "thinking" | "streaming" | "draining";
 type FsmEvent =
   | "SEND"
   | "SSE_THINKING"
+  | "SSE_PROGRESS"
   | "SSE_CONTENT"
   | "SSE_ERROR"
   | "SSE_DONE"
@@ -183,6 +184,7 @@ export class AiAssistantElement extends HTMLElement {
 
       case "thinking":
         if (event === "SSE_THINKING") { /* already thinking, no-op */ }
+        else if (event === "SSE_PROGRESS") { this.setSpeechText(payload as string); }
         else if (event === "SSE_CONTENT") { this._enterStreaming(payload); }
         else if (event === "SSE_ERROR") { this._enterIdle({ error: payload as string }); }
         else if (event === "SSE_DONE") { this._enterIdle(); }
@@ -190,6 +192,7 @@ export class AiAssistantElement extends HTMLElement {
 
       case "streaming":
         if (event === "SSE_CONTENT") { this._onChunk(payload); }
+        else if (event === "SSE_PROGRESS") { /* tool call mid-stream, ignore in UI */ }
         else if (event === "SSE_ERROR") { this._enterIdle({ error: payload as string }); }
         else if (event === "SSE_DONE") { this._enterDraining(); }
         break;
@@ -211,7 +214,7 @@ export class AiAssistantElement extends HTMLElement {
     this._setMascotVisual("idle");
 
     if (opts?.error) {
-      this.speechBubbleEl?.classList.remove("streaming");
+      this.speechBubbleEl?.classList.remove("streaming", "thinking");
       this.setSpeechText(opts.error);
       this.startPhraseRotation();
     } else if (this.streamingContent) {
@@ -251,6 +254,7 @@ export class AiAssistantElement extends HTMLElement {
     // Visual
     this._setMascotVisual("thinking");
     this.speechBubbleEl?.classList.remove("streaming");
+    this.speechBubbleEl?.classList.add("thinking");
     this.setSpeechText("思考中...");
 
     // Start stream — reuse persistent session_id (generated once per component lifecycle)
@@ -261,6 +265,7 @@ export class AiAssistantElement extends HTMLElement {
 
     this.abortController = startStream(this._apiUrl, body, {
       onThinking: () => this.transition("SSE_THINKING"),
+      onProgress: (msg) => this.transition("SSE_PROGRESS", msg),
       onContent: (text, isDelta) => this.transition("SSE_CONTENT", { text, isDelta }),
       onError: (msg) => this.transition("SSE_ERROR", msg),
       onDone: () => this.transition("SSE_DONE"),
@@ -273,6 +278,7 @@ export class AiAssistantElement extends HTMLElement {
     // Visual
     this._setMascotVisual("speaking");
     this._startLipSync();
+    this.speechBubbleEl?.classList.remove("thinking");
     this.speechBubbleEl?.classList.add("streaming");
 
     // Process first chunk

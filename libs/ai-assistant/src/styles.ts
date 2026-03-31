@@ -76,6 +76,49 @@ export const STYLES = /* css */ `
     white-space: pre-wrap;
     word-break: break-word;
   }
+
+  /* ── State-colored speech bubble ── */
+  .speech-bubble.thinking {
+    border-color: rgba(180, 190, 254, 0.4);
+    box-shadow: 0 2px 16px rgba(180, 190, 254, 0.15), 0 0 0 1px rgba(180, 190, 254, 0.1);
+  }
+  .speech-bubble.thinking::after {
+    border-top-color: var(--ai-bg);
+  }
+  .speech-bubble.streaming {
+    border-color: rgba(166, 227, 161, 0.35);
+    box-shadow: 0 2px 12px rgba(166, 227, 161, 0.1);
+  }
+
+  /* ── Loading spinner (above text, inside bubble) ── */
+  .speech-bubble.thinking .speech-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .speech-bubble.thinking .speech-text::before {
+    content: '';
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border: 2.5px solid rgba(180, 190, 254, 0.25);
+    border-top-color: var(--ai-accent);
+    border-radius: 50%;
+    animation: ai-spin 0.7s linear infinite;
+  }
+  @keyframes ai-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Pulse glow on thinking bubble */
+  .speech-bubble.thinking {
+    animation: ai-pulse 2s ease-in-out infinite;
+  }
+  @keyframes ai-pulse {
+    0%, 100% { box-shadow: 0 2px 16px rgba(180, 190, 254, 0.15), 0 0 0 1px rgba(180, 190, 254, 0.1); }
+    50% { box-shadow: 0 2px 20px rgba(180, 190, 254, 0.3), 0 0 0 1px rgba(180, 190, 254, 0.2); }
+  }
   .speech-bubble.streaming {
     padding-right: 6px;
   }

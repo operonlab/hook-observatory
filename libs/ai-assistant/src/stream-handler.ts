@@ -11,6 +11,7 @@ const BASE_RETRY_MS = 1000;
 export interface StreamCallbacks {
   onContent: (text: string, isDelta: boolean) => void;
   onThinking: () => void;
+  onProgress: (message: string) => void;
   onError: (message: string) => void;
   onDone: () => void;
 }
@@ -111,6 +112,12 @@ function handleBlock(
         typeof block.data.text === "string" ? block.data.text : "";
       const isDelta = block.data.is_delta !== false;
       callbacks.onContent(text, isDelta);
+      break;
+    }
+    case "progress": {
+      const progressMsg =
+        typeof block.data.message === "string" ? block.data.message : "";
+      if (progressMsg) callbacks.onProgress(progressMsg);
       break;
     }
     case "error": {
