@@ -17,6 +17,7 @@ class TradeCaptureAdapter(BaseCaptureAdapter):
     module = "invest"
     entity_type = "trade"
     default_ttl_days = 30
+    enrichment_adapter_type = "invest"
 
     field_weights = {
         "position_id": 25,
@@ -33,9 +34,7 @@ class TradeCaptureAdapter(BaseCaptureAdapter):
         "tax": 0,
     }
 
-    def smart_defaults(
-        self, payload: dict[str, Any], user_prefs: dict[str, Any]
-    ) -> dict[str, Any]:
+    def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}
 
         if result.get("currency") is None:

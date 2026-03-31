@@ -58,13 +58,73 @@ ENRICHMENT_SCHEMAS: dict[tuple[str, str], dict[str, str]] = {
 }
 
 
+# ── Asymmetric Enrichment Profiles ───────────────────────────────────────────
+#
+# Inspired by TurboQuant+ K>V asymmetry (ICLR 2026): errors in high-value data
+# are amplified downstream (like softmax on K cache), so they warrant deeper
+# enrichment. Time-sensitive or low-stakes sources use shallow enrichment.
+#
+# Keys match the adapter_type passed to get_enrichment_profile().
+# "generic" is the fallback and must match the legacy static thresholds.
+
+ADAPTER_ENRICHMENT_PROFILES: dict[str, dict[str, float]] = {
+    # High precision — errors are costly (finance records, investments)
+    "finance_transaction": {
+        "confidence_threshold": 0.5,
+        "ambiguity_threshold": 0.4,
+        "min_completeness": 0.9,
+    },
+    "finance_subscription": {
+        "confidence_threshold": 0.5,
+        "ambiguity_threshold": 0.4,
+        "min_completeness": 0.9,
+    },
+    "invest": {
+        "confidence_threshold": 0.5,
+        "ambiguity_threshold": 0.4,
+        "min_completeness": 0.85,
+    },
+    # Medium precision — structured but forgiving
+    "taskflow": {
+        "confidence_threshold": 0.6,
+        "ambiguity_threshold": 0.5,
+        "min_completeness": 0.8,
+    },
+    "dailyos": {
+        "confidence_threshold": 0.6,
+        "ambiguity_threshold": 0.5,
+        "min_completeness": 0.8,
+    },
+    # Low precision — speed matters, time-sensitive (must match legacy defaults)
+    "webcrawl": {
+        "confidence_threshold": 0.7,
+        "ambiguity_threshold": 0.6,
+        "min_completeness": 0.7,
+    },
+    # Generic fallback — matches legacy static thresholds
+    "generic": {
+        "confidence_threshold": 0.6,
+        "ambiguity_threshold": 0.5,
+        "min_completeness": 0.8,
+    },
+}
+
+
+def get_enrichment_profile(adapter_type: str | None) -> dict[str, float]:
+    """Return the enrichment profile for the given adapter type.
+
+    Falls back to "generic" if adapter_type is None or unknown.
+    """
+    if adapter_type and adapter_type in ADAPTER_ENRICHMENT_PROFILES:
+        return ADAPTER_ENRICHMENT_PROFILES[adapter_type]
+    return ADAPTER_ENRICHMENT_PROFILES["generic"]
+
+
 # ── RLM Enrichment Strategy ──────────────────────────────────────────────────
 
-# TODO: dynamic based on input complexity — e.g. longer / more structured inputs
-# can sustain higher confidence expectations than short freeform text.
+# Legacy constants retained for backward compatibility.
+# New code should use get_enrichment_profile() instead.
 _RLM_FIELD_CONFIDENCE_THRESHOLD = 0.6
-# TODO: dynamic based on input complexity — inputs with clear numeric tokens or
-# known entity names warrant a higher ambiguity bar.
 _RLM_AMBIGUITY_THRESHOLD = 0.5
 
 
@@ -89,12 +149,23 @@ class RLMEnrichmentStrategy(EnrichmentStrategy):
         self,
         field_schema: dict[str, str],
         *,
-        confidence_threshold: float = _RLM_FIELD_CONFIDENCE_THRESHOLD,
-        ambiguity_threshold: float = _RLM_AMBIGUITY_THRESHOLD,
+        adapter_type: str | None = None,
+        confidence_threshold: float | None = None,
+        ambiguity_threshold: float | None = None,
     ) -> None:
+        profile = get_enrichment_profile(adapter_type)
         self._field_schema = field_schema
-        self._confidence_threshold = confidence_threshold
-        self._ambiguity_threshold = ambiguity_threshold
+        # Explicit kwargs override profile values (backward compatibility)
+        self._confidence_threshold = (
+            confidence_threshold
+            if confidence_threshold is not None
+            else profile["confidence_threshold"]
+        )
+        self._ambiguity_threshold = (
+            ambiguity_threshold
+            if ambiguity_threshold is not None
+            else profile["ambiguity_threshold"]
+        )
         self._engine = RLMEngine(
             RLMConfig(
                 model="grok-4-fast",

@@ -21,13 +21,22 @@ class PlanItemCaptureAdapter(BaseCaptureAdapter):
     module = "dailyos"
     entity_type = "plan_item"
     default_ttl_days = 7  # shorter TTL — plan items are time-sensitive
+    enrichment_adapter_type = "dailyos"
 
     @property
     def enrichment_strategies(self):
-        from .enrichment_config import ENRICHMENT_SCHEMAS
+        from .enrichment_config import ENRICHMENT_SCHEMAS, get_enrichment_profile
 
         schema = ENRICHMENT_SCHEMAS.get(("dailyos", "plan_item"))
-        return [LLMEnrichmentStrategy(field_schema=schema)] if schema else []
+        if not schema:
+            return []
+        profile = get_enrichment_profile(self.enrichment_adapter_type)
+        return [
+            LLMEnrichmentStrategy(
+                field_schema=schema,
+                min_completeness=profile["min_completeness"],
+            )
+        ]
 
     field_weights = {
         "title": 40,

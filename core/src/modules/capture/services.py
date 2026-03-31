@@ -28,13 +28,19 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 
-def _confidence_threshold(enrichment_depth: int = 1) -> float:
-    """Dynamic confidence gate: base 0.45 + 0.05 per enrichment depth level.
+def _confidence_threshold(enrichment_depth: int = 1, adapter_type: str | None = None) -> float:
+    """Dynamic confidence gate combining adapter profile and enrichment depth.
 
-    Deeper enrichment pipelines have more context to extract from,
-    so the bar rises. Clamped to [0.3, 0.8].
+    Base formula: profile["confidence_threshold"] + 0.05 per enrichment depth level.
+    Clamped to [0.3, 0.8].
+
+    adapter_type selects the asymmetric enrichment profile (e.g. "finance_transaction"
+    applies a stricter bar than "webcrawl"). Falls back to "generic" if unknown.
     """
-    return max(0.3, min(0.8, 0.45 + 0.05 * enrichment_depth))
+    from .enrichment_config import get_enrichment_profile
+
+    profile_base = get_enrichment_profile(adapter_type)["confidence_threshold"]
+    return max(0.3, min(0.8, profile_base + 0.05 * enrichment_depth))
 
 
 class CaptureService:
@@ -266,7 +272,11 @@ class CaptureService:
             for strategy in adapter_strategies:
                 pipeline.add(strategy)
             enrichment_depth = len(adapter_strategies)
-            threshold = _confidence_threshold(enrichment_depth)
+            # Derive adapter_type key for asymmetric enrichment profile lookup
+            _at = getattr(adapter, "enrichment_adapter_type", None) or (
+                f"{adapter.module}_{adapter.entity_type}"
+            )
+            threshold = _confidence_threshold(enrichment_depth, adapter_type=_at)
             pipeline.add(ConfidenceGateStrategy(threshold=threshold))
 
             enrichment_result = await pipeline.run(

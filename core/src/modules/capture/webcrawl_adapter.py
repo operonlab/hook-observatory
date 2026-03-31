@@ -34,15 +34,23 @@ class WebCrawlCaptureAdapter(BaseCaptureAdapter):
 
     default_ttl_days = 7  # URLs are time-sensitive
 
+    enrichment_adapter_type = "webcrawl"
+
     # Extract page title from raw HTML if captured via paste/clipboard
     @property
     def enrichment_strategies(self):
-        from .enrichment_config import ENRICHMENT_SCHEMAS
+        from .enrichment_config import ENRICHMENT_SCHEMAS, get_enrichment_profile
 
         schema = ENRICHMENT_SCHEMAS.get(("intelflow", "webcrawl"))
         strategies = [PatternMatchStrategy(patterns={"title": r"<title>([^<]+)</title>"})]
         if schema:
-            strategies.append(LLMEnrichmentStrategy(field_schema=schema))
+            profile = get_enrichment_profile(self.enrichment_adapter_type)
+            strategies.append(
+                LLMEnrichmentStrategy(
+                    field_schema=schema,
+                    min_completeness=profile["min_completeness"],
+                )
+            )
         return strategies
 
     def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:

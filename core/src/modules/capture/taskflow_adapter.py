@@ -15,6 +15,7 @@ class TaskCaptureAdapter(BaseCaptureAdapter):
     module = "taskflow"
     entity_type = "task"
     default_ttl_days = 30
+    enrichment_adapter_type = "taskflow"
 
     field_weights = {
         "title": 30,
@@ -31,9 +32,7 @@ class TaskCaptureAdapter(BaseCaptureAdapter):
         "status": "todo",
     }
 
-    def smart_defaults(
-        self, payload: dict[str, Any], user_prefs: dict[str, Any]
-    ) -> dict[str, Any]:
+    def smart_defaults(self, payload: dict[str, Any], user_prefs: dict[str, Any]) -> dict[str, Any]:
         result = {**self.default_values, **payload}
 
         if result.get("source") is None:
