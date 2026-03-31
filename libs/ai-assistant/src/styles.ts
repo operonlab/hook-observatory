@@ -90,6 +90,27 @@ export const STYLES = /* css */ `
     box-shadow: 0 2px 12px rgba(166, 227, 161, 0.1);
   }
 
+  /* ── Markdown rendered content in speech bubble ── */
+  .speech-text p { margin: 0 0 0.4em; }
+  .speech-text p:last-child { margin-bottom: 0; }
+  .speech-text a {
+    color: var(--ai-accent);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--ai-accent);
+  }
+  .speech-text a:hover { opacity: 0.8; }
+  .speech-text code {
+    background: rgba(255,255,255,0.06);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .speech-text ul, .speech-text ol {
+    padding-left: 1.2em;
+    margin: 0.3em 0;
+  }
+  .speech-text li { margin: 0.15em 0; }
+
   /* ── Loading spinner (above text, inside bubble) ── */
   .speech-bubble.thinking .speech-text {
     display: flex;

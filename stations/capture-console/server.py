@@ -62,22 +62,35 @@ CAPTURE_WINDOW = os.getenv("CAPTURE_WINDOW", "3")
 CAPTURE_PANE = os.getenv("CAPTURE_PANE", "1")
 HOST = os.getenv("CAPTURE_HOST", "127.0.0.1")
 PORT = int(os.getenv("CAPTURE_PORT", "10104"))
-CLAUDE_TIMEOUT = float(os.getenv("CAPTURE_CLAUDE_TIMEOUT", "30"))
+CLAUDE_TIMEOUT = float(os.getenv("CAPTURE_CLAUDE_TIMEOUT", "60"))
 CLAUDE_MODEL = os.getenv("CAPTURE_CLAUDE_MODEL", "haiku")
 
 TMUX_TARGET = f"{TMUX_SESSION}:{CAPTURE_WINDOW}.{CAPTURE_PANE}"
 
 SYSTEM_PROMPT = (
-    "你是 Workshop 平台的捕捉解析助理。"
-    "使用者會給你簡短的自然語言描述（如消費、任務、投資、日程），"
-    "你必須將其解析成結構化 JSON。\n\n"
-    "## 規則\n"
-    "1. 禁止使用任何工具或 MCP server。只回覆純文字 JSON。\n"
-    "2. 回覆格式必須是 ```json\\n{...}\\n``` code block。\n"
-    "3. 用繁體中文回覆 notes 欄位。\n"
-    "4. 嚴禁任何解釋性文字、歡迎訊息、後續建議。只輸出 JSON code block。\n"
-    "5. 即使信心度低，仍以 JSON 格式回覆（在 notes 欄位說明原因）。\n"
-    "6. CRITICAL: 回覆只能有一個 ```json code block，前後不可有任何文字。\n\n"
+    "你是 Workshop 平台的捕捉解析助理，稱呼使用者為「少爺」。\n"
+    "使用者會給你簡短的自然語言描述（消費、任務、投資、日程等），\n"
+    "你必須解析成結構化 JSON 並用 CLI 工具查詢真實資料。\n\n"
+    "## 工作流程\n"
+    "1. 解析使用者意圖，判斷 module 和 entity_type\n"
+    "2. 若提到名稱（如錢包名、專案名、帳戶名），用 Bash 執行 CLI 查詢真實 ID\n"
+    "3. 回覆結構化 JSON（必須包含真實 ID，不可填 null 或 name）\n\n"
+    "## 可用 CLI 工具（用 Bash 執行，都支援 --json）\n"
+    "- `~/.local/bin/finance wallets list --json` — 錢包清單（wallet_id）\n"
+    "- `~/.local/bin/finance categories list --json` — 分類清單（category_id）\n"
+    "- `~/.local/bin/finance txn create --json` — 建立交易\n"
+    "- `~/.local/bin/taskflow tasks list --json` — 任務清單\n"
+    "- `~/.local/bin/taskflow tasks create --json` — 建立任務\n"
+    "- `~/.local/bin/dailyos plans list --json` — 日程清單\n"
+    "- `~/.local/bin/dailyos plans create --json` — 建立日程\n"
+    "- `~/.local/bin/invest accounts list --json` — 投資帳戶\n"
+    "- `~/.local/bin/invest positions list --json` — 持倉清單\n"
+    "- `~/.local/bin/intelflow topics list --json` — 追蹤主題\n\n"
+    "## 回覆格式\n"
+    "- 最終回覆必須是 ```json code block\n"
+    "- code block 前後不可有解釋性文字、歡迎訊息、後續建議\n"
+    "- 用繁體中文回覆 notes 欄位\n"
+    "- 即使信心度低，仍以 JSON 格式回覆\n\n"
     "## JSON 結構\n"
     "```json\n"
     '{"module":"finance|taskflow|invest|dailyos|intelflow",'
@@ -98,8 +111,9 @@ SYSTEM_PROMPT = (
     "transacted_at/plan_date 預設今天。\n\n"
     "## 解析範例\n"
     '- 「午餐 150」→ finance/transaction {amount:150, description:"午餐"}\n'
-    '- 「Netflix 390/月」→ finance/subscription {name:"Netflix", amount:390, billing_cycle:"monthly"}\n'
-    '- 「明天下午開會三小時」→ dailyos/plan_item {title:"開會", estimated_hours:3, plan_date:"明天"}\n'
+    "- 「中信卡 午餐 150」→ 先查 wallets list 找到中信卡的 wallet_id，填入 JSON\n"
+    '- 「Netflix 390/月」→ finance/subscription {name:"Netflix", amount:390}\n'
+    '- 「明天下午開會三小時」→ dailyos/plan_item {title:"開會", estimated_hours:3}\n'
     '- 「買 10 張台積電 850」→ invest/trade {shares:10, price:850, type:"buy"}'
 )
 # Idle cleanup delegated to capture_watchdog.py (Cronicle, 30-min threshold)
@@ -206,7 +220,7 @@ async def ensure_claude() -> bool:
     if await is_shell_async(TMUX_TARGET):
         # CC not running — start it and wait for ❯ prompt
         start_cmd = (
-            f"CLAUDE_VOICE=0 claude --model {CLAUDE_MODEL} --effort low"
+            f"CLAUDE_VOICE=0 claude --model {CLAUDE_MODEL} --effort medium"
             f" --dangerously-skip-permissions"
             f' --system-prompt "$(cat {_PROMPT_FILE})"'
         )

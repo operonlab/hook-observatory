@@ -28,7 +28,7 @@ import re
 import subprocess
 import time
 from collections.abc import AsyncGenerator, Generator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
@@ -97,9 +97,7 @@ _PROCESSING_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
-_SOURCES_HEADING_RE = re.compile(
-    r"^\s*(?:Sources?|References?|Learn more)\s*:\s*$", re.IGNORECASE
-)
+_SOURCES_HEADING_RE = re.compile(r"^\s*(?:Sources?|References?|Learn more)\s*:\s*$", re.IGNORECASE)
 
 # Spinner characters (used for activity detection)
 _SPINNER_RE = re.compile(r"[⏺✢✻✽✦✧✳⠂]")
@@ -551,7 +549,7 @@ def _extract_fsm_from_pane(pane_content: str) -> tuple[str, str | None]:
     if prompt_idx == -1:
         return "", None
 
-    response_lines = lines[prompt_idx + 1:]
+    response_lines = lines[prompt_idx + 1 :]
     text, prog = _run_fsm(response_lines)
     return strip_cc_noise(text), prog
 
@@ -611,22 +609,23 @@ def iter_cc_response(
         while time.time() < deadline:
             time.sleep(poll_interval)
 
-            # Read new JSONL lines (preserve offset on partial/malformed lines)
+            # Read new JSONL lines (binary mode for reliable seek/tell)
             new_entries: list[dict] = []
             try:
-                with open(jsonl_path, encoding="utf-8") as f:
+                with open(jsonl_path, "rb") as f:
                     f.seek(last_offset)
-                    for raw in f:
-                        line_start = f.tell() - len(raw.encode("utf-8"))
-                        raw_stripped = raw.strip()
-                        if not raw_stripped:
+                    for raw_bytes in f:
+                        try:
+                            raw = raw_bytes.decode("utf-8").strip()
+                        except UnicodeDecodeError:
+                            break
+                        if not raw:
+                            last_offset = f.tell()
                             continue
                         try:
-                            new_entries.append(json.loads(raw_stripped))
+                            new_entries.append(json.loads(raw))
                             last_offset = f.tell()
                         except json.JSONDecodeError:
-                            # Partial line — rewind so it's re-read next iteration
-                            last_offset = line_start
                             break
             except OSError:
                 pass
@@ -666,9 +665,7 @@ def iter_cc_response(
                     if prev_capture is not None and cur == prev_capture:
                         stable += 1
                         if stable >= stable_count:
-                            logger.debug(
-                                "cc_reader: done via stability (%.1fs)", elapsed
-                            )
+                            logger.debug("cc_reader: done via stability (%.1fs)", elapsed)
                             # Drain any remaining text
                             if len(full_text) > sent_len:
                                 yield CCDelta(text=full_text[sent_len:])
@@ -765,18 +762,20 @@ async def aiter_cc_response(
 
             new_entries: list[dict] = []
             try:
-                with open(jsonl_path, encoding="utf-8") as f:
+                with open(jsonl_path, "rb") as f:
                     f.seek(last_offset)
-                    for raw in f:
-                        line_start = f.tell() - len(raw.encode("utf-8"))
-                        raw_stripped = raw.strip()
-                        if not raw_stripped:
+                    for raw_bytes in f:
+                        try:
+                            raw = raw_bytes.decode("utf-8").strip()
+                        except UnicodeDecodeError:
+                            break
+                        if not raw:
+                            last_offset = f.tell()
                             continue
                         try:
-                            new_entries.append(json.loads(raw_stripped))
+                            new_entries.append(json.loads(raw))
                             last_offset = f.tell()
                         except json.JSONDecodeError:
-                            last_offset = line_start
                             break
             except OSError:
                 pass
@@ -814,9 +813,7 @@ async def aiter_cc_response(
                     if prev_capture is not None and cur == prev_capture:
                         stable += 1
                         if stable >= stable_count:
-                            logger.debug(
-                                "cc_reader: done via stability (%.1fs)", elapsed
-                            )
+                            logger.debug("cc_reader: done via stability (%.1fs)", elapsed)
                             if len(full_text) > sent_len:
                                 yield CCDelta(text=full_text[sent_len:])
                             yield CCDelta(is_done=True)
@@ -865,13 +862,13 @@ async def aiter_cc_response(
 # ── Public re-exports ─────────────────────────────────────────────────────────
 
 __all__ = [
-    "CCDelta",
     "TOOL_NAME_LABEL",
-    "resolve_session_jsonl",
-    "extract_text_from_jsonl_entry",
-    "strip_cc_noise",
-    "wait_stable_sync",
-    "wait_stable",
-    "iter_cc_response",
+    "CCDelta",
     "aiter_cc_response",
+    "extract_text_from_jsonl_entry",
+    "iter_cc_response",
+    "resolve_session_jsonl",
+    "strip_cc_noise",
+    "wait_stable",
+    "wait_stable_sync",
 ]

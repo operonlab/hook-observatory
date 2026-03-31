@@ -14,6 +14,7 @@
 
 import { SpriteAnimator } from "@workshop/live2d-core";
 import type { CubismRendererOptions } from "@workshop/live2d-core";
+import { renderMarkdown } from "./markdown";
 import { startStream } from "./stream-handler";
 import { STYLES } from "./styles";
 import type { ChatMessage, MascotState } from "./types";
@@ -337,7 +338,8 @@ export class AiAssistantElement extends HTMLElement {
       this.typewriterTimer = null;
     }
     if (this.typewriterQueue) {
-      this.setSpeechText(this.typewriterQueue, false);
+      // Final render with markdown for proper formatting
+      this.setSpeechText(this.typewriterQueue, false, true);
     }
     this.typewriterQueue = "";
     this.typewriterShown = "";
@@ -642,17 +644,21 @@ export class AiAssistantElement extends HTMLElement {
 
   // ── Speech Bubble ──
 
-  private setSpeechText(text: string, animate = true) {
+  private setSpeechText(text: string, animate = true, markdown = false) {
     if (!this.speechTextEl) return;
+    const apply = () => {
+      if (markdown) {
+        this.speechTextEl.innerHTML = renderMarkdown(text);
+      } else {
+        this.speechTextEl.textContent = text;
+      }
+      this.speechTextEl.style.opacity = "1";
+    };
     if (animate) {
       this.speechTextEl.style.opacity = "0";
-      setTimeout(() => {
-        this.speechTextEl.textContent = text;
-        this.speechTextEl.style.opacity = "1";
-      }, 200);
+      setTimeout(apply, 200);
     } else {
-      this.speechTextEl.textContent = text;
-      this.speechTextEl.style.opacity = "1";
+      apply();
     }
   }
 
