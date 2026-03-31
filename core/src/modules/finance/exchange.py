@@ -51,6 +51,7 @@ async def fetch_rates() -> dict[str, Any]:
         "base": "USD",
         "rates": {k.upper(): v for k, v in data.get("usd", {}).items()},
         "date": data.get("date", ""),
+        "is_fallback": False,
     }
 
 
