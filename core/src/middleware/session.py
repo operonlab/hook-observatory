@@ -4,6 +4,7 @@ Cookie stores only the session token (signed). User data is looked up from Redis
 """
 
 import json
+import secrets
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -22,7 +23,11 @@ class SessionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # --- Internal API key bypass (SDK/MCP/CLI) ---
         internal_key = request.headers.get("x-internal-key")
-        if internal_key and settings.internal_api_key and internal_key == settings.internal_api_key:
+        if (
+            internal_key
+            and settings.internal_api_key
+            and secrets.compare_digest(internal_key, settings.internal_api_key)
+        ):
             request.state.user = {
                 "id": "system",
                 "email": "system@internal",

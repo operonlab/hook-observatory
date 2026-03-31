@@ -35,7 +35,7 @@ def _safe_redirect_url(url: str | None) -> str:
 
     Only allows:
     - Relative paths starting with "/" (but not protocol-relative "//...")
-    - Absolute URLs whose hostname is in _ALLOWED_HOSTS
+    - Absolute URLs with http/https scheme whose hostname is in _ALLOWED_HOSTS
     Everything else falls back to "/".
     """
     if not url:
@@ -43,8 +43,10 @@ def _safe_redirect_url(url: str | None) -> str:
     # Allow relative paths, but reject protocol-relative URLs like //evil.com
     if url.startswith("/") and not url.startswith("//"):
         return url
-    # Allow only whitelisted hosts for absolute URLs
+    # Allow only whitelisted hosts for absolute URLs with safe schemes
     parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return "/"
     if parsed.hostname and parsed.hostname in _ALLOWED_HOSTS:
         return url
     return "/"
@@ -87,13 +89,8 @@ async def register(
     user = await user_service.register(db, body.email, body.password, body.name)
     await db.commit()
 
-    try:
-        await _create_session(request, db, user)
-    except Exception:
-        logger.warning(
-            "Redis session creation failed after register — user created but not auto-logged in",
-            exc_info=True,
-        )
+    # Don't auto-login pending users — they must verify email first.
+    # Session creation happens at POST /login which checks status=active.
 
     try:
         await event_bus.publish(
@@ -249,6 +246,7 @@ async def oauth_google_callback(
         name=userinfo.get("name"),
         avatar_url=userinfo.get("picture"),
         raw_data=dict(userinfo),
+        email_verified=bool(userinfo.get("email_verified", False)),
     )
     await db.commit()
 
@@ -291,12 +289,17 @@ async def oauth_github_callback(
 
     # Get primary email if not public
     email = profile.get("email")
+    github_email_verified = False
     if not email:
         emails_resp = await oauth.github.get("user/emails", token=token)
         emails = emails_resp.json()
         primary = next((e for e in emails if e.get("primary")), None)
         if primary:
             email = primary["email"]
+            github_email_verified = bool(primary.get("verified", False))
+    else:
+        # Public email from profile — treat as verified (GitHub only exposes verified emails)
+        github_email_verified = True
 
     user, is_new = await user_service.get_or_create_oauth_user(
         db,
@@ -306,6 +309,7 @@ async def oauth_github_callback(
         name=profile.get("name") or profile.get("login"),
         avatar_url=profile.get("avatar_url"),
         raw_data=profile,
+        email_verified=github_email_verified,
     )
     await db.commit()
 
