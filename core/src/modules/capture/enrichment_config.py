@@ -68,42 +68,43 @@ ENRICHMENT_SCHEMAS: dict[tuple[str, str], dict[str, str]] = {
 # "generic" is the fallback and must match the legacy static thresholds.
 
 ADAPTER_ENRICHMENT_PROFILES: dict[str, dict[str, float]] = {
-    # High precision — errors are costly (finance records, investments)
+    # High precision — errors are costly, gate must be STRICT (high threshold
+    # means more data flagged for review since gate triggers at confidence < threshold)
     "finance_transaction": {
-        "confidence_threshold": 0.5,
-        "ambiguity_threshold": 0.4,
+        "confidence_threshold": 0.65,
+        "ambiguity_threshold": 0.6,
         "min_completeness": 0.9,
     },
     "finance_subscription": {
-        "confidence_threshold": 0.5,
-        "ambiguity_threshold": 0.4,
+        "confidence_threshold": 0.65,
+        "ambiguity_threshold": 0.6,
         "min_completeness": 0.9,
     },
     "invest": {
-        "confidence_threshold": 0.5,
-        "ambiguity_threshold": 0.4,
+        "confidence_threshold": 0.65,
+        "ambiguity_threshold": 0.6,
         "min_completeness": 0.85,
     },
     # Medium precision — structured but forgiving
     "taskflow": {
-        "confidence_threshold": 0.6,
+        "confidence_threshold": 0.50,
         "ambiguity_threshold": 0.5,
         "min_completeness": 0.8,
     },
     "dailyos": {
-        "confidence_threshold": 0.6,
+        "confidence_threshold": 0.50,
         "ambiguity_threshold": 0.5,
         "min_completeness": 0.8,
     },
-    # Low precision — speed matters, time-sensitive (must match legacy defaults)
+    # Low precision — speed matters, LENIENT gate (low threshold = less flagged)
     "webcrawl": {
-        "confidence_threshold": 0.7,
-        "ambiguity_threshold": 0.6,
+        "confidence_threshold": 0.35,
+        "ambiguity_threshold": 0.3,
         "min_completeness": 0.7,
     },
-    # Generic fallback — matches legacy static thresholds
+    # Generic fallback — must match legacy base 0.45 (depth=1 → 0.50)
     "generic": {
-        "confidence_threshold": 0.6,
+        "confidence_threshold": 0.45,
         "ambiguity_threshold": 0.5,
         "min_completeness": 0.8,
     },

@@ -246,9 +246,14 @@ def _detect_metal_gpu(info: SystemInfo) -> None:
 
         gpu_entry = displays[0]
         name = gpu_entry.get("sppci_model", "unknown")
-        # VRAM: "8 GB" or "1536 MB"
-        vram_str: str = gpu_entry.get("sppci_vram", "0 MB")
-        vram_mb = _parse_vram_mb(vram_str)
+        # VRAM: "8 GB" or "1536 MB" — Apple Silicon often lacks sppci_vram
+        # (unified memory), so fall back to total system RAM as GPU-accessible memory.
+        vram_str: str = gpu_entry.get("sppci_vram", "")
+        if vram_str:
+            vram_mb = _parse_vram_mb(vram_str)
+        else:
+            # Apple Silicon unified memory: entire RAM is GPU-accessible
+            vram_mb = info.ram_gb * 1024 if info.ram_gb else 0
         info.gpu = GPUInfo(name=name, vram_mb=vram_mb, compute_type="metal")
     except (json.JSONDecodeError, KeyError, IndexError):
         info.gpu = GPUInfo(compute_type="metal")
