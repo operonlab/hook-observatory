@@ -308,6 +308,12 @@ async def search(
 
     if qdrant_result is not None:
         results, meta = qdrant_result
+        # H1: Sanitize ALL search paths (not just legacy fallback)
+        for r in results:
+            unsafe, reason = is_unsafe_for_injection(r.block.content)
+            if unsafe:
+                r.block.content = sanitize_for_injection(r.block.content)
+                meta.injection_sanitized = (meta.injection_sanitized or 0) + 1
         meta.routing_tags = inferred_tags if inferred_tags else None
         return EnhancedSearchResult(
             results=results,

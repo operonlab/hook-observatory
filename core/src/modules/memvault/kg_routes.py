@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
-from src.shared.deps import get_db
+from src.shared.deps import get_db, require_permission
 from src.shared.errors import NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
@@ -59,6 +59,7 @@ async def create_triple(
     body: TripleCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     instance = await triple_service.create(db, space_id, body)
     # Generate embedding (best-effort)
@@ -77,6 +78,7 @@ async def batch_ingest_triples(
     body: TripleBatchCreate,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     created = await triple_service.batch_ingest(db, space_id, body)
     await db.commit()
@@ -92,6 +94,7 @@ async def list_triples(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     if predicate:
         results = await triple_service.search_by_predicate(
@@ -117,6 +120,7 @@ async def search_triples(
     top_k: int = Query(10, ge=1, le=100),
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     query_embedding = await get_embedding(q)
     if query_embedding:
@@ -129,6 +133,7 @@ async def search_triples(
 async def delete_triple(
     triple_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     await triple_service.delete_by_id(db, triple_id)
     await db.commit()
@@ -140,6 +145,7 @@ async def update_triple(
     triple_id: str,
     body: TripleCreate,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     instance = await triple_service.update_by_id(db, triple_id, body)
     await db.commit()
@@ -152,6 +158,7 @@ async def invalidate_triple(
     triple_id: str,
     body: TripleInvalidateRequest,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Mark a triple as invalid (soft temporal invalidation)."""
     instance = await triple_service.invalidate(
@@ -173,6 +180,7 @@ async def list_communities(
     space_id: str = Query("default"),
     resolution_level: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     return await community_service.list_communities(db, space_id, resolution_level=resolution_level)
 
@@ -181,6 +189,7 @@ async def list_communities(
 async def get_community(
     community_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     detail = await community_service.get_community_detail(db, community_id)
     if not detail:
@@ -193,6 +202,7 @@ async def regenerate_communities(
     body: CommunityRegenerateRequest,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Accept community data from community_pipeline.py and save atomically.
 
@@ -234,6 +244,7 @@ async def update_community_description(
     community_id: str,
     body: dict,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Update a community's description_zh field."""
     from sqlalchemy import select
@@ -257,6 +268,7 @@ async def list_summaries(
     space_id: str = Query("default"),
     resolution_level: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     return await community_summary_service.list_summaries(
         db, space_id, resolution_level=resolution_level
