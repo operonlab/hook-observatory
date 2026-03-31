@@ -28,6 +28,7 @@ from . import (
     observability,
     pm_autopilot,
     relay_signal,
+    review_gate,
     rtk_rewrite,
     schedule_sync,
     sentinel_notify,
@@ -79,6 +80,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
     "Stop": [
+        (None, review_gate.handle),  # review gate — check uncommitted code changes
         (None, session_namer.handle),
         (None, relay_signal.handle),
         (None, session_channel.handle),
