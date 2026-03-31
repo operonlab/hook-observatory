@@ -684,7 +684,7 @@ class TestReranker:
 
         from src.modules.memvault.reranker import LocalReranker, RerankerConfig
 
-        config = RerankerConfig(weight_original=0.4, weight_rerank=0.6)
+        config = RerankerConfig(weight_original=0.4, weight_rerank=0.6, gate_enabled=False)
         reranker = LocalReranker(config)
 
         results = [
@@ -709,7 +709,7 @@ class TestReranker:
                 return_value=[doc_emb_1, doc_emb_2],
             ),
         ):
-            reranked, applied = await reranker.rerank("python", results)
+            reranked, applied, _gate = await reranker.rerank("python", results)
 
         assert applied is True
         # First result should have higher blended score
@@ -728,7 +728,7 @@ class TestReranker:
             {"content": "A", "score": 0.8},
             {"content": "B", "score": 0.7},
         ]
-        reranked, applied = await reranker.rerank("test", results)
+        reranked, applied, _gate = await reranker.rerank("test", results)
         assert applied is False
         assert reranked[0]["score"] == 0.8  # unchanged
 
@@ -738,7 +738,7 @@ class TestReranker:
 
         reranker = LocalReranker()
         results = [{"content": "Only one", "score": 0.9}]
-        reranked, applied = await reranker.rerank("test", results)
+        reranked, applied, _gate = await reranker.rerank("test", results)
         assert applied is False
         assert len(reranked) == 1
 
@@ -747,9 +747,9 @@ class TestReranker:
         """Mock embedding failure → returns original results."""
         from unittest.mock import AsyncMock, patch
 
-        from src.modules.memvault.reranker import LocalReranker
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
 
-        reranker = LocalReranker()
+        reranker = LocalReranker(RerankerConfig(gate_enabled=False))
         results = [
             {"content": "A content", "score": 0.8},
             {"content": "B content", "score": 0.7},
@@ -760,7 +760,7 @@ class TestReranker:
             new_callable=AsyncMock,
             return_value=None,  # Ollama unavailable
         ):
-            reranked, applied = await reranker.rerank("test query", results)
+            reranked, applied, _gate = await reranker.rerank("test query", results)
 
         assert applied is False
         assert reranked[0]["score"] == 0.8  # unchanged
@@ -773,7 +773,7 @@ class TestReranker:
 
         from src.modules.memvault.reranker import LocalReranker, RerankerConfig
 
-        config = RerankerConfig(failure_threshold=2, recovery_seconds=600)
+        config = RerankerConfig(failure_threshold=2, recovery_seconds=600, gate_enabled=False)
         reranker = LocalReranker(config)
 
         results = [
@@ -793,7 +793,7 @@ class TestReranker:
         assert reranker._breaker.open is True
 
         # Now reranker should be skipped without even calling embedding
-        _reranked, applied = await reranker.rerank("q3", results)
+        _reranked, applied, _gate = await reranker.rerank("q3", results)
         assert applied is False
 
     @pytest.mark.asyncio
@@ -814,8 +814,112 @@ class TestReranker:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            _reranked, applied = await rerank_results("test", results)
+            _reranked, applied, _gate = await rerank_results("test", results)
         assert applied is False
+
+
+# ======================== Attention-Gated Reranker Tests ========================
+
+
+class TestRerankerGating:
+    """Tests for attention-gated computation on reranker.
+
+    Pattern: use cheap scoring pipeline output to gate expensive cross-encoder.
+    Inspired by TurboQuant+ Sparse V (ICLR 2026).
+    """
+
+    def test_gate_few_candidates(self):
+        """Gate fires when <= gate_max_candidates survive scoring."""
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(gate_enabled=True, gate_max_candidates=5)
+        reranker = LocalReranker(config)
+        results = [{"content": f"item {i}", "score": 0.8 - i * 0.1} for i in range(4)]
+        gated, reason = reranker._should_gate(results)
+        assert gated is True
+        assert "few_candidates" in reason
+
+    def test_gate_score_dominance(self):
+        """Gate fires when top-1 has clear lead over #2."""
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(
+            gate_enabled=True,
+            gate_min_top_score=0.45,
+            gate_min_score_gap=0.15,
+            gate_max_candidates=3,  # low so few_candidates doesn't fire first
+        )
+        reranker = LocalReranker(config)
+        results = [
+            {"content": "A", "score": 0.85},
+            {"content": "B", "score": 0.60},
+            *[{"content": f"C{i}", "score": 0.5 - i * 0.05} for i in range(8)],
+        ]
+        gated, reason = reranker._should_gate(results)
+        assert gated is True
+        assert "score_dominance" in reason
+
+    def test_gate_tight_cluster(self):
+        """Gate fires when top scores are tightly clustered."""
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(
+            gate_enabled=True,
+            gate_min_cluster_tightness=0.05,
+            gate_min_top_score=0.45,
+            gate_max_candidates=3,
+        )
+        reranker = LocalReranker(config)
+        # All scores very close: 0.79, 0.78, ..., 0.70
+        results = [{"content": f"item {i}", "score": 0.79 - i * 0.01} for i in range(10)]
+        gated, reason = reranker._should_gate(results)
+        assert gated is True
+        assert "tight_cluster" in reason
+
+    def test_gate_does_not_fire_ambiguous(self):
+        """Gate does NOT fire when scores are spread and top isn't dominant."""
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(gate_enabled=True, gate_max_candidates=3)
+        reranker = LocalReranker(config)
+        # Wide spread, moderate gap, many candidates
+        results = [{"content": f"item {i}", "score": 0.7 - i * 0.06} for i in range(10)]
+        gated, _reason = reranker._should_gate(results)
+        assert gated is False
+
+    def test_gate_disabled(self):
+        """Gate never fires when gate_enabled=False."""
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(gate_enabled=False)
+        reranker = LocalReranker(config)
+        results = [{"content": "only one", "score": 0.95}]
+        gated, _ = reranker._should_gate(results)
+        assert gated is False
+
+    @pytest.mark.asyncio
+    async def test_gated_rerank_returns_reason(self):
+        """When gated, rerank() returns gate_reason as third element."""
+        from src.modules.memvault.reranker import LocalReranker, RerankerConfig
+
+        config = RerankerConfig(gate_enabled=True, gate_max_candidates=5)
+        reranker = LocalReranker(config)
+        results = [
+            {"content": "A", "score": 0.8},
+            {"content": "B", "score": 0.7},
+        ]
+        _reranked, applied, gate_reason = await reranker.rerank("test", results)
+        assert applied is False
+        assert gate_reason is not None
+        assert "few_candidates" in gate_reason
+
+    def test_metadata_tracks_gating(self):
+        """SearchMetadata reflects gating decision."""
+        meta = SearchMetadata()
+        meta.reranker_gated = True
+        meta.reranker_gate_reason = "few_candidates(3)"
+        assert meta.reranker_gated is True
+        assert meta.reranker_used is False
 
 
 # ======================== Defense ⑦: Multi-Scope Isolation Tests ========================

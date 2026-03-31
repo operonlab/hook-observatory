@@ -128,6 +128,8 @@ class SearchMetadata(BaseModel):
     stages_applied: list[str] = []
     stages_skipped: list[str] = []
     reranker_used: bool = False
+    reranker_gated: bool = False
+    reranker_gate_reason: str | None = None
     adaptive_skipped: bool = False
     adaptive_reason: str | None = None
     noise_filtered: int = 0

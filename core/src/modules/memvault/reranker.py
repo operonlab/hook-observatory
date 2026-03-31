@@ -4,15 +4,21 @@ Uses Jina Reranker v3 (0.6B, MLX-native) via persistent subprocess worker.
 True cross-encoder: query and document are jointly encoded with cross-attention,
 producing more accurate relevance scores than bi-encoder cosine similarity.
 
-Includes circuit breaker for graceful degradation — falls back to original
-scoring when the reranker is unavailable.
+Includes circuit breaker for graceful degradation and attention-gated computation
+to skip the expensive cross-encoder when scoring pipeline output is already confident.
+Pattern inspired by TurboQuant+ Sparse V (ICLR 2026).
 """
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+_GATE_FORCE_DISABLED = os.environ.get(
+    "MEMVAULT_RERANKER_GATE_DISABLED", ""
+).lower() in ("1", "true", "yes")
 
 
 @dataclass
@@ -25,6 +31,13 @@ class RerankerConfig:
     # Circuit breaker
     failure_threshold: int = 3
     recovery_seconds: float = 600  # 10 minutes
+    # Attention-gated computation: skip reranker when scoring pipeline
+    # output indicates high confidence (cheap signal gates expensive work)
+    gate_enabled: bool = True
+    gate_min_top_score: float = 0.45  # top-1 must exceed this
+    gate_min_score_gap: float = 0.15  # gap between #1 and #2
+    gate_max_candidates: int = 5  # skip if <= this many survive scoring
+    gate_min_cluster_tightness: float = 0.05  # top-5 std_dev below this = skip
 
 
 class CircuitBreaker:
@@ -68,21 +81,72 @@ class LocalReranker:
             self.config.recovery_seconds,
         )
 
+    def _should_gate(self, results: list[dict]) -> tuple[bool, str]:
+        """Determine if reranker can be safely skipped.
+
+        Uses scoring pipeline output as cheap pre-computed signal.
+        Returns (should_skip, reason).
+        """
+        if _GATE_FORCE_DISABLED or not self.config.gate_enabled:
+            return False, ""
+
+        n = len(results)
+
+        # Gate 1: Very few candidates — scoring pipeline already filtered heavily
+        if n <= self.config.gate_max_candidates:
+            return True, f"few_candidates({n})"
+
+        scores = [r.get("score", 0.0) for r in results]
+        top_score = scores[0]  # results are pre-sorted descending
+
+        # Gate 2: Top score dominance — clear winner
+        if n >= 2:
+            gap = top_score - scores[1]
+            if (
+                top_score >= self.config.gate_min_top_score
+                and gap >= self.config.gate_min_score_gap
+            ):
+                return True, f"score_dominance(top={top_score:.3f},gap={gap:.3f})"
+
+        # Gate 3: Tight cluster — all top candidates similarly scored
+        top_k = scores[: min(5, n)]
+        if len(top_k) >= 3:
+            mean = sum(top_k) / len(top_k)
+            variance = sum((s - mean) ** 2 for s in top_k) / len(top_k)
+            std_dev = variance**0.5
+            if (
+                std_dev <= self.config.gate_min_cluster_tightness
+                and mean >= self.config.gate_min_top_score
+            ):
+                return True, f"tight_cluster(std={std_dev:.4f},mean={mean:.3f})"
+
+        return False, ""
+
     async def rerank(
         self,
         query: str,
         results: list[dict],
-    ) -> tuple[list[dict], bool]:
+    ) -> tuple[list[dict], bool, str | None]:
         """Rerank results using Jina cross-encoder.
 
-        Returns (reranked_results, was_applied).
-        If reranking fails or circuit breaker is open, returns original results unchanged.
+        Returns (reranked_results, was_applied, gate_reason).
+        gate_reason is set when the reranker was skipped by attention-gated computation.
         """
         if not self.config.enabled or not self._breaker.is_available():
-            return results, False
+            return results, False, None
 
         if len(results) <= 1:
-            return results, False
+            return results, False, None
+
+        # Attention-gated computation: skip reranker if scoring pipeline
+        # output indicates high confidence
+        gated, gate_reason = self._should_gate(results)
+        if gated:
+            logger.debug(
+                "reranker.gated",
+                extra={"reason": gate_reason, "n_candidates": len(results)},
+            )
+            return results, False, gate_reason
 
         try:
             from src.shared import rerank_bridge
@@ -125,18 +189,20 @@ class LocalReranker:
             candidates.sort(key=lambda r: r["score"], reverse=True)
 
             self._breaker.record_success()
-            return candidates + remainder, True
+            return candidates + remainder, True, None
 
         except Exception:
             logger.exception("Reranking failed")
             self._breaker.record_failure()
-            return results, False
+            return results, False, None
 
 
 # Module singleton
 _reranker = LocalReranker()
 
 
-async def rerank_results(query: str, results: list[dict]) -> tuple[list[dict], bool]:
+async def rerank_results(
+    query: str, results: list[dict]
+) -> tuple[list[dict], bool, str | None]:
     """Convenience function using module singleton."""
     return await _reranker.rerank(query, results)
