@@ -272,7 +272,13 @@ def _detect_cuda_gpu(info: SystemInfo) -> None:
         info.gpu = GPUInfo()
         return
 
-    parts = raw.split(",", 1)
+    # M1: Multi-GPU systems emit one line per GPU — parse only the first line
+    # to avoid splitting on commas in subsequent GPU entries.
+    lines = raw.strip().splitlines()
+    if not lines:
+        info.gpu = GPUInfo(compute_type="cuda")
+        return
+    parts = lines[0].split(",", 1)
     name = parts[0].strip() if parts else "unknown"
     vram_mb = 0.0
     if len(parts) > 1:

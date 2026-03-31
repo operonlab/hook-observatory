@@ -250,9 +250,13 @@ class RLMEnrichmentStrategy(EnrichmentStrategy):
             "用 FINAL() 回傳。"
         )
 
+        # Sanitize raw_input before passing to LLM (C1: prompt injection defence)
+        safe_input = (raw_input or "")[:2000]
+        safe_input = f"<user_input>\n{safe_input}\n</user_input>"
+
         try:
             result = await asyncio.to_thread(
-                self._engine.completion, prompt=rlm_prompt, context=raw_input
+                self._engine.completion, prompt=rlm_prompt, context=safe_input
             )
         except Exception:
             logger.warning(

@@ -11,6 +11,7 @@ See AD-12 in docs/architecture/architecture-decisions.md.
 from __future__ import annotations
 
 import logging
+import math
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -67,6 +68,10 @@ class EnrichmentStrategy(ABC):
             meta["all_metadata"].update(result.metadata)
         except Exception:
             logger.exception("Enrichment stage '%s' failed, skipping", self.name)
+            # H1: Strategy failure must NOT leave confidence at the previous high value.
+            # Setting confidence to 0.0 ensures the capture is flagged for human review
+            # rather than silently promoted (fail-open → fail-closed).
+            ctx["confidence"] = 0.0
             meta["skipped"].append(self.name)
         return ctx
 
@@ -334,11 +339,15 @@ class LLMEnrichmentStrategy(EnrichmentStrategy):
             "- confidence 表示整體提取的信心程度"
         )
 
+        # Sanitize raw_input before passing to LLM (C1: prompt injection defence)
+        safe_input = (raw_input or "")[:2000]
+        safe_input = f"<user_input>\n{safe_input}\n</user_input>"
+
         # Lazy import to avoid import-time dependency
         from src.shared.llm_haiku import haiku_extract
 
         result = await haiku_extract(
-            user_message=raw_input,
+            user_message=safe_input,
             tool=tool,
             system=system_prompt,
         )
@@ -350,6 +359,10 @@ class LLMEnrichmentStrategy(EnrichmentStrategy):
 
         enriched = dict(payload)
         llm_confidence = float(result.pop("confidence", 0.7))
+        # M2: Guard against NaN/Inf from malformed LLM responses and clamp to [0, 1]
+        if not math.isfinite(llm_confidence):
+            llm_confidence = 0.0
+        llm_confidence = max(0.0, min(1.0, llm_confidence))
 
         # Only fill missing fields — never overwrite existing non-empty values
         filled: list[str] = []

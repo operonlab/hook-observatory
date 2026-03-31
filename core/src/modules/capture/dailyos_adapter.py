@@ -6,6 +6,7 @@ and promotes them into DailyPlan items via the service layer.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -15,6 +16,8 @@ from src.shared.models import _uuid7_hex
 
 from .adapters import BaseCaptureAdapter
 from .strategies import LLMEnrichmentStrategy
+
+logger = logging.getLogger(__name__)
 
 
 class PlanItemCaptureAdapter(BaseCaptureAdapter):
@@ -115,20 +118,14 @@ class PlanItemCaptureAdapter(BaseCaptureAdapter):
                 await db.flush()
                 await db.refresh(plan)
             except Exception:
-                # No active method — create minimal plan directly
-                from src.modules.dailyos.models import DailyPlan
-
-                plan = DailyPlan(
-                    id=_uuid7_hex(),
-                    space_id=space_id,
-                    created_by=created_by,
-                    plan_date=plan_date,
-                    context=context,
-                    status="planning",
-                    items=[item],
+                # C2: Do NOT bypass module boundaries by importing dailyos.models directly.
+                # Let the exception propagate so promote() fails cleanly with a proper error.
+                logger.exception(
+                    "dailyos_adapter: failed to create DailyPlan via service for space=%s date=%s",
+                    space_id,
+                    plan_date,
                 )
-                db.add(plan)
-                await db.flush()
+                raise
 
         return plan.id
 
