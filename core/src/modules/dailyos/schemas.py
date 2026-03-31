@@ -200,6 +200,14 @@ class RecurringItemCreate(BaseModel):
     category: str | None = None
     group_id: str | None = None
 
+    @model_validator(mode="after")
+    def validate_recurrence_fields(self):
+        if self.recurrence_type == "weekly" and self.day_of_week is None:
+            raise ValueError("day_of_week is required for weekly recurrence")
+        if self.recurrence_type == "monthly" and self.day_of_month is None:
+            raise ValueError("day_of_month is required for monthly recurrence")
+        return self
+
 
 class RecurringItemUpdate(BaseModel):
     title: str | None = None

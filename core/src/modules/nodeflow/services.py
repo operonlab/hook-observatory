@@ -341,6 +341,7 @@ class FlowRunService:
 
 
 _background_tasks: set[asyncio.Task] = set()  # prevent GC of fire-and-forget tasks
+_executing_flows: set[str] = set()  # guard against indirect execution cycles
 
 
 async def on_any_event(event: Event) -> None:
@@ -371,15 +372,25 @@ async def on_any_event(event: Event) -> None:
                 config = flow.trigger_config or {}
                 target_event = config.get("event_type", "")
                 if target_event and target_event == event.type:
+                    if flow.id in _executing_flows:
+                        logger.warning(
+                            "nodeflow_indirect_cycle_skipped",
+                            flow_id=flow.id,
+                            flow_name=flow.name,
+                            event_type=event.type,
+                        )
+                        continue
                     logger.info(
                         "nodeflow_event_trigger",
                         flow_id=flow.id,
                         flow_name=flow.name,
                         event_type=event.type,
                     )
+                    _executing_flows.add(flow.id)
                     task = asyncio.create_task(_execute_in_session(flow.id, flow.space_id, event))
                     _background_tasks.add(task)
                     task.add_done_callback(_background_tasks.discard)
+                    task.add_done_callback(lambda _, fid=flow.id: _executing_flows.discard(fid))
 
             await db.commit()
         except Exception:
