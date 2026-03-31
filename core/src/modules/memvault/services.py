@@ -371,11 +371,14 @@ class MemoryBlockService(
 
         scored_dicts, scoring_meta = await pipeline.apply(scored_dicts, query_embedding)
 
-        # Phase C2: Optional cross-encoder reranking
+        # Phase C2: Optional cross-encoder reranking (attention-gated)
         if query:
-            scored_dicts, reranked = await rerank_results(query, scored_dicts)
+            scored_dicts, reranked, gate_reason = await rerank_results(query, scored_dicts)
             if reranked:
                 meta.reranker_used = True
+            elif gate_reason:
+                meta.reranker_gated = True
+                meta.reranker_gate_reason = gate_reason
 
         # Update metadata
         meta.scoring_applied = True
@@ -507,10 +510,13 @@ class MemoryBlockService(
         pipeline = ScoringPipeline(scoring_config)
         scored_dicts, scoring_meta = await pipeline.apply(scored_dicts, query_embedding)
 
-        # Optional cross-encoder reranking
-        scored_dicts, reranked = await rerank_results(query, scored_dicts)
+        # Optional cross-encoder reranking (attention-gated)
+        scored_dicts, reranked, gate_reason = await rerank_results(query, scored_dicts)
         if reranked:
             meta.reranker_used = True
+        elif gate_reason:
+            meta.reranker_gated = True
+            meta.reranker_gate_reason = gate_reason
 
         meta.scoring_applied = True
         meta.stages_applied = scoring_meta.stages_applied
