@@ -63,6 +63,18 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     # --- Critical events: use publish_reliable() with retry instead of fire-and-forget ---
     critical_events: frozenset[str] = frozenset()
 
+    # --- Protected fields: never set via update() mass assignment ---
+    PROTECTED_FIELDS: frozenset[str] = frozenset(
+        {
+            "id",
+            "space_id",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+        }
+    )
+
     # --- Template Method hooks (override in subclass) ---
 
     def before_create(self, data: CreateT, **kwargs: Any) -> dict:
@@ -335,6 +347,16 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
             return None
         return instance
 
+    async def get_in_space(self, db: AsyncSession, entity_id: str, space_id: str) -> ModelT | None:
+        """Space-scoped get — prevents IDOR by verifying entity belongs to the space."""
+        q = select(self.model).where(
+            self.model.id == entity_id,  # type: ignore[attr-defined]
+            self.model.space_id == space_id,  # type: ignore[attr-defined]
+        )
+        if self._has_soft_delete():
+            q = q.where(self.model.deleted_at == None)  # noqa: E711
+        return (await db.execute(q)).scalars().first()
+
     async def get_including_deleted(self, db: AsyncSession, entity_id: str) -> ModelT | None:
         """Retrieve entity regardless of soft-delete status."""
         return await db.get(self.model, entity_id)
@@ -363,9 +385,18 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
         return instance
 
     async def update(
-        self, db: AsyncSession, entity_id: str, data: UpdateT, user_id: str | None = None
+        self,
+        db: AsyncSession,
+        entity_id: str,
+        data: UpdateT,
+        user_id: str | None = None,
+        *,
+        space_id: str | None = None,
     ) -> ModelT | None:
-        instance = await self.get(db, entity_id)
+        if space_id:
+            instance = await self.get_in_space(db, entity_id, space_id)
+        else:
+            instance = await self.get(db, entity_id)
         if not instance:
             return None
 
@@ -373,6 +404,8 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
 
         update_data = self.before_update(instance, data)
         for key, value in update_data.items():
+            if key in self.PROTECTED_FIELDS:
+                continue
             setattr(instance, key, value)
         await db.flush()
         await db.refresh(instance)
@@ -395,8 +428,18 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
             )
         return instance
 
-    async def delete(self, db: AsyncSession, entity_id: str, user_id: str | None = None) -> bool:
-        instance = await self.get(db, entity_id)
+    async def delete(
+        self,
+        db: AsyncSession,
+        entity_id: str,
+        user_id: str | None = None,
+        *,
+        space_id: str | None = None,
+    ) -> bool:
+        if space_id:
+            instance = await self.get_in_space(db, entity_id, space_id)
+        else:
+            instance = await self.get(db, entity_id)
         if not instance:
             return False
 

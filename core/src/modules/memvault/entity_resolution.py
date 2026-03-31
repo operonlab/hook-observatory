@@ -72,10 +72,11 @@ class EntityResolutionService:
         """
         normalized = normalize_entity_text(raw_text)
 
-        # Exact match on canonical_name
+        # Exact match on canonical_name + entity_type
         q = select(EntityCanonical).where(
             EntityCanonical.space_id == space_id,
             EntityCanonical.canonical_name == normalized,
+            EntityCanonical.entity_type == entity_type,
         )
         existing = (await db.execute(q)).scalar_one_or_none()
         if existing:
@@ -87,9 +88,10 @@ class EntityResolutionService:
                 await db.flush()
             return existing
 
-        # Check aliases
+        # Check aliases (with entity_type)
         alias_q = select(EntityCanonical).where(
             EntityCanonical.space_id == space_id,
+            EntityCanonical.entity_type == entity_type,
             EntityCanonical.aliases.any(normalized),
         )
         alias_match = (await db.execute(alias_q)).scalar_one_or_none()

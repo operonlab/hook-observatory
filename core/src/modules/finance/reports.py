@@ -63,6 +63,7 @@ async def _income_expense_for_month(
         .where(
             Transaction.space_id == space_id,
             Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
             func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
         )
         .group_by(Transaction.type)
@@ -160,6 +161,7 @@ async def _build_wallets_section(
     wallets_q = select(Wallet).where(
         Wallet.space_id == space_id,
         Wallet.is_active == True,  # noqa: E712
+        Wallet.deleted_at == None,  # noqa: E711
     )
     wallets_q = apply_privacy_filter(wallets_q, Wallet, viewer_id)
     wallets_q = wallets_q.order_by(Wallet.sort_order, Wallet.name)
@@ -180,6 +182,7 @@ async def _build_wallets_section(
             Transaction.wallet_id.in_(wallet_ids),
             Transaction.type == "income",
             Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
             func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
         )
         .group_by(Transaction.wallet_id)
@@ -188,7 +191,7 @@ async def _build_wallets_section(
     income_rows = (await db.execute(income_q)).all()
     income_map = {row.wallet_id: row.total for row in income_rows}
 
-    # Per-wallet expense for this month
+    # Per-wallet expense for this month (excludes transfers)
     expense_q = (
         select(
             Transaction.wallet_id,
@@ -198,6 +201,7 @@ async def _build_wallets_section(
             Transaction.wallet_id.in_(wallet_ids),
             Transaction.type == "expense",
             Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
             func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
         )
         .group_by(Transaction.wallet_id)

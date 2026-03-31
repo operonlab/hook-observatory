@@ -46,6 +46,20 @@ def _get_vapid_claims() -> dict:
     return {"sub": contact}
 
 
+def _is_retryable_error(exc: Exception) -> bool:
+    """Return True for transient failures worth retrying (5xx, network errors).
+
+    404/410 = expired subscription — permanent, do not retry.
+    """
+    if isinstance(exc, WebPushException):
+        if hasattr(exc, "response") and exc.response is not None:
+            status = exc.response.status_code
+            return status >= 500
+        # No response object = network/connection error
+        return True
+    return False
+
+
 def _send_push_sync(
     subscription_info: dict,
     payload: str,
@@ -68,11 +82,56 @@ def _send_push_sync(
             if status in (404, 410):
                 logger.info("push_subscription_expired", status=status)
                 return False
-        logger.error("webpush_error", error=str(exc))
-        return False
-    except Exception as exc:
-        logger.error("webpush_unexpected_error", error=str(exc))
-        return False
+        raise
+    except Exception:
+        raise
+
+
+async def _send_with_retry(
+    subscription_info: dict,
+    payload: str,
+    vapid_private_key: str,
+    vapid_claims: dict,
+    max_retries: int = 2,
+) -> bool:
+    """Send a web push with per-subscription retry for transient failures.
+
+    Retries up to max_retries times with 1s * (attempt+1) backoff.
+    Non-retryable errors (404/410) are handled in _send_push_sync and
+    return False immediately.
+    """
+    loop = asyncio.get_running_loop()
+    last_exc: Exception | None = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return await loop.run_in_executor(
+                None,
+                partial(
+                    _send_push_sync,
+                    subscription_info=subscription_info,
+                    payload=payload,
+                    vapid_private_key=vapid_private_key,
+                    vapid_claims=vapid_claims,
+                ),
+            )
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries and _is_retryable_error(exc):
+                wait = 1.0 * (attempt + 1)
+                logger.warning(
+                    "web_push_retry",
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    wait=wait,
+                    error=str(exc),
+                )
+                await asyncio.sleep(wait)
+                continue
+            break
+
+    logger.error("webpush_failed_after_retries", error=str(last_exc))
+    return False
 
 
 class WebPushChannel(BaseChannel, SupportsIcon):
@@ -125,7 +184,6 @@ class WebPushChannel(BaseChannel, SupportsIcon):
             return 0, len(subscriptions)
 
         vapid_claims = _get_vapid_claims()
-        loop = asyncio.get_running_loop()
 
         delivered = 0
         failed = 0
@@ -140,15 +198,11 @@ class WebPushChannel(BaseChannel, SupportsIcon):
                 },
             }
             tasks.append(
-                loop.run_in_executor(
-                    None,
-                    partial(
-                        _send_push_sync,
-                        subscription_info=subscription_info,
-                        payload=json.dumps(push_data),
-                        vapid_private_key=vapid_key,
-                        vapid_claims=vapid_claims,
-                    ),
+                _send_with_retry(
+                    subscription_info=subscription_info,
+                    payload=json.dumps(push_data),
+                    vapid_private_key=vapid_key,
+                    vapid_claims=vapid_claims,
                 )
             )
 

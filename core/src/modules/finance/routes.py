@@ -130,8 +130,7 @@ async def search_finance(
     if entity_type is None or entity_type == "transaction":
         txn_conditions = build_ilike_conditions(q, Transaction.description)
         txn_filter = (
-            or_(*txn_conditions) if txn_conditions
-            else Transaction.description.ilike(f"%{q}%")
+            or_(*txn_conditions) if txn_conditions else Transaction.description.ilike(f"%{q}%")
         )
         txn_stmt = (
             select(Transaction)
@@ -161,9 +160,13 @@ async def search_finance(
 
     if entity_type is None or entity_type == "subscription":
         sub_conditions = build_ilike_conditions(q, Subscription.name, Subscription.notes)
-        sub_filter = or_(*sub_conditions) if sub_conditions else or_(
-            Subscription.name.ilike(f"%{q}%"),
-            Subscription.notes.ilike(f"%{q}%"),
+        sub_filter = (
+            or_(*sub_conditions)
+            if sub_conditions
+            else or_(
+                Subscription.name.ilike(f"%{q}%"),
+                Subscription.notes.ilike(f"%{q}%"),
+            )
         )
         sub_stmt = (
             select(Subscription)
@@ -269,10 +272,11 @@ async def list_global_snapshots(
 @router.get("/wallets/{wallet_id}", response_model=WalletResponse)
 async def get_wallet(
     wallet_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    instance = await wallet_service.get(db, wallet_id)
+    instance = await wallet_service.get_in_space(db, wallet_id, space_id)
     if not instance:
         raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
     return wallet_service.to_response(instance)
@@ -294,10 +298,13 @@ async def create_wallet(
 async def update_wallet(
     wallet_id: str,
     data: WalletUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await wallet_service.update(db, wallet_id, data, user_id=user.get("id"))
+    instance = await wallet_service.update(
+        db, wallet_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
     await db.commit()
@@ -307,10 +314,11 @@ async def update_wallet(
 @router.delete("/wallets/{wallet_id}", status_code=204)
 async def delete_wallet(
     wallet_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    if not await wallet_service.delete(db, wallet_id, user_id=user.get("id")):
+    if not await wallet_service.delete(db, wallet_id, user_id=user.get("id"), space_id=space_id):
         raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
     await db.commit()
 
@@ -337,7 +345,9 @@ async def reconcile_wallet(
     return await wallet_service.reconcile(db, wallet_id, user_id=user.get("id"))
 
 
-@router.get("/wallets/{wallet_id}/snapshots", response_model=PaginatedResponse[WalletSnapshotResponse])
+@router.get(
+    "/wallets/{wallet_id}/snapshots", response_model=PaginatedResponse[WalletSnapshotResponse]
+)
 async def list_wallet_snapshots(
     wallet_id: str,
     page: int = Query(1, ge=1),
@@ -411,10 +421,13 @@ async def create_category(
 async def update_category(
     category_id: str,
     data: CategoryUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await category_service.update(db, category_id, data, user_id=user.get("id"))
+    instance = await category_service.update(
+        db, category_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Category not found", code="finance.category_not_found")
     await db.commit()
@@ -424,10 +437,13 @@ async def update_category(
 @router.delete("/categories/{category_id}", status_code=204)
 async def delete_category(
     category_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    if not await category_service.delete(db, category_id, user_id=user.get("id")):
+    if not await category_service.delete(
+        db, category_id, user_id=user.get("id"), space_id=space_id
+    ):
         raise NotFoundError("Category not found", code="finance.category_not_found")
     await db.commit()
 
@@ -466,10 +482,11 @@ async def list_transactions(
 @router.get("/transactions/{transaction_id}", response_model=TransactionResponse)
 async def get_transaction(
     transaction_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    instance = await transaction_service.get(db, transaction_id)
+    instance = await transaction_service.get_in_space(db, transaction_id, space_id)
     if not instance:
         raise NotFoundError("Transaction not found", code="finance.transaction_not_found")
     return transaction_service.to_response(instance)
@@ -491,10 +508,13 @@ async def create_transaction(
 async def update_transaction(
     transaction_id: str,
     data: TransactionUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await transaction_service.update(db, transaction_id, data, user_id=user.get("id"))
+    instance = await transaction_service.update(
+        db, transaction_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Transaction not found", code="finance.transaction_not_found")
     await db.commit()
@@ -504,10 +524,13 @@ async def update_transaction(
 @router.delete("/transactions/{transaction_id}", status_code=204)
 async def delete_transaction(
     transaction_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    if not await transaction_service.delete(db, transaction_id, user_id=user.get("id")):
+    if not await transaction_service.delete(
+        db, transaction_id, user_id=user.get("id"), space_id=space_id
+    ):
         raise NotFoundError("Transaction not found", code="finance.transaction_not_found")
     await db.commit()
 
@@ -613,10 +636,11 @@ async def list_subscriptions(
 @router.get("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
 async def get_subscription(
     subscription_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    instance = await subscription_service.get(db, subscription_id)
+    instance = await subscription_service.get_in_space(db, subscription_id, space_id)
     if not instance:
         raise NotFoundError("Subscription not found", code="finance.subscription_not_found")
     return subscription_service.to_response(instance)
@@ -638,10 +662,13 @@ async def create_subscription(
 async def update_subscription(
     subscription_id: str,
     data: SubscriptionUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await subscription_service.update(db, subscription_id, data, user_id=user.get("id"))
+    instance = await subscription_service.update(
+        db, subscription_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Subscription not found", code="finance.subscription_not_found")
     await db.commit()
@@ -651,10 +678,13 @@ async def update_subscription(
 @router.delete("/subscriptions/{subscription_id}", status_code=204)
 async def delete_subscription(
     subscription_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    if not await subscription_service.delete(db, subscription_id, user_id=user.get("id")):
+    if not await subscription_service.delete(
+        db, subscription_id, user_id=user.get("id"), space_id=space_id
+    ):
         raise NotFoundError("Subscription not found", code="finance.subscription_not_found")
     await db.commit()
 
@@ -683,10 +713,11 @@ async def list_installment_plans(
 @router.get("/installment-plans/{plan_id}", response_model=InstallmentPlanResponse)
 async def get_installment_plan(
     plan_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    instance = await installment_plan_service.get(db, plan_id)
+    instance = await installment_plan_service.get_in_space(db, plan_id, space_id)
     if not instance:
         raise NotFoundError("Installment plan not found", code="finance.plan_not_found")
     return installment_plan_service.to_response(instance)
@@ -708,10 +739,13 @@ async def create_installment_plan(
 async def update_installment_plan(
     plan_id: str,
     data: InstallmentPlanUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.write"),
 ):
-    instance = await installment_plan_service.update(db, plan_id, data, user_id=user.get("id"))
+    instance = await installment_plan_service.update(
+        db, plan_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Installment plan not found", code="finance.plan_not_found")
     await db.commit()

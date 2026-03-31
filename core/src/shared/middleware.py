@@ -157,17 +157,18 @@ class ThrottleMiddleware(StoreMiddleware):
         self._action_types = action_types  # None = throttle all
         # action_type → last dispatch monotonic time
         self._last_dispatch: dict[str, float] = {}
+        self._lock = asyncio.Lock()
 
     async def before_dispatch(self, action: Action, state: Any) -> Action:
         if self._action_types is not None and action.type not in self._action_types:
             return action  # not a throttled type
 
-        last = self._last_dispatch.get(action.type)
-        now = time.monotonic()
-        if last is not None and (now - last) < self._interval:
-            raise ThrottledError(action.type, self._interval)
-
-        self._last_dispatch[action.type] = now
+        async with self._lock:
+            last = self._last_dispatch.get(action.type)
+            now = time.monotonic()
+            if last is not None and (now - last) < self._interval:
+                raise ThrottledError(action.type, self._interval)
+            self._last_dispatch[action.type] = now
         return action
 
 

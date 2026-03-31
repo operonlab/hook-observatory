@@ -80,11 +80,14 @@ async def list_reports(
 @router.get("/reports/{report_id}", response_model=ReportResponse)
 async def get_report(
     report_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("intelflow.read"),
 ):
     instance = await report_service.get_with_content_resolve(db, report_id)
     if not instance:
+        raise NotFoundError("Report not found", code="intelflow.report_not_found")
+    if getattr(instance, "space_id", None) != space_id:
         raise NotFoundError("Report not found", code="intelflow.report_not_found")
     # Resolve S3 content references for archived reports
     from src.shared.storage import is_s3_ref, resolve_content
@@ -162,10 +165,11 @@ async def create_report(
 async def update_report(
     report_id: str,
     body: ReportUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("intelflow.write"),
 ):
-    instance = await report_service.update(db, report_id, body)
+    instance = await report_service.update(db, report_id, body, space_id=space_id)
     if not instance:
         raise NotFoundError("Report not found", code="intelflow.report_not_found")
     await db.commit()
@@ -176,10 +180,11 @@ async def update_report(
 @router.delete("/reports/{report_id}", status_code=204)
 async def delete_report(
     report_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("intelflow.write"),
 ):
-    deleted = await report_service.delete(db, report_id)
+    deleted = await report_service.delete(db, report_id, space_id=space_id)
     if not deleted:
         raise NotFoundError("Report not found", code="intelflow.report_not_found")
     await db.commit()

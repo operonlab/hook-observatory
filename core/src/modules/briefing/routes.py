@@ -105,10 +105,11 @@ async def create_topic(
 async def update_topic(
     topic_id: str,
     body: BriefingTopicUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("briefing.write"),
 ):
-    instance = await briefing_topic_service.update(db, topic_id, body)
+    instance = await briefing_topic_service.update(db, topic_id, body, space_id=space_id)
     if not instance:
         raise NotFoundError("Briefing topic not found", code="briefing.topic_not_found")
     await db.commit()
@@ -118,10 +119,11 @@ async def update_topic(
 @router.delete("/topics/{topic_id}", status_code=204)
 async def delete_topic(
     topic_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("briefing.write"),
 ):
-    deleted = await briefing_topic_service.delete(db, topic_id)
+    deleted = await briefing_topic_service.delete(db, topic_id, space_id=space_id)
     if not deleted:
         raise NotFoundError("Briefing topic not found", code="briefing.topic_not_found")
     await db.commit()
@@ -215,10 +217,11 @@ async def create_analyst(
 async def update_analyst(
     analyst_id: str,
     body: AnalystUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("briefing.write"),
 ):
-    instance = await analyst_service.update(db, analyst_id, body)
+    instance = await analyst_service.update(db, analyst_id, body, space_id=space_id)
     if not instance:
         raise NotFoundError("Analyst not found", code="briefing.analyst_not_found")
     await db.commit()
@@ -228,10 +231,11 @@ async def update_analyst(
 @router.delete("/analysts/{analyst_id}", status_code=204)
 async def delete_analyst(
     analyst_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("briefing.write"),
 ):
-    deleted = await analyst_service.delete(db, analyst_id)
+    deleted = await analyst_service.delete(db, analyst_id, space_id=space_id)
     if not deleted:
         raise NotFoundError("Analyst not found", code="briefing.analyst_not_found")
     await db.commit()
@@ -459,10 +463,7 @@ async def get_run_status(
     return {
         "status": overall,
         "date": today.isoformat(),
-        "topics": [
-            {"domain": b.domain, "status": b.status, "id": b.id}
-            for b in briefings
-        ],
+        "topics": [{"domain": b.domain, "status": b.status, "id": b.id} for b in briefings],
     }
 
 

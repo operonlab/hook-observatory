@@ -68,7 +68,12 @@ class RateLimiter:
     # ------------------------------------------------------------------
 
     def _extract_domain(self, url: str) -> str:
-        return urlparse(url).netloc or url
+        netloc = urlparse(url).netloc or url
+        # Canonicalize: lowercase + strip default ports
+        netloc = netloc.lower()
+        if netloc.endswith(":443") or netloc.endswith(":80"):
+            netloc = netloc.rsplit(":", 1)[0]
+        return netloc
 
     async def _get_state(self, domain: str) -> DomainState:
         """Return existing state or create one (registry-level lock)."""

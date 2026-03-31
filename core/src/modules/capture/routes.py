@@ -222,10 +222,11 @@ async def fill_options(
 @router.get("/{capture_id}", response_model=CaptureResponse)
 async def get_capture(
     capture_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("capture.read"),
 ):
-    capture = await capture_service.get(db, capture_id)
+    capture = await capture_service.get_in_space(db, capture_id, space_id)
     if not capture:
         raise NotFoundError("capture", capture_id)
     _check_owner(capture, user)
@@ -236,15 +237,18 @@ async def get_capture(
 async def update_capture(
     capture_id: str,
     data: CaptureUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("capture.write"),
 ):
-    capture = await capture_service.get(db, capture_id)
+    capture = await capture_service.get_in_space(db, capture_id, space_id)
     if not capture:
         raise NotFoundError("capture", capture_id)
     _check_owner(capture, user)
     user_prefs = await _get_user_prefs(db, user["id"])
-    capture = await capture_service.update(db, capture_id, data, user_prefs=user_prefs)
+    capture = await capture_service.update(
+        db, capture_id, data, user_prefs=user_prefs, space_id=space_id
+    )
     await db.commit()
     return capture_service.to_response(capture)
 
@@ -252,10 +256,11 @@ async def update_capture(
 @router.post("/{capture_id}/promote", response_model=CapturePromoteResult)
 async def promote_capture(
     capture_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("capture.write"),
 ):
-    capture = await capture_service.get(db, capture_id)
+    capture = await capture_service.get_in_space(db, capture_id, space_id)
     if not capture:
         raise NotFoundError("capture", capture_id)
     _check_owner(capture, user)
@@ -279,11 +284,12 @@ async def promote_capture(
 @router.post("/{capture_id}/enrich", response_model=CaptureResponse)
 async def enrich_capture(
     capture_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("capture.write"),
 ):
     """Run LLM enrichment pipeline on a pending capture."""
-    capture = await capture_service.get(db, capture_id)
+    capture = await capture_service.get_in_space(db, capture_id, space_id)
     if not capture:
         raise NotFoundError("capture", capture_id)
     _check_owner(capture, user)
@@ -295,14 +301,15 @@ async def enrich_capture(
 @router.delete("/{capture_id}", status_code=204)
 async def delete_capture(
     capture_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("capture.write"),
 ):
-    capture = await capture_service.get(db, capture_id)
+    capture = await capture_service.get_in_space(db, capture_id, space_id)
     if not capture:
         raise NotFoundError("capture", capture_id)
     _check_owner(capture, user)
-    await capture_service.delete(db, capture_id)
+    await capture_service.delete(db, capture_id, space_id=space_id)
     await db.commit()
 
 
@@ -319,10 +326,11 @@ async def expire_stale_captures(
 @router.get("/{capture_id}/enrichments", response_model=list[CaptureEnrichmentResponse])
 async def get_enrichments(
     capture_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("capture.read"),
 ):
-    capture = await capture_service.get(db, capture_id)
+    capture = await capture_service.get_in_space(db, capture_id, space_id)
     if not capture:
         raise NotFoundError("capture", capture_id)
     _check_owner(capture, user)

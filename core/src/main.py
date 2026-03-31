@@ -149,6 +149,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# --- Security Headers Middleware ---
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 # Mount domain modules
 from src.modules.admin.routes import router as admin_router  # noqa: E402
 from src.modules.auth.routes import router as auth_router  # noqa: E402

@@ -26,6 +26,7 @@ from .models import MemoryBlock
 
 logger = logging.getLogger(__name__)
 
+
 def _dedup_similarity_threshold(category: str = "knowledge") -> float:
     """Dynamic dedup threshold based on block category.
 
@@ -85,8 +86,8 @@ CATEGORY_DEDUP_RULES: dict[str, CategoryDedupRule] = {
         threshold=0.88,
     ),
     "attitude": CategoryDedupRule(
-        behavior=DedupBehavior.ALWAYS_MERGE,
-        threshold=0.75,  # More aggressive — opinions/preferences benefit from consolidation
+        behavior=DedupBehavior.MERGE_IF_SIMILAR,
+        threshold=0.82,  # Was ALWAYS_MERGE/0.75 — now uses conflict_resolver to avoid merging contradictions
     ),
     "skill": CategoryDedupRule(
         behavior=DedupBehavior.APPEND_ONLY,

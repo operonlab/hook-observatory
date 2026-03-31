@@ -1,8 +1,13 @@
 """Notification schemas — Pydantic request/response models."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
+
+PUSH_CATEGORIES = Literal[
+    "sentinel", "system", "finance", "taskflow", "intelflow", "agent", "general"
+]
 
 
 class SubscriptionKeys(BaseModel):
@@ -40,7 +45,7 @@ class PreferencesUpdate(BaseModel):
 class PushPayload(BaseModel):
     """Payload for triggering a push notification."""
 
-    category: str  # sentinel, system, finance, taskflow, intelflow, agent
+    category: PUSH_CATEGORIES = "general"
     title: str
     body: str = ""
     url: str = "/"

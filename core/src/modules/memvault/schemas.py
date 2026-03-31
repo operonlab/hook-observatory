@@ -29,7 +29,7 @@ class MemoryBlockCreate(BaseModel):
     content: str
     block_type: str = Field(default="general")
     tags: list[str] = Field(default_factory=list)
-    source_session: str | None = None
+    # source_session is set server-side only (from request context), not client-writable
 
 
 class MemoryBlockUpdate(BaseModel):

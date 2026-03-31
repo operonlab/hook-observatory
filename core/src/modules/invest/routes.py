@@ -55,10 +55,11 @@ async def list_accounts(
 @router.get("/accounts/{account_id}", response_model=AccountResponse)
 async def get_account(
     account_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("invest.read"),
 ):
-    instance = await account_service.get(db, account_id)
+    instance = await account_service.get_in_space(db, account_id, space_id)
     if not instance:
         raise NotFoundError("Account not found", code="invest.account_not_found")
     return account_service.to_response(instance)
@@ -80,10 +81,13 @@ async def create_account(
 async def update_account(
     account_id: str,
     data: AccountUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("invest.write"),
 ):
-    instance = await account_service.update(db, account_id, data, user_id=user.get("id"))
+    instance = await account_service.update(
+        db, account_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Account not found", code="invest.account_not_found")
     await db.commit()

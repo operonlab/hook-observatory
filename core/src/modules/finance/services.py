@@ -1127,8 +1127,18 @@ class TransactionService(
         )
         return instance
 
-    async def delete(self, db: AsyncSession, entity_id: str, user_id: str | None = None) -> bool:
-        instance = await self.get(db, entity_id)
+    async def delete(
+        self,
+        db: AsyncSession,
+        entity_id: str,
+        user_id: str | None = None,
+        *,
+        space_id: str | None = None,
+    ) -> bool:
+        if space_id:
+            instance = await self.get_in_space(db, entity_id, space_id)
+        else:
+            instance = await self.get(db, entity_id)
         if not instance:
             return False
 
@@ -1942,26 +1952,46 @@ class SummaryService:
         db: AsyncSession,
         space_id: str,
         user_id: str | None = None,
+        base_currency: str = "TWD",
     ) -> list[NetWorthPointResponse]:
-        """Return current net worth grouped by wallet type."""
+        """Return current net worth grouped by wallet type, converting all to base_currency."""
         from datetime import date as _date
+
+        from .exchange import get_exchange_rates
 
         q = select(
             Wallet.type,
+            Wallet.currency,
             func.sum(Wallet.current_balance).label("total"),
         ).where(
             Wallet.space_id == space_id,
             Wallet.is_active == True,  # noqa: E712
+            Wallet.deleted_at == None,  # noqa: E711
         )
         q = apply_privacy_filter(q, Wallet, user_id)
-        q = q.group_by(Wallet.type)
+        q = q.group_by(Wallet.type, Wallet.currency)
         rows = (await db.execute(q)).all()
+
+        # Fetch exchange rates for currency conversion
+        rates_data = await get_exchange_rates()
+        rates = rates_data.get("rates", {})
+
+        def to_base(amount: Decimal, currency: str) -> Decimal:
+            if currency == base_currency:
+                return amount
+            # Convert via USD as intermediary: amount/source_rate * target_rate
+            src_rate = Decimal(str(rates.get(currency, 1)))
+            tgt_rate = Decimal(str(rates.get(base_currency, 1)))
+            if src_rate == 0:
+                return amount
+            return (amount / src_rate) * tgt_rate
 
         type_map: dict[str, Decimal] = {}
         grand_total = Decimal("0")
         for row in rows:
-            type_map[row.type] = row.total or Decimal("0")
-            grand_total += row.total or Decimal("0")
+            converted = to_base(row.total or Decimal("0"), row.currency)
+            type_map[row.type] = type_map.get(row.type, Decimal("0")) + converted
+            grand_total += converted
 
         return [
             NetWorthPointResponse(

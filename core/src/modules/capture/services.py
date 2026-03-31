@@ -122,6 +122,17 @@ class CaptureService:
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_in_space(
+        self, db: AsyncSession, capture_id: str, space_id: str
+    ) -> Capture | None:
+        """Space-scoped get — prevents IDOR by verifying entity belongs to the space."""
+        stmt = select(Capture).where(
+            Capture.id == capture_id,
+            Capture.space_id == space_id,
+            Capture.deleted_at.is_(None),
+        )
+        return (await db.execute(stmt)).scalar_one_or_none()
+
     async def list(
         self,
         db: AsyncSession,
@@ -224,8 +235,13 @@ class CaptureService:
         await db.refresh(capture)
         return capture
 
-    async def delete(self, db: AsyncSession, capture_id: str) -> None:
-        capture = await self.get(db, capture_id)
+    async def delete(
+        self, db: AsyncSession, capture_id: str, *, space_id: str | None = None
+    ) -> None:
+        if space_id:
+            capture = await self.get_in_space(db, capture_id, space_id)
+        else:
+            capture = await self.get(db, capture_id)
         if not capture:
             raise NotFoundError("capture", capture_id)
         capture.deleted_at = datetime.now(UTC)

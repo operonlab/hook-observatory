@@ -69,11 +69,10 @@ class SessionMiddleware(BaseHTTPMiddleware):
                     user_data = json.loads(raw)
             except Exception as e:
                 logging.getLogger(__name__).warning(
-                    "Redis session lookup failed — keeping token, auth layer will enforce: %s", e
+                    "Redis session lookup failed — user_data=None, auth layer will 401: %s", e
                 )
-                # Do NOT null session_token: fail-open for reads so Redis downtime
-                # doesn't log everyone out. The auth layer (require_permission) still
-                # enforces authorization on each protected endpoint.
+                # user_data remains None → get_current_user() will raise 401 on protected
+                # endpoints. Only unprotected endpoints (/status) remain accessible.
             finally:
                 await redis.aclose()
 

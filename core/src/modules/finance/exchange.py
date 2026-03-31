@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _CDN_BASE = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies"
 _CACHE_KEY = "finance:exchange_rates"
 _CACHE_TTL = 6 * 3600  # 6 hours
+_STALE_MAX_AGE = 24 * 3600  # 24 hours — max age for stale fallback
 
 # In-memory fallback
 _mem_cache: dict[str, Any] = {}
@@ -83,8 +84,9 @@ async def get_exchange_rates() -> dict[str, Any]:
         data = await fetch_rates()
     except Exception:
         logger.warning("CDN fetch failed, returning stale cache")
-        if _mem_cache:
+        if _mem_cache and (time.time() - _mem_cache_ts) < _STALE_MAX_AGE:
             return _mem_cache
+        logger.warning("Stale cache expired (>24h), returning hardcoded fallback")
         return {"base": "USD", "rates": {"TWD": 31.5, "USD": 1.0}, "date": "fallback"}
 
     # Store in Redis

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # --- Tier Scoring Configuration ---
 
+
 @dataclass(frozen=True)
 class TierScoring:
     """Scoring weights per data tier.
@@ -48,6 +49,7 @@ DEFAULT_TIER_SCORING = TierScoring()
 
 
 # --- CJK-Aware Query Building ---
+
 
 def build_ilike_conditions(
     query: str,
@@ -80,14 +82,16 @@ def build_ilike_conditions(
         # This finds documents that mention ALL query terms somewhere
         token_conditions = []
         for token in tokens:
-            pattern = f"%{token}%"
+            escaped = token.replace("%", r"\%").replace("_", r"\_")
+            pattern = f"%{escaped}%"
             col_match = or_(*[col.ilike(pattern) for col in columns])
             token_conditions.append(col_match)
 
         return token_conditions  # caller should AND these
     else:
         # English: single ILIKE with full query
-        pattern = f"%{query}%"
+        escaped = query.replace("%", r"\%").replace("_", r"\_")
+        pattern = f"%{escaped}%"
         return [or_(*[col.ilike(pattern) for col in columns])]
 
 
@@ -133,6 +137,7 @@ def score_text_match(
 
 
 # --- RRF Fusion ---
+
 
 def rrf_fuse_scores(
     *result_lists: list[tuple[str, float]],

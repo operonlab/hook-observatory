@@ -34,6 +34,7 @@ from src.shared.errors import BadRequestError, ConflictError, NotFoundError
 
 try:
     from sdk_client.retry import with_backoff as _with_backoff
+
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False
@@ -92,10 +93,11 @@ async def list_articles(
 @router.get("/articles/{article_id}", response_model=ArticleResponse)
 async def get_article(
     article_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("paper.read"),
 ):
-    instance = await article_service.get(db, article_id)
+    instance = await article_service.get_in_space(db, article_id, space_id)
     if not instance:
         raise NotFoundError("Article not found", code="paper.article_not_found")
     return article_service.to_response(instance)
@@ -147,10 +149,11 @@ async def create_article(
 async def update_article(
     article_id: str,
     body: ArticleUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("paper.write"),
 ):
-    instance = await article_service.update(db, article_id, body)
+    instance = await article_service.update(db, article_id, body, space_id=space_id)
     if not instance:
         raise NotFoundError("Article not found", code="paper.article_not_found")
     await db.commit()
@@ -161,10 +164,11 @@ async def update_article(
 @router.delete("/articles/{article_id}", status_code=204)
 async def delete_article(
     article_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("paper.write"),
 ):
-    deleted = await article_service.delete(db, article_id)
+    deleted = await article_service.delete(db, article_id, space_id=space_id)
     if not deleted:
         raise NotFoundError("Article not found", code="paper.article_not_found")
     await db.commit()
@@ -240,10 +244,11 @@ async def _bg_generate_digest(
 @router.get("/articles/{article_id}/digest", response_model=DigestResponse)
 async def get_digest(
     article_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("paper.read"),
 ):
-    article = await article_service.get(db, article_id)
+    article = await article_service.get_in_space(db, article_id, space_id)
     if not article:
         raise NotFoundError("Article not found", code="paper.article_not_found")
 
@@ -257,6 +262,7 @@ async def get_digest(
 async def trigger_digest(
     article_id: str,
     background_tasks: BackgroundTasks,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("paper.write"),
 ):
@@ -266,7 +272,7 @@ async def trigger_digest(
     Phase 3 will implement the actual LLM digest_generator.
     For now, returns a placeholder indicating the job is queued.
     """
-    article = await article_service.get(db, article_id)
+    article = await article_service.get_in_space(db, article_id, space_id)
     if not article:
         raise NotFoundError("Article not found", code="paper.article_not_found")
 
@@ -287,12 +293,13 @@ async def trigger_digest(
 )
 async def list_annotations(
     article_id: str,
+    space_id: str = Query("default"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("paper.read"),
 ):
-    article = await article_service.get(db, article_id)
+    article = await article_service.get_in_space(db, article_id, space_id)
     if not article:
         raise NotFoundError("Article not found", code="paper.article_not_found")
 

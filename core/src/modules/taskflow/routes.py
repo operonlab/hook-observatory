@@ -164,10 +164,11 @@ async def list_tasks(
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("taskflow.read"),
 ):
-    instance = await task_service.get(db, task_id)
+    instance = await task_service.get_in_space(db, task_id, space_id)
     if not instance:
         raise NotFoundError("Task not found", code="taskflow.task_not_found")
     return task_service.to_response(instance)
@@ -189,10 +190,13 @@ async def create_task(
 async def update_task(
     task_id: str,
     data: TaskUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("taskflow.write"),
 ):
-    instance = await task_service.update(db, task_id, data, user_id=user.get("id"))
+    instance = await task_service.update(
+        db, task_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Task not found", code="taskflow.task_not_found")
     await db.commit()
@@ -202,10 +206,11 @@ async def update_task(
 @router.delete("/tasks/{task_id}", status_code=204)
 async def delete_task(
     task_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("taskflow.write"),
 ):
-    if not await task_service.delete(db, task_id, user_id=user.get("id")):
+    if not await task_service.delete(db, task_id, user_id=user.get("id"), space_id=space_id):
         raise NotFoundError("Task not found", code="taskflow.task_not_found")
     await db.commit()
 

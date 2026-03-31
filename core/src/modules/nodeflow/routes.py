@@ -47,17 +47,19 @@ async def list_flows(
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.read"),
 ):
-    return await flow_service.list(
-        db, space_id, PaginationParams(page=page, page_size=page_size)
-    )
+    return await flow_service.list(db, space_id, PaginationParams(page=page, page_size=page_size))
 
 
 @router.get("/flows/{flow_id}", response_model=FlowDetailResponse)
 async def get_flow(
     flow_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.read"),
 ):
+    flow = await flow_service.get_in_space(db, flow_id, space_id)
+    if not flow:
+        raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
     return await flow_service.get_detail(db, flow_id)
 
 
@@ -77,10 +79,13 @@ async def create_flow(
 async def update_flow(
     flow_id: str,
     data: FlowUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.write"),
 ):
-    instance = await flow_service.update(db, flow_id, data, user_id=user.get("id"))
+    instance = await flow_service.update(
+        db, flow_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
     await db.commit()
@@ -166,10 +171,13 @@ async def create_node(
 async def update_node(
     node_id: str,
     data: NodeUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.write"),
 ):
-    instance = await node_service.update(db, node_id, data, user_id=user.get("id"))
+    instance = await node_service.update(
+        db, node_id, data, user_id=user.get("id"), space_id=space_id
+    )
     if not instance:
         raise NotFoundError("Node not found", code="nodeflow.node_not_found")
     await db.commit()

@@ -359,6 +359,43 @@ async def auto_evolve_kg(
         await db.commit()
 
         stats["triples_stored"] = len(created)
+
+        # Index new triples in Qdrant for vector search (best-effort)
+        if created:
+            try:
+                from src.shared.embedding import get_embedding
+                from src.shared.qdrant_client import get_qdrant_client
+
+                client = get_qdrant_client()
+                if client:
+                    from qdrant_client.models import PointStruct
+
+                    points = []
+                    for triple in created:
+                        text = f"{triple.subject} {triple.predicate} {triple.object}"
+                        emb = await get_embedding(text, task_type="search_document")
+                        if emb:
+                            points.append(
+                                PointStruct(
+                                    id=triple.id,
+                                    vector=emb,
+                                    payload={
+                                        "space_id": space_id,
+                                        "subject": triple.subject,
+                                        "predicate": triple.predicate,
+                                        "object": triple.object,
+                                        "topic": triple.topic or "",
+                                    },
+                                )
+                            )
+                    if points:
+                        client.upsert(
+                            collection_name="memvault_triples",
+                            points=points,
+                        )
+                        logger.debug("KG auto-evolve: indexed %d triples in Qdrant", len(points))
+            except Exception:
+                logger.debug("KG auto-evolve: Qdrant indexing failed (best-effort)", exc_info=True)
         # contradictions_resolved is implicit in batch_ingest (invalidated_count not exposed);
         # we report 0 here — the invalidation events are still fired by batch_ingest internally.
 

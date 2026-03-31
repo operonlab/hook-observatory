@@ -67,7 +67,7 @@ class FinanceGRCAdapter:
             {
                 "id": t.id,
                 "type": t.type,
-                "amount": float(t.amount),
+                "amount": str(t.amount),
                 "description": t.description,
                 "merchant": t.merchant,
                 "category_id": t.category_id,
