@@ -37,7 +37,7 @@ function tryParseCapture(text: string): ParsedCapture | null {
   try {
     const raw = jsonMatch[1] ?? jsonMatch[0]
     const parsed = JSON.parse(raw)
-    if (parsed.module && parsed.payload) {
+    if (parsed.module && parsed.payload && (parsed.confidence ?? 1) >= 0.5) {
       return parsed as ParsedCapture
     }
   } catch {
@@ -183,6 +183,21 @@ function handleWsChunk(
   })
 }
 
+function tryExtractNotes(text: string): string | null {
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) || text.match(/\{[\s\S]*"notes"[\s\S]*\}/)
+  if (!jsonMatch) return null
+  try {
+    const raw = jsonMatch[1] ?? jsonMatch[0]
+    const parsed = JSON.parse(raw)
+    if (parsed.notes && (parsed.confidence ?? 1) < 0.5) {
+      return parsed.notes
+    }
+  } catch {
+    // Not valid JSON
+  }
+  return null
+}
+
 function handleWsDone(
   pendingChunks: React.MutableRefObject<string>,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
@@ -198,6 +213,18 @@ function handleWsDone(
       }
       return prev
     })
+  } else {
+    // Low confidence or no valid capture — show notes text instead of raw JSON
+    const notes = tryExtractNotes(pendingChunks.current)
+    if (notes) {
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (last?.role === 'assistant') {
+          return [...prev.slice(0, -1), { ...last, content: notes }]
+        }
+        return prev
+      })
+    }
   }
   pendingChunks.current = ''
 }
@@ -231,7 +258,6 @@ function handleWsMessage(
     // Ignore parse errors
   }
 }
-
 
 export default function EnrichmentChat({
   selectedCapture,

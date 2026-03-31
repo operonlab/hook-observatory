@@ -19,7 +19,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from tmux_lib.cc_reader import aiter_cc_response, resolve_session_jsonl
-from tmux_lib.cli_session import is_process_running_async, start_cli_async
+from tmux_lib.cli_session import is_process_running_async
 from tmux_lib.patterns import CLAUDE_CODE
 from tmux_lib.primitives import (
     send_enter_async,
@@ -38,20 +38,20 @@ _WATCHDOG_TS_FILE = "/tmp/capture_watchdog_ts"
 def _touch_last_used() -> None:
     """Update capture:haiku:last_used so capture_watchdog.py knows we're active."""
     now = str(int(time.time()))
-    # File fallback (always works)
+    # File fallback (always works, watchdog reads this too)
     try:
         with open(_WATCHDOG_TS_FILE, "w") as f:
             f.write(now)
     except OSError:
         pass
-    # Redis (best-effort)
+    # Redis (log on failure — silent failures caused 11-day stale timestamp)
     try:
         import redis as _redis
 
         r = _redis.Redis(decode_responses=True)
         r.set(_REDIS_LAST_USED_KEY, now)
     except Exception:
-        pass
+        log.warning("_touch_last_used: Redis write failed — watchdog relies on file fallback")
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +74,10 @@ SYSTEM_PROMPT = (
     "## 規則\n"
     "1. 禁止使用任何工具或 MCP server。只回覆純文字 JSON。\n"
     "2. 回覆格式必須是 ```json\\n{...}\\n``` code block。\n"
-    "3. 用繁體中文回覆 notes 欄位。\n\n"
+    "3. 用繁體中文回覆 notes 欄位。\n"
+    "4. 嚴禁任何解釋性文字、歡迎訊息、後續建議。只輸出 JSON code block。\n"
+    "5. 即使信心度低，仍以 JSON 格式回覆（在 notes 欄位說明原因）。\n"
+    "6. CRITICAL: 回覆只能有一個 ```json code block，前後不可有任何文字。\n\n"
     "## JSON 結構\n"
     "```json\n"
     '{"module":"finance|taskflow|invest|dailyos|intelflow",'
@@ -186,7 +189,7 @@ async def _ensure_pane() -> bool:
 
 
 async def ensure_claude() -> bool:
-    """Ensure Claude Code is running in the tmux pane. Create pane if needed."""
+    """Ensure Claude Code is running AND idle in the tmux pane."""
     if not await _ensure_pane():
         return False
 
@@ -194,18 +197,43 @@ async def ensure_claude() -> bool:
     with open(_PROMPT_FILE, "w") as f:
         f.write(SYSTEM_PROMPT)
 
-    start_cmd = (
-        f"claude --model {CLAUDE_MODEL} --effort low --dangerously-skip-permissions"
-        f' --system-prompt "$(cat {_PROMPT_FILE})"'
+    from tmux_lib.cli_session import (
+        is_shell_async,
+        start_cli_async,
+        wait_for_prompt_async,
     )
-    started = await start_cli_async(
-        TMUX_TARGET, start_cmd, CLAUDE_CODE, wait_timeout=10, poll_interval=0.5
+
+    if await is_shell_async(TMUX_TARGET):
+        # CC not running — start it and wait for ❯ prompt
+        start_cmd = (
+            f"CLAUDE_VOICE=0 claude --model {CLAUDE_MODEL} --effort low"
+            f" --dangerously-skip-permissions"
+            f' --system-prompt "$(cat {_PROMPT_FILE})"'
+        )
+        started = await start_cli_async(
+            TMUX_TARGET,
+            start_cmd,
+            CLAUDE_CODE,
+            wait_timeout=25,
+            poll_interval=0.5,
+        )
+        if not started:
+            log.error("Failed to start Claude Code in %s", TMUX_TARGET)
+            return False
+        log.info("Claude Code started and ready in %s", TMUX_TARGET)
+        _touch_last_used()
+        return True
+
+    # CC already running — just verify it's idle
+    ready = await wait_for_prompt_async(
+        TMUX_TARGET,
+        CLAUDE_CODE,
+        timeout=15,
+        poll_interval=0.5,
     )
-    if started:
-        log.info("Claude Code ready in %s", TMUX_TARGET)
-    else:
-        log.error("Failed to start Claude Code in %s", TMUX_TARGET)
-    return started
+    if not ready:
+        log.error("Claude Code running but not idle in %s", TMUX_TARGET)
+    return ready
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +273,7 @@ def _wrap_as_json_block(text: str) -> str:
 async def query_claude(message: str) -> str:
     """Send a message to Claude Code via tmux and capture the response."""
     async with _query_lock:
+        # Ensure CC is running AND idle (handles watchdog /exit recovery)
         if not await ensure_claude():
             raise RuntimeError("Claude Code 未執行且無法啟動")
         _touch_last_used()
@@ -258,7 +287,7 @@ async def query_claude(message: str) -> str:
             except OSError:
                 pass
 
-        # Send message via tmux (literal mode avoids key-name interpretation)
+        # Send raw message — system prompt handles JSON-only output
         safe_msg = message.replace("\n", " ")
         await send_text_async(TMUX_TARGET, safe_msg)
         await asyncio.sleep(0.1)

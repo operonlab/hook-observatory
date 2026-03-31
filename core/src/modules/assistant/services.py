@@ -11,7 +11,6 @@ import logging
 import threading
 import time
 from collections.abc import AsyncGenerator, Generator
-from pathlib import Path
 
 from src.shared.sse import BlockType, StreamBlock
 from tmux_lib.cc_reader import iter_cc_response, resolve_session_jsonl, strip_cc_noise
@@ -42,9 +41,26 @@ _CLAUDE_CMD = (
 _POLL_INTERVAL = 0.3
 _TIMEOUT = 180
 _REDIS_LAST_USED_KEY = "assistant:haiku:last_used"
+_WATCHDOG_TS_FILE = "/tmp/assistant_watchdog_ts"
 _CHAT_LOG = "/tmp/assistant-chat.log"
 
 _active_sessions: set[str] = set()
+
+
+def _touch_assistant_last_used() -> None:
+    """Update timestamp so assistant_watchdog.py knows we're active."""
+    now = str(int(time.time()))
+    try:
+        with open(_WATCHDOG_TS_FILE, "w") as f:
+            f.write(now)
+    except OSError:
+        pass
+    try:
+        import redis as _redis
+
+        _redis.Redis(decode_responses=True).set(_REDIS_LAST_USED_KEY, now)
+    except Exception:
+        logger.warning("assistant: Redis keepalive write failed — watchdog relies on file fallback")
 
 
 def _log_chat(
@@ -215,11 +231,7 @@ def _iter_chat(prompt: str, *, session_id: str = "") -> Generator[_DeltaEvent, N
         if delta.is_done:
             elapsed = time.time() - t0
             _log_chat(session_id=session_id, response=full_text, duration_s=elapsed)
-            try:
-                import redis as _redis
-                _redis.Redis(decode_responses=True).set(_REDIS_LAST_USED_KEY, str(int(time.time())))
-            except Exception:
-                pass
+            _touch_assistant_last_used()
             logger.info("assistant: done, %d chars, %.1fs", sent_len, elapsed)
             yield _DeltaEvent(is_done=True)
             return

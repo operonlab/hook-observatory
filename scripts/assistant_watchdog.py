@@ -56,21 +56,33 @@ def _redis_client():
 
 
 def _get_idle_secs(r) -> tuple[int | None, str]:
+    """Use the MOST RECENT timestamp from Redis and file to avoid stale values."""
+    now = int(time.time())
+    best_ts: int | None = None
+    source = "none"
+
     if r:
         try:
             last_used = r.get(REDIS_KEY)
             if last_used is not None:
-                return int(time.time()) - int(last_used), "redis"
+                ts = int(last_used)
+                if best_ts is None or ts > best_ts:
+                    best_ts = ts
+                    source = "redis"
         except Exception:
             pass
 
     if FALLBACK_TS_FILE.exists():
         try:
             ts = int(FALLBACK_TS_FILE.read_text().strip())
-            return int(time.time()) - ts, "file-fallback"
+            if best_ts is None or ts > best_ts:
+                best_ts = ts
+                source = "file-fallback"
         except (ValueError, OSError):
             pass
 
+    if best_ts is not None:
+        return now - best_ts, source
     return None, "none"
 
 
