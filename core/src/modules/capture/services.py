@@ -283,6 +283,7 @@ class CaptureService:
                 capture.payload,
                 module=capture.module,
                 entity_type=capture.entity_type,
+                context={"raw_input": capture.raw_input},  # H2: expose raw_input to strategies
             )
             logger.info(
                 "capture.enrich module=%s entity=%s confidence=%.2f source=%r",
