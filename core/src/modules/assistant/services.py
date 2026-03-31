@@ -9,11 +9,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 import subprocess
-import time
 import threading
+import time
 from collections.abc import AsyncGenerator, Generator
 from enum import StrEnum
 from pathlib import Path
@@ -116,7 +115,9 @@ def _resolve_session_jsonl() -> Path | None:
 
         result = subprocess.run(
             ["pgrep", "-P", str(pane_pid)],
-            capture_output=True, text=True, timeout=3,
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
         if result.returncode != 0 or not result.stdout.strip():
             return None
@@ -169,7 +170,10 @@ def _extract_text_from_content(content: list[dict]) -> tuple[str, str | None]:
 
 
 def _iter_chat_jsonl(
-    prompt: str, *, jsonl_path: Path, session_id: str = "",
+    prompt: str,
+    *,
+    jsonl_path: Path,
+    session_id: str = "",
 ) -> Generator[_DeltaEvent, None, None]:
     """JSONL file watcher: tail the session JSONL for assistant responses.
 
@@ -237,7 +241,7 @@ def _iter_chat_jsonl(
         # Read new JSONL lines
         new_entries = []
         try:
-            with open(jsonl_path, "r", encoding="utf-8") as f:
+            with open(jsonl_path, encoding="utf-8") as f:
                 f.seek(last_offset)
                 for raw in f:
                     raw = raw.strip()
@@ -283,9 +287,8 @@ def _iter_chat_jsonl(
             _log_chat(session_id=session_id, response=full_text, duration_s=elapsed)
             try:
                 import redis as _redis
-                _redis.Redis(decode_responses=True).set(
-                    _REDIS_LAST_USED_KEY, str(int(time.time()))
-                )
+
+                _redis.Redis(decode_responses=True).set(_REDIS_LAST_USED_KEY, str(int(time.time())))
             except Exception:
                 pass
             logger.info("assistant: done (jsonl), %d chars, %.1fs", sent_len, elapsed)
@@ -416,30 +419,39 @@ _PROCESSING_SUFFIX_RE = re.compile(
 _SOURCES_HEADING_RE = re.compile(r"^\s*(?:Sources?|References?|Learn more)\s*:\s*$", re.IGNORECASE)
 
 
-_CC_NOISE_RE = re.compile(
-    r"(?:\n|^)\s*[✢✻✳✶].*$"  # CC processing indicators (Concocting, Crunching, etc.)
-    r"|(?:\n)\s*(?:Sources?|References?|Learn more)\s*:.*",
-    re.DOTALL | re.MULTILINE,
+_URL_LINE_RE = re.compile(
+    r"^\s*[-•*]?\s*\[.*?\]\(https?://\S+\)\s*$"  # - [title](url)
+    r"|^\s*[-•*]?\s*\*{0,2}.*?\*{0,2}\s*[：:]\s*https?://\S+\s*$"  # **label**: url
+    r"|^\s*[-•*]?\s*https?://\S+\s*$",  # bare URL line
+)
+
+_SOURCES_HEADING_INLINE_RE = re.compile(
+    r"^\s*\*{0,2}(?:Sources?|References?|Learn more)\s*[：:]\s*\*{0,2}\s*$",
+    re.IGNORECASE,
 )
 
 
 def _strip_cc_noise(text: str) -> str:
-    """Remove CC processing indicators and trailing Sources sections."""
-    # Strip processing indicators line-by-line first
+    """Remove CC noise: processing indicators, Sources sections, URL-only lines."""
     lines = text.splitlines()
     cleaned = []
+    in_sources = False
     for line in lines:
         s = line.strip()
+        # CC processing indicators
         if s and s[0] in "✢✻✳✶":
-            continue  # CC processing indicator
+            continue
+        # Sources/References heading → drop everything after
+        if s and _SOURCES_HEADING_INLINE_RE.match(s):
+            in_sources = True
+            continue
+        if in_sources:
+            continue
+        # Standalone URL lines (bare URLs, markdown link list items)
+        if s and _URL_LINE_RE.match(line):
+            continue
         cleaned.append(line)
-    text = "\n".join(cleaned)
-    # Strip Sources section
-    for marker in ("\nSources:", "\nSource:", "\nReferences:", "\nLearn more:"):
-        idx = text.find(marker)
-        if idx > 0:
-            text = text[:idx]
-    return text.rstrip()
+    return "\n".join(cleaned).rstrip()
 
 
 # Tool name → friendly progress label (regex-based)
