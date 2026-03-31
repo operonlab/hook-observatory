@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextlib
 import io
 import logging
+import os
 import re
 import subprocess
 import time
@@ -467,8 +468,6 @@ def _init_safe_builtins() -> dict[str, Any]:
         "property",
         "staticmethod",
         "classmethod",
-        "open",
-        "__import__",
         # Exceptions
         "Exception",
         "ValueError",
@@ -496,9 +495,23 @@ def _init_safe_builtins() -> dict[str, Any]:
     safe["input"] = None
     safe["globals"] = None
     safe["locals"] = None
+    safe["__import__"] = None  # block dynamic import
     safe["True"] = True
     safe["False"] = False
     safe["None"] = None
+
+    # Restricted open: only allow reading /tmp/rlm-* paths
+    _real_open = builtins.open
+
+    def _safe_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+        path = str(file)
+        if not path.startswith("/tmp/rlm-"):
+            raise PermissionError(
+                f"open() restricted to /tmp/rlm-* paths in sandbox (got: {path!r})"
+            )
+        return _real_open(file, mode, *args, **kwargs)
+
+    safe["open"] = _safe_open
     return safe
 
 
@@ -740,153 +753,164 @@ class RLMEngine:
 
         trajectory: list[dict] = []
         target = self.config.tmux_target
+        ctx_file: str | None = None
 
-        # Setup REPL sandbox (local, same as stateless)
-        env = self._setup_environment(context)
+        try:
+            # Setup REPL sandbox (local, same as stateless)
+            env = self._setup_environment(context)
 
-        # Ensure tmux window is ready
-        if not _tmux_ensure_window(target, self.config.model):
-            return self._build_result("[tmux window failed]", trajectory, 0, "error")
+            # Ensure tmux window is ready
+            if not _tmux_ensure_window(target, self.config.model):
+                return self._build_result("[tmux window failed]", trajectory, 0, "error")
 
-        if not _tmux_is_ready(target):
-            deadline = time.time() + 20
-            while time.time() < deadline:
-                if _tmux_is_ready(target):
-                    break
-                time.sleep(_SLEEP_PROMPT_DETECT)
-            else:
-                return self._build_result("[tmux Claude not ready]", trajectory, 0, "error")
+            if not _tmux_is_ready(target):
+                deadline = time.time() + 20
+                while time.time() < deadline:
+                    if _tmux_is_ready(target):
+                        break
+                    time.sleep(_SLEEP_PROMPT_DETECT)
+                else:
+                    return self._build_result("[tmux Claude not ready]", trajectory, 0, "error")
 
-        # First turn: send system prompt + context + query
-        # For large context, write to file and reference it
-        first_prompt_parts = [_SYSTEM_PROMPT, ""]
-        if context is not None:
-            first_prompt_parts.append(_build_context_metadata(context))
-            if isinstance(context, str) and len(context) > 5000:
-                ctx_file = f"/tmp/rlm-ctx-{_uuid.uuid4().hex[:8]}.txt"
-                with open(ctx_file, "w") as f:
-                    f.write(context)
-                first_prompt_parts.append(
-                    f"\nThe full context is saved at {ctx_file}. "
-                    "Read it when you need to examine the context."
-                )
-            elif isinstance(context, list):
-                ctx_file = f"/tmp/rlm-ctx-{_uuid.uuid4().hex[:8]}.txt"
-                with open(ctx_file, "w") as f:
-                    for idx, chunk in enumerate(context):
-                        f.write(f"=== CHUNK {idx} ===\n{chunk}\n\n")
-                first_prompt_parts.append(
-                    f"\nThe full context ({len(context)} chunks) is saved at {ctx_file}. "
-                    "Read it when you need to examine the context."
-                )
-            else:
-                first_prompt_parts.append(f"\nContext:\n{context}")
-        first_prompt_parts.append(f"\nQuery: {prompt}")
-        first_prompt_parts.append(
-            "\nStart by examining the context and planning your approach. "
-            "Write Python code in ```repl blocks."
-        )
-
-        for i in range(self.config.max_iterations):
-            elapsed = time.time() - self._start_time
-            if elapsed > self.config.max_timeout_secs:
-                return self._build_result("[Timeout exceeded]", trajectory, i, "timeout")
-
-            remaining = self.config.max_timeout_secs - elapsed
-
-            # Determine what to send
-            if i == 0:
-                send_text = "\n".join(first_prompt_parts)
-            else:
-                # Subsequent turns: just send REPL output
-                send_text = _build_user_prompt(prompt, i)
-
-            # Send to tmux and get response
-            try:
-                with _tmux_lock:
-                    response = self._tmux_send_and_capture(target, send_text, remaining)
-                self._usage.total_calls += 1
-                self._error_count = 0
-            except Exception as e:
-                self._error_count += 1
-                if self.config.verbose:
-                    logger.warning("rlm-tmux[iter=%d] error: %s", i, e)
-                if self._error_count >= self.config.max_errors:
-                    return self._build_result(f"[tmux error: {e}]", trajectory, i, "error")
-                continue
-
-            if self.config.verbose:
-                logger.info("rlm-tmux[iter=%d] response: %.200s", i, response)
-
-            # Parse and execute code blocks
-            code_blocks = find_code_blocks(response)
-            exec_results: list[tuple[str, str, str]] = []
-
-            for code in code_blocks:
-                stdout, stderr = env.execute(code)
-                exec_results.append((code, stdout, stderr))
-
-            # Check FINAL_VAR from REPL
-            if env._final_answer is not None:
-                trajectory.append({"iteration": i, "action": "FINAL_VAR_repl"})
-                return self._build_result(env._final_answer, trajectory, i + 1)
-
-            # Check FINAL in text
-            final = find_final_answer(response, env)
-            if final:
-                trajectory.append(
-                    {"iteration": i, "action": "FINAL", "response_preview": response[:300]}
-                )
-                return self._build_result(final, trajectory, i + 1)
-
-            # tmux heuristic: if response is short, no code blocks, no FINAL
-            # → Claude likely just answered directly (interactive mode style)
-            if i > 0 and not code_blocks and len(response) < 500 and response.strip():
-                clean = response.strip().strip('"').strip("'")
-                if clean and "\n" not in clean:
-                    trajectory.append({"iteration": i, "action": "direct_answer"})
-                    return self._build_result(clean, trajectory, i + 1)
-
-            # Send REPL results back as the next message
-            if exec_results:
-                repl_feedback = []
-                for code, stdout, stderr in exec_results:
-                    repl_feedback.append(
-                        _format_execution_result(
-                            code, stdout, stderr, limit=self.config.repl_output_limit
-                        )
+            # First turn: send system prompt + context + query
+            # For large context, write to file and reference it
+            first_prompt_parts = [_SYSTEM_PROMPT, ""]
+            if context is not None:
+                first_prompt_parts.append(_build_context_metadata(context))
+                if isinstance(context, str) and len(context) > 5000:
+                    ctx_file = f"/tmp/rlm-ctx-{_uuid.uuid4().hex[:8]}.txt"
+                    with open(ctx_file, "w") as f:
+                        f.write(context)
+                    first_prompt_parts.append(
+                        f"\nThe full context is saved at {ctx_file}. "
+                        "Read it when you need to examine the context."
                     )
-                # Prepend REPL output to next iteration's send_text
-                first_prompt_parts = []  # clear first prompt
-                next_repl = "\n\n".join(repl_feedback)
-                # We'll send this as the "user" message next iteration
-                # by overriding the build_user_prompt with REPL results
-                _build_user_prompt_override = (
-                    f"{next_repl}\n\nContinue using the REPL to answer: {prompt}\nYour next action:"
-                )
-                # Send REPL results immediately to the tmux session
-                try:
-                    with _tmux_lock:
-                        self._tmux_send_and_capture(target, _build_user_prompt_override, remaining)
-                    self._usage.total_calls += 1
-
-                    # This response is the NEXT iteration — parse it too
-                    # (we handle it in the next loop iteration)
-                except Exception:
-                    pass  # will retry in next loop iteration
-
-            trajectory.append(
-                {
-                    "iteration": i,
-                    "action": "continue",
-                    "code_blocks": len(code_blocks),
-                    "response_preview": response[:200],
-                }
+                elif isinstance(context, list):
+                    ctx_file = f"/tmp/rlm-ctx-{_uuid.uuid4().hex[:8]}.txt"
+                    with open(ctx_file, "w") as f:
+                        for idx, chunk in enumerate(context):
+                            f.write(f"=== CHUNK {idx} ===\n{chunk}\n\n")
+                    first_prompt_parts.append(
+                        f"\nThe full context ({len(context)} chunks) is saved at {ctx_file}. "
+                        "Read it when you need to examine the context."
+                    )
+                else:
+                    first_prompt_parts.append(f"\nContext:\n{context}")
+            first_prompt_parts.append(f"\nQuery: {prompt}")
+            first_prompt_parts.append(
+                "\nStart by examining the context and planning your approach. "
+                "Write Python code in ```repl blocks."
             )
 
-        return self._build_result(
-            "[Max iterations exceeded]", trajectory, self.config.max_iterations, "max_iterations"
-        )
+            for i in range(self.config.max_iterations):
+                elapsed = time.time() - self._start_time
+                if elapsed > self.config.max_timeout_secs:
+                    return self._build_result("[Timeout exceeded]", trajectory, i, "timeout")
+
+                remaining = self.config.max_timeout_secs - elapsed
+
+                # Determine what to send
+                if i == 0:
+                    send_text = "\n".join(first_prompt_parts)
+                else:
+                    # Subsequent turns: just send REPL output
+                    send_text = _build_user_prompt(prompt, i)
+
+                # Send to tmux and get response
+                try:
+                    with _tmux_lock:
+                        response = self._tmux_send_and_capture(target, send_text, remaining)
+                    self._usage.total_calls += 1
+                    self._error_count = 0
+                except Exception as e:
+                    self._error_count += 1
+                    if self.config.verbose:
+                        logger.warning("rlm-tmux[iter=%d] error: %s", i, e)
+                    if self._error_count >= self.config.max_errors:
+                        return self._build_result(f"[tmux error: {e}]", trajectory, i, "error")
+                    continue
+
+                if self.config.verbose:
+                    logger.info("rlm-tmux[iter=%d] response: %.200s", i, response)
+
+                # Parse and execute code blocks
+                code_blocks = find_code_blocks(response)
+                exec_results: list[tuple[str, str, str]] = []
+
+                for code in code_blocks:
+                    stdout, stderr = env.execute(code)
+                    exec_results.append((code, stdout, stderr))
+
+                # Check FINAL_VAR from REPL
+                if env._final_answer is not None:
+                    trajectory.append({"iteration": i, "action": "FINAL_VAR_repl"})
+                    return self._build_result(env._final_answer, trajectory, i + 1)
+
+                # Check FINAL in text
+                final = find_final_answer(response, env)
+                if final:
+                    trajectory.append(
+                        {"iteration": i, "action": "FINAL", "response_preview": response[:300]}
+                    )
+                    return self._build_result(final, trajectory, i + 1)
+
+                # tmux heuristic: if response is short, no code blocks, no FINAL
+                # → Claude likely just answered directly (interactive mode style)
+                if i > 0 and not code_blocks and len(response) < 500 and response.strip():
+                    clean = response.strip().strip('"').strip("'")
+                    if clean and "\n" not in clean:
+                        trajectory.append({"iteration": i, "action": "direct_answer"})
+                        return self._build_result(clean, trajectory, i + 1)
+
+                # Send REPL results back as the next message
+                if exec_results:
+                    repl_feedback = []
+                    for code, stdout, stderr in exec_results:
+                        repl_feedback.append(
+                            _format_execution_result(
+                                code, stdout, stderr, limit=self.config.repl_output_limit
+                            )
+                        )
+                    # Prepend REPL output to next iteration's send_text
+                    first_prompt_parts = []  # clear first prompt
+                    next_repl = "\n\n".join(repl_feedback)
+                    # We'll send this as the "user" message next iteration
+                    # by overriding the build_user_prompt with REPL results
+                    _build_user_prompt_override = (
+                        f"{next_repl}\n\nContinue using the REPL"
+                        f" to answer: {prompt}\nYour next action:"
+                    )
+                    # Send REPL results immediately to the tmux session
+                    try:
+                        with _tmux_lock:
+                            self._tmux_send_and_capture(
+                                target, _build_user_prompt_override, remaining
+                            )
+                        self._usage.total_calls += 1
+
+                        # This response is the NEXT iteration — parse it too
+                        # (we handle it in the next loop iteration)
+                    except Exception:
+                        pass  # will retry in next loop iteration
+
+                trajectory.append(
+                    {
+                        "iteration": i,
+                        "action": "continue",
+                        "code_blocks": len(code_blocks),
+                        "response_preview": response[:200],
+                    }
+                )
+
+            return self._build_result(
+                "[Max iterations exceeded]",
+                trajectory,
+                self.config.max_iterations,
+                "max_iterations",
+            )
+        finally:
+            if ctx_file and os.path.exists(ctx_file):
+                os.unlink(ctx_file)
 
     def _tmux_send_and_capture(self, target: str, text: str, timeout: float) -> str:
         """Send text to tmux Claude, wait for response, return it."""

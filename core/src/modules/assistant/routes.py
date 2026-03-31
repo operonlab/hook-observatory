@@ -25,7 +25,7 @@ async def chat(
     body: ChatRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: dict = require_permission("assistant.read"),
+    user: dict = require_permission("assistant.write"),
 ):
     """Stream AI chat response with context-aware RAG.
 

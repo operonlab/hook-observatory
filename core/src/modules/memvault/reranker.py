@@ -164,7 +164,7 @@ class LocalReranker:
             scores = await rerank_bridge.rerank(query, snippets)
             if scores is None:
                 self._breaker.record_failure()
-                return results, False
+                return results, False, None
 
             # Build index→score map
             score_map = {s["index"]: s["score"] for s in scores}
