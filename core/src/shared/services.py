@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextvars import ContextVar
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Generic, TypeVar
@@ -11,6 +12,49 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.schemas import PaginatedResponse, PaginationParams
+
+# ---------------------------------------------------------------------------
+# Event Accumulator — ensures events are published *after* db.commit(), not
+# after db.flush().  Each async request context gets its own list via ContextVar.
+# ---------------------------------------------------------------------------
+
+# Each element: (Event, is_critical: bool)
+_pending_events: ContextVar[list[tuple[Any, bool]] | None] = ContextVar(
+    "_pending_events", default=None
+)
+
+
+def begin_event_accumulation() -> None:
+    """Activate event accumulation for the current async context.
+
+    Call once at the start of a route handler (or equivalent entry point).
+    While active, ``_auto_publish_event`` appends events to the per-context
+    list instead of publishing them immediately.
+    """
+    _pending_events.set([])
+
+
+async def flush_pending_events() -> None:
+    """Publish all accumulated events and clear the accumulator.
+
+    Must be called *after* ``db.commit()`` succeeds so that subscribers
+    can safely read committed data from a fresh DB session.
+    """
+    events = _pending_events.get(None)
+    if not events:
+        _pending_events.set(None)
+        return
+    from src.events.bus import event_bus
+
+    for event, is_critical in events:
+        if is_critical:
+            import asyncio
+
+            asyncio.ensure_future(event_bus.publish_reliable(event))  # noqa: RUF006
+        else:
+            event_bus.publish_fire_and_forget(event)
+    _pending_events.set(None)
+
 
 ModelT = TypeVar("ModelT")
 CreateT = TypeVar("CreateT")
@@ -126,6 +170,15 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     ) -> None:
         """Publish event if event_types has a mapping for this action.
 
+        If event accumulation is active for the current request context
+        (i.e. ``begin_event_accumulation()`` was called), the event is
+        queued and will be published by ``flush_pending_events()`` *after*
+        ``db.commit()`` succeeds — preventing subscribers from reading
+        uncommitted data.
+
+        Otherwise falls back to immediate publish (backward-compatible for
+        non-request contexts such as CLI scripts or cron jobs).
+
         Uses publish_reliable() with retry for events listed in critical_events,
         fire-and-forget for everything else.
         """
@@ -142,7 +195,16 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
             user_id=getattr(instance, "created_by", None),
         )
 
-        if event_type in self.critical_events:
+        is_critical = event_type in self.critical_events
+
+        # --- Accumulator path (preferred when active) ---
+        pending = _pending_events.get(None)
+        if pending is not None:
+            pending.append((event, is_critical))
+            return
+
+        # --- Immediate publish fallback (non-request contexts) ---
+        if is_critical:
             import asyncio
 
             asyncio.ensure_future(event_bus.publish_reliable(event))  # noqa: RUF006

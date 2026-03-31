@@ -150,6 +150,29 @@ app.add_middleware(
 )
 
 
+# --- Event Accumulator Middleware ---
+# Activates per-request event accumulation so that events published by
+# BaseCRUDService hooks are held until after db.commit() succeeds.
+# After call_next returns (route handler committed the DB), we flush the
+# accumulated events — eliminating the race window between flush and commit.
+@app.middleware("http")
+async def event_accumulator_middleware(request, call_next):
+    from src.shared.services import begin_event_accumulation, flush_pending_events
+
+    begin_event_accumulation()
+    try:
+        response = await call_next(request)
+    except Exception:
+        # On unhandled exceptions the transaction would be rolled back;
+        # drop accumulated events to avoid publishing stale data.
+        from src.shared.services import _pending_events
+
+        _pending_events.set(None)
+        raise
+    await flush_pending_events()
+    return response
+
+
 # --- Security Headers Middleware ---
 @app.middleware("http")
 async def add_security_headers(request, call_next):

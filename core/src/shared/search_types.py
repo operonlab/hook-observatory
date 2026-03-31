@@ -31,6 +31,7 @@ class SearchResult:
     content_preview: str  # first 200 chars
     tags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    embedding: list[float] | None = None  # dense vector, populated when with_vectors=True
 
 
 @dataclass

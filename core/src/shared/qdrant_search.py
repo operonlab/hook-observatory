@@ -159,27 +159,29 @@ async def index_documents_batch(docs: list[IndexDocument]) -> int:
             sparse = text_to_sparse_vector(doc.content, service=doc.service_id)
             point_id = _entity_to_point_id(doc.service_id, doc.entity_id)
 
-            points.append(PointStruct(
-                id=point_id,
-                vector={
-                    "dense": embedding,
-                    "bm25": SparseVector(
-                        indices=list(sparse.keys()),
-                        values=list(sparse.values()),
-                    ),
-                },
-                payload={
-                    "service_id": doc.service_id,
-                    "entity_id": doc.entity_id,
-                    "entity_type": doc.entity_type,
-                    "space_id": doc.space_id,
-                    "content_preview": doc.content[:200],
-                    "tags": doc.tags,
-                    "created_at": doc.created_at.isoformat() if doc.created_at else None,
-                    "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
-                    **doc.metadata,
-                },
-            ))
+            points.append(
+                PointStruct(
+                    id=point_id,
+                    vector={
+                        "dense": embedding,
+                        "bm25": SparseVector(
+                            indices=list(sparse.keys()),
+                            values=list(sparse.values()),
+                        ),
+                    },
+                    payload={
+                        "service_id": doc.service_id,
+                        "entity_id": doc.entity_id,
+                        "entity_type": doc.entity_type,
+                        "space_id": doc.space_id,
+                        "content_preview": doc.content[:200],
+                        "tags": doc.tags,
+                        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                        "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
+                        **doc.metadata,
+                    },
+                )
+            )
 
         if points:
             # Upsert in batches of 100
@@ -197,8 +199,16 @@ async def hybrid_search(
     query: str,
     space_id: str,
     config: SearchConfig | None = None,
+    *,
+    with_vectors: bool = False,
 ) -> tuple[list[SearchResult], SearchMetadata]:
-    """Execute hybrid search (sparse BM25 + dense semantic) with RRF fusion."""
+    """Execute hybrid search (sparse BM25 + dense semantic) with RRF fusion.
+
+    Args:
+        with_vectors: If True, request dense vectors from Qdrant and populate
+            SearchResult.embedding.  Used by scoring pipelines that need
+            SemanticBoostOp / MMROp (cosine similarity requires embeddings).
+    """
     config = config or SearchConfig()
     meta = SearchMetadata()
     start = time.monotonic()
@@ -276,6 +286,7 @@ async def hybrid_search(
             query=FusionQuery(fusion=Fusion.RRF),
             limit=config.top_k,
             with_payload=True,
+            with_vectors=["dense"] if with_vectors else False,
         )
 
         # Convert to SearchResult
@@ -287,17 +298,35 @@ async def hybrid_search(
             if score < config.score_threshold:
                 continue
 
-            search_results.append(SearchResult(
-                entity_id=payload.get("entity_id", ""),
-                service_id=payload.get("service_id", ""),
-                entity_type=payload.get("entity_type", ""),
-                score=score,
-                content_preview=payload.get("content_preview", ""),
-                tags=payload.get("tags", []),
-                metadata={k: v for k, v in payload.items()
-                          if k not in {"entity_id", "service_id", "entity_type",
-                                       "content_preview", "tags", "space_id"}},
-            ))
+            # Extract dense vector when requested (needed for SemanticBoostOp/MMROp)
+            point_embedding: list[float] | None = None
+            if with_vectors and isinstance(point.vector, dict):
+                point_embedding = point.vector.get("dense")
+
+            search_results.append(
+                SearchResult(
+                    entity_id=payload.get("entity_id", ""),
+                    service_id=payload.get("service_id", ""),
+                    entity_type=payload.get("entity_type", ""),
+                    score=score,
+                    content_preview=payload.get("content_preview", ""),
+                    tags=payload.get("tags", []),
+                    metadata={
+                        k: v
+                        for k, v in payload.items()
+                        if k
+                        not in {
+                            "entity_id",
+                            "service_id",
+                            "entity_type",
+                            "content_preview",
+                            "tags",
+                            "space_id",
+                        }
+                    },
+                    embedding=point_embedding,
+                )
+            )
 
         meta.total_candidates = len(search_results)
         meta.query_time_ms = (time.monotonic() - start) * 1000

@@ -37,10 +37,11 @@ async def on_capture_created_auto_enrich(event: Event) -> None:
 
 
 async def _do_auto_enrich(capture_id: str, module: str, entity_type: str, raw_input: str) -> None:
-    """Background: wait for commit, then run enrichment pipeline."""
-    # Brief delay to let the create route commit the transaction
-    await asyncio.sleep(1.5)
+    """Background: run enrichment pipeline after the create route commits.
 
+    No sleep needed — event accumulator middleware ensures this handler is
+    invoked only after db.commit() succeeds in the originating request.
+    """
     try:
         async with async_session_factory() as db:
             from .registry import get_adapter

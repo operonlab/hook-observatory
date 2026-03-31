@@ -96,6 +96,7 @@ class TransactionCaptureAdapter(BaseCaptureAdapter):
         space_id: str,
         created_by: str | None,
     ) -> str:
+        from src.events.bus import Event, event_bus
         from src.modules.finance.services import transaction_service
 
         # Reference fields already resolved by resolve_references() in services.py
@@ -111,6 +112,19 @@ class TransactionCaptureAdapter(BaseCaptureAdapter):
         tags = payload.pop("tags", [])
         data = TransactionCreate(**payload, tags=tags)
         instance = await transaction_service.create(db, space_id, data, created_by)
+        # TODO: migrate to full EventBus pattern when cross-process scaling needed
+        event_bus.publish_fire_and_forget(
+            Event(
+                type="capture.item.promoted",
+                data={
+                    "target_module": "finance",
+                    "target_entity_type": "transaction",
+                    "target_entity_id": instance.id,
+                    "promoted_by": created_by,
+                },
+                source="capture",
+            )
+        )
         return instance.id
 
 

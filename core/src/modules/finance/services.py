@@ -1000,27 +1000,35 @@ class TransactionService(
         _tags = (
             [t.tag for t in instance.tags] if "tags" in instance.__dict__ and instance.tags else []
         )
-        await event_bus.publish(
-            Event(
-                type=FinanceEvents.TRANSACTION_CREATED,
-                data={
-                    "transaction_id": instance.id,
-                    "id": instance.id,
-                    "space_id": instance.space_id,
-                    "type": instance.type,
-                    "amount": str(instance.amount),
-                    "currency": instance.currency,
-                    "description": instance.description,
-                    "merchant": instance.merchant,
-                    "payment_method": instance.payment_method,
-                    "tags": _tags,
-                    "created_at": instance.created_at.isoformat() if instance.created_at else None,
-                    "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
-                },
-                source="finance",
-                user_id=user_id,
-            )
+
+        # Publish via accumulator so the event fires after db.commit(), not after flush().
+        # Falls back to immediate publish in non-request contexts (CLI, cron).
+        from src.shared.services import _pending_events
+
+        _event = Event(
+            type=FinanceEvents.TRANSACTION_CREATED,
+            data={
+                "transaction_id": instance.id,
+                "id": instance.id,
+                "space_id": instance.space_id,
+                "type": instance.type,
+                "amount": str(instance.amount),
+                "currency": instance.currency,
+                "description": instance.description,
+                "merchant": instance.merchant,
+                "payment_method": instance.payment_method,
+                "tags": _tags,
+                "created_at": instance.created_at.isoformat() if instance.created_at else None,
+                "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+            },
+            source="finance",
+            user_id=user_id,
         )
+        _pending = _pending_events.get(None)
+        if _pending is not None:
+            _pending.append((_event, False))
+        else:
+            await event_bus.publish(_event)
         return instance
 
     async def update(
@@ -1667,6 +1675,15 @@ class TransferService:
         """Execute a transfer between two wallets in the same DB transaction.
 
         SELECT FOR UPDATE sorted by wallet_id to prevent deadlocks.
+
+        IMPORTANT: Caller MUST call ``await db.commit()`` immediately after this
+        returns.  Wallets are locked with FOR UPDATE — delayed commit holds row
+        locks unnecessarily long and increases contention.
+
+        The balance adjustments are wrapped in a savepoint (``begin_nested``) so
+        they are atomic within the outer transaction.  If the savepoint rolls
+        back the row locks are still held until the outer transaction ends, so
+        commit promptly.
         """
         if from_wallet_id == to_wallet_id:
             raise BadRequestError(
@@ -1726,9 +1743,13 @@ class TransferService:
         db.add(out_txn)
         db.add(in_txn)
 
-        # Update balances atomically
-        await _adjust_wallet_balance(db, from_wallet_id, -(amount + fee))
-        await _adjust_wallet_balance(db, to_wallet_id, amount)
+        # Update balances atomically within a savepoint so that a failure here
+        # rolls back only the balance changes without releasing the FOR UPDATE
+        # row locks acquired above — the outer transaction commit/rollback still
+        # controls lock release.
+        async with db.begin_nested():
+            await _adjust_wallet_balance(db, from_wallet_id, -(amount + fee))
+            await _adjust_wallet_balance(db, to_wallet_id, amount)
 
         await db.flush()
 

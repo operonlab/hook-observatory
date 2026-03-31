@@ -25,6 +25,7 @@ from src.shared.scoring_stages import cosine_similarity
 
 try:
     from sdk_client.retry import with_backoff as _with_backoff
+
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False
@@ -52,6 +53,7 @@ _ARXIV_API_BASE = "http://export.arxiv.org/api/query"
 _ARXIV_NS = "http://www.w3.org/2005/Atom"
 _ARXIV_TERM_NS = "http://arxiv.org/schemas/atom"
 _RATE_LIMIT_DELAY = 3.0  # seconds between requests (arXiv policy)
+_MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB safety cap per response page
 
 # XML namespaces for ElementTree
 _NS = {
@@ -162,12 +164,37 @@ def _parse_feed(xml_bytes: bytes) -> list[dict]:
 
 
 def _fetch_arxiv_page_once(url: str) -> bytes:
-    """Single HTTP GET to arXiv Atom API (no retry)."""
+    """Single HTTP GET to arXiv Atom API (no retry).
+
+    Raises ``ValueError`` if the response body exceeds ``_MAX_RESPONSE_BYTES``
+    to prevent memory exhaustion from unexpectedly large payloads.
+    """
     req = urllib.request.Request(  # noqa: S310 — arXiv API only
         url, headers={"User-Agent": "Workshop/1.0 (paper module)"}
     )
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-        return resp.read()
+        # Reject suspiciously large responses before reading into memory
+        content_length = resp.headers.get("Content-Length")
+        if content_length is not None and int(content_length) > _MAX_RESPONSE_BYTES:
+            raise ValueError(
+                f"arxiv response Content-Length {content_length} exceeds "
+                f"{_MAX_RESPONSE_BYTES} byte limit"
+            )
+        # Read in chunks to enforce the limit even when Content-Length is absent
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = resp.read(65536)  # 64 KiB chunks
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_RESPONSE_BYTES:
+                raise ValueError(
+                    f"arxiv response body exceeded {_MAX_RESPONSE_BYTES} byte limit "
+                    f"(read {total} bytes so far)"
+                )
+            chunks.append(chunk)
+        return b"".join(chunks)
 
 
 def _fetch_arxiv_page_sync(
