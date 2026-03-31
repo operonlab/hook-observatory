@@ -321,6 +321,7 @@ class UserService:
             raise NotFoundError("User not found", code="auth.user_not_found")
 
         old_role = user.role
+        old_status = user.status
         if display_name is not None:
             user.display_name = display_name
         if role is not None:
