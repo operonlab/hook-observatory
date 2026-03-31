@@ -327,8 +327,13 @@ def _iter_chat_jsonl(
 
 def _ensure_assistant_window() -> bool:
     """Ensure tmux assistant window exists with Claude Code running."""
-    with _startup_lock:
+    if not _startup_lock.acquire(timeout=10):
+        logger.warning("assistant: startup lock timeout — returning False")
+        return False
+    try:
         return _ensure_assistant_window_inner()
+    finally:
+        _startup_lock.release()
 
 
 def _ensure_assistant_window_inner() -> bool:
@@ -831,14 +836,24 @@ def _iter_chat_tmux(prompt: str, *, session_id: str = "") -> Generator[_DeltaEve
 
 
 # ── Public async API ──
-
+# Architectural note: TMUX_TARGET is a single shared tmux window. All requests
+# are serialized via _lock to prevent cross-request pollution. _REQUEST_QUEUE
+# provides bounded overflow protection: at most 5 pending requests; excess
+# requests are fast-failed immediately. Per-request windows would improve
+# isolation further but add complexity; acceptable for solo-dev use.
 _lock = asyncio.Lock()
+_REQUEST_QUEUE: asyncio.Queue[tuple] = asyncio.Queue(maxsize=5)
 
 
 async def stream_chat(
     messages: list[dict], *, session_id: str | None = None
 ) -> AsyncGenerator[StreamBlock, None]:
     """Stream CC one-shot response as SSE events."""
+    # Fast-fail if queue is full (> 5 pending requests)
+    if _REQUEST_QUEUE.full():
+        yield StreamBlock(type=BlockType.ERROR, data={"message": "助手請求佇列已滿，請稍後再試"})
+        return
+
     yield StreamBlock(type=BlockType.THINKING, data={"message": "思考中..."})
 
     user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")

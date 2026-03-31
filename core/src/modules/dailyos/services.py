@@ -337,7 +337,7 @@ def _build_completion_payload(plan) -> dict:
     """Build lean event payload for plan completion."""
     items = plan.items or []
     frog_items = [i for i in items if i.get("is_frog")]
-    completed_items = [i for i in items if i.get("status") == "completed"]
+    completed_items = [i for i in items if i.get("status") == "done"]
     carry_items = [i for i in items if i.get("status") in ("carry", "incomplete")]
 
     return {
@@ -348,7 +348,7 @@ def _build_completion_payload(plan) -> dict:
         "total_items": len(items),
         "completed_count": len(completed_items),
         "carry_count": len(carry_items),
-        "frog_completed": any(i.get("status") == "completed" for i in frog_items),
+        "frog_completed": any(i.get("status") == "done" for i in frog_items),
         "frog_title": frog_items[0].get("title") if frog_items else None,
         "reflection": plan.reflection,
         "method_state": plan.method_state,
@@ -445,7 +445,10 @@ class DailyPlanService:
         # 6. Validate (return errors as warnings, not blocking)
         _warnings = strategy.validate_plan(sorted_items)
 
-        # 7. Create plan record
+        # 7. Create plan record (persist effective_config for historical reconstruction)
+        _initial_method_state: dict = {"effective_config": effective_config}
+        if _warnings:
+            _initial_method_state["warnings"] = _warnings
         plan = DailyPlan(
             id=_uuid7_hex(),
             space_id=space_id,
@@ -455,7 +458,7 @@ class DailyPlanService:
             method_selection_id=selection.id,
             status="planning",
             items=sorted_items,
-            method_state={"warnings": _warnings} if _warnings else None,
+            method_state=_initial_method_state,
         )
         db.add(plan)
         await db.flush()
@@ -566,7 +569,7 @@ class DailyPlanService:
         context: str = "default",
     ) -> DailyPlan:
         """Convenience wrapper: get or create plan for today."""
-        return await self.get_or_create_for_date(db, space_id, date.today(), user_id, context)
+        return await self.get_or_create_for_date(db, space_id, _today(), user_id, context)
 
     async def get_date_range_stats(
         self,

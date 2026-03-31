@@ -171,13 +171,13 @@ def _call_openai_compat(
 # ── tmux persistent backend ──────────────────────────────────────────────────
 
 # Timing presets for tmux relay interaction
-_SLEEP_PROMPT_DETECT = 0.5     # wait for prompt detection (initial ready-check loop)
-_SLEEP_CONTENT_CHANGE = 0.5    # wait for pane content to change after send
-_SLEEP_CONTENT_STABLE = 0.8    # poll interval while waiting for content to stabilise
-_SLEEP_POST_SEND = 0.4         # settle after send-keys before re-capturing pane
-_TIMEOUT_TMUX_CMD = 10         # tmux subprocess timeout (seconds)
-_TIMEOUT_READY_CHECK = 5       # paste-buffer / short tmux operation timeout (seconds)
-_TMUX_POLL = 0.6               # poll interval for content-stability loop (seconds)
+_SLEEP_PROMPT_DETECT = 0.5  # wait for prompt detection (initial ready-check loop)
+_SLEEP_CONTENT_CHANGE = 0.5  # wait for pane content to change after send
+_SLEEP_CONTENT_STABLE = 0.8  # poll interval while waiting for content to stabilise
+_SLEEP_POST_SEND = 0.4  # settle after send-keys before re-capturing pane
+_TIMEOUT_TMUX_CMD = 10  # tmux subprocess timeout (seconds)
+_TIMEOUT_READY_CHECK = 5  # paste-buffer / short tmux operation timeout (seconds)
+_TMUX_POLL = 0.6  # poll interval for content-stability loop (seconds)
 
 _TMUX_PROMPT_RE = re.compile(r"❯\s*$", re.MULTILINE)
 _TMUX_SEND_LIMIT = 512
@@ -185,7 +185,9 @@ _tmux_lock = __import__("threading").Lock()
 
 
 def _tmux_cmd(*args: str, check: bool = False) -> str:
-    proc = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=_TIMEOUT_TMUX_CMD)
+    proc = subprocess.run(
+        ["tmux", *args], capture_output=True, text=True, timeout=_TIMEOUT_TMUX_CMD
+    )
     if check and proc.returncode != 0:
         raise RuntimeError(f"tmux {args[0]} failed: {proc.stderr.strip()}")
     return proc.stdout.strip()
@@ -648,6 +650,15 @@ def _build_user_prompt(query: str, iteration: int) -> str:
 # ── Message History Formatting ───────────────────────────────────────────────
 
 
+def _escape_role_markers(text: str) -> str:
+    """Escape role markers to prevent prompt injection in transcript format."""
+    return (
+        text.replace("[User]", "[User_]")
+        .replace("[Assistant]", "[Assistant_]")
+        .replace("[Context Info]", "[Context_Info]")
+    )
+
+
 def _format_history_as_transcript(messages: list[dict[str, str]]) -> str:
     """Format message history as a structured transcript for claude -p."""
     parts = []
@@ -655,11 +666,12 @@ def _format_history_as_transcript(messages: list[dict[str, str]]) -> str:
         role = msg["role"]
         content = msg["content"]
         if role == "assistant":
+            # Assistant content is trusted; no escaping needed
             parts.append(f"[Assistant]\n{content}")
         elif role == "user":
-            parts.append(f"[User]\n{content}")
+            parts.append(f"[User]\n{_escape_role_markers(content)}")
         elif role == "metadata":
-            parts.append(f"[Context Info]\n{content}")
+            parts.append(f"[Context Info]\n{_escape_role_markers(content)}")
     return "\n\n---\n\n".join(parts)
 
 

@@ -119,9 +119,7 @@ class ToggleService:
             for row in rows
         ]
 
-    async def delete_toggle(
-        self, db: AsyncSession, space_id: str, toggle_key: str
-    ) -> None:
+    async def delete_toggle(self, db: AsyncSession, space_id: str, toggle_key: str) -> None:
         stmt = select(UserToggle).where(
             UserToggle.space_id == space_id,
             UserToggle.toggle_key == toggle_key,
@@ -129,9 +127,7 @@ class ToggleService:
         )
         toggle: UserToggle | None = (await db.execute(stmt)).scalar_one_or_none()
         if not toggle:
-            raise NotFoundError(
-                f"Toggle '{toggle_key}' not found", code="dailyos.toggle_not_found"
-            )
+            raise NotFoundError(f"Toggle '{toggle_key}' not found", code="dailyos.toggle_not_found")
         toggle.deleted_at = datetime.now(UTC)
 
     async def apply_workflow_toggles(
@@ -227,9 +223,7 @@ class FunnelService:
         await db.flush()
         return self._to_response(item)
 
-    async def get_item(
-        self, db: AsyncSession, item_id: str, space_id: str
-    ) -> BacklogItem:
+    async def get_item(self, db: AsyncSession, item_id: str, space_id: str) -> BacklogItem:
         stmt = select(BacklogItem).where(
             BacklogItem.id == item_id,
             BacklogItem.space_id == space_id,
@@ -256,15 +250,11 @@ class FunnelService:
         await db.flush()
         return self._to_response(item)
 
-    async def delete_item(
-        self, db: AsyncSession, item_id: str, space_id: str
-    ) -> None:
+    async def delete_item(self, db: AsyncSession, item_id: str, space_id: str) -> None:
         item = await self.get_item(db, item_id, space_id)
         item.deleted_at = datetime.now(UTC)
 
-    async def promote(
-        self, db: AsyncSession, item_id: str, space_id: str
-    ) -> BacklogItemResponse:
+    async def promote(self, db: AsyncSession, item_id: str, space_id: str) -> BacklogItemResponse:
         item = await self.get_item(db, item_id, space_id)
         layer = item.funnel_layer
         current_idx = _FUNNEL_ORDER.index(layer) if layer in _FUNNEL_ORDER else -1
@@ -284,9 +274,7 @@ class FunnelService:
         await db.flush()
         return self._to_response(item)
 
-    async def demote(
-        self, db: AsyncSession, item_id: str, space_id: str
-    ) -> BacklogItemResponse:
+    async def demote(self, db: AsyncSession, item_id: str, space_id: str) -> BacklogItemResponse:
         item = await self.get_item(db, item_id, space_id)
         layer = item.funnel_layer
         current_idx = _FUNNEL_ORDER.index(layer) if layer in _FUNNEL_ORDER else -1
@@ -403,7 +391,7 @@ class CapacityService:
     ) -> CapacityBaselineResponse:
         from datetime import timedelta
 
-        cutoff = date.today() - timedelta(days=window_days)
+        cutoff = _today() - timedelta(days=window_days)
         stmt = select(CapacityHistory).where(
             CapacityHistory.space_id == space_id,
             CapacityHistory.budget_type == budget_type,
