@@ -3,6 +3,16 @@
   "description": "Unified schedule manifest — configuration template for all scheduled jobs and daemons, synced to Cronicle via seed_jobs.py",
   "jobs": [
     {
+      "name": "ws-observation-gate-dream",
+      "label": "com.joneshong.scheduler.ws-observation-gate-dream",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_observation_gate.py dream-consolidation",
+      "schedule": { "calendar": { "Month": 4, "DayOfMonth": 15, "Hour": 18, "Minute": 0 } },
+      "description": "一次性: 2026-04-15 18:00 — Dream consolidation 觀察期結束，Bark 通知檢查結果",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-memvault-synthesis",
       "label": "com.joneshong.scheduler.ws-memvault-synthesis",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_synthesis.py",
@@ -409,6 +419,16 @@
       "command": "~/workshop/stations/sentinel/.venv/bin/python3 ~/workshop/schedules/runners/ws_sentinel_check.py",
       "schedule": { "interval": 300 },
       "description": "每 5 分鐘: light health check — HTTP probe all services → sentinel DB + Bark on failure",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-db-backup-gdrive",
+      "label": "com.joneshong.scheduler.ws-db-backup-gdrive",
+      "command": "/Users/joneshong/workshop/scripts/ws-db-backup-gdrive.sh",
+      "schedule": { "calendar": { "Hour": 4, "Minute": 30 } },
+      "description": "每日 4:30AM: PostgreSQL full backup → gzip → Google Drive (keep 4 versions)",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
