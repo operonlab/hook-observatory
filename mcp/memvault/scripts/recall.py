@@ -10,6 +10,7 @@ stdout: Plain text context (or empty for no match)
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -21,6 +22,22 @@ from pathlib import Path
 # Configuration
 # ---------------------------------------------------------------------------
 CORE_API_URL = os.environ.get("CORE_API_URL", "http://localhost:10000")
+HOME_DIR = str(Path.home())
+WORKSHOP_DIR = os.path.join(HOME_DIR, "workshop")
+
+# Match file/dir paths that look like project references.
+# Anchored to home/absolute or known project-relative prefixes.
+# Intentionally excludes http(s)://, backtick-wrapped tokens, etc.
+PATH_PATTERN = re.compile(
+    r'(?<![`"\'])'  # not preceded by backtick / quote
+    r"(?:"
+    r"(?:~/|/Users/\w+/)"  # absolute home paths
+    r"|(?:core/src/|stations/|libs/|workbench/src/"
+    r"|mcp/|schedules/|bridges/|scripts/)"  # relative project paths
+    r")"
+    r"[\w/.\-]+"  # path continuation (no spaces)
+    r'(?!["\'])'  # not followed by quote
+)
 SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 LOG_DIR = Path.home() / "Claude" / "memvault" / "logs"
 LOG_FILE = LOG_DIR / "recall.log"
@@ -97,6 +114,23 @@ def _format_attitudes(raw_body: str) -> str:
         if fact:
             lines.append(f"- [{category}] {fact} ({confidence:.2f})")
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def validate_refs(text: str) -> set[str]:
+    """Extract file path references from text and return stale (non-existent) ones."""
+    refs = PATH_PATTERN.findall(text)
+    stale: set[str] = set()
+    for ref in refs:
+        # Normalize to absolute path
+        if ref.startswith("~/"):
+            full = os.path.join(HOME_DIR, ref[2:])
+        elif ref.startswith("/"):
+            full = ref
+        else:
+            full = os.path.join(WORKSHOP_DIR, ref)
+        if not os.path.exists(full):
+            stale.add(ref)
+    return stale
 
 
 def main() -> None:
@@ -187,6 +221,7 @@ def _main() -> None:
 
                 # Triples (L0)
                 triples = cascade_data.get("triples", [])
+                stale_refs: set[str] = set()
                 if triples:
                     formatted += "\n\n### Triples"
                     for t in triples:
@@ -194,7 +229,11 @@ def _main() -> None:
                         pred = t.get("predicate", "")
                         obj = t.get("object", "")
                         if subj:
-                            formatted += f"\n- {subj} --{pred}--> {obj}"
+                            triple_text = f"{subj} --{pred}--> {obj}"
+                            triple_stale = validate_refs(triple_text)
+                            stale_refs.update(triple_stale)
+                            stale_suffix = " [stale ref]" if triple_stale else ""
+                            formatted += f"\n- {triple_text}{stale_suffix}"
 
                 # Blocks
                 blocks = cascade_data.get("blocks", [])
@@ -205,7 +244,15 @@ def _main() -> None:
                         content = (b.get("content") or "—")[:200]
                         tags = b.get("tags", [])
                         tag_str = f" (tags: {', '.join(tags)})" if tags else ""
-                        formatted += f"\n- **{topic}**: {content}{tag_str}"
+                        block_text = f"{topic}: {content}{tag_str}"
+                        block_stale = validate_refs(block_text)
+                        stale_refs.update(block_stale)
+                        stale_suffix = " ⚠️ stale" if block_stale else ""
+                        formatted += f"\n- **{topic}**: {content}{tag_str}{stale_suffix}"
+
+                # Log and append stale refs warning
+                for ref in stale_refs:
+                    log(f"Stale ref: {ref}")
 
                 summary_count = len(summaries)
                 community_count = len(communities)
@@ -243,8 +290,15 @@ def _main() -> None:
                         if sp_status == 200 and sp_body:
                             try:
                                 profile = json.loads(sp_body)
-                                level_zh = {"novice": "新手", "proficient": "熟練", "expert": "專家"}
-                                level = level_zh.get(profile.get("proficiency_level", ""), profile.get("proficiency_level", ""))
+                                level_zh = {
+                                    "novice": "新手",
+                                    "proficient": "熟練",
+                                    "expert": "專家",
+                                }
+                                level = level_zh.get(
+                                    profile.get("proficiency_level", ""),
+                                    profile.get("proficiency_level", ""),
+                                )
                                 sr_pct = profile.get("success_rate", 0) * 100
                                 skill_section += (
                                     f"\n- **{skill_name}**: {profile.get('total_uses', 0)} 次使用, "
@@ -255,6 +309,12 @@ def _main() -> None:
                     if skill_section:
                         formatted += f"\n\n### Skill 熟練度{skill_section}"
                         log(f"Skill profile injected: {list(skill_tags)[:3]}")
+
+                # Stale refs summary (cascade path)
+                if stale_refs:
+                    formatted += (
+                        f"\n\n⚠️ {len(stale_refs)} 個記憶參照的檔案已不存在，建議驗證後再行動"
+                    )
 
     # ── Fallback: simple search if cascade returned nothing ───────────────────
     if not formatted:
@@ -270,13 +330,24 @@ def _main() -> None:
             if isinstance(search_data, list) and search_data:
                 result_count = len(search_data)
                 formatted = f"## 相關記憶（search: {result_count} results）"
+                search_stale_refs: set[str] = set()
                 for item in search_data:
                     block = item.get("block", {}) if isinstance(item, dict) else {}
                     topic = block.get("topic") or "untitled"
                     content = (block.get("content") or "—")[:200]
                     tags = block.get("tags", [])
                     tag_str = f" (tags: {', '.join(tags)})" if tags else ""
-                    formatted += f"\n- **{topic}**: {content}{tag_str}"
+                    block_text = f"{topic}: {content}{tag_str}"
+                    block_stale = validate_refs(block_text)
+                    search_stale_refs.update(block_stale)
+                    stale_suffix = " ⚠️ stale" if block_stale else ""
+                    formatted += f"\n- **{topic}**: {content}{tag_str}{stale_suffix}"
+                for ref in search_stale_refs:
+                    log(f"Stale ref: {ref}")
+                if search_stale_refs:
+                    formatted += (
+                        f"\n\n⚠️ {len(search_stale_refs)} 個記憶參照的檔案已不存在，建議驗證後再行動"
+                    )
                 log(f"Search fallback: {result_count} results")
 
     # ── Step 2: Attitude autoRecall ──────────────────────────────────────────
