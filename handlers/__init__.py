@@ -3,14 +3,16 @@ Unified hook handler registry and dispatcher.
 
 All hook events route through dispatch() which:
 1. Matches handlers by event_type + tool_name
-2. Runs matching handlers sequentially
-3. Merges decisions (block > approve > passthrough)
-4. Returns final output (JSON or passthrough text)
+2. Runs critical handlers first (always, no budget)
+3. Runs deferrable handlers with a 5s time budget
+4. Merges decisions (block > approve > passthrough)
+5. Returns final output (JSON or passthrough text)
 """
 
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 
 # Import all handler modules
@@ -22,6 +24,7 @@ from . import (
     claudemd_suggest,
     cleanup_versions,
     context_inject,
+    context_relay,
     external,
     instinct_distiller,
     memory_sync,
@@ -49,6 +52,22 @@ from .base import ALLOW, HookResult
 
 # Type alias for handler functions
 Handler = Callable[[str, str, dict, str], HookResult]
+
+# ---------------------------------------------------------------------------
+# Blocking budget — deferrable handlers get a 5-second window per dispatch.
+# Critical handlers always run regardless of elapsed time.
+# ---------------------------------------------------------------------------
+
+# Maximum milliseconds for deferrable handlers per event dispatch
+BLOCKING_BUDGET_MS = 5000  # 5 seconds (conservative; KAIROS uses 15s)
+
+# These handlers always run, regardless of time budget (safety / security)
+CRITICAL_HANDLERS: set[Handler] = {
+    bash_safety.handle,
+    skill_security.handle,
+    verify_commit.handle,
+    review_gate.handle,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +131,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, external.sync_login),
         (None, anvil_telemetry.handle),
         (None, session_channel.handle),
+        (None, context_relay.handle),
         (None, claudemd_suggest.handle),
         (None, instinct_distiller.handle),
         (None, cleanup_versions.handle),
@@ -133,6 +153,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "PreCompact": [
         # context_supervisor: disabled
         (None, external.progressive_extract),
+        (None, context_relay.handle),
         (None, observability.handle),
     ],
 }
@@ -145,9 +166,35 @@ def _matches(matcher: str | None, tool_name: str) -> bool:
     return tool_name in matcher.split("|")
 
 
+def _merge_result(result: HookResult, state: dict) -> None:
+    """
+    Merge a handler result into the mutable accumulator state dict.
+
+    state keys: decision, reason, messages, passthrough_parts, updated_input
+    """
+    if result.decision == "block":
+        state["decision"] = "block"
+        state["reason"] = result.reason
+    elif result.decision == "approve" and state["decision"] != "block":
+        state["decision"] = "approve"
+
+    if result.message:
+        state["messages"].append(result.message)
+
+    if result.text:
+        state["passthrough_parts"].append(result.text)
+
+    if result.updated_input is not None:
+        state["updated_input"] = result.updated_input
+
+
 def dispatch(event_type: str, raw_input: str) -> str:
     """
     Main entry point. Routes to matching handlers, merges results.
+
+    Handlers are split into two phases:
+    - Phase 1 (critical): always run, no time budget (safety / security)
+    - Phase 2 (deferrable): run within BLOCKING_BUDGET_MS; extras are skipped
 
     Returns:
         str: JSON string (for most events) or passthrough text (UserPromptSubmit)
@@ -165,37 +212,58 @@ def dispatch(event_type: str, raw_input: str) -> str:
 
     handlers = REGISTRY.get(event_type, [])
 
-    # Accumulators
-    decision: str | None = None
-    reason = ""
-    messages: list[str] = []
-    passthrough_parts: list[str] = []
-    updated_input: dict | None = None
+    # Split by criticality
+    critical = [(m, h) for m, h in handlers if h in CRITICAL_HANDLERS]
+    deferrable = [(m, h) for m, h in handlers if h not in CRITICAL_HANDLERS]
 
-    for matcher, handler_fn in handlers:
+    # Shared accumulator state
+    state: dict = {
+        "decision": None,
+        "reason": "",
+        "messages": [],
+        "passthrough_parts": [],
+        "updated_input": None,
+    }
+
+    start = time.monotonic()
+
+    # --- Phase 1: Critical handlers — always run, no budget ---
+    for matcher, handler_fn in critical:
         if not _matches(matcher, tool_name):
+            continue
+        try:
+            result = handler_fn(event_type, tool_name, tool_input, raw_input)
+        except Exception:
+            result = ALLOW
+        _merge_result(result, state)
+
+    # --- Phase 2: Deferrable handlers — subject to time budget ---
+    skipped_count = 0
+    for matcher, handler_fn in deferrable:
+        if not _matches(matcher, tool_name):
+            continue
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        if elapsed_ms > BLOCKING_BUDGET_MS:
+            skipped_count += 1
             continue
 
         try:
             result = handler_fn(event_type, tool_name, tool_input, raw_input)
         except Exception:
             result = ALLOW
+        _merge_result(result, state)
 
-        # Merge decisions — block always wins
-        if result.decision == "block":
-            decision = "block"
-            reason = result.reason
-        elif result.decision == "approve" and decision != "block":
-            decision = "approve"
+    if skipped_count > 0:
+        # Log but don't block — skipped handlers were non-critical
+        state["messages"].append(f"⏱️ {skipped_count} handler(s) skipped (budget exceeded)")
 
-        if result.message:
-            messages.append(result.message)
-
-        if result.text:
-            passthrough_parts.append(result.text)
-
-        if result.updated_input is not None:
-            updated_input = result.updated_input
+    # Unpack state
+    decision = state["decision"]
+    reason = state["reason"]
+    messages: list[str] = state["messages"]
+    passthrough_parts: list[str] = state["passthrough_parts"]
+    updated_input: dict | None = state["updated_input"]
 
     # --- Build output ---
     if event_type == "UserPromptSubmit" and passthrough_parts:
