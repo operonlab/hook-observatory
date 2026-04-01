@@ -27,8 +27,18 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 # Core checking logic
 # ---------------------------------------------------------------------------
 
+
 def _check_command(full_cmd: str) -> str | None:
     """Check a full command (may contain chains/pipes/subshells)."""
+    # SSH polling anti-pattern: sleep N && ssh <host> <cmd>
+    # Agent should use Fleet dispatch (push callback) instead of sleep+poll.
+    if re.search(
+        r"\bsleep\s+\S+\s*[;&|\n]+\s*.*\bssh(?=\s|$)",
+        full_cmd,
+        re.DOTALL,
+    ):
+        return "sleep + ssh polling — use Fleet dispatch with push callback"
+
     for segment in _split_commands(full_cmd):
         reason = _check_segment(segment)
         if reason:
@@ -50,6 +60,7 @@ def _check_command(full_cmd: str) -> str | None:
 
 
 _HOME = os.path.expanduser("~")
+
 
 def _check_segment(cmd: str) -> str | None:
     """Check a single command segment against deny patterns."""
@@ -78,7 +89,7 @@ def _check_segment(cmd: str) -> str | None:
                 if expanded.rstrip("/") == os.path.join(_HOME, "workshop"):
                     return "rm recursive+force on workshop directory"
                 if expanded.startswith(_HOME + "/"):
-                    rel = expanded[len(_HOME) + 1:].rstrip("/")
+                    rel = expanded[len(_HOME) + 1 :].rstrip("/")
                     if "/" not in rel:
                         return f"rm recursive+force on home-level directory: ~/{rel}"
 
