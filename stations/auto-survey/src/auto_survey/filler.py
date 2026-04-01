@@ -54,11 +54,39 @@ def _build_fill_script(
       const subj = page.locator('[data-qa="{subject_id}"]');
       const opts = subj.locator('[data-qa^="option-"]');
       const count = await opts.count();
+      let clicked = false;
+      // Pass 1: exact match
       for (let i = 0; i < count; i++) {{
         const qa = await opts.nth(i).getAttribute('data-qa');
         if (qa === 'option-{escaped}') {{
           await opts.nth(i).click();
+          clicked = true;
           break;
+        }}
+      }}
+      // Pass 2: fuzzy match — option text contains LLM answer or vice versa
+      if (!clicked) {{
+        const needle = '{escaped}'.replace(/\\s+/g, '');
+        for (let i = 0; i < count; i++) {{
+          const qa = (await opts.nth(i).getAttribute('data-qa')) || '';
+          const optText = qa.replace('option-', '').replace(/\\s+/g, '');
+          if (optText && (optText.includes(needle) || needle.includes(optText))) {{
+            await opts.nth(i).click();
+            clicked = true;
+            break;
+          }}
+        }}
+      }}
+      // Pass 3: click by visible text content similarity (first 20 chars)
+      if (!clicked && '{escaped}'.length > 10) {{
+        const prefix = '{escaped}'.substring(0, 20);
+        for (let i = 0; i < count; i++) {{
+          const text = (await opts.nth(i).innerText()).trim();
+          if (text.includes(prefix) || prefix.includes(text.substring(0, 20))) {{
+            await opts.nth(i).click();
+            clicked = true;
+            break;
+          }}
         }}
       }}
     }}
@@ -204,19 +232,32 @@ def fill_form(
 
         score = _extract_score(result_text) if survey.type == "quiz" else None
 
+        # Detect if we're still on the form page (submission failed silently)
+        form_still_visible = any(
+            marker in result_text for marker in ("此題必填", "送出", "請選擇公司名稱")
+        )
+
         # Debug: log result text for score extraction diagnosis
         if survey.type == "quiz":
             preview = result_text[:300].replace("\n", " | ")
             log.warning("[fill] %s result_text: %s", person.name, preview)
-            if score is None:
+            if form_still_visible:
+                log.warning("[fill] %s form still visible — submission likely failed", person.name)
+            elif score is None:
                 log.warning("[fill] %s score=None — regex matched nothing", person.name)
 
         submission = existing or Submission(
             survey_id=survey.id,
             person_id=person.id,
         )
-        submission.status = "success"
-        submission.score = score
+
+        if form_still_visible and survey.type == "quiz":
+            submission.status = "failed"
+            submission.error_message = "Form submission failed — still on form page"
+            submission.score = None
+        else:
+            submission.status = "success"
+            submission.score = score
         submission.answers_snapshot = answers
         submission.error_message = None
 

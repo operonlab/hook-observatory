@@ -432,6 +432,16 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "ws-blog-translate",
+      "label": "com.joneshong.scheduler.ws-blog-translate",
+      "command": "/Users/joneshong/workshop/scripts/ws-blog-translate.sh",
+      "schedule": { "calendar": { "Hour": 18, "Minute": 0 } },
+      "description": "每日 18:00: 檢查穩定 2 天以上的 zh 文章，自動翻譯成 en",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }
