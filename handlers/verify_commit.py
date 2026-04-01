@@ -15,6 +15,7 @@ from .base import ALLOW, HookResult, approve, block
 MARKER = "/tmp/.claude-verified"
 
 _COMMIT_RE = re.compile(r"(git commit|gh pr create)")
+_TOUCH_MARKER_RE = re.compile(r"touch\s+" + re.escape(MARKER))
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
@@ -24,6 +25,11 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     command = tool_input.get("command", "")
     if not _COMMIT_RE.search(command):
         return ALLOW
+
+    # Command itself creates the marker (e.g. `touch marker && git commit`)
+    # Hook runs before execution so the file won't exist yet — treat as verified
+    if _TOUCH_MARKER_RE.search(command):
+        return approve()
 
     # Marker exists → approve and consume it
     if os.path.isfile(MARKER):

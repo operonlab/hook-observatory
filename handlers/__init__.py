@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 # Import all handler modules
 from . import (
+    agent_naming,
     anvil_telemetry,
     attitude_signal,
     auto_format,
@@ -63,6 +64,7 @@ BLOCKING_BUDGET_MS = 5000  # 5 seconds (conservative; KAIROS uses 15s)
 
 # These handlers always run, regardless of time budget (safety / security)
 CRITICAL_HANDLERS: set[Handler] = {
+    agent_naming.handle,
     bash_safety.handle,
     skill_security.handle,
     verify_commit.handle,
@@ -78,6 +80,7 @@ CRITICAL_HANDLERS: set[Handler] = {
 
 REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "PreToolUse": [
+        ("Agent", agent_naming.handle),
         ("AskUserQuestion", voice_notify.handle),
         ("Bash", verify_commit.handle),
         ("Bash", bash_safety.handle),

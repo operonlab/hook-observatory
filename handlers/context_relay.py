@@ -170,7 +170,7 @@ def _format_handoff(handoff_md: str, source: str, ts_str: str, role: str | None 
 
     header = f"[Context Relay] 接續自 {source} 的工作"
     if age:
-        header += f"（{age}）"
+        header += f"({age})"
     if role:
         header += f"\n**角色**: {role}"
 
@@ -211,6 +211,6 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         return ALLOW
 
     if event_type == "PreCompact":
-        return message("💡 Context 即將壓縮。如需完整交棒到新 session，可執行 `handoff spawn`")
+        return message("💡 Context 即將壓縮。如需完整交棒到新 session，可執行 `handoff spawn`")  # noqa: RUF001
 
     return ALLOW
