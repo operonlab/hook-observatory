@@ -94,13 +94,16 @@ class MemvaultClient(BaseClient):
     def query_memory(
         self,
         query: str,
-        task_mode: str = "build",
+        task_mode: str = "auto",
         thinking_mode: str = "auto",
         load_budget: str = "standard",
         consumer: str = "human",
         top_k: int = 6,
     ) -> dict:
-        """Unified fast/slow memory query. POST /query"""
+        """Unified fast/slow memory query. POST /query
+
+        task_mode=auto infers intent from query content via classify_query().
+        """
         return self._post(
             "/query",
             {

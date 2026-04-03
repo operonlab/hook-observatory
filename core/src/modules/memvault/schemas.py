@@ -151,7 +151,7 @@ class EnhancedSearchResult(BaseModel):
 
 class MemoryQueryRequest(BaseModel):
     q: str = Field(..., min_length=1, max_length=2000)
-    task_mode: str = Field(default="build", description="lookup | decide | build | reflect")
+    task_mode: str = Field(default="auto", description="auto | lookup | decide | build | reflect")
     thinking_mode: str = Field(default="auto", description="auto | fast | slow")
     load_budget: str = Field(default="standard", description="light | standard | deep")
     consumer: str = Field(default="human", description="agent | human | ui")

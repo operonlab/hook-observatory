@@ -13,6 +13,7 @@ from datetime import datetime
 
 from cli.cli_helpers import json_out
 from cli.cli_utils import resolve_text_arg
+
 from sdk_client._base import APIConnectionError, APIError
 from sdk_client.memvault import MemvaultClient
 
@@ -1184,9 +1185,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("query", help="Search query")
         p.add_argument(
             "--task-mode",
-            default="build",
-            choices=["lookup", "decide", "build", "reflect"],
-            help="Task mode (default: build)",
+            default="auto",
+            choices=["auto", "lookup", "decide", "build", "reflect"],
+            help="Task mode (default: auto — inferred from query content)",
         )
         if name != "inspect":
             p.add_argument(

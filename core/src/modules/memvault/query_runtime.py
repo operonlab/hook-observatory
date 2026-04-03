@@ -28,7 +28,7 @@ from .schemas import (
 )
 from .services import memory_block_service
 
-_TASK_MODES = {"lookup", "decide", "build", "reflect"}
+_TASK_MODES = {"auto", "lookup", "decide", "build", "reflect"}
 _THINKING_MODES = {"auto", "fast", "slow"}
 _LOAD_BUDGETS = {"light", "standard", "deep"}
 _CONSUMERS = {"agent", "human", "ui"}
@@ -377,7 +377,25 @@ async def run_memory_query(
     request: MemoryQueryRequest,
 ) -> MemoryQueryResponse:
     _t_start = _time.monotonic()
-    task_mode = _normalize(request.task_mode, _TASK_MODES, "build")
+    task_mode = _normalize(request.task_mode, _TASK_MODES, "auto")
+
+    # task_mode=auto → infer from query content via classify_query()
+    if task_mode == "auto":
+        try:
+            from .query_router import QueryIntent, classify_query
+
+            plan = classify_query(request.q)
+            _INTENT_TO_TASK: dict[str, str] = {
+                QueryIntent.ENTITY_LOOKUP: "lookup",
+                QueryIntent.FACTUAL: "lookup",
+                QueryIntent.CONCEPTUAL: "reflect",
+                QueryIntent.EXPLORATORY: "reflect",
+                QueryIntent.CROSS_DOMAIN: "decide",
+                QueryIntent.UNKNOWN: "build",
+            }
+            task_mode = _INTENT_TO_TASK.get(plan.intent, "build")
+        except Exception:
+            task_mode = "build"
     thinking_mode_requested = _normalize(request.thinking_mode, _THINKING_MODES, "auto")
     load_budget = _normalize(request.load_budget, _LOAD_BUDGETS, "standard")
     consumer = _normalize(request.consumer, _CONSUMERS, "human")
