@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+import time as _time
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
-import time as _time
-
-from src.events.bus import Event, event_bus
-from src.events.types import MemvaultEvents
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.events.bus import Event, event_bus
+from src.events.types import MemvaultEvents
+from src.shared.prefetch import PrefetchFingerprint
+
 from .embedding import get_embedding
 from .injection_guard import sanitize_for_injection
-from src.shared.prefetch import PrefetchFingerprint
 from .kg_services import attitude_service, cascade_recall_service
 from .models import MemoryBlock
 from .schemas import (
@@ -125,9 +125,9 @@ def _task_use_now(task_mode: str, source_type: str, summary: str) -> str:
     if task_mode == "lookup":
         return f"直接提取可驗證資訊：{_clip(summary, 80)}"
     if task_mode == "decide":
-        return f"把這張卡當成決策依據，先比對是否符合目前取捨。"
+        return "把這張卡當成決策依據，先比對是否符合目前取捨。"
     if task_mode == "reflect":
-        return f"把這張卡視為長期模式，再與其他證據交叉驗證。"
+        return "把這張卡視為長期模式，再與其他證據交叉驗證。"
     if source_type == "attitude":
         return "延續這個偏好或工作原則，除非有新的明確反例。"
     return f"把這張卡當作當前工作的直接上下文：{_clip(summary, 70)}"
@@ -265,7 +265,10 @@ async def _search_blocks(
             top_k=top_k,
             query=query,
         )
-        return results, {"backend": meta.backend or "pgvector-fallback", "input_count": meta.input_count}
+        return results, {
+            "backend": meta.backend or "pgvector-fallback",
+            "input_count": meta.input_count,
+        }
 
     results = await memory_block_service.text_search(db, space_id, query, top_k=top_k)
     return results, {"backend": "text", "input_count": len(results)}
@@ -295,7 +298,9 @@ async def _working_cards(
             .order_by(MemoryBlock.created_at.desc())
             .limit(limit)
         )
-        recent_rows = [memory_block_service.to_response(row) for row in (await db.execute(q)).scalars().all()]
+        recent_rows = [
+            memory_block_service.to_response(row) for row in (await db.execute(q)).scalars().all()
+        ]
     return [_block_card(block, "working", task_mode) for block in recent_rows]
 
 
@@ -311,16 +316,25 @@ async def _check_prefetch_cache(
     Cache hits are re-sanitized before returning (defense-in-depth).
     """
     _t_check = _time.monotonic()
-    from .query_router import classify_query
+    # Use a lightweight intent guess — avoid importing query_router which
+    # pulls in query_expander with a broken import path (shared.text_utils).
+    # The prefetch write path uses IntentPredictorOp's transition rules,
+    # so we only need to match the same 3 stable fields.
+    intent_guess = task_mode  # coarse heuristic: task_mode correlates with intent
+    try:
+        from .query_router import classify_query
 
-    plan = classify_query(query)
+        plan = classify_query(query)
+        intent_guess = plan.intent.value
+    except Exception:
+        pass  # graceful degradation — use task_mode as intent proxy
     fp = PrefetchFingerprint(
         module="memvault",
         space_id=space_id,
         fields={
             "consumer": consumer,
             "task_mode": task_mode,
-            "intent": plan.intent.value,
+            "intent": intent_guess,
         },
     )
     cached = await _prefetch_cache.get(fp)
@@ -377,7 +391,11 @@ async def run_memory_query(
 
     # Phase B2: Check speculative prefetch cache before expensive search
     prefetch_hit, _prefetch_check_ms = await _check_prefetch_cache(
-        space_id, consumer, task_mode, request.q, request.top_k,
+        space_id,
+        consumer,
+        task_mode,
+        request.q,
+        request.top_k,
     )
 
     search_results, search_meta = await _search_blocks(
@@ -424,7 +442,9 @@ async def run_memory_query(
             evaluate="none",
         )
         deep_cards.extend(_summary_card(item, "deep", task_mode) for item in cascade.summaries)
-        deep_cards.extend(_triple_card(item, "deep", task_mode) for item in cascade.triples[: budget["deep"]])
+        deep_cards.extend(
+            _triple_card(item, "deep", task_mode) for item in cascade.triples[: budget["deep"]]
+        )
         deep_cards.extend(
             _block_card(item, "deep", task_mode)
             for item in cascade.blocks[: max(1, budget["deep"] // 2)]
@@ -460,22 +480,24 @@ async def run_memory_query(
 
     # Slow Thinker: fire-and-forget query completion event
     _t_end = _time.monotonic()
-    event_bus.publish_fire_and_forget(Event(
-        type=MemvaultEvents.QUERY_COMPLETED,
-        data={
-            "space_id": space_id,
-            "query": request.q,
-            "consumer": consumer,
-            "task_mode": task_mode,
-            "thinking_mode_used": thinking_mode_used,
-            "load_budget": load_budget,
-            "intent": "unknown",
-            "tags": [c.tags[0] for c in fast_cards[:3] if c.tags],
-            "result_count": len(fast_cards) + len(working_cards),
-            "latency_ms": round((_t_end - _t_start) * 1000, 1),
-        },
-        source="memvault",
-    ))
+    event_bus.publish_fire_and_forget(
+        Event(
+            type=MemvaultEvents.QUERY_COMPLETED,
+            data={
+                "space_id": space_id,
+                "query": request.q,
+                "consumer": consumer,
+                "task_mode": task_mode,
+                "thinking_mode_used": thinking_mode_used,
+                "load_budget": load_budget,
+                "intent": "unknown",
+                "tags": [c.tags[0] for c in fast_cards[:3] if c.tags],
+                "result_count": len(fast_cards) + len(working_cards),
+                "latency_ms": round((_t_end - _t_start) * 1000, 1),
+            },
+            source="memvault",
+        )
+    )
 
     return response
 
@@ -488,7 +510,9 @@ def build_injection_payload(response: MemoryQueryResponse) -> MemoryInjectRespon
     for idx, card in enumerate(agent_cards, start=1):
         prompt_lines.append(f"{idx}. {card.title}: {card.summary}")
         prompt_lines.append(f"   Use now: {card.use_now}")
-    decision_bias = [card.summary for card in response.fast_cards if card.source_type == "attitude"][:3]
+    decision_bias = [
+        card.summary for card in response.fast_cards if card.source_type == "attitude"
+    ][:3]
     working_context = [card.summary for card in response.working_cards[:3]]
     return MemoryInjectResponse(
         query=response.query,
