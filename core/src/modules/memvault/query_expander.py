@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 # Stop words — from shared single source of truth
 # ---------------------------------------------------------------------------
 
-from shared.text_utils import CJK_PATTERN as _CJK_RANGES  # noqa: E402
-from shared.text_utils import STOPWORDS_EN as _EN_STOPWORDS  # noqa: E402
-from shared.text_utils import STOPWORDS_ZH as _CJK_STOPWORDS  # noqa: E402
+from src.shared.text_utils import CJK_PATTERN as _CJK_RANGES  # noqa: E402
+from src.shared.text_utils import STOPWORDS_EN as _EN_STOPWORDS  # noqa: E402
+from src.shared.text_utils import STOPWORDS_ZH as _CJK_STOPWORDS  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Vague/demonstrative patterns that indicate expansion is useful
