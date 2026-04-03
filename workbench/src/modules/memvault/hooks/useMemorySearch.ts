@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMemvaultStore } from '../stores'
-import { useSemanticSearch } from './queries'
+import type { MemoryQueryOptions } from '../types'
+import { useMemoryQuery } from './queries'
 
-export function useMemorySearch(debounceMs = 300) {
+export function useMemorySearch(options: Partial<MemoryQueryOptions>, debounceMs = 300) {
   const searchQuery = useMemvaultStore((s) => s.searchQuery)
   const setSearchQuery = useMemvaultStore((s) => s.setSearchQuery)
   const clearSearch = useMemvaultStore((s) => s.clearSearch)
@@ -23,7 +24,7 @@ export function useMemorySearch(debounceMs = 300) {
     }
   }, [searchQuery, debounceMs])
 
-  const { data: results = [], isFetching } = useSemanticSearch(debouncedQuery)
+  const { data, isFetching } = useMemoryQuery(debouncedQuery, options)
 
   const handleQueryChange = useCallback(
     (query: string) => {
@@ -48,7 +49,7 @@ export function useMemorySearch(debounceMs = 300) {
 
   return {
     query: searchQuery,
-    results,
+    results: data,
     isSearching: isFetching,
     setQuery: handleQueryChange,
     searchNow: handleSearchNow,

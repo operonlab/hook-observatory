@@ -146,6 +146,77 @@ class EnhancedSearchResult(BaseModel):
     metadata: SearchMetadata | None = None
 
 
+# ======================== Fast / Slow Memory Query ========================
+
+
+class MemoryQueryRequest(BaseModel):
+    q: str = Field(..., min_length=1, max_length=2000)
+    task_mode: str = Field(default="build", description="lookup | decide | build | reflect")
+    thinking_mode: str = Field(default="auto", description="auto | fast | slow")
+    load_budget: str = Field(default="standard", description="light | standard | deep")
+    consumer: str = Field(default="human", description="agent | human | ui")
+    top_k: int = Field(default=6, ge=1, le=20)
+
+
+class MemoryEvidenceRef(BaseModel):
+    kind: str
+    ref_id: str
+    title: str
+    snippet: str | None = None
+    score: float | None = None
+
+
+class MemoryCard(BaseModel):
+    id: str
+    title: str
+    summary: str
+    why_relevant: str
+    use_now: str
+    layer: str
+    source_type: str
+    confidence: float = 0.0
+    freshness: str | None = None
+    tags: list[str] = []
+    evidence_refs: list[MemoryEvidenceRef] = []
+    source: str | None = None  # None=normal, "speculative_prefetch"=predicted hit
+
+
+class MemoryQueryStrategy(BaseModel):
+    task_mode: str
+    thinking_mode_requested: str
+    thinking_mode_used: str
+    load_budget: str
+    consumer: str
+
+
+class MemoryQueryResponse(BaseModel):
+    query: str
+    strategy: MemoryQueryStrategy
+    fast_cards: list[MemoryCard] = []
+    working_cards: list[MemoryCard] = []
+    deep_cards: list[MemoryCard] = []
+    highlights: list[str] = []
+    metadata: dict | None = None
+
+
+class MemoryInjectResponse(BaseModel):
+    query: str
+    strategy: MemoryQueryStrategy
+    system_prompt_memory: str
+    working_context: list[str] = []
+    decision_bias: list[str] = []
+    cards: list[MemoryCard] = []
+    metadata: dict | None = None
+
+
+class MemoryInspectResponse(BaseModel):
+    query: str
+    strategy: MemoryQueryStrategy
+    cards: list[MemoryCard] = []
+    raw_sections: dict[str, list[MemoryEvidenceRef]] = {}
+    metadata: dict | None = None
+
+
 # ======================== Reflection / Curate ========================
 
 

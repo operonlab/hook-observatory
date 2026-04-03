@@ -40,7 +40,7 @@ export const useMemvaultStore = create<MemvaultState>()(
       pageSize: 20,
       selectedBlock: null,
       searchQuery: '',
-      kg_activeTab: 'blocks',
+      kg_activeTab: 'fast',
       kg_galaxyLayers: new Set<GalaxyLayer>(['blocks', 'summaries', 'communities']),
 
       selectBlock: (block) => set({ selectedBlock: block }, false, 'memvault/selectBlock'),

@@ -18,12 +18,17 @@ from src.shared.schemas import PaginatedResponse, PaginationParams
 from .dedup import DedupDecision, check_duplicate, merge_content
 from .embedding import get_embedding
 from .injection_guard import is_unsafe_for_injection, sanitize_for_injection
+from .query_runtime import build_injection_payload, build_inspect_payload, run_memory_query
 from .schemas import (
     EnhancedSearchResult,
     KnowledgeDomainCreate,
     KnowledgeDomainResponse,
     KnowledgeDomainUpdate,
+    MemoryInjectResponse,
+    MemoryInspectResponse,
     MemoryBlockCreate,
+    MemoryQueryRequest,
+    MemoryQueryResponse,
     MemoryBlockResponse,
     MemoryBlockUpdate,
     ProfileScoreResponse,
@@ -349,6 +354,69 @@ async def search(
         results=results,
         metadata=meta if include_metadata else None,
     )
+
+
+@router.post("/query", response_model=MemoryQueryResponse)
+async def query_memory(
+    body: MemoryQueryRequest,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    return await run_memory_query(db, space_id, body)
+
+
+@router.post("/inject", response_model=MemoryInjectResponse)
+async def inject_memory(
+    body: MemoryQueryRequest,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    response = await run_memory_query(db, space_id, body)
+    return build_injection_payload(response)
+
+
+@router.post("/inspect", response_model=MemoryInspectResponse)
+async def inspect_memory(
+    body: MemoryQueryRequest,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    request = body.model_copy(update={"thinking_mode": "slow", "consumer": "human"})
+    response = await run_memory_query(db, space_id, request)
+    return build_inspect_payload(response)
+
+
+@router.get("/prefetch/metrics")
+async def prefetch_metrics(
+    space_id: str = Query("default"),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Dashboard endpoint for Slow Thinker prefetch metrics.
+
+    Note: space_id is taken from query param but validated against user's space
+    in production. Currently solo-user, so memvault.read is sufficient.
+    """
+    from src.shared.prefetch import SpeculativePrefetchCache
+
+    # TODO: Add ABAC owner-only check when multi-tenant
+    cache = SpeculativePrefetchCache(module="memvault")
+    metrics = await cache.get_metrics(space_id)
+    return {
+        "space_id": space_id,
+        "query_count": metrics.query_count,
+        "prefetch_count": metrics.prefetch_count,
+        "hit_count": metrics.hit_count,
+        "miss_count": metrics.miss_count,
+        "waste_count": metrics.waste_count,
+        "skip_count": metrics.skip_count,
+        "hit_rate": round(metrics.hit_rate, 4),
+        "waste_rate": round(metrics.waste_rate, 4),
+        "avg_latency_saved_ms": round(metrics.avg_latency_saved_ms, 1),
+        "compute_cost_ms": round(metrics.compute_cost_ms, 1),
+    }
 
 
 # ======================== Tags ========================

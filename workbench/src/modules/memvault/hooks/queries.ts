@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { kgApi, memvaultApi } from '../api'
-import type { BlockFilters } from '../types'
+import type { BlockFilters, MemoryQueryOptions } from '../types'
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -8,7 +8,8 @@ export const memvaultKeys = {
   blocks: (page: number, pageSize: number, filters: BlockFilters) =>
     ['memvault', 'blocks', { page, pageSize, blockType: filters.blockType, tag: filters.tag }] as const,
   profile: () => ['memvault', 'profile'] as const,
-  search: (query: string) => ['memvault', 'search', query] as const,
+  search: (query: string, options: Partial<MemoryQueryOptions>) =>
+    ['memvault', 'search', query, options] as const,
   kg: {
     triples: (page: number) => ['memvault', 'kg', 'triples', page] as const,
     communities: () => ['memvault', 'kg', 'communities'] as const,
@@ -24,15 +25,11 @@ export const memvaultKeys = {
 export function useBlocks(page: number, pageSize: number, filters: BlockFilters) {
   return useQuery({
     queryKey: memvaultKeys.blocks(page, pageSize, filters),
-    queryFn: () => {
-      if (filters.tag !== null) {
-        return memvaultApi.listByTag(filters.tag, page, pageSize)
-      }
-      if (filters.blockType !== null) {
-        return memvaultApi.listByType(filters.blockType, page, pageSize)
-      }
-      return memvaultApi.list(page, pageSize)
-    },
+    queryFn: () =>
+      memvaultApi.listBlocks(page, pageSize, {
+        tag: filters.tag,
+        blockType: filters.blockType,
+      }),
     staleTime: STALE_TIME,
   })
 }
@@ -45,10 +42,13 @@ export function useProfile() {
   })
 }
 
-export function useSemanticSearch(query: string) {
+export function useMemoryQuery(query: string, options: Partial<MemoryQueryOptions>) {
   return useQuery({
-    queryKey: memvaultKeys.search(query),
-    queryFn: () => memvaultApi.searchSemantic(query),
+    queryKey: memvaultKeys.search(query, options),
+    queryFn: () =>
+      options.consumer === 'ui'
+        ? memvaultApi.inspectMemory(query, options)
+        : memvaultApi.queryMemory(query, options),
     enabled: !!query.trim(),
     staleTime: STALE_TIME,
   })

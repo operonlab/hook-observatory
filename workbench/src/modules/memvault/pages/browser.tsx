@@ -8,6 +8,7 @@ import CascadeSearchBar from '../components/CascadeSearchBar'
 import InfoTip from '../components/InfoTip'
 import KgExplorerPanel from '../components/KgExplorerPanel'
 import MemoryCard from '../components/MemoryCard'
+import MemoryLensCard from '../components/MemoryLensCard'
 import ProfileWidget from '../components/ProfileWidget'
 import SearchBar from '../components/SearchBar'
 import SkillDashboard from '../components/SkillDashboard'
@@ -15,13 +16,29 @@ import { useDeleteBlock } from '../hooks/mutations'
 import { useBlocks, useProfile } from '../hooks/queries'
 import { useMemorySearch } from '../hooks/useMemorySearch'
 import { useMemvaultStore } from '../stores'
-import type { BrowserTab } from '../types'
+import type {
+  BrowserTab,
+  LoadBudget,
+  MemoryCardRecord,
+  MemoryQueryOptions,
+  TaskMode,
+  ThinkingMode,
+} from '../types'
 
-const TABS: { key: BrowserTab; label: string }[] = [
-  { key: 'blocks', label: '記憶區塊' },
-  { key: 'kg-explorer', label: '知識圖譜' },
-  { key: 'skills', label: '成長追蹤' },
+const TABS: { key: BrowserTab; label: string; hint: string }[] = [
+  { key: 'fast', label: 'Fast Memory', hint: '最小負荷、最快取用' },
+  { key: 'working', label: 'Working Memory', hint: '當前任務上下文' },
+  { key: 'deep', label: 'Deep Memory', hint: '完整證據與圖譜' },
+  { key: 'skills', label: 'Skills', hint: '能力與態度演化' },
 ]
+
+const DEFAULT_QUERY_OPTIONS: MemoryQueryOptions = {
+  taskMode: 'build',
+  thinkingMode: 'auto',
+  loadBudget: 'standard',
+  consumer: 'human',
+  topK: 6,
+}
 
 function CollapsibleSection({
   title,
@@ -252,16 +269,174 @@ function SyncWidget({ onSynced }: { onSynced?: () => void }) {
   )
 }
 
+function QueryControls({
+  options,
+  onChange,
+}: {
+  options: MemoryQueryOptions
+  onChange: (next: Partial<MemoryQueryOptions>) => void
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <SelectField<TaskMode>
+        label="Task"
+        value={options.taskMode}
+        options={[
+          { value: 'lookup', label: 'Lookup' },
+          { value: 'decide', label: 'Decide' },
+          { value: 'build', label: 'Build' },
+          { value: 'reflect', label: 'Reflect' },
+        ]}
+        onChange={(value) => onChange({ taskMode: value })}
+      />
+      <SelectField<ThinkingMode>
+        label="Thinking"
+        value={options.thinkingMode}
+        options={[
+          { value: 'auto', label: 'Auto' },
+          { value: 'fast', label: 'Fast' },
+          { value: 'slow', label: 'Slow' },
+        ]}
+        onChange={(value) => onChange({ thinkingMode: value })}
+      />
+      <SelectField<LoadBudget>
+        label="Load Budget"
+        value={options.loadBudget}
+        options={[
+          { value: 'light', label: 'Light' },
+          { value: 'standard', label: 'Standard' },
+          { value: 'deep', label: 'Deep' },
+        ]}
+        onChange={(value) => onChange({ loadBudget: value })}
+      />
+    </div>
+  )
+}
+
+function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: Array<{ value: T; label: string }>
+  onChange: (value: T) => void
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--subtext1)' }}>
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as T)}
+        className="rounded-xl border px-3 py-2.5 text-sm"
+        style={{
+          backgroundColor: 'var(--mantle)',
+          borderColor: 'var(--surface0)',
+          color: 'var(--text)',
+          minHeight: 44,
+        }}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function StrategyStrip({
+  activeTab,
+  hint,
+  highlights,
+  thinkingMode,
+}: {
+  activeTab: BrowserTab
+  hint: string
+  highlights: string[]
+  thinkingMode?: string
+}) {
+  return (
+    <div
+      className="rounded-2xl border p-4"
+      style={{
+        background: 'linear-gradient(135deg, color-mix(in srgb, var(--blue) 10%, var(--mantle)), var(--mantle))',
+        borderColor: 'color-mix(in srgb, var(--blue) 22%, var(--surface0))',
+      }}
+    >
+      <p className="text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--subtext1)' }}>
+        {activeTab} memory
+      </p>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mt-2">
+        <div>
+          <h2 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>
+            {hint}
+          </h2>
+          <p className="text-sm mt-1" style={{ color: 'var(--subtext0)' }}>
+            {thinkingMode ? `實際路徑：${thinkingMode}` : '輸入查詢後，系統會組裝對應層級記憶。'}
+          </p>
+        </div>
+        {highlights.length > 0 && (
+          <div className="lg:max-w-md">
+            <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--subtext1)' }}>
+              Highlights
+            </p>
+            <ul className="mt-1 space-y-1">
+              {highlights.slice(0, 2).map((item) => (
+                <li key={item} className="text-sm" style={{ color: 'var(--text)' }}>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MemoryLensGrid({
+  cards,
+  emptyMessage,
+}: {
+  cards: MemoryCardRecord[]
+  emptyMessage: string
+}) {
+  if (cards.length === 0) {
+    return (
+      <div
+        className="rounded-2xl border px-5 py-10 text-center"
+        style={{ borderColor: 'var(--surface0)', backgroundColor: 'var(--mantle)' }}
+      >
+        <p className="text-sm" style={{ color: 'var(--subtext0)' }}>
+          {emptyMessage}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      {cards.map((card) => (
+        <MemoryLensCard key={card.id} card={card} />
+      ))}
+    </div>
+  )
+}
+
 function BlockDetailDrawer({ block, onClose }: { block: MemoryBlock; onClose: () => void }) {
   return (
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 z-40"
         style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
         onClick={onClose}
       />
-      {/* Bottom sheet */}
       <div
         className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl border-t p-5 max-h-[70vh] overflow-y-auto"
         style={{
@@ -343,13 +518,31 @@ export default function MemoryBrowser() {
     setKgActiveTab,
   } = useMemvaultStore()
 
+  const [showSidebar, setShowSidebar] = useState(false)
+  const [queryOptions, setQueryOptions] = useState<MemoryQueryOptions>(DEFAULT_QUERY_OPTIONS)
+
   const blocksQuery = useBlocks(page, pageSize, filters)
   const profileQuery = useProfile()
   const queryClient = useQueryClient()
   const deleteBlockMutation = useDeleteBlock()
 
+  const searchOptions: MemoryQueryOptions = {
+    ...queryOptions,
+    consumer: kg_activeTab === 'deep' ? 'ui' : 'human',
+  }
+  const { query, results, isSearching, setQuery, searchNow, clear } = useMemorySearch(searchOptions)
+
   const blocks = blocksQuery.data?.items ?? []
   const total = blocksQuery.data?.total ?? 0
+  const strategy = results?.strategy
+  const tabHint = TABS.find((tab) => tab.key === kg_activeTab)?.hint ?? ''
+
+  const activeCards =
+    kg_activeTab === 'fast'
+      ? results?.fast_cards ?? []
+      : kg_activeTab === 'working'
+        ? results?.working_cards ?? []
+        : results?.deep_cards ?? []
 
   const handleDeleteBlock = (id: string) => {
     if (!window.confirm('確定要刪除這筆記憶嗎？')) return
@@ -360,19 +553,10 @@ export default function MemoryBrowser() {
     })
   }
 
-  const { query, results, isSearching, setQuery, searchNow, clear } = useMemorySearch()
-
-  const [showSidebar, setShowSidebar] = useState(false)
-
-  const showSearchResults = query.trim() && results.length > 0
-  const displayBlocks = showSearchResults ? results.map((r) => r.block) : blocks
-
   return (
     <div className="mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-5 lg:px-6 lg:py-6">
-      {/* View controls */}
       <div className="flex items-center justify-between mb-4 gap-2">
-        {kg_activeTab === 'blocks' && <ViewToggle mode={viewMode} onChange={setViewMode} />}
-        {/* Mobile: KAS Profile / Sync button */}
+        {kg_activeTab === 'deep' && <ViewToggle mode={viewMode} onChange={setViewMode} />}
         <button
           onClick={() => setShowSidebar(true)}
           className="lg:hidden flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ml-auto"
@@ -386,151 +570,158 @@ export default function MemoryBrowser() {
         </button>
       </div>
 
-      {/* Tab Bar */}
       <div
-        className="flex gap-0 mb-4 sm:mb-6 rounded-lg overflow-hidden border"
-        style={{ borderColor: 'var(--surface0)' }}
+        className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4 sm:mb-6"
       >
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setKgActiveTab(tab.key)}
-            className="flex-1 px-2 py-2.5 sm:px-4 text-xs sm:text-sm font-medium transition-colors"
+            className="rounded-xl border px-3 py-3 text-left transition-colors"
             style={{
-              backgroundColor: kg_activeTab === tab.key ? 'var(--surface0)' : 'var(--mantle)',
-              color: kg_activeTab === tab.key ? 'var(--text)' : 'var(--subtext0)',
-              minHeight: 44,
+              borderColor:
+                kg_activeTab === tab.key
+                  ? 'color-mix(in srgb, var(--blue) 40%, var(--surface0))'
+                  : 'var(--surface0)',
+              backgroundColor:
+                kg_activeTab === tab.key
+                  ? 'color-mix(in srgb, var(--blue) 10%, var(--mantle))'
+                  : 'var(--mantle)',
+              minHeight: 78,
             }}
           >
-            {tab.label}
+            <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              {tab.label}
+            </div>
+            <div className="text-xs mt-1" style={{ color: 'var(--subtext0)' }}>
+              {tab.hint}
+            </div>
           </button>
         ))}
       </div>
 
       <div className="flex gap-4 lg:gap-6">
-        {/* Main content */}
-        <div className="flex-1 min-w-0">
-          {/* Error */}
-          {blocksQuery.error && (
-            <div
-              className="rounded-lg border px-4 py-3 mb-4 text-sm"
-              style={{
-                backgroundColor: 'color-mix(in srgb, var(--red) 10%, transparent)',
-                borderColor: 'var(--red)',
-                color: 'var(--red)',
-              }}
-            >
-              {blocksQuery.error instanceof Error
-                ? blocksQuery.error.message
-                : 'Failed to fetch blocks'}
-            </div>
+        <div className="flex-1 min-w-0 space-y-4">
+          <StrategyStrip
+            activeTab={kg_activeTab}
+            hint={tabHint}
+            highlights={results?.highlights ?? []}
+            thinkingMode={strategy?.thinking_mode_used}
+          />
+
+          {kg_activeTab !== 'skills' && (
+            <>
+              <SearchBar
+                value={query}
+                onChange={setQuery}
+                onSearch={searchNow}
+                loading={isSearching}
+                resultCount={query.trim() ? activeCards.length : undefined}
+                onClear={clear}
+              />
+              <QueryControls options={queryOptions} onChange={(next) => setQueryOptions((prev) => ({ ...prev, ...next }))} />
+            </>
           )}
 
-          {/* === Blocks Tab === */}
-          {kg_activeTab === 'blocks' && (
-            <>
-              {/* Search */}
-              <div className="mb-4">
-                <SearchBar
-                  value={query}
-                  onChange={setQuery}
-                  onSearch={searchNow}
-                  loading={isSearching}
-                  resultCount={showSearchResults ? results.length : undefined}
-                  onClear={clear}
-                />
-              </div>
+          {kg_activeTab === 'fast' && (
+            <MemoryLensGrid
+              cards={activeCards}
+              emptyMessage={query.trim() ? 'Fast path 目前沒有可立即注入的記憶。' : '輸入查詢後，Fast Memory 會回傳最小負荷的可用知識卡。'}
+            />
+          )}
 
-              {/* Filters */}
-              {!showSearchResults && (
+          {kg_activeTab === 'working' && (
+            <MemoryLensGrid
+              cards={activeCards}
+              emptyMessage={query.trim() ? 'Working Memory 目前沒有形成足夠上下文。' : '輸入查詢後，Working Memory 會組裝當前任務上下文。'}
+            />
+          )}
+
+          {kg_activeTab === 'deep' && (
+            <div className="space-y-4">
+              <MemoryLensGrid
+                cards={activeCards}
+                emptyMessage={query.trim() ? 'Slow path 尚未找到可展開的深層證據。' : '輸入查詢後，Deep Memory 會展開摘要、關聯與深層證據。'}
+              />
+
+              <CollapsibleSection
+                title="Deep Evidence Explorer"
+                color="var(--blue)"
+                info="保留舊的 KG 視角做慢想探索；新的 deep cards 會先把重點壓縮給您，再決定是否展開圖譜。"
+              >
+                <div className="mb-4">
+                  <CascadeSearchBar />
+                </div>
+                <KgExplorerPanel />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Deep Archive"
+                color="var(--peach)"
+                info="原始 blocks 保留為深層證據層，供人工巡覽與除錯。"
+              >
                 <div className="mb-4">
                   <BlockTypeFilter
                     activeType={filters.blockType}
                     onChange={(type) => setFilters({ blockType: type as typeof filters.blockType })}
                   />
                 </div>
-              )}
 
-              {/* Loading — only show spinner on initial load */}
-              {blocksQuery.isLoading && (
-                <div className="flex items-center justify-center py-20">
-                  <div
-                    className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-                    style={{ borderColor: 'var(--blue)', borderTopColor: 'transparent' }}
-                  />
-                </div>
-              )}
-
-              {/* Empty state */}
-              {!blocksQuery.isLoading && displayBlocks.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 gap-2">
-                  <p className="text-base" style={{ color: 'var(--subtext0)' }}>
-                    {showSearchResults ? '未找到相關記憶' : '尚無記憶區塊'}
-                  </p>
-                  <p className="text-sm text-center px-4" style={{ color: 'var(--subtext1)' }}>
-                    {showSearchResults
-                      ? '試試不同的搜尋關鍵字'
-                      : '記憶區塊將在 Session 結束後自動提煉'}
-                  </p>
-                </div>
-              )}
-
-              {/* Block list */}
-              {displayBlocks.length > 0 && (
-                <div
-                  className={
-                    viewMode === 'grid'
-                      ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4'
-                      : 'flex flex-col gap-2'
-                  }
-                >
-                  {displayBlocks.map((block) => (
-                    <MemoryCard
-                      key={block.id}
-                      block={block}
-                      compact={viewMode === 'list'}
-                      onClick={() => selectBlock(block)}
-                      onDelete={handleDeleteBlock}
+                {blocksQuery.isLoading && (
+                  <div className="flex items-center justify-center py-20">
+                    <div
+                      className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+                      style={{ borderColor: 'var(--blue)', borderTopColor: 'transparent' }}
                     />
-                  ))}
-                </div>
-              )}
+                  </div>
+                )}
 
-              {/* Pagination */}
-              {!showSearchResults && (
+                {!blocksQuery.isLoading && blocks.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-2">
+                    <p className="text-base" style={{ color: 'var(--subtext0)' }}>
+                      尚無記憶區塊
+                    </p>
+                  </div>
+                )}
+
+                {blocks.length > 0 && (
+                  <div
+                    className={
+                      viewMode === 'grid'
+                        ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4'
+                        : 'flex flex-col gap-2'
+                    }
+                  >
+                    {blocks.map((block) => (
+                      <MemoryCard
+                        key={block.id}
+                        block={block}
+                        compact={viewMode === 'list'}
+                        onClick={() => selectBlock(block)}
+                        onDelete={handleDeleteBlock}
+                      />
+                    ))}
+                  </div>
+                )}
+
                 <Pagination page={page} total={total} pageSize={pageSize} onPageChange={setPage} />
-              )}
-            </>
+              </CollapsibleSection>
+            </div>
           )}
 
-          {/* === KG Explorer Tab === */}
-          {kg_activeTab === 'kg-explorer' && (
-            <>
-              <div className="mb-4">
-                <CascadeSearchBar />
-              </div>
-              <KgExplorerPanel />
-            </>
-          )}
-
-          {/* === Skills Tab === */}
           {kg_activeTab === 'skills' && (
             <div className="space-y-4">
               <CollapsibleSection
                 title="技能熟練度"
                 color="var(--green)"
-                info={
-                  '熟練度 = 調用次數 × 成功率 × 時效因子\n時效因子：最後使用距今 90 天內從 1.0 線性衰減至 0.1，超過 90 天固定 0.1。\n\n長條長度 = 熟練度分數，百分比 = 成功率。\n點擊卡片展開調用歷史，每項技能旁的 ? 查看技能說明。'
-                }
+                info="技能面板保留，用來對照 Fast / Working / Deep 路徑是否真的提升工作品質。"
               >
                 <SkillDashboard />
               </CollapsibleSection>
               <CollapsibleSection
                 title="態度演進"
                 color="var(--mauve)"
-                info={
-                  '態度（Attitudes）是從對話中自動提煉的偏好與工作原則。\n\n9 種分類：workflow, tool_behavior, config, architecture, preference, technical, naming, syntax, performance\n\n每條態度有信心度（0~1，隨時間衰減）。相同主題的新態度會取代舊版本，形成版本鏈記錄完整演進歷程。\n來源：session 對話直接萃取 + 知識三元組修正回饋。'
-                }
+                info="態度是 Fast Memory 的重要來源；這裡保留完整演進脈絡。"
               >
                 <AttitudeTimeline />
               </CollapsibleSection>
@@ -538,14 +729,37 @@ export default function MemoryBrowser() {
           )}
         </div>
 
-        {/* Desktop Sidebar */}
         <div className="hidden lg:flex lg:w-72 lg:flex-col lg:gap-4 lg:shrink-0">
           <ProfileWidget profile={profileQuery.data ?? null} loading={profileQuery.isLoading} />
           <SyncWidget
             onSynced={() => queryClient.invalidateQueries({ queryKey: ['memvault', 'blocks'] })}
           />
 
-          {/* Block detail panel (desktop) */}
+          {results && (
+            <div
+              className="rounded-xl border p-4"
+              style={{ backgroundColor: 'var(--mantle)', borderColor: 'var(--surface0)' }}
+            >
+              <p className="text-[11px] uppercase tracking-[0.16em]" style={{ color: 'var(--subtext1)' }}>
+                Query Strategy
+              </p>
+              <div className="mt-3 space-y-2 text-sm" style={{ color: 'var(--subtext0)' }}>
+                <div className="flex justify-between">
+                  <span>Task</span>
+                  <span style={{ color: 'var(--text)' }}>{results.strategy.task_mode}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Thinking</span>
+                  <span style={{ color: 'var(--text)' }}>{results.strategy.thinking_mode_used}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Budget</span>
+                  <span style={{ color: 'var(--text)' }}>{results.strategy.load_budget}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {selectedBlock && (
             <div
               className="rounded-xl border p-5"
@@ -615,14 +829,12 @@ export default function MemoryBrowser() {
         </div>
       </div>
 
-      {/* Mobile: Block detail bottom sheet */}
       {selectedBlock && (
         <div className="lg:hidden">
           <BlockDetailDrawer block={selectedBlock} onClose={() => selectBlock(null)} />
         </div>
       )}
 
-      {/* Mobile: KAS sidebar bottom sheet */}
       {showSidebar && (
         <>
           <div

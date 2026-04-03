@@ -1159,10 +1159,12 @@ class AttitudeService:
                     rows = sorted(rows, key=lambda r: id_order.get(str(r.id), 999))
                     return [
                         {
+                            "id": str(r.id),
                             "fact": r.fact,
                             "category": r.category,
                             "confidence": r.confidence,
                             "score": round(scores.get(str(r.id), 0.0), 3),
+                            "freshness": r.updated_at.isoformat() if r.updated_at else None,
                         }
                         for r in rows
                     ]
@@ -1182,10 +1184,12 @@ class AttitudeService:
         rows = (await db.execute(q)).scalars().all()
         return [
             {
+                "id": str(r.id),
                 "fact": r.fact,
                 "category": r.category,
                 "confidence": r.confidence,
                 "score": 0.0,
+                "freshness": r.updated_at.isoformat() if r.updated_at else None,
             }
             for r in rows
         ]

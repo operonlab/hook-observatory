@@ -17,10 +17,18 @@ from src.modules.memvault.noise_filter import (
     check_noise,
     filter_results,
 )
+from src.modules.memvault.query_runtime import (
+    build_injection_payload,
+    choose_thinking_mode,
+)
 from src.modules.memvault.schemas import (
     EnhancedSearchResult,
+    MemoryCard,
+    MemoryEvidenceRef,
     MemoryBlockCreate,
     MemoryBlockResponse,
+    MemoryQueryResponse,
+    MemoryQueryStrategy,
     SearchMetadata,
     SemanticSearchResult,
 )
@@ -465,6 +473,57 @@ class TestAdaptiveRetrieval:
         do, reason = should_search("What are the best practices for error handling?")
         assert do is True
         assert reason == "default"
+
+
+class TestFastSlowQueryRuntime:
+    def test_choose_thinking_mode_auto_agent_prefers_fast(self):
+        assert choose_thinking_mode("build", "auto", "standard", "agent") == "fast"
+
+    def test_choose_thinking_mode_ui_prefers_slow(self):
+        assert choose_thinking_mode("build", "auto", "standard", "ui") == "slow"
+
+    def test_choose_thinking_mode_reflect_prefers_slow(self):
+        assert choose_thinking_mode("reflect", "auto", "standard", "human") == "slow"
+
+    def test_build_injection_payload_prefers_fast_cards(self):
+        response = MemoryQueryResponse(
+            query="python preferences",
+            strategy=MemoryQueryStrategy(
+                task_mode="build",
+                thinking_mode_requested="auto",
+                thinking_mode_used="fast",
+                load_budget="light",
+                consumer="agent",
+            ),
+            fast_cards=[
+                MemoryCard(
+                    id="fast-1",
+                    title="偏好 / architecture",
+                    summary="偏好漸進式重構而非全面重寫",
+                    why_relevant="命中既有工作原則",
+                    use_now="延續這個原則處理目前變更。",
+                    layer="fast",
+                    source_type="attitude",
+                    confidence=0.9,
+                    evidence_refs=[
+                        MemoryEvidenceRef(
+                            kind="attitude",
+                            ref_id="att-1",
+                            title="architecture",
+                            snippet="偏好漸進式重構而非全面重寫",
+                        )
+                    ],
+                )
+            ],
+            working_cards=[],
+            deep_cards=[],
+            highlights=["延續這個原則處理目前變更。"],
+            metadata={"backend": "mock"},
+        )
+        payload = build_injection_payload(response)
+        assert "Memvault Fast Memory" in payload.system_prompt_memory
+        assert "偏好漸進式重構而非全面重寫" in payload.system_prompt_memory
+        assert payload.decision_bias == ["偏好漸進式重構而非全面重寫"]
 
 
 # ======================== Integration Tests ========================

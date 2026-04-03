@@ -6,6 +6,7 @@ import type {
   PaginatedResponse,
   SemanticSearchResult,
 } from '@/types'
+import type { MemoryCardRecord, MemoryQueryOptions, MemoryQueryResponse } from '../types'
 
 const delay = (ms = 50) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -176,6 +177,30 @@ function paginate<T>(items: T[], page: number, pageSize: number): PaginatedRespo
   }
 }
 
+function buildCard(block: MemoryBlock, layer: 'fast' | 'working' | 'deep'): MemoryCardRecord {
+  return {
+    id: `${layer}:${block.id}`,
+    title: `${block.block_type} / ${block.tags[0] ?? 'memory'}`,
+    summary: block.content,
+    why_relevant: 'Mock data matched by content or tag.',
+    use_now: `Use this ${layer} card as current context.`,
+    layer,
+    source_type: block.block_type,
+    confidence: block.confidence,
+    freshness: '近兩週',
+    tags: block.tags,
+    evidence_refs: [
+      {
+        kind: 'block',
+        ref_id: block.id,
+        title: block.block_type,
+        snippet: block.content.slice(0, 80),
+        score: block.confidence,
+      },
+    ],
+  }
+}
+
 export const mockMemvaultApi = {
   list: async (page = 1, pageSize = 20): Promise<PaginatedResponse<MemoryBlock>> => {
     await delay()
@@ -248,6 +273,35 @@ export const mockMemvaultApi = {
     return results
   },
 
+  queryMemory: async (
+    query: string,
+    options: Partial<MemoryQueryOptions> = {},
+  ): Promise<MemoryQueryResponse> => {
+    const semantic = await mockMemvaultApi.searchSemantic(query, options.topK ?? 6)
+    const blocks = semantic.map((item) => item.block)
+    return {
+      query,
+      strategy: {
+        task_mode: options.taskMode ?? 'build',
+        thinking_mode_requested: options.thinkingMode ?? 'auto',
+        thinking_mode_used:
+          options.thinkingMode === 'slow' || options.loadBudget === 'deep' ? 'slow' : 'fast',
+        load_budget: options.loadBudget ?? 'standard',
+        consumer: options.consumer ?? 'human',
+      },
+      fast_cards: blocks.slice(0, 3).map((block) => buildCard(block, 'fast')),
+      working_cards: blocks.slice(0, 2).map((block) => buildCard(block, 'working')),
+      deep_cards: blocks.slice(0, 4).map((block) => buildCard(block, 'deep')),
+      highlights: blocks.slice(0, 2).map((block) => block.content),
+      metadata: { backend: 'mock' },
+    }
+  },
+
+  inspectMemory: async (
+    query: string,
+    options: Partial<MemoryQueryOptions> = {},
+  ): Promise<MemoryQueryResponse> => mockMemvaultApi.queryMemory(query, { ...options, thinkingMode: 'slow' }),
+
   getProfile: async (): Promise<KASProfile> => {
     await delay()
     return mockProfile
@@ -270,6 +324,18 @@ export const mockMemvaultApi = {
   ): Promise<PaginatedResponse<MemoryBlock>> => {
     await delay()
     const filtered = mockBlocks.filter((b) => b.block_type === blockType)
+    return paginate(filtered, page, pageSize)
+  },
+
+  listBlocks: async (
+    page = 1,
+    pageSize = 20,
+    filters: { tag?: string | null; blockType?: string | null } = {},
+  ): Promise<PaginatedResponse<MemoryBlock>> => {
+    await delay()
+    let filtered = mockBlocks
+    if (filters.tag) filtered = filtered.filter((b) => b.tags.includes(filters.tag!))
+    if (filters.blockType) filtered = filtered.filter((b) => b.block_type === filters.blockType)
     return paginate(filtered, page, pageSize)
   },
 

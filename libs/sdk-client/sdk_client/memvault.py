@@ -91,6 +91,69 @@ class MemvaultClient(BaseClient):
             params["date_to"] = date_to
         return self._get("/search", params)
 
+    def query_memory(
+        self,
+        query: str,
+        task_mode: str = "build",
+        thinking_mode: str = "auto",
+        load_budget: str = "standard",
+        consumer: str = "human",
+        top_k: int = 6,
+    ) -> dict:
+        """Unified fast/slow memory query. POST /query"""
+        return self._post(
+            "/query",
+            {
+                "q": query,
+                "task_mode": task_mode,
+                "thinking_mode": thinking_mode,
+                "load_budget": load_budget,
+                "consumer": consumer,
+                "top_k": top_k,
+            },
+        )
+
+    def inject(
+        self,
+        query: str,
+        task_mode: str = "build",
+        thinking_mode: str = "auto",
+        load_budget: str = "light",
+        top_k: int = 6,
+    ) -> dict:
+        """Agent-facing fast memory payload. POST /inject"""
+        return self._post(
+            "/inject",
+            {
+                "q": query,
+                "task_mode": task_mode,
+                "thinking_mode": thinking_mode,
+                "load_budget": load_budget,
+                "consumer": "agent",
+                "top_k": top_k,
+            },
+        )
+
+    def inspect(
+        self,
+        query: str,
+        task_mode: str = "reflect",
+        load_budget: str = "deep",
+        top_k: int = 6,
+    ) -> dict:
+        """Deep evidence inspection. POST /inspect"""
+        return self._post(
+            "/inspect",
+            {
+                "q": query,
+                "task_mode": task_mode,
+                "thinking_mode": "slow",
+                "load_budget": load_budget,
+                "consumer": "human",
+                "top_k": top_k,
+            },
+        )
+
     # ======================== Tags ========================
 
     def list_tags(self) -> list:
