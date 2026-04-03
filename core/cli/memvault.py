@@ -59,6 +59,24 @@ def _parse_tags(raw: str | None) -> list[str] | None:
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 
+def _print_memory_cards(cards: list[dict], quiet: bool = False) -> None:
+    for i, card in enumerate(cards, 1):
+        summary = truncate(card.get("summary", ""), 180)
+        if quiet:
+            print(f"{card.get('layer', '?')} {card.get('source_type', '?')} {summary}")
+            continue
+        print(
+            f"  {i}. [{card.get('layer', '?')}] {card.get('title', '?')}"
+            f" ({card.get('source_type', '?')}, conf={card.get('confidence', 0):.2f})"
+        )
+        print(f"     摘要: {summary}")
+        print(f"     為何相關: {truncate(card.get('why_relevant', ''), 120)}")
+        print(f"     立即可用: {truncate(card.get('use_now', ''), 120)}")
+        if card.get("tags"):
+            print(f"     標籤: {', '.join(card['tags'][:4])}")
+        print()
+
+
 # ---------------------------------------------------------------------------
 # Command handlers — Existing (recall, extract, stats, profile, cascade,
 #                               wisdom, attitude, health)
@@ -94,6 +112,114 @@ def cmd_recall(client: MemvaultClient, args: argparse.Namespace) -> None:
         else:
             print(f"  {i}. [{fmt_score(score)}] ({btype}) {fmt_tags(tags)}")
             print(f"     {truncate(content)}")
+            print()
+
+
+def cmd_query(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Unified fast/slow memory query."""
+    data = client.query_memory(
+        args.query,
+        task_mode=args.task_mode,
+        thinking_mode=args.thinking_mode,
+        load_budget=args.load_budget,
+        consumer=args.consumer,
+        top_k=args.top_k,
+    )
+    if json_out(data, args):
+        return
+
+    strategy = data.get("strategy", {})
+    print("  Memory Query")
+    print("  ------------")
+    print(
+        "  "
+        f"mode={strategy.get('thinking_mode_used', '?')} "
+        f"task={strategy.get('task_mode', '?')} "
+        f"budget={strategy.get('load_budget', '?')} "
+        f"consumer={strategy.get('consumer', '?')}"
+    )
+    print()
+
+    if data.get("fast_cards"):
+        print("  Fast Memory")
+        print("  -----------")
+        _print_memory_cards(data["fast_cards"], args.quiet)
+
+    if data.get("working_cards"):
+        print("  Working Memory")
+        print("  --------------")
+        _print_memory_cards(data["working_cards"], args.quiet)
+
+    if data.get("deep_cards"):
+        print("  Deep Memory")
+        print("  -----------")
+        _print_memory_cards(data["deep_cards"], args.quiet)
+
+    highlights = data.get("highlights", [])
+    if highlights and not args.quiet:
+        print("  Highlights")
+        print("  ----------")
+        for item in highlights:
+            print(f"  - {truncate(item, 140)}")
+
+
+def cmd_inject(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Build agent-facing injection payload."""
+    data = client.inject(
+        args.query,
+        task_mode=args.task_mode,
+        thinking_mode=args.thinking_mode,
+        load_budget=args.load_budget,
+        top_k=args.top_k,
+    )
+    if json_out(data, args):
+        return
+
+    print("  System Prompt Memory")
+    print("  --------------------")
+    print(data.get("system_prompt_memory", ""))
+    print()
+
+    if data.get("working_context"):
+        print("  Working Context")
+        print("  ---------------")
+        for item in data["working_context"]:
+            print(f"  - {truncate(item, 160)}")
+        print()
+
+    if data.get("decision_bias"):
+        print("  Decision Bias")
+        print("  -------------")
+        for item in data["decision_bias"]:
+            print(f"  - {truncate(item, 160)}")
+
+
+def cmd_inspect(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Deep evidence inspection."""
+    data = client.inspect(
+        args.query,
+        task_mode=args.task_mode,
+        load_budget=args.load_budget,
+        top_k=args.top_k,
+    )
+    if json_out(data, args):
+        return
+
+    print("  Memory Inspect")
+    print("  --------------")
+    _print_memory_cards(data.get("cards", []), args.quiet)
+
+    if not args.quiet:
+        raw_sections = data.get("raw_sections", {})
+        for section, refs in raw_sections.items():
+            if not refs:
+                continue
+            print(f"  {section.title()} Evidence")
+            print(f"  {'-' * (len(section) + 9)}")
+            for ref in refs[:8]:
+                title = ref.get("title", "?")
+                snippet = truncate(ref.get("snippet", ""), 120)
+                print(f"  - [{ref.get('kind', '?')}] {title}: {snippet}")
             print()
 
 
@@ -1048,6 +1174,42 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--since", help="Filter: created_at >= date (ISO format, e.g. 2026-03-01)")
     p.add_argument("--before", help="Filter: created_at <= date (ISO format, e.g. 2026-03-11)")
 
+    # unified query / inject / inspect
+    for name, help_text in (
+        ("query", "Unified fast/slow memory query"),
+        ("inject", "Agent-facing memory injection payload"),
+        ("inspect", "Deep evidence inspection"),
+    ):
+        p = sub.add_parser(name, parents=[common], help=help_text)
+        p.add_argument("query", help="Search query")
+        p.add_argument(
+            "--task-mode",
+            default="build",
+            choices=["lookup", "decide", "build", "reflect"],
+            help="Task mode (default: build)",
+        )
+        if name != "inspect":
+            p.add_argument(
+                "--thinking-mode",
+                default="auto",
+                choices=["auto", "fast", "slow"],
+                help="Thinking mode (default: auto)",
+            )
+        p.add_argument(
+            "--load-budget",
+            default="light" if name == "inject" else "deep" if name == "inspect" else "standard",
+            choices=["light", "standard", "deep"],
+            help="Load budget",
+        )
+        if name == "query":
+            p.add_argument(
+                "--consumer",
+                default="human",
+                choices=["agent", "human", "ui"],
+                help="Consumer type (default: human)",
+            )
+        p.add_argument("--top-k", type=int, default=6, help="Number of cards (default: 6)")
+
     # extract
     p = sub.add_parser("extract", parents=[common], help="Create a new memory block")
     p.add_argument("text", help="Block content")
@@ -1484,6 +1646,9 @@ def cmd_intelligence_ingest(client: MemvaultClient, args: argparse.Namespace) ->
 COMMAND_MAP = {
     # Existing
     "recall": cmd_recall,
+    "query": cmd_query,
+    "inject": cmd_inject,
+    "inspect": cmd_inspect,
     "extract": cmd_extract,
     "stats": cmd_stats,
     "profile": cmd_profile,

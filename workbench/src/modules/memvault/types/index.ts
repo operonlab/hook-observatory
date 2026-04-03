@@ -1,6 +1,10 @@
 export type BlockType = 'knowledge' | 'skill' | 'attitude' | 'general'
 
 export type ViewMode = 'grid' | 'list'
+export type TaskMode = 'lookup' | 'decide' | 'build' | 'reflect'
+export type ThinkingMode = 'auto' | 'fast' | 'slow'
+export type LoadBudget = 'light' | 'standard' | 'deep'
+export type MemoryConsumer = 'agent' | 'human' | 'ui'
 
 export type SortField = 'created_at' | 'updated_at' | 'confidence'
 export type SortOrder = 'asc' | 'desc'
@@ -52,7 +56,64 @@ export const KG_LAYER_CONFIG: Record<GalaxyLayer, { label: string; color: string
 
 // ── KG API types (mirrors kg_schemas.py) ──
 
-export type BrowserTab = 'blocks' | 'kg-explorer' | 'skills'
+export type BrowserTab = 'fast' | 'working' | 'deep' | 'skills'
+
+export interface MemoryQueryOptions {
+  taskMode: TaskMode
+  thinkingMode: ThinkingMode
+  loadBudget: LoadBudget
+  consumer: MemoryConsumer
+  topK: number
+}
+
+export interface MemoryEvidenceRef {
+  kind: string
+  ref_id: string
+  title: string
+  snippet: string | null
+  score?: number | null
+}
+
+export interface MemoryCardRecord {
+  id: string
+  title: string
+  summary: string
+  why_relevant: string
+  use_now: string
+  layer: 'fast' | 'working' | 'deep'
+  source_type: string
+  confidence: number
+  freshness: string | null
+  tags: string[]
+  evidence_refs: MemoryEvidenceRef[]
+  source?: string | null  // "speculative_prefetch" for predicted hits
+}
+
+export interface MemoryQueryStrategy {
+  task_mode: TaskMode
+  thinking_mode_requested: ThinkingMode
+  thinking_mode_used: 'fast' | 'slow'
+  load_budget: LoadBudget
+  consumer: MemoryConsumer
+}
+
+export interface MemoryQueryResponse {
+  query: string
+  strategy: MemoryQueryStrategy
+  fast_cards: MemoryCardRecord[]
+  working_cards: MemoryCardRecord[]
+  deep_cards: MemoryCardRecord[]
+  highlights: string[]
+  metadata?: Record<string, unknown> | null
+}
+
+export interface MemoryInspectResponse {
+  query: string
+  strategy: MemoryQueryStrategy
+  cards: MemoryCardRecord[]
+  raw_sections: Record<string, MemoryEvidenceRef[]>
+  metadata?: Record<string, unknown> | null
+}
 
 export interface Triple {
   id: string

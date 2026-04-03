@@ -1,0 +1,516 @@
+"""Composable query runtime for fast/slow memvault access."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from datetime import UTC, datetime
+
+import time as _time
+
+from src.events.bus import Event, event_bus
+from src.events.types import MemvaultEvents
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .embedding import get_embedding
+from .injection_guard import sanitize_for_injection
+from src.shared.prefetch import PrefetchFingerprint
+from .kg_services import attitude_service, cascade_recall_service
+from .models import MemoryBlock
+from .schemas import (
+    MemoryCard,
+    MemoryEvidenceRef,
+    MemoryInjectResponse,
+    MemoryInspectResponse,
+    MemoryQueryRequest,
+    MemoryQueryResponse,
+    MemoryQueryStrategy,
+)
+from .services import memory_block_service
+
+_TASK_MODES = {"lookup", "decide", "build", "reflect"}
+_THINKING_MODES = {"auto", "fast", "slow"}
+_LOAD_BUDGETS = {"light", "standard", "deep"}
+_CONSUMERS = {"agent", "human", "ui"}
+
+# Reuse the same SpeculativePrefetchCache instance from slow_thinker
+# to keep metrics unified (reviewer finding #8)
+from .slow_thinker import _prefetch_cache
+
+
+def _normalize(value: str, allowed: set[str], default: str) -> str:
+    cleaned = (value or "").strip().lower()
+    return cleaned if cleaned in allowed else default
+
+
+def choose_thinking_mode(
+    task_mode: str,
+    thinking_mode: str,
+    load_budget: str,
+    consumer: str,
+) -> str:
+    """Choose a concrete thinking mode from the request."""
+    task_mode = _normalize(task_mode, _TASK_MODES, "build")
+    thinking_mode = _normalize(thinking_mode, _THINKING_MODES, "auto")
+    load_budget = _normalize(load_budget, _LOAD_BUDGETS, "standard")
+    consumer = _normalize(consumer, _CONSUMERS, "human")
+
+    if thinking_mode != "auto":
+        return thinking_mode
+    if consumer == "agent":
+        return "fast"
+    if consumer == "ui":
+        return "slow"
+    if load_budget == "deep":
+        return "slow"
+    if task_mode in {"decide", "reflect"}:
+        return "slow"
+    return "fast"
+
+
+def _budget_config(load_budget: str) -> dict[str, int]:
+    normalized = _normalize(load_budget, _LOAD_BUDGETS, "standard")
+    if normalized == "light":
+        return {"search_top_k": 5, "fast": 3, "working": 2, "deep": 2, "attitudes": 2}
+    if normalized == "deep":
+        return {"search_top_k": 12, "fast": 5, "working": 4, "deep": 6, "attitudes": 4}
+    return {"search_top_k": 8, "fast": 4, "working": 3, "deep": 4, "attitudes": 3}
+
+
+def _clip(text: str | None, limit: int = 180) -> str:
+    value = (text or "").strip().replace("\n", " ")
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1].rstrip() + "…"
+
+
+def _freshness_label(ts: datetime | None) -> str | None:
+    if ts is None:
+        return None
+    now = datetime.now(UTC)
+    delta = now - ts.astimezone(UTC)
+    hours = delta.total_seconds() / 3600
+    if hours < 12:
+        return "今天"
+    if hours < 48:
+        return "近兩天"
+    days = delta.days
+    if days < 14:
+        return "近兩週"
+    if days < 60:
+        return "近兩月"
+    return "較早"
+
+
+def _unique_cards(cards: Iterable[MemoryCard]) -> list[MemoryCard]:
+    seen: set[str] = set()
+    deduped: list[MemoryCard] = []
+    for card in cards:
+        if card.id in seen:
+            continue
+        seen.add(card.id)
+        deduped.append(card)
+    return deduped
+
+
+def _block_title(block_type: str, tags: list[str], source_session: str | None) -> str:
+    if tags:
+        return f"{block_type} / {tags[0]}"
+    if source_session:
+        return f"{block_type} / {source_session[:12]}"
+    return f"{block_type} memory"
+
+
+def _task_use_now(task_mode: str, source_type: str, summary: str) -> str:
+    if task_mode == "lookup":
+        return f"直接提取可驗證資訊：{_clip(summary, 80)}"
+    if task_mode == "decide":
+        return f"把這張卡當成決策依據，先比對是否符合目前取捨。"
+    if task_mode == "reflect":
+        return f"把這張卡視為長期模式，再與其他證據交叉驗證。"
+    if source_type == "attitude":
+        return "延續這個偏好或工作原則，除非有新的明確反例。"
+    return f"把這張卡當作當前工作的直接上下文：{_clip(summary, 70)}"
+
+
+def _block_card(block, layer: str, task_mode: str, score: float | None = None) -> MemoryCard:
+    safe_content = sanitize_for_injection(block.content)
+    title = _block_title(block.block_type, block.tags or [], block.source_session)
+    why = "這是與查詢最接近的原始記憶區塊。"
+    if block.tags:
+        why = f"命中標籤 {', '.join(block.tags[:3])}，適合作為{layer}上下文。"
+    return MemoryCard(
+        id=f"{layer}:block:{block.id}",
+        title=title,
+        summary=_clip(safe_content, 180),
+        why_relevant=why,
+        use_now=_task_use_now(task_mode, "block", safe_content),
+        layer=layer,
+        source_type="block",
+        confidence=round(float(score if score is not None else block.confidence or 0.55), 3),
+        freshness=_freshness_label(block.created_at),
+        tags=list(block.tags or []),
+        evidence_refs=[
+            MemoryEvidenceRef(
+                kind="block",
+                ref_id=str(block.id),
+                title=title,
+                snippet=_clip(safe_content, 120),
+                score=round(float(score), 3) if score is not None else None,
+            )
+        ],
+    )
+
+
+def _attitude_card(attitude: dict, layer: str, task_mode: str) -> MemoryCard:
+    fact = sanitize_for_injection(attitude["fact"])
+    category = attitude.get("category", "preference")
+    title = f"偏好 / {category}"
+    return MemoryCard(
+        id=f"{layer}:attitude:{attitude.get('id', fact[:32])}",
+        title=title,
+        summary=_clip(fact, 180),
+        why_relevant="這是目前仍有效的工作偏好或做事原則。",
+        use_now=_task_use_now(task_mode, "attitude", fact),
+        layer=layer,
+        source_type="attitude",
+        confidence=round(float(attitude.get("score") or attitude.get("confidence") or 0.5), 3),
+        freshness=attitude.get("freshness"),
+        tags=[category],
+        evidence_refs=[
+            MemoryEvidenceRef(
+                kind="attitude",
+                ref_id=str(attitude.get("id", title)),
+                title=title,
+                snippet=_clip(fact, 120),
+                score=round(float(attitude.get("score") or 0.0), 3),
+            )
+        ],
+    )
+
+
+def _summary_card(summary, layer: str, task_mode: str) -> MemoryCard:
+    text = sanitize_for_injection(summary.summary)
+    key_findings = summary.key_findings or []
+    use_now = key_findings[0] if key_findings else _task_use_now(task_mode, "summary", text)
+    return MemoryCard(
+        id=f"{layer}:summary:{summary.id}",
+        title="聚合摘要",
+        summary=_clip(text, 180),
+        why_relevant="這是多筆記憶聚合後的較低負荷知識摘要。",
+        use_now=_clip(use_now, 120),
+        layer=layer,
+        source_type="summary",
+        confidence=0.72,
+        freshness=_freshness_label(summary.updated_at),
+        tags=list(summary.tags or []),
+        evidence_refs=[
+            MemoryEvidenceRef(
+                kind="summary",
+                ref_id=str(summary.id),
+                title="聚合摘要",
+                snippet=_clip(text, 120),
+            )
+        ],
+    )
+
+
+def _triple_card(triple, layer: str, task_mode: str) -> MemoryCard:
+    text = f"{triple.subject} --[{triple.predicate}]--> {triple.object}"
+    return MemoryCard(
+        id=f"{layer}:triple:{triple.id}",
+        title="知識關聯",
+        summary=_clip(text, 180),
+        why_relevant="這是可追溯的結構化知識關聯，適合慢想驗證。",
+        use_now=_task_use_now(task_mode, "triple", text),
+        layer=layer,
+        source_type="triple",
+        confidence=0.68,
+        freshness=_freshness_label(triple.updated_at),
+        tags=[triple.predicate],
+        evidence_refs=[
+            MemoryEvidenceRef(
+                kind="triple",
+                ref_id=str(triple.id),
+                title=triple.predicate,
+                snippet=_clip(text, 120),
+            )
+        ],
+    )
+
+
+async def _search_blocks(
+    db: AsyncSession,
+    space_id: str,
+    query: str,
+    top_k: int,
+) -> tuple[list, dict]:
+    embedding = await get_embedding(query, task_type="search_query")
+    if embedding:
+        qdrant_result = await memory_block_service.qdrant_search(
+            db,
+            space_id,
+            query,
+            embedding,
+            top_k=top_k,
+        )
+        if qdrant_result is not None:
+            results, meta = qdrant_result
+            return results, {"backend": meta.backend or "qdrant", "input_count": meta.input_count}
+
+        results, meta = await memory_block_service.semantic_search(
+            db,
+            space_id,
+            embedding,
+            top_k=top_k,
+            query=query,
+        )
+        return results, {"backend": meta.backend or "pgvector-fallback", "input_count": meta.input_count}
+
+    results = await memory_block_service.text_search(db, space_id, query, top_k=top_k)
+    return results, {"backend": "text", "input_count": len(results)}
+
+
+async def _working_cards(
+    db: AsyncSession,
+    space_id: str,
+    task_mode: str,
+    limit: int,
+    primary_results: list,
+) -> list[MemoryCard]:
+    recent_rows = []
+    if primary_results:
+        recent_rows = sorted(
+            [result.block for result in primary_results],
+            key=lambda block: block.created_at,
+            reverse=True,
+        )[:limit]
+    else:
+        q = (
+            select(MemoryBlock)
+            .where(
+                MemoryBlock.space_id == space_id,
+                MemoryBlock.deleted_at.is_(None),
+            )
+            .order_by(MemoryBlock.created_at.desc())
+            .limit(limit)
+        )
+        recent_rows = [memory_block_service.to_response(row) for row in (await db.execute(q)).scalars().all()]
+    return [_block_card(block, "working", task_mode) for block in recent_rows]
+
+
+async def _check_prefetch_cache(
+    space_id: str,
+    consumer: str,
+    task_mode: str,
+    query: str,
+    top_k: int,
+) -> tuple[list[MemoryCard] | None, float]:
+    """Check speculative prefetch cache. Returns (cards, check_ms) or (None, check_ms).
+
+    Cache hits are re-sanitized before returning (defense-in-depth).
+    """
+    _t_check = _time.monotonic()
+    from .query_router import classify_query
+
+    plan = classify_query(query)
+    fp = PrefetchFingerprint(
+        module="memvault",
+        space_id=space_id,
+        fields={
+            "consumer": consumer,
+            "task_mode": task_mode,
+            "intent": plan.intent.value,
+        },
+    )
+    cached = await _prefetch_cache.get(fp)
+    if not cached:
+        await _prefetch_cache.record_miss(space_id)
+        return None, (_time.monotonic() - _t_check) * 1000
+
+    # Re-sanitize cached cards (defense-in-depth, reviewer HIGH #4)
+    safe_cards = []
+    for c in cached:
+        c["summary"] = sanitize_for_injection(c.get("summary", ""))
+        c.setdefault("source", "speculative_prefetch")
+        safe_cards.append(
+            MemoryCard(**{k: v for k, v in c.items() if k in MemoryCard.model_fields})
+        )
+
+    check_ms = (_time.monotonic() - _t_check) * 1000
+    await _prefetch_cache.record_hit(space_id, latency_saved_ms=check_ms)
+    return safe_cards, check_ms
+
+
+def _merge_prefetch_cards(
+    existing: list[MemoryCard],
+    prefetched: list[MemoryCard],
+    budget: int,
+) -> list[MemoryCard]:
+    """Merge prefetch cards AFTER stable results. Dedup by ID, respect budget."""
+    seen = {c.id for c in existing}
+    merged = list(existing)
+    for c in prefetched:
+        if c.id not in seen and len(merged) < budget:
+            seen.add(c.id)
+            merged.append(c)
+    return merged
+
+
+async def run_memory_query(
+    db: AsyncSession,
+    space_id: str,
+    request: MemoryQueryRequest,
+) -> MemoryQueryResponse:
+    _t_start = _time.monotonic()
+    task_mode = _normalize(request.task_mode, _TASK_MODES, "build")
+    thinking_mode_requested = _normalize(request.thinking_mode, _THINKING_MODES, "auto")
+    load_budget = _normalize(request.load_budget, _LOAD_BUDGETS, "standard")
+    consumer = _normalize(request.consumer, _CONSUMERS, "human")
+    thinking_mode_used = choose_thinking_mode(
+        task_mode=task_mode,
+        thinking_mode=thinking_mode_requested,
+        load_budget=load_budget,
+        consumer=consumer,
+    )
+    budget = _budget_config(load_budget)
+
+    # Phase B2: Check speculative prefetch cache before expensive search
+    prefetch_hit, _prefetch_check_ms = await _check_prefetch_cache(
+        space_id, consumer, task_mode, request.q, request.top_k,
+    )
+
+    search_results, search_meta = await _search_blocks(
+        db,
+        space_id,
+        request.q,
+        top_k=max(request.top_k, budget["search_top_k"]),
+    )
+    fast_cards = [
+        _block_card(result.block, "fast", task_mode, result.score)
+        for result in search_results[: budget["fast"]]
+    ]
+
+    attitude_hits = await attitude_service.semantic_search(
+        db,
+        space_id,
+        request.q,
+        top_k=budget["attitudes"],
+    )
+    fast_cards.extend(_attitude_card(item, "fast", task_mode) for item in attitude_hits)
+    fast_cards = _unique_cards(fast_cards)[: request.top_k]
+
+    # Phase B2: Merge prefetch hits (after stable results, before working)
+    if prefetch_hit:
+        fast_cards = _merge_prefetch_cards(fast_cards, prefetch_hit, budget["fast"] + 2)
+
+    working_cards = await _working_cards(
+        db,
+        space_id,
+        task_mode,
+        limit=budget["working"],
+        primary_results=search_results,
+    )
+
+    deep_cards: list[MemoryCard] = []
+    layers_searched: list[str] = []
+    evaluation_verdict: str | None = None
+    if thinking_mode_used == "slow":
+        cascade = await cascade_recall_service.recall(
+            db,
+            space_id,
+            request.q,
+            top_k=budget["deep"],
+            evaluate="none",
+        )
+        deep_cards.extend(_summary_card(item, "deep", task_mode) for item in cascade.summaries)
+        deep_cards.extend(_triple_card(item, "deep", task_mode) for item in cascade.triples[: budget["deep"]])
+        deep_cards.extend(
+            _block_card(item, "deep", task_mode)
+            for item in cascade.blocks[: max(1, budget["deep"] // 2)]
+        )
+        deep_cards = _unique_cards(deep_cards)[: budget["deep"]]
+        layers_searched = cascade.layers_searched
+        evaluation_verdict = cascade.evaluation_verdict
+
+    strategy = MemoryQueryStrategy(
+        task_mode=task_mode,
+        thinking_mode_requested=thinking_mode_requested,
+        thinking_mode_used=thinking_mode_used,
+        load_budget=load_budget,
+        consumer=consumer,
+    )
+    highlights = [card.use_now for card in fast_cards[:2]]
+    if not highlights:
+        highlights = [card.summary for card in working_cards[:1]]
+
+    response = MemoryQueryResponse(
+        query=request.q,
+        strategy=strategy,
+        fast_cards=fast_cards,
+        working_cards=working_cards,
+        deep_cards=deep_cards,
+        highlights=highlights,
+        metadata={
+            "backend": search_meta["backend"],
+            "layers_searched": layers_searched,
+            "evaluation_verdict": evaluation_verdict,
+        },
+    )
+
+    # Slow Thinker: fire-and-forget query completion event
+    _t_end = _time.monotonic()
+    event_bus.publish_fire_and_forget(Event(
+        type=MemvaultEvents.QUERY_COMPLETED,
+        data={
+            "space_id": space_id,
+            "query": request.q,
+            "consumer": consumer,
+            "task_mode": task_mode,
+            "thinking_mode_used": thinking_mode_used,
+            "load_budget": load_budget,
+            "intent": "unknown",
+            "tags": [c.tags[0] for c in fast_cards[:3] if c.tags],
+            "result_count": len(fast_cards) + len(working_cards),
+            "latency_ms": round((_t_end - _t_start) * 1000, 1),
+        },
+        source="memvault",
+    ))
+
+    return response
+
+
+def build_injection_payload(response: MemoryQueryResponse) -> MemoryInjectResponse:
+    agent_cards = response.fast_cards[:3]
+    if not agent_cards:
+        agent_cards = response.working_cards[:2]
+    prompt_lines = ["[Memvault Fast Memory]"]
+    for idx, card in enumerate(agent_cards, start=1):
+        prompt_lines.append(f"{idx}. {card.title}: {card.summary}")
+        prompt_lines.append(f"   Use now: {card.use_now}")
+    decision_bias = [card.summary for card in response.fast_cards if card.source_type == "attitude"][:3]
+    working_context = [card.summary for card in response.working_cards[:3]]
+    return MemoryInjectResponse(
+        query=response.query,
+        strategy=response.strategy,
+        system_prompt_memory="\n".join(prompt_lines),
+        working_context=working_context,
+        decision_bias=decision_bias,
+        cards=agent_cards,
+        metadata=response.metadata,
+    )
+
+
+def build_inspect_payload(response: MemoryQueryResponse) -> MemoryInspectResponse:
+    raw_sections = {
+        "fast": [ref for card in response.fast_cards for ref in card.evidence_refs],
+        "working": [ref for card in response.working_cards for ref in card.evidence_refs],
+        "deep": [ref for card in response.deep_cards for ref in card.evidence_refs],
+    }
+    return MemoryInspectResponse(
+        query=response.query,
+        strategy=response.strategy,
+        cards=[*response.fast_cards, *response.working_cards, *response.deep_cards],
+        raw_sections=raw_sections,
+        metadata=response.metadata,
+    )
