@@ -46,3 +46,8 @@ from .reactive_adapters import (  # noqa: E402
 wire_memory_creation_flow()
 wire_capture_promotion_flow()
 wire_intelligence_digest_flow()
+
+# Flow 4: memvault.query.completed → Slow Thinker (shadow metrics)
+from .slow_thinker import wire_slow_thinker_flow  # noqa: E402
+
+wire_slow_thinker_flow()

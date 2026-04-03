@@ -118,6 +118,8 @@ class MemvaultEvents:
     ENTITY_MERGED = "memvault.entity.merged"
     REFLECTION_COMPLETED = "memvault.reflection.completed"
     KNOWLEDGE_CURATED = "memvault.knowledge.curated"
+    # Slow Thinker prefetch trigger
+    QUERY_COMPLETED = "memvault.query.completed"
 
 
 class SkillpathEvents:

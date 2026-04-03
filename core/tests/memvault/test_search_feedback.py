@@ -75,55 +75,60 @@ def _make_scored_dict(
 class TestFeedbackBoostStage:
     """Test the feedback_boost stage of ScoringPipeline in isolation."""
 
-    def _run_feedback_only(self, results: list[dict]) -> tuple[list[dict], Any]:
+    async def _run_feedback_only(self, results: list[dict]) -> tuple[list[dict], Any]:
         pipeline = ScoringPipeline(
             ScoringConfig(
                 stages_enabled=_minimal_stages(feedback_boost=True),
                 feedback_weight=0.15,
             )
         )
-        return pipeline.apply(results)
+        return await pipeline.apply(results)
 
-    def test_positive_feedback_increases_score(self):
+    @pytest.mark.asyncio
+    async def test_positive_feedback_increases_score(self):
         base_score = 0.8
         r = _make_scored_dict(score=base_score, feedback_net=3)
-        results, meta = self._run_feedback_only([r])
+        results, meta = await self._run_feedback_only([r])
         assert results[0]["score"] > base_score, (
             f"Expected score > {base_score}, got {results[0]['score']}"
         )
 
-    def test_negative_feedback_decreases_score(self):
+    @pytest.mark.asyncio
+    async def test_negative_feedback_decreases_score(self):
         base_score = 0.8
         r = _make_scored_dict(score=base_score, feedback_net=-3)
-        results, meta = self._run_feedback_only([r])
+        results, meta = await self._run_feedback_only([r])
         assert results[0]["score"] < base_score, (
             f"Expected score < {base_score}, got {results[0]['score']}"
         )
 
-    def test_zero_net_feedback_no_change(self):
+    @pytest.mark.asyncio
+    async def test_zero_net_feedback_no_change(self):
         base_score = 0.8
         r = _make_scored_dict(score=base_score, feedback_net=0)
-        results, meta = self._run_feedback_only([r])
+        results, meta = await self._run_feedback_only([r])
         assert results[0]["score"] == pytest.approx(base_score), (
             "Zero net feedback should not change score"
         )
 
-    def test_missing_feedback_net_treated_as_zero(self):
+    @pytest.mark.asyncio
+    async def test_missing_feedback_net_treated_as_zero(self):
         """If feedback_net key is absent (not injected), score must be unchanged."""
         base_score = 0.8
         r = _make_scored_dict(score=base_score)  # no feedback_net key
         assert "feedback_net" not in r, "Pre-condition: feedback_net must be absent"
-        results, meta = self._run_feedback_only([r])
+        results, meta = await self._run_feedback_only([r])
         assert results[0]["score"] == pytest.approx(base_score), (
             "Missing feedback_net should default to 0, no score change"
         )
 
-    def test_tanh_saturation_high_positive(self):
+    @pytest.mark.asyncio
+    async def test_tanh_saturation_high_positive(self):
         """±10 net signal should not be wildly different from ±5 — tanh saturates."""
         r_5 = _make_scored_dict(score=0.8, feedback_net=5)
         r_10 = _make_scored_dict(score=0.8, feedback_net=10)
-        results_5, _ = self._run_feedback_only([r_5])
-        results_10, _ = self._run_feedback_only([r_10])
+        results_5, _ = await self._run_feedback_only([r_5])
+        results_10, _ = await self._run_feedback_only([r_10])
         boost_5 = results_5[0]["score"] - 0.8
         boost_10 = results_10[0]["score"] - 0.8
         # Both positive; boost_10 slightly larger but saturating
@@ -134,12 +139,13 @@ class TestFeedbackBoostStage:
             f"Expected saturation: boost_5={boost_5:.4f}, boost_10={boost_10:.4f}"
         )
 
-    def test_tanh_saturation_high_negative(self):
+    @pytest.mark.asyncio
+    async def test_tanh_saturation_high_negative(self):
         """Same saturation test for negative signals."""
         r_neg5 = _make_scored_dict(score=0.8, feedback_net=-5)
         r_neg10 = _make_scored_dict(score=0.8, feedback_net=-10)
-        results_5, _ = self._run_feedback_only([r_neg5])
-        results_10, _ = self._run_feedback_only([r_neg10])
+        results_5, _ = await self._run_feedback_only([r_neg5])
+        results_10, _ = await self._run_feedback_only([r_neg10])
         penalty_5 = 0.8 - results_5[0]["score"]
         penalty_10 = 0.8 - results_10[0]["score"]
         assert penalty_5 > 0
@@ -148,58 +154,64 @@ class TestFeedbackBoostStage:
             f"Expected saturation: penalty_5={penalty_5:.4f}, penalty_10={penalty_10:.4f}"
         )
 
-    def test_formula_correctness(self):
+    @pytest.mark.asyncio
+    async def test_formula_correctness(self):
         """Verify exact formula: score *= 1 + weight * tanh(net / 3)."""
         net = 3
         weight = 0.15
         base = 0.8
         expected = base * (1.0 + weight * math.tanh(net / 3.0))
         r = _make_scored_dict(score=base, feedback_net=net)
-        results, _ = self._run_feedback_only([r])
+        results, _ = await self._run_feedback_only([r])
         assert results[0]["score"] == pytest.approx(expected, rel=1e-6), (
             f"Formula mismatch: expected {expected}, got {results[0]['score']}"
         )
 
-    def test_feedback_boost_in_stages_applied(self):
+    @pytest.mark.asyncio
+    async def test_feedback_boost_in_stages_applied(self):
         """feedback_boost must appear in metadata.stages_applied."""
         r = _make_scored_dict(score=0.8, feedback_net=2)
-        _, meta = self._run_feedback_only([r])
+        _, meta = await self._run_feedback_only([r])
         assert "feedback_boost" in meta.stages_applied, (
             f"stages_applied={meta.stages_applied} — feedback_boost missing"
         )
 
-    def test_feedback_boost_skipped_when_disabled(self):
+    @pytest.mark.asyncio
+    async def test_feedback_boost_skipped_when_disabled(self):
         """When feedback_boost is disabled, it must appear in stages_skipped."""
         pipeline = ScoringPipeline(
             ScoringConfig(stages_enabled=_minimal_stages(feedback_boost=False))
         )
         r = _make_scored_dict(score=0.8, feedback_net=5)
-        _, meta = pipeline.apply([r])
+        _, meta = await pipeline.apply([r])
         assert "feedback_boost" in meta.stages_skipped
         assert "feedback_boost" not in meta.stages_applied
 
-    def test_empty_results_no_crash(self):
+    @pytest.mark.asyncio
+    async def test_empty_results_no_crash(self):
         """Empty result list must not raise."""
-        results, meta = self._run_feedback_only([])
+        results, meta = await self._run_feedback_only([])
         assert results == []
         assert meta.input_count == 0
 
-    def test_multiple_results_independent(self):
+    @pytest.mark.asyncio
+    async def test_multiple_results_independent(self):
         """Each result's boost is computed independently."""
         r_pos = _make_scored_dict(score=0.8, feedback_net=5)
         r_neg = _make_scored_dict(score=0.8, feedback_net=-5)
         r_zero = _make_scored_dict(score=0.8, feedback_net=0)
-        results, _ = self._run_feedback_only([r_pos, r_neg, r_zero])
+        results, _ = await self._run_feedback_only([r_pos, r_neg, r_zero])
         scores = {d["feedback_net"]: d["score"] for d in results}
         assert scores[5] > scores[0] > scores[-5], f"Expected pos > zero > neg, got: {scores}"
 
-    def test_feedback_net_one_small_boost(self):
+    @pytest.mark.asyncio
+    async def test_feedback_net_one_small_boost(self):
         """Net=1 should give a measurable but modest boost."""
         base = 0.8
         weight = 0.15
         expected_multiplier = 1.0 + weight * math.tanh(1 / 3.0)
         r = _make_scored_dict(score=base, feedback_net=1)
-        results, _ = self._run_feedback_only([r])
+        results, _ = await self._run_feedback_only([r])
         assert results[0]["score"] == pytest.approx(base * expected_multiplier, rel=1e-6)
 
 
@@ -490,7 +502,8 @@ class TestSDKIntegration:
 class TestEdgeCases:
     """Edge cases for robustness."""
 
-    def test_feedback_net_none_handled_as_zero(self):
+    @pytest.mark.asyncio
+    async def test_feedback_net_none_handled_as_zero(self):
         """feedback_net=None must be treated as 0 — score unchanged, no crash.
 
         Bug fixed: original `if net == 0: continue` skipped None check, causing
@@ -504,7 +517,7 @@ class TestEdgeCases:
         pipeline = ScoringPipeline(
             ScoringConfig(stages_enabled=_minimal_stages(feedback_boost=True))
         )
-        results, meta = pipeline.apply([r])
+        results, meta = await pipeline.apply([r])
 
         # Must not crash, score must be unchanged (None treated as 0)
         assert math.isfinite(results[0]["score"]), "Score must be finite when feedback_net=None"
@@ -550,7 +563,8 @@ class TestEdgeCases:
             "SearchFeedback must have deleted_at column (via SpaceScopedModel)"
         )
 
-    def test_pipeline_exception_isolation(self):
+    @pytest.mark.asyncio
+    async def test_pipeline_exception_isolation(self):
         """If feedback_boost raises internally, it is caught and stage is skipped."""
         pipeline = ScoringPipeline(
             ScoringConfig(stages_enabled=_minimal_stages(feedback_boost=True))
@@ -559,19 +573,20 @@ class TestEdgeCases:
         r = _make_scored_dict(score=0.8)
         r["feedback_net"] = float("nan")  # NaN will propagate through tanh
         # Should not raise — _run_stage wraps in try/except
-        results, meta = pipeline.apply([r])
+        results, meta = await pipeline.apply([r])
         # Either feedback_boost was applied (with NaN propagation) or skipped
         # The key assertion: no unhandled exception
         assert len(results) >= 0  # reached here = no crash
 
-    def test_score_remains_finite_with_extreme_feedback(self):
+    @pytest.mark.asyncio
+    async def test_score_remains_finite_with_extreme_feedback(self):
         """Extreme but valid feedback signals should not produce inf/nan scores."""
         for net in [-100, -50, 50, 100]:
             r = _make_scored_dict(score=0.8, feedback_net=net)
             pipeline = ScoringPipeline(
                 ScoringConfig(stages_enabled=_minimal_stages(feedback_boost=True))
             )
-            results, _ = pipeline.apply([r])
+            results, _ = await pipeline.apply([r])
             assert math.isfinite(results[0]["score"]), (
                 f"Score became non-finite with feedback_net={net}"
             )
