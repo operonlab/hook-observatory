@@ -25,7 +25,7 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"AKIA[0-9A-Z]{16}"), "AWS Access Key"),
     (re.compile(r"gh[ps]_[A-Za-z0-9_]{36,}"), "GitHub Token"),
     (re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"), "Slack Token"),
-    (re.compile(r"-----BEGIN .* PRIVATE KEY-----"), "Private Key"),
+    (re.compile(r"-----BEGIN .* PRIVATE KEY-----"), "Private Key"),  # nosec
     (
         re.compile(
             r"(?:api[_-]?key|secret[_-]?key|access[_-]?token|password)"
