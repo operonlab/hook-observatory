@@ -100,6 +100,16 @@ async def capture_pane(target: str, lines: int = 150) -> str:
     return out or ""
 
 
+async def capture_pane_visible(target: str) -> str:
+    """Capture only visible content (no scrollback).
+
+    Use for alt-screen panes to get pure TUI content without
+    main buffer scrollback bleeding through.
+    """
+    out = await capture_async(target, start_line=0, escape_sequences=True)
+    return out or ""
+
+
 async def capture_pane_scrollback(target: str, lines: int = 5000) -> str:
     """Capture extended scrollback from main buffer.
 
