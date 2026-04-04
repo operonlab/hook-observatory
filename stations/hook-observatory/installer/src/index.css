@@ -11,9 +11,25 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 0;
+  }
+
+  html {
+    @apply bg-dark;
+  }
+
   body {
-    @apply bg-dark text-mocha-text overflow-hidden select-none;
+    @apply bg-dark text-mocha-text overflow-x-hidden select-none;
+    margin: 0;
     line-height: 1.6;
+  }
+
+  #root {
+    @apply flex min-h-0 flex-col;
   }
 }
 
