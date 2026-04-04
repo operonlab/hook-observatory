@@ -11,9 +11,10 @@ import json
 import os
 from datetime import datetime
 
-from .base import ALLOW, HOME, HookResult
+from .base import ALLOW, HookResult
+from .hook_config import cfg
 
-SPOOL_DIR = os.path.join(HOME, ".hook-observatory", "spool")
+SPOOL_DIR = os.path.expanduser(str(cfg.get("spool_dir", "~/.hook-observatory/spool")))
 SPOOL_FILE = os.path.join(SPOOL_DIR, "events.jsonl")
 
 

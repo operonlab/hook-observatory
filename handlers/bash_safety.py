@@ -12,6 +12,24 @@ import re
 
 from .base import ALLOW, HookResult, block
 
+# Cache pnpm-lock.yaml lookup (process-scoped — one dispatch per process)
+_pnpm_lock_cache: bool | None = None
+
+
+def _has_pnpm_lock() -> bool:
+    """Check if project uses pnpm by walking up from cwd."""
+    global _pnpm_lock_cache
+    if _pnpm_lock_cache is not None:
+        return _pnpm_lock_cache
+    cwd = os.getcwd()
+    while cwd != "/" and cwd != _HOME:
+        if os.path.exists(os.path.join(cwd, "pnpm-lock.yaml")):
+            _pnpm_lock_cache = True
+            return True
+        cwd = os.path.dirname(cwd)
+    _pnpm_lock_cache = False
+    return False
+
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     if tool_name != "Bash":
@@ -116,6 +134,14 @@ def _check_segment(cmd: str) -> str | None:
         return "npm publish"
     if re.search(r"\byarn\s+publish\b", cmd):
         return "yarn publish"
+    # Package manager lock — enforce pnpm when project uses it
+    if os.environ.get("PNPM_LOCK_DISABLE") != "1" and _has_pnpm_lock():
+        if re.search(r"\bnpm\s+(install|i|add|ci)\b", cmd):
+            return "npm install/add/ci blocked — use pnpm (set PNPM_LOCK_DISABLE=1 to override)"
+        if re.search(r"\byarn\s+(install|add)\b", cmd):
+            return "yarn install/add blocked — use pnpm (set PNPM_LOCK_DISABLE=1 to override)"
+        if re.fullmatch(r"\s*yarn\s*", cmd):
+            return "bare yarn blocked — use pnpm install (set PNPM_LOCK_DISABLE=1 to override)"
     if re.search(r"\bdocker\s+run\b.*--privileged\b", cmd):
         return "docker run --privileged"
     if re.search(r"\bgh\s+repo\s+delete\b", cmd):

@@ -1,19 +1,22 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import ChartTooltip from "./ChartTooltip.tsx";
 import type { TimelineBucket } from "../api/client.ts";
+import { useI18n } from "../i18n";
 
 interface Props {
   data: TimelineBucket[];
 }
 
 export default function TimelineChart({ data }: Props) {
+  const { t } = useI18n();
+
   if (!data.length) {
     return (
       <div
         className="flex h-[280px] items-center justify-center rounded-lg"
         style={{ backgroundColor: "#12121a", border: "1px solid rgba(255, 255, 255, 0.04)" }}
       >
-        <p className="text-xs text-white/20">尚無時間軸資料</p>
+        <p className="text-xs text-white/20">{t("chart.noTimelineData")}</p>
       </div>
     );
   }
@@ -33,7 +36,7 @@ export default function TimelineChart({ data }: Props) {
       className="rounded-lg p-5"
       style={{ backgroundColor: "#12121a", border: "1px solid rgba(255, 255, 255, 0.04)" }}
     >
-      <h3 className="text-xs text-white/30 mb-4">事件時間軸（7 天）</h3>
+      <h3 className="text-xs text-white/30 mb-4">{t("chart.timeline")}</h3>
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={formatted}>
           <defs>

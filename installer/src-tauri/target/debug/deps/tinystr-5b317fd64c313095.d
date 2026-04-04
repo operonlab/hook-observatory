@@ -1,0 +1,12 @@
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/tinystr-5b317fd64c313095.d: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/macros.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/ascii.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/asciibyte.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/error.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/int_ops.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/unvalidated.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/ule.rs
+
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/libtinystr-5b317fd64c313095.rmeta: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/macros.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/ascii.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/asciibyte.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/error.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/int_ops.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/unvalidated.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/ule.rs
+
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/lib.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/macros.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/ascii.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/asciibyte.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/error.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/int_ops.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/unvalidated.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tinystr-0.8.3/src/ule.rs:

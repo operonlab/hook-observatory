@@ -2,8 +2,20 @@ import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
 import AuthGuard from "./components/AuthGuard.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Events from "./pages/Events.tsx";
+import { useI18n } from "./i18n";
+import I18nProvider from "./i18n/I18nProvider";
 
 export default function App() {
+  return (
+    <I18nProvider>
+      <AppInner />
+    </I18nProvider>
+  );
+}
+
+function AppInner() {
+  const { t, locale, setLocale } = useI18n();
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-surface-0">
@@ -18,11 +30,17 @@ export default function App() {
         >
           <div className="flex items-center gap-3">
             <span className="text-lg">📡</span>
-            <span className="text-sm font-medium text-white/80">Hook Observatory</span>
+            <span className="text-sm font-medium text-white/80">{t("app.title")}</span>
           </div>
-          <nav className="flex gap-4">
-            <NavLink to="/">Dashboard</NavLink>
-            <NavLink to="/events">Events</NavLink>
+          <nav className="flex gap-4 items-center">
+            <NavLink to="/">{t("app.nav.dashboard")}</NavLink>
+            <NavLink to="/events">{t("app.nav.events")}</NavLink>
+            <button
+              onClick={() => setLocale(locale === "en" ? "zh-TW" : "en")}
+              className="text-xs text-white/40 hover:text-white/70 transition-colors"
+            >
+              {locale === "en" ? "中文" : "EN"}
+            </button>
           </nav>
         </header>
 

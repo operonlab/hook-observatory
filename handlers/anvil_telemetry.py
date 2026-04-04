@@ -24,9 +24,15 @@ import urllib.error
 import urllib.request
 
 from .base import ALLOW, HookResult, run_background
+from .hook_config import get_path, get_service
 
-ANVIL_API = os.environ.get("ANVIL_API", "http://127.0.0.1:10301")
-SPOOL_DIR = os.path.join(os.path.expanduser("~"), ".claude", "data", "anvil-telemetry")
+ANVIL_API = os.environ.get("ANVIL_API", get_service("anvil_url"))
+_spool_dir_from_config = get_path("data_dir")
+SPOOL_DIR = (
+    os.path.join(_spool_dir_from_config, "anvil-telemetry")
+    if _spool_dir_from_config
+    else os.path.join(os.path.expanduser("~"), ".claude", "data", "anvil-telemetry")
+)
 SPOOL_FILE = os.path.join(SPOOL_DIR, "pending.jsonl")
 
 # ---------------------------------------------------------------------------

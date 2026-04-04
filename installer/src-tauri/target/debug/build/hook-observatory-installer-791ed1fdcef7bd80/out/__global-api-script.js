@@ -1,0 +1,1 @@
+["/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tauri-2.10.3/scripts/bundle.global.js","/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/tauri-plugin-shell-2.3.5/api-iife.js"]

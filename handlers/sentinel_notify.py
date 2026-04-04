@@ -17,8 +17,9 @@ import os
 import re
 
 from .base import ALLOW, HookResult, run_background
+from .hook_config import get_service
 
-_SENTINEL_BASE = "http://127.0.0.1:4101/api/sentinel"
+_SENTINEL_BASE = get_service("sentinel_url")
 
 # Patterns: (regex, service_hint)
 PATTERNS: list[tuple[re.Pattern, str]] = [

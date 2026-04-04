@@ -13,9 +13,10 @@ import json
 import os
 from datetime import UTC, datetime
 
-from .base import ALLOW, HOME, HookResult
+from .base import ALLOW, HookResult
+from .hook_config import get_path
 
-DATA_DIR = os.path.join(HOME, ".claude", "data", "session-cost")
+DATA_DIR = os.path.join(get_path("data_dir"), "session-cost")
 SESSIONS_FILE = os.path.join(DATA_DIR, "sessions.jsonl")
 
 # Per-process counter: session_id → response_index

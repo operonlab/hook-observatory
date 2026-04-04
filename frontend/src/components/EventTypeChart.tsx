@@ -1,6 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import ChartTooltip from "./ChartTooltip.tsx";
 import type { EventTypeStats } from "../api/client.ts";
+import { useI18n } from "../i18n";
 
 const COLORS = ["#89b4fa", "#a6e3a1", "#cba6f7", "#f9e2af", "#fab387", "#f38ba8", "#94e2d5", "#eba0ac", "#74c7ec"];
 
@@ -9,8 +10,10 @@ interface Props {
 }
 
 export default function EventTypeChart({ data }: Props) {
+  const { t } = useI18n();
+
   if (!data.length) {
-    return <EmptyState />;
+    return <EmptyState text={t("chart.noEventData")} />;
   }
 
   return (
@@ -18,7 +21,7 @@ export default function EventTypeChart({ data }: Props) {
       className="rounded-lg p-5"
       style={{ backgroundColor: "#12121a", border: "1px solid rgba(255, 255, 255, 0.04)" }}
     >
-      <h3 className="text-xs text-white/30 mb-4">事件類型分佈</h3>
+      <h3 className="text-xs text-white/30 mb-4">{t("chart.eventTypes")}</h3>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} layout="vertical" margin={{ left: 20 }}>
           <XAxis type="number" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -42,13 +45,13 @@ export default function EventTypeChart({ data }: Props) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ text }: { text: string }) {
   return (
     <div
       className="flex h-[280px] items-center justify-center rounded-lg"
       style={{ backgroundColor: "#12121a", border: "1px solid rgba(255, 255, 255, 0.04)" }}
     >
-      <p className="text-xs text-white/20">尚無事件資料</p>
+      <p className="text-xs text-white/20">{text}</p>
     </div>
   );
 }

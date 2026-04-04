@@ -1,0 +1,12 @@
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/cookie-200a871a1d499772.d: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/builder.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/parse.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/jar.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/delta.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/same_site.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/expiration.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/prefix.rs
+
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/libcookie-200a871a1d499772.rmeta: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/builder.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/parse.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/jar.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/delta.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/same_site.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/expiration.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/prefix.rs
+
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/lib.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/builder.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/parse.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/jar.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/delta.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/same_site.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/expiration.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/cookie-0.18.1/src/prefix.rs:
