@@ -26,6 +26,9 @@
   <a href="https://github.com/operonlab/hook-observatory/stargazers">
     <img alt="Stars" src="https://img.shields.io/github/stars/operonlab/hook-observatory?style=flat-square">
   </a>
+  <a href="https://deepwiki.com/operonlab/hook-observatory">
+    <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg">
+  </a>
 </p>
 
 A centralized, configurable hook handler framework for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Replaces scattered shell scripts with a single Python dispatcher, 34 handler modules, and YAML-based configuration.
