@@ -30,6 +30,9 @@ window.tmuxState = {
   autoRelay: false,
 };
 
+// Per-pane history scroll state
+const _historyState = {};  // paneId → {active: bool, offset: int}
+
 // ========================================================================
 // 2. DOM Refs
 // ========================================================================
@@ -534,6 +537,57 @@ function buildPaneEl(p) {
   let scrolledByUser = false;
   term.addEventListener('scroll', () => { scrolledByUser = (term.scrollHeight - term.scrollTop - term.clientHeight) > 60; });
 
+  // History scroll for alt-screen panes (Claude Code, vim, htop, etc.)
+  let _lastScrollTime = 0;
+  term.addEventListener('wheel', (e) => {
+    const now = Date.now();
+    if (now - _lastScrollTime < 200) return;  // Throttle
+    const info = S.paneInfo[p.id];
+    const isAlt = info && info.alternate_on;
+    const hs = _historyState[p.id] || { active: false, offset: 0 };
+
+    if (hs.active) {
+      e.preventDefault();
+      _lastScrollTime = now;
+      if (e.deltaY < 0) {
+        hs.offset++;
+      } else {
+        hs.offset = Math.max(0, hs.offset - 1);
+        if (hs.offset === 0) {
+          hs.active = false;
+          _historyState[p.id] = hs;
+          window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'down' });
+          return;
+        }
+      }
+      _historyState[p.id] = hs;
+      window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'up', offset: hs.offset });
+    } else if (isAlt && e.deltaY < 0) {
+      e.preventDefault();
+      _lastScrollTime = now;
+      hs.active = true;
+      hs.offset = 0;
+      _historyState[p.id] = hs;
+      window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'up', offset: 0 });
+    } else if (!isAlt && term.scrollTop <= 0 && e.deltaY < 0) {
+      e.preventDefault();
+      _lastScrollTime = now;
+      hs.active = true;
+      hs.offset = 0;
+      _historyState[p.id] = hs;
+      window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'up', offset: 0 });
+    }
+  }, { passive: false });
+
+  // Escape exits history mode
+  box.setAttribute('tabindex', '-1');
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _historyState[p.id]?.active) {
+      _historyState[p.id] = { active: false, offset: 0 };
+      window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'down' });
+    }
+  });
+
   box.addEventListener('click', () => setFocus(p.id));
 
   S.paneEls[p.id] = { box, terminal: term, scrolledByUser: () => scrolledByUser, resetScroll: () => { scrolledByUser = false; } };
@@ -841,6 +895,8 @@ window.tmuxWs = (function() {
         renderPanes(data.panes);
       } else if (data.type === 'output') {
         for (const [paneId, content] of Object.entries(data.panes)) {
+          // Skip live update if in history mode
+          if (_historyState[paneId]?.active) continue;
           const pe = S.paneEls[paneId];
           if (!pe) continue;
           // Skip update if user is selecting text in this terminal
@@ -852,6 +908,28 @@ window.tmuxWs = (function() {
             requestAnimationFrame(() => { requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; }); });
           }
         }
+        // Update alt-screen state from server
+        if (data.alt) {
+          for (const [pid, altOn] of Object.entries(data.alt)) {
+            if (S.paneInfo[pid]) S.paneInfo[pid].alternate_on = altOn;
+          }
+        }
+      } else if (data.type === 'scroll_history') {
+        const pe = S.paneEls[data.pane];
+        if (!pe) return;
+        const histHtml = ansiToHtml(data.content);
+        const lines = histHtml.split('\n');
+        const timeStr = data.ts ? new Date(data.ts * 1000).toLocaleTimeString() : '';
+        const sourceLabel = data.source === 'snapshot'
+          ? `Snapshot ${data.offset + 1}/${data.total}${timeStr ? ' \u2014 ' + timeStr : ''}`
+          : 'Scrollback History';
+        pe.terminal.innerHTML =
+          '<div class="history-bar">' +
+            '<span class="history-label">' + esc(sourceLabel) + '</span>' +
+            '<span class="history-hint">scroll \u2193 to return to live</span>' +
+          '</div>' +
+          lines.map(l => '<div class="term-line hist-line">' + (l || '\u200b') + '</div>').join('');
+        pe.terminal.scrollTop = pe.terminal.scrollHeight;
       } else if (data.type === 'windows') {
         renderWindowTabs(data.windows, data.active);
       } else if (data.type === 'metrics') {

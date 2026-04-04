@@ -26,8 +26,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
+from pane_history import PaneSnapshotStore
 from tmux_manager import (
     capture_pane,
+    capture_pane_scrollback,
     kill_window,
     list_panes,
     list_sessions,
@@ -90,6 +92,7 @@ RELAY_SH = RELAY_SCRIPTS_DIR / "relay.sh"
 _active_connections: dict[str, int] = {}  # session -> connection count
 _ws_clients: set[WebSocket] = set()
 _tts_store: dict = {}  # {"id": str, "data": bytes, "text": str}
+_snapshot_store = PaneSnapshotStore(max_snapshots=200)
 
 # Note: disconnect layout reset removed — fitPane no longer resizes tmux panes,
 # so there's nothing to reset on disconnect.
@@ -599,16 +602,26 @@ async def ws_handler(websocket: WebSocket):
                         last_contents.pop(gone, None)
 
                 updates = {}
+                alt_states = {}
                 for p in vis:
                     target = f"{session}:{p['id']}"
                     content = await capture_pane(target, capture_lines)
+                    alt_on = p.get("alternate_on", 0)
+                    alt_states[p["id"]] = alt_on
                     if content != last_contents.get(p["id"]):
                         last_contents[p["id"]] = content
                         updates[p["id"]] = content
+                    # Store snapshot for alt-screen panes (deduplicated)
+                    if alt_on and content:
+                        _snapshot_store.add(p["id"], content)
 
                 if updates:
                     await asyncio.wait_for(
-                        websocket.send_json({"type": "output", "panes": updates}),
+                        websocket.send_json({
+                            "type": "output",
+                            "panes": updates,
+                            "alt": alt_states,
+                        }),
                         timeout=5.0,
                     )
 
@@ -837,6 +850,48 @@ async def ws_handler(websocket: WebSocket):
             elif action == "refresh_panes":
                 panes = await list_panes(session)
                 await websocket.send_json({"type": "panes", "panes": visible_panes(panes)})
+
+            elif action == "scroll":
+                direction = data.get("direction", "up")
+                offset = data.get("offset", 0)
+                cur_panes = await list_panes(session)
+                pane_info_item = next(
+                    (p for p in cur_panes if p["id"] == pane_id), None
+                )
+                is_alt = pane_info_item and pane_info_item.get("alternate_on", 0)
+
+                if direction == "up":
+                    snap_total = _snapshot_store.total(pane_id)
+                    if is_alt and offset < snap_total:
+                        snap = _snapshot_store.get(pane_id, offset)
+                        if snap:
+                            await websocket.send_json({
+                                "type": "scroll_history",
+                                "pane": pane_id,
+                                "content": snap.content,
+                                "offset": offset,
+                                "total": snap_total,
+                                "ts": snap.timestamp,
+                                "source": "snapshot",
+                            })
+                    else:
+                        content = await capture_pane_scrollback(target, 5000)
+                        await websocket.send_json({
+                            "type": "scroll_history",
+                            "pane": pane_id,
+                            "content": content,
+                            "offset": offset,
+                            "total": (snap_total + 1) if is_alt else 1,
+                            "source": "scrollback",
+                        })
+                else:
+                    # direction == "down" → return to live view
+                    content = await capture_pane(target, capture_lines)
+                    last_contents[pane_id] = content
+                    await websocket.send_json({
+                        "type": "output",
+                        "panes": {pane_id: content},
+                    })
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for session '%s'", session)
