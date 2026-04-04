@@ -26,6 +26,9 @@
   <a href="https://github.com/operonlab/hook-observatory/stargazers">
     <img alt="Stars" src="https://img.shields.io/github/stars/operonlab/hook-observatory?style=flat-square">
   </a>
+  <a href="https://deepwiki.com/operonlab/hook-observatory">
+    <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg">
+  </a>
 </p>
 
 Claude Code 的集中式 hook handler 框架。
