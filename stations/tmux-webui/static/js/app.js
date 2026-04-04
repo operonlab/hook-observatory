@@ -534,6 +534,52 @@ function buildPaneEl(p) {
   let scrolledByUser = false;
   term.addEventListener('scroll', () => { scrolledByUser = (term.scrollHeight - term.scrollTop - term.clientHeight) > 60; });
 
+  // Forward scroll to tmux history (wheel + touch)
+  let scrollThrottled = false;
+  let historyOffset = 0;
+  let inHistoryMode = false;
+
+  function doScroll(direction) {
+    if (scrollThrottled) return;
+    scrollThrottled = true;
+    if (direction === 'up') {
+      historyOffset += 50;
+      inHistoryMode = true;
+      scrolledByUser = true;
+      window.tmuxWs.send({ type: 'scroll', pane: p.id, direction: 'up', offset: historyOffset, limit: 50 });
+    } else {
+      historyOffset = Math.max(0, historyOffset - 50);
+      if (historyOffset === 0) {
+        inHistoryMode = false;
+        scrolledByUser = false;
+        window.tmuxWs.send({ type: 'scroll', pane: p.id, direction: 'down' });
+      } else {
+        window.tmuxWs.send({ type: 'scroll', pane: p.id, direction: 'up', offset: historyOffset, limit: 50 });
+      }
+    }
+    setTimeout(() => { scrollThrottled = false; }, 150);
+  }
+
+  term.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    doScroll(e.deltaY < 0 ? 'up' : 'down');
+  }, { passive: false });
+
+  // Touch support
+  let touchStartY = 0;
+  term.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  term.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1) return;
+    const dy = touchStartY - e.touches[0].clientY;
+    if (Math.abs(dy) > 30) {
+      e.preventDefault();
+      doScroll(dy > 0 ? 'down' : 'up');
+      touchStartY = e.touches[0].clientY;
+    }
+  }, { passive: false });
+
   box.addEventListener('click', () => setFocus(p.id));
 
   S.paneEls[p.id] = { box, terminal: term, scrolledByUser: () => scrolledByUser, resetScroll: () => { scrolledByUser = false; } };
@@ -851,6 +897,13 @@ window.tmuxWs = (function() {
             const t = pe.terminal;
             requestAnimationFrame(() => { requestAnimationFrame(() => { t.scrollTop = t.scrollHeight; }); });
           }
+        }
+      } else if (data.type === 'scroll_history') {
+        const pe = S.paneEls[data.pane];
+        if (pe) {
+          const historyHtml = data.lines.map(l => '<div class="term-line hist-line">' + esc(l || '\u200b') + '</div>').join('');
+          pe.terminal.innerHTML = historyHtml + '<div class="term-line" style="color:var(--subtext-1);text-align:center;padding:4px 0;">── History: ' + data.total + ' lines ──</div>';
+          pe.terminal.scrollTop = 0;
         }
       } else if (data.type === 'windows') {
         renderWindowTabs(data.windows, data.active);
