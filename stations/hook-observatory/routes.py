@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import aiofiles
 from auth import require_auth
-from database import get_session
+from database import IS_POSTGRES, get_session
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from models import HookEvent
@@ -29,6 +29,33 @@ from config import config
 
 router = APIRouter()
 
+# ── SQL helpers ──────────────────────────────────────────────────
+
+_T = "hook_observatory.events" if IS_POSTGRES else "events"
+
+
+def _count_filter(condition: str) -> str:
+    """COUNT with filter — PostgreSQL FILTER vs SQLite CASE."""
+    if IS_POSTGRES:
+        return f"COUNT(*) FILTER (WHERE {condition})"
+    return f"SUM(CASE WHEN {condition} THEN 1 ELSE 0 END)"
+
+
+def _recent_condition(hours: int = 24) -> str:
+    """WHERE clause for recent events."""
+    if IS_POSTGRES:
+        return f"created_at > now() - interval '{hours} hours'"
+    cutoff = (datetime.now(UTC) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S")
+    return f"created_at > '{cutoff}'"
+
+
+def _date_trunc(granularity: str, column: str) -> str:
+    """date_trunc for PostgreSQL, strftime for SQLite."""
+    if IS_POSTGRES:
+        return f"date_trunc('{granularity}', {column})"
+    fmt_map = {"hour": "%Y-%m-%d %H:00:00", "day": "%Y-%m-%d", "minute": "%Y-%m-%d %H:%M:00"}
+    return f"strftime('{fmt_map.get(granularity, '%Y-%m-%d %H:00:00')}', {column})"
+
 
 # ──────────────────────────────────────────────
 # Public endpoints (localhost only, no auth)
@@ -37,10 +64,7 @@ router = APIRouter()
 
 @router.post("/api/events", status_code=202)
 async def ingest_event(request: Request):
-    """Accept event → write to spool → 202 Accepted.
-
-    Does NOT write to DB directly. Spool drainer handles persistence.
-    """
+    """Accept event → write to spool → 202 Accepted."""
     try:
         body = await request.json()
     except Exception:
@@ -66,7 +90,7 @@ async def health():
     return HealthResponse(
         status="ok",
         spool_dir=str(config.spool_dir),
-        total_events_processed=0,  # kept for API compat, real count from /api/stats/summary
+        total_events_processed=0,
         pending_files=len(spool_files),
     )
 
@@ -76,23 +100,86 @@ async def health():
 # ──────────────────────────────────────────────
 
 
+def _summary_sql() -> str:
+    today_filter = _count_filter(_recent_condition(24))
+    return f"""
+        SELECT COUNT(*) AS total,
+            {today_filter} AS today,
+            COUNT(DISTINCT session_id) AS unique_sessions
+        FROM {_T}
+    """
+
+
+def _by_event_sql() -> str:
+    today_filter = _count_filter(_recent_condition(24))
+    return f"""
+        SELECT event_type, COUNT(*) AS count, {today_filter} AS today
+        FROM {_T}
+        GROUP BY event_type ORDER BY count DESC
+    """
+
+
+def _by_tool_sql() -> str:
+    return f"""
+        SELECT tool_name, COUNT(*) AS count
+        FROM {_T}
+        WHERE tool_name IS NOT NULL
+        GROUP BY tool_name ORDER BY count DESC
+        LIMIT :limit
+    """
+
+
+def _by_session_sql() -> str:
+    return f"""
+        SELECT session_id, COUNT(*) AS event_count,
+            MIN(created_at) AS first_seen, MAX(created_at) AS last_seen
+        FROM {_T}
+        WHERE session_id IS NOT NULL
+        GROUP BY session_id
+        ORDER BY last_seen DESC
+        LIMIT :limit
+    """
+
+
+def _timeline_sql(granularity: str, days: int, hours: int, mins: int) -> tuple[str, dict]:
+    bucket_expr = _date_trunc(granularity, "created_at")
+    if IS_POSTGRES:
+        return (
+            f"""
+            SELECT {bucket_expr} AS bucket, COUNT(*) AS count
+            FROM {_T}
+            WHERE created_at > now() - make_interval(
+                days => :days, hours => :hours, mins => :mins
+            )
+            GROUP BY bucket ORDER BY bucket
+            """,
+            {"days": days, "hours": hours, "mins": mins},
+        )
+    else:
+        cutoff = (datetime.now(UTC) - timedelta(days=days, hours=hours, minutes=mins)).strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+        return (
+            f"""
+            SELECT {bucket_expr} AS bucket, COUNT(*) AS count
+            FROM {_T}
+            WHERE created_at > :cutoff
+            GROUP BY bucket ORDER BY bucket
+            """,
+            {"cutoff": cutoff},
+        )
+
+
 @router.get("/api/stats/summary")
 async def stats_summary(
     db: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_auth),
 ) -> SummaryStats:
-    """Summary stats: total events, today count, unique sessions."""
-    result = await db.execute(
-        text("""
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS today,
-                COUNT(DISTINCT session_id) AS unique_sessions
-            FROM hook_observatory.events
-        """)
-    )
+    result = await db.execute(text(_summary_sql()))
     row = result.one()
-    return SummaryStats(total=row.total, today=row.today, unique_sessions=row.unique_sessions)
+    return SummaryStats(
+        total=row.total, today=int(row.today or 0), unique_sessions=row.unique_sessions
+    )
 
 
 @router.get("/api/stats/all")
@@ -100,62 +187,21 @@ async def stats_all(
     db: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_auth),
 ) -> AllStats:
-    """All dashboard stats in a single request."""
-    # Run all queries concurrently via a single DB session
-    summary_r, event_r, tool_r, session_r, timeline_r = (
-        await db.execute(
-            text("""
-                SELECT
-                    COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS today,
-                    COUNT(DISTINCT session_id) AS unique_sessions
-                FROM hook_observatory.events
-            """)
-        ),
-        await db.execute(
-            text("""
-                SELECT event_type, COUNT(*) AS count,
-                    COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS today
-                FROM hook_observatory.events
-                GROUP BY event_type ORDER BY count DESC
-            """)
-        ),
-        await db.execute(
-            text("""
-                SELECT tool_name, COUNT(*) AS count
-                FROM hook_observatory.events
-                WHERE tool_name IS NOT NULL
-                GROUP BY tool_name ORDER BY count DESC
-                LIMIT 20
-            """)
-        ),
-        await db.execute(
-            text("""
-                SELECT session_id, COUNT(*) AS event_count,
-                    MIN(created_at) AS first_seen, MAX(created_at) AS last_seen
-                FROM hook_observatory.events
-                WHERE session_id IS NOT NULL
-                GROUP BY session_id
-                ORDER BY last_seen DESC
-                LIMIT 20
-            """)
-        ),
-        await db.execute(
-            text("""
-                SELECT date_trunc('hour', created_at) AS bucket,
-                    COUNT(*) AS count
-                FROM hook_observatory.events
-                WHERE created_at > now() - interval '7 days'
-                GROUP BY bucket ORDER BY bucket
-            """)
-        ),
-    )
+    summary_r = await db.execute(text(_summary_sql()))
+    event_r = await db.execute(text(_by_event_sql()))
+    tool_r = await db.execute(text(_by_tool_sql()), {"limit": 20})
+    session_r = await db.execute(text(_by_session_sql()), {"limit": 20})
+
+    tl_sql, tl_params = _timeline_sql("hour", days=7, hours=0, mins=0)
+    timeline_r = await db.execute(text(tl_sql), tl_params)
 
     row = summary_r.one()
     return AllStats(
-        summary=SummaryStats(total=row.total, today=row.today, unique_sessions=row.unique_sessions),
+        summary=SummaryStats(
+            total=row.total, today=int(row.today or 0), unique_sessions=row.unique_sessions
+        ),
         by_event=[
-            EventTypeStats(event_type=r.event_type, count=r.count, today=r.today)
+            EventTypeStats(event_type=r.event_type, count=r.count, today=int(r.today or 0))
             for r in event_r.all()
         ],
         by_tool=[ToolStats(tool_name=r.tool_name, count=r.count) for r in tool_r.all()],
@@ -177,17 +223,10 @@ async def stats_by_event(
     db: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_auth),
 ) -> list[EventTypeStats]:
-    """Event count grouped by event_type."""
-    result = await db.execute(
-        text("""
-            SELECT event_type, COUNT(*) AS count,
-                COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS today
-            FROM hook_observatory.events
-            GROUP BY event_type ORDER BY count DESC
-        """)
-    )
+    result = await db.execute(text(_by_event_sql()))
     return [
-        EventTypeStats(event_type=r.event_type, count=r.count, today=r.today) for r in result.all()
+        EventTypeStats(event_type=r.event_type, count=r.count, today=int(r.today or 0))
+        for r in result.all()
     ]
 
 
@@ -197,17 +236,7 @@ async def stats_by_tool(
     db: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_auth),
 ) -> list[ToolStats]:
-    """Tool usage ranking."""
-    result = await db.execute(
-        text("""
-            SELECT tool_name, COUNT(*) AS count
-            FROM hook_observatory.events
-            WHERE tool_name IS NOT NULL
-            GROUP BY tool_name ORDER BY count DESC
-            LIMIT :limit
-        """),
-        {"limit": limit},
-    )
+    result = await db.execute(text(_by_tool_sql()), {"limit": limit})
     return [ToolStats(tool_name=r.tool_name, count=r.count) for r in result.all()]
 
 
@@ -217,19 +246,7 @@ async def stats_by_session(
     db: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_auth),
 ) -> list[SessionStats]:
-    """Recent sessions with event counts."""
-    result = await db.execute(
-        text("""
-            SELECT session_id, COUNT(*) AS event_count,
-                MIN(created_at) AS first_seen, MAX(created_at) AS last_seen
-            FROM hook_observatory.events
-            WHERE session_id IS NOT NULL
-            GROUP BY session_id
-            ORDER BY last_seen DESC
-            LIMIT :limit
-        """),
-        {"limit": limit},
-    )
+    result = await db.execute(text(_by_session_sql()), {"limit": limit})
     return [
         SessionStats(
             session_id=r.session_id,
@@ -248,29 +265,14 @@ async def stats_timeline(
     db: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_auth),
 ) -> list[TimelineBucket]:
-    """Time-series event counts in buckets."""
-    # Parse range (e.g. "7d", "24h", "60m").
-    # Input is already validated by Query(pattern=r"^\d+[dhm]$"),
-    # but we use make_interval() with named parameters to fully
-    # eliminate f-string interpolation of user-supplied values.
     amount = int(range[:-1])
-    unit_key = range[-1]  # one of d / h / m
+    unit_key = range[-1]
     days = amount if unit_key == "d" else 0
     hours = amount if unit_key == "h" else 0
     mins = amount if unit_key == "m" else 0
 
-    result = await db.execute(
-        text("""
-            SELECT date_trunc(:granularity, created_at) AS bucket,
-                COUNT(*) AS count
-            FROM hook_observatory.events
-            WHERE created_at > now() - make_interval(
-                days => :days, hours => :hours, mins => :mins
-            )
-            GROUP BY bucket ORDER BY bucket
-        """),
-        {"granularity": granularity, "days": days, "hours": hours, "mins": mins},
-    )
+    tl_sql, tl_params = _timeline_sql(granularity, days, hours, mins)
+    result = await db.execute(text(tl_sql), tl_params)
     return [TimelineBucket(bucket=r.bucket, count=r.count) for r in result.all()]
 
 

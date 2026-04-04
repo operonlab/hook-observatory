@@ -5,6 +5,12 @@ frontend/node_modules/
 frontend/dist/
 .playwright-cli/
 
+# Installer build artifacts
+installer/node_modules/
+installer/dist/
+installer/src-tauri/target/
+installer/src-tauri/gen/schemas/
+
 # User config (copy config.example.yaml → config.yaml)
 config.yaml
 config.local.yaml

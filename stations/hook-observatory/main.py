@@ -5,14 +5,13 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from database import async_session, engine
+from database import IS_POSTGRES, async_session, engine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from models import Base, HookEvent
 from spool import SpoolDrainer
 from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from config import config
 from routes import router
@@ -34,33 +33,65 @@ def _strip_null(obj):
     return obj
 
 
-async def _batch_write_events(events: list[dict]) -> None:
-    """Write a batch of events to PostgreSQL. ON CONFLICT DO NOTHING for idempotency."""
+def _build_rows(events: list[dict]) -> list[dict]:
+    """Convert raw spool events to DB row dicts."""
+    rows = []
+    for evt in events:
+        data = _strip_null(evt.get("data", {})) if IS_POSTGRES else evt.get("data", {})
+        rows.append(
+            {
+                "event_type": evt.get("event_type", "unknown"),
+                "session_id": data.get("session_id"),
+                "cwd": data.get("cwd"),
+                "tool_name": data.get("tool_name"),
+                "hook_name": data.get("hook_name"),
+                "payload": data,
+                "dedup_hash": evt.get("_dedup_hash", ""),
+            }
+        )
+    return rows
+
+
+async def _batch_write_pg(events: list[dict]) -> None:
+    """PostgreSQL: bulk INSERT ... ON CONFLICT DO NOTHING."""
     import asyncio
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     if not events:
         return
-
     async with async_session() as session:
-        rows = []
-        for evt in events:
-            data = _strip_null(evt.get("data", {}))
-            rows.append(
-                {
-                    "event_type": evt.get("event_type", "unknown"),
-                    "session_id": data.get("session_id"),
-                    "cwd": data.get("cwd"),
-                    "tool_name": data.get("tool_name"),
-                    "hook_name": data.get("hook_name"),
-                    "payload": data,
-                    "dedup_hash": evt.get("_dedup_hash", ""),
-                }
-            )
-
-        stmt = pg_insert(HookEvent).values(rows)
+        stmt = pg_insert(HookEvent).values(_build_rows(events))
         stmt = stmt.on_conflict_do_nothing(index_elements=["dedup_hash"])
         await asyncio.wait_for(session.execute(stmt), timeout=30)
         await asyncio.wait_for(session.commit(), timeout=30)
+
+
+async def _batch_write_sqlite(events: list[dict]) -> None:
+    """SQLite: INSERT OR IGNORE (dedup via unique index)."""
+    import asyncio
+
+    from sqlalchemy import insert
+
+    if not events:
+        return
+    async with async_session() as session:
+        rows = _build_rows(events)
+        # Add Python-generated defaults for SQLite
+        from models import _make_uuid, _utcnow
+
+        for row in rows:
+            row["id"] = _make_uuid()
+            row["created_at"] = _utcnow()
+            if row["payload"] is None:
+                row["payload"] = {}
+
+        stmt = insert(HookEvent).prefix_with("OR IGNORE").values(rows)
+        await asyncio.wait_for(session.execute(stmt), timeout=30)
+        await asyncio.wait_for(session.commit(), timeout=30)
+
+
+_batch_write_events = _batch_write_pg if IS_POSTGRES else _batch_write_sqlite
 
 
 @asynccontextmanager
@@ -68,12 +99,12 @@ async def lifespan(app: FastAPI):
     """Startup: create schema + tables, start spool drainer."""
     global _drainer
 
-    # Ensure schema exists
     async with engine.begin() as conn:
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS hook_observatory"))
+        if IS_POSTGRES:
+            await conn.execute(text("CREATE SCHEMA IF NOT EXISTS hook_observatory"))
         await conn.run_sync(Base.metadata.create_all)
 
-    logger.info("Database schema ready")
+    logger.info("Database ready (%s)", "PostgreSQL" if IS_POSTGRES else "SQLite")
 
     # Wire reactive store
     from store import hook_store

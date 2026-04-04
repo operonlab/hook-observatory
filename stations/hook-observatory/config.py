@@ -23,11 +23,16 @@ class SpoolConfig:
 class Config:
     port: int = 10100
     host: str = "127.0.0.1"
-    database_url: str = "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
+    database_url: str = "sqlite+aiosqlite:///~/.hook-observatory/events.db"
     secret_key: str = "change-me-in-production"
     session_cookie_name: str = "workshop_session"
     session_max_age: int = 604800  # 7 days
+    auth_enabled: bool = False
     spool: SpoolConfig = field(default_factory=SpoolConfig)
+
+    @property
+    def is_postgres(self) -> bool:
+        return self.database_url.startswith("postgresql")
 
     @property
     def spool_dir(self) -> Path:
@@ -51,6 +56,9 @@ def load_config(path: Path | None = None) -> Config:
         cfg.session_cookie_name = str(raw["session_cookie_name"])
     if "session_max_age" in raw:
         cfg.session_max_age = int(raw["session_max_age"])
+
+    if "auth_enabled" in raw:
+        cfg.auth_enabled = bool(raw["auth_enabled"])
 
     # Spool sub-config (flat keys: spool_*)
     if "spool_dir" in raw:

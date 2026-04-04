@@ -1,4 +1,8 @@
-"""Workshop cookie auth middleware — validates workshop_session cookie."""
+"""Workshop cookie auth middleware — validates workshop_session cookie.
+
+Set `auth_enabled: true` in config.yaml to require authentication.
+Default: disabled (open access on localhost).
+"""
 
 from __future__ import annotations
 
@@ -9,12 +13,14 @@ from config import config
 
 _serializer = URLSafeTimedSerializer(config.secret_key)
 
+_ANON_USER = {"status": "active", "source": "auth-disabled"}
+
 
 async def require_auth(request: Request) -> dict:
-    """FastAPI dependency — validate workshop_session cookie or X-Local-Key header.
+    """FastAPI dependency — validate session or pass through if auth is disabled."""
+    if not config.auth_enabled:
+        return _ANON_USER
 
-    Returns the user dict from the session payload.
-    """
     # Local key auth (CLI/SDK)
     local_key = request.headers.get("x-local-key")
     if local_key and local_key == config.secret_key:
@@ -30,7 +36,6 @@ async def require_auth(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Session expired")
 
     # V2 Core format: cookie contains a signed session token (string).
-    # Signature is already verified above, so the session is valid.
     if isinstance(data, str):
         return {"status": "active", "source": "v2-token"}
 

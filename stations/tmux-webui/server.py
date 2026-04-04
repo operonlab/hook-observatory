@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# dependencies = ["fastapi", "uvicorn", "jinja2", "websockets", "python-multipart", "pyyaml", "pyte"]
+# dependencies = ["fastapi", "uvicorn", "jinja2", "websockets", "python-multipart", "pyyaml"]
 # ///
 """
 tmux Web Controller V2 — Modular Edition
@@ -21,7 +21,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from autocomplete import complete, get_cache_stats, init_cache, refresh_cache
-from pane_history import PaneHistoryManager
 from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -91,7 +90,6 @@ RELAY_SH = RELAY_SCRIPTS_DIR / "relay.sh"
 _active_connections: dict[str, int] = {}  # session -> connection count
 _ws_clients: set[WebSocket] = set()
 _tts_store: dict = {}  # {"id": str, "data": bytes, "text": str}
-_history_manager = PaneHistoryManager()
 
 # Note: disconnect layout reset removed — fitPane no longer resizes tmux panes,
 # so there's nothing to reset on disconnect.
@@ -565,11 +563,6 @@ async def ws_handler(websocket: WebSocket):
     if init_metrics:
         await websocket.send_json({"type": "metrics", "metrics": init_metrics})
 
-    # Start pipe-pane history capture for visible panes
-    for p in visible_panes(all_panes):
-        target = f"{session}:{p['id']}"
-        await _history_manager.ensure_started(target, p.get('width', 80), p.get('height', 24))
-
     last_contents: dict[str, str] = {}
     last_metrics: dict[str, str] = dict(init_metrics)
     metrics_counter = 0
@@ -831,27 +824,6 @@ async def ws_handler(websocket: WebSocket):
                 if direction:
                     await select_pane(target, direction)
 
-            elif action == "scroll":
-                direction = data.get("direction", "up")
-                offset = data.get("offset", 0)
-                limit = data.get("limit", 50)
-                ph = _history_manager.get(target)
-                if ph and direction == "up":
-                    lines = ph.get_history(offset=offset, limit=limit)
-                    total = ph.get_total_lines()
-                    await websocket.send_json({
-                        "type": "scroll_history",
-                        "pane": pane_id,
-                        "lines": lines,
-                        "offset": offset,
-                        "total": total,
-                    })
-                elif direction == "down":
-                    # Scroll back to live view — just send current capture
-                    content = await capture_pane(target, capture_lines)
-                    last_contents[pane_id] = content
-                    await websocket.send_json({"type": "output", "panes": {pane_id: content}})
-
             elif action == "autocomplete":
                 query = data.get("query", "")
                 results = complete(query)
@@ -874,9 +846,6 @@ async def ws_handler(websocket: WebSocket):
         poll_task.cancel()
         heartbeat_task.cancel()
         _ws_clients.discard(websocket)
-        # Stop history capture for this session's panes
-        for pid in list(last_contents.keys()):
-            await _history_manager.stop(f"{session}:{pid}")
         # Restore tmux layouts if fit mode was active
         if fit_mode and original_layouts:
             for win_idx, layout in original_layouts.items():
