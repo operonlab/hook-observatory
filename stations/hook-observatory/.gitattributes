@@ -1,4 +1,4 @@
-# Mark installer as generated — exclude from GitHub language stats
-installer/** linguist-generated
-frontend/** linguist-generated
+# Lock files and Rust build artifacts — not real source code
 *.lock linguist-generated
+installer/src-tauri/Cargo.lock linguist-generated
+installer/pnpm-lock.yaml linguist-generated
