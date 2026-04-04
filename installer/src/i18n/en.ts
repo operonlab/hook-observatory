@@ -95,6 +95,28 @@ const en = {
   "config.biomePlaceholder": "Leave empty to skip JS/TS formatting",
   "config.detected": "Auto-detected",
   "config.manual": "Manual",
+  "config.installed": "Installed",
+  "config.notInstalled": "Not installed",
+  "config.installCmd": "Install with:",
+  "config.copy": "Copy",
+  "config.copied": "Copied!",
+  "config.requiredLabel": "Required",
+  "config.optionalLabel": "Optional",
+  "config.checkedInStep2": "Verified in Step 2",
+
+  // Tool names & descriptions
+  "tool.git": "git",
+  "tool.git.desc":
+    "Version control system. Essential for tracking code changes.",
+  "tool.ruff": "ruff",
+  "tool.ruff.desc":
+    "Python code formatter and linter. Keeps your Python code clean and consistent.",
+  "tool.biome": "biome",
+  "tool.biome.desc":
+    "JavaScript/TypeScript formatter and linter. Like spell-check for web code.",
+  "tool.gh": "GitHub CLI",
+  "tool.gh.desc":
+    "GitHub command-line tool. Required only if you want automatic issue tracking.",
 
   // Installing
   "install.title": "Installing Hooks",

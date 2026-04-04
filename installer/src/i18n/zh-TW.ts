@@ -85,6 +85,24 @@ const zhTW: Record<keyof typeof en, string> = {
   "config.biomePlaceholder": "留空則略過 JS/TS 格式化",
   "config.detected": "自動偵測",
   "config.manual": "手動設定",
+  "config.installed": "已安裝",
+  "config.notInstalled": "未安裝",
+  "config.installCmd": "安裝指令：",
+  "config.copy": "複製",
+  "config.copied": "已複製！",
+  "config.requiredLabel": "必要",
+  "config.optionalLabel": "可選",
+  "config.checkedInStep2": "已在步驟 2 驗證",
+
+  // Tool names & descriptions
+  "tool.git": "git",
+  "tool.git.desc": "版本控制系統。追蹤程式碼變更的必備工具。",
+  "tool.ruff": "ruff",
+  "tool.ruff.desc": "Python 程式碼格式化工具。讓你的 Python 程式碼整齊一致。",
+  "tool.biome": "biome",
+  "tool.biome.desc": "JavaScript/TypeScript 格式化工具。像網頁程式碼的拼字檢查。",
+  "tool.gh": "GitHub CLI",
+  "tool.gh.desc": "GitHub 命令列工具。只有需要自動追蹤 issue 進度時才需要。",
 
   // Installing
   "install.title": "正在安裝 Hook",

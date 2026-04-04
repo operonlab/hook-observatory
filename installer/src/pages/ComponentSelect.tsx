@@ -21,8 +21,8 @@ function ComponentCard({
   const descKey = `comp.${comp.id}.desc` as TranslationKey;
 
   return (
-    <label 
-      className={`relative flex items-center p-4 rounded-xl border transition-all duration-300 cursor-pointer group ${
+    <label
+      className={`relative flex items-center p-3 sm:p-4 rounded-xl border transition-all duration-300 cursor-pointer group ${
         comp.enabled 
           ? "bg-surface border-mocha-blue/40 shadow-lg shadow-mocha-blue/5" 
           : "bg-mocha-overlay/10 border-white/5 hover:border-white/20"
@@ -82,21 +82,21 @@ export default function ComponentSelect() {
   }));
 
   return (
-    <div className="flex flex-col min-h-screen p-10 bg-dark font-inter">
-      <div className="max-w-4xl w-full mx-auto flex flex-col min-h-full">
-        <header className="mb-10 text-center">
-          <h2 className="text-3xl font-bold text-white mb-2">{t("comp.title")}</h2>
+    <div className="flex w-full flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10 bg-dark font-inter">
+      <div className="max-w-4xl w-full mx-auto flex min-h-0 flex-1 flex-col">
+        <header className="mb-6 sm:mb-10 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">{t("comp.title")}</h2>
           <p className="text-mocha-subtext">{t("comp.subtitle")}</p>
         </header>
 
-        <div className="space-y-8 mb-12 flex-grow">
+        <div className="space-y-6 sm:space-y-8 mb-8 sm:mb-12 flex-1">
           {grouped.map(({ category, style, items }) => (
             <div
               key={category}
-              className={`rounded-2xl border p-6 bg-surface/30 ${style.borderColor}`}
+              className={`rounded-2xl border p-4 sm:p-6 bg-surface/30 ${style.borderColor}`}
             >
-              <div className="flex items-center mb-6">
-                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest mr-4 ${style.bgColor} ${style.textColor}`}>
+              <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
+                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${style.bgColor} ${style.textColor}`}>
                   {t(style.labelKey as TranslationKey)}
                 </span>
                 <span className="text-xs text-mocha-subtext/80 italic font-medium">
@@ -104,7 +104,7 @@ export default function ComponentSelect() {
                 </span>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {items.map((comp) => (
                   <ComponentCard key={comp.id} comp={comp} onToggle={toggleComponent} />
                 ))}
@@ -113,7 +113,7 @@ export default function ComponentSelect() {
           ))}
         </div>
 
-        <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/5">
+        <div className="shrink-0 flex items-center justify-between mt-auto pt-6 border-t border-white/5">
           <button 
             className="px-6 py-2 rounded-xl text-mocha-subtext hover:text-white hover:bg-white/5 transition-all" 
             onClick={prevStep}

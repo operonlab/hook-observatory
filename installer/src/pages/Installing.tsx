@@ -64,19 +64,19 @@ export default function Installing() {
   const hasError = installSteps.some((s) => s.status === "error") || installError;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-10 bg-dark font-inter relative overflow-hidden">
+    <div className="relative flex w-full flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10 bg-dark font-inter overflow-x-hidden">
       {/* Background Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-mocha-blue/5 rounded-full blur-[120px] pointer-events-none" />
       
-      <div className="glass-card max-w-xl w-full p-10 relative z-10">
-        <header className="mb-10 text-center">
-          <h2 className="text-3xl font-bold text-white mb-2">
+      <div className="glass-card my-auto max-w-xl w-full mx-auto p-6 sm:p-10 relative z-10">
+        <header className="mb-6 sm:mb-10 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
             {hasError ? t("install.failed") : allDone ? "Installation Complete" : t("install.title")}
           </h2>
           <p className="text-mocha-subtext">{t("install.subtitle")}</p>
         </header>
 
-        <div className="space-y-4 mb-10">
+        <div className="space-y-3 sm:space-y-4 mb-6 sm:mb-10">
           {installSteps.map((step, i) => (
             <div 
               key={i} 

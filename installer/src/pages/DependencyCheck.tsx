@@ -59,16 +59,16 @@ export default function DependencyCheck() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-10 bg-dark font-inter">
-      <div className="max-w-4xl w-full mx-auto">
-        <header className="mb-10 text-center">
-          <h2 className="text-3xl font-bold text-white mb-2">{t("deps.title")}</h2>
+    <div className="flex w-full flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10 bg-dark font-inter">
+      <div className="max-w-4xl w-full mx-auto flex min-h-0 flex-1 flex-col">
+        <header className="mb-6 sm:mb-10 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">{t("deps.title")}</h2>
           <p className="text-mocha-subtext">{t("deps.subtitle")}</p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12 flex-1 content-start">
           {checking && dependencies.length === 0 ? (
-            <div className="col-span-3 flex flex-col items-center py-20 bg-surface/50 rounded-xl border border-white/5 animate-pulse">
+            <div className="col-span-1 sm:col-span-2 md:col-span-3 flex flex-col items-center py-20 bg-surface/50 rounded-xl border border-white/5 animate-pulse">
               <div className="w-10 h-10 border-2 border-mocha-blue border-t-transparent rounded-full animate-spin mb-4" />
               <span className="text-mocha-subtext font-medium">{t("deps.checking")}</span>
             </div>
@@ -76,7 +76,7 @@ export default function DependencyCheck() {
             dependencies.map((dep) => (
               <div
                 key={dep.name}
-                className={`glass-card p-6 flex flex-col items-center text-center transition-all duration-300 ${
+                className={`glass-card p-4 sm:p-6 flex flex-col items-center text-center transition-all duration-300 ${
                   dep.found ? "border-mocha-green/20" : "border-mocha-red/20"
                 }`}
               >
@@ -127,7 +127,7 @@ export default function DependencyCheck() {
           )}
         </div>
 
-        <div className="flex flex-col items-center mb-10">
+        <div className="flex flex-col items-center mb-6 sm:mb-10">
           {dependencies.length > 0 && !allFound && (
             <div className="bg-mocha-red/10 text-mocha-red px-4 py-2 rounded-lg text-sm font-medium mb-4 flex items-center">
               <span className="mr-2">⚠️</span> {t("deps.missing")}
@@ -140,7 +140,7 @@ export default function DependencyCheck() {
           )}
         </div>
 
-        <div className="flex items-center justify-between mt-auto pt-6 border-t border-white/5">
+        <div className="shrink-0 flex items-center justify-between mt-auto pt-6 border-t border-white/5">
           <button 
             className="px-6 py-2 rounded-xl text-mocha-subtext hover:text-white hover:bg-white/5 transition-all" 
             onClick={prevStep}

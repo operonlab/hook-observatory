@@ -1,6 +1,18 @@
 # hook-observatory
 
+[English](https://github.com/operonlab/hook-observatory/blob/main/README.md) | **[繁體中文](https://github.com/operonlab/hook-observatory/blob/main/README.zh.md)**
+
 Claude Code 的集中式 hook handler 框架。
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard — 即時事件監控" width="700" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/installer-welcome.png" alt="GUI 安裝程式 — 歡迎" width="220" />
+  <img src="docs/screenshots/installer-deps.png" alt="GUI 安裝程式 — 環境檢查" width="220" />
+  <img src="docs/screenshots/installer-components.png" alt="GUI 安裝程式 — 元件選擇" width="220" />
+</p>
 
 ---
 
