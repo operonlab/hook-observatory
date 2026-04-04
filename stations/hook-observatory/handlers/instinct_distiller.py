@@ -21,8 +21,9 @@ from datetime import UTC
 from pathlib import Path
 
 from .base import ALLOW, HookResult, message
+from .hook_config import get_path
 
-STAGING_DIR = Path.home() / ".claude" / "data" / "instincts"
+STAGING_DIR = Path(get_path("data_dir")) / "instincts"
 STAGING_FILE = STAGING_DIR / "pending.jsonl"
 LOG_FILE = STAGING_DIR / "distill.log"
 MAX_ENTRIES = 500

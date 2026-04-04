@@ -5,10 +5,12 @@ import EventTypeChart from "../components/EventTypeChart.tsx";
 import TimelineChart from "../components/TimelineChart.tsx";
 import ToolUsageChart from "../components/ToolUsageChart.tsx";
 import SessionList from "../components/SessionList.tsx";
+import { useI18n } from "../i18n";
 
 const REFRESH = 30_000;
 
 export default function Dashboard() {
+  const { t } = useI18n();
   const { data: allStats, error: statsError, refresh: refreshStats } = useSWR(
     "allStats",
     api.allStats,
@@ -27,12 +29,12 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Title row */}
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-medium text-white/80">Dashboard</h1>
+        <h1 className="text-lg font-medium text-white/80">{t("dashboard.title")}</h1>
         <button
           onClick={refreshAll}
           className="text-[11px] text-white/25 hover:text-white/50 transition-colors"
         >
-          重新整理
+          {t("dashboard.refresh")}
         </button>
       </div>
 

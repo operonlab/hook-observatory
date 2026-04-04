@@ -1,17 +1,20 @@
 import type { SummaryStats, HealthResponse } from "../api/client.ts";
+import { useI18n } from "../i18n";
 
 interface Props {
   summary: SummaryStats | null;
   health: HealthResponse | null;
 }
 
-const cards = [
-  { key: "total" as const, label: "總事件數", color: "#89b4fa" },
-  { key: "today" as const, label: "今日事件", color: "#a6e3a1" },
-  { key: "unique_sessions" as const, label: "Sessions", color: "#cba6f7" },
-];
-
 export default function StatsOverview({ summary, health }: Props) {
+  const { t } = useI18n();
+
+  const cards = [
+    { key: "total" as const, label: t("stats.totalEvents"), color: "#89b4fa" },
+    { key: "today" as const, label: t("stats.todayEvents"), color: "#a6e3a1" },
+    { key: "unique_sessions" as const, label: t("stats.sessions"), color: "#cba6f7" },
+  ];
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {cards.map((c) => (
@@ -33,7 +36,7 @@ export default function StatsOverview({ summary, health }: Props) {
         <div
           className="col-span-full text-[11px] text-white/20 mt-1"
         >
-          Spool: {health.spool_dir} · 已處理: {health.total_events_processed.toLocaleString()}
+          {t("stats.spool")} {health.spool_dir} · {t("stats.processed")} {health.total_events_processed.toLocaleString()}
         </div>
       )}
     </div>

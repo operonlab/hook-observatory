@@ -1,0 +1,9 @@
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/unicode_segmentation-c88f7cf3428cf2b8.d: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/grapheme.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/sentence.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/word.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/tables.rs
+
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/libunicode_segmentation-c88f7cf3428cf2b8.rmeta: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/grapheme.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/sentence.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/word.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/tables.rs
+
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/lib.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/grapheme.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/sentence.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/word.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/unicode-segmentation-1.13.2/src/tables.rs:

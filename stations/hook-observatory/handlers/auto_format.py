@@ -12,8 +12,9 @@ import subprocess
 import sys
 
 from .base import ALLOW, HookResult
+from .hook_config import get_tool
 
-RUFF_BIN = "/opt/homebrew/bin/ruff"
+RUFF_BIN = get_tool("ruff")
 PY_EXTS = {".py"}
 JS_EXTS = {".ts", ".tsx", ".js", ".jsx"}
 SKIP_DIRS = {
@@ -99,7 +100,7 @@ def _find_biome_bin(config_dir: str) -> str | None:
 
 
 def _format_python(file_path: str) -> None:
-    if not os.path.isfile(RUFF_BIN):
+    if not RUFF_BIN or not os.path.isfile(RUFF_BIN):
         return
     try:
         subprocess.run(

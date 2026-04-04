@@ -2,8 +2,10 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client.ts";
 import type { HookEvent, EventTypeStats } from "../api/client.ts";
 import EventTable from "../components/EventTable.tsx";
+import { useI18n } from "../i18n";
 
 export default function Events() {
+  const { t } = useI18n();
   const [events, setEvents] = useState<HookEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
@@ -40,12 +42,12 @@ export default function Events() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-medium text-white/80">事件明細</h1>
+        <h1 className="text-lg font-medium text-white/80">{t("events.title")}</h1>
         <button
           onClick={fetchEvents}
           className="text-[11px] text-white/25 hover:text-white/50 transition-colors"
         >
-          重新整理
+          {t("events.refresh")}
         </button>
       </div>
 

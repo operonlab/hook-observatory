@@ -30,11 +30,13 @@ from . import (
     instinct_distiller,
     memory_sync,
     observability,
+    plan_impl_gate,
     pm_autopilot,
     relay_signal,
     review_gate,
     rtk_rewrite,
     schedule_sync,
+    secret_scan,
     sentinel_notify,
     session_channel,
     session_cost,
@@ -50,6 +52,8 @@ from . import (
     context_supervisor as context_supervisor,
 )
 from .base import ALLOW, HookResult
+from .hook_config import cfg as cfg
+from .hook_config import get_budget_ms, is_handler_enabled
 
 # Type alias for handler functions
 Handler = Callable[[str, str, dict, str], HookResult]
@@ -60,12 +64,13 @@ Handler = Callable[[str, str, dict, str], HookResult]
 # ---------------------------------------------------------------------------
 
 # Maximum milliseconds for deferrable handlers per event dispatch
-BLOCKING_BUDGET_MS = 5000  # 5 seconds (conservative; KAIROS uses 15s)
+BLOCKING_BUDGET_MS = get_budget_ms()
 
 # These handlers always run, regardless of time budget (safety / security)
 CRITICAL_HANDLERS: set[Handler] = {
     agent_naming.handle,
     bash_safety.handle,
+    secret_scan.handle,
     skill_security.handle,
     verify_commit.handle,
     review_gate.handle,
@@ -84,6 +89,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ("AskUserQuestion", voice_notify.handle),
         ("Bash", verify_commit.handle),
         ("Bash", bash_safety.handle),
+        ("Bash", secret_scan.handle),
         ("Bash", sentinel_notify.handle),
         ("Bash", rtk_rewrite.handle),  # after safety — rewrite for token savings
         ("Write|Edit", skill_security.handle),
@@ -98,6 +104,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ("Bash", pm_autopilot.handle),
         (None, anvil_telemetry.handle),
         ("Skill", external.skill_tracker),
+        ("ExitPlanMode", plan_impl_gate.handle),
         # context_supervisor: disabled
         (None, observability.handle),
     ],
@@ -126,6 +133,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
     "UserPromptSubmit": [
         # context_supervisor: disabled
         (None, external.recall),
+        (None, plan_impl_gate.handle),
         (None, session_namer.handle_color_hint),
         (None, anvil_telemetry.handle),
         (None, observability.handle),
@@ -160,6 +168,70 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         (None, observability.handle),
     ],
 }
+
+
+# ---------------------------------------------------------------------------
+# Filter disabled handlers based on config.yaml / config.local.yaml
+# ---------------------------------------------------------------------------
+
+# Map handler function → handler module name (for config lookup)
+_HANDLER_MODULE_MAP: dict[Handler, str] = {}
+for _mod_name, _mod in [
+    ("agent_naming", agent_naming),
+    ("anvil_telemetry", anvil_telemetry),
+    ("attitude_signal", attitude_signal),
+    ("auto_format", auto_format),
+    ("bash_safety", bash_safety),
+    ("claudemd_suggest", claudemd_suggest),
+    ("cleanup_versions", cleanup_versions),
+    ("context_inject", context_inject),
+    ("context_relay", context_relay),
+    ("instinct_distiller", instinct_distiller),
+    ("memory_sync", memory_sync),
+    ("observability", observability),
+    ("plan_impl_gate", plan_impl_gate),
+    ("pm_autopilot", pm_autopilot),
+    ("relay_signal", relay_signal),
+    ("review_gate", review_gate),
+    ("rtk_rewrite", rtk_rewrite),
+    ("schedule_sync", schedule_sync),
+    ("secret_scan", secret_scan),
+    ("sentinel_notify", sentinel_notify),
+    ("session_channel", session_channel),
+    ("session_cost", session_cost),
+    ("session_namer", session_namer),
+    ("session_pipeline", session_pipeline),
+    ("skill_security", skill_security),
+    ("utility_watchdog", utility_watchdog),
+    ("verify_commit", verify_commit),
+    ("verify_completion", verify_completion),
+    ("voice_notify", voice_notify),
+]:
+    _HANDLER_MODULE_MAP[_mod.handle] = _mod_name
+
+# Also map external.* functions
+for _attr in ("recall", "skill_tracker", "progressive_extract", "sync_login"):
+    _fn = getattr(external, _attr, None)
+    if _fn:
+        _HANDLER_MODULE_MAP[_fn] = "external"
+
+
+def _filter_registry() -> None:
+    """Remove disabled handlers from REGISTRY and CRITICAL_HANDLERS."""
+    for event_type in list(REGISTRY.keys()):
+        REGISTRY[event_type] = [
+            (m, h)
+            for m, h in REGISTRY[event_type]
+            if is_handler_enabled(_HANDLER_MODULE_MAP.get(h, ""))
+        ]
+
+    disabled_critical = {
+        h for h in CRITICAL_HANDLERS if not is_handler_enabled(_HANDLER_MODULE_MAP.get(h, ""))
+    }
+    CRITICAL_HANDLERS.difference_update(disabled_critical)
+
+
+_filter_registry()
 
 
 def _matches(matcher: str | None, tool_name: str) -> bool:

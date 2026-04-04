@@ -9,7 +9,8 @@ the block wins regardless (dispatcher merges decisions: block > all).
 
 from __future__ import annotations
 
-from .base import ALLOW, HookResult, find_executable, run_cmd
+from .base import ALLOW, HookResult, run_cmd
+from .hook_config import get_tool
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
@@ -20,7 +21,7 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     if not cmd or cmd.startswith("rtk "):
         return ALLOW
 
-    rtk_bin = find_executable("rtk")
+    rtk_bin = get_tool("rtk")
     if not rtk_bin:
         return ALLOW
 

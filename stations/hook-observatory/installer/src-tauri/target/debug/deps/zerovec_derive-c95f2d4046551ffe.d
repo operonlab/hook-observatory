@@ -1,0 +1,10 @@
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/zerovec_derive-c95f2d4046551ffe.d: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/make_ule.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/make_varule.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/ule.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/utils.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/varule.rs
+
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/libzerovec_derive-c95f2d4046551ffe.dylib: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/make_ule.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/make_varule.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/ule.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/utils.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/varule.rs
+
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/lib.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/make_ule.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/make_varule.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/ule.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/utils.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/zerovec-derive-0.11.3/src/varule.rs:

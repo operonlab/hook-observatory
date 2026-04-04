@@ -1,0 +1,11 @@
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/powerfmt-598959961abc29c7.d: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/buf.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/ext.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display_impls.rs
+
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/libpowerfmt-598959961abc29c7.rlib: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/buf.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/ext.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display_impls.rs
+
+/Users/joneshong/workshop/stations/hook-observatory/installer/src-tauri/target/debug/deps/libpowerfmt-598959961abc29c7.rmeta: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/buf.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/ext.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display_impls.rs
+
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/lib.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/buf.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/ext.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/powerfmt-0.2.0/src/smart_display_impls.rs:

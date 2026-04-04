@@ -14,8 +14,9 @@ import re
 import time
 
 from .base import ALLOW, HookResult, message, run_cmd
+from .hook_config import get_service
 
-_BASE_URL = "http://localhost:10101"
+_BASE_URL = get_service("session_channel_url")
 _LOCAL_KEY = os.environ.get("SESSION_CHANNEL_KEY", "change-me-in-production")
 _HANDOFF_DIR = "/tmp/handoff"  # noqa: S108
 _PANE_RE = re.compile(r"^pane-\d+$")

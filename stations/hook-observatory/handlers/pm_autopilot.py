@@ -18,8 +18,9 @@ import json
 import re
 
 from .base import ALLOW, HookResult, message, run_background, run_cmd
+from .hook_config import cfg
 
-REPO = "JonesHong/workshop"
+REPO = cfg.get("github", {}).get("repo", "")
 STATE_FILE = "/tmp/pm-autopilot-state.json"  # noqa: S108
 MAX_SYNC_ISSUES = 3
 
@@ -30,6 +31,8 @@ MAX_SYNC_ISSUES = 3
 
 
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
+    if not REPO:
+        return ALLOW
     if event_type == "SessionStart":
         return _session_start()
     if event_type == "PostToolUse" and tool_name == "Bash":

@@ -16,8 +16,9 @@ import os
 import time
 
 from .base import ALLOW, HookResult, run_background
+from .hook_config import get_service
 
-_BASE_URL = "http://localhost:10101"
+_BASE_URL = get_service("session_channel_url")
 _LOCAL_KEY = "change-me-in-production"
 _DEBOUNCE_FILE = "/tmp/session-channel-stop-debounce-{pane}.ts"  # noqa: S108
 _DEBOUNCE_SECONDS = 60  # Don't announce Stop more than once per minute per pane
