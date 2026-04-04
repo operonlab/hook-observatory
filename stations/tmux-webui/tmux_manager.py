@@ -67,7 +67,7 @@ async def list_panes(session: str) -> list[dict]:
         session,
         "-F",
         "#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_active}"
-        "\t#{pane_width}\t#{pane_height}\t#{pane_current_command}\t#{pane_title}",
+        "\t#{pane_width}\t#{pane_height}\t#{pane_current_command}\t#{pane_title}\t#{alternate_on}",
     )
     if not r.ok:
         return []
@@ -85,6 +85,7 @@ async def list_panes(session: str) -> list[dict]:
                     "height": int(parts[5]),
                     "command": parts[6],
                     "title": parts[7] if len(parts) > 7 else "",
+                    "alternate_on": int(parts[8]) if len(parts) > 8 else 0,
                     "id": f"{parts[0]}.{parts[2]}",
                 }
             )
@@ -95,6 +96,16 @@ async def list_panes(session: str) -> list[dict]:
 
 
 async def capture_pane(target: str, lines: int = 150) -> str:
+    out = await capture_async(target, start_line=-lines, escape_sequences=True)
+    return out or ""
+
+
+async def capture_pane_scrollback(target: str, lines: int = 5000) -> str:
+    """Capture extended scrollback from main buffer.
+
+    When pane is in alt screen, this returns the main buffer history
+    (content from before the TUI app started).
+    """
     out = await capture_async(target, start_line=-lines, escape_sequences=True)
     return out or ""
 
