@@ -25,8 +25,8 @@ from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisc
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.requests import Request
 from pane_history import PaneSnapshotStore
+from starlette.requests import Request
 from tmux_manager import (
     capture_pane,
     capture_pane_scrollback,
@@ -40,9 +40,9 @@ from tmux_manager import (
     send_keys,
     status_metrics,
 )
-from sdk_client.station_bootstrap import setup_logging
 
 from config import get_config, load_config
+from sdk_client.station_bootstrap import setup_logging
 
 logger = setup_logging("tmux-webui")
 
@@ -615,13 +615,15 @@ async def ws_handler(websocket: WebSocket):
                     if alt_on and content:
                         _snapshot_store.add(p["id"], content)
 
-                if updates:
+                if updates or alt_states:
                     await asyncio.wait_for(
-                        websocket.send_json({
-                            "type": "output",
-                            "panes": updates,
-                            "alt": alt_states,
-                        }),
+                        websocket.send_json(
+                            {
+                                "type": "output",
+                                "panes": updates,
+                                "alt": alt_states,
+                            }
+                        ),
                         timeout=5.0,
                     )
 
@@ -855,9 +857,7 @@ async def ws_handler(websocket: WebSocket):
                 direction = data.get("direction", "up")
                 offset = data.get("offset", 0)
                 cur_panes = await list_panes(session)
-                pane_info_item = next(
-                    (p for p in cur_panes if p["id"] == pane_id), None
-                )
+                pane_info_item = next((p for p in cur_panes if p["id"] == pane_id), None)
                 is_alt = pane_info_item and pane_info_item.get("alternate_on", 0)
 
                 if direction == "up":
@@ -865,33 +865,39 @@ async def ws_handler(websocket: WebSocket):
                     if is_alt and offset < snap_total:
                         snap = _snapshot_store.get(pane_id, offset)
                         if snap:
-                            await websocket.send_json({
-                                "type": "scroll_history",
-                                "pane": pane_id,
-                                "content": snap.content,
-                                "offset": offset,
-                                "total": snap_total,
-                                "ts": snap.timestamp,
-                                "source": "snapshot",
-                            })
+                            await websocket.send_json(
+                                {
+                                    "type": "scroll_history",
+                                    "pane": pane_id,
+                                    "content": snap.content,
+                                    "offset": offset,
+                                    "total": snap_total,
+                                    "ts": snap.timestamp,
+                                    "source": "snapshot",
+                                }
+                            )
                     else:
                         content = await capture_pane_scrollback(target, 5000)
-                        await websocket.send_json({
-                            "type": "scroll_history",
-                            "pane": pane_id,
-                            "content": content,
-                            "offset": offset,
-                            "total": (snap_total + 1) if is_alt else 1,
-                            "source": "scrollback",
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "scroll_history",
+                                "pane": pane_id,
+                                "content": content,
+                                "offset": offset,
+                                "total": (snap_total + 1) if is_alt else 1,
+                                "source": "scrollback",
+                            }
+                        )
                 else:
                     # direction == "down" → return to live view
                     content = await capture_pane(target, capture_lines)
                     last_contents[pane_id] = content
-                    await websocket.send_json({
-                        "type": "output",
-                        "panes": {pane_id: content},
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "output",
+                            "panes": {pane_id: content},
+                        }
+                    )
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for session '%s'", session)

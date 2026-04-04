@@ -579,6 +579,40 @@ function buildPaneEl(p) {
     }
   }, { passive: false });
 
+  // Touch-based history scroll (for mobile)
+  let _touchStartY2 = 0;
+  term.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) _touchStartY2 = e.touches[0].clientY;
+  }, { passive: true });
+  term.addEventListener('touchend', (e) => {
+    if (e.changedTouches.length !== 1) return;
+    const dy = _touchStartY2 - e.changedTouches[0].clientY;
+    if (Math.abs(dy) < 50) return;
+    const info = S.paneInfo[p.id];
+    const isAlt = info && info.alternate_on;
+    const hs = _historyState[p.id] || { active: false, offset: 0 };
+    if (!hs.active && !isAlt) return;
+    const now = Date.now();
+    if (now - _lastScrollTime < 300) return;
+    _lastScrollTime = now;
+    if (dy > 0) {
+      hs.active = true;
+      hs.offset = (hs.offset || 0) + 1;
+      _historyState[p.id] = hs;
+      window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'up', offset: hs.offset });
+    } else {
+      hs.offset = Math.max(0, (hs.offset || 0) - 1);
+      if (hs.offset === 0) {
+        hs.active = false;
+        _historyState[p.id] = hs;
+        window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'down' });
+      } else {
+        _historyState[p.id] = hs;
+        window.tmuxWs?.send({ type: 'scroll', pane: p.id, direction: 'up', offset: hs.offset });
+      }
+    }
+  }, { passive: true });
+
   // Escape exits history mode
   box.setAttribute('tabindex', '-1');
   box.addEventListener('keydown', (e) => {
