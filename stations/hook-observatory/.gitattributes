@@ -1,0 +1,4 @@
+# Mark installer as generated — exclude from GitHub language stats
+installer/** linguist-generated
+frontend/** linguist-generated
+*.lock linguist-generated
