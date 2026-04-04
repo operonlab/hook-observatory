@@ -1,10 +1,32 @@
 # hook-observatory
 
-**[English](https://github.com/operonlab/hook-observatory/blob/main/README.md)** | [繁體中文](https://github.com/operonlab/hook-observatory/blob/main/README.zh.md)
+<p align="center">
+  <img src="docs/icon.png" alt="hook-observatory icon" width="200"/>
+</p>
 
-![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![Claude Code](https://img.shields.io/badge/claude--code-compatible-purple)
+<p align="center">
+  <strong><a href="https://github.com/operonlab/hook-observatory/blob/main/README.md">English</a></strong>
+  &nbsp;|&nbsp;
+  <a href="https://github.com/operonlab/hook-observatory/blob/main/README.zh.md">繁體中文</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/operonlab/hook-observatory/releases">
+    <img alt="Release" src="https://img.shields.io/github/v/release/operonlab/hook-observatory?include_prereleases&style=flat-square">
+  </a>
+  <a href="https://www.python.org/">
+    <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square">
+  </a>
+  <a href="https://opensource.org/licenses/MIT">
+    <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green?style=flat-square">
+  </a>
+  <a href="https://docs.anthropic.com/en/docs/claude-code">
+    <img alt="Claude Code" src="https://img.shields.io/badge/claude--code-compatible-purple?style=flat-square">
+  </a>
+  <a href="https://github.com/operonlab/hook-observatory/stargazers">
+    <img alt="Stars" src="https://img.shields.io/github/stars/operonlab/hook-observatory?style=flat-square">
+  </a>
+</p>
 
 A centralized, configurable hook handler framework for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Replaces scattered shell scripts with a single Python dispatcher, 34 handler modules, and YAML-based configuration.
 
@@ -13,9 +35,9 @@ A centralized, configurable hook handler framework for [Claude Code](https://doc
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/installer-welcome.png" alt="GUI Installer — Welcome" width="220" />
-  <img src="docs/screenshots/installer-deps.png" alt="GUI Installer — Dependency Check" width="220" />
-  <img src="docs/screenshots/installer-components.png" alt="GUI Installer — Component Selection" width="220" />
+  <img src="docs/screenshots/installer-welcome.png" alt="GUI Installer — Welcome" width="280" />
+  <img src="docs/screenshots/installer-deps.png" alt="GUI Installer — Dependency Check" width="280" />
+  <img src="docs/screenshots/installer-components.png" alt="GUI Installer — Component Selection" width="280" />
 </p>
 
 ---
