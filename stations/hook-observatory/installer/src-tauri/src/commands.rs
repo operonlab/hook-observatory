@@ -49,9 +49,13 @@ pub struct HandlerToggle {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ToolInfo {
+pub struct ToolDetailInfo {
     pub name: String,
     pub path: Option<String>,
+    pub version: Option<String>,
+    pub installed: bool,
+    pub install_command: String,
+    pub required: bool,
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -306,18 +310,87 @@ pub fn save_config(handlers: Vec<HandlerToggle>) -> Result<String, String> {
     Ok(format!("Config saved to {}", config_path.display()))
 }
 
-/// Detect optional tool paths (ruff, biome, gh).
+/// Detect tool availability with version and install info.
 #[tauri::command]
-pub fn detect_tools() -> Vec<ToolInfo> {
-    let tools = ["ruff", "biome", "gh"];
+pub fn detect_tools() -> Vec<ToolDetailInfo> {
+    let mut tools = Vec::new();
+
+    // Python
+    let py_path = which("python3");
+    let py_version = py_path
+        .as_ref()
+        .and_then(|p| run_version(p, &["--version"]))
+        .map(|v| extract_version(&v));
+    tools.push(ToolDetailInfo {
+        name: "python".into(),
+        installed: py_path.is_some(),
+        path: py_path,
+        version: py_version,
+        install_command: "brew install python@3.12".into(),
+        required: true,
+    });
+
+    // Git
+    let git_path = which("git");
+    let git_version = git_path
+        .as_ref()
+        .and_then(|p| run_version(p, &["--version"]))
+        .map(|v| extract_version(&v));
+    tools.push(ToolDetailInfo {
+        name: "git".into(),
+        installed: git_path.is_some(),
+        path: git_path,
+        version: git_version,
+        install_command: "brew install git".into(),
+        required: true,
+    });
+
+    // ruff
+    let ruff_path = which("ruff");
+    let ruff_version = ruff_path
+        .as_ref()
+        .and_then(|p| run_version(p, &["--version"]))
+        .map(|v| extract_version(&v));
+    tools.push(ToolDetailInfo {
+        name: "ruff".into(),
+        installed: ruff_path.is_some(),
+        path: ruff_path,
+        version: ruff_version,
+        install_command: "brew install ruff".into(),
+        required: false,
+    });
+
+    // biome
+    let biome_path = which("biome");
+    let biome_version = biome_path
+        .as_ref()
+        .and_then(|p| run_version(p, &["--version"]))
+        .map(|v| extract_version(&v));
+    tools.push(ToolDetailInfo {
+        name: "biome".into(),
+        installed: biome_path.is_some(),
+        path: biome_path,
+        version: biome_version,
+        install_command: "pnpm add -g @biomejs/biome".into(),
+        required: false,
+    });
+
+    // gh (GitHub CLI)
+    let gh_path = which("gh");
+    let gh_version = gh_path
+        .as_ref()
+        .and_then(|p| run_version(p, &["--version"]))
+        .map(|v| extract_version(&v));
+    tools.push(ToolDetailInfo {
+        name: "gh".into(),
+        installed: gh_path.is_some(),
+        path: gh_path,
+        version: gh_version,
+        install_command: "brew install gh".into(),
+        required: false,
+    });
 
     tools
-        .iter()
-        .map(|&name| ToolInfo {
-            name: name.to_string(),
-            path: which(name),
-        })
-        .collect()
 }
 
 // ─── Tests ──────────────────────────────────────────────────────
@@ -381,13 +454,21 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_tools_returns_three() {
+    fn test_detect_tools_returns_five() {
         let tools = detect_tools();
-        assert_eq!(tools.len(), 3);
+        assert_eq!(tools.len(), 5);
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&"python"));
+        assert!(names.contains(&"git"));
         assert!(names.contains(&"ruff"));
         assert!(names.contains(&"biome"));
         assert!(names.contains(&"gh"));
+
+        for tool in &tools {
+            if tool.installed {
+                assert!(tool.path.is_some(), "{} marked installed but no path", tool.name);
+            }
+        }
     }
 
     #[test]

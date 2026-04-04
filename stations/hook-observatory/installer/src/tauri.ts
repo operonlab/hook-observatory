@@ -3,7 +3,7 @@
  * When running outside Tauri (e.g., in a browser), returns mock data.
  */
 
-import type { DependencyResult, ToolPaths } from "./store";
+import type { DependencyResult, ToolPaths, ToolDetailInfo } from "./store";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let tauriInvoke: ((cmd: string, args?: Record<string, unknown>) => Promise<any>) | null = null;
@@ -29,11 +29,13 @@ const MOCK_DEPS: DependencyResult[] = [
   { name: "git", found: true, path: "/usr/bin/git", version: "2.43.0" },
 ];
 
-const MOCK_TOOLS: ToolPaths = {
-  python: "/usr/local/bin/python3",
-  ruff: "/usr/local/bin/ruff",
-  biome: "",
-};
+const MOCK_TOOL_DETAILS: ToolDetailInfo[] = [
+  { name: "python", path: "/usr/local/bin/python3", version: "3.12.4", installed: true, install_command: "brew install python@3.12", required: true },
+  { name: "git", path: "/usr/bin/git", version: "2.43.0", installed: true, install_command: "brew install git", required: true },
+  { name: "ruff", path: "/usr/local/bin/ruff", version: "0.8.0", installed: true, install_command: "brew install ruff", required: false },
+  { name: "biome", path: null, version: null, installed: false, install_command: "pnpm add -g @biomejs/biome", required: false },
+  { name: "gh", path: "/usr/local/bin/gh", version: "2.62.0", installed: true, install_command: "brew install gh", required: false },
+];
 
 // ── Public API ──
 
@@ -46,12 +48,12 @@ export async function checkDependencies(): Promise<DependencyResult[]> {
   return MOCK_DEPS;
 }
 
-export async function detectTools(): Promise<ToolPaths> {
+export async function detectTools(): Promise<ToolDetailInfo[]> {
   if (isTauri && tauriInvoke) {
     return tauriInvoke("detect_tools");
   }
   await new Promise((r) => setTimeout(r, 800));
-  return MOCK_TOOLS;
+  return MOCK_TOOL_DETAILS;
 }
 
 export interface InstallOptions {
@@ -100,14 +102,11 @@ export async function installHooks(
 }
 
 export async function closeWindow(): Promise<void> {
-  if (isTauri && tauriInvoke) {
-    // @ts-expect-error Tauri window API
-    const win = window.__TAURI__?.window;
-    if (win?.getCurrentWindow) {
-      await win.getCurrentWindow().close();
-      return;
-    }
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().close();
+  } catch {
+    // Not in Tauri runtime
+    console.log("Close requested (no-op in browser)");
   }
-  // In browser, just log
-  console.log("Close requested (no-op in browser)");
 }

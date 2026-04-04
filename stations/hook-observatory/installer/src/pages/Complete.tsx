@@ -9,13 +9,13 @@ export default function Complete() {
   const enabled = components.filter((c) => c.enabled);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-10 bg-dark font-inter relative overflow-hidden text-center">
+    <div className="flex w-full flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10 bg-dark font-inter relative overflow-x-hidden text-center">
       {/* Celebration Glows */}
       <div className="absolute top-1/3 left-1/4 w-[400px] h-[400px] bg-mocha-green/5 rounded-full blur-[100px] pointer-events-none animate-pulse" />
       <div className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] bg-mocha-mauve/5 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: '1s' }} />
 
-      <div className="glass-card max-w-lg w-full p-12 relative z-10 flex flex-col items-center">
-        <div className="mb-10 relative">
+      <div className="glass-card my-auto max-w-lg w-full mx-auto p-6 sm:p-12 relative z-10 flex flex-col items-center">
+        <div className="mb-6 sm:mb-10 relative">
           <div className="absolute inset-0 bg-mocha-green/20 rounded-full blur-2xl animate-glow-pulse" />
           <div className="relative w-24 h-24 rounded-full bg-mocha-green flex items-center justify-center shadow-[0_0_40px_rgba(166,227,161,0.4)]">
             <svg
@@ -36,14 +36,14 @@ export default function Complete() {
           </div>
         </div>
 
-        <h2 className="text-3xl font-bold text-white mb-3">
+        <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
           {t("complete.title")}
         </h2>
         <p className="text-mocha-blue font-medium mb-6 uppercase tracking-[0.2em] text-xs">
           {t("complete.subtitle")}
         </p>
         
-        <div className="bg-mocha-overlay/10 rounded-2xl p-6 mb-10 w-full border border-white/5">
+        <div className="bg-mocha-overlay/10 rounded-2xl p-4 sm:p-6 mb-6 sm:mb-10 w-full border border-white/5">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-mocha-subtext/60 mb-4">
             {t("complete.enabled")}
           </h3>
@@ -60,7 +60,7 @@ export default function Complete() {
           </div>
         </div>
 
-        <p className="text-mocha-subtext text-sm mb-10 italic leading-relaxed">
+        <p className="text-mocha-subtext text-sm mb-6 sm:mb-10 italic leading-relaxed">
           {t("complete.enjoy")}
           <br />
           <span className="text-[11px] opacity-60 not-italic mt-2 block">

@@ -6,10 +6,10 @@ export default function Welcome() {
   const nextStep = useInstallerStore((s) => s.nextStep);
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-6 bg-dark font-inter">
-      <div className="glass-card max-w-lg w-full p-10 flex flex-col items-center text-center">
-        <div className="mb-8 p-6 bg-mocha-overlay/20 rounded-2xl animate-glow-pulse">
-          <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div className="flex w-full flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 bg-dark font-inter">
+      <div className="glass-card my-auto max-w-lg w-full mx-auto p-6 sm:p-10 flex flex-col items-center text-center">
+        <div className="mb-6 sm:mb-8 p-4 sm:p-6 bg-mocha-overlay/20 rounded-2xl animate-glow-pulse">
+          <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="sm:w-[100px] sm:h-[100px]">
             {/* Outer Observatory Ring - Minimalist & Tech */}
             <circle cx="50" cy="50" r="45" stroke="#313244" strokeWidth="1" strokeDasharray="6 6" />
             <circle cx="50" cy="50" r="35" stroke="#89b4fa" strokeWidth="2" strokeOpacity="0.1" />
@@ -39,13 +39,13 @@ export default function Welcome() {
           </svg>
         </div>
 
-        <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 tracking-tight">
           {t("welcome.title")}
         </h1>
         <p className="text-mocha-blue font-medium mb-6 uppercase tracking-[0.2em] text-xs">
           {t("welcome.subtitle")}
         </p>
-        <p className="text-mocha-subtext mb-10 text-sm leading-relaxed max-w-sm">
+        <p className="text-mocha-subtext mb-8 sm:mb-10 text-sm leading-relaxed max-w-sm">
           {t("welcome.description")}
         </p>
 

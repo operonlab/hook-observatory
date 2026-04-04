@@ -46,11 +46,21 @@ export interface ToolPaths {
   biome: string;
 }
 
+export interface ToolDetailInfo {
+  name: string;
+  path: string | null;
+  version: string | null;
+  installed: boolean;
+  install_command: string;
+  required: boolean;
+}
+
 interface InstallerState {
   currentStep: number;
   dependencies: DependencyResult[];
   components: HookComponent[];
   toolPaths: ToolPaths;
+  toolDetails: ToolDetailInfo[];
   installSteps: InstallStep[];
   installError: string | null;
 
@@ -60,6 +70,7 @@ interface InstallerState {
   setDependencies: (deps: DependencyResult[]) => void;
   toggleComponent: (id: string) => void;
   setToolPaths: (paths: Partial<ToolPaths>) => void;
+  setToolDetails: (details: ToolDetailInfo[]) => void;
   setInstallSteps: (steps: InstallStep[]) => void;
   updateInstallStep: (index: number, update: Partial<InstallStep>) => void;
   setInstallError: (error: string | null) => void;
@@ -71,6 +82,7 @@ const initialState = {
   dependencies: [],
   components: DEFAULT_COMPONENTS.map((c) => ({ ...c })),
   toolPaths: { python: "", ruff: "", biome: "" },
+  toolDetails: [] as ToolDetailInfo[],
   installSteps: [],
   installError: null,
 };
@@ -93,6 +105,19 @@ export const useInstallerStore = create<InstallerState>((set) => ({
 
   setToolPaths: (paths) =>
     set((s) => ({ toolPaths: { ...s.toolPaths, ...paths } })),
+
+  setToolDetails: (details) =>
+    set((s) => {
+      const toolPaths = { ...s.toolPaths };
+      for (const d of details) {
+        if (d.installed && d.path) {
+          if (d.name === "python") toolPaths.python = d.path;
+          if (d.name === "ruff") toolPaths.ruff = d.path;
+          if (d.name === "biome") toolPaths.biome = d.path;
+        }
+      }
+      return { toolDetails: details, toolPaths };
+    }),
 
   setInstallSteps: (steps) => set({ installSteps: steps }),
 

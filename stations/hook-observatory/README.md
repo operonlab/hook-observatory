@@ -1,10 +1,22 @@
 # hook-observatory
 
+**[English](https://github.com/operonlab/hook-observatory/blob/main/README.md)** | [繁體中文](https://github.com/operonlab/hook-observatory/blob/main/README.zh.md)
+
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![Claude Code](https://img.shields.io/badge/claude--code-compatible-purple)
 
 A centralized, configurable hook handler framework for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Replaces scattered shell scripts with a single Python dispatcher, 34 handler modules, and YAML-based configuration.
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard — real-time event monitoring" width="700" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/installer-welcome.png" alt="GUI Installer — Welcome" width="220" />
+  <img src="docs/screenshots/installer-deps.png" alt="GUI Installer — Dependency Check" width="220" />
+  <img src="docs/screenshots/installer-components.png" alt="GUI Installer — Component Selection" width="220" />
+</p>
 
 ---
 
