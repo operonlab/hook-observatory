@@ -605,14 +605,9 @@ async def ws_handler(websocket: WebSocket):
                 alt_states = {}
                 for p in vis:
                     target = f"{session}:{p['id']}"
+                    content = await capture_pane(target, capture_lines)
                     alt_on = p.get("alternate_on", 0)
                     alt_states[p["id"]] = alt_on
-                    # Alt-screen: capture visible only (pure TUI, no main buffer bleed)
-                    # Normal: capture with scrollback lines
-                    if alt_on:
-                        content = await capture_pane_visible(target)
-                    else:
-                        content = await capture_pane(target, capture_lines)
                     if content != last_contents.get(p["id"]):
                         last_contents[p["id"]] = content
                         updates[p["id"]] = content
