@@ -109,9 +109,13 @@ tts:
   debounce_seconds: 10
   settle_seconds: 8
 
+# ─── CORS (additional allowed origins for web UI) ────────────────
+cors_origins: []               # e.g., ["https://my-domain.com"]
+
 # ─── Paths ─────────────────────────────────────────────────────
 paths:
   observatory_root: auto       # auto-detect from package location
   claude_dir: "~/.claude"
   hooks_dir: "~/.claude/hooks"
   data_dir: "~/.claude/data"
+  project_root: ""             # protected directory for rm -rf safety check

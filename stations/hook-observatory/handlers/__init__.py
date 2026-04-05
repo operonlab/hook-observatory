@@ -15,45 +15,54 @@ import json
 import time
 from collections.abc import Callable
 
-# Import all handler modules
+# Required handlers (Category A — always available in OSS distribution)
 from . import (
     agent_naming,
-    anvil_telemetry,
-    attitude_signal,
     auto_format,
     bash_safety,
     claudemd_suggest,
     cleanup_versions,
     context_inject,
-    context_relay,
-    external,
     instinct_distiller,
-    memory_sync,
     observability,
     plan_impl_gate,
     pm_autopilot,
-    relay_signal,
     review_gate,
     rtk_rewrite,
-    schedule_sync,
     secret_scan,
-    sentinel_notify,
-    session_channel,
     session_cost,
     session_namer,
-    session_pipeline,
     skill_security,
-    utility_watchdog,
     verify_commit,
     verify_completion,
-    voice_notify,
-)
-from . import (
-    context_supervisor as context_supervisor,
 )
 from .base import ALLOW, HookResult
 from .hook_config import cfg as cfg
 from .hook_config import get_budget_ms, is_handler_enabled
+
+
+# Optional handlers (Category B — workshop-dependent, may be absent in OSS)
+def _try_import(name: str):
+    """Import a handler module, returning None if unavailable."""
+    try:
+        return __import__(f"{__package__}.{name}", fromlist=[name])
+    except (ImportError, ModuleNotFoundError):
+        return None
+
+
+anvil_telemetry = _try_import("anvil_telemetry")
+attitude_signal = _try_import("attitude_signal")
+context_relay = _try_import("context_relay")
+context_supervisor = _try_import("context_supervisor")
+external = _try_import("external")
+memory_sync = _try_import("memory_sync")
+relay_signal = _try_import("relay_signal")
+schedule_sync = _try_import("schedule_sync")
+sentinel_notify = _try_import("sentinel_notify")
+session_channel = _try_import("session_channel")
+session_pipeline = _try_import("session_pipeline")
+utility_watchdog = _try_import("utility_watchdog")
+voice_notify = _try_import("voice_notify")
 
 # Type alias for handler functions
 Handler = Callable[[str, str, dict, str], HookResult]
@@ -77,6 +86,14 @@ CRITICAL_HANDLERS: set[Handler] = {
 }
 
 
+def _opt(matcher: str | None, mod, attr: str = "handle") -> tuple[str | None, Handler] | None:
+    """Create an optional registry entry. Returns None if module unavailable."""
+    if mod is None:
+        return None
+    fn = getattr(mod, attr, None)
+    return (matcher, fn) if fn else None
+
+
 # ---------------------------------------------------------------------------
 # Registry: event_type -> [(matcher_or_None, handler_fn), ...]
 #   matcher=None  → always run (catch-all)
@@ -84,89 +101,92 @@ CRITICAL_HANDLERS: set[Handler] = {
 # ---------------------------------------------------------------------------
 
 REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
-    "PreToolUse": [
-        ("Agent", agent_naming.handle),
-        ("AskUserQuestion", voice_notify.handle),
-        ("Bash", verify_commit.handle),
-        ("Bash", bash_safety.handle),
-        ("Bash", secret_scan.handle),
-        ("Bash", sentinel_notify.handle),
-        ("Bash", rtk_rewrite.handle),  # after safety — rewrite for token savings
-        ("Write|Edit", skill_security.handle),
-        # context_supervisor: disabled — concept good, scoring inaccurate
-        (None, observability.handle),
-    ],
-    "PostToolUse": [
-        ("Edit|Write", auto_format.handle),
-        ("Edit|Write", memory_sync.handle),
-        ("Edit|Write", schedule_sync.handle),
-        ("Bash", sentinel_notify.handle),
-        ("Bash", pm_autopilot.handle),
-        (None, anvil_telemetry.handle),
-        ("Skill", external.skill_tracker),
-        ("ExitPlanMode", plan_impl_gate.handle),
-        # context_supervisor: disabled
-        (None, observability.handle),
-    ],
-    "Stop": [
-        (None, review_gate.handle),  # review gate — check uncommitted code changes
-        (None, session_namer.handle),
-        (None, relay_signal.handle),
-        (None, session_channel.handle),
-        (None, pm_autopilot.handle),
-        (None, voice_notify.handle),
-        (None, session_cost.handle),  # response counter — before observability
-        # context_supervisor: disabled
-        (None, observability.handle),
-    ],
-    "Notification": [
-        (None, attitude_signal.handle),
-        (None, observability.handle),
-    ],
-    "SessionEnd": [
-        (None, session_pipeline.handle),
-        (None, instinct_distiller.handle),
-        (None, utility_watchdog.handle),
-        (None, attitude_signal.handle),
-        (None, observability.handle),
-    ],
-    "UserPromptSubmit": [
-        # context_supervisor: disabled
-        (None, external.recall),
-        (None, plan_impl_gate.handle),
-        (None, session_namer.handle_color_hint),
-        (None, anvil_telemetry.handle),
-        (None, observability.handle),
-    ],
-    "SessionStart": [
-        (None, external.sync_login),
-        (None, anvil_telemetry.handle),
-        (None, session_channel.handle),
-        (None, context_relay.handle),
-        (None, claudemd_suggest.handle),
-        (None, instinct_distiller.handle),
-        (None, cleanup_versions.handle),
-        (None, pm_autopilot.handle),
-        (None, utility_watchdog.handle),
-        # context_supervisor: disabled
-        (None, observability.handle),
-    ],
-    "SubagentStart": [
-        (None, context_inject.handle),
-        (None, voice_notify.handle),
-        (None, observability.handle),
-    ],
-    "SubagentStop": [
-        (None, verify_completion.handle),
-        (None, voice_notify.handle),
-        (None, observability.handle),
-    ],
-    "PreCompact": [
-        # context_supervisor: disabled
-        (None, external.progressive_extract),
-        (None, context_relay.handle),
-        (None, observability.handle),
-    ],
+    k: [e for e in v if e is not None]
+    for k, v in {
+        "PreToolUse": [
+            ("Agent", agent_naming.handle),
+            _opt("AskUserQuestion", voice_notify),
+            ("Bash", verify_commit.handle),
+            ("Bash", bash_safety.handle),
+            ("Bash", secret_scan.handle),
+            _opt("Bash", sentinel_notify),
+            ("Bash", rtk_rewrite.handle),
+            ("Write|Edit", skill_security.handle),
+            # context_supervisor: disabled — concept good, scoring inaccurate
+            (None, observability.handle),
+        ],
+        "PostToolUse": [
+            ("Edit|Write", auto_format.handle),
+            _opt("Edit|Write", memory_sync),
+            _opt("Edit|Write", schedule_sync),
+            _opt("Bash", sentinel_notify),
+            ("Bash", pm_autopilot.handle),
+            _opt(None, anvil_telemetry),
+            _opt("Skill", external, "skill_tracker"),
+            (None, plan_impl_gate.handle),
+            # context_supervisor: disabled
+            (None, observability.handle),
+        ],
+        "Stop": [
+            (None, review_gate.handle),
+            (None, session_namer.handle),
+            _opt(None, relay_signal),
+            _opt(None, session_channel),
+            (None, pm_autopilot.handle),
+            _opt(None, voice_notify),
+            (None, session_cost.handle),
+            # context_supervisor: disabled
+            (None, observability.handle),
+        ],
+        "Notification": [
+            _opt(None, attitude_signal),
+            (None, observability.handle),
+        ],
+        "SessionEnd": [
+            _opt(None, session_pipeline),
+            (None, instinct_distiller.handle),
+            _opt(None, utility_watchdog),
+            _opt(None, attitude_signal),
+            (None, observability.handle),
+        ],
+        "UserPromptSubmit": [
+            # context_supervisor: disabled
+            _opt(None, external, "recall"),
+            (None, plan_impl_gate.handle),
+            (None, session_namer.handle_color_hint),
+            _opt(None, anvil_telemetry),
+            (None, observability.handle),
+        ],
+        "SessionStart": [
+            _opt(None, external, "sync_login"),
+            _opt(None, anvil_telemetry),
+            _opt(None, session_channel),
+            _opt(None, context_relay),
+            (None, claudemd_suggest.handle),
+            (None, instinct_distiller.handle),
+            (None, cleanup_versions.handle),
+            (None, pm_autopilot.handle),
+            _opt(None, utility_watchdog),
+            # context_supervisor: disabled
+            (None, observability.handle),
+        ],
+        "SubagentStart": [
+            (None, context_inject.handle),
+            _opt(None, voice_notify),
+            (None, observability.handle),
+        ],
+        "SubagentStop": [
+            (None, verify_completion.handle),
+            _opt(None, voice_notify),
+            (None, observability.handle),
+        ],
+        "PreCompact": [
+            # context_supervisor: disabled
+            _opt(None, external, "progressive_extract"),
+            _opt(None, context_relay),
+            (None, observability.handle),
+        ],
+    }.items()
 }
 
 
@@ -207,13 +227,18 @@ for _mod_name, _mod in [
     ("verify_completion", verify_completion),
     ("voice_notify", voice_notify),
 ]:
-    _HANDLER_MODULE_MAP[_mod.handle] = _mod_name
+    if _mod is not None and hasattr(_mod, "handle"):
+        _HANDLER_MODULE_MAP[_mod.handle] = _mod_name
 
-# Also map external.* functions
-for _attr in ("recall", "skill_tracker", "progressive_extract", "sync_login"):
-    _fn = getattr(external, _attr, None)
-    if _fn:
-        _HANDLER_MODULE_MAP[_fn] = "external"
+# Also map external.* functions (if available)
+if external is not None:
+    for _attr in ("recall", "skill_tracker", "progressive_extract", "sync_login"):
+        _fn = getattr(external, _attr, None)
+        if _fn:
+            _HANDLER_MODULE_MAP[_fn] = "external"
+
+# session_namer has a second function registered
+_HANDLER_MODULE_MAP[session_namer.handle_color_hint] = "session_namer"
 
 
 def _filter_registry() -> None:

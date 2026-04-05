@@ -80,6 +80,16 @@ def _check_command(full_cmd: str) -> str | None:
 _HOME = os.path.expanduser("~")
 
 
+def _get_project_root() -> str:
+    """Get the project root path from config for rm protection."""
+    try:
+        from .hook_config import get_path
+        root = get_path("project_root")
+        return os.path.expanduser(root) if root else ""
+    except Exception:
+        return ""
+
+
 def _check_segment(cmd: str) -> str | None:
     """Check a single command segment against deny patterns."""
     cmd = cmd.strip()
@@ -104,8 +114,9 @@ def _check_segment(cmd: str) -> str | None:
                     return f"rm recursive+force on critical path: {t}"
                 if expanded.rstrip("/") == _HOME:
                     return "rm recursive+force on home directory"
-                if expanded.rstrip("/") == os.path.join(_HOME, "workshop"):
-                    return "rm recursive+force on workshop directory"
+                _project_root = _get_project_root()
+                if _project_root and expanded.rstrip("/") == _project_root:
+                    return "rm recursive+force on project root directory"
                 if expanded.startswith(_HOME + "/"):
                     rel = expanded[len(_HOME) + 1 :].rstrip("/")
                     if "/" not in rel:
