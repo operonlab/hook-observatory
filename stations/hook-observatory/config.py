@@ -6,7 +6,38 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sdk_client.station_bootstrap import load_yaml_config
+
+def load_yaml_config(config_path: Path | str, defaults: dict | None = None) -> dict:
+    """Load YAML config with env var override.
+
+    Priority: env vars > YAML file > defaults.
+    Env var naming: <ENV_PREFIX>_<KEY> (env_prefix from YAML).
+    """
+    import yaml
+
+    result: dict = dict(defaults or {})
+    path = Path(config_path)
+    if path.exists():
+        with open(path) as f:
+            file_config = yaml.safe_load(f) or {}
+        result.update(file_config)
+
+    env_prefix = result.get("env_prefix", "").upper()
+    if env_prefix and not env_prefix.endswith("_"):
+        env_prefix += "_"
+    for key in list(result.keys()):
+        if key == "env_prefix":
+            continue
+        env_key = f"{env_prefix}{key.upper()}"
+        env_val = os.environ.get(env_key)
+        if env_val is not None:
+            if env_val.isdigit():
+                result[key] = int(env_val)
+            elif env_val.lower() in ("true", "false"):
+                result[key] = env_val.lower() == "true"
+            else:
+                result[key] = env_val
+    return result
 
 _DEFAULT_CONFIG_DIR = Path.home() / ".hook-observatory"
 _CONFIG_PATH = Path(__file__).parent / "config.yaml"
@@ -24,7 +55,7 @@ class Config:
     port: int = 10100
     host: str = "127.0.0.1"
     database_url: str = "sqlite+aiosqlite:///~/.hook-observatory/events.db"
-    secret_key: str = "change-me-in-production"
+    secret_key: str = "change-me-in-production"  # noqa: S105
     session_cookie_name: str = "workshop_session"
     session_max_age: int = 604800  # 7 days
     auth_enabled: bool = False

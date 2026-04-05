@@ -201,9 +201,17 @@ def batch_rename_sessions(session_paths: list[str]) -> dict[str, dict]:
     import re
     import sys as _sys
 
-    _sys.path.insert(0, "/Users/joneshong/workshop/core")
-
-    from src.shared.rlm_engine import RLMConfig, RLMEngine
+    try:
+        from .hook_config import get_path
+        _project_root = get_path("project_root")
+        if _project_root:
+            _sys.path.insert(0, os.path.join(_project_root, "core"))
+        from src.shared.rlm_engine import RLMConfig, RLMEngine
+    except ImportError:
+        raise ImportError(
+            "batch_rename_sessions requires workshop core (RLMEngine). "
+            "Set paths.project_root in config.yaml or install workshop core."
+        ) from None
 
     session_paths = session_paths[:50]
     results: dict[str, dict] = {}

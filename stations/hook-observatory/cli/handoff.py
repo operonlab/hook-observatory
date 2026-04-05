@@ -1,4 +1,4 @@
-#!/Users/joneshong/.local/bin/python3
+#!/usr/bin/env python3
 """
 Context Relay CLI — handoff session state to a new Claude Code pane.
 

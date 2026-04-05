@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,9 +16,13 @@ from sqlalchemy import text
 
 from config import config
 from routes import router
-from sdk_client.station_bootstrap import setup_logging
 
-logger = setup_logging("hook-observatory")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("hook-observatory")
 
 _drainer: SpoolDrainer | None = None
 
@@ -106,10 +111,13 @@ async def lifespan(app: FastAPI):
 
     logger.info("Database ready (%s)", "PostgreSQL" if IS_POSTGRES else "SQLite")
 
-    # Wire reactive store
-    from store import hook_store
-
-    app.state.store = hook_store
+    # Wire reactive store (optional — requires workshop core)
+    try:
+        from store import hook_store
+        app.state.store = hook_store
+    except ImportError:
+        app.state.store = None
+        logger.info("FeatureStore unavailable (OSS mode)")
 
     # Start spool drainer
     _drainer = SpoolDrainer(
@@ -134,13 +142,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow workbench origin
+# CORS — configurable origins
+_cors_extra = []
+try:
+    from handlers.hook_config import cfg
+    _cors_extra = cfg.get("cors_origins", [])
+    if isinstance(_cors_extra, str):
+        _cors_extra = [_cors_extra] if _cors_extra else []
+except Exception:  # noqa: S110
+    pass
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:10100",
-        "https://workshop.joneshong.com",
+        f"http://localhost:{config.port}",
+        *_cors_extra,
     ],
     allow_credentials=True,
     allow_methods=["*"],
