@@ -194,6 +194,12 @@ LIGHT_CHECKS: list[LightCheck] = [
         url=_url("nginx", "/paper/"),
         expect_contains='<div id="root">',
     ),
+    LightCheck(
+        name="frontend-docvault",
+        group="internal",
+        url=_url("nginx", "/docvault/"),
+        expect_contains='<div id="root">',
+    ),
     # ── external (stations) ──
     LightCheck(
         name="hook-observatory",
@@ -432,6 +438,13 @@ DEEP_CHECKS: list[DeepCheck] = [
         playwright_code=_pw_module_check("paper"),
         eval_code=_eval_module_check("paper"),
     ),
+    DeepCheck(
+        name="frontend-docvault-render",
+        group="internal",
+        url=_url("nginx", "/docvault/"),
+        playwright_code=_pw_module_check("docvault"),
+        eval_code=_eval_module_check("docvault"),
+    ),
     # ── external (station HTML — body > *) ──
     DeepCheck(
         name="hook-observatory-render",
@@ -637,6 +650,7 @@ _SHORT_NAMES = {
     "frontend-briefing-render": "bf",
     "frontend-dailyos-render": "dos",
     "frontend-paper-render": "paper",
+    "frontend-docvault-render": "dv",
     "hook-observatory-render": "hook",
     "session-channel-render": "ch",
     "agent-vista-render": "vista",

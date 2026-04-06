@@ -1,18 +1,16 @@
 #!/Users/joneshong/.local/bin/python3
 """DocVault CLI — Command-line interface for the DocVault document knowledge system.
 
-Uses the shared workshop SDK client.
-Full coverage of document CRUD, QA, relations, coverage gaps, and stats.
+Uses the shared workshop SDK client. 12 commands covering document
+lifecycle, search, QA, relations, gaps, and management.
 """
 
 import argparse
-import json
+import os
 import sys
 from datetime import datetime
-from pathlib import Path
 
 from cli.cli_helpers import json_out
-from cli.cli_utils import resolve_text_arg
 
 from sdk_client._base import APIConnectionError, APIError
 from sdk_client.docvault import DocvaultClient
@@ -45,278 +43,354 @@ def fmt_tags(tags: list[str]) -> str:
     return "[" + ", ".join(tags) + "]"
 
 
-def _print_document(doc: dict, verbose: bool = False) -> None:
-    print(f"  📄 {doc.get('title', 'Untitled')}")
-    status = doc.get("status", "?")
-    stype = doc.get("source_type", "?")
-    print(f"     ID: {doc['id']}  Status: {status}  Type: {stype}")
-    if doc.get("tags"):
-        print(f"     Tags: {fmt_tags(doc['tags'])}")
-    if verbose:
-        print(f"     Hash: {doc.get('content_hash', '?')[:16]}...")
-        print(f"     Created: {fmt_dt(doc.get('created_at'))}")
-        print(f"     Confidence: {doc.get('confidence', 0):.2f}")
-        print(f"     Access count: {doc.get('access_count', 0)}")
-    print()
-
-
-def _print_qa_result(result: dict) -> None:
-    print(f"\n💬 Answer (pipeline {result.get('pipeline_used', '?')}):\n")
-    print(result.get("answer", "No answer"))
-    print(f"\n  Confidence: {result.get('confidence', 0):.2f}")
-    if result.get("crag_verdict"):
-        print(f"  CRAG verdict: {result['crag_verdict']}")
-    citations = result.get("citations", [])
-    if citations:
-        print(f"\n📎 Citations ({len(citations)}):")
-        for i, c in enumerate(citations, 1):
-            section = c.get("section", "")
-            page = c.get("page", "")
-            loc = f" (section: {section}, page: {page})" if section or page else ""
-            print(f"  {i}. [{c.get('document_id', '?')}]{loc}")
-            if c.get("quote"):
-                print(f'     "{truncate(c["quote"], 120)}"')
+def _parse_tags(raw: str | None) -> list[str] | None:
+    if not raw:
+        return None
+    return [t.strip() for t in raw.split(",") if t.strip()]
 
 
 # ---------------------------------------------------------------------------
-# Commands
+# Command handlers
 # ---------------------------------------------------------------------------
 
 
-def cmd_upload(args) -> None:
-    client = DocvaultClient()
-    tags = [t.strip() for t in args.tags.split(",")] if args.tags else []
-    try:
-        doc = client.upload(args.file, args.title or Path(args.file).stem, tags=tags)
-        if json_out(doc, args):
-            return
-        print("✅ Document uploaded:")
-        _print_document(doc, verbose=True)
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_search(args) -> None:
-    client = DocvaultClient()
-    try:
-        results = client.search(args.query, top_k=args.top_k, tag=args.tag)
-        if json_out(results, args):
-            return
-        if not results:
-            print("No results found.")
-            return
-        print(f"🔍 {len(results)} results:\n")
-        for i, chunk in enumerate(results, 1):
-            score = chunk.get("score", 0)
-            content = truncate(chunk.get("content", ""), 200)
-            meta = chunk.get("metadata", {})
-            print(f"  {i}. [{score:.3f}] {meta.get('section_path', '')}")
-            print(f"     {content}\n")
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_qa(args) -> None:
-    client = DocvaultClient()
-    question = resolve_text_arg(args.question) or args.question
-    try:
-        result = client.qa(question, mode=args.mode, top_k=args.top_k, domain=args.domain)
-        if json_out(result, args):
-            return
-        _print_qa_result(result)
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_list(args) -> None:
-    client = DocvaultClient()
-    try:
-        data = client.list_documents(
-            page=args.page, page_size=args.page_size, status=args.status, tag=args.tag
-        )
-        if json_out(data, args):
-            return
-        items = data.get("items", [])
-        total = data.get("total", 0)
-        print(f"📚 Documents ({total} total, page {args.page}):\n")
-        for doc in items:
-            _print_document(doc)
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_info(args) -> None:
-    client = DocvaultClient()
-    try:
-        doc = client.get_document(args.doc_id)
-        if json_out(doc, args):
-            return
-        _print_document(doc, verbose=True)
-
-        versions = client.list_versions(args.doc_id)
-        if versions:
-            print(f"  📋 Versions ({len(versions)}):")
-            for v in versions:
-                print(
-                    f"     v{v.get('version_number', '?')} — {v.get('status', '?')} "
-                    f"({v.get('chunk_count', 0)} chunks, {fmt_dt(v.get('created_at'))})"
-                )
-                if v.get("summary"):
-                    print(f"       Summary: {truncate(v['summary'], 120)}")
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_supersede(args) -> None:
-    client = DocvaultClient()
-    try:
-        version = client.supersede_document(args.doc_id, args.file)
-        if json_out(version, args):
-            return
-        print(f"✅ New version created: v{version.get('version_number', '?')}")
-        print(f"   Status: {version.get('status', '?')}")
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_relations(args) -> None:
-    client = DocvaultClient()
-    try:
-        relations = client.list_relations(args.doc_id)
-        if json_out(relations, args):
-            return
-        if not relations:
-            print("No relations found.")
-            return
-        print(f"🔗 Relations ({len(relations)}):\n")
-        for r in relations:
-            src = r.get("source_document_id", "?")[:8]
-            tgt = r.get("target_document_id", "?")[:8]
-            rtype = r.get("relation_type", "?")
-            conf = r.get("confidence", 0)
-            print(f"  {src}.. —[{rtype}]→ {tgt}.. (conf={conf:.2f})")
-            if r.get("evidence"):
-                print(f"    Evidence: {truncate(r['evidence'], 100)}")
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_contradictions(args) -> None:
-    client = DocvaultClient()
-    try:
-        results = client.find_contradictions()
-        if json_out(results, args):
-            return
-        if not results:
-            print("No contradictions detected.")
-            return
-        print(f"⚠️  Contradictions ({len(results)}):\n")
-        for c in results:
-            src = c.get("source_document_id", "?")[:8]
-            tgt = c.get("target_document_id", "?")[:8]
-            print(f"  {src}.. ↔ {tgt}..")
-            if c.get("evidence"):
-                print(f"    {truncate(c['evidence'], 120)}")
-            print()
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_gaps(args) -> None:
-    client = DocvaultClient()
-    try:
-        data = client.list_gaps(status=args.status)
-        if json_out(data, args):
-            return
-        items = data.get("items", [])
-        total = data.get("total", 0)
-        print(f"🕳️  Coverage gaps ({total} total):\n")
-        for g in items:
-            status = g.get("status", "?")
-            gap_type = g.get("gap_type", "?")
-            print(f"  [{status}] {gap_type}: {truncate(g.get('query_text', ''), 120)}")
-            if g.get("suggested_sources"):
-                sug = json.dumps(g["suggested_sources"], ensure_ascii=False)[:100]
-                print(f"    Suggestions: {sug}")
-            print()
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_reindex(args) -> None:
-    client = DocvaultClient()
-    try:
-        result = client.reindex(args.doc_id)
-        if json_out(result, args):
-            return
-        print(f"✅ Re-index queued for document {args.doc_id}")
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_bulk_import(args) -> None:
-    client = DocvaultClient()
-    directory = Path(args.directory)
-    if not directory.is_dir():
-        print(f"❌ Not a directory: {args.directory}", file=sys.stderr)
-        sys.exit(1)
-
-    extensions = {".pdf", ".docx", ".md", ".txt"}
-    files = [str(f) for f in directory.iterdir() if f.suffix.lower() in extensions]
-
-    if not files:
-        print("No supported files found (.pdf, .docx, .md, .txt)")
+def cmd_upload(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Upload a document."""
+    tags = _parse_tags(args.tags)
+    data = client.upload(
+        file_path=args.file,
+        title=args.title,
+        source_type=args.source_type,
+        source_uri=args.source_uri,
+        tags=tags,
+    )
+    if json_out(data, args):
         return
 
-    print(f"📦 Importing {len(files)} files from {args.directory}...\n")
-    try:
-        results = client.bulk_import(files)
-        if json_out(results, args):
-            return
-        success = sum(1 for r in results if r["status"] == "success")
-        errors = sum(1 for r in results if r["status"] == "error")
-        print(f"  ✅ {success} imported, ❌ {errors} failed")
-        for r in results:
-            if r["status"] == "error":
-                print(f"  ❌ {Path(r['file']).name}: {r['error']}")
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
+    doc_id = data.get("id", "?")
+    if args.quiet:
+        print(doc_id)
+    else:
+        print(f"  Document uploaded: {doc_id}")
+        print(f"  Title: {data.get('title', '?')}")
+        print(f"  Type: {data.get('source_type', '?')}")
 
 
-def cmd_stats(args) -> None:
-    client = DocvaultClient()
-    try:
-        data = client.stats()
-        if json_out(data, args):
-            return
-        print("📊 DocVault Statistics:\n")
-        print(f"  Documents:  {data.get('total_documents', 0)}")
-        print(f"  Chunks:     {data.get('total_chunks', 0)}")
-        print(f"  Relations:  {data.get('total_relations', 0)}")
-        print(f"  Gaps:       {data.get('total_gaps', 0)}")
-        print(f"  QA logs:    {data.get('total_qa_logs', 0)}")
-        if data.get("by_status"):
-            print("\n  By status:")
-            for s, c in data["by_status"].items():
-                print(f"    {s}: {c}")
-        if data.get("by_source_type"):
-            print("\n  By source type:")
-            for t, c in data["by_source_type"].items():
-                print(f"    {t}: {c}")
-    except (APIError, APIConnectionError) as e:
-        print(f"❌ {e}", file=sys.stderr)
-        sys.exit(1)
+def cmd_search(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Semantic search over document chunks."""
+    tags = _parse_tags(args.tags)
+    data = client.search(
+        args.query,
+        top_k=args.top_k,
+        source_type=args.source_type,
+        tags=tags,
+    )
+    if json_out(data, args):
+        return
+
+    results = data.get("results", data.get("chunks", []))
+    if not results:
+        if not args.quiet:
+            print("  No results found.")
+        return
+
+    for i, item in enumerate(results, 1):
+        score = item.get("score", 0)
+        section = item.get("section_path", "")
+        content = item.get("content", "")
+        doc_id = item.get("document_id", "?")[:12]
+
+        if args.quiet:
+            print(f"{score:.1%} {truncate(content, 120)}")
+        else:
+            print(f"  {i}. [{score:.1%}] doc={doc_id} {section}")
+            print(f"     {truncate(content)}")
+            print()
+
+
+def cmd_qa(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Ask a question against the document corpus."""
+    data = client.qa(
+        args.question,
+        mode=args.mode,
+        domain=args.domain,
+        top_k=args.top_k,
+    )
+    if json_out(data, args):
+        return
+
+    print(f"  Q: {args.question}")
+    print()
+    print(f"  A: {data.get('answer', 'No answer')}")
+    print()
+
+    citations = data.get("citations", [])
+    if citations and not args.quiet:
+        print("  Citations:")
+        for c in citations:
+            idx = c.get("index", "?")
+            section = c.get("section", "?")
+            page = c.get("page", "")
+            page_info = f" p.{page}" if page else ""
+            print(f"    [{idx}] {section}{page_info}")
+        print()
+
+    confidence = data.get("confidence")
+    verdict = data.get("crag_verdict")
+    if not args.quiet:
+        parts = []
+        if confidence is not None:
+            parts.append(f"confidence={confidence:.2f}")
+        if verdict:
+            parts.append(f"verdict={verdict}")
+        pipeline = data.get("pipeline_used", "?")
+        parts.append(f"pipeline={pipeline}")
+        print(f"  ({', '.join(parts)})")
+
+
+def cmd_list(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """List documents."""
+    data = client.list_documents(
+        page=args.page,
+        page_size=args.page_size,
+        tag=args.tag,
+        status=args.status,
+    )
+    if json_out(data, args):
+        return
+
+    items = data.get("items", [])
+    total = data.get("total", "?")
+
+    if not items:
+        if not args.quiet:
+            print("  No documents found.")
+        return
+
+    if not args.quiet:
+        print(f"  Documents (page {args.page}, {total} total)")
+        print("  " + "-" * 60)
+
+    for d in items:
+        did = d.get("id", "?")[:12]
+        title = d.get("title", "?")
+        status = d.get("status", "?")
+        source = d.get("source_type", "?")
+        tags = fmt_tags(d.get("tags", []))
+        created = fmt_dt(d.get("created_at"))
+
+        if args.quiet:
+            print(f"{did} [{status}] {title}")
+        else:
+            print(f"  {did}  [{status}] ({source}) {title} {tags}")
+            print(f"    Created: {created}")
+            print()
+
+
+def cmd_info(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Get detailed document info."""
+    data = client.get_document(args.document_id)
+    if json_out(data, args):
+        return
+
+    if args.quiet:
+        print(f"{data.get('title', '?')} [{data.get('status', '?')}]")
+        return
+
+    print(f"  ID          : {data.get('id', '?')}")
+    print(f"  Title       : {data.get('title', '?')}")
+    print(f"  Status      : {data.get('status', '?')}")
+    print(f"  Source Type  : {data.get('source_type', '?')}")
+    print(f"  Source URI   : {data.get('source_uri', 'n/a')}")
+    print(f"  Content Hash : {data.get('content_hash', '?')}")
+    print(f"  Tags         : {fmt_tags(data.get('tags', []))}")
+    print(f"  Confidence   : {data.get('confidence', 'n/a')}")
+    print(f"  Access Count : {data.get('access_count', 0)}")
+    print(f"  Created      : {fmt_dt(data.get('created_at'))}")
+    print(f"  Updated      : {fmt_dt(data.get('updated_at'))}")
+
+
+def cmd_supersede(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Mark a document as superseded."""
+    data = client.supersede_document(
+        args.document_id,
+        args.new_document_id,
+        reason=args.reason,
+    )
+    if json_out(data, args):
+        return
+
+    if args.quiet:
+        print("ok")
+    else:
+        print(f"  Document {args.document_id[:12]} superseded by {args.new_document_id[:12]}")
+
+
+def cmd_relations(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """List document relations."""
+    data = client.list_relations(
+        args.document_id,
+        page=args.page,
+        page_size=args.page_size,
+    )
+    if json_out(data, args):
+        return
+
+    items = data.get("items", [])
+    if not items:
+        if not args.quiet:
+            print("  No relations found.")
+        return
+
+    for r in items:
+        src = r.get("source_document_id", "?")[:12]
+        tgt = r.get("target_document_id", "?")[:12]
+        rtype = r.get("relation_type", "?")
+        conf = r.get("confidence")
+
+        if args.quiet:
+            print(f"{src} --[{rtype}]--> {tgt}")
+        else:
+            conf_str = f" ({conf:.2f})" if conf is not None else ""
+            print(f"  {src} --[{rtype}]--> {tgt}{conf_str}")
+            evidence = r.get("evidence", "")
+            if evidence:
+                print(f"    Evidence: {truncate(evidence, 120)}")
+
+
+def cmd_contradictions(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Find contradictions across documents."""
+    data = client.find_contradictions(
+        document_id=args.document_id if hasattr(args, "document_id") and args.document_id else None,
+    )
+    if json_out(data, args):
+        return
+
+    items = data.get("contradictions", data.get("items", []))
+    if not items:
+        if not args.quiet:
+            print("  No contradictions found.")
+        return
+
+    for c in items:
+        src = c.get("source_document_id", c.get("document_a_id", "?"))[:12]
+        tgt = c.get("target_document_id", c.get("document_b_id", "?"))[:12]
+        ctype = c.get("type", c.get("contradiction_type", "?"))
+        hint = c.get("resolution_hint", "")
+
+        if args.quiet:
+            print(f"{src} ↔ {tgt} [{ctype}]")
+        else:
+            print(f"  {src} ↔ {tgt} [{ctype}]")
+            if hint:
+                print(f"    Hint: {hint}")
+
+
+def cmd_gaps(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """List coverage gaps."""
+    data = client.list_gaps(
+        page=args.page,
+        page_size=args.page_size,
+        status=args.status,
+    )
+    if json_out(data, args):
+        return
+
+    items = data.get("items", [])
+    total = data.get("total", "?")
+
+    if not items:
+        if not args.quiet:
+            print("  No coverage gaps found.")
+        return
+
+    if not args.quiet:
+        print(f"  Coverage Gaps (page {args.page}, {total} total)")
+        print("  " + "-" * 60)
+
+    for g in items:
+        gid = g.get("id", "?")[:12]
+        query = g.get("query_text", "?")
+        gap_type = g.get("gap_type", "?")
+        status = g.get("status", "?")
+
+        if args.quiet:
+            print(f"{gid} [{status}] {truncate(query, 80)}")
+        else:
+            print(f"  {gid}  [{status}] ({gap_type})")
+            print(f"    Query: {truncate(query, 150)}")
+            detected = fmt_dt(g.get("detected_at"))
+            print(f"    Detected: {detected}")
+            print()
+
+
+def cmd_reindex(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Trigger reindexing."""
+    doc_id = args.document_id if hasattr(args, "document_id") else None
+    data = client.reindex(document_id=doc_id)
+    if json_out(data, args):
+        return
+
+    if args.quiet:
+        print("ok")
+    else:
+        scope = f"document {doc_id[:12]}" if doc_id else "all documents"
+        print(f"  Reindex triggered for {scope}")
+
+
+def cmd_bulk_import(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Bulk import documents from a directory."""
+    tags = _parse_tags(args.tags)
+    data = client.bulk_import(
+        args.source_dir,
+        source_type=args.source_type,
+        tags=tags,
+    )
+    if json_out(data, args):
+        return
+
+    imported = data.get("imported", 0)
+    errors = data.get("errors", 0)
+
+    if args.quiet:
+        print(f"{imported} imported, {errors} errors")
+    else:
+        print(f"  Bulk import from: {args.source_dir}")
+        print(f"  Imported: {imported}")
+        print(f"  Errors: {errors}")
+
+
+def cmd_stats(client: DocvaultClient, args: argparse.Namespace) -> None:
+    """Display aggregate statistics."""
+    data = client.stats()
+    if json_out(data, args):
+        return
+
+    if args.quiet:
+        print(
+            f"docs={data.get('total_documents', '?')} "
+            f"chunks={data.get('total_chunks', '?')} "
+            f"qa={data.get('total_qa_logs', '?')}"
+        )
+        return
+
+    print("  DocVault Statistics")
+    print("  -------------------")
+    print(f"  Documents     : {data.get('total_documents', '?')}")
+    print(f"  Chunks        : {data.get('total_chunks', '?')}")
+    print(f"  QA Logs       : {data.get('total_qa_logs', '?')}")
+    print(f"  Coverage Gaps : {data.get('coverage_gap_count', '?')}")
+    print(f"  Published     : {data.get('published_count', '?')}")
+
+    recent = data.get("recent_documents", [])
+    if recent:
+        print()
+        print("  Recent Documents:")
+        for d in recent[:5]:
+            title = d.get("title", "?")
+            status = d.get("status", "?")
+            created = fmt_dt(d.get("created_at"))
+            print(f"    [{status}] {title} ({created})")
 
 
 # ---------------------------------------------------------------------------
@@ -325,99 +399,141 @@ def cmd_stats(args) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docvault", description="DocVault document knowledge CLI")
-    p.add_argument("--json", action="store_true", default=False, help="JSON output")
-    sub = p.add_subparsers(dest="command")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--json", dest="json_output", action="store_true", help="Output raw JSON")
+    common.add_argument("--quiet", action="store_true", help="Minimal output")
+    common.add_argument("--api-url", dest="api_url", default=None, help="Override Core API URL")
+
+    paginated = argparse.ArgumentParser(add_help=False)
+    paginated.add_argument("--page", type=int, default=1, help="Page number (default: 1)")
+    paginated.add_argument("--page-size", type=int, default=20, help="Items per page (default: 20)")
+
+    parser = argparse.ArgumentParser(
+        prog="docvault",
+        description="CLI for the DocVault document knowledge system",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
 
     # upload
-    up = sub.add_parser("upload", help="Upload a document")
-    up.add_argument("file", help="Path to document file")
-    up.add_argument("--title", help="Document title (default: filename)")
-    up.add_argument("--tags", help="Comma-separated tags")
+    p = sub.add_parser("upload", parents=[common], help="Upload a document")
+    p.add_argument("file", nargs="?", help="Path to document file")
+    p.add_argument("--title", help="Document title (default: filename stem)")
+    p.add_argument(
+        "--source-type",
+        default="markdown",
+        choices=["pdf", "docx", "markdown", "webpage", "api"],
+        help="Source type (default: markdown)",
+    )
+    p.add_argument("--source-uri", help="Source URI")
+    p.add_argument("--tags", help="Comma-separated tags")
 
     # search
-    se = sub.add_parser("search", help="Semantic search across documents")
-    se.add_argument("query", help="Search query")
-    se.add_argument("--top-k", type=int, default=5, dest="top_k")
-    se.add_argument("--tag", help="Filter by tag")
+    p = sub.add_parser("search", parents=[common], help="Semantic search over documents")
+    p.add_argument("query", help="Search query")
+    p.add_argument("--top-k", type=int, default=10, help="Number of results (default: 10)")
+    p.add_argument("--source-type", help="Filter by source type")
+    p.add_argument("--tags", help="Comma-separated tag filter")
 
     # qa
-    qa = sub.add_parser("qa", help="Ask a question (Pipeline A/C)")
-    qa.add_argument("question", help="Question text (use '-' for stdin, '@file' for file)")
-    qa.add_argument("--mode", default="factual", choices=["factual", "mixed"])
-    qa.add_argument("--top-k", type=int, default=5, dest="top_k")
-    qa.add_argument("--domain", default="default")
+    p = sub.add_parser("qa", parents=[common], help="Ask a question")
+    p.add_argument("question", help="Question text")
+    p.add_argument(
+        "--mode",
+        default="factual",
+        choices=["factual", "mixed"],
+        help="QA mode (default: factual)",
+    )
+    p.add_argument("--domain", default="default", help="Domain profile (default: default)")
+    p.add_argument("--top-k", type=int, default=6, help="Evidence chunks (default: 6)")
 
     # list
-    ls = sub.add_parser("list", help="List documents")
-    ls.add_argument("--page", type=int, default=1)
-    ls.add_argument("--page-size", type=int, default=20, dest="page_size")
-    ls.add_argument("--status", help="Filter by status")
-    ls.add_argument("--tag", help="Filter by tag")
+    p = sub.add_parser("list", parents=[common, paginated], help="List documents")
+    p.add_argument("--tag", help="Filter by tag")
+    p.add_argument("--status", help="Filter by status")
 
     # info
-    info = sub.add_parser("info", help="Document details + version history")
-    info.add_argument("doc_id", help="Document ID")
+    p = sub.add_parser("info", parents=[common], help="Get document info")
+    p.add_argument("document_id", help="Document ID")
 
     # supersede
-    ss = sub.add_parser("supersede", help="Upload new version of a document")
-    ss.add_argument("doc_id", help="Document ID")
-    ss.add_argument("file", help="Path to new version file")
+    p = sub.add_parser("supersede", parents=[common], help="Mark document as superseded")
+    p.add_argument("document_id", help="Document ID to supersede")
+    p.add_argument("new_document_id", help="Newer document ID")
+    p.add_argument("--reason", help="Reason for superseding")
 
     # relations
-    rel = sub.add_parser("relations", help="View document relations")
-    rel.add_argument("doc_id", help="Document ID")
+    p = sub.add_parser("relations", parents=[common, paginated], help="List document relations")
+    p.add_argument("document_id", help="Document ID")
 
     # contradictions
-    sub.add_parser("contradictions", help="List contradicting document pairs")
+    p = sub.add_parser(
+        "contradictions", parents=[common], help="Find contradictions across documents"
+    )
+    p.add_argument("--document-id", help="Filter by document ID")
 
     # gaps
-    gp = sub.add_parser("gaps", help="List coverage gaps")
-    gp.add_argument("--status", help="Filter by status")
+    p = sub.add_parser("gaps", parents=[common, paginated], help="List coverage gaps")
+    p.add_argument("--status", help="Filter by status (pending/investigating/resolved/dismissed)")
 
     # reindex
-    ri = sub.add_parser("reindex", help="Re-index a document")
-    ri.add_argument("doc_id", help="Document ID")
+    p = sub.add_parser("reindex", parents=[common], help="Trigger reindexing")
+    p.add_argument("--document-id", help="Reindex specific document (default: all)")
 
     # bulk-import
-    bi = sub.add_parser("bulk-import", help="Bulk import documents from a directory")
-    bi.add_argument("directory", help="Directory containing documents")
+    p = sub.add_parser("bulk-import", parents=[common], help="Bulk import from directory")
+    p.add_argument("source_dir", help="Directory containing documents")
+    p.add_argument(
+        "--source-type",
+        default="markdown",
+        choices=["pdf", "docx", "markdown"],
+        help="Source type (default: markdown)",
+    )
+    p.add_argument("--tags", help="Comma-separated tags to apply")
 
     # stats
-    sub.add_parser("stats", help="Statistics overview")
+    sub.add_parser("stats", parents=[common], help="Display statistics")
 
-    return p
+    return parser
+
+
+COMMAND_MAP: dict = {
+    "upload": cmd_upload,
+    "search": cmd_search,
+    "qa": cmd_qa,
+    "list": cmd_list,
+    "info": cmd_info,
+    "supersede": cmd_supersede,
+    "relations": cmd_relations,
+    "contradictions": cmd_contradictions,
+    "gaps": cmd_gaps,
+    "reindex": cmd_reindex,
+    "bulk-import": cmd_bulk_import,
+    "stats": cmd_stats,
+}
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    commands = {
-        "upload": cmd_upload,
-        "search": cmd_search,
-        "qa": cmd_qa,
-        "list": cmd_list,
-        "info": cmd_info,
-        "supersede": cmd_supersede,
-        "relations": cmd_relations,
-        "contradictions": cmd_contradictions,
-        "gaps": cmd_gaps,
-        "reindex": cmd_reindex,
-        "bulk-import": cmd_bulk_import,
-        "stats": cmd_stats,
-    }
+    api_url = args.api_url or os.environ.get("DOCVAULT_API_URL") or None
+    client = DocvaultClient(base_url=api_url)
 
-    if args.command is None:
-        parser.print_help()
-        sys.exit(0)
-
-    handler = commands.get(args.command)
-    if handler:
-        handler(args)
-    else:
+    handler = COMMAND_MAP.get(args.command)
+    if not handler:
         parser.print_help()
         sys.exit(1)
+
+    try:
+        handler(client, args)
+    except APIConnectionError as e:
+        print(f"  {e}", file=sys.stderr)
+        sys.exit(1)
+    except APIError as e:
+        print(f"  {e}", file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)
 
 
 if __name__ == "__main__":

@@ -1,22 +1,67 @@
-"""FlatIndexOp — basic Qdrant indexing for document chunks.
+"""FlatIndexOp — index document chunks into Qdrant.
 
-IndexSlot: chunks → indexed_collection (service_id="docvault-chunk").
-Wraps shared qdrant_search.index_documents_batch().
+Wraps shared/qdrant_search.py to index docvault chunks with
+service_id='docvault-chunk' for unified workshop search.
+
+Operator protocol:
+  input_keys: ("chunks", "document_id", "version_id")
+  output_keys: ("indexed_count", "index_errors")
 """
+
+from __future__ import annotations
 
 import logging
 from typing import Any
 
-from src.shared import qdrant_search
-from src.shared.embedding import get_embeddings_batch
+from src.shared.qdrant_search import index_documents_batch
+from src.shared.search_types import IndexDocument
 
 logger = logging.getLogger(__name__)
 
 SERVICE_ID = "docvault-chunk"
 
 
+def _chunks_to_index_docs(
+    chunks: list[dict[str, Any]],
+    document_id: str,
+    version_id: str,
+    space_id: str,
+) -> list[IndexDocument]:
+    """Convert docvault chunks to IndexDocument format for Qdrant."""
+    docs: list[IndexDocument] = []
+    for i, chunk in enumerate(chunks):
+        content = chunk.get("content", "")
+        if not content.strip():
+            continue
+        docs.append(
+            IndexDocument(
+                id=f"{document_id}:{version_id}:{i}",
+                content=content,
+                service_id=SERVICE_ID,
+                entity_id=document_id,
+                entity_type="document_chunk",
+                space_id=space_id,
+                tags=chunk.get("tags", []),
+                metadata={
+                    "chunk_index": i,
+                    "version_id": version_id,
+                    "section_path": chunk.get("section_path", ""),
+                    "page_range": chunk.get("page_range", ""),
+                    "heading": chunk.get("heading", ""),
+                    "token_count": chunk.get("token_count", 0),
+                },
+            )
+        )
+    return docs
+
+
 class FlatIndexOp:
-    """IndexSlot: embed chunks and index into Qdrant."""
+    """Index document chunks into Qdrant vector store.
+
+    Operator protocol:
+      input_keys: ("chunks", "document_id", "version_id")
+      output_keys: ("indexed_count", "index_errors")
+    """
 
     @property
     def name(self) -> str:
@@ -24,56 +69,41 @@ class FlatIndexOp:
 
     @property
     def input_keys(self) -> tuple[str, ...]:
-        return ("chunks", "document_id", "version_id", "space_id")
+        return ("chunks", "document_id", "version_id")
 
     @property
     def output_keys(self) -> tuple[str, ...]:
-        return ("indexed_count",)
+        return ("indexed_count", "index_errors")
 
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        chunks: list[dict] = ctx["chunks"]
-        document_id: str = ctx["document_id"]
-        version_id: str = ctx["version_id"]
-        space_id: str = ctx["space_id"]
+        chunks: list[dict[str, Any]] = ctx.get("chunks", [])
+        document_id: str = ctx.get("document_id", "")
+        version_id: str = ctx.get("version_id", "")
+        space_id: str = ctx.get("space_id", "default")
 
         if not chunks:
             ctx["indexed_count"] = 0
+            ctx["index_errors"] = []
             return ctx
 
-        # Use contextualized text for embedding if available
-        texts = [c.get("contextualized", c["content"]) for c in chunks]
-        embeddings = await get_embeddings_batch(texts, task_type="search_document")
+        index_docs = _chunks_to_index_docs(chunks, document_id, version_id, space_id)
+        errors: list[str] = []
 
-        docs = []
-        for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=False)):
-            if emb is None:
-                logger.warning("Embedding failed for chunk %d, skipping", i)
-                continue
-            docs.append(
-                qdrant_search.IndexDocument(
-                    entity_id=f"{version_id}:{chunk['chunk_index']}",
-                    entity_type="docvault_chunk",
-                    service_id=SERVICE_ID,
-                    space_id=space_id,
-                    content=chunk["content"],
-                    embedding=emb,
-                    metadata={
-                        "document_id": document_id,
-                        "version_id": version_id,
-                        "chunk_index": chunk["chunk_index"],
-                        "section_path": chunk.get("section_path", ""),
-                        "heading": chunk.get("heading", ""),
-                        "page_range": chunk.get("page_range", ""),
-                        "chunk_type": chunk.get("chunk_type", "text"),
-                    },
-                )
-            )
+        try:
+            await index_documents_batch(index_docs)
+            indexed_count = len(index_docs)
+        except Exception as e:
+            logger.error("FlatIndexOp: batch index failed: %s", e)
+            errors.append(str(e))
+            indexed_count = 0
 
-        if docs:
-            await qdrant_search.index_documents_batch(docs)
+        ctx["indexed_count"] = indexed_count
+        ctx["index_errors"] = errors
 
-        ctx["indexed_count"] = len(docs)
         logger.info(
-            "FlatIndex: indexed %d/%d chunks for doc %s", len(docs), len(chunks), document_id
+            "FlatIndexOp: %d chunks → %d indexed, %d errors",
+            len(chunks),
+            indexed_count,
+            len(errors),
         )
         return ctx

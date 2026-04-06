@@ -1,28 +1,86 @@
-"""FanOutOp — parallel query dispatch to memvault and docvault.
+"""FanOutOp — parallel search across docvault and memvault.
 
-Pipeline C uses this to search both knowledge stores simultaneously,
-then merge results downstream via MergeOp.
+Used in Pipeline B (mixed mode) to retrieve from both knowledge stores
+concurrently. Results are passed to MergeOp for unification.
+
+Operator protocol:
+  input_keys: ("query", "layer_plan")
+  output_keys: ("docvault_results", "memvault_results")
 """
 
+from __future__ import annotations
+
 import asyncio
-import copy
 import logging
 from typing import Any
 
+from src.shared.qdrant_search import hybrid_search
+from src.shared.search_types import SearchConfig
+
 logger = logging.getLogger(__name__)
+
+DOCVAULT_SERVICE_ID = "docvault-chunk"
+MEMVAULT_SERVICE_ID = "memvault-block"
+
+
+async def _search_docvault(
+    query: str,
+    space_id: str,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    """Search docvault chunks via hybrid search."""
+    config = SearchConfig(service_id=DOCVAULT_SERVICE_ID, top_k=top_k, min_score=0.1)
+    try:
+        results = await hybrid_search(query, space_id, config)
+        return [
+            {
+                "id": r.id,
+                "content": r.content,
+                "score": r.score,
+                "source": "docvault",
+                "document_id": r.metadata.get("entity_id", ""),
+                "section_path": r.metadata.get("section_path", ""),
+                "page_range": r.metadata.get("page_range", ""),
+            }
+            for r in results
+        ]
+    except Exception as e:
+        logger.error("FanOutOp: docvault search failed: %s", e)
+        return []
+
+
+async def _search_memvault(
+    query: str,
+    space_id: str,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    """Search memvault blocks via hybrid search."""
+    config = SearchConfig(service_id=MEMVAULT_SERVICE_ID, top_k=top_k, min_score=0.1)
+    try:
+        results = await hybrid_search(query, space_id, config)
+        return [
+            {
+                "id": r.id,
+                "content": r.content,
+                "score": r.score,
+                "source": "memvault",
+                "block_type": r.metadata.get("block_type", ""),
+                "tags": r.metadata.get("tags", []),
+            }
+            for r in results
+        ]
+    except Exception as e:
+        logger.error("FanOutOp: memvault search failed: %s", e)
+        return []
 
 
 class FanOutOp:
-    """Fixed Op: query → parallel(memvault, docvault) results."""
+    """Parallel search across docvault + memvault.
 
-    def __init__(
-        self,
-        *,
-        memvault_pipeline: Any | None = None,
-        docvault_pipeline: Any | None = None,
-    ) -> None:
-        self._memvault_pipeline = memvault_pipeline
-        self._docvault_pipeline = docvault_pipeline
+    Operator protocol:
+      input_keys: ("query", "layer_plan")
+      output_keys: ("docvault_results", "memvault_results")
+    """
 
     @property
     def name(self) -> str:
@@ -30,49 +88,42 @@ class FanOutOp:
 
     @property
     def input_keys(self) -> tuple[str, ...]:
-        return ("query", "space_id")
+        return ("query", "layer_plan")
 
     @property
     def output_keys(self) -> tuple[str, ...]:
-        return ("memvault_results", "docvault_results")
+        return ("docvault_results", "memvault_results")
 
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        tasks = []
+        query: str = ctx.get("query", "")
+        space_id: str = ctx.get("space_id", "default")
+        layer_plan: dict[str, Any] = ctx.get("layer_plan", {})
 
-        if self._memvault_pipeline is not None:
-            mv_ctx = copy.deepcopy(ctx)
-            tasks.append(("memvault", self._memvault_pipeline(mv_ctx)))
+        doc_top_k = layer_plan.get("docvault_top_k", 6)
+        mem_top_k = layer_plan.get("memvault_top_k", 4)
+
+        sources = layer_plan.get("sources", ["docvault"])
+
+        # Fan out concurrently
+        doc_coro = _search_docvault(query, space_id, doc_top_k)
+
+        if "memvault" in sources:
+            mem_coro = _search_memvault(query, space_id, mem_top_k)
+            doc_res, mem_res = await asyncio.gather(doc_coro, mem_coro, return_exceptions=True)
         else:
-            tasks.append(("memvault", self._noop_results()))
+            doc_res = await doc_coro
+            mem_res = []
 
-        if self._docvault_pipeline is not None:
-            dv_ctx = copy.deepcopy(ctx)
-            tasks.append(("docvault", self._docvault_pipeline(dv_ctx)))
-        else:
-            tasks.append(("docvault", self._noop_results()))
+        docvault_results = doc_res if isinstance(doc_res, list) else []
+        memvault_results = mem_res if isinstance(mem_res, list) else []
 
-        labels = [t[0] for t in tasks]
-        coros = [t[1] for t in tasks]
-        results = await asyncio.gather(*coros, return_exceptions=True)
+        ctx["docvault_results"] = docvault_results
+        ctx["memvault_results"] = memvault_results
 
-        for label, result in zip(labels, results, strict=True):
-            if isinstance(result, Exception):
-                logger.error("FanOut %s pipeline failed: %s", label, result)
-                ctx[f"{label}_results"] = []
-            elif isinstance(result, dict):
-                ctx[f"{label}_results"] = result.get(
-                    "reranked_chunks", result.get("candidate_chunks", [])
-                )
-            else:
-                ctx[f"{label}_results"] = []
-
-        logger.debug(
-            "FanOut: memvault=%d, docvault=%d",
-            len(ctx.get("memvault_results", [])),
-            len(ctx.get("docvault_results", [])),
+        logger.info(
+            "FanOutOp: query=%r → docvault=%d, memvault=%d",
+            query[:60],
+            len(docvault_results),
+            len(memvault_results),
         )
         return ctx
-
-    @staticmethod
-    async def _noop_results() -> dict[str, Any]:
-        return {"reranked_chunks": []}

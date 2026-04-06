@@ -1,15 +1,13 @@
-"""DocVault API client — full coverage of document QA, CRUD, relations, coverage gaps.
+"""DocVault API client — full coverage of all Core API endpoints.
 
 Usage:
     from sdk_client.docvault import DocvaultClient
 
     client = DocvaultClient()
-    doc = client.upload(file_path="/path/to/doc.pdf", title="My Doc")
-    result = client.qa("What does the document say about X?")
-    gaps = client.list_gaps(status="pending")
+    results = client.search("Python concurrency patterns")
+    answer = client.qa("What is the GIL?")
+    client.upload("/path/to/doc.pdf", title="Python GIL Guide")
 """
-
-from pathlib import Path
 
 from ._base import BaseClient
 
@@ -22,191 +20,214 @@ class DocvaultClient(BaseClient):
 
     # ======================== Documents CRUD ========================
 
-    def upload(
-        self,
-        file_path: str,
-        title: str,
-        *,
-        source_type: str | None = None,
-        tags: list[str] | None = None,
-        metadata: dict | None = None,
-    ) -> dict:
-        """Upload a document file. POST /documents
-
-        Reads the file, computes content hash, and creates a document + first version.
-        """
-        import hashlib
-
-        path = Path(file_path)
-        data = path.read_bytes()
-        content_hash = hashlib.sha256(data).hexdigest()
-
-        if source_type is None:
-            ext_map = {".pdf": "pdf", ".docx": "docx", ".md": "markdown", ".txt": "txt"}
-            source_type = ext_map.get(path.suffix.lower(), "txt")
-
-        body: dict = {
-            "title": title,
-            "source_type": source_type,
-            "content_hash": content_hash,
-            "source_uri": str(path.resolve()),
-            "tags": tags or [],
-        }
-        if metadata:
-            body["metadata"] = metadata
-        return self._post("/documents", body)
-
     def list_documents(
         self,
         page: int = 1,
         page_size: int = 20,
-        *,
-        status: str | None = None,
-        source_type: str | None = None,
         tag: str | None = None,
+        tags: str | None = None,
+        status: str | None = None,
     ) -> dict:
         """List documents with optional filters. GET /documents"""
         params: dict = {"page": page, "page_size": page_size}
-        if status:
-            params["status"] = status
-        if source_type:
-            params["source_type"] = source_type
         if tag:
             params["tag"] = tag
+        if tags:
+            params["tags"] = tags
+        if status:
+            params["status"] = status
         return self._get("/documents", params)
 
-    def get_document(self, doc_id: str) -> dict:
-        """Get document details. GET /documents/{id}"""
-        return self._get(f"/documents/{doc_id}")
+    def get_document(self, document_id: str) -> dict:
+        """Get a single document by ID. GET /documents/{id}"""
+        return self._get(f"/documents/{document_id}")
 
-    def update_document(self, doc_id: str, **fields) -> dict:
-        """Update document fields. PATCH /documents/{id}
+    def upload(
+        self,
+        file_path: str | None = None,
+        title: str | None = None,
+        source_type: str = "markdown",
+        source_uri: str | None = None,
+        content_hash: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        """Create/upload a new document. POST /documents
 
-        Accepted fields: title, tags, metadata, status.
+        If file_path is provided, content_hash is computed automatically.
+        """
+        import hashlib
+        from pathlib import Path
+
+        body: dict = {
+            "source_type": source_type,
+            "tags": tags or [],
+        }
+
+        if file_path:
+            path = Path(file_path)
+            if not title:
+                title = path.stem
+            if not content_hash:
+                content_hash = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+        body["title"] = title or "Untitled"
+        body["content_hash"] = content_hash or "0" * 16
+
+        if source_uri:
+            body["source_uri"] = source_uri
+        if metadata:
+            body["metadata"] = metadata
+
+        return self._post("/documents", body)
+
+    def update_document(self, document_id: str, **fields) -> dict:
+        """Update a document. PUT /documents/{id}
+
+        Accepted fields: title, tags, metadata, status, confidence.
         """
         body = {k: v for k, v in fields.items() if v is not None}
-        return self._put(f"/documents/{doc_id}", body)
+        return self._put(f"/documents/{document_id}", body)
 
-    def delete_document(self, doc_id: str) -> None:
-        """Soft-delete a document. DELETE /documents/{id}"""
-        self._delete(f"/documents/{doc_id}")
+    def delete_document(self, document_id: str) -> None:
+        """Delete a document. DELETE /documents/{id}"""
+        self._delete(f"/documents/{document_id}")
+
+    # ======================== Supersede ========================
 
     def supersede_document(
         self,
-        doc_id: str,
-        file_path: str,
+        document_id: str,
+        new_document_id: str,
+        reason: str | None = None,
     ) -> dict:
-        """Upload a new version of an existing document. POST /documents/{id}/supersede
-
-        Triggers version replacement flow: hash compare → new version → re-index.
-        """
-        import hashlib
-
-        path = Path(file_path)
-        data = path.read_bytes()
-        content_hash = hashlib.sha256(data).hexdigest()
-        raw_content = data.decode("utf-8", errors="replace")
-
-        return self._post(
-            f"/documents/{doc_id}/supersede",
-            {"raw_content": raw_content, "content_hash": content_hash},
-        )
+        """Mark a document as superseded by a newer one. POST /documents/{id}/supersede"""
+        body: dict = {"new_document_id": new_document_id}
+        if reason:
+            body["reason"] = reason
+        return self._post(f"/documents/{document_id}/supersede", body)
 
     # ======================== Versions ========================
 
-    def list_versions(self, doc_id: str) -> list[dict]:
-        """List all versions of a document. GET /documents/{id}/versions"""
-        return self._get(f"/documents/{doc_id}/versions")
+    def list_versions(
+        self,
+        document_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        """List versions of a document. GET /documents/{id}/versions"""
+        return self._get(
+            f"/documents/{document_id}/versions",
+            {"page": page, "page_size": page_size},
+        )
 
-    def get_version(self, version_id: str) -> dict:
-        """Get a specific document version. GET /versions/{id}"""
-        return self._get(f"/versions/{version_id}")
+    # ======================== Chunks ========================
 
-    # ======================== Search + QA ========================
+    def list_chunks(
+        self,
+        document_id: str,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict:
+        """List chunks of a document. GET /documents/{id}/chunks"""
+        return self._get(
+            f"/documents/{document_id}/chunks",
+            {"page": page, "page_size": page_size},
+        )
+
+    # ======================== Search ========================
 
     def search(
         self,
         query: str,
-        top_k: int = 5,
-        *,
+        top_k: int = 10,
         source_type: str | None = None,
-        tag: str | None = None,
-    ) -> list[dict]:
-        """Semantic search across document chunks. GET /search"""
-        params: dict = {"q": query, "top_k": top_k}
+        tags: list[str] | None = None,
+    ) -> dict:
+        """Semantic search over document chunks. POST /search"""
+        body: dict = {"q": query, "top_k": top_k}
         if source_type:
-            params["source_type"] = source_type
-        if tag:
-            params["tag"] = tag
-        return self._get("/search", params)
+            body["source_type"] = source_type
+        if tags:
+            body["tags"] = tags
+        return self._post("/search", body)
+
+    # ======================== QA ========================
 
     def qa(
         self,
         question: str,
-        *,
         mode: str = "factual",
-        top_k: int = 5,
         domain: str = "default",
+        top_k: int = 6,
     ) -> dict:
-        """Ask a question against the document knowledge base. POST /qa
-
-        Args:
-            question: The question to answer.
-            mode: "factual" (Pipeline A) or "mixed" (Pipeline C).
-            top_k: Number of evidence chunks to use.
-            domain: Domain profile for pipeline configuration.
-        """
-        return self._post(
-            "/qa",
-            {
-                "question": question,
-                "mode": mode,
-                "top_k": top_k,
-                "domain": domain,
-            },
-        )
+        """Ask a question against document corpus. POST /qa"""
+        return self._post("/qa", {
+            "question": question,
+            "mode": mode,
+            "domain": domain,
+            "top_k": top_k,
+        })
 
     def qa_feedback(self, qa_log_id: str, feedback: str) -> dict:
-        """Submit feedback on a QA answer. POST /qa/{id}/feedback
+        """Record QA feedback (positive/negative). PATCH /qa/logs/{id}/feedback"""
+        return self._patch(f"/qa/logs/{qa_log_id}/feedback", {"feedback": feedback})
 
-        Args:
-            qa_log_id: ID of the QA log entry.
-            feedback: "positive" or "negative".
-        """
-        return self._post(f"/qa/{qa_log_id}/feedback", {"feedback": feedback})
+    def list_qa_logs(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        """List QA log entries. GET /qa/logs"""
+        return self._get("/qa/logs", {"page": page, "page_size": page_size})
+
+    def get_qa_log(self, qa_log_id: str) -> dict:
+        """Get a single QA log entry. GET /qa/logs/{id}"""
+        return self._get(f"/qa/logs/{qa_log_id}")
 
     # ======================== Relations ========================
 
-    def list_relations(self, doc_id: str) -> list[dict]:
+    def list_relations(
+        self,
+        document_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
         """List relations for a document. GET /documents/{id}/relations"""
-        return self._get(f"/documents/{doc_id}/relations")
+        return self._get(
+            f"/documents/{document_id}/relations",
+            {"page": page, "page_size": page_size},
+        )
 
     def create_relation(
         self,
-        source_id: str,
-        target_id: str,
+        source_document_id: str,
+        target_document_id: str,
         relation_type: str,
-        *,
         evidence: str | None = None,
-        confidence: float = 0.0,
+        confidence: float | None = None,
     ) -> dict:
-        """Create a document relation. POST /relations"""
+        """Create a document relation. POST /documents/{source_id}/relations"""
         body: dict = {
-            "source_document_id": source_id,
-            "target_document_id": target_id,
+            "source_document_id": source_document_id,
+            "target_document_id": target_document_id,
             "relation_type": relation_type,
-            "confidence": confidence,
         }
         if evidence:
             body["evidence"] = evidence
-        return self._post("/relations", body)
+        if confidence is not None:
+            body["confidence"] = confidence
+        return self._post(f"/documents/{source_document_id}/relations", body)
 
-    def find_contradictions(self, doc_id: str | None = None) -> list[dict]:
-        """Find contradicting document pairs. GET /contradictions"""
+    def find_contradictions(
+        self,
+        document_id: str | None = None,
+    ) -> dict:
+        """Find contradictions across documents. GET /relations/contradictions"""
         params: dict = {}
-        if doc_id:
-            params["doc_id"] = doc_id
-        return self._get("/contradictions", params)
+        if document_id:
+            params["document_id"] = document_id
+        return self._get("/relations/contradictions", params)
 
     # ======================== Coverage Gaps ========================
 
@@ -214,7 +235,6 @@ class DocvaultClient(BaseClient):
         self,
         page: int = 1,
         page_size: int = 20,
-        *,
         status: str | None = None,
     ) -> dict:
         """List coverage gaps. GET /gaps"""
@@ -223,45 +243,56 @@ class DocvaultClient(BaseClient):
             params["status"] = status
         return self._get("/gaps", params)
 
-    def resolve_gap(self, gap_id: str, resolution: str) -> dict:
+    def resolve_gap(
+        self,
+        gap_id: str,
+        resolution: str = "document_added",
+        resolved_document_id: str | None = None,
+    ) -> dict:
         """Resolve a coverage gap. PATCH /gaps/{id}"""
-        return self._put(f"/gaps/{gap_id}", {"status": "resolved", "resolution": resolution})
+        body: dict = {"status": "resolved", "resolution": resolution}
+        if resolved_document_id:
+            body["resolved_document_id"] = resolved_document_id
+        return self._patch(f"/gaps/{gap_id}", body)
 
     def gap_stats(self) -> dict:
         """Get coverage gap statistics. GET /gaps/stats"""
         return self._get("/gaps/stats")
 
-    # ======================== Admin ========================
+    # ======================== Management ========================
 
-    def reindex(self, doc_id: str) -> dict:
-        """Queue a document for re-indexing. POST /documents/{id}/reindex"""
-        return self._post(f"/documents/{doc_id}/reindex", {})
+    def reindex(self, document_id: str | None = None) -> dict:
+        """Trigger reindexing. POST /reindex
 
-    def bulk_import(self, file_paths: list[str]) -> list[dict]:
-        """Bulk import multiple documents. POST /bulk-import
-
-        Returns a list of results (success/failure per file).
+        If document_id is provided, reindex only that document.
+        Otherwise, reindex all documents.
         """
-        results = []
-        for fp in file_paths:
-            try:
-                path = Path(fp)
-                doc = self.upload(fp, title=path.stem)
-                results.append({"file": fp, "status": "success", "document": doc})
-            except Exception as e:
-                results.append({"file": fp, "status": "error", "error": str(e)})
-        return results
+        body: dict = {}
+        if document_id:
+            body["document_id"] = document_id
+        return self._post("/reindex", body)
 
-    def export(self, doc_id: str, fmt: str = "markdown") -> str:
-        """Export document content. GET /documents/{id}/export"""
-        return self._get(f"/documents/{doc_id}/export", {"format": fmt})
+    def bulk_import(
+        self,
+        source_dir: str,
+        source_type: str = "markdown",
+        tags: list[str] | None = None,
+    ) -> dict:
+        """Bulk import documents from a directory. POST /bulk-import"""
+        return self._post("/bulk-import", {
+            "source_dir": source_dir,
+            "source_type": source_type,
+            "tags": tags or [],
+        })
 
     def stats(self) -> dict:
-        """Get docvault statistics. GET /stats"""
-        return self._get("/stats")
+        """Get docvault statistics. GET /dashboard"""
+        return self._get("/dashboard")
 
-    # ======================== QA Logs ========================
-
-    def list_qa_logs(self, page: int = 1, page_size: int = 20) -> dict:
-        """List QA log entries. GET /qa-logs"""
-        return self._get("/qa-logs", {"page": page, "page_size": page_size})
+    def health(self) -> bool:
+        """Check API connectivity. GET /status"""
+        try:
+            self._get("/status")
+            return True
+        except Exception:
+            return False

@@ -1,21 +1,96 @@
-"""IntentRouterOp — classify query intent and build a layer execution plan.
+"""IntentRouterOp — classify query intent and plan retrieval layers.
 
-Routes queries to the appropriate search strategy (factual, exploratory, comparative).
+Routes incoming queries to the appropriate pipeline (A/B/C) based on intent:
+  - A: Pure docvault factual (single-source QA)
+  - B: Mixed docvault + memvault (needs fan-out)
+  - C: Coverage gap trigger (insufficient docs detected)
+
+Operator protocol:
+  input_keys: ("query",)
+  output_keys: ("intent", "layer_plan")
 """
 
+from __future__ import annotations
+
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Intent categories
-INTENT_FACTUAL = "factual"  # direct answer from docs
-INTENT_EXPLORATORY = "exploratory"  # broad topic exploration
-INTENT_COMPARATIVE = "comparative"  # compare across documents
+# Intent classification heuristics (LLM-based in Phase 2)
+_PERSONAL_PATTERNS = re.compile(
+    r"(我的|my |偏好|preference|attitude|attitude|習慣|profile|"
+    r"我之前|我記得|上次|last time|remember)",
+    re.IGNORECASE,
+)
+
+_FACTUAL_PATTERNS = re.compile(
+    r"(什麼是|what is|how does|how to|定義|definition|"
+    r"規定|regulation|法規|policy|根據|according to|"
+    r"哪一條|which article|第\d+條)",
+    re.IGNORECASE,
+)
+
+
+def classify_intent(query: str) -> str:
+    """Classify query intent into pipeline type.
+
+    Returns:
+        "factual" — pure document QA (Pipeline A)
+        "mixed" — needs both docvault + memvault (Pipeline B)
+        "meta" — coverage / gap analysis query
+    """
+    q = query.strip()
+
+    if _PERSONAL_PATTERNS.search(q):
+        return "mixed"
+
+    if _FACTUAL_PATTERNS.search(q):
+        return "factual"
+
+    # Default: factual for docvault queries
+    return "factual"
+
+
+def build_layer_plan(intent: str, query: str) -> dict[str, Any]:
+    """Build retrieval layer plan based on classified intent.
+
+    Returns a dict describing which sources to query and in what order.
+    """
+    if intent == "mixed":
+        return {
+            "pipeline": "B",
+            "sources": ["docvault", "memvault"],
+            "strategy": "fan_out_merge",
+            "docvault_top_k": 6,
+            "memvault_top_k": 4,
+        }
+
+    if intent == "meta":
+        return {
+            "pipeline": "C",
+            "sources": ["docvault"],
+            "strategy": "coverage_check",
+            "docvault_top_k": 10,
+        }
+
+    # Default: factual
+    return {
+        "pipeline": "A",
+        "sources": ["docvault"],
+        "strategy": "direct_search",
+        "docvault_top_k": 10,
+    }
 
 
 class IntentRouterOp:
-    """Classify query intent → decide search strategy."""
+    """Route query to appropriate retrieval pipeline.
+
+    Operator protocol:
+      input_keys: ("query",)
+      output_keys: ("intent", "layer_plan")
+    """
 
     @property
     def name(self) -> str:
@@ -30,46 +105,17 @@ class IntentRouterOp:
         return ("intent", "layer_plan")
 
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        query = ctx["query"]
-        intent, layer_plan = self._classify(query)
+        query: str = ctx.get("query", "")
+        intent = classify_intent(query)
+        layer_plan = build_layer_plan(intent, query)
+
         ctx["intent"] = intent
         ctx["layer_plan"] = layer_plan
-        logger.debug("IntentRouter: query=%r → intent=%s", query[:80], intent)
-        return ctx
 
-    def _classify(self, query: str) -> tuple[str, dict[str, Any]]:
-        """Rule-based intent classification. LLM upgrade in Phase 2+."""
-        q_lower = query.lower()
-
-        # Comparative signals
-        comparative_signals = ("compare", "vs", "difference", "versus", "比較", "差異", "對比")
-        if any(sig in q_lower for sig in comparative_signals):
-            return INTENT_COMPARATIVE, {
-                "search_top_k": 10,
-                "rerank_top_k": 6,
-                "multi_doc": True,
-            }
-
-        # Exploratory signals
-        exploratory_signals = (
-            "what is",
-            "explain",
-            "overview",
-            "什麼是",
-            "介紹",
-            "概述",
-            "how does",
+        logger.info(
+            "IntentRouterOp: query=%r → intent=%s, pipeline=%s",
+            query[:60],
+            intent,
+            layer_plan["pipeline"],
         )
-        if any(sig in q_lower for sig in exploratory_signals):
-            return INTENT_EXPLORATORY, {
-                "search_top_k": 8,
-                "rerank_top_k": 5,
-                "multi_doc": False,
-            }
-
-        # Default: factual
-        return INTENT_FACTUAL, {
-            "search_top_k": 5,
-            "rerank_top_k": 3,
-            "multi_doc": False,
-        }
+        return ctx

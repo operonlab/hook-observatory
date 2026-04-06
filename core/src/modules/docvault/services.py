@@ -1,22 +1,20 @@
-"""DocVault services — CRUD + version replacement + QA orchestration.
+"""DocVault services — CRUD + domain logic.
 
 This is the PUBLIC API of the docvault module.
 Other modules import from here, never from models.py.
 """
 
-import hashlib
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.errors import NotFoundError
-from src.shared.schemas import PaginatedResponse
+from src.events.types import DocvaultEvents
+from src.shared.cache import cached
+from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
-from .events import DocvaultEvents
 from .models import (
     CoverageGap,
     Document,
@@ -29,18 +27,19 @@ from .schemas import (
     CoverageGapCreate,
     CoverageGapResponse,
     CoverageGapUpdate,
+    DocumentBrief,
     DocumentChunkCreate,
     DocumentChunkResponse,
     DocumentCreate,
     DocumentRelationCreate,
     DocumentRelationResponse,
+    DocumentRelationUpdate,
     DocumentResponse,
     DocumentUpdate,
     DocumentVersionCreate,
     DocumentVersionResponse,
     DocumentVersionUpdate,
-    DocvaultStats,
-    GapStats,
+    DocvaultDashboardResponse,
     QALogCreate,
     QALogResponse,
 )
@@ -48,24 +47,29 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 
-def _content_hash(content: str) -> str:
-    """SHA-256 hash for idempotent upload detection."""
-    return hashlib.sha256(content.encode()).hexdigest()
+# ======================== Document Service ========================
 
 
-# ======================== DocumentService ========================
-
-
-class DocumentService(BaseCRUDService[Document, DocumentCreate, DocumentUpdate, DocumentResponse]):
+class DocumentService(
+    BaseCRUDService[Document, DocumentCreate, DocumentUpdate, DocumentResponse]
+):
     model = Document
     audit_module = "docvault"
-    audit_entity_type = "document"
+    audit_entity_type = "documents"
     event_types = {
         "created": DocvaultEvents.DOCUMENT_CREATED,
-        "updated": DocvaultEvents.DOCUMENT_PUBLISHED,
+        "updated": DocvaultEvents.DOCUMENT_ENRICHED,
         "deleted": DocvaultEvents.DOCUMENT_ARCHIVED,
     }
-    event_fields = ("title", "status", "source_type")
+    event_id_alias = "document_id"
+    event_fields = ("title", "source_type", "status", "tags", "content_hash")
+
+    def before_create(self, data: DocumentCreate, **kwargs: Any) -> dict:
+        d = data.model_dump(by_alias=True)
+        # Remap alias back to column name
+        if "metadata" in d:
+            d["metadata_"] = d.pop("metadata")
+        return d
 
     def to_response(self, instance: Document) -> DocumentResponse:
         return DocumentResponse(
@@ -87,231 +91,44 @@ class DocumentService(BaseCRUDService[Document, DocumentCreate, DocumentUpdate, 
             last_accessed_at=instance.last_accessed_at,
         )
 
-    async def list(
-        self,
-        db: AsyncSession,
-        *,
-        space_id: str,
-        page: int = 1,
-        page_size: int = 20,
-        filters: dict[str, Any] | None = None,
-    ) -> PaginatedResponse[DocumentResponse]:
-        """List documents with optional filters."""
-        query = select(Document).where(
-            Document.space_id == space_id,
-            Document.deleted_at.is_(None),
-        )
-        count_query = select(func.count(Document.id)).where(
-            Document.space_id == space_id,
-            Document.deleted_at.is_(None),
+    def to_brief(self, instance: Document) -> DocumentBrief:
+        return DocumentBrief(
+            id=instance.id,
+            title=instance.title,
+            source_type=instance.source_type,
+            tags=instance.tags or [],
+            status=instance.status,
+            created_at=instance.created_at,
         )
 
-        if filters:
-            if filters.get("status"):
-                query = query.where(Document.status == filters["status"])
-                count_query = count_query.where(Document.status == filters["status"])
-            if filters.get("source_type"):
-                query = query.where(Document.source_type == filters["source_type"])
-                count_query = count_query.where(Document.source_type == filters["source_type"])
-            if filters.get("tag"):
-                query = query.where(Document.tags.any(filters["tag"]))
-                count_query = count_query.where(Document.tags.any(filters["tag"]))
-
-        total = (await db.execute(count_query)).scalar() or 0
-        query = query.order_by(Document.created_at.desc())
-        query = query.offset((page - 1) * page_size).limit(page_size)
-        result = await db.execute(query)
-        items = [self.to_response(row) for row in result.scalars().all()]
-
-        return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
-
-    async def supersede(
-        self,
-        db: AsyncSession,
-        doc_id: str,
-        *,
-        raw_content: str,
-        content_hash: str,
-        space_id: str,
-        created_by: str,
-    ) -> DocumentVersionResponse:
-        """Version replacement flow:
-
-        1. content_hash compare — same → skip (idempotent)
-        2. New DocumentVersion (version_number + 1)
-        3. Old version status → "superseded"
-        4. Old chunks' Qdrant points deleted (via service_id)
-        5. New chunks embed + index
-        6. Old DocumentRelations: invalid_at = now()
-        7. Re-run enrichment pipeline
-        8. Emit DOCUMENT_SUPERSEDED event
-        """
-        doc = await self.get(db, doc_id, space_id=space_id)
-        if doc is None:
-            raise NotFoundError(f"Document {doc_id} not found")
-
-        # 1. Idempotent check
-        if doc.content_hash == content_hash:
-            logger.info("Document %s: same content_hash, skip supersede", doc_id)
-            current_version = await db.get(DocumentVersion, doc.current_version_id)
-            if current_version is None:
-                raise NotFoundError(f"Current version for {doc_id} not found")
-            return DocumentVersionService().to_response(current_version)
-
-        # 2. Get latest version number
-        latest_q = select(func.max(DocumentVersion.version_number)).where(
-            DocumentVersion.document_id == doc_id
+    async def get_by_content_hash(
+        self, db: AsyncSession, content_hash: str
+    ) -> Document | None:
+        """Dedup check by content hash."""
+        q = select(Document).where(
+            Document.content_hash == content_hash,
+            Document.deleted_at == None,  # noqa: E711
         )
-        latest_num = (await db.execute(latest_q)).scalar() or 0
-
-        # 3. Mark old version as superseded
-        if doc.current_version_id:
-            await db.execute(
-                update(DocumentVersion)
-                .where(DocumentVersion.id == doc.current_version_id)
-                .values(status="superseded")
-            )
-
-        # 4. Create new version
-        new_version = DocumentVersion(
-            document_id=doc_id,
-            version_number=latest_num + 1,
-            content_hash=content_hash,
-            raw_content=raw_content,
-            status="processing",
-            space_id=space_id,
-            created_by=created_by,
-        )
-        db.add(new_version)
-        await db.flush()
-
-        # 5. Update document pointer + hash
-        await db.execute(
-            update(Document)
-            .where(Document.id == doc_id)
-            .values(
-                current_version_id=new_version.id,
-                content_hash=content_hash,
-                status="processing",
-            )
-        )
-
-        # 6. Invalidate old relations
-        now = datetime.now(UTC)
-        await db.execute(
-            update(DocumentRelation)
-            .where(
-                DocumentRelation.source_document_id == doc_id,
-                DocumentRelation.invalid_at.is_(None),
-            )
-            .values(invalid_at=now)
-        )
-
-        await db.commit()
-
-        # 7. Old chunks cleanup + new indexing happens async via event handler
-        self._auto_publish_event("superseded", doc)
-
-        logger.info(
-            "Document %s superseded: v%d → v%d",
-            doc_id,
-            latest_num,
-            latest_num + 1,
-        )
-        return DocumentVersionService().to_response(new_version)
-
-    async def stats(self, db: AsyncSession, *, space_id: str) -> DocvaultStats:
-        """Aggregate statistics for the docvault module."""
-        base_where = [Document.space_id == space_id, Document.deleted_at.is_(None)]
-
-        total_docs = (
-            await db.execute(select(func.count(Document.id)).where(*base_where))
-        ).scalar() or 0
-
-        total_chunks = (
-            await db.execute(
-                select(func.count(DocumentChunk.id)).where(
-                    DocumentChunk.space_id == space_id,
-                    DocumentChunk.deleted_at.is_(None),
-                )
-            )
-        ).scalar() or 0
-
-        total_relations = (
-            await db.execute(
-                select(func.count(DocumentRelation.id)).where(
-                    DocumentRelation.space_id == space_id,
-                    DocumentRelation.deleted_at.is_(None),
-                )
-            )
-        ).scalar() or 0
-
-        total_gaps = (
-            await db.execute(
-                select(func.count(CoverageGap.id)).where(
-                    CoverageGap.space_id == space_id,
-                    CoverageGap.deleted_at.is_(None),
-                )
-            )
-        ).scalar() or 0
-
-        total_qa = (
-            await db.execute(
-                select(func.count(QALog.id)).where(
-                    QALog.space_id == space_id,
-                    QALog.deleted_at.is_(None),
-                )
-            )
-        ).scalar() or 0
-
-        # Status breakdown
-        status_q = (
-            select(Document.status, func.count(Document.id))
-            .where(*base_where)
-            .group_by(Document.status)
-        )
-        by_status = dict((await db.execute(status_q)).all())
-
-        # Source type breakdown
-        type_q = (
-            select(Document.source_type, func.count(Document.id))
-            .where(*base_where)
-            .group_by(Document.source_type)
-        )
-        by_source_type = dict((await db.execute(type_q)).all())
-
-        return DocvaultStats(
-            total_documents=total_docs,
-            total_chunks=total_chunks,
-            total_relations=total_relations,
-            total_gaps=total_gaps,
-            total_qa_logs=total_qa,
-            by_status=by_status,
-            by_source_type=by_source_type,
-        )
-
-    async def reindex(self, db: AsyncSession, doc_id: str, *, space_id: str) -> None:
-        """Queue a document for re-indexing."""
-        doc = await self.get(db, doc_id, space_id=space_id)
-        if doc is None:
-            raise NotFoundError(f"Document {doc_id} not found")
-        await db.execute(update(Document).where(Document.id == doc_id).values(status="processing"))
-        await db.commit()
-        # Event triggers async re-indexing pipeline
-        self._auto_publish_event("updated", doc)
+        return (await db.execute(q)).scalar_one_or_none()
 
 
-# ======================== DocumentVersionService ========================
+# ======================== DocumentVersion Service ========================
 
 
 class DocumentVersionService(
     BaseCRUDService[
-        DocumentVersion, DocumentVersionCreate, DocumentVersionUpdate, DocumentVersionResponse
+        DocumentVersion,
+        DocumentVersionCreate,
+        DocumentVersionUpdate,
+        DocumentVersionResponse,
     ]
 ):
     model = DocumentVersion
     audit_module = "docvault"
-    audit_entity_type = "document_version"
+    audit_entity_type = "document_versions"
+
+    def before_create(self, data: DocumentVersionCreate, **kwargs: Any) -> dict:
+        return data.model_dump()
 
     def to_response(self, instance: DocumentVersion) -> DocumentVersionResponse:
         return DocumentVersionResponse(
@@ -333,34 +150,44 @@ class DocumentVersionService(
     async def list_by_document(
         self,
         db: AsyncSession,
-        doc_id: str,
-        *,
-        space_id: str,
-    ) -> list[DocumentVersionResponse]:
-        query = (
-            select(DocumentVersion)
-            .where(
-                DocumentVersion.document_id == doc_id,
-                DocumentVersion.space_id == space_id,
-                DocumentVersion.deleted_at.is_(None),
-            )
-            .order_by(DocumentVersion.version_number.desc())
+        document_id: str,
+        pagination: PaginationParams | None = None,
+    ) -> PaginatedResponse[DocumentVersionResponse]:
+        p = pagination or PaginationParams()
+        base = select(DocumentVersion).where(
+            DocumentVersion.document_id == document_id,
+            DocumentVersion.deleted_at == None,  # noqa: E711
         )
-        result = await db.execute(query)
-        return [self.to_response(v) for v in result.scalars().all()]
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+        q = (
+            base.order_by(DocumentVersion.version_number.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[DocumentVersionResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
 
 
-# ======================== ChunkService ========================
+# ======================== Chunk Service ========================
 
 
 class ChunkService(
     BaseCRUDService[
-        DocumentChunk, DocumentChunkCreate, DocumentChunkResponse, DocumentChunkResponse
+        DocumentChunk, DocumentChunkCreate, DocumentChunkCreate, DocumentChunkResponse
     ]
 ):
     model = DocumentChunk
     audit_module = "docvault"
-    audit_entity_type = "chunk"
+    audit_entity_type = "document_chunks"
+
+    def before_create(self, data: DocumentChunkCreate, **kwargs: Any) -> dict:
+        return data.model_dump()
 
     def to_response(self, instance: DocumentChunk) -> DocumentChunkResponse:
         return DocumentChunkResponse(
@@ -380,34 +207,83 @@ class ChunkService(
             chunk_type=instance.chunk_type,
         )
 
-    async def delete_by_version(self, db: AsyncSession, version_id: str) -> int:
-        """Soft-delete all chunks for a given version. Returns count deleted."""
-        now = datetime.now(UTC)
-        result = await db.execute(
-            update(DocumentChunk)
-            .where(
-                DocumentChunk.version_id == version_id,
-                DocumentChunk.deleted_at.is_(None),
-            )
-            .values(deleted_at=now)
+    async def list_by_version(
+        self,
+        db: AsyncSession,
+        version_id: str,
+        pagination: PaginationParams | None = None,
+    ) -> PaginatedResponse[DocumentChunkResponse]:
+        p = pagination or PaginationParams()
+        base = select(DocumentChunk).where(
+            DocumentChunk.version_id == version_id,
+            DocumentChunk.deleted_at == None,  # noqa: E711
         )
-        return result.rowcount
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+        q = (
+            base.order_by(DocumentChunk.chunk_index.asc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[DocumentChunkResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
+
+    async def list_by_document(
+        self,
+        db: AsyncSession,
+        document_id: str,
+        pagination: PaginationParams | None = None,
+    ) -> PaginatedResponse[DocumentChunkResponse]:
+        p = pagination or PaginationParams()
+        base = select(DocumentChunk).where(
+            DocumentChunk.document_id == document_id,
+            DocumentChunk.deleted_at == None,  # noqa: E711
+        )
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+        q = (
+            base.order_by(DocumentChunk.chunk_index.asc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[DocumentChunkResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
 
 
-# ======================== RelationService ========================
+# ======================== Relation Service ========================
 
 
 class RelationService(
     BaseCRUDService[
         DocumentRelation,
         DocumentRelationCreate,
-        DocumentRelationResponse,
+        DocumentRelationUpdate,
         DocumentRelationResponse,
     ]
 ):
     model = DocumentRelation
     audit_module = "docvault"
-    audit_entity_type = "relation"
+    audit_entity_type = "document_relations"
+    event_types = {"created": DocvaultEvents.RELATION_DISCOVERED}
+    event_fields = (
+        "source_document_id",
+        "target_document_id",
+        "relation_type",
+        "confidence",
+    )
+
+    def before_create(self, data: DocumentRelationCreate, **kwargs: Any) -> dict:
+        return data.model_dump()
 
     def to_response(self, instance: DocumentRelation) -> DocumentRelationResponse:
         return DocumentRelationResponse(
@@ -430,26 +306,33 @@ class RelationService(
     async def list_by_document(
         self,
         db: AsyncSession,
-        doc_id: str,
-        *,
-        space_id: str,
-    ) -> list[DocumentRelationResponse]:
-        query = (
-            select(DocumentRelation)
-            .where(
-                (DocumentRelation.source_document_id == doc_id)
-                | (DocumentRelation.target_document_id == doc_id),
-                DocumentRelation.space_id == space_id,
-                DocumentRelation.deleted_at.is_(None),
-                DocumentRelation.invalid_at.is_(None),
-            )
-            .order_by(DocumentRelation.created_at.desc())
+        document_id: str,
+        pagination: PaginationParams | None = None,
+    ) -> PaginatedResponse[DocumentRelationResponse]:
+        p = pagination or PaginationParams()
+        base = select(DocumentRelation).where(
+            (DocumentRelation.source_document_id == document_id)
+            | (DocumentRelation.target_document_id == document_id),
+            DocumentRelation.deleted_at == None,  # noqa: E711
+            DocumentRelation.invalid_at == None,  # noqa: E711
         )
-        result = await db.execute(query)
-        return [self.to_response(r) for r in result.scalars().all()]
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+        q = (
+            base.order_by(DocumentRelation.created_at.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[DocumentRelationResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
 
 
-# ======================== CoverageGapService ========================
+# ======================== CoverageGap Service ========================
 
 
 class CoverageGapService(
@@ -457,11 +340,14 @@ class CoverageGapService(
 ):
     model = CoverageGap
     audit_module = "docvault"
-    audit_entity_type = "coverage_gap"
+    audit_entity_type = "coverage_gaps"
     event_types = {
         "created": DocvaultEvents.COVERAGE_GAP_DETECTED,
-        "updated": DocvaultEvents.COVERAGE_GAP_RESOLVED,
     }
+    event_fields = ("query_hash", "gap_type", "status")
+
+    def before_create(self, data: CoverageGapCreate, **kwargs: Any) -> dict:
+        return data.model_dump()
 
     def to_response(self, instance: CoverageGap) -> CoverageGapResponse:
         return CoverageGapResponse(
@@ -480,68 +366,49 @@ class CoverageGapService(
             suggested_sources=instance.suggested_sources,
         )
 
-    async def list(
+    async def list_by_status(
         self,
         db: AsyncSession,
-        *,
         space_id: str,
-        page: int = 1,
-        page_size: int = 20,
-        status: str | None = None,
+        status: str,
+        pagination: PaginationParams | None = None,
     ) -> PaginatedResponse[CoverageGapResponse]:
-        where_clauses = [
+        p = pagination or PaginationParams()
+        base = select(CoverageGap).where(
             CoverageGap.space_id == space_id,
-            CoverageGap.deleted_at.is_(None),
-        ]
-        if status:
-            where_clauses.append(CoverageGap.status == status)
-
-        total = (
-            await db.execute(select(func.count(CoverageGap.id)).where(*where_clauses))
-        ).scalar() or 0
-
-        query = (
-            select(CoverageGap)
-            .where(*where_clauses)
-            .order_by(CoverageGap.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            CoverageGap.status == status,
+            CoverageGap.deleted_at == None,  # noqa: E711
         )
-        result = await db.execute(query)
-        items = [self.to_response(g) for g in result.scalars().all()]
-
-        return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
-
-    async def stats(self, db: AsyncSession, *, space_id: str) -> GapStats:
-        base = [CoverageGap.space_id == space_id, CoverageGap.deleted_at.is_(None)]
-        total = (await db.execute(select(func.count(CoverageGap.id)).where(*base))).scalar() or 0
-
-        status_q = (
-            select(CoverageGap.status, func.count(CoverageGap.id))
-            .where(*base)
-            .group_by(CoverageGap.status)
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+        q = (
+            base.order_by(CoverageGap.detected_at.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
         )
-        counts = dict((await db.execute(status_q)).all())
-
-        return GapStats(
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[CoverageGapResponse](
+            items=[self.to_response(r) for r in rows],
             total=total,
-            pending=counts.get("pending", 0),
-            investigating=counts.get("investigating", 0),
-            resolved=counts.get("resolved", 0),
-            dismissed=counts.get("dismissed", 0),
+            page=p.page,
+            page_size=p.page_size,
         )
 
 
-# ======================== QALogService ========================
+# ======================== QALog Service ========================
 
 
-class QALogService(BaseCRUDService[QALog, QALogCreate, QALogResponse, QALogResponse]):
+class QALogService(
+    BaseCRUDService[QALog, QALogCreate, QALogCreate, QALogResponse]
+):
     model = QALog
     audit_module = "docvault"
-    audit_entity_type = "qa_log"
-    event_types = {
-        "created": DocvaultEvents.QA_EXECUTED,
-    }
+    audit_entity_type = "qa_logs"
+    event_types = {"created": DocvaultEvents.QA_EXECUTED}
+    event_fields = ("query_hash", "crag_verdict", "pipeline_used", "confidence")
+
+    def before_create(self, data: QALogCreate, **kwargs: Any) -> dict:
+        return data.model_dump()
 
     def to_response(self, instance: QALog) -> QALogResponse:
         return QALogResponse(
@@ -561,43 +428,116 @@ class QALogService(BaseCRUDService[QALog, QALogCreate, QALogResponse, QALogRespo
             latency_ms=instance.latency_ms,
         )
 
-    async def list(
-        self,
-        db: AsyncSession,
-        *,
-        space_id: str,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> PaginatedResponse[QALogResponse]:
-        where_clauses = [QALog.space_id == space_id, QALog.deleted_at.is_(None)]
-        total = (await db.execute(select(func.count(QALog.id)).where(*where_clauses))).scalar() or 0
+    async def record_feedback(
+        self, db: AsyncSession, qa_log_id: str, feedback: str
+    ) -> QALog | None:
+        """Record user feedback on a QA result."""
+        instance = await self.get(db, qa_log_id)
+        if not instance:
+            return None
+        instance.feedback = feedback
+        await db.flush()
+        return instance
 
-        query = (
-            select(QALog)
-            .where(*where_clauses)
-            .order_by(QALog.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+
+# ======================== Dashboard Service ========================
+
+
+class DashboardService:
+    """Statistics and summary for the docvault module."""
+
+    @cached("docvault", "dashboard_summary", ttl=3600, key_params=("space_id",))
+    async def get_summary(
+        self, db: AsyncSession, space_id: str
+    ) -> DocvaultDashboardResponse:
+        stats_q = select(
+            select(func.count())
+            .select_from(Document)
+            .where(Document.space_id == space_id, Document.deleted_at == None)  # noqa: E711
+            .correlate(None)
+            .scalar_subquery()
+            .label("total_documents"),
+            select(func.count())
+            .select_from(DocumentChunk)
+            .where(
+                DocumentChunk.space_id == space_id,
+                DocumentChunk.deleted_at == None,  # noqa: E711
+            )
+            .correlate(None)
+            .scalar_subquery()
+            .label("total_chunks"),
+            select(func.count())
+            .select_from(QALog)
+            .where(QALog.space_id == space_id, QALog.deleted_at == None)  # noqa: E711
+            .correlate(None)
+            .scalar_subquery()
+            .label("total_qa_logs"),
+            select(func.count())
+            .select_from(CoverageGap)
+            .where(
+                CoverageGap.space_id == space_id,
+                CoverageGap.status == "pending",
+                CoverageGap.deleted_at == None,  # noqa: E711
+            )
+            .correlate(None)
+            .scalar_subquery()
+            .label("coverage_gap_count"),
+            select(func.count())
+            .select_from(Document)
+            .where(
+                Document.space_id == space_id,
+                Document.status == "published",
+                Document.deleted_at == None,  # noqa: E711
+            )
+            .correlate(None)
+            .scalar_subquery()
+            .label("published_count"),
         )
-        result = await db.execute(query)
-        items = [self.to_response(log) for log in result.scalars().all()]
+        stats = (await db.execute(stats_q)).one()
 
-        return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
+        recent_rows = (
+            (
+                await db.execute(
+                    select(Document)
+                    .where(
+                        Document.space_id == space_id,
+                        Document.deleted_at == None,  # noqa: E711
+                    )
+                    .order_by(Document.created_at.desc())
+                    .limit(5)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        recent_documents = [
+            DocumentBrief(
+                id=d.id,
+                title=d.title,
+                source_type=d.source_type,
+                tags=d.tags or [],
+                status=d.status,
+                created_at=d.created_at,
+            )
+            for d in recent_rows
+        ]
 
-    async def set_feedback(
-        self,
-        db: AsyncSession,
-        qa_log_id: str,
-        feedback: str,
-        *,
-        space_id: str,
-    ) -> QALogResponse:
-        """Set user feedback on a QA log entry."""
-        log = await db.get(QALog, qa_log_id)
-        if log is None or log.space_id != space_id:
-            raise NotFoundError(f"QA log {qa_log_id} not found")
-        log.feedback = feedback
-        await db.commit()
-        await db.refresh(log)
-        self._auto_publish_event("feedback", log)
-        return self.to_response(log)
+        return DocvaultDashboardResponse(
+            total_documents=stats.total_documents,
+            total_chunks=stats.total_chunks,
+            total_qa_logs=stats.total_qa_logs,
+            coverage_gap_count=stats.coverage_gap_count,
+            published_count=stats.published_count,
+            recent_documents=recent_documents,
+        )
+
+
+# ======================== Module-level singletons ========================
+
+document_service = DocumentService()
+version_service = DocumentVersionService()
+chunk_service = ChunkService()
+relation_service = RelationService()
+coverage_gap_service = CoverageGapService()
+qa_log_service = QALogService()
+dashboard_service = DashboardService()

@@ -1,49 +1,107 @@
-"""EnrichmentOp — LLM-powered document enrichment.
+"""EnrichmentOp — enrich document chunks with summary, relations, and ToC.
 
-Generates summaries, table of contents, and extracts inter-document relations.
-Runs after indexing to enhance document metadata.
+Post-chunking enrichment: generates a document summary, extracts
+inter-chunk relations, and builds a table of contents from section paths.
+
+Operator protocol:
+  input_keys: ("chunks", "metadata")
+  output_keys: ("summary", "relations", "table_of_contents")
 """
 
-import json
+from __future__ import annotations
+
 import logging
+from collections import OrderedDict
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-SUMMARY_PROMPT = (
-    "Summarize this document in 2-3 concise sentences. "
-    "Focus on the main topic and key conclusions.\n\n"
-    "Document title: {title}\n"
-    "Content (first 3000 chars):\n{content}"
-)
+# Summary generation: stub (LLM-based in Phase 2)
+MAX_SUMMARY_CHUNKS = 5
+MAX_SUMMARY_LENGTH = 500
 
-TOC_PROMPT = (
-    "Extract a table of contents from this document. "
-    "Return a JSON array of objects with fields:\n"
-    '- "title": section heading\n'
-    '- "level": heading level (1-6)\n\n'
-    "Document:\n{content}"
-)
 
-RELATION_PROMPT = (
-    "Given these two document summaries, identify if there "
-    "is a relationship between them.\n"
-    "Possible relation types: cites, extends, contradicts, "
-    "supersedes, related, none.\n\n"
-    "Document A: {doc_a_title}\nSummary: {doc_a_summary}\n\n"
-    "Document B: {doc_b_title}\nSummary: {doc_b_summary}\n\n"
-    "Return a JSON object with fields:\n"
-    '- "relation_type": one of the types above\n'
-    '- "confidence": 0.0 to 1.0\n'
-    '- "evidence": brief explanation\n\n'
-    "If no meaningful relationship exists, return "
-    '{{"relation_type": "none", "confidence": 0.0, '
-    '"evidence": ""}}'
-)
+def _generate_summary(chunks: list[dict[str, Any]], metadata: dict[str, Any]) -> str:
+    """Generate a document summary from top chunks.
+
+    Stub implementation — concatenates first N chunks.
+    Will be replaced by LLM summarization in Phase 2.
+    """
+    title = metadata.get("title", "Untitled")
+    source_type = metadata.get("source_type", "document")
+    total_chunks = len(chunks)
+
+    parts = [f"Document: {title} ({source_type}, {total_chunks} chunks)"]
+
+    for chunk in chunks[:MAX_SUMMARY_CHUNKS]:
+        content = chunk.get("raw_content", chunk.get("content", ""))
+        section = chunk.get("section_path", "")
+        excerpt = content[:150].strip()
+        if section:
+            parts.append(f"- [{section}] {excerpt}...")
+        else:
+            parts.append(f"- {excerpt}...")
+
+    summary = "\n".join(parts)
+    return summary[:MAX_SUMMARY_LENGTH]
+
+
+def _extract_relations(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract potential inter-document relations from chunk content.
+
+    Stub implementation — detects reference patterns.
+    LLM-based relation extraction in Phase 2.
+    """
+    relations: list[dict[str, Any]] = []
+
+    for chunk in chunks:
+        content = chunk.get("raw_content", chunk.get("content", ""))
+        section = chunk.get("section_path", "")
+
+        # Detect citation patterns (e.g., "see Document X", "根據 XXX 規定")
+        if any(marker in content.lower() for marker in
+               ("see ", "refer to ", "according to ", "根據", "參見", "依據", "引用")):
+            relations.append({
+                "type": "cites",
+                "source_section": section,
+                "evidence": content[:200],
+                "confidence": 0.5,  # Low confidence for pattern match
+            })
+
+    return relations
+
+
+def _build_table_of_contents(
+    chunks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build table of contents from chunk section paths."""
+    seen: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    for i, chunk in enumerate(chunks):
+        section = chunk.get("section_path", "")
+        heading = chunk.get("heading", "")
+        key = section or heading or f"Section {i + 1}"
+
+        if key not in seen:
+            seen[key] = {
+                "heading": heading or key,
+                "section_path": section,
+                "chunk_start": i,
+                "chunk_count": 1,
+            }
+        else:
+            seen[key]["chunk_count"] += 1
+
+    return list(seen.values())
 
 
 class EnrichmentOp:
-    """Fixed Op: chunks + document → summary + relations + ToC."""
+    """Enrich chunks with summary, relations, and table of contents.
+
+    Operator protocol:
+      input_keys: ("chunks", "metadata")
+      output_keys: ("summary", "relations", "table_of_contents")
+    """
 
     @property
     def name(self) -> str:
@@ -51,102 +109,35 @@ class EnrichmentOp:
 
     @property
     def input_keys(self) -> tuple[str, ...]:
-        return ("raw_content", "doc_title", "document_id")
+        return ("chunks", "metadata")
 
     @property
     def output_keys(self) -> tuple[str, ...]:
-        return ("summary", "table_of_contents", "discovered_relations")
+        return ("summary", "relations", "table_of_contents")
 
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        raw_content: str = ctx["raw_content"]
-        doc_title: str = ctx["doc_title"]
+        chunks: list[dict[str, Any]] = ctx.get("chunks", [])
+        metadata: dict[str, Any] = ctx.get("metadata", {})
 
-        # Generate summary
-        summary = await self._generate_summary(doc_title, raw_content)
+        if not chunks:
+            ctx["summary"] = ""
+            ctx["relations"] = []
+            ctx["table_of_contents"] = []
+            return ctx
+
+        summary = _generate_summary(chunks, metadata)
+        relations = _extract_relations(chunks)
+        toc = _build_table_of_contents(chunks)
+
         ctx["summary"] = summary
-
-        # Generate ToC
-        toc = await self._generate_toc(raw_content)
+        ctx["relations"] = relations
         ctx["table_of_contents"] = toc
 
-        # Relations are discovered async via event handlers, not inline
-        ctx["discovered_relations"] = []
-
         logger.info(
-            "Enrichment: title=%r, summary_len=%d, toc_entries=%d",
-            doc_title[:50],
+            "EnrichmentOp: %d chunks → summary=%d chars, %d relations, %d ToC entries",
+            len(chunks),
             len(summary),
+            len(relations),
             len(toc),
         )
         return ctx
-
-    async def _generate_summary(self, title: str, content: str) -> str:
-        """Generate document summary via LLM."""
-        try:
-            from src.shared.llm import acompletion
-
-            prompt = SUMMARY_PROMPT.format(title=title, content=content[:3000])
-            response = await acompletion(
-                model="haiku",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=256,
-                temperature=0.1,
-            )
-            return response.choices[0].message.content.strip()
-        except Exception:
-            logger.exception("Summary generation failed")
-            return ""
-
-    async def _generate_toc(self, content: str) -> list[dict[str, Any]]:
-        """Extract table of contents via LLM."""
-        try:
-            from src.shared.llm import acompletion
-
-            prompt = TOC_PROMPT.format(content=content[:5000])
-            response = await acompletion(
-                model="haiku",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=512,
-                temperature=0.1,
-            )
-            text = response.choices[0].message.content.strip()
-            # Extract JSON from response
-            if "[" in text:
-                json_str = text[text.index("[") : text.rindex("]") + 1]
-                return json.loads(json_str)
-            return []
-        except Exception:
-            logger.exception("ToC generation failed")
-            return []
-
-    @staticmethod
-    async def analyze_relation(
-        doc_a_title: str,
-        doc_a_summary: str,
-        doc_b_title: str,
-        doc_b_summary: str,
-    ) -> dict[str, Any]:
-        """Analyze relationship between two documents. Used by event handlers."""
-        try:
-            from src.shared.llm import acompletion
-
-            prompt = RELATION_PROMPT.format(
-                doc_a_title=doc_a_title,
-                doc_a_summary=doc_a_summary,
-                doc_b_title=doc_b_title,
-                doc_b_summary=doc_b_summary,
-            )
-            response = await acompletion(
-                model="haiku",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=256,
-                temperature=0.1,
-            )
-            text = response.choices[0].message.content.strip()
-            if "{" in text:
-                json_str = text[text.index("{") : text.rindex("}") + 1]
-                return json.loads(json_str)
-            return {"relation_type": "none", "confidence": 0.0, "evidence": ""}
-        except Exception:
-            logger.exception("Relation analysis failed")
-            return {"relation_type": "none", "confidence": 0.0, "evidence": ""}

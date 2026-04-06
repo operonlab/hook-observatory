@@ -1,0 +1,332 @@
+{
+  "_meta": {
+    "description": "DocVault QA gold set — 40 questions for citation accuracy + answer faithfulness evaluation",
+    "version": "1.0.0",
+    "domains": ["default", "legal", "medical", "finance"],
+    "metrics": ["citation_accuracy", "answer_faithfulness", "contradiction_detection"],
+    "target_citation_accuracy": 0.80,
+    "target_answer_faithfulness": 0.85
+  },
+  "questions": [
+    {
+      "id": "default-001",
+      "domain": "default",
+      "question": "What is the main purpose of this document?",
+      "expected_section": "Introduction",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "default-002",
+      "domain": "default",
+      "question": "What are the key findings mentioned in the conclusion?",
+      "expected_section": "Conclusion",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "default-003",
+      "domain": "default",
+      "question": "Who are the authors of this document?",
+      "expected_section": "metadata",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "easy"
+    },
+    {
+      "id": "default-004",
+      "domain": "default",
+      "question": "What methodology was used in this research?",
+      "expected_section": "Methods",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "default-005",
+      "domain": "default",
+      "question": "What are the limitations acknowledged in this document?",
+      "expected_section": "Limitations",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "default-006",
+      "domain": "default",
+      "question": "How does this document relate to prior work in the field?",
+      "expected_section": "Related Work",
+      "evaluation": "citation_accuracy",
+      "difficulty": "hard"
+    },
+    {
+      "id": "default-007",
+      "domain": "default",
+      "question": "What recommendations does the document make?",
+      "expected_section": "Recommendations",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "default-008",
+      "domain": "default",
+      "question": "What data sources were used?",
+      "expected_section": "Data",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "default-009",
+      "domain": "default",
+      "question": "What is the scope of this document?",
+      "expected_section": "Introduction > Scope",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "easy"
+    },
+    {
+      "id": "default-010",
+      "domain": "default",
+      "question": "Are there any definitions of key terms?",
+      "expected_section": "Definitions",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "legal-001",
+      "domain": "legal",
+      "question": "第三條規定的申報期限是什麼？",
+      "expected_section": "第三條",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "legal-002",
+      "domain": "legal",
+      "question": "違反第五條的罰則為何？",
+      "expected_section": "罰則 > 第五條",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "legal-003",
+      "domain": "legal",
+      "question": "本法的適用範圍包含哪些主體？",
+      "expected_section": "總則 > 適用範圍",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "legal-004",
+      "domain": "legal",
+      "question": "新舊法規對同一事項的規定是否有衝突？",
+      "expected_section": "multiple",
+      "evaluation": "contradiction_detection",
+      "difficulty": "hard"
+    },
+    {
+      "id": "legal-005",
+      "domain": "legal",
+      "question": "例外條款在什麼情況下適用？",
+      "expected_section": "例外規定",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "legal-006",
+      "domain": "legal",
+      "question": "修正案與原條文有何差異？",
+      "expected_section": "修正對照表",
+      "evaluation": "contradiction_detection",
+      "difficulty": "hard"
+    },
+    {
+      "id": "legal-007",
+      "domain": "legal",
+      "question": "申訴程序的步驟有哪些？",
+      "expected_section": "救濟程序",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "legal-008",
+      "domain": "legal",
+      "question": "委託第三方的法律責任如何分配？",
+      "expected_section": "責任歸屬",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "hard"
+    },
+    {
+      "id": "legal-009",
+      "domain": "legal",
+      "question": "保密義務的有效期限為多長？",
+      "expected_section": "保密條款",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "legal-010",
+      "domain": "legal",
+      "question": "哪些行為構成違約？",
+      "expected_section": "違約事由",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "medical-001",
+      "domain": "medical",
+      "question": "What is the recommended dosage for adults?",
+      "expected_section": "Dosage > Adults",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "medical-002",
+      "domain": "medical",
+      "question": "What are the known contraindications?",
+      "expected_section": "Contraindications",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "medical-003",
+      "domain": "medical",
+      "question": "What side effects were observed in clinical trials?",
+      "expected_section": "Adverse Reactions",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "medical-004",
+      "domain": "medical",
+      "question": "Are there drug interactions to be aware of?",
+      "expected_section": "Drug Interactions",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "medical-005",
+      "domain": "medical",
+      "question": "What is the mechanism of action?",
+      "expected_section": "Pharmacology > Mechanism",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "medical-006",
+      "domain": "medical",
+      "question": "Is this medication safe during pregnancy?",
+      "expected_section": "Special Populations > Pregnancy",
+      "evaluation": "citation_accuracy",
+      "difficulty": "hard"
+    },
+    {
+      "id": "medical-007",
+      "domain": "medical",
+      "question": "What are the storage requirements?",
+      "expected_section": "Storage",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "medical-008",
+      "domain": "medical",
+      "question": "What clinical trial results support efficacy?",
+      "expected_section": "Clinical Studies",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "hard"
+    },
+    {
+      "id": "medical-009",
+      "domain": "medical",
+      "question": "How should dosage be adjusted for renal impairment?",
+      "expected_section": "Dosage > Renal",
+      "evaluation": "citation_accuracy",
+      "difficulty": "hard"
+    },
+    {
+      "id": "medical-010",
+      "domain": "medical",
+      "question": "What monitoring is recommended during treatment?",
+      "expected_section": "Monitoring",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "finance-001",
+      "domain": "finance",
+      "question": "What was the total revenue for Q4?",
+      "expected_section": "Financial Highlights > Revenue",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "finance-002",
+      "domain": "finance",
+      "question": "What is the year-over-year growth rate?",
+      "expected_section": "Performance Summary",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "finance-003",
+      "domain": "finance",
+      "question": "What are the main risk factors identified?",
+      "expected_section": "Risk Factors",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "finance-004",
+      "domain": "finance",
+      "question": "What dividend was declared per share?",
+      "expected_section": "Dividends",
+      "evaluation": "citation_accuracy",
+      "difficulty": "easy"
+    },
+    {
+      "id": "finance-005",
+      "domain": "finance",
+      "question": "How has the debt-to-equity ratio changed?",
+      "expected_section": "Balance Sheet > Ratios",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "hard"
+    },
+    {
+      "id": "finance-006",
+      "domain": "finance",
+      "question": "What were the major capital expenditures?",
+      "expected_section": "Cash Flow > CapEx",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "finance-007",
+      "domain": "finance",
+      "question": "What guidance was provided for next fiscal year?",
+      "expected_section": "Outlook",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "medium"
+    },
+    {
+      "id": "finance-008",
+      "domain": "finance",
+      "question": "Are there any related-party transactions disclosed?",
+      "expected_section": "Related Party Transactions",
+      "evaluation": "citation_accuracy",
+      "difficulty": "hard"
+    },
+    {
+      "id": "finance-009",
+      "domain": "finance",
+      "question": "What accounting policies were changed?",
+      "expected_section": "Accounting Policies",
+      "evaluation": "answer_faithfulness",
+      "difficulty": "hard"
+    },
+    {
+      "id": "finance-010",
+      "domain": "finance",
+      "question": "What is the breakdown of revenue by segment?",
+      "expected_section": "Segment Reporting",
+      "evaluation": "citation_accuracy",
+      "difficulty": "medium"
+    }
+  ]
+}

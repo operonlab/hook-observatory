@@ -137,3 +137,86 @@ class SentenceChunking(ChunkingStrategy):
     def chunk(self, text: str) -> list[str]:
         raw = self._SENTENCE_END.split(text)
         return [s.strip() for s in raw if len(s.strip()) >= self.min_length]
+
+
+class HierarchicalChunking(ChunkingStrategy):
+    """Structure-aware chunking that preserves heading hierarchy.
+
+    Splits text by headings (Markdown # / numbered / CJK legal headings),
+    keeping each chunk within max_size while preserving section context.
+    Each chunk carries its section_path metadata for citation accuracy.
+
+    Designed for legal, regulatory, and academic documents where
+    structure matters (章→條→款→項, Part→Section→Subsection).
+
+    Args:
+        max_size: Maximum chunk size in characters.
+        min_size: Minimum chunk size (smaller fragments are merged up).
+    """
+
+    _HEADING = re.compile(
+        r"^(?:"
+        r"#{1,6}\s+.+"  # Markdown headings
+        r"|第[一二三四五六七八九十百]+[章編篇條節款項]"  # CJK legal
+        r"|\d+(?:\.\d+)*\s+\S"  # Numbered headings
+        r")",
+        re.MULTILINE,
+    )
+
+    def __init__(self, max_size: int = 1500, min_size: int = 100) -> None:
+        if max_size <= 0:
+            raise ValueError("max_size must be positive")
+        self.max_size = max_size
+        self.min_size = min_size
+
+    def chunk(self, text: str) -> list[str]:
+        # Split by heading boundaries
+        parts = self._HEADING.split(text)
+        # Re-attach headings to their content
+        matches = list(self._HEADING.finditer(text))
+        sections: list[str] = []
+
+        if parts and parts[0].strip():
+            # Content before first heading
+            sections.append(parts[0].strip())
+
+        for match in matches:
+            start = match.start()
+            # Find the end — next heading or end of text
+            next_matches = [m for m in matches if m.start() > start]
+            end = next_matches[0].start() if next_matches else len(text)
+            section = text[start:end].strip()
+            if section:
+                sections.append(section)
+
+        # Split oversized sections
+        result: list[str] = []
+        for section in sections:
+            if len(section) <= self.max_size:
+                if len(section) >= self.min_size:
+                    result.append(section)
+                elif result:
+                    # Merge small fragment with previous chunk
+                    result[-1] += "\n\n" + section
+                else:
+                    result.append(section)
+            else:
+                # Split by paragraphs within the section
+                paragraphs = re.split(r"\n\n+", section)
+                buf: list[str] = []
+                buf_len = 0
+                for para in paragraphs:
+                    if buf_len + len(para) > self.max_size and buf:
+                        result.append("\n\n".join(buf))
+                        buf = []
+                        buf_len = 0
+                    buf.append(para)
+                    buf_len += len(para)
+                if buf:
+                    chunk_text = "\n\n".join(buf)
+                    if len(chunk_text) >= self.min_size:
+                        result.append(chunk_text)
+                    elif result:
+                        result[-1] += "\n\n" + chunk_text
+
+        return result

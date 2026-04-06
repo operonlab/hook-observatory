@@ -146,6 +146,15 @@ export const APP_LIST: AppInfo[] = [
     status: 'available',
   },
   {
+    id: 'docvault',
+    name: '文件知識庫',
+    description: '文件問答、語意搜尋、引用追蹤、領域 Profile',
+    icon: '📚',
+    path: '/docvault',
+    color: '#74c7ec',
+    status: 'available',
+  },
+  {
     id: 'agent-metrics',
     name: 'Agent 儀表板',
     description: 'LLM 用量追蹤、配額監控、模型成本分析',

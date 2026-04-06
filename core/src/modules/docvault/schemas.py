@@ -10,18 +10,22 @@ from src.shared.schemas import PaginatedResponse, SpaceScopedResponse  # noqa: F
 
 
 class DocumentCreate(BaseModel):
-    title: str
-    source_type: str = "pdf"
+    title: str = Field(..., max_length=500)
+    source_type: str = Field(default="markdown", pattern="^(pdf|docx|markdown|webpage|api)$")
     source_uri: str | None = None
+    content_hash: str = Field(..., max_length=64)
     tags: list[str] = Field(default_factory=list)
-    metadata: dict | None = None
+    metadata_: dict | None = Field(default=None, alias="metadata")
 
 
 class DocumentUpdate(BaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=500)
     tags: list[str] | None = None
-    metadata: dict | None = None
-    status: str | None = None
+    metadata_: dict | None = Field(default=None, alias="metadata")
+    status: str | None = Field(
+        default=None, pattern="^(ingested|processing|indexed|enriched|published|archived|failed)$"
+    )
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class DocumentResponse(SpaceScopedResponse):
@@ -31,11 +35,24 @@ class DocumentResponse(SpaceScopedResponse):
     content_hash: str
     current_version_id: str | None = None
     tags: list[str] = []
-    metadata: dict | None = None
+    metadata_: dict | None = Field(default=None, alias="metadata")
     status: str
-    confidence: float = 0.0
+    confidence: float | None = None
     access_count: int = 0
     last_accessed_at: datetime | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class DocumentBrief(BaseModel):
+    """Lightweight document for list views."""
+
+    id: str
+    title: str
+    source_type: str
+    tags: list[str] = []
+    status: str
+    created_at: datetime
 
 
 # ======================== DocumentVersion ========================
@@ -44,13 +61,15 @@ class DocumentResponse(SpaceScopedResponse):
 class DocumentVersionCreate(BaseModel):
     document_id: str
     version_number: int
-    content_hash: str
+    content_hash: str = Field(..., max_length=64)
     raw_content: str | None = None
     extraction_model: str | None = None
 
 
 class DocumentVersionUpdate(BaseModel):
-    status: str | None = None
+    status: str | None = Field(
+        default=None, pattern="^(processing|ready|superseded)$"
+    )
     chunk_count: int | None = None
     summary: str | None = None
     table_of_contents: dict | None = None
@@ -65,6 +84,7 @@ class DocumentVersionResponse(SpaceScopedResponse):
     extraction_model: str | None = None
     summary: str | None = None
     table_of_contents: dict | None = None
+    # raw_content intentionally excluded from response (too large)
 
 
 # ======================== DocumentChunk ========================
@@ -79,7 +99,7 @@ class DocumentChunkCreate(BaseModel):
     page_range: str | None = None
     heading: str | None = None
     token_count: int = 0
-    chunk_type: str = "text"
+    chunk_type: str = Field(default="text", pattern="^(text|table|list|code)$")
 
 
 class DocumentChunkResponse(SpaceScopedResponse):
@@ -100,10 +120,19 @@ class DocumentChunkResponse(SpaceScopedResponse):
 class DocumentRelationCreate(BaseModel):
     source_document_id: str
     target_document_id: str
-    relation_type: str
+    relation_type: str = Field(
+        ..., pattern="^(cites|extends|contradicts|supersedes|related)$"
+    )
     evidence: str | None = None
     source_chunk_id: str | None = None
-    confidence: float = 0.0
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class DocumentRelationUpdate(BaseModel):
+    evidence: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    invalid_at: datetime | None = None
+    invalidated_by: str | None = None
 
 
 class DocumentRelationResponse(SpaceScopedResponse):
@@ -112,7 +141,7 @@ class DocumentRelationResponse(SpaceScopedResponse):
     relation_type: str
     evidence: str | None = None
     source_chunk_id: str | None = None
-    confidence: float = 0.0
+    confidence: float | None = None
     valid_from: datetime | None = None
     invalid_at: datetime | None = None
     invalidated_by: str | None = None
@@ -123,15 +152,23 @@ class DocumentRelationResponse(SpaceScopedResponse):
 
 class CoverageGapCreate(BaseModel):
     query_text: str
-    query_hash: str
-    gap_type: str
+    query_hash: str = Field(..., max_length=64)
+    detected_at: datetime
+    gap_type: str = Field(
+        ..., pattern="^(topic_missing|depth_insufficient|outdated)$"
+    )
     suggested_sources: dict | None = None
 
 
 class CoverageGapUpdate(BaseModel):
-    status: str | None = None
-    resolution: str | None = None
+    status: str | None = Field(
+        default=None, pattern="^(pending|investigating|resolved|dismissed)$"
+    )
+    resolution: str | None = Field(
+        default=None, pattern="^(document_added|not_applicable|merged_existing)$"
+    )
     resolved_document_id: str | None = None
+    suggested_sources: dict | None = None
 
 
 class CoverageGapResponse(SpaceScopedResponse):
@@ -150,13 +187,15 @@ class CoverageGapResponse(SpaceScopedResponse):
 
 class QALogCreate(BaseModel):
     query_text: str
-    query_hash: str
+    query_hash: str = Field(..., max_length=64)
     answer_text: str
     citations: dict | None = None
-    confidence: float = 0.0
-    crag_verdict: str | None = None
-    pipeline_used: str = "A"
-    latency_ms: int = 0
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    crag_verdict: str | None = Field(
+        default=None, pattern="^(correct|ambiguous|incorrect)$"
+    )
+    pipeline_used: str = Field(default="A", pattern="^(A|B|C)$")
+    latency_ms: int | None = None
 
 
 class QALogResponse(SpaceScopedResponse):
@@ -164,54 +203,67 @@ class QALogResponse(SpaceScopedResponse):
     query_hash: str
     answer_text: str
     citations: dict | None = None
-    confidence: float = 0.0
+    confidence: float | None = None
     crag_verdict: str | None = None
     feedback: str | None = None
     pipeline_used: str = "A"
-    latency_ms: int = 0
+    latency_ms: int | None = None
 
 
-# ======================== QA Request/Response ========================
+class QAFeedbackUpdate(BaseModel):
+    """Lightweight feedback schema for QA log entries."""
+
+    feedback: str = Field(..., pattern="^(positive|negative)$")
+
+
+# ======================== Search / QA Request ========================
+
+
+class DocumentSearchParams(BaseModel):
+    q: str = Field(..., min_length=1, max_length=2000)
+    top_k: int = Field(default=10, ge=1, le=100)
+    source_type: str | None = None
+    tags: list[str] | None = None
 
 
 class QARequest(BaseModel):
-    question: str
-    mode: str = "factual"  # factual | mixed
-    top_k: int = 5
-    domain: str = "default"
+    """Question-answering request for Pipeline A/B/C."""
+
+    question: str = Field(..., min_length=1, max_length=2000)
+    mode: str = Field(default="factual", pattern="^(factual|mixed)$")
+    domain: str = Field(default="default")
+    top_k: int = Field(default=6, ge=1, le=20)
 
 
-class Citation(BaseModel):
+class CitationRef(BaseModel):
+    """A single citation reference in a QA answer."""
+
     document_id: str
-    chunk_id: str
+    chunk_id: str | None = None
     section: str | None = None
     page: str | None = None
     quote: str | None = None
-    score: float = 0.0
 
 
 class QAResponse(BaseModel):
+    """Response from the QA pipeline."""
+
+    question: str
     answer: str
-    citations: list[Citation] = []
-    confidence: float = 0.0
+    citations: list[CitationRef] = []
+    confidence: float | None = None
     crag_verdict: str | None = None
     pipeline_used: str = "A"
-    latency_ms: int = 0
+    qa_log_id: str | None = None
 
 
-class GapStats(BaseModel):
-    total: int = 0
-    pending: int = 0
-    investigating: int = 0
-    resolved: int = 0
-    dismissed: int = 0
+# ======================== Dashboard ========================
 
 
-class DocvaultStats(BaseModel):
+class DocvaultDashboardResponse(BaseModel):
     total_documents: int = 0
     total_chunks: int = 0
-    total_relations: int = 0
-    total_gaps: int = 0
     total_qa_logs: int = 0
-    by_status: dict[str, int] = {}
-    by_source_type: dict[str, int] = {}
+    coverage_gap_count: int = 0
+    published_count: int = 0
+    recent_documents: list[DocumentBrief] = []

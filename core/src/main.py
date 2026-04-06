@@ -222,6 +222,7 @@ from src.modules.assistant.routes import router as assistant_router  # noqa: E40
 from src.modules.capture.routes import register_capture_sse_events  # noqa: E402
 from src.modules.capture.routes import router as capture_router  # noqa: E402
 from src.modules.dailyos.routes import router as dailyos_router  # noqa: E402
+from src.modules.docvault.routes import router as docvault_router  # noqa: E402
 from src.modules.paper.routes import router as paper_router  # noqa: E402
 
 app.include_router(assistant_router, prefix="/api/assistant", tags=["assistant"])
@@ -229,3 +230,4 @@ app.include_router(capture_router, prefix="/api/captures", tags=["capture"])
 register_capture_sse_events()
 app.include_router(dailyos_router, prefix="/api/dailyos", tags=["dailyos"])
 app.include_router(paper_router, prefix="/api/paper", tags=["paper"])
+app.include_router(docvault_router, prefix="/api/docvault", tags=["docvault"])

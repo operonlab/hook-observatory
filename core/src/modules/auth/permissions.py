@@ -38,6 +38,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "nodeflow.write",
         "paper.read",
         "paper.write",
+        "docvault.read",
+        "docvault.write",
         "assistant.read",
         "plugin.use",
         "profile.read",
@@ -54,6 +56,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "briefing.read",
         "nodeflow.read",
         "paper.read",
+        "docvault.read",
         "assistant.read",
     ],
 }

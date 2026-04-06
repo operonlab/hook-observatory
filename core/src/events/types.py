@@ -221,6 +221,25 @@ class PaperEvents:
     ANNOTATION_CREATED = "paper.annotation.created"
 
 
+class DocvaultEvents:
+    # Lifecycle
+    DOCUMENT_CREATED = "docvault.document.created"
+    DOCUMENT_PROCESSING = "docvault.document.processing"
+    DOCUMENT_INDEXED = "docvault.document.indexed"
+    DOCUMENT_ENRICHED = "docvault.document.enriched"
+    DOCUMENT_PUBLISHED = "docvault.document.published"
+    DOCUMENT_SUPERSEDED = "docvault.document.superseded"
+    DOCUMENT_ARCHIVED = "docvault.document.archived"
+    # QA
+    QA_EXECUTED = "docvault.qa.executed"
+    QA_FEEDBACK = "docvault.qa.feedback"
+    # Coverage
+    COVERAGE_GAP_DETECTED = "docvault.coverage.gap_detected"
+    COVERAGE_GAP_RESOLVED = "docvault.coverage.gap_resolved"
+    # Relations
+    RELATION_DISCOVERED = "docvault.relation.discovered"
+
+
 class SystemEvents:
     HEALTH_CHECKED = "system.health.checked"
     CONFIG_CHANGED = "system.config.changed"
