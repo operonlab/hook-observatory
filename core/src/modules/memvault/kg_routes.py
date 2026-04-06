@@ -30,6 +30,7 @@ from .kg_schemas import (
     EntityMergeResult,
     EntityResolutionStats,
     GraphTraversalResult,
+    LintReportResponse,
     SkillProfileResponse,
     SkillProfileUpsert,
     TripleBatchCreate,
@@ -47,6 +48,7 @@ from .kg_services import (
     skill_profile_service,
     triple_service,
 )
+from .lint import remediate_orphans, remediate_stale, run_lint
 
 router = APIRouter(prefix="/kg", tags=["memvault-kg"])
 
@@ -884,3 +886,48 @@ async def get_meta_insights(
         }
         for f in facts
     ]
+
+
+# ======================== KG Lint ========================
+
+
+@router.post("/lint", response_model=LintReportResponse)
+async def lint_knowledge_graph(
+    checks: str = Query("all", description="Comma-separated check names or all"),
+    fix: bool = Query(False, description="Apply safe remediations"),
+    dry_run: bool = Query(True, description="Preview-only when fix=True"),
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Knowledge graph health check — detect contradictions, stale triples, orphans, etc."""
+    check_list = None if checks == "all" else [c.strip() for c in checks.split(",")]
+    report = await run_lint(db, space_id, checks=check_list)
+
+    remediations = 0
+    if fix:
+        stale_findings = [f for f in report.findings if f.check == "stale"]
+        orphan_findings = [f for f in report.findings if f.check == "orphan_entities"]
+        remediations += await remediate_stale(db, stale_findings, dry_run=dry_run)
+        remediations += await remediate_orphans(db, orphan_findings, dry_run=dry_run)
+
+    return LintReportResponse(
+        space_id=report.space_id,
+        checks_run=report.checks_run,
+        findings=[
+            {
+                "check": f.check,
+                "severity": f.severity,
+                "entity_id": f.entity_id,
+                "entity_type": f.entity_type,
+                "message": f.message,
+                "suggested_action": f.suggested_action,
+                "metadata": f.metadata,
+            }
+            for f in report.findings
+        ],
+        summary=report.summary,
+        run_duration_ms=report.run_duration_ms,
+        run_at=report.run_at.isoformat(),
+        remediations_applied=remediations,
+    )

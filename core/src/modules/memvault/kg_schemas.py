@@ -279,3 +279,30 @@ class GraphTraversalResult(BaseModel):
     edges: list[GraphEdge] = []
     total_triples_traversed: int = 0
     truncated: bool = False
+
+
+# ======================== Lint ========================
+
+
+class LintFindingResponse(BaseModel):
+    """A single lint finding."""
+
+    check: str
+    severity: str
+    entity_id: str
+    entity_type: str
+    message: str
+    suggested_action: str
+    metadata: dict = {}
+
+
+class LintReportResponse(BaseModel):
+    """Full lint report."""
+
+    space_id: str
+    checks_run: list[str]
+    findings: list[LintFindingResponse]
+    summary: dict[str, int]
+    run_duration_ms: float
+    run_at: str
+    remediations_applied: int = 0

@@ -491,6 +491,20 @@ class MemvaultClient(BaseClient):
         """Apply confidence decay to attitude facts. POST /kg/decay"""
         return self._post("/kg/decay")
 
+    def lint(
+        self,
+        checks: str = "all",
+        fix: bool = False,
+        dry_run: bool = True,
+    ) -> dict:
+        """Run knowledge lint checks. POST /kg/lint"""
+        params: dict = {
+            "checks": checks,
+            "fix": str(fix).lower(),
+            "dry_run": str(dry_run).lower(),
+        }
+        return self._post("/kg/lint", params=params, timeout=120)
+
     def backfill_embeddings(self, batch_size: int = 50) -> dict:
         """Backfill missing embeddings for triples and attitudes. POST /kg/embeddings/backfill"""
         return self._post("/kg/embeddings/backfill", params={"batch_size": batch_size}, timeout=120)
