@@ -1636,5 +1636,57 @@ class TmuxRelayClient:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
+    # ================================================================
+    # Board API — task bulletin board via session-channel
+    # ================================================================
+
+    def publish_board(self, board_id: str, tasks: list[dict]) -> None:
+        """Publish a task board to session-channel. tasks: [{id, desc, ...}]"""
+        self._notify_channel(
+            topic=f"board:{board_id}",
+            text=json.dumps({"tasks": tasks}),
+            tag="publish",
+            priority="high",
+        )
+
+    def claim_board_task(self, board_id: str, task_id: str) -> dict | None:
+        """Atomically claim a task via Lua CAS. Returns response dict or None."""
+        pane = os.environ.get("TMUX_PANE", "sdk")
+        resp = self._board_http(
+            "POST",
+            f"/api/board/{board_id}/claim",
+            {"task_id": task_id, "pane": pane},
+        )
+        return resp if resp and resp.get("ok") else None
+
+    def complete_board_task(
+        self, board_id: str, task_id: str, result: str = ""
+    ) -> None:
+        """Report task completion to session-channel board."""
+        self._notify_channel(
+            topic=f"board:{board_id}",
+            text=json.dumps({"task_id": task_id, "result": result}),
+            tag="done",
+        )
+
+    def _board_http(self, method: str, path: str, body: dict) -> dict | None:
+        """Synchronous HTTP to session-channel board API."""
+        try:
+            r = subprocess.run(
+                [
+                    "curl", "-s", "-m", "5", "-X", method,
+                    f"{self._CHANNEL_URL}{path}",
+                    "-H", "Content-Type: application/json",
+                    "-H", f"x-local-key: {self._CHANNEL_KEY}",
+                    "-d", json.dumps(body),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=8,
+            )
+            return json.loads(r.stdout) if r.returncode == 0 else None
+        except Exception:
+            return None
+
     def __repr__(self) -> str:
         return f"TmuxRelayClient(claude_bin={self.claude_bin!r})"
