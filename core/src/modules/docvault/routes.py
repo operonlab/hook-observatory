@@ -47,6 +47,7 @@ from .schemas import (
     DocumentRelationResponse,
     DocumentResponse,
     DocumentSearchParams,
+    DocumentSearchResponse,
     DocumentUpdate,
     DocumentUploadRequest,
     DocumentVersionCreate,
@@ -57,6 +58,7 @@ from .schemas import (
     QALogResponse,
     QARequest,
     QAResponse,
+    SearchChunkResult,
 )
 from .services import (
     chunk_service,
@@ -359,7 +361,7 @@ async def create_relation(
 # ======================== Search ========================
 
 
-@router.post("/search")
+@router.post("/search", response_model=DocumentSearchResponse)
 async def search_documents(
     body: DocumentSearchParams,
     space_id: str = Query("default"),
@@ -380,18 +382,18 @@ async def search_documents(
     chunks = []
     for r in results:
         chunks.append(
-            {
-                "document_id": r.entity_id,
-                "score": r.score,
-                "content": r.content_preview,
-                "section_path": r.metadata.get("section_path", ""),
-                "page_range": r.metadata.get("page_range", ""),
-                "heading": r.metadata.get("heading", ""),
-                "chunk_index": r.metadata.get("chunk_index"),
-            }
+            SearchChunkResult(
+                document_id=r.entity_id,
+                score=r.score,
+                content=r.content_preview,
+                section_path=r.metadata.get("section_path", ""),
+                page_range=r.metadata.get("page_range", ""),
+                heading=r.metadata.get("heading", ""),
+                chunk_index=r.metadata.get("chunk_index"),
+            )
         )
 
-    return {"query": q, "results": chunks, "total": len(chunks)}
+    return DocumentSearchResponse(query=body.q, results=chunks, total=len(chunks))
 
 
 # ======================== QA Pipeline ========================
