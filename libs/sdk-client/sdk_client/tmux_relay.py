@@ -1236,6 +1236,18 @@ class TmuxRelayClient:
                 stderr=subprocess.DEVNULL,
             )
 
+            # Phase 1.1: Set tmux pane-exited hook as RELIABLE fallback
+            # This fires when the CC process exits (normal /exit, crash, or context exhaustion)
+            # regardless of whether Stop hook triggers. This is the ultimate safety net.
+            _exit_hook_cmd = (
+                f"run-shell 'tmux wait-for -S {channel} 2>/dev/null; "
+                f"rm -f {pending_file} 2>/dev/null'"
+            )
+            try:
+                tmux_ok("set-hook", "-t", pane_id, "pane-exited", _exit_hook_cmd)
+            except Exception:
+                pass  # Best effort — idle watchdog is secondary fallback
+
             # Timeout watchdog — kills wait-for if it takes too long
             timed_out = False
 
@@ -1282,8 +1294,12 @@ class TmuxRelayClient:
             done_time = int(time.time())
             elapsed = done_time - send_time
 
-            # Eagerly remove pending file
+            # Eagerly remove pending file + clean up pane-exited hook
             pending_file.unlink(missing_ok=True)
+            try:
+                tmux_ok("set-hook", "-u", "-t", pane_id, "pane-exited")
+            except Exception:
+                pass
 
             # Check timeout
             if timed_out or wait_proc.returncode != 0:
@@ -1397,8 +1413,12 @@ class TmuxRelayClient:
             _cleanup()
             raise
         finally:
-            # Ensure pending file is always removed
+            # Ensure pending file is always removed + clean pane-exited hook
             pending_file.unlink(missing_ok=True)
+            try:
+                tmux_ok("set-hook", "-u", "-t", pane_id, "pane-exited")
+            except Exception:
+                pass
 
     # ================================================================
     # Public relay operations
