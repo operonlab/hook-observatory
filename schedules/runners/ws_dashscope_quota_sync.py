@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-ws_dashscope_quota_sync.py — Sync DashScope (Qwen) free quota via Playwright CLI
+ws_dashscope_quota_sync.py — Sync DashScope (Qwen) free quota via camoufox-cli
 
 Scrapes https://modelstudio.console.alibabacloud.com free-quota dashboard,
 parses usage data, and stores in Redis for agent-metrics consumption.
 
-Requires: Alibaba Cloud session in Playwright master profile.
+Dual-track scraping: camoufox-cli (primary, anti-detect Firefox) →
+playwright-cli (fallback) → Safari (last resort).
+
+Requires: Alibaba Cloud session in camoufox master profile.
 
 Logs: ~/workshop/outputs/scheduler/logs/ws-dashscope-quota-sync.log
 """
@@ -15,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -26,6 +30,7 @@ LOG_DIR = HOME / "workshop/outputs/scheduler/logs"
 LOG_FILE = LOG_DIR / "ws-dashscope-quota-sync.log"
 REDIS_KEY = "agent-metrics:dashscope:free_quota"
 REDIS_TTL = 86400 * 7  # 7 days (free quota changes slowly)
+CFX_SESSION = "dashscope-sync"
 TARGET_URL = (
     "https://modelstudio.console.alibabacloud.com/ap-southeast-1/"
     "?tab=dashboard#/model-usage/free-quota"
@@ -46,8 +51,48 @@ def log(msg: str) -> None:
         f.write(line + "\n")
 
 
+def _cfx(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
+    """Run a camoufox-cli command with the sync session."""
+    cmd = ["camoufox-cli", "--session", CFX_SESSION, *args]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def scrape_with_camoufox() -> str | None:
+    """Scrape DashScope free quota page via camoufox-cli (primary)."""
+    try:
+        open_r = _cfx("--persistent", "open", TARGET_URL)
+        if open_r.returncode != 0:
+            log(f"ERROR: camoufox open failed: {open_r.stderr[:200]}")
+            return None
+
+        time.sleep(6)  # Wait for SPA to render
+
+        eval_r = _cfx("eval", "document.body.innerText.substring(0, 8000)", timeout=15)
+
+        if eval_r.returncode != 0:
+            log(f"ERROR: camoufox eval failed: {eval_r.stderr[:200]}")
+            return None
+
+        return eval_r.stdout.strip() or None
+
+    except subprocess.TimeoutExpired:
+        log("ERROR: camoufox timeout")
+        return None
+    except FileNotFoundError:
+        log("WARN: camoufox-cli not found, skipping")
+        return None
+    except Exception as e:
+        log(f"ERROR: camoufox failed: {e}")
+        return None
+    finally:
+        try:
+            _cfx("close", timeout=10)
+        except Exception:
+            pass
+
+
 def scrape_with_playwright() -> str | None:
-    """Scrape DashScope free quota page via Playwright CLI."""
+    """Scrape DashScope free quota page via Playwright CLI (fallback)."""
     # Init session (APFS clone of master profile)
     init_result = subprocess.run(
         [str(PYTHON), str(PW_SESSION), "init"],
@@ -72,8 +117,7 @@ def scrape_with_playwright() -> str | None:
         # Open page
         subprocess.run(
             [
-                "npx",
-                "@playwright/cli",
+                "playwright-cli",
                 "--profile",
                 profile_dir,
                 f"-s={session_id}",
@@ -84,15 +128,12 @@ def scrape_with_playwright() -> str | None:
             text=True,
             timeout=30,
         )
-        import time
-
         time.sleep(5)  # Wait for SPA to render
 
         # Extract body text
         eval_result = subprocess.run(
             [
-                "npx",
-                "@playwright/cli",
+                "playwright-cli",
                 f"-s={session_id}",
                 "eval",
                 "document.body.innerText.substring(0, 8000)",
@@ -104,7 +145,7 @@ def scrape_with_playwright() -> str | None:
 
         # Close + cleanup
         subprocess.run(
-            ["npx", "@playwright/cli", f"-s={session_id}", "close"],
+            ["playwright-cli", f"-s={session_id}", "close"],
             capture_output=True,
             timeout=10,
         )
@@ -141,7 +182,7 @@ def scrape_with_playwright() -> str | None:
         # Ensure cleanup
         try:
             subprocess.run(
-                ["npx", "@playwright/cli", f"-s={session_id}", "close"],
+                ["playwright-cli", f"-s={session_id}", "close"],
                 capture_output=True,
                 timeout=5,
             )
@@ -167,8 +208,6 @@ def scrape_with_safari() -> str | None:
             text=True,
             timeout=15,
         )
-        import time
-
         time.sleep(5)
 
         # Extract text
@@ -304,8 +343,11 @@ def store_to_redis(data: dict) -> bool:
 def main() -> int:
     log("=== Qwen Free Quota Sync Start ===")
 
-    # Try Playwright first, then Safari fallback
-    text = scrape_with_playwright()
+    # Primary: camoufox-cli (anti-detect Firefox)
+    text = scrape_with_camoufox()
+    if not text:
+        log("Camoufox failed, trying Playwright CLI fallback...")
+        text = scrape_with_playwright()
     if not text:
         log("Playwright failed, trying Safari fallback...")
         text = scrape_with_safari()

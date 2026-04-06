@@ -1,13 +1,71 @@
-"""Playwright CLI wrapper — session management + command execution."""
+"""Browser automation — camoufox-cli (primary) + Playwright CLI (fallback)."""
 
+import os
+import shutil
 import subprocess
+import tempfile
 import uuid
 
 from .config import settings
 
 
+class CamoufoxSession:
+    """Manages a camoufox-cli browser session (primary)."""
+
+    def __init__(self, session_id: str | None = None):
+        self.sid = session_id or uuid.uuid4().hex[:8]
+
+    def _run(self, *args: str, timeout: int = 30) -> str:
+        cmd = [settings.camoufox_cli, "--session", self.sid, *args]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if result.returncode != 0:
+            raise RuntimeError(f"camoufox-cli error: {result.stderr or result.stdout}")
+        return result.stdout
+
+    def open(self, url: str) -> str:
+        profile = os.path.expanduser(settings.camoufox_profile)
+        return self._run("--persistent", profile, "open", url, timeout=30)
+
+    def navigate(self, url: str) -> str:
+        return self._run("open", url, timeout=30)
+
+    def run_code(self, js_code: str, timeout: int = 60) -> str:
+        return self._run("eval", js_code, timeout=timeout)
+
+    def snapshot(self, interactive: bool = True) -> str:
+        args = ["snapshot"]
+        if interactive:
+            args.append("-i")
+        return self._run(*args, timeout=15)
+
+    def click(self, ref: str) -> str:
+        return self._run("click", ref if ref.startswith("@") else f"@{ref}", timeout=15)
+
+    def fill(self, ref: str, text: str) -> str:
+        ref_str = ref if ref.startswith("@") else f"@{ref}"
+        return self._run("fill", ref_str, text, timeout=15)
+
+    def screenshot(self, full_page: bool = False) -> str:
+        args = ["screenshot"]
+        if full_page:
+            args.append("--full")
+        return self._run(*args, timeout=15)
+
+    def close(self) -> str:
+        try:
+            return self._run("close", timeout=10)
+        except Exception:
+            return ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
 class PlaywrightSession:
-    """Manages a Playwright CLI browser session."""
+    """Manages a Playwright CLI browser session (fallback)."""
 
     def __init__(self, session_id: str | None = None):
         self.sid = session_id or uuid.uuid4().hex[:8]
@@ -17,7 +75,6 @@ class PlaywrightSession:
     def _run(self, *args: str, timeout: int = 30) -> str:
         cmd_parts = [*self._cli.split(), f"-s={self.sid}", *args]
         if self.profile_dir:
-            # Insert --profile before the subcommand args
             idx = next(
                 (
                     i
@@ -43,8 +100,24 @@ class PlaywrightSession:
     def open(self, url: str) -> str:
         return self._run("open", url, timeout=30)
 
+    def navigate(self, url: str) -> str:
+        return self.open(url)
+
     def run_code(self, js_code: str, timeout: int = 60) -> str:
         return self._run("run-code", js_code, timeout=timeout)
+
+    def snapshot(self, interactive: bool = True) -> str:
+        args = ["snapshot"]
+        if interactive:
+            args.append("-i")
+        return self._run(*args, timeout=15)
+
+    def click(self, ref: str) -> str:
+        return self._run("click", ref if ref.startswith("@") else f"@{ref}", timeout=15)
+
+    def fill(self, ref: str, text: str) -> str:
+        ref_str = ref if ref.startswith("@") else f"@{ref}"
+        return self._run("fill", ref_str, text, timeout=15)
 
     def screenshot(self, full_page: bool = False) -> str:
         args = ["screenshot"]
@@ -65,22 +138,28 @@ class PlaywrightSession:
         self.close()
 
 
-def create_session() -> PlaywrightSession:
-    """Create a session with APFS-cloned profile for isolation."""
-    sess = PlaywrightSession()
+def create_session() -> CamoufoxSession | PlaywrightSession:
+    """Create a browser session — camoufox-cli primary, playwright-cli fallback."""
+    # Try camoufox first
+    try:
+        subprocess.run(
+            ["camoufox-cli", "--help"],
+            capture_output=True,
+            timeout=5,
+        )
+        return CamoufoxSession()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
 
+    # Fallback to playwright
+    sess = PlaywrightSession()
     profile_src = settings.pw_profile_dir
     if not profile_src:
-        # Use default master profile
         profile_src = "~/.playwright-profiles/master"
-
-    import os
-    import tempfile
 
     profile_src = os.path.expanduser(profile_src)
     if os.path.isdir(profile_src):
         tmp = tempfile.mkdtemp(prefix="pw-")
-        # APFS clone for zero-cost copy
         subprocess.run(
             ["cp", "-c", "-R", profile_src + "/.", tmp],
             check=False,
@@ -90,9 +169,9 @@ def create_session() -> PlaywrightSession:
     return sess
 
 
-def cleanup_session(sess: PlaywrightSession):
-    """Remove cloned profile directory."""
-    import shutil
-
-    if sess.profile_dir and sess.profile_dir.startswith("/tmp/pw-"):
-        shutil.rmtree(sess.profile_dir, ignore_errors=True)
+def cleanup_session(sess: CamoufoxSession | PlaywrightSession) -> None:
+    """Clean up session resources."""
+    if isinstance(sess, PlaywrightSession) and sess.profile_dir:
+        if sess.profile_dir.startswith("/tmp/pw-"):
+            shutil.rmtree(sess.profile_dir, ignore_errors=True)
+    # CamoufoxSession uses persistent profile, no cleanup needed

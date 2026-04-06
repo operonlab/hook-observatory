@@ -1,4 +1,4 @@
-"""Dual-layer health check engine: light (httpx) + deep (Playwright CLI)."""
+"""Dual-layer health check engine: light (httpx) + deep (camoufox-cli / Playwright CLI)."""
 
 from __future__ import annotations
 
@@ -56,8 +56,9 @@ class DeepCheck:
     name: str
     group: str = ""
     url: str = ""
-    playwright_code: str = ""  # JS code for run-code
-    timeout: float = _TIMEOUT_DEEP_CHECK  # Chrome startup can be slow under memory pressure
+    playwright_code: str = ""  # JS code for Playwright run-code (fallback)
+    eval_code: str = ""  # Browser JS for camoufox eval (primary)
+    timeout: float = _TIMEOUT_DEEP_CHECK  # Browser startup can be slow under memory pressure
 
 
 def _url(name: str, path: str = "/") -> str:
@@ -315,17 +316,13 @@ LIGHT_CHECKS: list[LightCheck] = [
 ]
 
 
+# ── Playwright run-code checks (fallback) ────────────────────
 _PW_ROOT_CHECK = (
     'async (page) => { await page.waitForSelector("#root > *", {timeout:10000}); return "ok"; }'
 )
 _PW_BODY_CHECK = (
     'async (page) => { await page.waitForSelector("body > *", {timeout:10000}); return "ok"; }'
 )
-# Canvas/WebGL apps: JS bundle must load + create <canvas> element.
-# Headless Chromium may fail WebGL init, so we check in 3 tiers:
-#   1. <canvas> created with dimensions → fully healthy
-#   2. <canvas> exists but zero-size → JS loaded, WebGL degraded (still ok)
-#   3. No <canvas> at all → JS failed to execute (unhealthy)
 _PW_CANVAS_CHECK = (
     "async (page) => {"
     "  const errors = [];"
@@ -344,14 +341,17 @@ _PW_CANVAS_CHECK = (
     "}"
 )
 
+# ── Browser JS eval checks (camoufox-cli primary) ────────────
+_EVAL_ROOT_CHECK = 'document.querySelector("#root > *") ? "ok" : "NO_ROOT"'
+_EVAL_BODY_CHECK = 'document.querySelector("body > *") ? "ok" : "NO_BODY"'
+_EVAL_CANVAS_CHECK = (
+    'document.querySelector("canvas") ? "ok" : '
+    '(document.querySelectorAll("script[type=module]").length > 0 ? "ok" : "NO_CANVAS")'
+)
+
 
 def _pw_module_check(css_class: str) -> str:
-    """Generate deep check that verifies: render + no 404 + module content exists.
-
-    Catches two failure modes that _PW_ROOT_CHECK misses:
-    1. Missing route → NotFound page renders (h1 with "404")
-    2. JS runtime error → module layout never mounts (no .{css_class} element)
-    """
+    """Playwright run-code: render + no 404 + module content."""
     return (
         "async (page) => {"
         '  await page.waitForSelector("#root > *", {timeout:10000});'
@@ -367,6 +367,20 @@ def _pw_module_check(css_class: str) -> str:
     )
 
 
+def _eval_module_check(css_class: str) -> str:
+    """Browser JS eval: render + no 404 + module content."""
+    return (
+        "(() => {"
+        '  if (!document.querySelector("#root > *")) return "NO_ROOT";'
+        '  const h = document.querySelector("h1");'
+        '  if (h && h.textContent.trim() === "404") return "NOT_FOUND: route renders 404 page";'
+        f'  const m = document.querySelector(".{css_class}");'
+        f'  if (!m) return "MODULE_MISSING: .{css_class} not found";'
+        '  return "ok";'
+        "})()"
+    )
+
+
 DEEP_CHECKS: list[DeepCheck] = [
     # ── internal (React #root) ──
     DeepCheck(
@@ -374,42 +388,49 @@ DEEP_CHECKS: list[DeepCheck] = [
         group="internal",
         url=_url("nginx", "/"),
         playwright_code=_PW_ROOT_CHECK,
+        eval_code=_EVAL_ROOT_CHECK,
     ),
     DeepCheck(
         name="frontend-finance-render",
         group="internal",
         url=_url("nginx", "/finance/"),
         playwright_code=_pw_module_check("finance"),
+        eval_code=_eval_module_check("finance"),
     ),
     DeepCheck(
         name="frontend-memvault-render",
         group="internal",
         url=_url("nginx", "/memvault/"),
         playwright_code=_pw_module_check("memvault"),
+        eval_code=_eval_module_check("memvault"),
     ),
     DeepCheck(
         name="frontend-intelflow-render",
         group="internal",
         url=_url("nginx", "/intelflow/"),
         playwright_code=_pw_module_check("intelflow"),
+        eval_code=_eval_module_check("intelflow"),
     ),
     DeepCheck(
         name="frontend-briefing-render",
         group="internal",
         url=_url("nginx", "/briefing/"),
         playwright_code=_pw_module_check("briefing"),
+        eval_code=_eval_module_check("briefing"),
     ),
     DeepCheck(
         name="frontend-dailyos-render",
         group="internal",
         url=_url("nginx", "/dailyos/"),
         playwright_code=_pw_module_check("dailyos"),
+        eval_code=_eval_module_check("dailyos"),
     ),
     DeepCheck(
         name="frontend-paper-render",
         group="internal",
         url=_url("nginx", "/paper/"),
         playwright_code=_pw_module_check("paper"),
+        eval_code=_eval_module_check("paper"),
     ),
     # ── external (station HTML — body > *) ──
     DeepCheck(
@@ -417,66 +438,77 @@ DEEP_CHECKS: list[DeepCheck] = [
         group="external",
         url=_url("nginx", "/apps/hook/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="session-channel-render",
         group="external",
         url=_url("nginx", "/apps/channel/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="agent-vista-render",
         group="external",
         url=_url("nginx", "/apps/vista/"),
         playwright_code=_PW_CANVAS_CHECK,
+        eval_code=_EVAL_CANVAS_CHECK,
     ),
     DeepCheck(
         name="system-monitor-render",
         group="external",
         url=_url("nginx", "/apps/sysmon/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="tmux-webui-render",
         group="external",
         url=_url("nginx", "/apps/tmux/?readonly=1"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="agent-metrics-render",
         group="external",
         url=_url("nginx", "/apps/agent-metrics/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="sentinel-render",
         group="external",
         url=_url("nginx", "/apps/sentinel/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="auto-survey-render",
         group="external",
         url=_url("nginx", "/apps/survey/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="anvil-render",
         group="external",
         url=_url("nginx", "/apps/anvil/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
     DeepCheck(
         name="capture-console-render",
         group="external",
         url=_url("nginx", "/capture"),
         playwright_code=_PW_ROOT_CHECK,
+        eval_code=_EVAL_ROOT_CHECK,
     ),
     DeepCheck(
         name="cronicle-render",
         group="external",
         url=_url("nginx", "/apps/scheduler/"),
         playwright_code=_PW_BODY_CHECK,
+        eval_code=_EVAL_BODY_CHECK,
     ),
 ]
 
@@ -597,44 +629,98 @@ async def run_light_check(check: LightCheck) -> CheckResult:
         )
 
 
-async def run_deep_check(check: DeepCheck) -> CheckResult:
-    """Execute a Playwright CLI deep check.
+_SHORT_NAMES = {
+    "frontend-render": "fe",
+    "frontend-finance-render": "fin",
+    "frontend-memvault-render": "mv",
+    "frontend-intelflow-render": "if",
+    "frontend-briefing-render": "bf",
+    "frontend-dailyos-render": "dos",
+    "frontend-paper-render": "paper",
+    "hook-observatory-render": "hook",
+    "session-channel-render": "ch",
+    "agent-vista-render": "vista",
+    "system-monitor-render": "sysm",
+    "tmux-webui-render": "tmux",
+    "agent-metrics-render": "am",
+    "sentinel-render": "sntl",
+    "auto-survey-render": "asrv",
+    "anvil-render": "anvl",
+    "capture-console-render": "cap",
+    "cronicle-render": "cron",
+}
 
-    Playwright CLI v1.59+ requires session-based usage:
-    1. open <url>  — launches headless browser with session ID
-    2. run-code    — executes JS check
-    3. close       — cleans up session
-    """
-    # Keep session ID short — macOS Unix socket path limit is 104 chars.
-    # Playwright stores sockets in /var/folders/…/playwright-cli/<hash>/<session>.sock
-    # which is ~85 chars base, so session ID must be ≤18 chars.
-    _short_names = {
-        "frontend-render": "fe",
-        "frontend-finance-render": "fin",
-        "frontend-memvault-render": "mv",
-        "frontend-intelflow-render": "if",
-        "frontend-briefing-render": "bf",
-        "frontend-dailyos-render": "dos",
-        "frontend-paper-render": "paper",
-        "hook-observatory-render": "hook",
-        "session-channel-render": "ch",
-        "agent-vista-render": "vista",
-        "system-monitor-render": "sysm",
-        "tmux-webui-render": "tmux",
-        "agent-metrics-render": "am",
-        "sentinel-render": "sntl",
-        "auto-survey-render": "asrv",
-        "anvil-render": "anvl",
-        "capture-console-render": "cap",
-        "cronicle-render": "cron",
-    }
-    session_id = f"sn-{_short_names.get(check.name, check.name[:8])}"
+
+async def _run_deep_cfx(check: DeepCheck, session_id: str) -> CheckResult | None:
+    """Try camoufox-cli: open → wait → eval → close. Returns None if cfx unavailable."""
     start = time.monotonic()
     try:
-        # Open browser session with target URL (headless by default)
         open_proc = await asyncio.create_subprocess_exec(
-            "npx",
-            "@playwright/cli",
+            "camoufox-cli", "--session", session_id, "open", check.url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(open_proc.communicate(), timeout=15)
+
+        if open_proc.returncode != 0:
+            elapsed = (time.monotonic() - start) * 1000
+            return CheckResult(check.name, "deep", "unhealthy", elapsed, "camoufox open failed")
+
+        # Wait for SPA render
+        wait_proc = await asyncio.create_subprocess_exec(
+            "camoufox-cli", "--session", session_id, "wait", "5000",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(wait_proc.communicate(), timeout=10)
+
+        # Eval browser JS check
+        eval_proc = await asyncio.create_subprocess_exec(
+            "camoufox-cli", "--session", session_id, "eval", check.eval_code,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(eval_proc.communicate(), timeout=check.timeout)
+        elapsed = (time.monotonic() - start) * 1000
+
+        if eval_proc.returncode != 0:
+            return CheckResult(check.name, "deep", "unhealthy", elapsed, stderr.decode()[:200])
+
+        output = stdout.decode().strip()
+        if "ok" in output.lower():
+            return CheckResult(check.name, "deep", "healthy", elapsed)
+        return CheckResult(
+            check.name, "deep", "unhealthy", elapsed, f"Unexpected: {output[:100]}"
+        )
+
+    except FileNotFoundError:
+        return None  # Signal caller to try playwright fallback
+    except TimeoutError:
+        return CheckResult(
+            check.name, "deep", "timeout", (time.monotonic() - start) * 1000, "Timeout"
+        )
+    except Exception as e:
+        return CheckResult(
+            check.name, "deep", "unhealthy", (time.monotonic() - start) * 1000, str(e)[:200]
+        )
+    finally:
+        try:
+            close_proc = await asyncio.create_subprocess_exec(
+                "camoufox-cli", "--session", session_id, "close",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(close_proc.communicate(), timeout=5)
+        except Exception:
+            pass
+
+
+async def _run_deep_pw(check: DeepCheck, session_id: str) -> CheckResult:
+    """Playwright CLI fallback: open → run-code → close."""
+    start = time.monotonic()
+    try:
+        open_proc = await asyncio.create_subprocess_exec(
+            "playwright-cli",
             f"-s={session_id}",
             "open",
             check.url,
@@ -647,10 +733,8 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
             elapsed = (time.monotonic() - start) * 1000
             return CheckResult(check.name, "deep", "unhealthy", elapsed, "Browser open failed")
 
-        # Run code check
         code_proc = await asyncio.create_subprocess_exec(
-            "npx",
-            "@playwright/cli",
+            "playwright-cli",
             f"-s={session_id}",
             "run-code",
             check.playwright_code,
@@ -666,27 +750,24 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
         output = stdout.decode().strip()
         if "ok" in output.lower():
             return CheckResult(check.name, "deep", "healthy", elapsed)
-        else:
-            return CheckResult(
-                check.name, "deep", "unhealthy", elapsed, f"Unexpected: {output[:100]}"
-            )
+        return CheckResult(
+            check.name, "deep", "unhealthy", elapsed, f"Unexpected: {output[:100]}"
+        )
 
     except TimeoutError:
         return CheckResult(
             check.name, "deep", "timeout", (time.monotonic() - start) * 1000, "Timeout"
         )
     except FileNotFoundError:
-        return CheckResult(check.name, "deep", "unhealthy", 0, "Playwright CLI not found")
+        return CheckResult(check.name, "deep", "unhealthy", 0, "Browser CLI not found")
     except Exception as e:
         return CheckResult(
             check.name, "deep", "unhealthy", (time.monotonic() - start) * 1000, str(e)[:200]
         )
     finally:
-        # Always clean up the browser session
         try:
             close_proc = await asyncio.create_subprocess_exec(
-                "npx",
-                "@playwright/cli",
+                "playwright-cli",
                 f"-s={session_id}",
                 "close",
                 stdout=asyncio.subprocess.PIPE,
@@ -695,6 +776,20 @@ async def run_deep_check(check: DeepCheck) -> CheckResult:
             await asyncio.wait_for(close_proc.communicate(), timeout=5)
         except Exception:  # noqa: S110
             pass
+
+
+async def run_deep_check(check: DeepCheck) -> CheckResult:
+    """Execute deep check: camoufox-cli primary, playwright-cli fallback."""
+    session_id = f"sn-{_SHORT_NAMES.get(check.name, check.name[:8])}"
+
+    # Try camoufox-cli first (if eval_code is defined)
+    if check.eval_code:
+        result = await _run_deep_cfx(check, session_id)
+        if result is not None:
+            return result
+        # None = camoufox not found, fall through to playwright
+
+    return await _run_deep_pw(check, session_id)
 
 
 async def run_all_light_checks() -> list[CheckResult]:
