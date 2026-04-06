@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     max_delay: int = 15
     headless: bool = True
 
-    playwright_cli: str = "npx @playwright/cli"
+    camoufox_cli: str = "camoufox-cli"
+    camoufox_profile: str = "~/.camoufox-profiles/master"
+    playwright_cli: str = "playwright-cli"
     pw_profile_dir: str = ""  # empty = use temp APFS clone
 
     execution_hour: int = 14  # execute after this hour; before → scheduled

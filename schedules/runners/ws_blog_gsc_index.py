@@ -4,7 +4,8 @@ ws_blog_gsc_index.py — Daily blog change detection → GSC re-index submission
 
 Pipeline:
   1. Fetch sitemap-posts.xml, compare lastmod against state.json
-  2. For changed URLs, use Playwright CLI to submit "Request Indexing" in GSC
+  2. For changed URLs, use camoufox-cli / Playwright CLI (fallback)
+     to submit "Request Indexing" in GSC
   3. Update state.json for successfully submitted URLs
 
 Logs: ~/workshop/outputs/scheduler/logs/ws-blog-gsc-index.log
@@ -29,6 +30,7 @@ LOG_DIR = HOME / "workshop/outputs/scheduler/logs"
 LOG_FILE = LOG_DIR / "ws-blog-gsc-index.log"
 STATE_DIR = HOME / "workshop/outputs/blog-gsc"
 STATE_FILE = STATE_DIR / "state.json"
+CFX_SESSION = "gsc-index"
 
 SITEMAP_URL = "http://127.0.0.1:10302/sitemap-posts.xml"
 GSC_BASE = "https://search.google.com/search-console"
@@ -64,6 +66,139 @@ def bark_notify(title: str, body: str) -> None:
         urllib.request.urlopen(url, timeout=5)
     except Exception:
         pass
+
+
+# ── Phase 2a: GSC Submission via camoufox-cli (primary) ──────
+
+
+def _cfx(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
+    """Run a camoufox-cli command with the GSC session."""
+    cmd = ["camoufox-cli", "--session", CFX_SESSION, *args]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def cfx_snapshot() -> str:
+    """Take snapshot and return aria tree text."""
+    r = _cfx("snapshot", "-i", timeout=15)
+    return r.stdout if r.returncode == 0 else ""
+
+
+def submit_single_url_cfx(url: str) -> str:
+    """Submit one URL to GSC via camoufox-cli. Returns 'ok', 'quota', or error."""
+    snap = cfx_snapshot()
+    health = check_session_health(snap)
+    if health:
+        return health
+
+    # Find search combobox
+    search_ref = find_ref(snap, r"combobox.*檢查")
+    if not search_ref:
+        search_ref = find_ref(snap, r"combobox.*Inspect")
+    if not search_ref:
+        log("  WARN: Cannot find search box in snapshot")
+        return "search_box_not_found"
+
+    _cfx("click", f"@{search_ref}")
+    _cfx("fill", f"@{search_ref}", url)
+    _cfx("press", "Enter")
+
+    time.sleep(8)
+
+    snap = cfx_snapshot()
+    health = check_session_health(snap)
+    if health:
+        return health
+
+    btn_ref = find_ref(snap, r"要求建立索引")
+    if not btn_ref:
+        btn_ref = find_ref(snap, r"Request [Ii]ndexing")
+    if not btn_ref:
+        time.sleep(5)
+        snap = cfx_snapshot()
+        btn_ref = find_ref(snap, r"要求建立索引")
+    if not btn_ref:
+        log("  WARN: Cannot find 'Request Indexing' button")
+        return "button_not_found"
+
+    _cfx("click", f"@{btn_ref}")
+
+    elapsed = 0
+    while elapsed < POLL_TIMEOUT:
+        time.sleep(POLL_INTERVAL)
+        elapsed += POLL_INTERVAL
+        snap = cfx_snapshot()
+
+        if "已要求建立索引" in snap or "Indexing requested" in snap:
+            close_ref = find_ref(snap, r"button.*關閉") or find_ref(snap, r"button.*[Cc]lose")
+            if close_ref:
+                _cfx("click", f"@{close_ref}")
+                time.sleep(1)
+            return "ok"
+
+        if "配額" in snap or "quota" in snap.lower():
+            return "quota"
+
+        if "正在測試" in snap or "Testing" in snap:
+            continue
+
+        log(f"  Poll {elapsed}s: waiting...")
+
+    return "timeout"
+
+
+def submit_urls_to_gsc_cfx(urls: list[str]) -> dict[str, str]:
+    """Submit URLs to GSC via camoufox-cli. Returns {url: status}."""
+    results: dict[str, str] = {}
+
+    try:
+        gsc_url = f"{GSC_BASE}?resource_id={urllib.request.quote(GSC_PROPERTY, safe='')}"
+        open_r = _cfx("--persistent", "open", gsc_url)
+        if open_r.returncode != 0:
+            log(f"ERROR: camoufox open failed: {open_r.stderr[:200]}")
+            return {u: "cfx_open_failed" for u in urls}
+
+        time.sleep(5)
+
+        snap = cfx_snapshot()
+        health = check_session_health(snap)
+        if health:
+            log(f"ERROR: Session issue on GSC open: {health}")
+            bark_notify("Blog GSC Alert", health)
+            return {u: health for u in urls}
+
+        for url in urls:
+            log(f"  Submitting: {url}")
+            status = submit_single_url_cfx(url)
+            results[url] = status
+            log(f"  Result: {status}")
+
+            if status == "quota":
+                log("WARN: Quota exhausted, stopping further submissions")
+                bark_notify("Blog GSC Alert", f"Quota exhausted after {len(results)} URLs")
+                for remaining in urls[len(results):]:
+                    results[remaining] = "skipped_quota"
+                break
+            elif status in ("CAPTCHA detected", "Login required"):
+                log(f"ERROR: {status}, aborting")
+                bark_notify("Blog GSC Alert", status)
+                for remaining in urls[len(results):]:
+                    results[remaining] = "skipped_session"
+                break
+
+    except subprocess.TimeoutExpired:
+        log("ERROR: camoufox timeout")
+    except FileNotFoundError:
+        log("WARN: camoufox-cli not found")
+        return {}  # Return empty so caller knows to try fallback
+    except Exception as e:
+        log(f"ERROR: camoufox unexpected: {e}")
+    finally:
+        try:
+            _cfx("close", timeout=10)
+        except Exception:
+            pass
+
+    return results
 
 
 # ── Phase 1: Change Detection ─────────────────────────────────
@@ -122,7 +257,7 @@ def detect_changes() -> tuple[dict[str, str], list[str]]:
     return sitemap, changed[:MAX_SUBMISSIONS]
 
 
-# ── Phase 2: GSC Submission via Playwright CLI ─────────────────
+# ── Phase 2b: GSC Submission via Playwright CLI (fallback) ──
 
 
 def pw_init() -> tuple[str | None, str | None]:
@@ -324,7 +459,7 @@ def submit_single_url(session_id: str, url: str) -> str:
     return "timeout"
 
 
-def submit_urls_to_gsc(urls: list[str]) -> dict[str, str]:
+def submit_urls_to_gsc_pw(urls: list[str]) -> dict[str, str]:
     """Submit URLs to GSC via Playwright. Returns {url: status}."""
     profile_dir, sid = pw_init()
     if not profile_dir or not sid:
@@ -418,8 +553,11 @@ def main() -> int:
     for u in changed:
         log(f"  - {u}")
 
-    # Phase 2
-    results = submit_urls_to_gsc(changed)
+    # Phase 2: Submit via camoufox (primary), playwright (fallback)
+    results = submit_urls_to_gsc_cfx(changed)
+    if not results:
+        log("Camoufox failed, trying Playwright CLI fallback...")
+        results = submit_urls_to_gsc_pw(changed)
 
     # Phase 3
     update_state(sitemap, results)
