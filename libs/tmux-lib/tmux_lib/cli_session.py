@@ -20,8 +20,6 @@ from tmux_lib.primitives import (
     send_enter_async,
     send_text,
     send_text_async,
-    tmux_check,
-    tmux_check_async,
 )
 
 if TYPE_CHECKING:
@@ -98,18 +96,30 @@ async def is_process_running_async(pane: str, profile: CLIProfile) -> bool:
 
 
 def has_prompt(pane: str, profile: CLIProfile, *, lines: int = 5) -> bool:
-    """Check if the CLI tool's idle prompt is visible."""
+    """Check if the CLI tool's idle prompt is visible.
+
+    Must satisfy BOTH conditions to avoid false positives from shell prompts
+    that also contain the prompt char (e.g. zsh with starship/powerlevel10k):
+    1. The prompt pattern is visible in bottom lines
+    2. The CLI process is actually running (pane_current_command check)
+    """
     bottom = capture(pane, start_line=-lines)
     if not bottom:
         return False
-    return bool(profile.prompt_pattern.search(bottom))
+    if not profile.prompt_pattern.search(bottom):
+        return False
+    # Guard: ensure the CLI process is actually running, not just a shell
+    return is_process_running(pane, profile)
 
 
 async def has_prompt_async(pane: str, profile: CLIProfile, *, lines: int = 5) -> bool:
     bottom = await capture_async(pane, start_line=-lines)
     if not bottom:
         return False
-    return bool(profile.prompt_pattern.search(bottom))
+    if not profile.prompt_pattern.search(bottom):
+        return False
+    # Guard: ensure the CLI process is actually running, not just a shell
+    return await is_process_running_async(pane, profile)
 
 
 def is_busy(pane: str, profile: CLIProfile, *, lines: int = 8) -> bool:
@@ -246,9 +256,7 @@ def shutdown_cli(pane: str, profile: CLIProfile, *, timeout: int = 15) -> bool:
     return False
 
 
-async def shutdown_cli_async(
-    pane: str, profile: CLIProfile, *, timeout: int = 15
-) -> bool:
+async def shutdown_cli_async(pane: str, profile: CLIProfile, *, timeout: int = 15) -> bool:
     import asyncio as _aio
 
     await send_text_async(pane, profile.exit_command)

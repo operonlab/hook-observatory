@@ -1117,14 +1117,26 @@ class TmuxRelayClient:
 
         Runs as daemon thread. Uses has_prompt() + not is_busy() from cli_session.
         Two consecutive prompt-idle detections = task complete.
+        Also detects CC exit (pane returned to shell) as completion.
         Signals the wait-for channel to unblock _relay_execute.
         """
-        from tmux_lib.cli_session import has_prompt, is_busy
+        from tmux_lib.cli_session import has_prompt, is_busy, is_shell
 
         time.sleep(min_wait)  # Don't check too early — give Claude time to process
         idle_count = 0
+        exit_count = 0
         while wait_proc.poll() is None:
             try:
+                # Check if CC has exited — pane returned to shell prompt
+                if is_shell(pane):
+                    exit_count += 1
+                    if exit_count >= 2:
+                        # CC exited: pane shows shell for 2 consecutive checks
+                        tmux_ok("wait-for", "-S", channel)
+                        break
+                else:
+                    exit_count = 0
+
                 prompt_visible = has_prompt(pane, CLAUDE_CODE, lines=5)
                 busy = is_busy(pane, CLAUDE_CODE, lines=8)
                 if prompt_visible and not busy:
@@ -1517,8 +1529,12 @@ class TmuxRelayClient:
                         role=role,
                         cwd=cwd,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # Ensure signal file is ALWAYS written, even on crash
+                    try:
+                        Path(signal_file).write_text(f"status=error\nerror={exc!r}\npane={pane}\n")
+                    except Exception:
+                        pass
                 os._exit(0)
 
             # Parent: record child PID and continue

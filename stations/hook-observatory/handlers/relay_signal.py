@@ -70,6 +70,15 @@ def _update_redis_cache(pane_safe: str) -> None:
         pass  # Cache is advisory — never block the hook
 
 
+def _debug_log(msg: str) -> None:
+    """Append debug line to relay signal log (advisory, never fails)."""
+    try:
+        with open("/tmp/relay-signal-debug.log", "a") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
+
+
 def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) -> HookResult:
     pane_id = os.environ.get("TMUX_PANE", "")
     if not pane_id:
@@ -79,12 +88,14 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
     pending_file = f"/tmp/relay-pending-{pane_safe}.channel"
 
     if not os.path.isfile(pending_file):
+        _debug_log(f"no-op pane={pane_safe} (no pending file)")
         return ALLOW
 
     try:
         with open(pending_file) as f:
             channel = f.read().strip()
     except OSError:
+        _debug_log(f"error pane={pane_safe} (cannot read pending file)")
         return ALLOW
 
     if channel:
@@ -93,6 +104,7 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         except OSError:
             pass
         run_background(["tmux", "wait-for", "-S", channel])
+        _debug_log(f"signaled pane={pane_safe} channel={channel}")
 
         # Update Redis cache (advisory, non-blocking)
         _update_redis_cache(pane_safe)
