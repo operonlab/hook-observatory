@@ -46,39 +46,47 @@ class DocvaultClient(BaseClient):
         self,
         file_path: str | None = None,
         title: str | None = None,
-        source_type: str = "markdown",
+        source_type: str | None = None,
         source_uri: str | None = None,
         content_hash: str | None = None,
         tags: list[str] | None = None,
         metadata: dict | None = None,
     ) -> dict:
-        """Create/upload a new document. POST /documents
+        """Upload a document file — full server-side pipeline. POST /documents/upload
 
-        If file_path is provided, content_hash is computed automatically.
+        If file_path is provided, the server parses, chunks, and indexes it.
+        Falls back to POST /documents for metadata-only creation.
         """
-        import hashlib
-        from pathlib import Path
-
-        body: dict = {
-            "source_type": source_type,
-            "tags": tags or [],
-        }
-
         if file_path:
+            from pathlib import Path
+
             path = Path(file_path)
-            if not title:
-                title = path.stem
-            if not content_hash:
-                content_hash = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+            body: dict = {
+                "file_path": str(path.resolve()),
+                "tags": tags or [],
+            }
+            if title:
+                body["title"] = title
+            if source_type:
+                body["source_type"] = source_type
+            if source_uri:
+                body["source_uri"] = source_uri
+            if metadata:
+                body["metadata"] = metadata
+            return self._post("/documents/upload", body)
 
-        body["title"] = title or "Untitled"
-        body["content_hash"] = content_hash or "0" * 16
+        # Metadata-only creation (no file)
 
+        body = {
+            "source_type": source_type or "markdown",
+            "tags": tags or [],
+            "title": title or "Untitled",
+            "content_hash": content_hash or "0" * 16,
+        }
         if source_uri:
             body["source_uri"] = source_uri
         if metadata:
             body["metadata"] = metadata
-
         return self._post("/documents", body)
 
     def update_document(self, document_id: str, **fields) -> dict:
@@ -162,12 +170,15 @@ class DocvaultClient(BaseClient):
         top_k: int = 6,
     ) -> dict:
         """Ask a question against document corpus. POST /qa"""
-        return self._post("/qa", {
-            "question": question,
-            "mode": mode,
-            "domain": domain,
-            "top_k": top_k,
-        })
+        return self._post(
+            "/qa",
+            {
+                "question": question,
+                "mode": mode,
+                "domain": domain,
+                "top_k": top_k,
+            },
+        )
 
     def qa_feedback(self, qa_log_id: str, feedback: str) -> dict:
         """Record QA feedback (positive/negative). PATCH /qa/logs/{id}/feedback"""
@@ -279,11 +290,14 @@ class DocvaultClient(BaseClient):
         tags: list[str] | None = None,
     ) -> dict:
         """Bulk import documents from a directory. POST /bulk-import"""
-        return self._post("/bulk-import", {
-            "source_dir": source_dir,
-            "source_type": source_type,
-            "tags": tags or [],
-        })
+        return self._post(
+            "/bulk-import",
+            {
+                "source_dir": source_dir,
+                "source_type": source_type,
+                "tags": tags or [],
+            },
+        )
 
     def stats(self) -> dict:
         """Get docvault statistics. GET /dashboard"""

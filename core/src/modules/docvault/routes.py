@@ -4,13 +4,14 @@ Prefix: /api/docvault (mounted in main.py)
 
 Endpoints:
   GET/POST      /documents                          — list/create
+  POST           /documents/upload                   — upload file (full pipeline)
   GET/PUT/DELETE /documents/{id}                    — detail/update/delete
   GET            /documents/{id}/versions            — list versions
   GET            /documents/{id}/chunks              — list chunks
   GET            /documents/{id}/relations           — list relations
   POST           /documents/{id}/relations           — create relation
-  POST           /search                             — semantic search (stub)
-  POST           /qa                                 — QA pipeline (stub)
+  POST           /search                             — semantic search
+  POST           /qa                                 — QA pipeline
   GET/POST       /qa/logs                            — list/create QA logs
   GET            /qa/logs/{id}                       — get QA log
   PATCH          /qa/logs/{id}/feedback              — record feedback
@@ -21,25 +22,33 @@ Endpoints:
   GET            /status                             — health check
 """
 
+import hashlib
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.deps import get_db, require_permission
-from src.shared.errors import ConflictError, NotFoundError
+from src.shared.errors import BadRequestError, ConflictError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
+from .ingest.parser import parse_document
+from .ops.contextual_chunk import contextual_chunk
+from .ops.flat_index import FlatIndexOp
 from .schemas import (
     CoverageGapCreate,
     CoverageGapResponse,
     CoverageGapUpdate,
+    DocumentChunkCreate,
     DocumentChunkResponse,
     DocumentCreate,
     DocumentRelationCreate,
     DocumentRelationResponse,
     DocumentResponse,
     DocumentUpdate,
+    DocumentUploadRequest,
+    DocumentVersionCreate,
     DocumentVersionResponse,
     DocvaultDashboardResponse,
     QAFeedbackUpdate,
@@ -61,6 +70,8 @@ from .services import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["docvault"])
+
+DOCVAULT_SERVICE_ID = "docvault-chunk"
 
 
 # ======================== Documents ========================
@@ -121,6 +132,111 @@ async def create_document(
     await db.commit()
     await db.refresh(instance)
     return document_service.to_response(instance)
+
+
+@router.post("/documents/upload", response_model=DocumentResponse, status_code=201)
+async def upload_document(
+    body: DocumentUploadRequest,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("docvault.write"),
+):
+    """Upload a local file — full ingest pipeline: parse → Document → Version → Chunks → Qdrant."""
+    file_path = body.file_path
+    path = Path(file_path)
+    if not path.exists():
+        raise BadRequestError(f"File not found: {file_path}", code="docvault.file_not_found")
+
+    # 1. Parse file
+    raw_content, file_metadata = parse_document(file_path, body.source_type)
+    if not raw_content.strip():
+        raise BadRequestError("File is empty or unreadable", code="docvault.empty_file")
+
+    # 2. Compute content hash + dedup
+    content_hash = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    existing = await document_service.get_by_content_hash(db, content_hash)
+    if existing:
+        raise ConflictError(
+            f"Document with content_hash={content_hash} already exists",
+            code="docvault.content_hash_conflict",
+        )
+
+    # 3. Determine metadata
+    title = body.title or file_metadata.get("title", path.stem)
+    source_type = body.source_type or file_metadata.get("source_type", "markdown")
+
+    # 4. Create Document record
+    doc_create = DocumentCreate(
+        title=title,
+        source_type=source_type,
+        source_uri=body.source_uri or str(path),
+        content_hash=content_hash,
+        tags=body.tags,
+        metadata=body.metadata or file_metadata,
+    )
+    doc_instance = await document_service.create(db, space_id, doc_create)
+    await db.flush()
+
+    # 5. Create Version record
+    ver_create = DocumentVersionCreate(
+        document_id=doc_instance.id,
+        version_number=1,
+        content_hash=content_hash,
+        raw_content=raw_content,
+        extraction_model="pdfplumber" if source_type == "pdf" else "direct",
+    )
+    ver_instance = await version_service.create(db, space_id, ver_create)
+    await db.flush()
+
+    # 6. Chunk content
+    chunks = contextual_chunk(raw_content, doc_title=title)
+
+    # 7. Create Chunk records in DB
+    for i, chunk_data in enumerate(chunks):
+        chunk_create = DocumentChunkCreate(
+            version_id=ver_instance.id,
+            document_id=doc_instance.id,
+            chunk_index=i,
+            content=chunk_data["content"],
+            section_path=chunk_data.get("section_path"),
+            token_count=chunk_data.get("token_count", 0),
+        )
+        await chunk_service.create(db, space_id, chunk_create)
+
+    # 8. Update version chunk_count + status
+    from .schemas import DocumentVersionUpdate
+
+    await version_service.update(
+        db,
+        ver_instance.id,
+        DocumentVersionUpdate(chunk_count=len(chunks), status="ready"),
+        space_id=space_id,
+    )
+
+    # 9. Update document status + current_version_id
+    doc_instance.current_version_id = ver_instance.id
+    doc_instance.status = "indexed"
+
+    await db.commit()
+    await db.refresh(doc_instance)
+
+    # 10. Index chunks in Qdrant (best-effort, don't fail upload if Qdrant is down)
+    try:
+        flat_index = FlatIndexOp()
+        ctx = {
+            "chunks": chunks,
+            "document_id": doc_instance.id,
+            "version_id": ver_instance.id,
+            "space_id": space_id,
+        }
+        await flat_index(ctx)
+        logger.info(
+            "Indexed %d chunks for document %s", ctx.get("indexed_count", 0), doc_instance.id
+        )
+    except Exception:
+        logger.exception("Qdrant indexing failed for document %s", doc_instance.id)
+
+    return document_service.to_response(doc_instance)
 
 
 @router.put("/documents/{document_id}", response_model=DocumentResponse)
@@ -239,25 +355,45 @@ async def create_relation(
     return relation_service.to_response(instance)
 
 
-# ======================== Search (stub) ========================
+# ======================== Search ========================
 
 
 @router.post("/search")
 async def search_documents(
-    q: str = Query(..., min_length=1, max_length=2000),
-    top_k: int = Query(10, ge=1, le=100),
+    body: DocumentSearchParams,
     space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("docvault.read"),
 ):
-    """Semantic search over document chunks. Stub — Phase 1 ops will implement."""
-    return {
-        "results": [],
-        "message": "Search not yet implemented. Phase 1 ops pending.",
-    }
+    """Semantic search over document chunks via Qdrant hybrid search."""
+    from src.shared.qdrant_search import hybrid_search
+    from src.shared.search_types import SearchConfig
+
+    config = SearchConfig(
+        top_k=body.top_k,
+        service_ids=[DOCVAULT_SERVICE_ID],
+        tag_filter=body.tags,
+    )
+    results, _meta = await hybrid_search(body.q, space_id, config)
+
+    chunks = []
+    for r in results:
+        chunks.append(
+            {
+                "document_id": r.entity_id,
+                "score": r.score,
+                "content": r.content_preview,
+                "section_path": r.metadata.get("section_path", ""),
+                "page_range": r.metadata.get("page_range", ""),
+                "heading": r.metadata.get("heading", ""),
+                "chunk_index": r.metadata.get("chunk_index"),
+            }
+        )
+
+    return {"query": q, "results": chunks, "total": len(chunks)}
 
 
-# ======================== QA Pipeline (stub) ========================
+# ======================== QA Pipeline ========================
 
 
 @router.post("/qa", response_model=QAResponse)
@@ -267,14 +403,78 @@ async def qa_question(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("docvault.read"),
 ):
-    """Question-answering pipeline. Stub — Phase 1 ops will implement."""
+    """Question-answering pipeline: search → cited answer → log."""
+    from src.shared.qdrant_search import hybrid_search
+    from src.shared.search_types import SearchConfig
+
+    from .ops.cited_answer import CitedAnswerOp
+    from .schemas import CitationRef
+
+    # 1. Search for evidence chunks
+    config = SearchConfig(
+        top_k=body.top_k,
+        service_ids=[DOCVAULT_SERVICE_ID],
+    )
+    results, _meta = await hybrid_search(body.question, space_id, config)
+
+    # 2. Convert to evidence format
+    evidence_chunks = []
+    for r in results:
+        evidence_chunks.append(
+            {
+                "id": f"{r.entity_id}:{r.metadata.get('chunk_index', 0)}",
+                "document_id": r.entity_id,
+                "content": r.content_preview,
+                "section_path": r.metadata.get("section_path", ""),
+                "page_range": r.metadata.get("page_range", ""),
+                "heading": r.metadata.get("heading", ""),
+                "score": r.score,
+            }
+        )
+
+    # 3. Generate cited answer
+    cited_op = CitedAnswerOp()
+    ctx = {"question": body.question, "evidence_chunks": evidence_chunks}
+    await cited_op(ctx)
+
+    answer_text = ctx.get("answer", "No answer found.")
+    raw_citations = ctx.get("citations", [])
+    confidence = ctx.get("confidence", 0.0)
+
+    citations = [
+        CitationRef(
+            document_id=c.get("document_id", ""),
+            chunk_id=c.get("chunk_id"),
+            section=c.get("section"),
+            page=c.get("page"),
+            quote=c.get("quote"),
+        )
+        for c in raw_citations
+    ]
+
+    # 4. Log the QA interaction
+    import hashlib as _hashlib
+
+    query_hash = _hashlib.sha256(body.question.encode()).hexdigest()[:16]
+    qa_log_data = QALogCreate(
+        query_text=body.question,
+        query_hash=query_hash,
+        answer_text=answer_text,
+        citations={"refs": raw_citations},
+        confidence=confidence,
+        pipeline_used="A",
+    )
+    qa_log = await qa_log_service.create(db, space_id, qa_log_data)
+    await db.commit()
+    await db.refresh(qa_log)
+
     return QAResponse(
         question=body.question,
-        answer="QA pipeline not yet implemented. Phase 1 ops pending.",
-        citations=[],
-        confidence=0.0,
-        crag_verdict=None,
+        answer=answer_text,
+        citations=citations,
+        confidence=confidence,
         pipeline_used="A",
+        qa_log_id=qa_log.id,
     )
 
 

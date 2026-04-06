@@ -67,9 +67,7 @@ class DocumentVersionCreate(BaseModel):
 
 
 class DocumentVersionUpdate(BaseModel):
-    status: str | None = Field(
-        default=None, pattern="^(processing|ready|superseded)$"
-    )
+    status: str | None = Field(default=None, pattern="^(processing|ready|superseded)$")
     chunk_count: int | None = None
     summary: str | None = None
     table_of_contents: dict | None = None
@@ -120,9 +118,7 @@ class DocumentChunkResponse(SpaceScopedResponse):
 class DocumentRelationCreate(BaseModel):
     source_document_id: str
     target_document_id: str
-    relation_type: str = Field(
-        ..., pattern="^(cites|extends|contradicts|supersedes|related)$"
-    )
+    relation_type: str = Field(..., pattern="^(cites|extends|contradicts|supersedes|related)$")
     evidence: str | None = None
     source_chunk_id: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -154,16 +150,12 @@ class CoverageGapCreate(BaseModel):
     query_text: str
     query_hash: str = Field(..., max_length=64)
     detected_at: datetime
-    gap_type: str = Field(
-        ..., pattern="^(topic_missing|depth_insufficient|outdated)$"
-    )
+    gap_type: str = Field(..., pattern="^(topic_missing|depth_insufficient|outdated)$")
     suggested_sources: dict | None = None
 
 
 class CoverageGapUpdate(BaseModel):
-    status: str | None = Field(
-        default=None, pattern="^(pending|investigating|resolved|dismissed)$"
-    )
+    status: str | None = Field(default=None, pattern="^(pending|investigating|resolved|dismissed)$")
     resolution: str | None = Field(
         default=None, pattern="^(document_added|not_applicable|merged_existing)$"
     )
@@ -191,9 +183,7 @@ class QALogCreate(BaseModel):
     answer_text: str
     citations: dict | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
-    crag_verdict: str | None = Field(
-        default=None, pattern="^(correct|ambiguous|incorrect)$"
-    )
+    crag_verdict: str | None = Field(default=None, pattern="^(correct|ambiguous|incorrect)$")
     pipeline_used: str = Field(default="A", pattern="^(A|B|C)$")
     latency_ms: int | None = None
 
@@ -216,7 +206,41 @@ class QAFeedbackUpdate(BaseModel):
     feedback: str = Field(..., pattern="^(positive|negative)$")
 
 
+# ======================== Upload ========================
+
+
+class DocumentUploadRequest(BaseModel):
+    """Upload request — server-side file parsing."""
+
+    file_path: str = Field(..., description="Absolute path to the local file")
+    title: str | None = Field(default=None, max_length=500)
+    source_type: str | None = Field(default=None, pattern="^(pdf|docx|markdown|webpage|api)$")
+    source_uri: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict | None = None
+
+
 # ======================== Search / QA Request ========================
+
+
+class SearchChunkResult(BaseModel):
+    """A single search result chunk."""
+
+    document_id: str
+    score: float
+    content: str
+    section_path: str | None = None
+    page_range: str | None = None
+    heading: str | None = None
+    chunk_index: int | None = None
+
+
+class DocumentSearchResponse(BaseModel):
+    """Search response with results."""
+
+    query: str
+    results: list[SearchChunkResult] = []
+    total: int = 0
 
 
 class DocumentSearchParams(BaseModel):
