@@ -45,11 +45,9 @@ class Document(SpaceScopedModel):
     source_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
     current_version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), server_default=text("'{}'::text[]")
-    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     metadata_: Mapped[dict | None] = mapped_column(
-        "metadata", JSONB, nullable=True
+        "metadata_", JSONB, nullable=True
     )  # author, page_count, language, custom fields
     status: Mapped[str] = mapped_column(
         String(32), server_default=text("'ingested'")
@@ -96,9 +94,7 @@ class DocumentVersion(SpaceScopedModel):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    raw_content: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # full text or S3 ref
+    raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)  # full text or S3 ref
     status: Mapped[str] = mapped_column(
         String(32), server_default=text("'processing'")
     )  # processing | ready | superseded
@@ -147,9 +143,7 @@ class DocumentChunk(SpaceScopedModel):
     section_path: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # "Chapter 3 > 3.2 > Paragraph 4"
-    page_range: Mapped[str | None] = mapped_column(
-        String(32), nullable=True
-    )  # "12-13"
+    page_range: Mapped[str | None] = mapped_column(String(32), nullable=True)  # "12-13"
     heading: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     chunk_type: Mapped[str] = mapped_column(
@@ -157,9 +151,7 @@ class DocumentChunk(SpaceScopedModel):
     )  # text | table | list | code
 
     # Relationships
-    version: Mapped["DocumentVersion"] = relationship(
-        "DocumentVersion", back_populates="chunks"
-    )
+    version: Mapped["DocumentVersion"] = relationship("DocumentVersion", back_populates="chunks")
 
 
 # ======================== DocumentRelation ========================
@@ -199,12 +191,8 @@ class DocumentRelation(SpaceScopedModel):
     evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_chunk_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    valid_from: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    invalid_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invalidated_by: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )  # FK → DocumentRelation
@@ -230,9 +218,7 @@ class CoverageGap(SpaceScopedModel):
 
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
     query_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
-    detected_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     gap_type: Mapped[str] = mapped_column(
         String(32), nullable=False
     )  # topic_missing | depth_insufficient | outdated
@@ -275,7 +261,5 @@ class QALog(SpaceScopedModel):
     feedback: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )  # positive | negative | null
-    pipeline_used: Mapped[str] = mapped_column(
-        String(8), server_default=text("'A'")
-    )  # A | B | C
+    pipeline_used: Mapped[str] = mapped_column(String(8), server_default=text("'A'"))  # A | B | C
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -46,6 +46,7 @@ from .schemas import (
     DocumentRelationCreate,
     DocumentRelationResponse,
     DocumentResponse,
+    DocumentSearchParams,
     DocumentUpdate,
     DocumentUploadRequest,
     DocumentVersionCreate,
