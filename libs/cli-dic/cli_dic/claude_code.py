@@ -46,7 +46,7 @@ CLAUDE_CODE = CLIEntry(
     # ── Configuration ecosystem ──
     mcp=MCPSpec(
         config_format="json",
-        config_path=".mcp.json",  # project-level; also --mcp-config flag
+        config_path="mcp.json",  # global: ~/.claude/mcp.json; project: .claude/mcp.json
         config_key="mcpServers",
         supports_http=True,
         supports_stdio=True,
