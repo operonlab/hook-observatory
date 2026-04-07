@@ -32,7 +32,10 @@ Rules:
 - If evidence is insufficient, say so honestly — never fabricate.
 - Answer in the same language as the question.
 - Be concise but thorough. Prefer direct quotes when relevant.
-- At the end, rate your confidence from 0.0 to 1.0 based on evidence quality.
+- Rate confidence 0.0-1.0 based on EVIDENCE COVERAGE:
+  0.0 = no relevant evidence. 0.3 = partial. 0.7 = mostly answered.
+  1.0 = fully answered with direct quotes.
+  If question is about something NOT in the documents, confidence = 0.0.
 
 Output format (strict JSON):
 {

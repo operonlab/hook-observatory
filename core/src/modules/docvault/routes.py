@@ -192,9 +192,10 @@ async def upload_document(
     await db.flush()
 
     # 6. Chunk content
-    chunks = contextual_chunk(raw_content, doc_title=title)
+    chunks = contextual_chunk(raw_content, doc_title=title, extract_headings=True)
 
-    # 7. Create Chunk records in DB
+    # 7. Create Chunk records in DB + collect DB IDs for Qdrant indexing
+    chunk_db_ids: list[str] = []
     for i, chunk_data in enumerate(chunks):
         chunk_create = DocumentChunkCreate(
             version_id=ver_instance.id,
@@ -202,9 +203,13 @@ async def upload_document(
             chunk_index=i,
             content=chunk_data["content"],
             section_path=chunk_data.get("section_path"),
+            heading=chunk_data.get("heading"),
+            page_range=chunk_data.get("page_range"),
             token_count=chunk_data.get("token_count", 0),
         )
-        await chunk_service.create(db, space_id, chunk_create)
+        chunk_instance = await chunk_service.create(db, space_id, chunk_create)
+        await db.flush()
+        chunk_db_ids.append(chunk_instance.id)
 
     # 8. Update version chunk_count + status
     from .schemas import DocumentVersionUpdate
@@ -224,6 +229,11 @@ async def upload_document(
     await db.refresh(doc_instance)
 
     # 10. Index chunks in Qdrant (best-effort, don't fail upload if Qdrant is down)
+    # Attach DB chunk IDs so FlatIndexOp uses them as entity_id (for DB lookups)
+    for i, chunk_data in enumerate(chunks):
+        if i < len(chunk_db_ids):
+            chunk_data["db_id"] = chunk_db_ids[i]
+
     try:
         flat_index = FlatIndexOp()
         ctx = {

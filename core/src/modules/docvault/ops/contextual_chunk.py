@@ -20,6 +20,9 @@ DEFAULT_MAX_CHUNK_SIZE = 1500
 DEFAULT_MIN_CHUNK_SIZE = 100
 DEFAULT_OVERLAP = 100
 
+_PAGE_MARKER_RE = re.compile(r"<!--\s*page\s+(\d+)\s*-->")
+_CHAPTER_RE = re.compile(r"^Chapter\s+\d+\s*$", re.MULTILINE)
+
 
 def _estimate_tokens(text: str) -> int:
     """Rough token estimation (CJK-aware)."""
@@ -33,6 +36,71 @@ def _split_into_paragraphs(text: str) -> list[str]:
     return [p.strip() for p in re.split(r"\n\n+", text) if p.strip()]
 
 
+def _extract_sections(raw_content: str) -> list[dict[str, Any]]:
+    """Extract sections with headings and page ranges from raw content.
+
+    Detects <!-- page N --> markers and heading lines (markdown #, Chapter X,
+    or _detect_heading_level from hierarchical_chunk).
+    Returns list of {"heading", "page_start", "page_end", "content"}.
+    """
+    from .hierarchical_chunk import _detect_heading_level
+
+    lines = raw_content.split("\n")
+    sections: list[dict[str, Any]] = []
+    current_heading = ""
+    current_page = ""
+    current_lines: list[str] = []
+
+    for line in lines:
+        # Track page markers
+        pm = _PAGE_MARKER_RE.match(line.strip())
+        if pm:
+            current_page = pm.group(1)
+            continue
+
+        # Detect headings
+        heading_result = _detect_heading_level(line)
+        is_chapter = bool(_CHAPTER_RE.match(line.strip()))
+
+        if heading_result or is_chapter:
+            # Flush previous section
+            if current_lines:
+                text = "\n".join(current_lines).strip()
+                if text:
+                    sections.append(
+                        {
+                            "heading": current_heading,
+                            "page_start": sections[-1]["page_start"] if sections else current_page,
+                            "page_end": current_page,
+                            "content": text,
+                        }
+                    )
+                current_lines = []
+
+            if heading_result:
+                _, heading_text = heading_result
+                current_heading = heading_text
+            elif is_chapter:
+                current_heading = line.strip()
+
+        current_lines.append(line)
+
+    # Flush final section
+    if current_lines:
+        text = "\n".join(current_lines).strip()
+        if text:
+            sections.append(
+                {
+                    "heading": current_heading,
+                    "page_start": sections[-1]["page_start"] if sections else current_page,
+                    "page_end": current_page,
+                    "content": text,
+                }
+            )
+
+    return sections
+
+
 def _build_contextual_prefix(doc_title: str, section_path: str | None) -> str:
     """Build the contextual prefix: doc_title > section_path."""
     parts = [doc_title]
@@ -41,25 +109,17 @@ def _build_contextual_prefix(doc_title: str, section_path: str | None) -> str:
     return " > ".join(parts)
 
 
-def contextual_chunk(
-    raw_content: str,
-    doc_title: str,
-    section_path: str | None = None,
-    max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE,
-    min_chunk_size: int = DEFAULT_MIN_CHUNK_SIZE,
-    overlap: int = DEFAULT_OVERLAP,
+def _chunk_paragraphs(
+    paragraphs: list[str],
+    prefix: str,
+    section_path: str | None,
+    heading: str | None,
+    page_range: str | None,
+    max_chunk_size: int,
+    min_chunk_size: int,
+    overlap: int,
 ) -> list[dict[str, Any]]:
-    """Split content into chunks with contextual prefix.
-
-    Each chunk is prefixed with "doc_title > section_path: " to maintain
-    self-contained context for embedding and retrieval.
-    """
-    prefix = _build_contextual_prefix(doc_title, section_path)
-    paragraphs = _split_into_paragraphs(raw_content)
-
-    if not paragraphs:
-        return []
-
+    """Buffer paragraphs into chunks with metadata."""
     chunks: list[dict[str, Any]] = []
     buffer: list[str] = []
     buffer_len = 0
@@ -70,14 +130,17 @@ def contextual_chunk(
         if buffer_len + para_len > max_chunk_size and buffer:
             chunk_text = "\n\n".join(buffer)
             prefixed = f"{prefix}: {chunk_text}"
-            chunks.append({
-                "content": prefixed,
-                "raw_content": chunk_text,
-                "section_path": section_path,
-                "prefix": prefix,
-                "token_count": _estimate_tokens(prefixed),
-            })
-            # Keep last paragraph for overlap
+            chunks.append(
+                {
+                    "content": prefixed,
+                    "raw_content": chunk_text,
+                    "section_path": section_path,
+                    "heading": heading,
+                    "page_range": page_range,
+                    "prefix": prefix,
+                    "token_count": _estimate_tokens(prefixed),
+                }
+            )
             if overlap > 0 and buffer:
                 last = buffer[-1]
                 buffer = [last] if len(last) <= overlap else []
@@ -89,20 +152,92 @@ def contextual_chunk(
         buffer.append(para)
         buffer_len += para_len
 
-    # Flush remaining buffer
     if buffer:
         chunk_text = "\n\n".join(buffer)
         if len(chunk_text.strip()) >= min_chunk_size:
             prefixed = f"{prefix}: {chunk_text}"
-            chunks.append({
-                "content": prefixed,
-                "raw_content": chunk_text,
-                "section_path": section_path,
-                "prefix": prefix,
-                "token_count": _estimate_tokens(prefixed),
-            })
+            chunks.append(
+                {
+                    "content": prefixed,
+                    "raw_content": chunk_text,
+                    "section_path": section_path,
+                    "heading": heading,
+                    "page_range": page_range,
+                    "prefix": prefix,
+                    "token_count": _estimate_tokens(prefixed),
+                }
+            )
 
     return chunks
+
+
+def contextual_chunk(
+    raw_content: str,
+    doc_title: str,
+    section_path: str | None = None,
+    extract_headings: bool = False,
+    max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE,
+    min_chunk_size: int = DEFAULT_MIN_CHUNK_SIZE,
+    overlap: int = DEFAULT_OVERLAP,
+) -> list[dict[str, Any]]:
+    """Split content into chunks with contextual prefix.
+
+    Each chunk is prefixed with "doc_title > section_path: " to maintain
+    self-contained context for embedding and retrieval.
+
+    When extract_headings=True, detects headings and page markers in the
+    raw content to populate section_path, heading, and page_range per chunk.
+    """
+    if not raw_content.strip():
+        return []
+
+    if extract_headings:
+        sections = _extract_sections(raw_content)
+        if sections:
+            all_chunks: list[dict[str, Any]] = []
+            for sec in sections:
+                sec_heading = sec.get("heading", "")
+                sec_path = f"{doc_title} > {sec_heading}" if sec_heading else doc_title
+                page_start = sec.get("page_start", "")
+                page_end = sec.get("page_end", "")
+                page_range = (
+                    f"{page_start}-{page_end}"
+                    if page_start and page_end and page_start != page_end
+                    else page_start
+                )
+                prefix = _build_contextual_prefix(doc_title, sec_heading or None)
+                paragraphs = _split_into_paragraphs(sec["content"])
+                if paragraphs:
+                    all_chunks.extend(
+                        _chunk_paragraphs(
+                            paragraphs,
+                            prefix=prefix,
+                            section_path=sec_path,
+                            heading=sec_heading,
+                            page_range=page_range,
+                            max_chunk_size=max_chunk_size,
+                            min_chunk_size=min_chunk_size,
+                            overlap=overlap,
+                        )
+                    )
+            if all_chunks:
+                return all_chunks
+
+    # Fallback: flat chunking without heading extraction
+    prefix = _build_contextual_prefix(doc_title, section_path)
+    paragraphs = _split_into_paragraphs(raw_content)
+    if not paragraphs:
+        return []
+    return _chunk_paragraphs(
+        paragraphs,
+        prefix=prefix,
+        section_path=section_path,
+        heading=None,
+        page_range=None,
+        max_chunk_size=max_chunk_size,
+        min_chunk_size=min_chunk_size,
+        overlap=overlap,
+    )
 
 
 class ContextualChunkOp:

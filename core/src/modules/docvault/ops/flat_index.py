@@ -33,17 +33,20 @@ def _chunks_to_index_docs(
         content = chunk.get("content", "")
         if not content.strip():
             continue
+        # Use DB chunk ID as entity_id (enables DB content lookup from search results)
+        # Falls back to composite key if db_id not available
+        chunk_entity_id = chunk.get("db_id") or f"{document_id}:{version_id}:{i}"
         docs.append(
             IndexDocument(
-                id=f"{document_id}:{version_id}:{i}",
                 content=content,
                 service_id=SERVICE_ID,
-                entity_id=document_id,
+                entity_id=chunk_entity_id,
                 entity_type="document_chunk",
                 space_id=space_id,
                 tags=chunk.get("tags", []),
                 metadata={
                     "chunk_index": i,
+                    "document_id": document_id,
                     "version_id": version_id,
                     "section_path": chunk.get("section_path", ""),
                     "page_range": chunk.get("page_range", ""),
