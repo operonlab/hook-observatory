@@ -1659,9 +1659,17 @@ class TmuxRelayClient:
         )
         return resp if resp and resp.get("ok") else None
 
-    def complete_board_task(
-        self, board_id: str, task_id: str, result: str = ""
-    ) -> None:
+    def drop_board_task(self, board_id: str, task_id: str) -> dict | None:
+        """Release a claimed task. Returns response dict or None."""
+        pane = os.environ.get("TMUX_PANE", "sdk")
+        resp = self._board_http(
+            "POST",
+            f"/api/board/{board_id}/drop",
+            {"task_id": task_id, "pane": pane},
+        )
+        return resp if resp and resp.get("ok") else None
+
+    def complete_board_task(self, board_id: str, task_id: str, result: str = "") -> None:
         """Report task completion to session-channel board."""
         self._notify_channel(
             topic=f"board:{board_id}",
@@ -1670,21 +1678,21 @@ class TmuxRelayClient:
         )
 
     def _board_http(self, method: str, path: str, body: dict) -> dict | None:
-        """Synchronous HTTP to session-channel board API."""
+        """Synchronous HTTP to session-channel board API (stdlib, no curl)."""
+        import urllib.request
+
+        req = urllib.request.Request(
+            f"{self._CHANNEL_URL}{path}",
+            data=json.dumps(body).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "x-local-key": self._CHANNEL_KEY,
+            },
+            method=method,
+        )
         try:
-            r = subprocess.run(
-                [
-                    "curl", "-s", "-m", "5", "-X", method,
-                    f"{self._CHANNEL_URL}{path}",
-                    "-H", "Content-Type: application/json",
-                    "-H", f"x-local-key: {self._CHANNEL_KEY}",
-                    "-d", json.dumps(body),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=8,
-            )
-            return json.loads(r.stdout) if r.returncode == 0 else None
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return json.loads(resp.read())
         except Exception:
             return None
 
