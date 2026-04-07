@@ -470,7 +470,76 @@ async def qa_question(
     else:
         await HybridRRFSearchOp()(ctx)
 
-    # ── 3. Parent-child enrichment ──
+    # ── 3a. Neighbor expansion ──
+    # For scattered-wisdom queries, the answer spans multiple non-adjacent sections.
+    # Expand the evidence pool by pulling ±3 chunk_index neighbors of each hit,
+    # then let the reranker filter down to the most relevant ones.
+    evidence = ctx.get("evidence_chunks", [])
+    hit_chunk_ids = {c.get("id", "") for c in evidence if c.get("id")}
+
+    if hit_chunk_ids:
+        # Get chunk_index and document_id for each hit
+        hit_meta = (
+            await db.execute(
+                select(
+                    DocumentChunk.document_id,
+                    DocumentChunk.chunk_index,
+                ).where(DocumentChunk.id.in_(hit_chunk_ids))
+            )
+        ).all()
+
+        # Build target index ranges per document
+        neighbor_ranges: dict[str, set[int]] = {}
+        for doc_id, idx in hit_meta:
+            if doc_id not in neighbor_ranges:
+                neighbor_ranges[doc_id] = set()
+            for offset in range(-3, 4):  # ±3
+                neighbor_ranges[doc_id].add(idx + offset)
+
+        # Fetch neighbor chunks not already in evidence
+
+        for doc_id, indices in neighbor_ranges.items():
+            neighbors = (
+                await db.execute(
+                    select(
+                        DocumentChunk.id,
+                        DocumentChunk.content,
+                        DocumentChunk.section_path,
+                        DocumentChunk.page_range,
+                        DocumentChunk.heading,
+                        DocumentChunk.chunk_index,
+                    ).where(
+                        DocumentChunk.document_id == doc_id,
+                        DocumentChunk.chunk_index.in_(indices),
+                        DocumentChunk.deleted_at == None,  # noqa: E711
+                    )
+                )
+            ).all()
+
+            for n in neighbors:
+                if n.id not in hit_chunk_ids:
+                    evidence.append(
+                        {
+                            "id": n.id,
+                            "content": n.content,
+                            "score": 0.1,  # low base score — reranker decides
+                            "document_id": doc_id,
+                            "section_path": n.section_path or "",
+                            "page_range": n.page_range or "",
+                            "heading": n.heading or "",
+                            "chunk_index": n.chunk_index,
+                        }
+                    )
+                    hit_chunk_ids.add(n.id)
+
+        ctx["evidence_chunks"] = evidence
+        logger.info(
+            "Neighbor expansion: %d → %d chunks",
+            len(hit_meta),
+            len(evidence),
+        )
+
+    # ── 3b. Parent-child enrichment ──
     # Search found child chunks (small, precise). For LLM synthesis,
     # fetch the full parent section (all chunks sharing the same heading).
     evidence = ctx.get("evidence_chunks", [])
@@ -535,13 +604,26 @@ async def qa_question(
     except Exception:
         logger.warning("JinaRerankOp failed, using retrieval order", exc_info=True)
 
-    # ── 5. Synthesize cited answer ──
+    # ── 5. CRAG evaluation (quality gate before synthesis) ──
+    from src.shared.crag_evaluator import evaluate_results as crag_evaluate
+
+    crag_eval = crag_evaluate(
+        query=body.question,
+        results=ctx.get("evidence_chunks", []),
+        score_key="score",
+    )
+    crag_verdict = crag_eval.verdict.value
+
+    # ── 6. Synthesize cited answer ──
     ctx["question"] = body.question
     await CitedAnswerOp()(ctx)
 
     answer_text = ctx.get("answer", "No answer found.")
     raw_citations = ctx.get("citations", [])
+    # Use LLM confidence as primary, but floor it if CRAG says INCORRECT
     confidence = ctx.get("confidence", 0.0)
+    if crag_verdict == "incorrect" and confidence > 0.3:
+        confidence = min(confidence, 0.2)
 
     citations = [
         CitationRef(
@@ -563,6 +645,7 @@ async def qa_question(
         answer_text=answer_text,
         citations={"refs": raw_citations},
         confidence=confidence,
+        crag_verdict=crag_verdict,
         pipeline_used=pipeline,
     )
     qa_log = await qa_log_service.create(db, space_id, qa_log_data)
@@ -574,6 +657,7 @@ async def qa_question(
         answer=answer_text,
         citations=citations,
         confidence=confidence,
+        crag_verdict=crag_verdict,
         pipeline_used=pipeline,
         qa_log_id=qa_log.id,
     )

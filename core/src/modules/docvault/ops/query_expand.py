@@ -19,17 +19,27 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _EXPAND_PROMPT = """\
-Given a user question about a document, generate 2-3 diverse search queries \
-that would help find ALL relevant sections. Each query should target a different \
-angle or use different terminology.
+Generate 3 diverse search queries to find ALL relevant document sections. \
+Each query MUST target a DIFFERENT angle.
 
-Rules:
-- Query 1: restate the original question with key terms
-- Query 2: use synonyms or related concepts that might appear in the document
-- Query 3 (optional): target a specific section type (checklist, troubleshooting, examples)
+EXAMPLES:
 
-Return ONLY a JSON array of strings. Example:
-["original terms query", "synonym/related concept query", "section-specific query"]
+Q: "best practices for writing SKILL.md descriptions"
+→ ["SKILL.md description field frontmatter requirements", \
+"writing instructions good and bad examples formatting guidelines", \
+"checklist before uploading skill quality validation"]
+
+Q: "how to handle errors in MCP connections"
+→ ["MCP connection error handling troubleshooting", \
+"common MCP issues retry reconnect", \
+"debugging checklist MCP server status"]
+
+Q: "what testing approach should I use"
+→ ["testing methodology skill validation", \
+"quantitative qualitative metrics measurement", \
+"iteration feedback improvement cycle"]
+
+Return ONLY a JSON array of 3 strings. No explanation.
 """
 
 
