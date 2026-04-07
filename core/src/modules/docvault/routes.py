@@ -369,8 +369,12 @@ async def search_documents(
     _user: dict = require_permission("docvault.read"),
 ):
     """Semantic search over document chunks via Qdrant hybrid search."""
+    from sqlalchemy import select
+
     from src.shared.qdrant_search import hybrid_search
     from src.shared.search_types import SearchConfig
+
+    from .models import DocumentChunk
 
     config = SearchConfig(
         top_k=body.top_k,
@@ -379,13 +383,28 @@ async def search_documents(
     )
     results, _meta = await hybrid_search(body.q, space_id, config)
 
+    # Fetch full chunk content from DB (Qdrant only stores 200-char preview)
+    chunk_ids = [r.entity_id for r in results]
+    full_content_map: dict[str, str] = {}
+    if chunk_ids:
+        rows = (
+            await db.execute(
+                select(DocumentChunk.id, DocumentChunk.content).where(
+                    DocumentChunk.id.in_(chunk_ids)
+                )
+            )
+        ).all()
+        full_content_map = {row.id: row.content for row in rows}
+
     chunks = []
     for r in results:
+        doc_id = r.metadata.get("document_id", r.entity_id)
+        content = full_content_map.get(r.entity_id, r.content_preview)
         chunks.append(
             SearchChunkResult(
-                document_id=r.entity_id,
+                document_id=doc_id,
                 score=r.score,
-                content=r.content_preview,
+                content=content,
                 section_path=r.metadata.get("section_path", ""),
                 page_range=r.metadata.get("page_range", ""),
                 heading=r.metadata.get("heading", ""),
@@ -407,9 +426,12 @@ async def qa_question(
     _user: dict = require_permission("docvault.read"),
 ):
     """Question-answering pipeline: search → cited answer → log."""
+    from sqlalchemy import select
+
     from src.shared.qdrant_search import hybrid_search
     from src.shared.search_types import SearchConfig
 
+    from .models import DocumentChunk
     from .ops.cited_answer import CitedAnswerOp
     from .schemas import CitationRef
 
@@ -420,14 +442,29 @@ async def qa_question(
     )
     results, _meta = await hybrid_search(body.question, space_id, config)
 
-    # 2. Convert to evidence format
+    # 2. Fetch full chunk content from DB (Qdrant only stores 200-char preview)
+    chunk_ids = [r.entity_id for r in results]
+    full_content_map: dict[str, str] = {}
+    if chunk_ids:
+        rows = (
+            await db.execute(
+                select(DocumentChunk.id, DocumentChunk.content).where(
+                    DocumentChunk.id.in_(chunk_ids)
+                )
+            )
+        ).all()
+        full_content_map = {row.id: row.content for row in rows}
+
+    # 3. Convert to evidence format with full content
     evidence_chunks = []
     for r in results:
+        doc_id = r.metadata.get("document_id", r.entity_id)
+        content = full_content_map.get(r.entity_id, r.content_preview)
         evidence_chunks.append(
             {
-                "id": f"{r.entity_id}:{r.metadata.get('chunk_index', 0)}",
-                "document_id": r.entity_id,
-                "content": r.content_preview,
+                "id": r.entity_id,
+                "document_id": doc_id,
+                "content": content,
                 "section_path": r.metadata.get("section_path", ""),
                 "page_range": r.metadata.get("page_range", ""),
                 "heading": r.metadata.get("heading", ""),
@@ -435,7 +472,7 @@ async def qa_question(
             }
         )
 
-    # 3. Generate cited answer
+    # 4. Generate cited answer
     cited_op = CitedAnswerOp()
     ctx = {"question": body.question, "evidence_chunks": evidence_chunks}
     await cited_op(ctx)
@@ -456,7 +493,7 @@ async def qa_question(
         for c in raw_citations
     ]
 
-    # 4. Log the QA interaction
+    # 5. Log the QA interaction
     import hashlib as _hashlib
 
     query_hash = _hashlib.sha256(body.question.encode()).hexdigest()[:16]
