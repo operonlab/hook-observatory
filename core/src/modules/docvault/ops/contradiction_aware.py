@@ -17,6 +17,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from text_ops.overlap import jaccard_word_overlap as _compute_text_overlap
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,17 +34,6 @@ class Contradiction:
     chunk_b_excerpt: str
     contradiction_type: str  # direct | temporal | scope
     resolution_hint: str | None = None
-
-
-def _compute_text_overlap(text_a: str, text_b: str) -> float:
-    """Simple word-level Jaccard overlap for contradiction detection."""
-    words_a = set(text_a.lower().split())
-    words_b = set(text_b.lower().split())
-    if not words_a or not words_b:
-        return 0.0
-    intersection = words_a & words_b
-    union = words_a | words_b
-    return len(intersection) / len(union)
 
 
 def _detect_contradictions(
@@ -87,7 +78,7 @@ def _detect_contradictions(
             contradictions.append(
                 Contradiction(
                     chunk_a_id=chunk_a.get("id", f"chunk_{i}"),
-                    chunk_b_id=chunk_b.get("id", f"chunk_{i+1}"),
+                    chunk_b_id=chunk_b.get("id", f"chunk_{i + 1}"),
                     chunk_a_section=chunk_a.get("section_path", "Unknown"),
                     chunk_b_section=chunk_b.get("section_path", "Unknown"),
                     chunk_a_excerpt=content_a[:200],
@@ -169,13 +160,9 @@ class ContradictionAwareOp:
 
         # Append contradiction summary
         if contradictions:
-            answer_parts.append(
-                _format_contradiction_summary(contradictions)
-            )
+            answer_parts.append(_format_contradiction_summary(contradictions))
 
-        answer_parts.append(
-            "\n(ContradictionAwareOp stub — LLM synthesis pending Phase 1)"
-        )
+        answer_parts.append("\n(ContradictionAwareOp stub — LLM synthesis pending Phase 1)")
 
         # Build citations
         citations = [

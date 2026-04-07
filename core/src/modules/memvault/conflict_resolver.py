@@ -17,16 +17,21 @@ semantic arbitration is desired.
 
 import json
 import logging
-from dataclasses import dataclass
-from enum import StrEnum
 
 import httpx
+
+from src.shared.conflict import (
+    ConflictDecision,
+    ConflictResult,
+    simple_conflict_heuristic,
+)
 
 logger = logging.getLogger(__name__)
 
 # oMLX local LLM inference endpoint
 _OMLX_URL = "http://localhost:8000/v1/chat/completions"
 _LLM_TIMEOUT = 10  # seconds
+
 
 def _conflict_threshold(block_type: str = "memory") -> float:
     """Dynamic conflict similarity threshold based on block type.
@@ -38,26 +43,6 @@ def _conflict_threshold(block_type: str = "memory") -> float:
     """
     adjustments = {"attitude": 0.03, "skill": 0.02, "memory": 0, "knowledge": -0.02}
     return max(0.80, min(0.92, 0.85 + adjustments.get(block_type, 0)))
-
-
-# Static constants kept for backward-compatible heuristic comparisons.
-# Prefer _conflict_threshold(block_type) for per-call gating.
-CONFLICT_SIMILARITY_THRESHOLD = 0.85
-HIGH_SIMILARITY_THRESHOLD = 0.95
-
-
-class ConflictDecision(StrEnum):
-    MERGE = "merge"  # Complementary info → combine
-    SUPERSEDE = "supersede"  # New replaces old (temporal update)
-    COEXIST = "coexist"  # Different perspectives → keep both
-
-
-@dataclass
-class ConflictResult:
-    decision: ConflictDecision
-    confidence: float  # 0-1, how confident the LLM is
-    reason: str
-    merged_content: str | None = None  # Only populated for MERGE decision
 
 
 # ---------------------------------------------------------------------------
@@ -179,50 +164,6 @@ async def _call_llm(new_content: str, existing_content: str, block_type: str) ->
 
 
 # ---------------------------------------------------------------------------
-# Heuristic fallback
-# ---------------------------------------------------------------------------
-
-
-def _simple_conflict_heuristic(
-    new_content: str,
-    existing_content: str,
-    similarity: float,
-) -> ConflictResult:
-    """Fallback when LLM is unavailable.
-
-    Logic:
-    - Very high similarity (>0.95) + high word overlap → MERGE (almost same content)
-    - High similarity (0.85-0.95) or low word overlap → COEXIST (different perspectives)
-    """
-    words_new = set(new_content.lower().split())
-    words_existing = set(existing_content.lower().split())
-
-    if not words_new or not words_existing:
-        return ConflictResult(
-            decision=ConflictDecision.COEXIST,
-            confidence=0.5,
-            reason="empty_content_fallback",
-        )
-
-    intersection = words_new & words_existing
-    union = words_new | words_existing
-    overlap = len(intersection) / len(union)
-
-    if similarity > HIGH_SIMILARITY_THRESHOLD and overlap > 0.7:
-        return ConflictResult(
-            decision=ConflictDecision.MERGE,
-            confidence=0.7,
-            reason=f"heuristic_high_overlap (sim={similarity:.3f}, overlap={overlap:.2f})",
-        )
-
-    return ConflictResult(
-        decision=ConflictDecision.COEXIST,
-        confidence=0.6,
-        reason=f"heuristic_coexist (sim={similarity:.3f}, overlap={overlap:.2f})",
-    )
-
-
-# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -302,7 +243,7 @@ async def resolve_conflict(
             exc,
         )
 
-    result = _simple_conflict_heuristic(new_content, existing_content, similarity)
+    result = simple_conflict_heuristic(new_content, existing_content, similarity)
     logger.info(
         "conflict_resolved(heuristic): block_id=%s decision=%s reason=%r",
         existing_block_id,

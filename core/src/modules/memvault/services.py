@@ -24,6 +24,7 @@ from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 from src.shared.text_utils import is_cjk, is_cjk_dominant
 from src.shared.tier_config import get_threshold
+from text_ops.noise import QUARANTINE_TAG, check_noise, filter_results
 
 from .models import (
     EMBEDDING_DIM,
@@ -34,7 +35,6 @@ from .models import (
     SearchFeedback,
     Tag,
 )
-from .noise_filter import QUARANTINE_TAG, check_noise, filter_results
 from .reranker import rerank_results
 from .schemas import (
     BLOCK_TYPE_ALIASES,

@@ -15,6 +15,7 @@ from typing import Any
 
 from src.events.bus import event_bus
 from src.events.types import DocvaultEvents
+from text_ops.overlap import jaccard_word_overlap as _word_overlap
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +23,6 @@ logger = logging.getLogger(__name__)
 OVERLAP_THRESHOLD = 0.3
 # Minimum number of chunks to trigger pairwise comparison
 MIN_CHUNKS_FOR_DETECTION = 2
-
-
-def _word_overlap(text_a: str, text_b: str) -> float:
-    """Word-level Jaccard similarity for topic overlap detection."""
-    words_a = set(text_a.lower().split())
-    words_b = set(text_b.lower().split())
-    if not words_a or not words_b:
-        return 0.0
-    return len(words_a & words_b) / len(words_a | words_b)
 
 
 def detect_contradictions(
@@ -74,22 +66,24 @@ def detect_contradictions(
             else:
                 c_type = "direct"
 
-            contradictions.append({
-                "chunk_a_id": chunk_a.get("id", ""),
-                "chunk_b_id": chunk_b.get("id", ""),
-                "document_a_id": doc_a,
-                "document_b_id": doc_b,
-                "section_a": chunk_a.get("section_path", ""),
-                "section_b": chunk_b.get("section_path", ""),
-                "type": c_type,
-                "overlap": round(overlap, 3),
-                "confidence": round(min(overlap * 1.5, 0.9), 3),
-                "resolution_hint": (
-                    "Newer document may supersede (lex posterior)"
-                    if c_type == "temporal"
-                    else "Review both provisions; consider scope and specificity"
-                ),
-            })
+            contradictions.append(
+                {
+                    "chunk_a_id": chunk_a.get("id", ""),
+                    "chunk_b_id": chunk_b.get("id", ""),
+                    "document_a_id": doc_a,
+                    "document_b_id": doc_b,
+                    "section_a": chunk_a.get("section_path", ""),
+                    "section_b": chunk_b.get("section_path", ""),
+                    "type": c_type,
+                    "overlap": round(overlap, 3),
+                    "confidence": round(min(overlap * 1.5, 0.9), 3),
+                    "resolution_hint": (
+                        "Newer document may supersede (lex posterior)"
+                        if c_type == "temporal"
+                        else "Review both provisions; consider scope and specificity"
+                    ),
+                }
+            )
 
     return contradictions
 

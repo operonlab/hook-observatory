@@ -14,8 +14,10 @@ members = [
     "realtime",
     "workshop",
     "workshop-audio-ops",
+    "workshop-cli-dic",
     "workshop-image-ops",
     "workshop-sdk-client",
+    "workshop-text-ops",
     "workshop-tmux-lib",
     "workshop-video-ops",
 ]
@@ -424,6 +426,7 @@ dependencies = [
     { name = "structlog" },
     { name = "uuid-utils" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "workshop-text-ops" },
 ]
 
 [package.dev-dependencies]
@@ -457,6 +460,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.0" },
     { name = "uuid-utils", specifier = ">=0.9" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
+    { name = "workshop-text-ops", editable = "libs/text-ops" },
 ]
 
 [package.metadata.requires-dev]
@@ -2004,6 +2008,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "workshop-audio-ops" },
+    { name = "workshop-cli-dic" },
     { name = "workshop-image-ops" },
     { name = "workshop-sdk-client" },
     { name = "workshop-tmux-lib" },
@@ -2015,6 +2020,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "workshop-audio-ops", editable = "libs/audio-ops" },
+    { name = "workshop-cli-dic", editable = "libs/cli-dic" },
     { name = "workshop-image-ops", editable = "libs/image-ops" },
     { name = "workshop-sdk-client", editable = "libs/sdk-client" },
     { name = "workshop-tmux-lib", editable = "libs/tmux-lib" },
@@ -2035,6 +2041,11 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "soundfile", specifier = ">=0.13" },
 ]
+
+[[package]]
+name = "workshop-cli-dic"
+version = "0.1.0"
+source = { editable = "libs/cli-dic" }
 
 [[package]]
 name = "workshop-image-ops"
@@ -2070,6 +2081,11 @@ requires-dist = [
     { name = "soundfile", marker = "extra == 'audio'", specifier = ">=0.13" },
 ]
 provides-extras = ["audio"]
+
+[[package]]
+name = "workshop-text-ops"
+version = "0.1.0"
+source = { editable = "libs/text-ops" }
 
 [[package]]
 name = "workshop-tmux-lib"

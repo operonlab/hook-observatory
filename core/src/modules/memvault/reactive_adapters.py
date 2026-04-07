@@ -25,8 +25,7 @@ from src.shared.reactive import (
     Pipeline,
     Subscription,
 )
-
-from .noise_filter import check_noise
+from text_ops.noise import check_noise
 
 logger = logging.getLogger(__name__)
 
@@ -157,9 +156,7 @@ class DigestToBlockOp:
 
         ctx["space_id"] = ctx.get("space_id") or "default"
         ctx["block_type"] = "knowledge"
-        ctx["tags"] = list(
-            dict.fromkeys(["intelligence", "digest", digest_type, *extra_tags])
-        )
+        ctx["tags"] = list(dict.fromkeys(["intelligence", "digest", digest_type, *extra_tags]))
         ctx["source_session"] = f"intelligence:{digest_type}:{period}"
         return ctx
 

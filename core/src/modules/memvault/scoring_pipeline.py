@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.shared.access_tracker import compute_effective_half_life
+from src.shared.decay import WEIBULL_PARAMS, weibull_decay, weibull_decay_with_half_life
 from src.shared.reactive import Pipeline
 from src.shared.scoring_stages import (
     apply_length_normalization,
@@ -30,63 +31,14 @@ from src.shared.scoring_stages import (
     apply_recency_boost,
     cosine_similarity,
 )
-
-from .noise_filter import check_noise
+from text_ops.noise import check_noise
 
 logger = logging.getLogger(__name__)
-
-# --- Weibull decay parameters per memory tier ---
-# β (shape): <1 = rapid early decay, 1 = exponential, >1 = slow then fast
-# λ (scale): characteristic lifetime in days
-# floor: minimum decay factor (memory never fully forgotten)
-WEIBULL_PARAMS = {
-    "core": {"beta": 0.8, "lambda_": 180.0, "floor": 0.4},
-    "hot": {"beta": 1.0, "lambda_": 60.0, "floor": 0.3},
-    "warm": {"beta": 1.2, "lambda_": 30.0, "floor": 0.2},
-    "cold": {"beta": 1.5, "lambda_": 14.0, "floor": 0.1},
-}
 
 # --- Access reinforcement defaults (G6) ---
 # Base half-life used when adjusting Weibull λ via access reinforcement.
 # The effective λ replaces the tier's lambda_ when access_count > 0.
 _ACCESS_BASE_HALF_LIFE_DAYS: float = 30.0
-
-
-def weibull_decay(age_days: float, tier: str = "hot") -> float:
-    """Compute Weibull survival function for memory decay.
-
-    S(t) = floor + (1 - floor) * exp(-(t/λ)^β)
-    """
-    params = WEIBULL_PARAMS.get(tier, WEIBULL_PARAMS["hot"])
-    beta = params["beta"]
-    lambda_ = params["lambda_"]
-    floor = params["floor"]
-
-    if age_days <= 0:
-        return 1.0
-
-    survival = math.exp(-((age_days / lambda_) ** beta))
-    return floor + (1 - floor) * survival
-
-
-def weibull_decay_with_half_life(
-    age_days: float, effective_half_life: float, tier: str = "hot"
-) -> float:
-    """Weibull decay with an access-adjusted characteristic lifetime.
-
-    Replaces the tier's default lambda_ with effective_half_life so that
-    frequently-accessed memories decay more slowly.
-    """
-    params = WEIBULL_PARAMS.get(tier, WEIBULL_PARAMS["hot"])
-    beta = params["beta"]
-    floor = params["floor"]
-
-    if age_days <= 0:
-        return 1.0
-
-    # Use effective half-life as the scale parameter (λ)
-    survival = math.exp(-((age_days / effective_half_life) ** beta))
-    return floor + (1 - floor) * survival
 
 
 @dataclass
