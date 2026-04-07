@@ -38,7 +38,7 @@ REDIS_KEY_LAST_DREAM = "memvault:dream:last_run_at"
 
 # --- LLM Reflection ---
 _LLM_URL = "http://localhost:4000/v1/chat/completions"
-_LLM_API_KEY = "sk-litellm-local-dev"
+_LLM_API_KEY = "sk-litellm-local-dev"  # nosec — local dev proxy key
 _LLM_MODEL = "gemini-3.1-flash-lite"
 _REFLECT_TIMEOUT = 30
 _REFLECT_MAX_BLOCKS = 30

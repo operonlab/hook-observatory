@@ -49,7 +49,7 @@ results, meta = await hybrid_search("problem-first approach", "default", config)
 1. 修 `routes.py` 的 `search_documents` endpoint — 確認 `DocumentSearchParams` body 和 SDK 的 request 對齊
 2. 修 `routes.py` 的 `qa` endpoint — 確認 `QARequest` body 格式
 3. 重啟 core：`~/.local/bin/python3 scripts/workshop_services.py restart core`
-4. 測試：`CORE_INTERNAL_API_KEY="NeM2Z37ycpsdzGUVgNLsl3yJazDoh1CwBVAhTWUdOuI" ~/.local/bin/python3 ~/workshop/core/cli/docvault.py search "problem-first" --json`
+4. 測試：`~/.local/bin/python3 ~/workshop/core/cli/docvault.py search "problem-first" --json` (需設 CORE_INTERNAL_API_KEY env)
 5. 測試：同上但用 `qa "How does problem-first approach work?"` 
 6. 少爺的最終需求：用 docvault 回答「Anthropic Skill Guide 裡 problem-first 是怎麼處理問題的？」
 
