@@ -63,8 +63,9 @@ def build_layer_plan(intent: str, query: str) -> dict[str, Any]:
             "pipeline": "B",
             "sources": ["docvault", "memvault"],
             "strategy": "fan_out_merge",
-            "docvault_top_k": 6,
-            "memvault_top_k": 4,
+            "docvault_top_k": 15,
+            "memvault_top_k": 6,
+            "synth_top_k": 8,
         }
 
     if intent == "meta":
@@ -72,15 +73,17 @@ def build_layer_plan(intent: str, query: str) -> dict[str, Any]:
             "pipeline": "C",
             "sources": ["docvault"],
             "strategy": "coverage_check",
-            "docvault_top_k": 10,
+            "docvault_top_k": 20,
+            "synth_top_k": 10,
         }
 
-    # Default: factual
+    # Default: factual — over-retrieve for reranking
     return {
         "pipeline": "A",
         "sources": ["docvault"],
         "strategy": "direct_search",
-        "docvault_top_k": 10,
+        "docvault_top_k": 20,
+        "synth_top_k": 12,
     }
 
 

@@ -69,10 +69,16 @@ class JinaRerankOp:
             weight_rerank=self._weight_rerank,
         )
 
+        # Truncate to synth_top_k (best N for LLM synthesis)
+        synth_top_k = ctx.get("layer_plan", {}).get("synth_top_k")
+        if synth_top_k and len(reranked) > synth_top_k:
+            reranked = reranked[:synth_top_k]
+
         ctx["evidence_chunks"] = reranked
 
         logger.info(
-            "JinaRerankOp: reranked %d chunks for query=%r",
+            "JinaRerankOp: reranked %d → %d chunks for query=%r",
+            len(chunks),
             len(reranked),
             query[:60],
         )

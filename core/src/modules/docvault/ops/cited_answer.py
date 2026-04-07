@@ -45,7 +45,7 @@ Output format (strict JSON):
 
 def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
     parts = [f"Question: {question}\n\nEvidence chunks:\n"]
-    for i, chunk in enumerate(chunks[:8], 1):
+    for i, chunk in enumerate(chunks, 1):
         section = chunk.get("section_path", "")
         page = chunk.get("page_range", "")
         meta_parts = []
@@ -54,7 +54,7 @@ def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
         if page:
             meta_parts.append(f"page={page}")
         meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
-        content = chunk.get("content", "")[:800]
+        content = chunk.get("content", "")[:2000]
         parts.append(f"[{i}]{meta}:\n{content}\n")
     return "\n".join(parts)
 

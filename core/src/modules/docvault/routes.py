@@ -442,14 +442,16 @@ async def qa_question(
     # ── 1. Intent routing ──
     ctx: dict = {"query": body.question, "space_id": space_id, "top_k": body.top_k}
     await IntentRouterOp()(ctx)
-    pipeline = ctx.get("layer_plan", {}).get("pipeline", "A")
+    layer_plan = ctx.get("layer_plan", {})
+    pipeline = layer_plan.get("pipeline", "A")
 
-    # ── 2. Search (Pipeline A: direct, Pipeline B: fan-out + merge) ──
+    # ── 2. Over-retrieve for reranking (use layer_plan top_k, not request top_k) ──
+    ctx["top_k"] = layer_plan.get("docvault_top_k", body.top_k)
     if pipeline == "B":
         await FanOutOp()(ctx)
         await MergeOp()(ctx)
     else:
-        await HybridRRFSearchOp(top_k=body.top_k)(ctx)
+        await HybridRRFSearchOp()(ctx)
 
     # ── 3. Enrich with full chunk content from DB ──
     evidence = ctx.get("evidence_chunks", [])
