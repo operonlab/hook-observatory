@@ -57,7 +57,7 @@ def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
         if page:
             meta_parts.append(f"page={page}")
         meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
-        content = chunk.get("content", "")[:2000]
+        content = chunk.get("content", "")[:4000]
         parts.append(f"[{i}]{meta}:\n{content}\n")
     return "\n".join(parts)
 

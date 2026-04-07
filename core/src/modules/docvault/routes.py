@@ -192,7 +192,9 @@ async def upload_document(
     await db.flush()
 
     # 6. Chunk content
-    chunks = contextual_chunk(raw_content, doc_title=title, extract_headings=True)
+    chunks = contextual_chunk(
+        raw_content, doc_title=title, extract_headings=True, max_chunk_size=4000
+    )
 
     # 7. Create Chunk records in DB + collect DB IDs for Qdrant indexing
     chunk_db_ids: list[str] = []
