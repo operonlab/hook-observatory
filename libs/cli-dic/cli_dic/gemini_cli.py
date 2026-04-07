@@ -45,8 +45,10 @@ GEMINI_CLI = CLIEntry(
         config_format="json",
         config_path="settings.json",
         config_key="mcpServers",
-        supports_http=False,
+        supports_http=True,
         supports_stdio=True,
+        http_url_key="httpUrl",  # {"httpUrl": "..."} (different from CC's "url")
+        env_in_config=True,
     ),
     skills=SkillSpec(dir_name="skills", file_name="SKILL.md", format="markdown"),
     hooks=HookSpec(

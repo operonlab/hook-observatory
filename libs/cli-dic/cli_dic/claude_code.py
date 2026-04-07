@@ -46,10 +46,12 @@ CLAUDE_CODE = CLIEntry(
     # ── Configuration ecosystem ──
     mcp=MCPSpec(
         config_format="json",
-        config_path="settings.json",
+        config_path=".mcp.json",  # project-level; also --mcp-config flag
         config_key="mcpServers",
         supports_http=True,
         supports_stdio=True,
+        http_url_key="url",  # {"type": "http", "url": "..."}
+        env_in_config=True,
     ),
     skills=SkillSpec(dir_name="skills", file_name="SKILL.md", format="markdown"),
     hooks=HookSpec(

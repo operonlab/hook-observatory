@@ -45,10 +45,12 @@ class MCPSpec:
     """How this CLI configures MCP servers."""
 
     config_format: str = ""  # "json" | "toml" | ""
-    config_path: str = ""  # relative to config_dir, e.g. "settings.json"
+    config_path: str = ""  # relative to config_dir or project root
     config_key: str = ""  # JSON/TOML key, e.g. "mcpServers" | "mcp_servers"
     supports_http: bool = False  # can connect to HTTP MCP endpoints
     supports_stdio: bool = True  # can launch stdio MCP processes
+    http_url_key: str = "url"  # key for HTTP URL: "url" (CC), "httpUrl" (Gemini), "url" (Codex)
+    env_in_config: bool = True  # can define env vars in MCP config (Codex TOML cannot)
 
 
 @dataclass(frozen=True)

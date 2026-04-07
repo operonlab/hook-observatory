@@ -49,6 +49,8 @@ CODEX_CLI = CLIEntry(
         config_key="mcp_servers",
         supports_http=True,
         supports_stdio=True,
+        http_url_key="url",  # [mcp_servers.name] url = "..."
+        env_in_config=False,  # TOML cannot define env vars; use shell env
     ),
     skills=SkillSpec(dir_name="skills", file_name="SKILL.md", format="markdown"),
     hooks=HookSpec(
