@@ -460,6 +460,31 @@ def cmd_health(client: MemvaultClient, args: argparse.Namespace) -> None:
         print(f"  Memvault API healthy ({client.base_url})")
 
 
+def cmd_lint(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Knowledge graph lint checks."""
+    data = client.lint(
+        checks=args.checks,
+        fix=args.fix,
+        dry_run=not args.no_dry_run,
+    )
+    if json_out(data, args):
+        return
+
+    findings = data.get("findings", [])
+    summary = data.get("summary", {})
+    print(f"\n  Knowledge Lint Report ({data.get('space_id', 'default')})")
+    print(f"  Duration: {data.get('run_duration_ms', 0):.0f}ms")
+    print(f"  Checks: {', '.join(data.get('checks_run', []))}\n")
+    for f in findings:
+        severity = f["severity"].upper()
+        print(f"  [{severity}] {f['check']}: {f['message']}")
+        if f.get("suggested_action", "none") != "none":
+            print(f"          → suggested: {f['suggested_action']}")
+    total = sum(summary.values())
+    remediated = data.get("remediations_applied", 0)
+    print(f"\n  Total: {total} findings | {remediated} remediations applied")
+
+
 # ---------------------------------------------------------------------------
 # Command handlers — NEW: Blocks CRUD
 # ---------------------------------------------------------------------------
@@ -1246,6 +1271,12 @@ def build_parser() -> argparse.ArgumentParser:
     # health
     sub.add_parser("health", parents=[common], help="API health check")
 
+    # lint
+    lint_p = sub.add_parser("lint", parents=[common], help="Knowledge graph lint checks")
+    lint_p.add_argument("--checks", default="all", help="Comma-separated checks or 'all'")
+    lint_p.add_argument("--fix", action="store_true", help="Apply safe remediations")
+    lint_p.add_argument("--no-dry-run", action="store_true", help="Actually apply fixes")
+
     # ---- NEW: Blocks CRUD ----
 
     # blocks (list)
@@ -1657,6 +1688,7 @@ COMMAND_MAP = {
     "summaries": cmd_summaries,
     "attitude": cmd_attitude,
     "health": cmd_health,
+    "lint": cmd_lint,
     # Blocks CRUD
     "blocks": cmd_blocks,
     "block": cmd_block_get,

@@ -341,6 +341,28 @@ async def memvault_kg_traverse(
 
 @mcp.tool()
 @mcp_error_handler("Memvault")
+async def memvault_lint(
+    checks: str = "all",
+    fix: bool = False,
+) -> str:
+    """知識圖譜健康檢查 — 偵測矛盾、過期、孤立實體、缺失引用、社群異常、資料缺口"""
+    result = await to_thread(client.lint, checks=checks, fix=fix, dry_run=not fix)
+    findings = result.get("findings", [])
+    summary = result.get("summary", {})
+    parts = ["# Knowledge Lint Report\n"]
+    parts.append(f"Checks: {', '.join(result.get('checks_run', []))}")
+    parts.append(f"Duration: {result.get('run_duration_ms', 0):.0f}ms\n")
+    for cat, count in summary.items():
+        parts.append(f"- **{cat}**: {count} findings")
+    if findings:
+        parts.append("\n## Findings\n")
+        for f in findings[:20]:
+            parts.append(f"[{f['severity'].upper()}] {f['check']}: {f['message']}")
+    return "\n".join(parts)
+
+
+@mcp.tool()
+@mcp_error_handler("Memvault")
 async def memvault_entity_stats() -> str:
     """實體解析統計：canonical 總數、aliases 總數、平均合併次數、未解析 triples"""
     result = await to_thread(client.entity_stats)

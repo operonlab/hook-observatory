@@ -204,6 +204,28 @@ Keep your response under 500 words. Write in 繁體中文."""
         return f"Dream reflection failed: {e}"
 
 
+def dream_lint_summary() -> str:
+    """Quick lint summary for dream log — fast SQL checks only."""
+    url = (
+        f"{CORE_API}/kg/lint?space_id=default"
+        "&checks=stale,orphan_entities,dangling_refs,data_gaps"
+    )
+    try:
+        req = urllib.request.Request(  # noqa: S310
+            url,
+            data=b"",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+            summary = data.get("summary", {})
+            total = sum(summary.values())
+            return f"Lint: {total} findings ({summary})"
+    except Exception:
+        return "Lint: unavailable"
+
+
 def dream_phase() -> bool:
     """Execute the dream consolidation phase (dry-run: report only, no mutations)."""
     log("Step 0/5: Dream Consolidation (dry-run)")
@@ -223,9 +245,13 @@ def dream_phase() -> bool:
     # Reflect
     report = dream_reflect(context)
 
+    # Lint summary (lightweight SQL checks)
+    lint_line = dream_lint_summary()
+    log(f"  {lint_line}")
+
     # Report — write to dream log (dry-run, no mutations)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    dream_entry = f"\n{'=' * 60}\n[Dream] {timestamp}\n{'=' * 60}\n{report}\n"
+    dream_entry = f"\n{'=' * 60}\n[Dream] {timestamp}\n{'=' * 60}\n{report}\n\n{lint_line}\n"
 
     try:
         with open(DREAM_LOG, "a") as f:
