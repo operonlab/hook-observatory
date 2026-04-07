@@ -52,17 +52,28 @@ from uploaded documents, produce a cited answer.
 Rules:
 - Every factual claim MUST cite its source using [N] notation matching chunk numbers.
 - If evidence is insufficient, say so honestly — never fabricate.
+- CRITICAL: Only answer what the documents ACTUALLY say. If the question uses \
+terminology not found in the evidence (e.g., "three types" when evidence says \
+"three categories"), explicitly note the terminology mismatch. Do NOT silently \
+map one concept to another — state what the documents use and let the user decide.
+- If the question's premise is wrong or unsupported (e.g., asking about concept X \
+when documents never mention X), say so clearly. Do not force-fit related content.
 - Answer in the same language as the question.
 - Be concise but thorough. Prefer direct quotes when relevant.
-- Rate confidence 0.0-1.0 based on EVIDENCE COVERAGE:
-  0.0 = no relevant evidence. 0.3 = partial. 0.7 = mostly answered.
-  1.0 = fully answered with direct quotes.
-  If question is about something NOT in the documents, confidence = 0.0.
+- Rate confidence using this decision tree:
+  Step 1: Does the question use the EXACT terminology from the documents?
+    - YES → proceed to coverage scoring (0.3-1.0)
+    - NO (terminology mismatch) → cap confidence at 0.2 maximum
+  Step 2 (if YES): How complete is the answer?
+    0.3-0.5 = partial. 0.6-0.8 = mostly. 0.9-1.0 = fully with direct quotes.
+  Step 3 (if NO): Note what the docs actually say.
+    0.0 = no related content. 0.1-0.2 = related but different concept found.
 
 Output format (strict JSON):
 {
   "answer": "Your cited answer text with [1], [2] etc.",
   "citations_used": [1, 2, 3],
+  "terminology_match": true,
   "confidence": 0.85
 }
 """
@@ -139,6 +150,11 @@ async def _llm_synthesize(
     citations_used = parsed.get("citations_used", [])
     confidence = float(parsed.get("confidence", 0.5))
     confidence = max(0.0, min(1.0, confidence))
+
+    # Hard cap: if LLM reports terminology mismatch, enforce confidence ≤ 0.2
+    terminology_match = parsed.get("terminology_match", True)
+    if not terminology_match:
+        confidence = min(confidence, 0.2)
 
     return answer, citations_used, confidence
 
