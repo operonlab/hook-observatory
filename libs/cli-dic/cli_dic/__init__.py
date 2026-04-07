@@ -8,7 +8,17 @@ Used by tmux-relay, maestro, headless wrappers, and session-channel board.
     cmd = entry.headless_cmd("fix the bug", auto_approve=True)
 """
 
-from cli_dic.base import AutoApprove, CLIEntry, ExitBehavior, HeadlessSpec
+from cli_dic.base import (
+    AgentSpec,
+    AutoApprove,
+    CLIEntry,
+    ExitBehavior,
+    HeadlessSpec,
+    HookSpec,
+    InstructionSpec,
+    MCPSpec,
+    SkillSpec,
+)
 from cli_dic.claude_code import CLAUDE_CODE
 from cli_dic.codex_cli import CODEX_CLI
 from cli_dic.gemini_cli import GEMINI_CLI
@@ -18,10 +28,15 @@ __all__ = [
     "CLAUDE_CODE",
     "CODEX_CLI",
     "GEMINI_CLI",
+    "AgentSpec",
     "AutoApprove",
     "CLIEntry",
     "ExitBehavior",
     "HeadlessSpec",
+    "HookSpec",
+    "InstructionSpec",
+    "MCPSpec",
+    "SkillSpec",
     "detect_from_command",
     "get",
     "list_entries",

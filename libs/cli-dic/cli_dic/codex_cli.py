@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import re
 
-from cli_dic.base import AutoApprove, CLIEntry, ExitBehavior, HeadlessSpec
+from cli_dic.base import (
+    AgentSpec,
+    AutoApprove,
+    CLIEntry,
+    ExitBehavior,
+    HeadlessSpec,
+    HookSpec,
+    InstructionSpec,
+    MCPSpec,
+    SkillSpec,
+)
 
 CODEX_CLI = CLIEntry(
     name="codex-cli",
@@ -32,4 +42,24 @@ CODEX_CLI = CLIEntry(
     known_version="0.118.0",
     prompt_pattern=re.compile(r"❯|›|>"),
     process_names=frozenset({"codex"}),
+    # ── Configuration ecosystem ──
+    mcp=MCPSpec(
+        config_format="toml",
+        config_path="config.toml",
+        config_key="mcp_servers",
+        supports_http=True,
+        supports_stdio=True,
+    ),
+    skills=SkillSpec(dir_name="skills", file_name="SKILL.md", format="markdown"),
+    hooks=HookSpec(
+        config_path="config.toml",
+        config_format="toml",
+        events=("notify",),
+    ),
+    instructions=InstructionSpec(
+        global_file="instructions.md",
+        project_file="CODEX.md",
+        rules_dir="rules/",
+    ),
+    agents=AgentSpec(dir_name="agents", file_format="toml"),
 )

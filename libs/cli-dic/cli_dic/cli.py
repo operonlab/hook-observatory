@@ -67,6 +67,12 @@ def _compare(args: argparse.Namespace) -> None:
         "headless": "Headless Mode",
         "auto-approve": "Auto-Approve Flags",
         "model": "Model Selection",
+        "mcp": "MCP Configuration",
+        "hooks": "Hook Events",
+        "skills": "Skill System",
+        "instructions": "Instruction Files",
+        "agents": "Agent Definitions",
+        "config": "Full Config Ecosystem",
     }
     print(f"{title_map.get(aspect, aspect)}:")
 
@@ -80,6 +86,49 @@ def _compare(args: argparse.Namespace) -> None:
             print(f"  {e.name:>15}:  {e.auto_approve.flag}")
         elif aspect == "model":
             print(f"  {e.name:>15}:  {e.model_flag} (default: {e.default_model})")
+        elif aspect == "mcp":
+            m = e.mcp
+            print(
+                f"  {e.name:>15}:  {m.config_path} ({m.config_format})"
+                f"  key={m.config_key}  http={m.supports_http}"
+            )
+        elif aspect == "hooks":
+            h = e.hooks
+            print(f"  {e.name:>15}:  {h.config_path} ({h.config_format})")
+            print(f"  {'':>15}   events: {', '.join(h.events)}")
+        elif aspect == "skills":
+            s = e.skills
+            print(f"  {e.name:>15}:  {e.config_dir}{s.dir_name}/{s.file_name}")
+        elif aspect == "instructions":
+            i = e.instructions
+            print(
+                f"  {e.name:>15}:  global={i.global_file}"
+                f"  project={i.project_file}  rules={i.rules_dir or 'N/A'}"
+            )
+        elif aspect == "agents":
+            a = e.agents
+            print(f"  {e.name:>15}:  {e.config_dir}{a.dir_name}/*.{a.file_format}")
+        elif aspect == "config":
+            _print_config_summary(e)
+
+
+def _print_config_summary(e) -> None:
+    """Print full config ecosystem for one CLI."""
+    print(f"  {e.name:>15}:")
+    m = e.mcp
+    print(
+        f"    MCP:          {m.config_path} ({m.config_format}) key={m.config_key}"
+        f"  http={m.supports_http}"
+    )
+    h = e.hooks
+    print(f"    Hooks:        {h.config_path} ({h.config_format})  {len(h.events)} events")
+    s = e.skills
+    print(f"    Skills:       {e.config_dir}{s.dir_name}/{s.file_name}")
+    i = e.instructions
+    print(f"    Instructions: global={i.global_file}  project={i.project_file}")
+    a = e.agents
+    fmt = f"{e.config_dir}{a.dir_name}/*.{a.file_format}" if a.dir_name else "N/A"
+    print(f"    Agents:       {fmt}")
 
 
 def _check(_args: argparse.Namespace) -> None:
@@ -109,12 +158,35 @@ def main() -> None:
         "section",
         nargs="?",
         default="all",
-        choices=["all", "exit", "headless", "auto-approve", "model"],
+        choices=[
+            "all",
+            "exit",
+            "headless",
+            "auto-approve",
+            "model",
+            "mcp",
+            "hooks",
+            "skills",
+            "instructions",
+            "agents",
+        ],
     )
 
     sp_cmp = sub.add_parser("compare", help="Compare CLIs side-by-side")
     sp_cmp.add_argument(
-        "aspect", choices=["exit", "headless", "auto-approve", "model"]
+        "aspect",
+        choices=[
+            "exit",
+            "headless",
+            "auto-approve",
+            "model",
+            "mcp",
+            "hooks",
+            "skills",
+            "instructions",
+            "agents",
+            "config",
+        ],
     )
 
     sub.add_parser("check", help="Health check — version + staleness")

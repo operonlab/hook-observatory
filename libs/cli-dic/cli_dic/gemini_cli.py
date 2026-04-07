@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import re
 
-from cli_dic.base import AutoApprove, CLIEntry, ExitBehavior, HeadlessSpec
+from cli_dic.base import (
+    AgentSpec,
+    AutoApprove,
+    CLIEntry,
+    ExitBehavior,
+    HeadlessSpec,
+    HookSpec,
+    InstructionSpec,
+    MCPSpec,
+    SkillSpec,
+)
 
 GEMINI_CLI = CLIEntry(
     name="gemini-cli",
@@ -30,4 +40,33 @@ GEMINI_CLI = CLIEntry(
     known_version="0.36.0",
     prompt_pattern=re.compile(r"❯"),
     process_names=frozenset({"gemini"}),
+    # ── Configuration ecosystem ──
+    mcp=MCPSpec(
+        config_format="json",
+        config_path="settings.json",
+        config_key="mcpServers",
+        supports_http=False,
+        supports_stdio=True,
+    ),
+    skills=SkillSpec(dir_name="skills", file_name="SKILL.md", format="markdown"),
+    hooks=HookSpec(
+        config_path="settings.json",
+        config_format="json",
+        events=(
+            "AfterAgent",
+            "AfterTool",
+            "BeforeAgent",
+            "BeforeTool",
+            "Notification",
+            "PreCompress",
+            "SessionEnd",
+            "SessionStart",
+        ),
+    ),
+    instructions=InstructionSpec(
+        global_file="GEMINI.md",
+        project_file="GEMINI.md",
+        rules_dir="",
+    ),
+    agents=AgentSpec(dir_name="agents", file_format="md"),
 )

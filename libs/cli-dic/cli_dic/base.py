@@ -41,6 +41,52 @@ class AutoApprove:
 
 
 @dataclass(frozen=True)
+class MCPSpec:
+    """How this CLI configures MCP servers."""
+
+    config_format: str = ""  # "json" | "toml" | ""
+    config_path: str = ""  # relative to config_dir, e.g. "settings.json"
+    config_key: str = ""  # JSON/TOML key, e.g. "mcpServers" | "mcp_servers"
+    supports_http: bool = False  # can connect to HTTP MCP endpoints
+    supports_stdio: bool = True  # can launch stdio MCP processes
+
+
+@dataclass(frozen=True)
+class SkillSpec:
+    """How this CLI discovers and loads skills."""
+
+    dir_name: str = "skills"  # relative to config_dir
+    file_name: str = "SKILL.md"  # skill definition file
+    format: str = "markdown"  # "markdown" (YAML frontmatter)
+
+
+@dataclass(frozen=True)
+class HookSpec:
+    """How this CLI supports lifecycle hooks."""
+
+    config_path: str = ""  # where hooks are configured
+    config_format: str = ""  # "json" | "toml"
+    events: tuple[str, ...] = ()  # supported hook event names
+
+
+@dataclass(frozen=True)
+class InstructionSpec:
+    """How this CLI loads global/project instructions."""
+
+    global_file: str = ""  # e.g. "CLAUDE.md", "instructions.md", "GEMINI.md"
+    project_file: str = ""  # e.g. "CLAUDE.md" in project root
+    rules_dir: str = ""  # e.g. "rules/" for additional rule files
+
+
+@dataclass(frozen=True)
+class AgentSpec:
+    """How this CLI defines sub-agents."""
+
+    dir_name: str = ""  # e.g. "agents/"
+    file_format: str = ""  # "md" | "toml"
+
+
+@dataclass(frozen=True)
 class CLIEntry:
     """Complete descriptor for a coding CLI tool."""
 
@@ -53,6 +99,13 @@ class CLIEntry:
     # ── Paths ──
     config_dir: str = ""
     install_command: str = ""
+
+    # ── Configuration ecosystem ──
+    mcp: MCPSpec = field(default_factory=MCPSpec)
+    skills: SkillSpec = field(default_factory=SkillSpec)
+    hooks: HookSpec = field(default_factory=HookSpec)
+    instructions: InstructionSpec = field(default_factory=InstructionSpec)
+    agents: AgentSpec = field(default_factory=AgentSpec)
 
     # ── Interactive mode ──
     exit_behavior: ExitBehavior = field(default_factory=ExitBehavior)

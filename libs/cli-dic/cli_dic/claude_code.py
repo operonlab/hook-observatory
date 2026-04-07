@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import re
 
-from cli_dic.base import AutoApprove, CLIEntry, ExitBehavior, HeadlessSpec
+from cli_dic.base import (
+    AgentSpec,
+    AutoApprove,
+    CLIEntry,
+    ExitBehavior,
+    HeadlessSpec,
+    HookSpec,
+    InstructionSpec,
+    MCPSpec,
+    SkillSpec,
+)
 
 CLAUDE_CODE = CLIEntry(
     name="claude-code",
@@ -33,4 +43,35 @@ CLAUDE_CODE = CLIEntry(
     known_version="2.1.92",
     prompt_pattern=re.compile(r"❯"),
     process_names=frozenset({"claude"}),
+    # ── Configuration ecosystem ──
+    mcp=MCPSpec(
+        config_format="json",
+        config_path="settings.json",
+        config_key="mcpServers",
+        supports_http=True,
+        supports_stdio=True,
+    ),
+    skills=SkillSpec(dir_name="skills", file_name="SKILL.md", format="markdown"),
+    hooks=HookSpec(
+        config_path="settings.json",
+        config_format="json",
+        events=(
+            "Notification",
+            "PostToolUse",
+            "PreCompact",
+            "PreToolUse",
+            "SessionEnd",
+            "SessionStart",
+            "Stop",
+            "SubagentStart",
+            "SubagentStop",
+            "UserPromptSubmit",
+        ),
+    ),
+    instructions=InstructionSpec(
+        global_file="CLAUDE.md",
+        project_file="CLAUDE.md",
+        rules_dir="rules/",
+    ),
+    agents=AgentSpec(dir_name="agents", file_format="md"),
 )
