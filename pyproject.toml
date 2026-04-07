@@ -15,6 +15,7 @@ members = [
     "libs/tmux-lib",
     "libs/cli-dic",
     "libs/text-ops",
+    "libs/kg-ops",
 ]
 
 [tool.uv]
@@ -28,6 +29,7 @@ workshop-video-ops = { workspace = true }
 workshop-tmux-lib = { workspace = true }
 workshop-cli-dic = { workspace = true }
 workshop-text-ops = { workspace = true }
+workshop-kg-ops = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -37,12 +39,13 @@ dev = [
     "workshop-video-ops",
     "workshop-tmux-lib",
     "workshop-cli-dic",
+    "workshop-kg-ops",
 ]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["core/src", "mcp", "scripts", "libs/sdk-client", "libs/audio-ops", "libs/image-ops", "libs/video-ops", "libs/tmux-lib", "libs/cli-dic", "libs/text-ops"]
+src = ["core/src", "mcp", "scripts", "libs/sdk-client", "libs/audio-ops", "libs/image-ops", "libs/video-ops", "libs/tmux-lib", "libs/cli-dic", "libs/text-ops", "libs/kg-ops"]
 extend-exclude = [".claude/worktrees", ".worktrees"]
 
 [tool.ruff.lint]

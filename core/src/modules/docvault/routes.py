@@ -249,6 +249,45 @@ async def upload_document(
     except Exception:
         logger.exception("Qdrant indexing failed for document %s", doc_instance.id)
 
+    # 11. Extract KG entities + triples (best-effort, async)
+    try:
+        from .ops.chunk_entity import ChunkEntityOp
+
+        kg_ctx = {
+            "chunks": chunks,
+            "document_id": doc_instance.id,
+            "space_id": space_id,
+            "db": db,
+        }
+        await ChunkEntityOp()(kg_ctx)
+        logger.info(
+            "KG extraction: %d entities, %d triples for document %s",
+            kg_ctx.get("entity_count", 0),
+            kg_ctx.get("triple_count", 0),
+            doc_instance.id,
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("KG extraction failed for document %s", doc_instance.id)
+        await db.rollback()
+
+    # 12. Community clustering + L2 summaries (best-effort, fire-and-forget)
+    try:
+        from .ops.community_index import CommunityIndexOp
+
+        comm_ctx = {"space_id": space_id, "db": db, "document_id": doc_instance.id}
+        await CommunityIndexOp()(comm_ctx)
+        logger.info(
+            "Community indexing: %d communities, %d summaries for space %s",
+            comm_ctx.get("community_count", 0),
+            comm_ctx.get("summary_count", 0),
+            space_id,
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("Community indexing failed for space %s", space_id)
+        await db.rollback()
+
     return document_service.to_response(doc_instance)
 
 
@@ -443,7 +482,7 @@ async def qa_question(
     from .models import DocumentChunk
     from .ops.cited_answer import CitedAnswerOp
     from .ops.fan_out import FanOutOp
-    from .ops.hybrid_rrf_search import HybridRRFSearchOp
+    from .ops.graph_search import GraphSearchOp
     from .ops.intent_router import IntentRouterOp
     from .ops.jina_rerank import JinaRerankOp
     from .ops.merge import MergeOp
@@ -451,7 +490,7 @@ async def qa_question(
     from .schemas import CitationRef
 
     # ── 1. Intent routing ──
-    ctx: dict = {"query": body.question, "space_id": space_id, "top_k": body.top_k}
+    ctx: dict = {"query": body.question, "space_id": space_id, "top_k": body.top_k, "db": db}
     await IntentRouterOp()(ctx)
     layer_plan = ctx.get("layer_plan", {})
     pipeline = layer_plan.get("pipeline", "A")
@@ -468,7 +507,7 @@ async def qa_question(
         await FanOutOp()(ctx)
         await MergeOp()(ctx)
     else:
-        await HybridRRFSearchOp()(ctx)
+        await GraphSearchOp()(ctx)
 
     # ── 3a. Neighbor expansion ──
     # For scattered-wisdom queries, the answer spans multiple non-adjacent sections.

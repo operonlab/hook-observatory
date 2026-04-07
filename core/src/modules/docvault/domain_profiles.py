@@ -69,7 +69,7 @@ DOMAIN_PROFILES: dict[str, dict[str, str]] = {
     "default": {
         "chunk": "ContextualChunkOp",
         "index": "FlatIndexOp",
-        "search": "HybridRRFSearchOp",
+        "search": "GraphSearchOp",
         "rerank": "JinaRerankOp",
         "synth": "CitedAnswerOp",
     },
@@ -110,7 +110,10 @@ _OP_REGISTRY: dict[str, type] | None = None
 
 def _build_registry() -> dict[str, type]:
     """Build the Op class registry (lazy, called once)."""
+    from .ops.chunk_entity import ChunkEntityOp
+    from .ops.community_index import CommunityIndexOp
     from .ops.contradiction_aware import ContradictionAwareOp
+    from .ops.graph_search import GraphSearchOp
     from .ops.hierarchical_chunk import HierarchicalChunkOp
     from .ops.strict_cite import StrictCiteOp
 
@@ -119,17 +122,14 @@ def _build_registry() -> dict[str, type]:
         "HierarchicalChunkOp": HierarchicalChunkOp,
         "StrictCiteOp": StrictCiteOp,
         "ContradictionAwareOp": ContradictionAwareOp,
-        # Stubs — will be replaced with real implementations in later phases
-        # "ContextualChunkOp": ...,
-        # "FlatIndexOp": ...,
-        # "HybridRRFSearchOp": ...,
-        # "JinaRerankOp": ...,
-        # "CitedAnswerOp": ...,
-        # Phase 6+ (not yet implemented)
+        # KG layer — Phase 2-4
+        "GraphSearchOp": GraphSearchOp,
+        "ChunkEntityOp": ChunkEntityOp,
+        "CommunityIndexOp": CommunityIndexOp,
+        # Stubs — not yet implemented
         # "LateChunkOp": ...,
         # "RAPTORIndexOp": ...,
         # "DeepReadSearchOp": ...,
-        # "GraphSearchOp": ...,
         # "HybridDynamicAlphaOp": ...,
         # "ColBERTRerankOp": ...,
     }
