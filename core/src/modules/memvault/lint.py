@@ -68,7 +68,16 @@ async def check_contradictions(
     from src.shared.search_types import SearchConfig
 
     if not await qdrant_available():
-        return []
+        return [
+            LintFinding(
+                check="contradictions",
+                severity="warning",
+                entity_id="",
+                entity_type="system",
+                message="Qdrant unavailable — contradiction check skipped",
+                suggested_action="none",
+            )
+        ]
 
     # Sample recent valid triples
     q = (
@@ -188,6 +197,7 @@ async def check_orphan_entities(
     )
     q = select(EntityCanonical).where(
         EntityCanonical.space_id == space_id,
+        EntityCanonical.deleted_at.is_(None),
         EntityCanonical.id.notin_(subj_ids),
         EntityCanonical.id.notin_(obj_ids),
     )
@@ -413,14 +423,15 @@ async def remediate_stale(
     for f in findings:
         if f.check != "stale" or not f.entity_id:
             continue
-        if not dry_run:
-            await db.execute(
-                update(Triple)
-                .where(Triple.id == f.entity_id)
-                .values(invalid_at=datetime.now(UTC), invalidation_reason="stale")
-            )
+        if dry_run:
+            continue
+        await db.execute(
+            update(Triple)
+            .where(Triple.id == f.entity_id)
+            .values(invalid_at=datetime.now(UTC), invalidation_reason="stale")
+        )
         count += 1
-    if not dry_run and count > 0:
+    if count > 0:
         await db.commit()
     return count
 
@@ -436,11 +447,12 @@ async def remediate_orphans(
     for f in findings:
         if f.check != "orphan_entities" or not f.entity_id:
             continue
-        if not dry_run:
-            await db.execute(
-                delete(EntityCanonical).where(EntityCanonical.id == f.entity_id)
-            )
+        if dry_run:
+            continue
+        await db.execute(
+            delete(EntityCanonical).where(EntityCanonical.id == f.entity_id)
+        )
         count += 1
-    if not dry_run and count > 0:
+    if count > 0:
         await db.commit()
     return count

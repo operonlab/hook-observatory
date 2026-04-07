@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.shared.deps import get_db, require_permission
-from src.shared.errors import NotFoundError
+from src.shared.errors import ForbiddenError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 
 from .embedding import get_embedding, get_embeddings_batch
@@ -901,6 +901,14 @@ async def lint_knowledge_graph(
     _user: dict = require_permission("memvault.read"),
 ):
     """Knowledge graph health check — detect contradictions, stale triples, orphans, etc."""
+    if fix and not dry_run:
+        from src.modules.auth.permissions import has_permission
+
+        if not has_permission(_user.get("role", "guest"), "memvault.write"):
+            raise ForbiddenError(
+                "Permission denied: memvault.write required for fix with dry_run=False",
+                code="memvault.forbidden",
+            )
     check_list = None if checks == "all" else [c.strip() for c in checks.split(",")]
     report = await run_lint(db, space_id, checks=check_list)
 
