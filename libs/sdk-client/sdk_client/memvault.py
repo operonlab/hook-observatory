@@ -572,6 +572,18 @@ class MemvaultClient(BaseClient):
             "profile": self._get("/profile"),
         }
 
+    def dream(
+        self,
+        dry_run: bool = True,
+        force: bool = False,
+    ) -> dict:
+        """Run dream consolidation. POST /dream"""
+        params: dict = {
+            "dry_run": str(dry_run).lower(),
+            "force": str(force).lower(),
+        }
+        return self._post("/dream", params=params, timeout=180)
+
     def health(self) -> bool:
         """Check API connectivity. Returns True if API responds."""
         try:

@@ -65,11 +65,6 @@ COUNTER_FILE = HOME / ".memvault-triple-counter"
 CORE_API = "http://localhost:10000/api/memvault"
 DOMAIN_THRESHOLD = 10
 
-# ── Dream Phase Configuration ──────────────────────────────────
-LITELLM_URL = "http://localhost:4000/v1/chat/completions"
-DREAM_LOG = LOG_DIR / "dream.log"
-DREAM_MODEL = "haiku"  # Via LiteLLM proxy
-
 # Extend PATH
 os.environ["PATH"] = (
     f"/opt/homebrew/bin:{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:"
@@ -120,150 +115,6 @@ def api_post(url: str, data: dict) -> int | None:
         return None
 
 
-def dream_orient() -> dict:
-    """Orient: Fetch recent memories and attitude facts."""
-    result = {"attitudes": [], "blocks": [], "triples_count": 0}
-
-    # Recent attitude facts (last 7 days)
-    url = f"{CORE_API}/kg/attitudes?space_id=default&page_size=50"
-    data = api_get(url)
-    if data and isinstance(data, dict):
-        result["attitudes"] = data.get("items", [])
-
-    # Recent memory blocks
-    url = f"{CORE_API}/blocks?space_id=default&page_size=30&sort=-created_at"
-    data = api_get(url)
-    if data and isinstance(data, dict):
-        result["blocks"] = data.get("items", [])
-
-    # Triple count
-    url = f"{CORE_API}/kg/triples?space_id=default&page_size=1"
-    data = api_get(url)
-    if data and isinstance(data, dict):
-        result["triples_count"] = data.get("total", 0)
-
-    return result
-
-
-def dream_reflect(context: dict) -> str:
-    """Reflect: LLM reviews memory state and identifies issues."""
-    attitudes_summary = "\n".join(
-        f"- [{a.get('category', '')}] {a.get('fact', '')} "
-        f"(confidence: {a.get('confidence', 0):.2f})"
-        for a in context["attitudes"][:30]
-    )
-    blocks_summary = "\n".join(
-        f"- [{b.get('block_type', '')}] {b.get('topic', 'untitled')}: "
-        f"{(b.get('content', ''))[:150]}"
-        for b in context["blocks"][:20]
-    )
-
-    prompt = f"""You are performing a dream — a reflective pass over memory state.
-
-## Current Memory State
-- {len(context["attitudes"])} attitude facts
-- {len(context["blocks"])} recent memory blocks
-- {context["triples_count"]} total knowledge triples
-
-## Recent Attitude Facts
-{attitudes_summary or "(none)"}
-
-## Recent Memory Blocks
-{blocks_summary or "(none)"}
-
-## Your Task
-Review the above and identify:
-1. **Contradictions**: Any facts that contradict each other
-2. **Stale entries**: Facts that may no longer be true (old dates, deprecated tools)
-3. **Merge candidates**: Multiple entries on the same topic to consolidate
-4. **Confidence anomalies**: Scores that seem too high or too low
-
-Output a concise report in markdown. If nothing stands out, say "No issues found."
-Keep your response under 500 words. Write in 繁體中文."""
-
-    try:
-        payload = json.dumps(
-            {
-                "model": DREAM_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 800,
-                "temperature": 0.3,
-            }
-        ).encode()
-
-        req = urllib.request.Request(
-            LITELLM_URL,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read())
-            return result["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"Dream reflection failed: {e}"
-
-
-def dream_lint_summary() -> str:
-    """Quick lint summary for dream log — fast SQL checks only."""
-    url = (
-        f"{CORE_API}/kg/lint?space_id=default"
-        "&checks=stale,orphan_entities,dangling_refs,data_gaps"
-    )
-    try:
-        req = urllib.request.Request(  # noqa: S310
-            url,
-            data=b"",
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-            data = json.loads(resp.read())
-            summary = data.get("summary", {})
-            total = sum(summary.values())
-            return f"Lint: {total} findings ({summary})"
-    except Exception:
-        return "Lint: unavailable"
-
-
-def dream_phase() -> bool:
-    """Execute the dream consolidation phase (dry-run: report only, no mutations)."""
-    log("Step 0/5: Dream Consolidation (dry-run)")
-
-    # Orient
-    context = dream_orient()
-    if not context["attitudes"] and not context["blocks"]:
-        log("  Dream: No recent memories to review, skipping")
-        return True
-
-    log(
-        f"  Orient: {len(context['attitudes'])} attitudes, "
-        f"{len(context['blocks'])} blocks, "
-        f"{context['triples_count']} triples"
-    )
-
-    # Reflect
-    report = dream_reflect(context)
-
-    # Lint summary (lightweight SQL checks)
-    lint_line = dream_lint_summary()
-    log(f"  {lint_line}")
-
-    # Report — write to dream log (dry-run, no mutations)
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    dream_entry = f"\n{'=' * 60}\n[Dream] {timestamp}\n{'=' * 60}\n{report}\n\n{lint_line}\n"
-
-    try:
-        with open(DREAM_LOG, "a") as f:
-            f.write(dream_entry)
-        log(f"  Dream report written to {DREAM_LOG}")
-    except Exception as e:
-        log(f"  Dream log write failed: {e}")
-
-    log("Step 0 OK (dry-run — report only)")
-    return True
-
-
 def main() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -278,8 +129,7 @@ def main() -> None:
 
     log("========== Daily synthesis started ==========")
 
-    # Step 0: Dream Consolidation (dry-run — report only, no mutations)
-    dream_phase()
+    # Step 0: Dream Consolidation — moved to dedicated ws_memvault_dream.py runner (4AM daily)
 
     # Step 1: Leiden community detection + LLM summaries (synthesis_runner.py)
     # This also triggers Qdrant auto-indexing for L1 communities and L2 summaries

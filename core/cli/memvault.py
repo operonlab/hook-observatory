@@ -460,6 +460,105 @@ def cmd_health(client: MemvaultClient, args: argparse.Namespace) -> None:
         print(f"  Memvault API healthy ({client.base_url})")
 
 
+def cmd_dream(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Run dream consolidation (default: dry-run)."""
+    data = client.dream(
+        dry_run=not args.apply,
+        force=args.force,
+    )
+    if json_out(data, args):
+        return
+
+    if data.get("skipped"):
+        orient = data.get("phase_orient", {})
+        print(
+            f"  Dream skipped — gate not met "
+            f"(hours={orient.get('hours_since', '?')}, "
+            f"sessions={orient.get('sessions_since', '?')})"
+        )
+        return
+
+    mode = "DRY-RUN" if data.get("dry_run") else "APPLIED"
+    print(f"\n  Dream Consolidation Report [{mode}]")
+    print("  " + "=" * 50)
+
+    # Orient
+    orient = data.get("phase_orient", {})
+    print("\n  Phase 1 — Orient")
+    print(f"    Blocks: {orient.get('total_blocks', 0)}")
+    hrs = orient.get("hours_since", "?")
+    sess = orient.get("sessions_since", "?")
+    print(f"    Since last dream: {hrs}h, {sess} sessions")
+    print(f"    Trigger: {orient.get('trigger', '?')}")
+
+    # Signal
+    signal = data.get("phase_signal", {})
+    print("\n  Phase 2 — Gather Signal")
+    print(f"    New blocks: {signal.get('total_new', 0)}")
+    print(f"    Contradictions found: {signal.get('contradictions_found', 0)}")
+    print(f"    Resolvable: {signal.get('contradictions_resolvable', 0)}")
+
+    # Reflect
+    reflect = data.get("phase_reflect", {})
+    if reflect and not reflect.get("error"):
+        score = reflect.get("health_score", 0)
+        print(f"\n  Phase 2.5 — Reflect (health: {score:.0%})")
+        insights = reflect.get("insights", [])
+        if insights:
+            print("    Insights:")
+            for i in insights[:5]:
+                print(f"      - {i}")
+        gaps = reflect.get("knowledge_gaps", [])
+        if gaps:
+            print("    Knowledge gaps:")
+            for g in gaps[:3]:
+                print(f"      - {g}")
+        merge = reflect.get("merge_candidates", [])
+        if merge:
+            print(f"    Merge candidates: {len(merge)}")
+        attitudes = reflect.get("suggested_attitudes", [])
+        if attitudes:
+            print("    Suggested attitudes:")
+            for a in attitudes[:3]:
+                print(f"      - {a}")
+        stale = reflect.get("stale_candidates", [])
+        if stale:
+            print(f"    Stale candidates: {len(stale)}")
+    elif reflect.get("error"):
+        print(f"\n  Phase 2.5 — Reflect: SKIPPED ({reflect['error']})")
+
+    # Consolidate
+    cons = data.get("phase_consolidate", {})
+    print("\n  Phase 3 — Consolidate")
+    print(f"    Contradictions resolved: {cons.get('contradictions_resolved', 0)}")
+    print(f"    Contradictions coexist: {cons.get('contradictions_coexist', 0)}")
+    print(f"    Blocks merged: {cons.get('blocks_merged', 0)}")
+    print(f"    Content normalized: {cons.get('content_normalized', 0)}")
+    norm_changes = cons.get("norm_changes", {})
+    if norm_changes:
+        parts = [f"{k}={v}" for k, v in norm_changes.items()]
+        print(f"    Norm breakdown: {', '.join(parts)}")
+
+    # Prune
+    prune = data.get("phase_prune", {})
+    curate = prune.get("curate", {})
+    print("\n  Phase 4 — Prune")
+    print(f"    Blocks soft-deleted: {curate.get('blocks_soft_deleted', 0)}")
+    print(f"    Orphan triples cleaned: {curate.get('orphan_triples_cleaned', 0)}")
+    print(f"    Stale remediated: {prune.get('stale_remediated', 0)}")
+    print(f"    Orphans remediated: {prune.get('orphans_remediated', 0)}")
+    print(f"    Lint: {prune.get('lint_summary', {})}")
+
+    # Errors
+    errors = data.get("errors", [])
+    if errors:
+        print(f"\n  Errors ({len(errors)}):")
+        for e in errors:
+            print(f"    - {e}")
+
+    print()
+
+
 def cmd_lint(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Knowledge graph lint checks."""
     data = client.lint(
@@ -1271,6 +1370,11 @@ def build_parser() -> argparse.ArgumentParser:
     # health
     sub.add_parser("health", parents=[common], help="API health check")
 
+    # dream
+    dream_p = sub.add_parser("dream", parents=[common], help="Run dream consolidation")
+    dream_p.add_argument("--apply", action="store_true", help="Apply changes (default: dry-run)")
+    dream_p.add_argument("--force", action="store_true", help="Skip dual-gate trigger check")
+
     # lint
     lint_p = sub.add_parser("lint", parents=[common], help="Knowledge graph lint checks")
     lint_p.add_argument("--checks", default="all", help="Comma-separated checks or 'all'")
@@ -1689,6 +1793,7 @@ COMMAND_MAP = {
     "attitude": cmd_attitude,
     "health": cmd_health,
     "lint": cmd_lint,
+    "dream": cmd_dream,
     # Blocks CRUD
     "blocks": cmd_blocks,
     "block": cmd_block_get,

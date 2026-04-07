@@ -120,6 +120,8 @@ class MemvaultEvents:
     KNOWLEDGE_CURATED = "memvault.knowledge.curated"
     # Slow Thinker prefetch trigger
     QUERY_COMPLETED = "memvault.query.completed"
+    # Dream Loop consolidation
+    DREAM_COMPLETED = "memvault.dream.completed"
 
 
 class SkillpathEvents:

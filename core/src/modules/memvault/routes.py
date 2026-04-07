@@ -24,13 +24,13 @@ from .schemas import (
     KnowledgeDomainCreate,
     KnowledgeDomainResponse,
     KnowledgeDomainUpdate,
-    MemoryInjectResponse,
-    MemoryInspectResponse,
     MemoryBlockCreate,
-    MemoryQueryRequest,
-    MemoryQueryResponse,
     MemoryBlockResponse,
     MemoryBlockUpdate,
+    MemoryInjectResponse,
+    MemoryInspectResponse,
+    MemoryQueryRequest,
+    MemoryQueryResponse,
     ProfileScoreResponse,
     ProfileScoreUpdate,
     SearchFeedbackCreate,
@@ -825,3 +825,27 @@ async def thaw_frozen_block(
         "tier": "frozen",
         "frozen_at": frozen.frozen_at,
     }
+
+
+# ======================== Dream Loop ========================
+
+
+@router.post("/dream", summary="Run dream consolidation")
+async def run_dream_consolidation(
+    space_id: str = Query("default"),
+    dry_run: bool = Query(True),
+    force: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Execute the Dream Loop: Orient → Gather Signal → Consolidate → Prune.
+
+    Default is dry-run mode (no mutations). Set dry_run=false to apply changes.
+    The dual-gate trigger (24h + 5 sessions) can be bypassed with force=true.
+    """
+    from .dream import run_dream
+
+    report = await run_dream(db, space_id, dry_run=dry_run, force=force)
+    if not dry_run and not report.skipped:
+        await db.commit()
+    return report.to_dict()
