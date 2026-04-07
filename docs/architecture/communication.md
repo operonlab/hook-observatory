@@ -151,7 +151,7 @@ import httpx
 
 async def request_transcription(audio_url: str, user_id: str):
     async with httpx.AsyncClient() as client:
-        resp = await client.post("http://localhost:8831/transcribe", json={
+        resp = await client.post("http://localhost:10201/transcribe", json={  # stt station
             "audio_url": audio_url,
             "user_id": user_id,
         })

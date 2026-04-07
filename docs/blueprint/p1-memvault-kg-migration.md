@@ -407,7 +407,7 @@ V2 適配：
 | V1 文件 | 處理方式 |
 |---------|---------|
 | `docs/v2-schema.md` | 本文件取代（V2 schema 已在 §2 定義） |
-| `docs/three-layer-redesign.md` | 歸檔至 `~/workshop/docs/reference/memvault-kg-research.md`（研究基礎，保留參考價值） |
+| `docs/three-layer-redesign.md` | 歸檔至 `~/workshop/docs/archive/memvault-kg-research.md`（研究基礎，保留參考價值） |
 
 ---
 
@@ -450,7 +450,7 @@ V2 適配：
 | 4.1 | V1 資料遷移腳本 | `mcp/memvault/scripts/migrate-v1-kg.py` | After Phase 2 |
 | 4.2 | 執行遷移 + 驗證 | Row count + 抽樣比對 | After 4.1 |
 | 4.3 | Cascade recall E2E 測試 | 真實 query 驗證 | After 4.2 |
-| 4.4 | 歸檔 V1 設計文件 | `docs/reference/memvault-kg-research.md` | Yes |
+| 4.4 | 歸檔 V1 設計文件 | `docs/archive/memvault-kg-research.md` | Yes |
 
 ### Phase 5：V1 未完成項目 ✅ 完成（2026-02-26）
 

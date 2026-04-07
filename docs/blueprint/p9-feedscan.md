@@ -1,6 +1,9 @@
 # P9 — Feedscan（社群搜尋管線）
 
-> 狀態：**規劃中** | 優先級：待排定 | 靈感來源：[mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill)
+> **Status**: ❌ ABANDONED (2026-04-05)
+> **Note**: "feedscan" 模組未實作。社群搜尋功能已整合至 `intelflow` 模組（報告搜尋 + 主題追蹤），不再需要獨立模組。
+>
+> _原始狀態：規劃中 | 優先級：待排定 | 靈感來源：[mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill)_
 
 ## 動機
 

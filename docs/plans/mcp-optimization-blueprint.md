@@ -1,8 +1,11 @@
 # MCP Optimization Blueprint
 
-> 4+ Claude Code sessions x 17 MCP servers = 72+ processes (measured 46 MCP-related processes from single session)
-> 22 MCP servers exist in `mcp/`, 153 total tools; Claude Code loads 17 servers (~116 tools)
-> Goal: Reduce process count 4-10x while maintaining full tool access
+> **Status**: ✅ COMPLETED — Layer 0 + Layer 1b (2026-03-15)
+> **Outcome**: mcpproxy-go v0.20.2 部署完成，72+ processes → ~20 shared；mcp-profile.sh 可切換 profile；Layer 1a (semantic filter) 與 Layer 2 (long-term) 保留為未來選項
+>
+> _Original problem: 4+ Claude Code sessions x 17 MCP servers = 72+ processes_
+> _22 MCP servers exist in `mcp/`, 153 total tools; Claude Code loads 17 servers (~116 tools)_
+> _Goal: Reduce process count 4-10x while maintaining full tool access_
 
 ---
 

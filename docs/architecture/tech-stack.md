@@ -101,7 +101,7 @@ PostgreSQL Instance
 - **版本**: 最新 (自託管)
 - **部署**: 需要 Docker 容器 + SSL/網域
 - **授權**: Apache 2.0
-- **連接埠**: 8830 (即時服務)
+- **連接埠**: 未部署（LiveKit 規劃中，尚未註冊至 port_registry）
 
 ```
 Browser (React SDK)

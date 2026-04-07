@@ -68,7 +68,7 @@ com.workshop.{service-name}[-{variant}].plist
 
 | plist | 服務 | 類型 |
 |-------|------|------|
-| `com.workshop.core.plist` | Core Monolith (port 8800) | 常駐服務 |
+| `com.workshop.core.plist` | Core Monolith (port 10000) | 常駐服務 |
 | `com.workshop.sentinel.plist` | Sentinel (port 4101) | 常駐服務 |
 | `com.workshop.system-monitor-weekly.plist` | 週報生成 | 定時任務 |
 | `com.workshop.system-monitor-monthly.plist` | 月報生成 | 定時任務 |
@@ -93,7 +93,7 @@ com.workshop.{service-name}[-{variant}].plist
         <string>--host</string>
         <string>127.0.0.1</string>
         <string>--port</string>
-        <string>8800</string>
+        <string>10000</string>
     </array>
 
     <key>WorkingDirectory</key>
@@ -281,7 +281,7 @@ async def initialize_schedules(event):
 | PostgreSQL | Docker (`unless-stopped`) | 5432 | ✅ | ✅ |
 | Redis | Docker (`unless-stopped`) | 6379 | ✅ | ✅ |
 | LGTM | Docker (`unless-stopped`) | 3000/4317/4318 | ✅ | ✅ |
-| Core Monolith | launchd (`KeepAlive`) | 8800 | ✅ | ✅ |
+| Core Monolith | launchd (`KeepAlive`) | 10000 | ✅ | ✅ |
 | Sentinel | launchd (`KeepAlive`) | 4101 | ✅ | ✅ |
 | Agent Metrics | launchd (`KeepAlive`) | 8795 | ✅ | ✅ |
 | Nginx | launchd (系統自帶) | 80/443 | ✅ | ✅ |

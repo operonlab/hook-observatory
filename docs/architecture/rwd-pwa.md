@@ -64,9 +64,12 @@ translated_at: 2026-02-23
 
 | 資產 | 策略 | 原理說明 |
 |-------|----------|-----------|
-| App shell (HTML/CSS/JS) | **Cache-first** | 即時載入，在背景更新 |
-| API 回應 | **Network-first**, 快取備援 | 優先取得最新數據 |
-| 靜態資產 (圖片、字型) | **Cache-first**, stale-while-revalidate | 極少變動 |
+| App shell (HTML/CSS/JS) | **HTTP Cache + content-hash** | Rsbuild 產生帶 hash 的靜態檔，Nginx Cache-Control 管理 |
+| Push 通知 | **Event-Driven** | sw.js 僅處理 push + notificationclick 事件 |
+| API 回應 | **Network-only** | 每次從伺服器取得最新數據（無離線快取） |
+| 靜態資產 (圖片、字型) | **HTTP Cache** | 瀏覽器 HTTP Cache-Control 管理 |
+
+> **Note (2026-04)**: 目前 `workbench/public/sw.js` 是 push-notification-only，安裝時主動清除所有 cache。完整離線 Cache-first 策略尚未實作。
 
 ### HTML 要求
 
@@ -85,9 +88,9 @@ translated_at: 2026-02-23
 
 ### 離線行為
 
-- App shell 從快取載入（即時）
-- 網路不可用時顯示離線指示器
-- 將變更放入佇列，待重新連線後重播（未來功能）
+- 目前無離線快取（sw.js 僅處理 push 通知）
+- 網路不可用時瀏覽器顯示預設離線頁面
+- 離線佇列重播為未來規劃
 
 ## 在 Web App 中的實作
 

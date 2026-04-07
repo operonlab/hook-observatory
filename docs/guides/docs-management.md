@@ -54,9 +54,10 @@ docs/
 │   ├── composite-architecture-roadmap.md  # 四層架構推進計劃
 │   └── skill-ecosystem-hardening.md       # Skill 生態加固
 ├── reference/                       # 參考資料
-│   ├── sandbox-executor.md          # Sandbox 執行器規格
-│   ├── memvault-kg-research.md      # Memvault KG 研究
-│   └── memvault-growth-loops.md     # Memvault 成長飛輪
+│   └── sandbox-executor.md          # Sandbox 執行器規格
+├── archive/                         # 歸檔（已完成/棄用的研究文件）
+│   ├── memvault-kg-research.md      # Memvault KG 研究（已遷移至 V2）
+│   └── memvault-growth-loops.md     # Memvault 成長飛輪（Loop 2-3 待迭代）
 ├── guides/                          # 開發者指南
 │   ├── docs-management.md           # 此文件
 │   └── feature-lifecycle.md         # POC → 生產工作流
@@ -86,7 +87,8 @@ workbench/README.md                      ← 前端開發指南
 | 建設藍圖（各模組實作規格） | `docs/blueprint/` | P1-P10 各模組藍圖、V2 優先級矩陣 |
 | 戰略計劃（跨模組演進） | `docs/plans/` | 四層架構推進、熱暖冷冰資料策略 |
 | 開發者指南 | `docs/guides/` | 文件管理、功能生命週期 |
-| 參考資料（研究與規格） | `docs/reference/` | Sandbox 規格、Memvault KG 研究 |
+| 參考資料（工具規格） | `docs/reference/` | Sandbox 規格 |
+| 歸檔（已完成/棄用） | `docs/archive/` | Memvault KG 研究、成長飛輪 |
 | 實戰教訓 | `docs/lessons/` | 前端色彩修復、Hook 韌性模式 |
 | 模組專屬設置 | `core/README.md` | 核心需要 CORE_DB_URL 環境變數 |
 | 共享函式庫用法 | `libs/<lang>/README.md` | 匯入 corelib.db 進行連線 |
@@ -111,14 +113,16 @@ workbench/README.md                      ← 前端開發指南
 
 ## 翻譯工作流 (zh-TW)
 
+> **Note (2026-04-05)**: `docs-en/` 目前不存在，英文備份工作流暫停。翻譯腳本 `scripts/translate-docs.py` 仍存在但未啟用。docs/ 為繁體中文 source of truth。
+
 ### 結構
 
-繁體中文文件是**單一事實來源**（`docs/`），英文版本保留於 `docs-en/` 作為備份。
+繁體中文文件是**單一事實來源**（`docs/`）。英文版本保留於 `docs-en/`（目前未啟用）。
 
 ```
 docs/architecture/modular-monolith.md     ← 繁體中文（source of truth）
 docs/vision/roadmap.md                    ← 繁體中文（source of truth）
-docs-en/architecture/modular-monolith.md  ← 英文備份
+docs-en/architecture/modular-monolith.md  ← 英文備份（目前未啟用）
 ```
 
 ### 版本追蹤

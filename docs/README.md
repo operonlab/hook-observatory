@@ -20,7 +20,8 @@ target_lang: zh-TW
 | **[plans/](./plans/)** | 戰略計劃：跨模組的演進計劃與路線圖 | 見下方 |
 | **[guides/](./guides/)** | 開發者指南：文件管理、功能生命週期 | — |
 | **[lessons/](./lessons/)** | 實戰教訓：從專案中提煉的經驗與模式 | [README](./lessons/README.md) |
-| **[reference/](./reference/)** | 參考資料：模組研究、工具規格 | — |
+| **[reference/](./reference/)** | 參考資料：工具規格 | — |
+| **[archive/](./archive/)** | 歸檔：已完成或棄用的研究文件 | — |
 
 ---
 
@@ -36,8 +37,8 @@ target_lang: zh-TW
 → [composite-architecture.md](./architecture/composite-architecture.md)（SDK→CLI→MCP→Skill 四層）
 
 ### 我想了解下一步要做什麼
-→ [roadmap.md](./vision/roadmap.md)（四階段路線圖）
-→ [v2-priorities.md](./blueprint/v2-priorities.md)（V2 藍圖優先級）
+→ [v2-priorities.md](./blueprint/v2-priorities.md)（V2 藍圖優先級，開發順序的真值源）
+→ ~~[roadmap.md](./vision/roadmap.md)~~（早期構想，已 DEPRECATED）
 
 ### 我想了解特定模組的實作規格
 → `blueprint/p{N}-{module}.md`（例如 [p5-finance.md](./blueprint/p5-finance.md)）

@@ -1,5 +1,12 @@
 # Four-Tier Data Lifecycle Architecture
 
+> **Status**: 📐 DESIGN PROPOSAL（未實作）
+> **Current state (2026-04)**:
+> - ✅ Archive 表存在（Hot → Cold 二層）
+> - ❌ tier_config.py 未建立
+> - ❌ Frozen tier + S3 未實作
+> - ❌ Lifecycle scripts Phase 0-3 未啟動
+
 ## Context
 
 Workshop 現有 Hot-Cold 二層資料分層（主表 + archive 表 + S3）面臨中間灰色地帶：

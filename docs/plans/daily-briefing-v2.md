@@ -1,7 +1,10 @@
 # Daily Briefing V2 — Architecture Blueprint
 
-> Status: DRAFT | Date: 2026-03-06
-> Goal: 將每日情報從 intelflow 完全抽離為第 14 個獨立 core module `briefing`
+> **Status**: ✅ COMPLETED (2026-03-25)
+> **Outcome**: briefing 已獨立為第 14 個 core module，含完整 backend（models/schemas/services/routes/events/streaming）
+>
+> _Original: DRAFT | Date: 2026-03-06_
+> _Goal: 將每日情報從 intelflow 完全抽離為第 14 個獨立 core module `briefing`_
 
 ## 1. Design Decisions
 

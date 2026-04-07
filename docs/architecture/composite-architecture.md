@@ -184,8 +184,8 @@ Claude Code ──► MCP Server ──► SDK Client ──► FastAPI Core ─
 | P2 | 基礎設施與知識 | nodeflow, system-monitor, envkit | ✅ 完成 |
 | P3 | 支援服務 | notification, auth, admin, tmux-webui, session-archiver | 🔶 部分完成 |
 
-**統計（截至 2026-03-28）**：
-- 核心模組：17 個（13 個有 HTTP API，4 個骨架階段）
+**統計（截至 2026-04-05）**：
+- 核心模組：18 個（14 個有 HTTP API，4 個骨架階段）
 - 工作站：29 個（含 infra、AI/media、business 三類）
 - MCP Servers：31 個（11 Core + 20 Station）
 - SDK 客戶端：38 個（`libs/sdk-client/sdk_client/`）

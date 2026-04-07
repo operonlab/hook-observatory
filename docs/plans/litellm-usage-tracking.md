@@ -1,5 +1,8 @@
 # LiteLLM Usage Tracking
 
+> **Status**: ✅ COMPLETED (2026-03-20)
+> **Outcome**: agent-metrics v0.2.0 上線，含 litellm_collector + quota_collector + dashboard UI at `/apps/agent-metrics/`
+
 ## 架構
 
 ```

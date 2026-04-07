@@ -8,7 +8,11 @@ translated_at: 2026-02-23
 
 # 工作坊路線圖
 
-> 四階段開發路線圖：從個人與家庭到商業應用。
+> **Status**: ⚠️ DEPRECATED (2026-04-05)
+> **Note**: 本文件描述早期構想的線性 Phase 1→4 路線，實際開發並未按此順序推進。
+> 當前開發優先級請參閱 [blueprint/v2-priorities.md](../blueprint/v2-priorities.md)。
+>
+> _原始描述：四階段開發路線圖：從個人與家庭到商業應用。_
 
 ---
 

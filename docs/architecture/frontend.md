@@ -184,17 +184,17 @@ export function Router() {
 
 ## API 通訊
 
-所有模組都與同一個後端通訊（位於連接埠 8800 的核心單體 Core Monolith）：
+所有模組都與同一個後端通訊（位於連接埠 10000 的核心單體 Core Monolith）：
 
 ```
-workbench/  →  core/  (port 8800)
+workbench/  →  core/  (port 10000)
 ```
 
 在生產環境中，API 呼叫會經由閘道器（Nginx）進行路由：
 
 ```
 生產環境：  https://domain.com/api/finance/  → nginx → core monolith
-開發環境：  http://localhost:8800/api/finance/ → 直接呼叫
+開發環境：  http://localhost:10000/api/finance/ → 直接呼叫
 ```
 
 每個模組都有自己的 `api/client.ts`，用於封裝其領域端點的 fetch 呼叫。

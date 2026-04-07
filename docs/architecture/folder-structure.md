@@ -14,7 +14,7 @@ Workshop 將所有功能組織成四個層級：
 
 | 層級 | 描述 | 位置 | DB 依賴 |
 |------|------|------|---------|
-| **核心模組 (Core Modules)** | 由資料庫支援的業務領域（17 個模組） | `core/src/modules/` | ✅ Core PostgreSQL |
+| **核心模組 (Core Modules)** | 由資料庫支援的業務領域（18 個模組） | `core/src/modules/` | ✅ Core PostgreSQL |
 | **微服務 (Services)** | 從 Core 提取的獨立服務（共用 DB） | `services/` | ✅ Core PostgreSQL |
 | **工作站 (Stations)** | 獨立的本地工具（不依賴核心資料庫） | `stations/` | ❌ |
 | **橋接器 (Bridges)** | 外部平台連接器 | `bridges/` | ❌ |
@@ -38,7 +38,7 @@ stations/          ─── 完全獨立的本地工具，不碰 Core DB
 │   ├── src/
 │   │   ├── events/              # 事件匯流排引擎
 │   │   ├── hooks/               # 鉤子/插件引擎
-│   │   ├── modules/             # 核心模組 (17 個領域)
+│   │   ├── modules/             # 核心模組 (18 個領域)
 │   │   │   ├── auth/            # 認證與授權
 │   │   │   ├── finance/         # 會計與財務
 │   │   │   ├── taskflow/        # 任務與調度
@@ -55,13 +55,14 @@ stations/          ─── 完全獨立的本地工具，不碰 Core DB
 │   │   │   ├── briefing/        # 每日簡報
 │   │   │   ├── capture/         # 模糊意圖捕捉
 │   │   │   ├── dailyos/         # 每日規劃
-│   │   │   └── paper/           # 論文研究
+│   │   │   ├── paper/           # 論文研究
+│   │   │   └── assistant/       # AI 助理對話
 │   │   ├── middleware/          # Auth, CORS, OTel 中間件
 │   │   ├── shared/              # 共享類型、工具
 │   │   └── routes/              # 路由聚合
-│   ├── services/                # 熱路徑服務 (獨立部署)
-│   │   ├── realtime/            # LiveKit WebRTC 網關 (port 8830)
-│   │   └── media/               # STT/TTS/圖像處理 (port 8831)
+│   ├── services/                # 熱路徑服務 (獨立部署, 目前僅 stub)
+│   │   ├── realtime/            # LiveKit WebRTC 網關 (規劃中, 未部署)
+│   │   └── media/               # STT/TTS/圖像處理 (規劃中, 未部署)
 │   ├── plugins/                 # 已安裝插件
 │   ├── migrations/              # 資料庫遷移 (所有 schema)
 │   └── tests/
@@ -192,7 +193,7 @@ core/src/modules/<name>/
 └── deps.py              # FastAPI 依賴項
 ```
 
-### 17 個核心模組
+### 18 個核心模組
 
 | 模組 | 領域 | 階段 | 資料庫 Schema |
 |--------|--------|-------|-----------|
@@ -211,6 +212,7 @@ core/src/modules/<name>/
 | `capture` | 模糊意圖捕捉 | 2 | `capture` |
 | `dailyos` | 每日規劃 | 2 | `dailyos` |
 | `paper` | 論文研究 | 2 | `paper` |
+| `assistant` | AI 助理對話 | 2 | `assistant` |
 | `workpool` | 資源管理 | 3 | `workpool` |
 | `matchcore` | 匹配引擎 | 3 | `matchcore` |
 

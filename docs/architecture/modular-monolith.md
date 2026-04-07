@@ -33,9 +33,9 @@ translated_at: 2026-03-04
                     │  ┌────────┐ ┌─────────┐ ┌────────┐      │
                     │  │ admin  │ │briefing │ │capture │      │
                     │  └────────┘ └─────────┘ └────────┘      │
-                    │  ┌─────────┐ ┌────────┐                  │
-                    │  │dailyos  │ │ paper  │                  │
-                    │  └─────────┘ └────────┘                  │
+                    │  ┌─────────┐ ┌────────┐ ┌──────────┐      │
+                    │  │dailyos  │ │ paper  │ │assistant │      │
+                    │  └──────���──┘ └────────┘ └──────���───┘      │
                     │                                          │
                     │  ┌──────────────────────────────────┐    │
                     │  │  Event Bus  │  Hook Engine       │    │
@@ -45,7 +45,7 @@ translated_at: 2026-03-04
               ┌─────────┴──┐   ┌─────┴────────┐    │
               │  Realtime  │   │    Media      │    │
               │  (LiveKit) │   │  (STT/TTS)   │    │
-              │  port 8830 │   │  port 8831   │    │
+              │  (規劃中)  │   │  (規劃中)    │    │
               └────────────┘   └──────────────┘    │
                                                    │
                     ┌──────────────────────────────────────────┐
@@ -86,6 +86,7 @@ translated_at: 2026-03-04
 | `capture` | Fuzzy intent capture, progressive enrichment | `capture` | 2 |
 | `dailyos` | Daily planning, schedule management | `dailyos` | 2 |
 | `paper` | Academic paper research, arXiv digest | `paper` | 2 |
+| `assistant` | AI assistant conversations, TUI chat | `assistant` | 2 |
 | `workpool` | Resources (human/machine/agent), scheduling | `workpool` | 3 |
 | `matchcore` | Talent-job matching, task pairing | `matchcore` | 3 |
 
@@ -166,17 +167,19 @@ core/src/modules/<name>/
 
 有兩個服務運行在單體**之外**，因為它們具有根本不同的運行時需求：
 
-### 實時服務 (Realtime Service, port 8830)
+### 實時服務 (Realtime Service, 規劃中)
 
 - **功能**：LiveKit WebRTC 網關 + agents
 - **為何分離**：WebRTC 需要持久連接、媒體處理，以及不同的擴展模式
 - **通訊方式**：用於 token 生成的 REST API，以及用於狀態同步的 Redis 事件
+- **狀態**：stub 階段（僅 pyproject.toml），尚未部署
 
-### 媒體服務 (Media Service, port 8831)
+### 媒體服務 (Media Service, 規劃中)
 
 - **功能**：STT、TTS、圖像處理流水線
 - **為何分離**：CPU/GPU 密集型，需要獨立的資源分配
 - **通訊方式**：來自 core 的 HTTP API 調用，結果以事件形式發布
+- **狀態**：stub 階段（僅 pyproject.toml），STT/TTS 功能目前由 stations/ 提供
 
 ## 埠位分配
 
@@ -186,8 +189,8 @@ core/src/modules/<name>/
 | 10010 | 微服務 — paper |
 | 10011 | 微服務 — intelflow |
 | 10012 | 微服務 — invest |
-| 8830 | 實時服務 (LiveKit) |
-| 8831 | 媒體服務 (STT/TTS) |
+| (規劃中) | 實時服務 (LiveKit) — 未部署 |
+| (規劃中) | 媒體服務 (STT/TTS) — 未部署，由 stations/ 承擔 |
 | 3000 | 前端開發伺服器 |
 
 ## 配置
@@ -198,7 +201,7 @@ core/src/modules/<name>/
 from pydantic_settings import BaseSettings
 
 class CoreSettings(BaseSettings):
-    port: int = 8800
+    port: int = 10000
     db_url: str = "postgresql://localhost/workshop"
     redis_url: str = "redis://localhost:6379"
     debug: bool = False

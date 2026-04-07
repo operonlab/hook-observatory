@@ -1,7 +1,9 @@
 # Capture Pipeline — Progressive Enrichment for Workshop
 
-Status: In Progress
-Date: 2026-03-08
+**Status**: ✅ COMPLETED (2026-03-30)
+**Outcome**: capture 已上線為 core module，含 6 個 adapter（finance/invest/taskflow/dailyos/webcrawl/grc）+ enrichment + resolver 框架
+
+_Original: In Progress | Date: 2026-03-08_
 
 ## Problem
 
