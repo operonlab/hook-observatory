@@ -32,6 +32,11 @@ from tmux_lib.cli_session import (
     wait_for_prompt,
 )
 from tmux_lib.patterns import CLAUDE_CODE
+
+try:
+    from cli_dic.registry import detect_from_command as _detect_cli
+except ImportError:
+    _detect_cli = None  # cli-dic not installed; fall back to /exit
 from tmux_lib.primitives import (
     capture,
     display,
@@ -150,6 +155,28 @@ class TmuxRelayClient:
         if self.silent:
             cmd = f"CLAUDE_VOICE=0 {cmd}"
         return cmd
+
+    def _exit_cli(self, pane: str) -> None:
+        """Exit whatever CLI is running in the pane, using cli-dic for detection."""
+        if _detect_cli is not None:
+            cmd = display(pane, "#{pane_current_command}")
+            entry = _detect_cli(cmd or "")
+            if entry:
+                eb = entry.exit_behavior
+                if eb.command:
+                    send_text(pane, eb.command, buf_name="_relay_paste")
+                    if eb.needs_enter:
+                        send_enter(pane)
+                elif eb.key_sequence:
+                    from tmux_lib.primitives import tmux_run
+
+                    for _ in range(eb.repeat):
+                        tmux_run("send-keys", "-t", pane, eb.key_sequence)
+                        time.sleep(0.5)
+                return
+        # Fallback: assume Claude Code
+        send_text(pane, "/exit", buf_name="_relay_paste")
+        send_enter(pane)
 
     # Session-channel fire-and-forget notification (team coordination)
     _CHANNEL_URL = "http://localhost:10101"
@@ -760,8 +787,7 @@ class TmuxRelayClient:
             except Exception:
                 pass
 
-        send_text(pane, "/exit", buf_name="_relay_paste")
-        send_enter(pane)
+        self._exit_cli(pane)
 
         for _ in range(self.RECYCLE_EXIT_TIMEOUT):
             time.sleep(1)
@@ -833,8 +859,7 @@ class TmuxRelayClient:
                     self._save_context(target, p.pane_id.replace("%", ""), "auto_standby")
                 except Exception:
                     pass
-                send_text(target, "/exit", buf_name="_relay_paste")
-                send_enter(target)
+                self._exit_cli(target)
                 time.sleep(3)
                 tmux_ok("kill-pane", "-t", target)
                 self._clear_idle_ts(p.pane_id)
@@ -870,10 +895,9 @@ class TmuxRelayClient:
         return f"Standby: {standby_count}, Killed: {killed_count}, Spawned: {spawned}"
 
     def recycle(self, pane: str) -> str:
-        """Recycle a pane: /exit -> restart Claude Code."""
-        # Step 1: Send /exit
-        send_text(pane, "/exit", buf_name="_relay_paste")
-        send_enter(pane)
+        """Recycle a pane: exit CLI -> restart Claude Code."""
+        # Step 1: Exit current CLI (auto-detects CLI type via cli-dic)
+        self._exit_cli(pane)
 
         # Step 2: Wait for Claude to exit (pane_current_command returns to shell)
         for _ in range(self.RECYCLE_EXIT_TIMEOUT):
@@ -978,8 +1002,7 @@ class TmuxRelayClient:
                 except Exception:
                     pass
                 messages.append(f"Reaping Claude pane {target} (idle {idle_secs}s)")
-                send_text(target, "/exit", buf_name="_relay_paste")
-                send_enter(target)
+                self._exit_cli(target)
                 time.sleep(3)
                 tmux_ok("kill-pane", "-t", target)
                 self._clear_idle_ts(pane_id)
