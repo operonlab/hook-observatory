@@ -20,8 +20,30 @@ logger = logging.getLogger(__name__)
 
 _LITELLM_BASE = "http://localhost:4000/v1"
 _LITELLM_KEY = "sk-litellm-local-dev"
-_MODEL = "grok-4.20-fast"
 _TIMEOUT = 30.0
+
+# Model preference order — LiteLLM config changes externally
+_MODEL_CANDIDATES = ["deepseek-v3", "qwen3.5-flash", "grok-4.1-fast", "gemini-3.1-flash"]
+
+
+def _resolve_model() -> str:
+    """Pick first available model from candidates via LiteLLM /v1/models."""
+    try:
+        import httpx
+
+        resp = httpx.get(
+            f"{_LITELLM_BASE}/models",
+            headers={"Authorization": f"Bearer {_LITELLM_KEY}"},
+            timeout=3,
+        )
+        available = {m["id"] for m in resp.json().get("data", [])}
+        for candidate in _MODEL_CANDIDATES:
+            if candidate in available:
+                return candidate
+    except Exception:
+        logger.debug("_resolve_model: failed to query LiteLLM /models, using default")
+    return _MODEL_CANDIDATES[0]
+
 
 _SYSTEM_PROMPT = """\
 You are a document QA assistant. Given a question and numbered evidence chunks \
@@ -95,7 +117,7 @@ async def _llm_synthesize(
             f"{_LITELLM_BASE}/chat/completions",
             headers={"Authorization": f"Bearer {_LITELLM_KEY}"},
             json={
-                "model": _MODEL,
+                "model": _resolve_model(),
                 "messages": [
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": user_msg},
