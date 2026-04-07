@@ -192,9 +192,7 @@ async def upload_document(
     await db.flush()
 
     # 6. Chunk content
-    chunks = contextual_chunk(
-        raw_content, doc_title=title, extract_headings=True, max_chunk_size=4000
-    )
+    chunks = contextual_chunk(raw_content, doc_title=title, extract_headings=True)
 
     # 7. Create Chunk records in DB + collect DB IDs for Qdrant indexing
     chunk_db_ids: list[str] = []
@@ -465,22 +463,64 @@ async def qa_question(
     else:
         await HybridRRFSearchOp()(ctx)
 
-    # ── 3. Enrich with full chunk content from DB ──
+    # ── 3. Parent-child enrichment ──
+    # Search found child chunks (small, precise). For LLM synthesis,
+    # fetch the full parent section (all chunks sharing the same heading).
     evidence = ctx.get("evidence_chunks", [])
     chunk_ids = [c.get("id", "") for c in evidence if c.get("id")]
     if chunk_ids:
-        rows = (
+        # Step A: get child chunk metadata (document_id, heading)
+        child_rows = (
             await db.execute(
-                select(DocumentChunk.id, DocumentChunk.content).where(
-                    DocumentChunk.id.in_(chunk_ids)
-                )
+                select(
+                    DocumentChunk.id,
+                    DocumentChunk.document_id,
+                    DocumentChunk.heading,
+                    DocumentChunk.content,
+                ).where(DocumentChunk.id.in_(chunk_ids))
             )
         ).all()
-        full_map = {row.id: row.content for row in rows}
+
+        # Step B: for each unique (document_id, heading), fetch ALL sibling chunks
+        seen_sections: set[tuple[str, str]] = set()
+        parent_content_map: dict[str, str] = {}  # child_id → parent section content
+
+        for row in child_rows:
+            section_key = (row.document_id, row.heading or "")
+            if section_key in seen_sections:
+                # Already fetched this section — find it in map
+                for cid, pcontent in parent_content_map.items():
+                    other = next((r for r in child_rows if r.id == cid), None)
+                    if other and (other.document_id, other.heading or "") == section_key:
+                        parent_content_map[row.id] = pcontent
+                        break
+                continue
+            seen_sections.add(section_key)
+
+            siblings = (
+                (
+                    await db.execute(
+                        select(DocumentChunk.content)
+                        .where(
+                            DocumentChunk.document_id == row.document_id,
+                            DocumentChunk.heading == (row.heading or ""),
+                            DocumentChunk.deleted_at == None,  # noqa: E711
+                        )
+                        .order_by(DocumentChunk.chunk_index.asc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            parent_text = "\n\n".join(siblings) if siblings else row.content
+            parent_content_map[row.id] = parent_text
+
+        # Step C: enrich evidence with parent section content
         for c in evidence:
-            full = full_map.get(c.get("id", ""))
-            if full:
-                c["content"] = full
+            parent = parent_content_map.get(c.get("id", ""))
+            if parent:
+                c["content"] = parent
 
     # ── 4. Cross-encoder rerank ──
     try:

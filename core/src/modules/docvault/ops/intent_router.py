@@ -83,7 +83,7 @@ def build_layer_plan(intent: str, query: str) -> dict[str, Any]:
         "sources": ["docvault"],
         "strategy": "direct_search",
         "docvault_top_k": 20,
-        "synth_top_k": 12,
+        "synth_top_k": 8,
     }
 
 

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 _LITELLM_BASE = "http://localhost:4000/v1"
 _LITELLM_KEY = "sk-litellm-local-dev"
-_MODEL = "grok-4-fast"
+_MODEL = "grok-4.20-fast"
 _TIMEOUT = 30.0
 
 _SYSTEM_PROMPT = """\
@@ -57,7 +57,7 @@ def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
         if page:
             meta_parts.append(f"page={page}")
         meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
-        content = chunk.get("content", "")[:4000]
+        content = chunk.get("content", "")[:3000]
         parts.append(f"[{i}]{meta}:\n{content}\n")
     return "\n".join(parts)
 
