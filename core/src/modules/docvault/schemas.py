@@ -262,6 +262,7 @@ class QARequest(BaseModel):
 class CitationRef(BaseModel):
     """A single citation reference in a QA answer."""
 
+    index: int | None = None
     document_id: str
     chunk_id: str | None = None
     section: str | None = None

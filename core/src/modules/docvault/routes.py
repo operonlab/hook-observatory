@@ -446,6 +446,7 @@ async def qa_question(
 
     citations = [
         CitationRef(
+            index=c.get("index"),
             document_id=c.get("document_id", ""),
             chunk_id=c.get("chunk_id"),
             section=c.get("section"),
