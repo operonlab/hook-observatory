@@ -39,10 +39,10 @@ REDIS_KEY_LAST_DREAM = "memvault:dream:last_run_at"
 # --- LLM Reflection ---
 _LLM_URL = "http://localhost:4000/v1/chat/completions"
 _LLM_API_KEY = "sk-litellm-local-dev"  # nosec — local dev proxy key
-_LLM_MODEL = "gemini-3.1-flash-lite"
+_LLM_MODEL = "gemini-2.5-flash"
 _REFLECT_TIMEOUT = 30
-_REFLECT_MAX_BLOCKS = 30
-_REFLECT_MAX_ATTITUDES = 30
+_REFLECT_MAX_BLOCKS = 15
+_REFLECT_MAX_ATTITUDES = 15
 
 # --- Date Normalization Patterns ---
 _RELATIVE_DATE_PATTERNS: list[tuple[re.Pattern[str], int | None]] = [
@@ -275,7 +275,7 @@ async def _reflect(
         .limit(_REFLECT_MAX_BLOCKS)
     )
     blocks = (await db.execute(bq)).scalars().all()
-    blocks_summary = "\n".join(f"- [{b.block_type}] {(b.content or '')[:150]}" for b in blocks)
+    blocks_summary = "\n".join(f"- [{b.block_type}] {(b.content or '')[:80]}" for b in blocks)
 
     # Gather recent attitudes
     aq = (
@@ -309,12 +309,12 @@ async def _reflect(
         '  "stale_candidates": ["<memory that appears outdated>", ...]\n'
         "}\n\n"
         "Guidelines:\n"
-        "- insights: max 5, focus on patterns and cross-topic connections\n"
-        "- merge_candidates: blocks covering the same topic that should be consolidated\n"
-        "- knowledge_gaps: topics the user works on frequently but has thin memory coverage\n"
-        "- suggested_attitudes: recurring preferences or beliefs not yet captured\n"
-        "- stale_candidates: information that may no longer be accurate\n"
-        "- Be concise. Write in 繁體中文."
+        "- insights: max 3 items, one sentence each\n"
+        "- merge_candidates: max 3 items, brief description\n"
+        "- knowledge_gaps: max 3 items, topic name only\n"
+        "- suggested_attitudes: max 3 items, one sentence each\n"
+        "- stale_candidates: max 2 items, brief description\n"
+        "- Be extremely concise. Each item under 50 chars. Write in 繁體中文."
     )
 
     user_message = (
@@ -333,7 +333,7 @@ async def _reflect(
             {"role": "user", "content": user_message},
         ],
         "temperature": 0.3,
-        "max_tokens": 2000,
+        "max_tokens": 16000,  # Gemini thinking tokens count toward limit
     }
 
     try:
@@ -348,19 +348,29 @@ async def _reflect(
         data = resp.json()
         raw_text: str = data["choices"][0]["message"]["content"]
 
-        # Parse JSON response (with truncation recovery)
+        # Parse JSON response (strip markdown fences + truncation recovery)
         import json as _json
+
+        # Strip markdown code fences if present
+        cleaned = raw_text.strip()
+        if cleaned.startswith("```"):
+            first_nl = cleaned.find("\n")
+            if first_nl > 0:
+                cleaned = cleaned[first_nl + 1 :]
+            last_fence = cleaned.rfind("```")
+            if last_fence > 0:
+                cleaned = cleaned[:last_fence]
+            cleaned = cleaned.strip()
 
         from src.shared.llm_json import parse_llm_json
 
-        parsed = parse_llm_json(raw_text)
+        parsed = parse_llm_json(cleaned)
         if not isinstance(parsed, dict):
-            # Try truncated JSON recovery: find last complete field
+            # Try truncated JSON recovery: find last complete array
             try:
-                # Find the last complete key-value pair
-                last_bracket = raw_text.rfind("]")
+                last_bracket = cleaned.rfind("]")
                 if last_bracket > 0:
-                    truncated = raw_text[: last_bracket + 1] + "\n}"
+                    truncated = cleaned[: last_bracket + 1] + "\n}"
                     parsed = _json.loads(truncated)
             except Exception:
                 logger.debug("dream.reflect: truncated JSON recovery failed")
