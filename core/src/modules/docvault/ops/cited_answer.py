@@ -58,6 +58,11 @@ terminology not found in the evidence (e.g., "three types" when evidence says \
 map one concept to another — state what the documents use and let the user decide.
 - If the question's premise is wrong or unsupported (e.g., asking about concept X \
 when documents never mention X), say so clearly. Do not force-fit related content.
+- PREFER STRUCTURED CONTENT: If the evidence contains a numbered list, checklist, \
+or step-by-step procedure that directly answers the question, cite THAT specific \
+structure verbatim rather than synthesizing your own list from scattered paragraphs. \
+Do NOT create your own numbered list by aggregating points from different sections \
+when a single authoritative list already exists in the evidence.
 - Answer in the same language as the question.
 - Be concise but thorough. Prefer direct quotes when relevant.
 - Rate confidence using this decision tree:

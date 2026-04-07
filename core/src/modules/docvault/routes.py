@@ -447,6 +447,7 @@ async def qa_question(
     from .ops.intent_router import IntentRouterOp
     from .ops.jina_rerank import JinaRerankOp
     from .ops.merge import MergeOp
+    from .ops.query_expand import QueryExpandOp
     from .schemas import CitationRef
 
     # ── 1. Intent routing ──
@@ -455,7 +456,13 @@ async def qa_question(
     layer_plan = ctx.get("layer_plan", {})
     pipeline = layer_plan.get("pipeline", "A")
 
-    # ── 2. Over-retrieve for reranking (use layer_plan top_k, not request top_k) ──
+    # ── 2. Query expansion (multi-angle sub-queries for broader recall) ──
+    try:
+        await QueryExpandOp()(ctx)
+    except Exception:
+        logger.debug("QueryExpandOp failed, using original query only")
+
+    # ── 3. Over-retrieve for reranking (use layer_plan top_k, not request top_k) ──
     ctx["top_k"] = layer_plan.get("docvault_top_k", body.top_k)
     if pipeline == "B":
         await FanOutOp()(ctx)

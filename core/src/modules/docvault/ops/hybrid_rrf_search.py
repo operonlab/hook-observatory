@@ -62,46 +62,64 @@ class HybridRRFSearchOp:
             ctx["search_metadata"] = {"total": 0}
             return ctx
 
+        # Multi-query: search expanded queries if available, else just the original
+        queries = ctx.get("expanded_queries", [query])
+        if not queries:
+            queries = [query]
+
+        per_query_k = max(top_k // len(queries), 5)
         config = SearchConfig(
             service_ids=[SERVICE_ID],
-            top_k=top_k,
+            top_k=per_query_k,
             score_threshold=self._score_threshold,
         )
 
-        try:
-            results, _meta = await hybrid_search(query, space_id, config)
-        except Exception as e:
-            logger.error("HybridRRFSearchOp: search failed: %s", e)
-            ctx["evidence_chunks"] = []
-            ctx["search_metadata"] = {"total": 0, "error": str(e)}
-            return ctx
-
+        # Search all queries, deduplicate by entity_id
+        seen_ids: set[str] = set()
         evidence_chunks: list[dict[str, Any]] = []
-        for r in results:
-            chunk: dict[str, Any] = {
-                "id": r.entity_id,
-                "content": r.content_preview,
-                "score": r.score,
-                "document_id": r.metadata.get("document_id", r.entity_id),
-                "section_path": r.metadata.get("section_path", ""),
-                "page_range": r.metadata.get("page_range", ""),
-                "heading": r.metadata.get("heading", ""),
-                "chunk_index": r.metadata.get("chunk_index"),
-                "version_id": r.metadata.get("version_id", ""),
-                "created_at": r.metadata.get("created_at", ""),
-            }
-            evidence_chunks.append(chunk)
+
+        for q in queries:
+            try:
+                results, _meta = await hybrid_search(q, space_id, config)
+            except Exception as e:
+                logger.error("HybridRRFSearchOp: search failed for %r: %s", q[:40], e)
+                continue
+
+            for r in results:
+                if r.entity_id in seen_ids:
+                    continue
+                seen_ids.add(r.entity_id)
+                evidence_chunks.append(
+                    {
+                        "id": r.entity_id,
+                        "content": r.content_preview,
+                        "score": r.score,
+                        "document_id": r.metadata.get("document_id", r.entity_id),
+                        "section_path": r.metadata.get("section_path", ""),
+                        "page_range": r.metadata.get("page_range", ""),
+                        "heading": r.metadata.get("heading", ""),
+                        "chunk_index": r.metadata.get("chunk_index"),
+                        "version_id": r.metadata.get("version_id", ""),
+                        "created_at": r.metadata.get("created_at", ""),
+                    }
+                )
+
+        # Sort by score descending, cap at top_k
+        evidence_chunks.sort(key=lambda c: c.get("score", 0), reverse=True)
+        evidence_chunks = evidence_chunks[:top_k]
 
         ctx["evidence_chunks"] = evidence_chunks
         ctx["search_metadata"] = {
             "total": len(evidence_chunks),
             "service_id": SERVICE_ID,
+            "queries_used": len(queries),
             "top_k": top_k,
         }
 
         logger.info(
-            "HybridRRFSearchOp: query=%r → %d results",
-            query[:60],
+            "HybridRRFSearchOp: %d queries → %d unique results (top_k=%d)",
+            len(queries),
             len(evidence_chunks),
+            top_k,
         )
         return ctx
