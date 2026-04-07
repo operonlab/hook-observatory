@@ -14,6 +14,7 @@ from cli_dic.base import (
     InstructionSpec,
     MCPSpec,
     SkillSpec,
+    ToolNameMap,
 )
 
 CODEX_CLI = CLIEntry(
@@ -64,4 +65,18 @@ CODEX_CLI = CLIEntry(
         rules_dir="rules/",
     ),
     agents=AgentSpec(dir_name="agents", file_format="toml"),
+    # Codex uses sandbox policy, not tool whitelist in SKILL.md frontmatter.
+    # Mapping kept for sync-config translation (empty = no equivalent).
+    tool_names=ToolNameMap(
+        read="read_file",
+        write="write_file",
+        edit="apply_diff",
+        bash="shell",
+        glob="",  # Codex 無對應
+        grep="",  # Codex 無對應
+        web_fetch="",
+        web_search="web_search",
+        agent="",
+        notebook_edit="",
+    ),
 )

@@ -18,6 +18,7 @@ from cli_dic.base import (
     InstructionSpec,
     MCPSpec,
     SkillSpec,
+    ToolNameMap,
 )
 from cli_dic.claude_code import CLAUDE_CODE
 from cli_dic.codex_cli import CODEX_CLI
@@ -37,6 +38,7 @@ __all__ = [
     "InstructionSpec",
     "MCPSpec",
     "SkillSpec",
+    "ToolNameMap",
     "detect_from_command",
     "get",
     "list_entries",

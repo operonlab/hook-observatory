@@ -14,6 +14,7 @@ from cli_dic.base import (
     InstructionSpec,
     MCPSpec,
     SkillSpec,
+    ToolNameMap,
 )
 
 GEMINI_CLI = CLIEntry(
@@ -50,7 +51,12 @@ GEMINI_CLI = CLIEntry(
         http_url_key="httpUrl",  # {"httpUrl": "..."} (different from CC's "url")
         env_in_config=True,
     ),
-    skills=SkillSpec(dir_name="skills", file_name="SKILL.md", format="markdown"),
+    skills=SkillSpec(
+        dir_name="skills",
+        file_name="SKILL.md",
+        format="markdown",
+        search_paths=("~/.agents/skills/", "~/.gemini/skills/"),  # .agents/ takes priority
+    ),
     hooks=HookSpec(
         config_path="settings.json",
         config_format="json",
@@ -71,4 +77,16 @@ GEMINI_CLI = CLIEntry(
         rules_dir="",
     ),
     agents=AgentSpec(dir_name="agents", file_format="md"),
+    tool_names=ToolNameMap(
+        read="read_file",
+        write="write_file",
+        edit="edit_file",
+        bash="run_shell_command",
+        glob="glob_search",
+        grep="grep_search",
+        web_fetch="web_fetch",
+        web_search="web_search",
+        agent="",  # Gemini 無對應
+        notebook_edit="",
+    ),
 )
