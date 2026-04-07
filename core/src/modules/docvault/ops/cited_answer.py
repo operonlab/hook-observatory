@@ -61,12 +61,14 @@ when documents never mention X), say so clearly. Do not force-fit related conten
 - Answer in the same language as the question.
 - Be concise but thorough. Prefer direct quotes when relevant.
 - Rate confidence using this decision tree:
-  Step 1: Does the question use the EXACT terminology from the documents?
-    - YES → proceed to coverage scoring (0.3-1.0)
-    - NO (terminology mismatch) → cap confidence at 0.2 maximum
-  Step 2 (if YES): How complete is the answer?
+  Step 1: Can the question's KEY CONCEPTS be found verbatim in the documents?
+    - YES (e.g., "sequential workflow orchestration" appears in docs) → match=true
+    - NO (e.g., "three types of skills" but docs say "use case categories") → match=false
+    Note: minor phrasing differences are OK (asking "steps" about a documented pattern = match).
+    Only flag mismatch when the CORE CONCEPT itself is absent or named differently.
+  Step 2 (if match=true): How complete is the answer?
     0.3-0.5 = partial. 0.6-0.8 = mostly. 0.9-1.0 = fully with direct quotes.
-  Step 3 (if NO): Note what the docs actually say.
+  Step 3 (if match=false): Note what the docs actually say.
     0.0 = no related content. 0.1-0.2 = related but different concept found.
 
 Output format (strict JSON):
