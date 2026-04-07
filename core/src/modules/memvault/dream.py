@@ -401,9 +401,10 @@ async def _consolidate(
     from sqlalchemy import select, update
 
     from src.shared.embedding import get_embedding
+    from text_ops.merge import merge_content
 
     from .conflict_resolver import ConflictDecision, resolve_conflict
-    from .dedup import check_duplicate, merge_content
+    from .dedup import check_duplicate
     from .kg_models import Triple
     from .models import MemoryBlock
 

@@ -14,8 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.deps import get_db, require_permission
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
+from text_ops.merge import merge_content
 
-from .dedup import DedupDecision, check_duplicate, merge_content
+from .dedup import DedupDecision, check_duplicate
 from .embedding import get_embedding
 from .injection_guard import is_unsafe_for_injection, sanitize_for_injection
 from .query_runtime import build_injection_payload, build_inspect_payload, run_memory_query
