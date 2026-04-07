@@ -90,8 +90,8 @@ def get_litellm_status() -> dict:
     """Get LiteLLM proxy status and model info."""
     result = {"proxy_alive": False, "models_configured": [], "error": None}
     try:
-        req = urllib.request.Request(f"{settings.LITELLM_BASE_URL}/health/liveliness", timeout=5)
-        with urllib.request.urlopen(req) as resp:
+        req = urllib.request.Request(f"{settings.LITELLM_BASE_URL}/health/liveliness")
+        with urllib.request.urlopen(req, timeout=5) as resp:
             result["proxy_alive"] = resp.status == 200
     except Exception as e:
         result["error"] = f"Proxy unreachable: {e}"

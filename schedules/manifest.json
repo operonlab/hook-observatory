@@ -255,6 +255,16 @@
       "enabled": true
     },
     {
+      "name": "ws-model-freshness-scan",
+      "label": "com.joneshong.scheduler.ws-model-freshness-scan",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_freshness_scan.py",
+      "schedule": { "calendar": { "Weekday": 0, "Hour": 16, "Minute": 30 } },
+      "description": "每週日 16:30: LLM provider model freshness scan — API 查 7 家供應商 → 比對 config.yaml → Bark 通知",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-relay-auto-standby",
       "label": "com.joneshong.scheduler.ws-relay-auto-standby",
       "command": "~/.local/bin/relay standby",
@@ -305,11 +315,21 @@
       "enabled": true
     },
     {
+      "name": "ws-memvault-dream",
+      "label": "com.joneshong.scheduler.ws-memvault-dream",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_dream.py",
+      "schedule": { "calendar": { "Hour": 4, "Minute": 0 } },
+      "description": "每日 4AM: Dream Loop — 矛盾解決 + batch dedup + 日期正規化 + prune（雙閘門自動跳過）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-memvault-decay",
       "label": "com.joneshong.scheduler.ws-memvault-decay",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_decay.py",
-      "schedule": { "calendar": { "Weekday": 0, "Hour": 4, "Minute": 0 } },
-      "description": "每週日 4AM: AttitudeFact confidence 指數衰減（半衰期按 category）",
+      "schedule": { "calendar": { "Weekday": 0, "Hour": 4, "Minute": 30 } },
+      "description": "每週日 4:30AM: AttitudeFact confidence 指數衰減（半衰期按 category，避開 dream 4AM）",
       "category": "workshop",
       "type": "periodic",
       "enabled": true

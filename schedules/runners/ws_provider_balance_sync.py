@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-ws_provider_balance_sync.py — Sync LLM provider balances via Playwright CLI
+ws_provider_balance_sync.py — Sync LLM provider balances via camoufox-cli
 
 Scrapes balance/usage dashboards for MiniMax, Moonshot, Z.AI, DeepSeek, xAI.
-All use Google OAuth — single Playwright session, multi-tab scraping.
+Uses camoufox-cli with persistent Firefox profile (anti-detect, cookies maintained by user).
 
 Stores results in Redis for agent-metrics consumption.
 
@@ -15,17 +15,17 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────
 HOME = Path.home()
-PYTHON = HOME / ".local/bin/python3"
-PW_SESSION = HOME / ".claude/scripts/pw_session.py"
 LOG_DIR = HOME / "workshop/outputs/scheduler/logs"
 LOG_FILE = LOG_DIR / "ws-provider-balance-sync.log"
 REDIS_KEY_PREFIX = "agent-metrics:provider"
 REDIS_TTL = 86400 * 7  # 7 days
+CFX_SESSION = "balance-sync"
 
 os.environ["PATH"] = (
     f"/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:"
@@ -66,150 +66,62 @@ def log(msg: str) -> None:
         f.write(line + "\n")
 
 
-# ── Playwright helpers ─────────────────────────────────────────
+# ── camoufox-cli helpers ──────────────────────────────────────
 
 
-def init_session() -> tuple[str, str] | None:
-    """Init Playwright session (APFS clone of master profile)."""
-    result = subprocess.run(
-        [str(PYTHON), str(PW_SESSION), "init"],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    profile_dir = sid = None
-    for line in result.stdout.splitlines():
-        if line.startswith("export PW_PROFILE="):
-            profile_dir = line.split("=", 1)[1].strip().strip("'\"")
-        elif line.startswith("export SID="):
-            sid = line.split("=", 1)[1].strip().strip("'\"")
-    if not profile_dir or not sid:
-        log(f"ERROR: pw_session init failed: {result.stdout[:200]}")
-        return None
-    return profile_dir, sid
+def _cfx(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
+    """Run a camoufox-cli command with the sync session."""
+    cmd = ["camoufox-cli", "--session", CFX_SESSION, *args]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-def scrape_all_providers(profile_dir: str, sid: str) -> dict[str, str]:
-    """Open all provider URLs and extract text via single session + run-code."""
-    session_id = f"{sid}-balance"
-    urls = {name: cfg["url"] for name, cfg in PROVIDERS.items()}
-    provider_names = list(urls.keys())
-    provider_urls = list(urls.values())
-
-    # Build JS that opens all URLs as tabs, waits, then extracts text from each
-    js_code = f"""async (page) => {{
-      const urls = {json.dumps(provider_urls)};
-      const names = {json.dumps(provider_names)};
-      const results = {{}};
-
-      // Open all URLs as new tabs
-      const context = page.context();
-      const tabs = [];
-      for (const url of urls) {{
-        const tab = await context.newPage();
-        await tab.goto(url, {{ waitUntil: 'domcontentloaded', timeout: 20000 }}).catch(() => {{}});
-        tabs.push(tab);
-      }}
-
-      // Wait for SPAs to render
-      await page.waitForTimeout(6000);
-
-      // Extract text from each tab
-      for (let i = 0; i < tabs.length; i++) {{
-        try {{
-          const text = await tabs[i].evaluate(() => document.body.innerText.substring(0, 5000));
-          results[names[i]] = text;
-        }} catch (e) {{
-          results[names[i]] = 'ERROR: ' + e.message;
-        }}
-      }}
-
-      return JSON.stringify(results);
-    }}"""
+def scrape_all_providers() -> dict[str, str]:
+    """Open each provider URL sequentially, extract body text."""
+    results: dict[str, str] = {}
 
     try:
-        # Open a blank page to start the browser
-        open_r = subprocess.run(
-            [
-                "npx",
-                "@playwright/cli",
-                "--profile",
-                profile_dir,
-                f"-s={session_id}",
-                "open",
-                "about:blank",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        # Open first provider to start browser with persistent profile
+        first_name = list(PROVIDERS.keys())[0]
+        first_url = PROVIDERS[first_name]["url"]
+
+        open_r = _cfx("--persistent", "open", first_url)
         if open_r.returncode != 0:
-            log(f"ERROR: open failed: {open_r.stderr[:200]}")
+            log(f"ERROR: cfx open failed: {open_r.stderr[:200]}")
             return {}
 
-        # Run multi-tab scraping
-        run_r = subprocess.run(
-            [
-                "npx",
-                "@playwright/cli",
-                f"-s={session_id}",
-                "run-code",
-                js_code,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
+        # Wait for SPA to render
+        time.sleep(6)
+
+        # Extract text from first provider
+        eval_r = _cfx("eval", "document.body.innerText.substring(0, 5000)", timeout=15)
+        results[first_name] = (
+            eval_r.stdout if eval_r.returncode == 0 else f"ERROR: {eval_r.stderr[:200]}"
         )
+        log(f"  [{first_name}] scraped {len(results[first_name])} chars")
 
-        if run_r.returncode != 0:
-            log(f"ERROR: run-code failed: {run_r.stderr[:300]}")
-            return {}
+        # Scrape remaining providers sequentially
+        for name, cfg in list(PROVIDERS.items())[1:]:
+            _cfx("open", cfg["url"], timeout=20)
+            time.sleep(6)
 
-        # Parse result — look for JSON in output
-        for line in run_r.stdout.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith('"') and stripped.endswith('"'):
-                try:
-                    decoded = json.loads(stripped)
-                    if isinstance(decoded, str):
-                        return json.loads(decoded)
-                except (json.JSONDecodeError, ValueError):
-                    pass
-            elif stripped.startswith("{"):
-                try:
-                    return json.loads(stripped)
-                except (json.JSONDecodeError, ValueError):
-                    pass
-
-        log(f"ERROR: could not parse run-code output: {run_r.stdout[:300]}")
-        return {}
+            eval_r = _cfx("eval", "document.body.innerText.substring(0, 5000)", timeout=15)
+            if eval_r.returncode == 0:
+                results[name] = eval_r.stdout
+            else:
+                results[name] = f"ERROR: {eval_r.stderr[:200]}"
+            log(f"  [{name}] scraped {len(results.get(name, ''))} chars")
 
     except subprocess.TimeoutExpired:
-        log("ERROR: playwright timeout")
-        return {}
+        log("ERROR: camoufox timeout")
     except Exception as e:
-        log(f"ERROR: playwright failed: {e}")
-        return {}
+        log(f"ERROR: camoufox failed: {e}")
     finally:
         try:
-            subprocess.run(
-                ["npx", "@playwright/cli", f"-s={session_id}", "close"],
-                capture_output=True,
-                timeout=10,
-            )
+            _cfx("close", timeout=10)
         except Exception:
             pass
 
-
-def cleanup_session(profile_dir: str) -> None:
-    try:
-        subprocess.run(
-            [str(PYTHON), str(PW_SESSION), "cleanup", profile_dir],
-            capture_output=True,
-            timeout=10,
-        )
-    except Exception:
-        pass
+    return results
 
 
 # ── Parsers (based on real scraping 2026-03-13) ────────────────
@@ -280,21 +192,24 @@ def parse_deepseek(text: str) -> dict | None:
 
 
 def parse_xai(text: str) -> dict | None:
-    """xAI: billing page — 'Purchased credits\n...\n$25.00' + 'API spend\n$0.00'."""
+    """xAI: billing page — credit balance shown under 'Credits' section."""
     if not text or "Access to team denied" in text:
         return None
-    # Purchased credits (total deposited)
+    # New layout (2026-04): Credits section shows '$24.82' followed by 'Purchase credits'
+    m = re.search(
+        r"Credits\s*\n\s*[^\n]*credit balance[^\n]*\n\s*\$\s*([\d,]+\.?\d+)", text, re.IGNORECASE
+    )
+    if m:
+        return {"remaining": float(m.group(1).replace(",", ""))}
+    # Legacy layout: 'Purchased credits' + 'API spend'
     m_credits = re.search(r"Purchased credits[^$]*\$\s*([\d,]+\.?\d+)", text, re.DOTALL)
-    # Free credits
     m_free = re.search(r"Free credits[^$]*\$\s*([\d,]+\.?\d+)", text, re.DOTALL)
-    # API spend this month
     m_spend = re.search(r"API spend\s*\n\s*\$\s*([\d,]+\.?\d+)", text)
     if m_credits:
         purchased = float(m_credits.group(1).replace(",", ""))
         free = float(m_free.group(1).replace(",", "")) if m_free else 0.0
         spend = float(m_spend.group(1).replace(",", "")) if m_spend else 0.0
-        remaining = purchased + free - spend
-        return {"remaining": round(remaining, 4)}
+        return {"remaining": round(purchased + free - spend, 4)}
     return None
 
 
@@ -336,18 +251,9 @@ def store_results(results: dict) -> int:
 
 
 def main() -> int:
-    log("=== Provider Balance Sync Start ===")
+    log("=== Provider Balance Sync Start (camoufox) ===")
 
-    session = init_session()
-    if not session:
-        log("ERROR: Failed to init Playwright session")
-        return 1
-
-    profile_dir, sid = session
-    log(f"Session: profile={profile_dir}, sid={sid}")
-
-    raw_texts = scrape_all_providers(profile_dir, sid)
-    cleanup_session(profile_dir)
+    raw_texts = scrape_all_providers()
 
     if not raw_texts:
         log("ERROR: No data scraped from any provider")
@@ -368,7 +274,6 @@ def main() -> int:
             continue
 
         (raw_dir / f"{name}_raw.txt").write_text(text)
-        log(f"  [{name}] scraped {len(text)} chars")
 
         parser = PARSERS[name]
         parsed = parser(text)

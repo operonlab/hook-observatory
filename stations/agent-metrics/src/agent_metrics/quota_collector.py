@@ -69,10 +69,10 @@ _cc_backoff_until: float = 0.0
 _cc_consecutive_failures: int = 0
 _cc_last_status_code: int | None = None
 _cc_last_error: str | None = None
-_cc_last_fetch_mode: str = "init"  # live | playwright | backoff_fallback | error_fallback | failed
+_cc_last_fetch_mode: str = "init"  # live | camoufox | backoff_fallback | error_fallback | failed
 
-# Playwright scrape lock — prevent concurrent browser sessions
-_pw_scrape_lock = asyncio.Lock()
+# Browser scrape lock — prevent concurrent camoufox sessions
+_cfx_scrape_lock = asyncio.Lock()
 
 
 def _persist_cc_quota(data: dict, source: str = "api") -> None:
@@ -232,62 +232,32 @@ async def fetch_cc_quota(client: httpx.AsyncClient) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Claude Code — Playwright CLI fallback
+# Claude Code — camoufox-cli fallback (anti-detect Firefox with persistent cookies)
 # ---------------------------------------------------------------------------
+
+_CFX_SESSION = "ccq-scrape"
 
 
 def _scrape_usage_page() -> dict:
-    """Sync: pw_session clone → open claude.ai → Google SSO → goto usage → eval → cleanup.
+    """Sync: camoufox-cli with persistent profile → open claude.ai/settings/usage → eval → close.
 
-    Uses pw_session.py to APFS-clone ~/.playwright-profiles/master (has Google auth),
-    then opens a headless browser with stealth config (anti-detection + UA spoof)
-    window position (anti-focus-stealing). Google SSO auto-redirects to /new, so we do a second
-    goto to /settings/usage. Extracts body text via `eval` and parses percentages.
+    Uses camoufox-cli with ~/.camoufox-profiles/master (cookies maintained by user).
+    No APFS clone needed — camoufox uses persistent Firefox profile directly.
 
     Returns data in the same shape as the OAuth API: {five_hour: {utilization: N}, ...}
     """
-    import shutil
+    import time as _time
 
-    _PYTHON = str(Path.home() / ".local" / "bin" / "python3")
-    pw_session = Path(settings.PW_SESSION_SCRIPT)
-    if not pw_session.exists():
-        log.debug("pw_scrape_skip_no_script", path=str(pw_session))
-        return {}
-
-    profile_dir = None
-    sid = None
+    usage_url = "https://claude.ai/settings/usage"
 
     try:
-        # 1. Init session (APFS clone of master profile via pw_session.py)
-        init_result = subprocess.run(
-            [_PYTHON, str(pw_session), "init"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        for line in init_result.stdout.splitlines():
-            if line.startswith("export PW_PROFILE="):
-                profile_dir = line.split("=", 1)[1].strip().strip("'\"")
-            elif line.startswith("export SID="):
-                sid = line.split("=", 1)[1].strip().strip("'\"")
-
-        if not profile_dir or not sid:
-            log.warning("pw_scrape_init_failed", stdout=init_result.stdout[:200])
-            return {}
-
-        session_id = f"{sid}-ccq"
-        usage_url = "https://claude.ai/settings/usage"
-
-        # 2. Open browser (headless + stealth config)
-        # Anti-detection args + UA spoof come from PLAYWRIGHT_MCP_CONFIG env var
-        # (set in ~/.zshenv → ~/.playwright-profiles/stealth.config.json)
+        # 1. Open usage page with persistent profile (cookies handle auth)
         open_result = subprocess.run(
             [
-                "npx",
-                "@playwright/cli",
-                "--profile",
-                profile_dir,
-                f"-s={session_id}",
+                "camoufox-cli",
+                "--session",
+                _CFX_SESSION,
+                "--persistent",
                 "open",
                 usage_url,
             ],
@@ -297,38 +267,37 @@ def _scrape_usage_page() -> dict:
         )
         if open_result.returncode != 0:
             log.warning(
-                "pw_scrape_open_failed", rc=open_result.returncode, stderr=open_result.stderr[:200]
+                "cfx_scrape_open_failed",
+                rc=open_result.returncode,
+                stderr=open_result.stderr[:200],
             )
             return {}
 
-        # 3. Wait for Google SSO redirect, then goto usage page
-        import time as _time
-
+        # 2. Check if SSO redirected away — navigate back to usage page
         _time.sleep(4)
 
-        # Check if we landed on /new (SSO redirect) — need second goto
         loc_result = subprocess.run(
-            ["npx", "@playwright/cli", f"-s={session_id}", "eval", "window.location.href"],
+            ["camoufox-cli", "--session", _CFX_SESSION, "eval", "window.location.href"],
             capture_output=True,
             text=True,
             timeout=10,
         )
         if "/settings/usage" not in loc_result.stdout:
             subprocess.run(
-                ["npx", "@playwright/cli", f"-s={session_id}", "goto", usage_url],
+                ["camoufox-cli", "--session", _CFX_SESSION, "open", usage_url],
                 capture_output=True,
                 text=True,
                 timeout=15,
             )
             _time.sleep(3)
 
-        # 4. Poll until usage content appears (up to 16s)
+        # 3. Poll until usage content appears (up to 16s)
         for _ in range(8):
             snap = subprocess.run(
                 [
-                    "npx",
-                    "@playwright/cli",
-                    f"-s={session_id}",
+                    "camoufox-cli",
+                    "--session",
+                    _CFX_SESSION,
                     "eval",
                     "document.body.innerText.substring(0, 500)",
                 ],
@@ -340,12 +309,12 @@ def _scrape_usage_page() -> dict:
                 break
             _time.sleep(2)
 
-        # 5. Extract full body text via eval
+        # 4. Extract full body text
         eval_result = subprocess.run(
             [
-                "npx",
-                "@playwright/cli",
-                f"-s={session_id}",
+                "camoufox-cli",
+                "--session",
+                _CFX_SESSION,
                 "eval",
                 "document.body.innerText.substring(0, 4000)",
             ],
@@ -354,63 +323,40 @@ def _scrape_usage_page() -> dict:
             timeout=15,
         )
 
-        # 6. Close session + cleanup clone
+        # 5. Close session (profile persists — no cleanup needed)
         subprocess.run(
-            ["npx", "@playwright/cli", f"-s={session_id}", "close"],
+            ["camoufox-cli", "--session", _CFX_SESSION, "close"],
             capture_output=True,
             timeout=10,
         )
-        subprocess.run(
-            [_PYTHON, str(pw_session), "cleanup", profile_dir],
-            capture_output=True,
-            timeout=10,
-        )
-        profile_dir = None  # prevent double cleanup
 
-        # 7. Parse output
         if eval_result.returncode != 0:
             log.warning(
-                "pw_scrape_eval_failed", rc=eval_result.returncode, stderr=eval_result.stderr[:200]
+                "cfx_scrape_eval_failed",
+                rc=eval_result.returncode,
+                stderr=eval_result.stderr[:200],
             )
             return {}
 
-        # Playwright CLI eval wraps body text as a JSON-encoded string with
-        # escaped \n.  Decode it so _parse_usage_page_text sees real newlines.
-        text = eval_result.stdout
-        for _line in text.split("\n"):
-            stripped = _line.strip()
-            if stripped.startswith('"') and stripped.endswith('"') and len(stripped) > 200:
-                try:
-                    decoded = json.loads(stripped)
-                    if isinstance(decoded, str):
-                        text = decoded
-                        break
-                except (json.JSONDecodeError, ValueError):
-                    pass
-
-        return _parse_usage_page_text(text)
+        # camoufox-cli eval outputs raw text (no JSON wrapping unlike playwright-cli)
+        return _parse_usage_page_text(eval_result.stdout)
 
     except subprocess.TimeoutExpired:
-        log.warning("pw_scrape_timeout")
+        log.warning("cfx_scrape_timeout")
         return {}
     except Exception:
-        log.debug("pw_scrape_failed", exc_info=True)
+        log.debug("cfx_scrape_failed", exc_info=True)
         return {}
     finally:
-        if profile_dir and sid:
-            try:
-                subprocess.run(
-                    ["npx", "@playwright/cli", f"-s={sid}-ccq", "close"],
-                    capture_output=True,
-                    timeout=10,
-                )
-                subprocess.run(
-                    [_PYTHON, str(pw_session), "cleanup", profile_dir],
-                    capture_output=True,
-                    timeout=10,
-                )
-            except Exception:
-                shutil.rmtree(profile_dir, ignore_errors=True)
+        # Best-effort close if still open
+        try:
+            subprocess.run(
+                ["camoufox-cli", "--session", _CFX_SESSION, "close"],
+                capture_output=True,
+                timeout=5,
+            )
+        except Exception:
+            pass
 
 
 def _parse_usage_page_text(text: str) -> dict:
@@ -478,7 +424,7 @@ def _parse_usage_page_text(text: str) -> dict:
 
     if result:
         log.info(
-            "pw_scrape_parsed",
+            "cfx_scrape_parsed",
             five_hour=result.get("five_hour"),
             seven_day=result.get("seven_day"),
             extra_usage=result.get("extra_usage"),
@@ -487,21 +433,21 @@ def _parse_usage_page_text(text: str) -> dict:
     return result
 
 
-async def _fetch_cc_via_playwright() -> dict:
-    """Async wrapper: run Playwright scrape in executor (with lock to prevent concurrent sessions)."""
+async def _fetch_cc_via_camoufox() -> dict:
+    """Async wrapper: run camoufox scrape in executor (with lock to prevent concurrent sessions)."""
     global _cc_last_fetch_mode
-    if _pw_scrape_lock.locked():
-        log.debug("pw_scrape_already_running")
+    if _cfx_scrape_lock.locked():
+        log.debug("cfx_scrape_already_running")
         return {}
-    async with _pw_scrape_lock:
+    async with _cfx_scrape_lock:
         loop = asyncio.get_running_loop()
         try:
             data = await loop.run_in_executor(None, _scrape_usage_page)
             if data:
-                _cc_last_fetch_mode = "playwright"
+                _cc_last_fetch_mode = "camoufox"
             return data
         except Exception:
-            log.debug("pw_cc_async_failed", exc_info=True)
+            log.debug("cfx_cc_async_failed", exc_info=True)
         return {}
 
 
@@ -697,17 +643,17 @@ async def get_quota(force: bool = False) -> dict:
             # API in backoff — go directly to Playwright
             cc_raw = {}
             log.info(
-                "cc_api_in_backoff_using_playwright",
+                "cc_api_in_backoff_using_camoufox",
                 backoff_remaining_s=int(_cc_backoff_until - now),
             )
         else:
             cc_raw = results[2] if not isinstance(results[2], Exception) else {}
 
-        # Playwright fallback if API returned nothing or used stale/fallback cache
+        # Camoufox fallback if API returned nothing or used stale/fallback cache
         if not cc_raw or _cc_last_fetch_mode in ("backoff_fallback", "error_fallback", "failed"):
-            pw_data = await _fetch_cc_via_playwright()
-            if pw_data:
-                cc_raw = pw_data
+            cfx_data = await _fetch_cc_via_camoufox()
+            if cfx_data:
+                cc_raw = cfx_data
         if cc_raw:
             _cc_raw_result = cc_raw
             _cc_raw_result_ts = now
