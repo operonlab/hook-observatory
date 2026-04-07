@@ -425,26 +425,35 @@ async def qa_question(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("docvault.read"),
 ):
-    """Question-answering pipeline: search → cited answer → log."""
-    from sqlalchemy import select
+    """QA pipeline: IntentRouter → Search/FanOut → DB enrich → Rerank → Synth → Log."""
+    import hashlib as _hashlib
 
-    from src.shared.qdrant_search import hybrid_search
-    from src.shared.search_types import SearchConfig
+    from sqlalchemy import select
 
     from .models import DocumentChunk
     from .ops.cited_answer import CitedAnswerOp
+    from .ops.fan_out import FanOutOp
+    from .ops.hybrid_rrf_search import HybridRRFSearchOp
+    from .ops.intent_router import IntentRouterOp
+    from .ops.jina_rerank import JinaRerankOp
+    from .ops.merge import MergeOp
     from .schemas import CitationRef
 
-    # 1. Search for evidence chunks
-    config = SearchConfig(
-        top_k=body.top_k,
-        service_ids=[DOCVAULT_SERVICE_ID],
-    )
-    results, _meta = await hybrid_search(body.question, space_id, config)
+    # ── 1. Intent routing ──
+    ctx: dict = {"query": body.question, "space_id": space_id, "top_k": body.top_k}
+    await IntentRouterOp()(ctx)
+    pipeline = ctx.get("layer_plan", {}).get("pipeline", "A")
 
-    # 2. Fetch full chunk content from DB (Qdrant only stores 200-char preview)
-    chunk_ids = [r.entity_id for r in results]
-    full_content_map: dict[str, str] = {}
+    # ── 2. Search (Pipeline A: direct, Pipeline B: fan-out + merge) ──
+    if pipeline == "B":
+        await FanOutOp()(ctx)
+        await MergeOp()(ctx)
+    else:
+        await HybridRRFSearchOp(top_k=body.top_k)(ctx)
+
+    # ── 3. Enrich with full chunk content from DB ──
+    evidence = ctx.get("evidence_chunks", [])
+    chunk_ids = [c.get("id", "") for c in evidence if c.get("id")]
     if chunk_ids:
         rows = (
             await db.execute(
@@ -453,29 +462,21 @@ async def qa_question(
                 )
             )
         ).all()
-        full_content_map = {row.id: row.content for row in rows}
+        full_map = {row.id: row.content for row in rows}
+        for c in evidence:
+            full = full_map.get(c.get("id", ""))
+            if full:
+                c["content"] = full
 
-    # 3. Convert to evidence format with full content
-    evidence_chunks = []
-    for r in results:
-        doc_id = r.metadata.get("document_id", r.entity_id)
-        content = full_content_map.get(r.entity_id, r.content_preview)
-        evidence_chunks.append(
-            {
-                "id": r.entity_id,
-                "document_id": doc_id,
-                "content": content,
-                "section_path": r.metadata.get("section_path", ""),
-                "page_range": r.metadata.get("page_range", ""),
-                "heading": r.metadata.get("heading", ""),
-                "score": r.score,
-            }
-        )
+    # ── 4. Cross-encoder rerank ──
+    try:
+        await JinaRerankOp()(ctx)
+    except Exception:
+        logger.warning("JinaRerankOp failed, using retrieval order", exc_info=True)
 
-    # 4. Generate cited answer
-    cited_op = CitedAnswerOp()
-    ctx = {"question": body.question, "evidence_chunks": evidence_chunks}
-    await cited_op(ctx)
+    # ── 5. Synthesize cited answer ──
+    ctx["question"] = body.question
+    await CitedAnswerOp()(ctx)
 
     answer_text = ctx.get("answer", "No answer found.")
     raw_citations = ctx.get("citations", [])
@@ -493,9 +494,7 @@ async def qa_question(
         for c in raw_citations
     ]
 
-    # 5. Log the QA interaction
-    import hashlib as _hashlib
-
+    # ── 6. Log QA interaction ──
     query_hash = _hashlib.sha256(body.question.encode()).hexdigest()[:16]
     qa_log_data = QALogCreate(
         query_text=body.question,
@@ -503,7 +502,7 @@ async def qa_question(
         answer_text=answer_text,
         citations={"refs": raw_citations},
         confidence=confidence,
-        pipeline_used="A",
+        pipeline_used=pipeline,
     )
     qa_log = await qa_log_service.create(db, space_id, qa_log_data)
     await db.commit()
@@ -514,7 +513,7 @@ async def qa_question(
         answer=answer_text,
         citations=citations,
         confidence=confidence,
-        pipeline_used="A",
+        pipeline_used=pipeline,
         qa_log_id=qa_log.id,
     )
 

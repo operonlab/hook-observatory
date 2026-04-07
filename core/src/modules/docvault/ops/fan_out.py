@@ -29,16 +29,16 @@ async def _search_docvault(
     top_k: int,
 ) -> list[dict[str, Any]]:
     """Search docvault chunks via hybrid search."""
-    config = SearchConfig(service_id=DOCVAULT_SERVICE_ID, top_k=top_k, min_score=0.1)
+    config = SearchConfig(service_ids=[DOCVAULT_SERVICE_ID], top_k=top_k)
     try:
-        results = await hybrid_search(query, space_id, config)
+        results, _meta = await hybrid_search(query, space_id, config)
         return [
             {
-                "id": r.id,
-                "content": r.content,
+                "id": r.entity_id,
+                "content": r.content_preview,
                 "score": r.score,
                 "source": "docvault",
-                "document_id": r.metadata.get("entity_id", ""),
+                "document_id": r.metadata.get("document_id", r.entity_id),
                 "section_path": r.metadata.get("section_path", ""),
                 "page_range": r.metadata.get("page_range", ""),
             }
@@ -55,17 +55,17 @@ async def _search_memvault(
     top_k: int,
 ) -> list[dict[str, Any]]:
     """Search memvault blocks via hybrid search."""
-    config = SearchConfig(service_id=MEMVAULT_SERVICE_ID, top_k=top_k, min_score=0.1)
+    config = SearchConfig(service_ids=[MEMVAULT_SERVICE_ID], top_k=top_k)
     try:
-        results = await hybrid_search(query, space_id, config)
+        results, _meta = await hybrid_search(query, space_id, config)
         return [
             {
-                "id": r.id,
-                "content": r.content,
+                "id": r.entity_id,
+                "content": r.content_preview,
                 "score": r.score,
                 "source": "memvault",
                 "block_type": r.metadata.get("block_type", ""),
-                "tags": r.metadata.get("tags", []),
+                "tags": r.tags,
             }
             for r in results
         ]
@@ -104,7 +104,6 @@ class FanOutOp:
 
         sources = layer_plan.get("sources", ["docvault"])
 
-        # Fan out concurrently
         doc_coro = _search_docvault(query, space_id, doc_top_k)
 
         if "memvault" in sources:

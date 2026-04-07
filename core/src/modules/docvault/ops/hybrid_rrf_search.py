@@ -35,10 +35,10 @@ class HybridRRFSearchOp:
     def __init__(
         self,
         top_k: int = 10,
-        min_score: float = 0.1,
+        score_threshold: float = 0.0,
     ) -> None:
         self._top_k = top_k
-        self._min_score = min_score
+        self._score_threshold = score_threshold
 
     @property
     def name(self) -> str:
@@ -63,31 +63,30 @@ class HybridRRFSearchOp:
             return ctx
 
         config = SearchConfig(
-            service_id=SERVICE_ID,
+            service_ids=[SERVICE_ID],
             top_k=top_k,
-            min_score=self._min_score,
+            score_threshold=self._score_threshold,
         )
 
         try:
-            results = await hybrid_search(query, space_id, config)
+            results, _meta = await hybrid_search(query, space_id, config)
         except Exception as e:
             logger.error("HybridRRFSearchOp: search failed: %s", e)
             ctx["evidence_chunks"] = []
             ctx["search_metadata"] = {"total": 0, "error": str(e)}
             return ctx
 
-        # Convert SearchResult to chunk dicts for downstream ops
         evidence_chunks: list[dict[str, Any]] = []
         for r in results:
             chunk: dict[str, Any] = {
-                "id": r.id,
-                "content": r.content,
+                "id": r.entity_id,
+                "content": r.content_preview,
                 "score": r.score,
-                "document_id": r.metadata.get("entity_id", ""),
+                "document_id": r.metadata.get("document_id", r.entity_id),
                 "section_path": r.metadata.get("section_path", ""),
                 "page_range": r.metadata.get("page_range", ""),
                 "heading": r.metadata.get("heading", ""),
-                "chunk_index": r.metadata.get("chunk_index", 0),
+                "chunk_index": r.metadata.get("chunk_index"),
                 "version_id": r.metadata.get("version_id", ""),
                 "created_at": r.metadata.get("created_at", ""),
             }
