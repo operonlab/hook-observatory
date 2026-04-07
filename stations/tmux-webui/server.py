@@ -38,9 +38,9 @@ from tmux_manager import (
     send_keys,
     status_metrics,
 )
-from sdk_client.station_bootstrap import setup_logging
 
 from config import get_config, load_config
+from sdk_client.station_bootstrap import setup_logging
 
 logger = setup_logging("tmux-webui")
 

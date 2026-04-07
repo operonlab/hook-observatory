@@ -78,7 +78,7 @@ mark{background:rgba(255,179,71,.25);color:var(--orange);padding:0 2px;border-ra
 <div class="config-bar" id="configBar" style="display:none">
   <label><input type="checkbox" id="optCiteMarkers" checked> 移除 LLM 標記</label>
   <label><input type="checkbox" id="optNegDuration" checked> 修正負/零持續時間</label>
-  <label><input type="checkbox" id="optHourAnomaly" checked> 修正小時位異常</label>
+  <label><input type="checkbox" id="optHourAnomaly" checked> 修正高位時間碼異常</label>
   <label><input type="checkbox" id="optOverlap" checked> 修正重疊時間戳</label>
   <label><input type="checkbox" id="optDuplicates" checked> 移除重複條目</label>
   <label><input type="checkbox" id="optRenumber" checked> 重新編號</label>
@@ -150,6 +150,75 @@ function parseTsLine(line) {
 }
 
 function isTsLine(line) { return parseTsLine(line) !== null; }
+
+function estimateDurationMs(textLines) {
+  const textLen = textLines.join('').length;
+  return Math.max(1500, Math.min(5000, textLen * 150));
+}
+
+function buildContextCandidates(rawMs, anchors) {
+  const candidates = new Set([rawMs]);
+  const secMsPart = ((rawMs % 60000) + 60000) % 60000;
+  for (const anchor of anchors) {
+    if (!Number.isFinite(anchor)) continue;
+    const baseMinute = Math.floor(anchor / 60000);
+    for (let delta = -1; delta <= 1; delta++) {
+      const totalMinutes = baseMinute + delta;
+      if (totalMinutes >= 0) candidates.add(totalMinutes * 60000 + secMsPart);
+    }
+  }
+  return [...candidates].sort((a, b) => a - b);
+}
+
+function scoreGap(gapMs) {
+  if (!Number.isFinite(gapMs)) return 0;
+  if (gapMs < -200) return 2000 + Math.abs(gapMs);
+  if (gapMs < 0) return 200 + Math.abs(gapMs) * 2;
+  return Math.min(gapMs, 30000) / 15;
+}
+
+function scoreRange(startMs, endMs, prevEnd, nextStart, estDuration) {
+  if (endMs <= startMs) return Number.POSITIVE_INFINITY;
+  const duration = endMs - startMs;
+  if (duration < 300 || duration > 12000) return Number.POSITIVE_INFINITY;
+  let score = Math.abs(duration - estDuration) / 8;
+  if (Number.isFinite(prevEnd)) score += scoreGap(startMs - prevEnd);
+  if (Number.isFinite(nextStart)) score += scoreGap(nextStart - endMs);
+  return score;
+}
+
+function findContextualRepair(entries, index) {
+  const curr = entries[index];
+  const prev = index > 0 ? entries[index - 1] : null;
+  const next = index < entries.length - 1 ? entries[index + 1] : null;
+  const prevEnd = prev ? prev.endMs : NaN;
+  const nextStart = next ? next.startMs : NaN;
+  const estDuration = estimateDurationMs(curr.textLines);
+  const rawScore = scoreRange(curr.startMs, curr.endMs, prevEnd, nextStart, estDuration);
+  const prevGap = prev ? curr.startMs - prev.endMs : 0;
+  const nextGap = next ? next.startMs - curr.endMs : 0;
+  const suspicious = curr.endMs <= curr.startMs || prevGap > 15000 || nextGap > 15000;
+  if (!suspicious) return null;
+
+  const startCandidates = buildContextCandidates(curr.startMs, [prevEnd, curr.endMs, nextStart]);
+  const endCandidates = buildContextCandidates(curr.endMs, [prevEnd, curr.startMs, nextStart]);
+  let best = null;
+
+  for (const startMs of startCandidates) {
+    if (Number.isFinite(prevEnd) && startMs < prevEnd - 2000) continue;
+    for (const endMs of endCandidates) {
+      if (Number.isFinite(nextStart) && endMs > nextStart + 2000) continue;
+      const score = scoreRange(startMs, endMs, prevEnd, nextStart, estDuration);
+      if (!Number.isFinite(score)) continue;
+      if (!best || score < best.score) best = { startMs, endMs, score };
+    }
+  }
+
+  if (!best) return null;
+  if (best.startMs === curr.startMs && best.endMs === curr.endMs) return null;
+  if (Number.isFinite(rawScore) && rawScore - best.score < 500) return null;
+  return best;
+}
 
 // ── Parser ──
 
@@ -259,6 +328,14 @@ function analyzeSRT(entries, parseMeta) {
   }
   if (overlapCount) issues.push({ type:'warn', msg:`${overlapCount} 處時間重疊 (>200ms)`, category:'timestamp' });
 
+  // Large gaps: useful for spotting likely missing subtitles or demo-only sections
+  let largeGapCount = 0;
+  for (let i=1; i<entries.length; i++) {
+    const gap = entries[i].startMs - entries[i-1].endMs;
+    if (gap > 15000) largeGapCount++;
+  }
+  if (largeGapCount) issues.push({ type:'info', msg:`${largeGapCount} 處大空檔 (>15s)，可能是原始缺字幕或長段無旁白`, category:'timestamp' });
+
   // Duplicate entries (same text within 2s window)
   let dupCount = 0;
   for (let i=1; i<entries.length; i++) {
@@ -326,7 +403,7 @@ function fixSRT(entries, opts, parseMeta) {
     if (removed) fixes.push({ type:'fix', msg:`移除 ${removed} 個空白條目` });
   }
 
-  // Fix hour anomaly: only if <10% of entries have hours>=1 (corrupted, not a long video)
+  // Fix high-order anomaly: first handle obvious hour overflow, then repair suspicious minute/hour corruption from local context.
   if (opts.hourAnomaly) {
     const hourEntries = result.filter(e => e.startMs >= 3600000 || e.endMs >= 3600000);
     if (hourEntries.length > 0 && hourEntries.length / result.length < 0.1) {
@@ -348,6 +425,18 @@ function fixSRT(entries, opts, parseMeta) {
         if (hourFixes) fixes.push({ type:'fix', msg:`修正 ${hourFixes} 條小時位異常 (歸零)` });
       }
     }
+
+    let contextualFixes = 0;
+    for (let i=0; i<result.length; i++) {
+      const repaired = findContextualRepair(result, i);
+      if (!repaired) continue;
+      result[i].startMs = repaired.startMs;
+      result[i].endMs = repaired.endMs;
+      result[i].tsLine = `${msToTs(result[i].startMs)} --> ${msToTs(result[i].endMs)}`;
+      contextualFixes++;
+      fixes.push({ type:'fix', msg:`#${result[i].seq}: 依鄰近段落修正時間碼 → ${result[i].tsLine}` });
+    }
+    if (contextualFixes) fixes.push({ type:'fix', msg:`修正 ${contextualFixes} 條高位時間碼錯位` });
   }
 
   // Fix negative/zero durations (after hour fix, since hour fix may resolve some)
@@ -357,8 +446,7 @@ function fixSRT(entries, opts, parseMeta) {
       if (e.endMs <= e.startMs) {
         const prevEnd = i > 0 ? result[i-1].endMs : 0;
         const nextStart = i < result.length-1 ? result[i+1].startMs : e.startMs + 3000;
-        const textLen = e.textLines.join('').length;
-        const estDuration = Math.max(1500, textLen * 150);
+        const estDuration = estimateDurationMs(e.textLines);
 
         if (e.startMs < prevEnd || e.startMs > nextStart || nextStart <= e.startMs) {
           // Start is wrong or nextStart equals start — recalculate both from context
@@ -383,8 +471,7 @@ function fixSRT(entries, opts, parseMeta) {
         const prevEnd = result[i-1].endMs;
         result[i].startMs = prevEnd + 100;
         if (result[i].endMs <= result[i].startMs) {
-          const textLen = result[i].textLines.join('').length;
-          const estDuration = Math.max(1500, textLen * 150);
+          const estDuration = estimateDurationMs(result[i].textLines);
           const nextStart = i < result.length-1 ? result[i+1].startMs : result[i].startMs + estDuration;
           result[i].endMs = Math.min(result[i].startMs + estDuration, nextStart > result[i].startMs ? nextStart : result[i].startMs + estDuration);
         }

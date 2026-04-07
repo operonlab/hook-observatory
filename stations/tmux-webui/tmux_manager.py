@@ -175,6 +175,9 @@ async def status_metrics() -> dict:
         )
         stdout_b, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
         if proc.returncode != 0 or not stdout_b:
+            logger.debug(
+                "status_metrics: curl failed (rc=%s, len=%d)", proc.returncode, len(stdout_b)
+            )
             return results
 
         data = json.loads(stdout_b.decode("utf-8", errors="replace"))
@@ -199,7 +202,7 @@ async def status_metrics() -> dict:
             provider, metric = rest[:sep], rest[sep + 1 :]
             llm.setdefault(provider, {})[metric] = v
         results["llm"] = llm
-    except Exception:  # noqa: S110
-        pass
+    except Exception:
+        logger.warning("status_metrics: failed to fetch metrics", exc_info=True)
 
     return results
