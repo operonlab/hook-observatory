@@ -16,7 +16,6 @@ Each phase is isolated — a failure in one phase does not abort subsequent phas
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -44,23 +43,6 @@ _REFLECT_TIMEOUT = 30
 _REFLECT_MAX_BLOCKS = 15
 _REFLECT_MAX_ATTITUDES = 15
 
-# --- Date Normalization Patterns ---
-_RELATIVE_DATE_PATTERNS: list[tuple[re.Pattern[str], int | None]] = [
-    (re.compile(r"\byesterday\b", re.IGNORECASE), -1),
-    (re.compile(r"\bthe day before yesterday\b", re.IGNORECASE), -2),
-    (re.compile(r"\blast week\b", re.IGNORECASE), -7),
-    (re.compile(r"\blast month\b", re.IGNORECASE), -30),
-    (re.compile(r"\btoday\b", re.IGNORECASE), 0),
-    (re.compile(r"今天"), 0),
-    (re.compile(r"昨天"), -1),
-    (re.compile(r"前天"), -2),
-    (re.compile(r"上週"), -7),
-    (re.compile(r"上個月"), -30),
-]
-_NDAYS_EN = re.compile(r"\b(\d+)\s*days?\s*ago\b", re.IGNORECASE)
-_NDAYS_ZH = re.compile(r"(\d+)\s*天前")
-
-
 # --- Data Structures ---
 
 
@@ -82,40 +64,6 @@ class DreamReport:
         d["started_at"] = self.started_at.isoformat()
         d["finished_at"] = self.finished_at.isoformat() if self.finished_at else None
         return d
-
-
-# --- Date Normalization ---
-
-
-def normalize_dates(content: str, reference_date: datetime) -> str:
-    """Convert relative dates in content to absolute YYYY-MM-DD format.
-
-    Pure function. Returns unchanged content if no matches found.
-    """
-    result = content
-
-    # Fixed offset patterns
-    for pattern, offset in _RELATIVE_DATE_PATTERNS:
-        if offset is None:
-            continue
-        target = (reference_date + timedelta(days=offset)).strftime("%Y-%m-%d")
-        result = pattern.sub(target, result)
-
-    # "N days ago" pattern
-    def _replace_en(m: re.Match[str]) -> str:
-        days = int(m.group(1))
-        return (reference_date - timedelta(days=days)).strftime("%Y-%m-%d")
-
-    result = _NDAYS_EN.sub(_replace_en, result)
-
-    # "N 天前" pattern
-    def _replace_zh(m: re.Match[str]) -> str:
-        days = int(m.group(1))
-        return (reference_date - timedelta(days=days)).strftime("%Y-%m-%d")
-
-    result = _NDAYS_ZH.sub(_replace_zh, result)
-
-    return result
 
 
 # --- Phase Implementations ---

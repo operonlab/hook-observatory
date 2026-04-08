@@ -176,95 +176,25 @@ class NormalizerOp(ABC):
         ...
 
 
-# ======================== Date Normalizer ========================
+# ======================== Date Normalizer (DEPRECATED) ========================
 
-# Relative date patterns — dual-variant (Traditional + Simplified)
-_DATE_PATTERNS: list[tuple[re.Pattern[str], int | None]] = [
-    (re.compile(r"\byesterday\b", re.IGNORECASE), -1),
-    (re.compile(r"\bthe day before yesterday\b", re.IGNORECASE), -2),
-    (re.compile(r"\blast week\b", re.IGNORECASE), -7),
-    (re.compile(r"\blast month\b", re.IGNORECASE), -30),
-    (re.compile(r"\btoday\b", re.IGNORECASE), 0),
-    (re.compile(r"今天"), 0),
-    (re.compile(r"昨天"), -1),
-    (re.compile(r"前天"), -2),
-    (re.compile(r"上[週周]"), -7),
-    (re.compile(r"上[個个]月"), -30),
-    (re.compile(r"大[後后]天"), 3),
-    (re.compile(r"[後后]天"), 2),
-]
-_NDAYS_EN = re.compile(r"\b(\d+)\s*days?\s*ago\b", re.IGNORECASE)
-_NDAYS_ZH = re.compile(r"(\d+)\s*天前")
-_NWEEKS_ZH = re.compile(r"(\d+)\s*[週周]前")
-_NMONTHS_ZH = re.compile(r"(\d+)\s*[個个]月前")
-_NHOURS_ZH = re.compile(r"(\d+)\s*小[時时]前")
+from .temporal import TemporalNormalizer
 
 
-class DateNormalizer(NormalizerOp):
-    """Normalize relative dates to absolute YYYY-MM-DD format."""
+class DateNormalizer(TemporalNormalizer):
+    """Deprecated: use TemporalNormalizer instead."""
 
     name = "date"
 
-    def normalize(self, content: str, ctx: NormContext) -> tuple[str, list[NormChange]]:
-        changes: list[NormChange] = []
-        result = content
-        ref = ctx.created_at
+    def __init__(self) -> None:
+        import warnings
 
-        # Fixed offset patterns
-        for pattern, offset in _DATE_PATTERNS:
-            if offset is None:
-                continue
-            target = (ref + timedelta(days=offset)).strftime("%Y-%m-%d")
-            for m in pattern.finditer(result):
-                changes.append(NormChange("date", m.group(), target))
-            result = pattern.sub(target, result)
-
-        # "N days ago"
-        def _repl_days_en(m: re.Match[str]) -> str:
-            days = int(m.group(1))
-            t = (ref - timedelta(days=days)).strftime("%Y-%m-%d")
-            changes.append(NormChange("date", m.group(), t))
-            return t
-
-        result = _NDAYS_EN.sub(_repl_days_en, result)
-
-        # "N天前"
-        def _repl_days_zh(m: re.Match[str]) -> str:
-            days = int(m.group(1))
-            t = (ref - timedelta(days=days)).strftime("%Y-%m-%d")
-            changes.append(NormChange("date", m.group(), t))
-            return t
-
-        result = _NDAYS_ZH.sub(_repl_days_zh, result)
-
-        # "N周前"
-        def _repl_weeks_zh(m: re.Match[str]) -> str:
-            weeks = int(m.group(1))
-            t = (ref - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
-            changes.append(NormChange("date", m.group(), t))
-            return t
-
-        result = _NWEEKS_ZH.sub(_repl_weeks_zh, result)
-
-        # "N个月前"
-        def _repl_months_zh(m: re.Match[str]) -> str:
-            months = int(m.group(1))
-            t = (ref - timedelta(days=months * 30)).strftime("%Y-%m-%d")
-            changes.append(NormChange("date", m.group(), t))
-            return t
-
-        result = _NMONTHS_ZH.sub(_repl_months_zh, result)
-
-        # "N小时前"
-        def _repl_hours_zh(m: re.Match[str]) -> str:
-            hours = int(m.group(1))
-            t = (ref - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M")
-            changes.append(NormChange("date", m.group(), t))
-            return t
-
-        result = _NHOURS_ZH.sub(_repl_hours_zh, result)
-
-        return result, changes
+        warnings.warn(
+            "DateNormalizer is deprecated, use TemporalNormalizer",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__()
 
 
 # ======================== Currency Normalizer ========================
@@ -381,7 +311,7 @@ _FUZZY_INDICATORS = re.compile(
 
 # Default op order
 DEFAULT_OPS: list[NormalizerOp] = [
-    DateNormalizer(),
+    TemporalNormalizer(),
     CurrencyNormalizer(),
     ProportionNormalizer(),
     DurationNormalizer(),
