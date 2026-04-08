@@ -444,7 +444,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="QA mode (default: factual)",
     )
     p.add_argument("--domain", default="default", help="Domain profile (default: default)")
-    p.add_argument("--top-k", type=int, default=6, help="Evidence chunks (default: 6)")
+    p.add_argument("--top-k", type=int, default=20, help="Evidence chunks (default: 20)")
 
     # list
     p = sub.add_parser("list", parents=[common, paginated], help="List documents")

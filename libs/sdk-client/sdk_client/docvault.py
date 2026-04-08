@@ -167,7 +167,7 @@ class DocvaultClient(BaseClient):
         question: str,
         mode: str = "factual",
         domain: str = "default",
-        top_k: int = 6,
+        top_k: int = 20,
     ) -> dict:
         """Ask a question against document corpus. POST /qa"""
         return self._post(
