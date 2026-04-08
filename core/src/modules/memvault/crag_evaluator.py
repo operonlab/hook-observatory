@@ -256,7 +256,7 @@ class CRAGEvaluator:
             ai_result = await _haiku_eval_agent.run(
                 user_msg,
                 model=make_litellm_model("haiku"),
-                model_settings={"temperature": 0.0, "max_tokens": 10, "timeout": timeout},
+                model_settings={"temperature": 0.0, "max_tokens": 128, "timeout": timeout},
             )
             verdict = ai_result.output.verdict
             score_map = {"correct": 0.8, "ambiguous": 0.5, "incorrect": 0.1}
