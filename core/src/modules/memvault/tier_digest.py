@@ -14,22 +14,30 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
+from pydantic_ai import Agent
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.tier_manager import TierTransition
 
+from .llm_config import make_omlx_model
 from .models import BlockArchive, BlockFrozen, MemoryBlock
 
 logger = logging.getLogger(__name__)
 
-_LLM_URL = "http://localhost:8000/v1/chat/completions"
-_LLM_TIMEOUT = 5.0
 _DIGEST_MAX_CHARS = 400
 _DIGEST_TAG_PREFIX = "digest:"
 _DIGEST_TIERS = {"cold", "frozen"}
 _UPWARD_PAIRS = {("cold", "warm"), ("warm", "hot"), ("frozen", "cold")}
+
+_digest_agent = Agent(
+    output_type=str,
+    system_prompt=(
+        "You are a memory compressor. Given a memory block, compress it into "
+        "1-2 sentences preserving key facts. Return ONLY the compressed text."
+    ),
+    retries=1,
+)
 
 
 async def generate_digest(content: str, block_type: str, tags: list[str]) -> str:
@@ -38,26 +46,17 @@ async def generate_digest(content: str, block_type: str, tags: list[str]) -> str
     Falls back to simple truncation when the LLM is unavailable or times out.
     """
     tag_hint = ", ".join(tags[:5]) if tags else "none"
-    prompt = (
-        f"Compress this {block_type} memory into 1-2 sentences preserving key facts.\n"
-        f"Tags: {tag_hint}\n\n{content}"
-    )
+    user_msg = f"Block type: {block_type}\nTags: {tag_hint}\n\n{content}"
     try:
-        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-            resp = await client.post(
-                _LLM_URL,
-                json={
-                    "model": "default",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 120,
-                    "temperature": 0.2,
-                },
-            )
-            resp.raise_for_status()
-            digest: str = resp.json()["choices"][0]["message"]["content"].strip()
-            logger.debug("tier_digest: LLM digest generated (%d chars)", len(digest))
-            return digest
-    except (httpx.HTTPError, httpx.TimeoutException, KeyError, IndexError) as exc:
+        result = await _digest_agent.run(
+            user_msg,
+            model=make_omlx_model(),
+            model_settings={"temperature": 0.2, "max_tokens": 120, "timeout": 5},
+        )
+        digest = result.output.strip()
+        logger.debug("tier_digest: LLM digest generated (%d chars)", len(digest))
+        return digest
+    except Exception as exc:
         logger.warning("tier_digest: LLM unavailable (%s), using truncation fallback", exc)
         return content[:_DIGEST_MAX_CHARS].rstrip() + (
             "…" if len(content) > _DIGEST_MAX_CHARS else ""
