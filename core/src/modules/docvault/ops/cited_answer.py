@@ -10,55 +10,16 @@ Operator protocol:
 
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 from typing import Any
 
-import httpx
+from pydantic_ai import Agent
+
+from ..llm_config import get_model
+from ..llm_models import SynthResult, VerifyResult
 
 logger = logging.getLogger(__name__)
-
-_LITELLM_BASE = "http://localhost:4000/v1"
-_LITELLM_KEY = "sk-litellm-local-dev"
-_TIMEOUT = 30.0
-
-# Model preference order — LiteLLM config changes externally
-_MODEL_CANDIDATES = ["deepseek-v3", "qwen3.5-flash", "grok-4.1-fast", "gemini-3.1-flash"]
-
-
-_cached_model: str | None = None
-_cached_model_ts: float = 0.0
-
-
-def _resolve_model() -> str:
-    """Pick first available model from candidates via LiteLLM /v1/models. Cached 60s."""
-    import time
-
-    global _cached_model, _cached_model_ts
-    now = time.monotonic()
-    if _cached_model and (now - _cached_model_ts) < 60:
-        return _cached_model
-
-    try:
-        import httpx
-
-        resp = httpx.get(
-            f"{_LITELLM_BASE}/models",
-            headers={"Authorization": f"Bearer {_LITELLM_KEY}"},
-            timeout=3,
-        )
-        available = {m["id"] for m in resp.json().get("data", [])}
-        for candidate in _MODEL_CANDIDATES:
-            if candidate in available:
-                _cached_model = candidate
-                _cached_model_ts = now
-                return candidate
-    except Exception:
-        logger.debug("_resolve_model: failed to query LiteLLM /models, using default")
-    _cached_model = _MODEL_CANDIDATES[0]
-    _cached_model_ts = now
-    return _cached_model
-
 
 _SYSTEM_PROMPT = """\
 You are a document QA assistant. Answer ONLY from evidence chunks. Cite with [N]. \
@@ -92,44 +53,6 @@ Output format (strict JSON, no markdown fences):
 """
 
 
-def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
-    parts = [f"Question: {question}\n\nEvidence chunks:\n"]
-    for i, chunk in enumerate(chunks, 1):
-        section = chunk.get("section_path", "")
-        page = chunk.get("page_range", "")
-        meta_parts = []
-        if section:
-            meta_parts.append(f"section={section}")
-        if page:
-            meta_parts.append(f"page={page}")
-        meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
-        content = chunk.get("content", "")[:3000]
-        parts.append(f"[{i}]{meta}:\n{content}\n")
-    return "\n".join(parts)
-
-
-def _parse_llm_json(text: str) -> dict | None:
-    """Extract JSON from LLM response, handling markdown fences."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        # Remove first and last fence lines
-        lines = [line for line in lines if not line.strip().startswith("```")]
-        text = "\n".join(lines).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        # Try to find JSON object in text
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start >= 0 and end > start:
-            try:
-                return json.loads(text[start:end])
-            except json.JSONDecodeError:
-                return None
-    return None
-
-
 _VERIFY_PROMPT = """\
 You will receive a Question and numbered evidence chunks. \
 Do TWO things:
@@ -152,104 +75,121 @@ If nothing missed and no analogies: {"missed": [], "analogies": []}
 """
 
 
-async def _llm_call(system: str, user_msg: str, temperature: float = 0.2) -> str:
-    """Single LLM call helper. Returns raw content string."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.post(
-            f"{_LITELLM_BASE}/chat/completions",
-            headers={"Authorization": f"Bearer {_LITELLM_KEY}"},
-            json={
-                "model": _resolve_model(),
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_msg},
-                ],
-                "temperature": temperature,
-            },
-        )
-        resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+_synth_agent = Agent(
+    output_type=SynthResult,
+    system_prompt=_SYSTEM_PROMPT,
+    retries=2,
+)
+
+_verify_agent = Agent(
+    output_type=VerifyResult,
+    system_prompt=_VERIFY_PROMPT,
+    retries=2,
+)
+
+
+def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
+    parts = [f"Question: {question}\n\nEvidence chunks:\n"]
+    for i, chunk in enumerate(chunks, 1):
+        section = chunk.get("section_path", "")
+        page = chunk.get("page_range", "")
+        meta_parts = []
+        if section:
+            meta_parts.append(f"section={section}")
+        if page:
+            meta_parts.append(f"page={page}")
+        meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
+        content = chunk.get("content", "")[:3000]
+        parts.append(f"[{i}]{meta}:\n{content}\n")
+    return "\n".join(parts)
 
 
 async def _llm_synthesize(
     question: str, chunks: list[dict[str, Any]]
 ) -> tuple[str, list[int], float]:
-    """Two-pass parallel synthesis.
+    """Two-pass parallel synthesis via PydanticAI agents.
 
-    Pass 1 (analogy extraction) and Pass 2 (cited answer) run concurrently.
+    Pass 1 (verify/analogy extraction) and Pass 2 (cited answer) run concurrently.
     If Pass 1 finds analogies, they are woven into the final answer.
     """
-    import asyncio
-
     user_msg = _build_user_message(question, chunks)
+    model = await get_model()
 
     # ── Parallel: verify+analogy extraction + factual synthesis ──
-    async def _verify_and_extract() -> dict[str, Any]:
+    async def _verify_and_extract() -> VerifyResult:
         try:
-            raw = await _llm_call(_VERIFY_PROMPT, user_msg, temperature=0.1)
-            parsed = _parse_llm_json(raw)
-            return parsed if parsed else {"missed": [], "analogies": []}
+            result = await _verify_agent.run(
+                user_msg,
+                model=model,
+                model_settings={"temperature": 0.1},
+            )
+            return result.output
         except Exception:
             logger.debug("Verify pass failed, skipping")
-            return {"missed": [], "analogies": []}
+            return VerifyResult()
 
-    async def _synthesize() -> dict[str, Any]:
-        raw = await _llm_call(_SYSTEM_PROMPT, user_msg)
-        parsed = _parse_llm_json(raw)
-        if not parsed:
-            logger.warning("CitedAnswerOp: failed to parse LLM JSON, using raw text")
-            return {"answer": raw, "citations_used": [], "confidence": 0.3}
-        return parsed
+    async def _synthesize() -> SynthResult:
+        result = await _synth_agent.run(
+            user_msg,
+            model=model,
+            model_settings={"temperature": 0.2},
+        )
+        return result.output
 
-    verify_result, synth_result = await asyncio.gather(_verify_and_extract(), _synthesize())
+    verify_result, synth_result = await asyncio.gather(
+        _verify_and_extract(), _synthesize()
+    )
 
-    answer = synth_result.get("answer", "")
-    citations_used = synth_result.get("citations_used", [])
-    confidence = float(synth_result.get("confidence", 0.5))
-    confidence = max(0.0, min(1.0, confidence))
+    answer = synth_result.answer or ""
+    citations_used = list(synth_result.citations_used)
+    confidence = max(0.0, min(1.0, synth_result.confidence))
 
     # Hard cap: if LLM reports terminology mismatch, enforce confidence ≤ 0.2
-    terminology_match = synth_result.get("terminology_match", True)
-    if not terminology_match:
+    if not synth_result.terminology_match:
         confidence = min(confidence, 0.2)
 
+    # If answer is empty, return refusal
+    if not answer.strip():
+        refusal_msg = synth_result.reason or "文件中未找到足夠相關的內容來回答此問題。"
+        return refusal_msg, [], 0.0
+
     # ── Dedup helper ──
-    def _dedup_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _dedup_items(
+        items: list[Any],
+    ) -> list[Any]:
         seen: set[str] = set()
-        unique: list[dict[str, Any]] = []
+        unique: list[Any] = []
         for item in items:
-            key = item.get("text", "")[:60]
+            key = item.text[:60]
             if key and key not in seen:
                 seen.add(key)
                 unique.append(item)
         return unique
 
     # ── Merge missed content (append to answer) ──
-    missed = _dedup_items(verify_result.get("missed", []))
-    novel_missed = [m for m in missed if m.get("text", "")[:40] not in answer]
+    missed = _dedup_items(verify_result.missed)
+    novel_missed = [m for m in missed if m.text[:40] not in answer]
     if novel_missed:
         supplement_lines = []
         for m in novel_missed[:3]:
-            chunk_ref = f"[{m['chunk']}]" if m.get("chunk") else ""
-            supplement_lines.append(f"- {m['text']} {chunk_ref}")
-            idx = m.get("chunk")
-            if idx and idx not in citations_used:
-                citations_used.append(idx)
+            chunk_ref = f"[{m.chunk}]" if m.chunk else ""
+            supplement_lines.append(f"- {m.text} {chunk_ref}")
+            if m.chunk and m.chunk not in citations_used:
+                citations_used.append(m.chunk)
         answer = f"{answer}\n\nAdditional relevant details from the document:\n" + "\n".join(
             supplement_lines
         )
 
     # ── Merge analogies (prepend to answer) ──
-    analogies = _dedup_items(verify_result.get("analogies", []))
-    novel_analogies = [a for a in analogies if a.get("text", "")[:40] not in answer]
+    analogies = _dedup_items(verify_result.analogies)
+    novel_analogies = [a for a in analogies if a.text[:40] not in answer]
     if novel_analogies:
         analogy_lines = []
         for a in novel_analogies[:2]:
-            chunk_ref = f"[{a['chunk']}]" if a.get("chunk") else ""
-            analogy_lines.append(f"{a['text']} {chunk_ref}")
-            idx = a.get("chunk")
-            if idx and idx not in citations_used:
-                citations_used.append(idx)
+            chunk_ref = f"[{a.chunk}]" if a.chunk else ""
+            analogy_lines.append(f"{a.text} {chunk_ref}")
+            if a.chunk and a.chunk not in citations_used:
+                citations_used.append(a.chunk)
         answer = " ".join(analogy_lines) + "\n\n" + answer
 
     return answer, citations_used, confidence

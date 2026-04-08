@@ -1,0 +1,51 @@
+"""Pydantic models for LLM structured output — used as PydanticAI result_type."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class MissedContent(BaseModel):
+    text: str
+    chunk: int | None = None
+
+
+class AnalogContent(BaseModel):
+    text: str
+    chunk: int | None = None
+
+
+class VerifyResult(BaseModel):
+    """Result from verify/analogy extraction pass."""
+
+    missed: list[MissedContent] = Field(default_factory=list)
+    analogies: list[AnalogContent] = Field(default_factory=list)
+
+
+class SynthResult(BaseModel):
+    """Result from cited answer synthesis."""
+
+    answer: str | None = None
+    citations_used: list[int] = Field(default_factory=list)
+    terminology_match: bool = True
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    reason: str | None = None
+
+
+class ExpandedQueries(BaseModel):
+    """Result from query expansion."""
+
+    queries: list[str] = Field(default_factory=list)
+
+
+class CommunitySummaryResult(BaseModel):
+    """Result from community summary generation."""
+
+    summary: str
+    key_findings: list[str] = Field(default_factory=list)
+
+
+class RewriteResult(BaseModel):
+    """Result from corrective re-retrieval query rewrite."""
+
+    query: str

@@ -10,11 +10,13 @@ Operator protocol:
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
-import httpx
+from pydantic_ai import Agent
+
+from ..llm_config import get_model
+from ..llm_models import ExpandedQueries
 
 logger = logging.getLogger(__name__)
 
@@ -25,77 +27,51 @@ Each query MUST target a DIFFERENT angle.
 EXAMPLES:
 
 Q: "best practices for writing SKILL.md descriptions"
-→ ["SKILL.md description field frontmatter requirements", \
+→ {"queries": ["SKILL.md description field frontmatter requirements", \
 "writing instructions good and bad examples formatting guidelines", \
-"checklist before uploading skill quality validation"]
+"checklist before uploading skill quality validation"]}
 
 Q: "how to handle errors in MCP connections"
-→ ["MCP connection error handling troubleshooting", \
+→ {"queries": ["MCP connection error handling troubleshooting", \
 "common MCP issues retry reconnect", \
-"debugging checklist MCP server status"]
+"debugging checklist MCP server status"]}
 
 Q: "what testing approach should I use"
-→ ["testing methodology skill validation", \
+→ {"queries": ["testing methodology skill validation", \
 "quantitative qualitative metrics measurement", \
-"iteration feedback improvement cycle"]
+"iteration feedback improvement cycle"]}
 
-Return ONLY a JSON array of 3 strings. No explanation.
+Return ONLY a JSON object with a "queries" field containing an array of 3 strings. \
+No explanation.
 """
 
+_expand_agent = Agent(
+    output_type=ExpandedQueries,
+    system_prompt=_EXPAND_PROMPT,
+    retries=2,
+)
 
-async def expand_query(
-    question: str,
-    litellm_base: str = "http://localhost:4000/v1",
-    litellm_key: str = "sk-litellm-local-dev",
-    request_timeout: float = 10.0,
-) -> list[str]:
+
+async def expand_query(question: str) -> list[str]:
     """Expand a question into multiple search queries via LLM."""
-    # Always include the original query
     queries = [question]
 
     try:
-        # Resolve available model
-        from .cited_answer import _resolve_model
-
-        model = _resolve_model()
-
-        async with httpx.AsyncClient(timeout=request_timeout) as client:
-            resp = await client.post(
-                f"{litellm_base}/chat/completions",
-                headers={"Authorization": f"Bearer {litellm_key}"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": _EXPAND_PROMPT},
-                        {"role": "user", "content": question},
-                    ],
-                    "temperature": 0.3,
-                },
-            )
-            resp.raise_for_status()
-
-        content = resp.json()["choices"][0]["message"]["content"].strip()
-
-        # Parse JSON array from response
-        if content.startswith("["):
-            expanded = json.loads(content)
-        else:
-            # Try to extract JSON from markdown code block
-            import re
-
-            match = re.search(r"\[.*\]", content, re.DOTALL)
-            if match:
-                expanded = json.loads(match.group())
-            else:
-                expanded = []
-
-        if isinstance(expanded, list):
-            for q in expanded:
-                if isinstance(q, str) and q.strip() and q.strip() != question:
-                    queries.append(q.strip())
+        model = await get_model()
+        result = await _expand_agent.run(
+            question,
+            model=model,
+            model_settings={"temperature": 0.3, "timeout": 10},
+        )
+        for q in result.output.queries:
+            if q.strip() and q.strip() != question:
+                queries.append(q.strip())
 
     except Exception:
-        logger.debug("QueryExpandOp: LLM expansion failed, using original query only")
+        logger.warning(
+            "QueryExpandOp: LLM expansion failed, using original query only",
+            exc_info=True,
+        )
 
     return queries[:4]  # Cap at 4 queries max
 
