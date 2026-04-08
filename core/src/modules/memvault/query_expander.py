@@ -14,10 +14,11 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-import httpx
+from pydantic_ai import Agent
 
-from sdk_client.retry import async_with_backoff
 from sdk_client.timeout import dynamic_timeout
+
+from .llm_config import make_omlx_model
 
 logger = logging.getLogger(__name__)
 
@@ -225,20 +226,17 @@ def should_expand(query: str) -> bool:
     return False
 
 
-def _build_hyde_prompt(query: str) -> str:
-    """Build prompt for hypothetical memory generation.
-
-    Prompt the LLM to generate what an ideal memory entry would look like
-    for this query. Short, factual, like a note to self.
-    """
-    return (
+_hyde_agent = Agent(
+    output_type=str,
+    system_prompt=(
         "You are a memory retrieval assistant. Given a search query, generate a SHORT "
         "hypothetical memory entry (2-3 sentences) that would perfectly answer this query. "
         "Write it as if it were a stored memory note.\n\n"
-        f"Query: {query}\n\n"
         "Respond with ONLY the hypothetical memory text, nothing else. "
         "Match the language of the query."
-    )
+    ),
+    retries=2,
+)
 
 
 async def expand_query(query: str) -> ExpandedQuery:
@@ -265,8 +263,7 @@ async def expand_query(query: str) -> ExpandedQuery:
         )
 
     # Try HyDE via local LLM
-    prompt = _build_hyde_prompt(query)
-    hypothetical = await _call_local_llm(prompt, max_tokens=200)
+    hypothetical = await _call_hyde_llm(query)
 
     if hypothetical and hypothetical.strip():
         hyde_text = hypothetical.strip()
@@ -502,47 +499,20 @@ def _run_rlm_expansion(query: str) -> str | None:
     return text
 
 
-@async_with_backoff(
-    max_retries=2,
-    base_delay=0.5,
-    max_delay=5.0,
-    retryable=(httpx.TimeoutException, httpx.NetworkError),
-)
-async def _call_local_llm_with_retry(prompt: str, max_tokens: int, timeout: float) -> str | None:
-    """Inner call with retry — separated so backoff decorator can wrap cleanly."""
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(
-            "http://localhost:8000/v1/chat/completions",
-            json={
-                "model": "default",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_tokens,
-                "temperature": 0.3,
-                "stream": False,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        choices = data.get("choices", [])
-        if choices:
-            return choices[0].get("message", {}).get("content", "")
-    return None
+async def _call_hyde_llm(query: str) -> str | None:
+    """Call oMLX local LLM for HyDE query expansion. Returns None on failure.
 
-
-async def _call_local_llm(prompt: str, max_tokens: int = 200) -> str | None:
-    """Call oMLX local LLM for query expansion. Returns None on failure.
-
-    Uses oMLX port 8000 with a dynamic timeout scaled by prompt length,
-    retrying up to 2 times on transient network/timeout errors.
+    Uses PydanticAI agent with oMLX (port 8000), dynamic timeout scaled by
+    query length, and built-in retries (2 attempts).
     """
-    query_length = len(prompt)
-    timeout = dynamic_timeout(base=5, factor=0.5, context=query_length / 1000, cap=30)
+    timeout = dynamic_timeout(base=5, factor=0.5, context=len(query) / 1000, cap=30)
     try:
-        return await _call_local_llm_with_retry(prompt, max_tokens, timeout)
-    except httpx.TimeoutException:
-        logger.debug("oMLX LLM timeout during query expansion — falling back to keyword mode")
-    except httpx.ConnectError:
-        logger.debug("oMLX LLM unavailable — falling back to keyword mode")
+        result = await _hyde_agent.run(
+            query,
+            model=make_omlx_model(),
+            model_settings={"temperature": 0.3, "max_tokens": 200, "timeout": timeout},
+        )
+        return result.output
     except Exception:
-        logger.exception("Unexpected error during HyDE LLM call")
+        logger.debug("oMLX LLM unavailable — falling back to keyword mode")
     return None
