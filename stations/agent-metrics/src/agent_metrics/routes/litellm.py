@@ -197,15 +197,109 @@ _MODEL_CATALOG = [
 ]
 
 
+_HIGHLIGHTS_SUBJECTIVE = {
+    "smart": {"name": "grok-4.20", "provider": "xAI", "note": "2M context 旗艦，config 標註最強"},
+    "fast": {"name": "qwen3.5-flash", "provider": "Qwen", "note": "$0.10/$0.40 全場最低 input 價"},
+    "value": {"name": "deepseek-v3", "provider": "DeepSeek", "note": "$0.28/$0.42 地板價"},
+    "free": {
+        "name": "gemini-2.5-flash",
+        "provider": "Google",
+        "note": "仍免費，但 2025/12 速率限制砍半",
+    },
+}
+
+# Sources: LMSYS Chatbot Arena (2026-04-07), SWE-Bench Verified, ArtificialAnalysis.ai
+_HIGHLIGHTS_BENCHMARK = {
+    "overall": {
+        "name": "grok-4.20",
+        "provider": "xAI",
+        "score": "1491 Elo",
+        "note": "Arena 第 3（前 2 為 Claude/Gemini Pro）",
+    },
+    "coding": {
+        "name": "grok-4.20",
+        "provider": "xAI",
+        "score": "79.6% SWE-Bench",
+        "note": "亞軍 Gemini 3 Flash 78%",
+    },
+    "reasoning": {
+        "name": "kimi-k2.5",
+        "provider": "Moonshot",
+        "score": "96.1% AIME",
+        "note": "數學推理遙遙領先",
+    },
+    "chinese": {
+        "name": "glm-5",
+        "provider": "Z.AI",
+        "score": "1456 Elo",
+        "note": "開源中文模型王，BenchLM 82",
+    },
+    "speed": {
+        "name": "gemini-2.5-flash-lite",
+        "provider": "Google",
+        "score": "380 tok/s",
+        "note": "全場最快出字速度",
+    },
+    "cost": {
+        "name": "deepseek-v3",
+        "provider": "DeepSeek",
+        "score": "$0.28/M in",
+        "note": "品質/價格比最高",
+    },
+}
+
+_SCENARIOS = [
+    {
+        "task": "寫程式",
+        "best": "grok-4.20",
+        "alt": "gemini-3.1-pro",
+        "reason": "SWE-Bench 79.6% / 78.8%",
+    },
+    {"task": "中文內容", "best": "glm-5", "alt": "kimi-k2.5", "reason": "Arena 1456 / ~1450 Elo"},
+    {
+        "task": "數學推理",
+        "best": "kimi-k2.5",
+        "alt": "deepseek-r1",
+        "reason": "AIME 96.1%，K2.5 數學最強",
+    },
+    {
+        "task": "研究分析",
+        "best": "gemini-3.1-pro",
+        "alt": "grok-4.20",
+        "reason": "Intelligence 57，長文理解佳",
+    },
+    {
+        "task": "快速草稿",
+        "best": "qwen3.5-flash",
+        "alt": "gemini-3.1-flash-lite",
+        "reason": "$0.10 + 極速出字",
+    },
+    {
+        "task": "Agent 任務",
+        "best": "kimi-k2.5",
+        "alt": "minimax-m2.7",
+        "reason": "BrowseComp 78%，多步工具使用",
+    },
+    {
+        "task": "省錢至上",
+        "best": "deepseek-v3",
+        "alt": "qwen3.5-flash",
+        "reason": "$0.28/$0.42 vs $0.10/$0.40",
+    },
+]
+
+
 @router.get("/model-catalog")
 async def litellm_model_catalog() -> dict:
     """Return model catalog with Smart/Fast/Value classification per provider."""
     return {
         "catalog": _MODEL_CATALOG,
-        "highlights": {
-            "smart": {"name": "grok-4.20", "provider": "xAI", "note": "2M context 全場最強"},
-            "fast": {"name": "qwen3.5-flash", "provider": "Qwen", "note": "$0.10/$0.40 極速"},
-            "value": {"name": "deepseek-v3", "provider": "DeepSeek", "note": "$0.28/$0.42 地板價"},
-            "free": {"name": "gemini-2.5-flash", "provider": "Google", "note": "免費且品質穩定"},
+        "highlights_subjective": _HIGHLIGHTS_SUBJECTIVE,
+        "highlights_benchmark": _HIGHLIGHTS_BENCHMARK,
+        "scenarios": _SCENARIOS,
+        "data_sources": {
+            "arena": "LMSYS Chatbot Arena (2026-04-07)",
+            "swe_bench": "SWE-Bench Verified (vals.ai)",
+            "speed": "ArtificialAnalysis.ai (72h rolling avg)",
         },
     }

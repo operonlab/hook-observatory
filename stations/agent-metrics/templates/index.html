@@ -84,10 +84,37 @@
   <!-- ═══ Tab: 模型圖鑑 ═══ -->
   <div class="tab-panel" id="panel-catalog">
     <div class="container">
-      <!-- Highlights -->
+      <!-- Benchmark-based picks -->
       <div class="card">
-        <div class="card-title">跨廠商最佳選擇</div>
-        <div class="highlight-grid" id="catalog-highlights">
+        <div class="card-title">📊 評測推薦 — Arena / SWE-Bench / Speed</div>
+        <div class="highlight-grid" id="catalog-benchmark">
+          <div class="empty">載入中...</div>
+        </div>
+        <div id="catalog-sources" style="margin-top:0.5rem;font-size:0.55rem;color:var(--overlay0)"></div>
+      </div>
+      <!-- Scenario recommendations -->
+      <div class="card">
+        <div class="card-title">🎯 場景推薦</div>
+        <div class="table-wrap">
+          <table class="data-table" id="scenario-table">
+            <thead>
+              <tr>
+                <th>使用場景</th>
+                <th>首選</th>
+                <th>替代</th>
+                <th>依據</th>
+              </tr>
+            </thead>
+            <tbody id="scenario-tbody">
+              <tr><td colspan="4" class="empty">載入中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Subjective picks -->
+      <div class="card">
+        <div class="card-title">💡 主觀推薦 — 來自 LiteLLM Config 標註</div>
+        <div class="highlight-grid" id="catalog-subjective">
           <div class="empty">載入中...</div>
         </div>
       </div>

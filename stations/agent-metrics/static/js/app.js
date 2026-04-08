@@ -169,32 +169,64 @@ function updateQuotaFromSSE(data) {
 }
 
 /* ── 模型圖鑑 Tab ── */
+function _renderHighlights(el, h, cards) {
+  el.innerHTML = cards.map(c => {
+    const m = h[c.key];
+    if (!m) return "";
+    const scoreLine = m.score ? `<div style="font-size:0.65rem;font-weight:600;color:${c.color}">${m.score}</div>` : "";
+    return `<div class="highlight-card" style="border-color:${c.color}">
+      <div class="hl-icon">${c.icon}</div>
+      <div class="hl-label" style="color:${c.color}">${c.label}</div>
+      <div class="hl-name">${m.name}</div>
+      ${scoreLine}
+      <div class="hl-provider">${m.provider}</div>
+      <div class="hl-note">${m.note}</div>
+    </div>`;
+  }).join("");
+}
+
 async function refreshCatalog() {
   const data = await api("litellm/model-catalog");
   if (!data) return;
 
-  const hlEl = document.getElementById("catalog-highlights");
-  if (hlEl && data.highlights) {
-    const h = data.highlights;
-    const cards = [
+  // Benchmark-based highlights
+  const bmEl = document.getElementById("catalog-benchmark");
+  if (bmEl && data.highlights_benchmark) {
+    _renderHighlights(bmEl, data.highlights_benchmark, [
+      { key: "overall", icon: "🏆", label: "綜合最強", color: "var(--mauve)" },
+      { key: "coding", icon: "💻", label: "寫程式", color: "var(--blue)" },
+      { key: "reasoning", icon: "🧮", label: "數學推理", color: "var(--peach)" },
+      { key: "chinese", icon: "🇹🇼", label: "中文最強", color: "var(--red)" },
+      { key: "speed", icon: "⚡", label: "出字最快", color: "var(--yellow)" },
+      { key: "cost", icon: "💰", label: "CP 值王", color: "var(--green)" },
+    ]);
+  }
+  const srcEl = document.getElementById("catalog-sources");
+  if (srcEl && data.data_sources) {
+    const s = data.data_sources;
+    srcEl.textContent = `資料來源：${s.arena} · ${s.swe_bench} · ${s.speed}`;
+  }
+
+  // Scenario table
+  const sTbody = document.getElementById("scenario-tbody");
+  if (sTbody && data.scenarios) {
+    sTbody.innerHTML = data.scenarios.map(s =>
+      `<tr><td style="font-weight:600;white-space:nowrap">${s.task}</td><td style="color:var(--blue);font-weight:600">${s.best}</td><td>${s.alt}</td><td style="font-size:0.65rem;color:var(--subtext0)">${s.reason}</td></tr>`
+    ).join("");
+  }
+
+  // Subjective highlights
+  const sjEl = document.getElementById("catalog-subjective");
+  if (sjEl && data.highlights_subjective) {
+    _renderHighlights(sjEl, data.highlights_subjective, [
       { key: "smart", icon: "🧠", label: "最強", color: "var(--mauve)" },
       { key: "fast", icon: "⚡", label: "最快", color: "var(--yellow)" },
       { key: "value", icon: "💰", label: "CP 值最高", color: "var(--green)" },
       { key: "free", icon: "🎁", label: "免費首選", color: "var(--teal)" },
-    ];
-    hlEl.innerHTML = cards.map(c => {
-      const m = h[c.key];
-      if (!m) return "";
-      return `<div class="highlight-card" style="border-color:${c.color}">
-        <div class="hl-icon">${c.icon}</div>
-        <div class="hl-label" style="color:${c.color}">${c.label}</div>
-        <div class="hl-name">${m.name}</div>
-        <div class="hl-provider">${m.provider}</div>
-        <div class="hl-note">${m.note}</div>
-      </div>`;
-    }).join("");
+    ]);
   }
 
+  // Per-provider catalog table
   const tbody = document.getElementById("catalog-tbody");
   if (tbody && data.catalog) {
     tbody.innerHTML = data.catalog.map(row => {
