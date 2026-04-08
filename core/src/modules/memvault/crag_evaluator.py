@@ -23,7 +23,7 @@ from pydantic_ai import Agent
 
 from sdk_client.timeout import dynamic_timeout
 
-from .llm_config import make_litellm_model
+from .llm_config import get_litellm_model
 from .llm_models import CRAGVerdictOutput
 
 if TYPE_CHECKING:
@@ -255,7 +255,7 @@ class CRAGEvaluator:
 
             ai_result = await _haiku_eval_agent.run(
                 user_msg,
-                model=make_litellm_model("haiku"),
+                model=await get_litellm_model(),
                 model_settings={"temperature": 0.0, "max_tokens": 128, "timeout": timeout},
             )
             verdict = ai_result.output.verdict
