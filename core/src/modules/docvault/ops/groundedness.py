@@ -20,7 +20,8 @@ from ..llm_models import GroundednessResult, SynthResult
 
 logger = logging.getLogger(__name__)
 
-# ── Tier 3 toggle ──
+# ── Tier 2 & 3 toggles (off by default — extra LLM calls add latency) ──
+NLI_VERIFICATION_ENABLED = os.environ.get("DOCVAULT_NLI_VERIFY", "0") == "1"
 SELF_CONSISTENCY_ENABLED = os.environ.get("DOCVAULT_SELF_CONSISTENCY", "0") == "1"
 
 # ── Tier 1: Span Validation ──
@@ -105,6 +106,9 @@ async def verify_claims(
 
     Returns GroundednessResult with per-claim verdicts.
     """
+    if not NLI_VERIFICATION_ENABLED:
+        return GroundednessResult()
+
     if not answer.strip() or not chunks:
         return GroundednessResult()
 
@@ -175,9 +179,7 @@ async def self_consistency_check(
         except Exception:
             return None
 
-    secondary_results = await asyncio.gather(
-        *[_generate_one() for _ in range(n_samples)]
-    )
+    secondary_results = await asyncio.gather(*[_generate_one() for _ in range(n_samples)])
     valid_results = [r for r in secondary_results if r and r.answer]
 
     if not valid_results:
@@ -225,9 +227,7 @@ async def self_consistency_check(
                 key = f"{match.group(1).replace(',', '')}_{match.group(2).lower()}"
                 result_nums.add(key)
             # Count how many of this answer's numbers appear in other answers
-            agreement = sum(
-                1 for n in result_nums if len(number_votes.get(n, [])) > 1
-            )
+            agreement = sum(1 for n in result_nums if len(number_votes.get(n, [])) > 1)
             if agreement > best_agreement:
                 best_agreement = agreement
                 best_idx = idx
