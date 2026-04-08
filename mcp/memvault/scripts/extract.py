@@ -365,10 +365,15 @@ Timestamp: {timestamp}
     elif memvault_llm == "codex":
         pass  # model stays empty unless explicitly set
 
-    log(f"Calling {memvault_llm} ({memvault_model or 'default'}) for extraction ...")
+    # Primary: LiteLLM HTTP (uses Google API quota), fallback: Gemini CLI headless
+    litellm_model = os.environ.get("MEMVAULT_LITELLM_MODEL", "gemini-3.1-pro")
     pipeline_t0 = time.monotonic()
-
-    llm_output, extract_elapsed = _call_llm(memvault_llm, memvault_model, prompt, env)
+    llm_output, extract_elapsed = _call_litellm(litellm_model, prompt)
+    if llm_output is not None:
+        log(f"Extraction via LiteLLM ({litellm_model}) took {extract_elapsed:.1f}s.")
+    else:
+        log(f"LiteLLM failed, falling back to {memvault_llm} CLI ({memvault_model}) ...")
+        llm_output, extract_elapsed = _call_llm(memvault_llm, memvault_model, prompt, env)
     log(f"Extraction LLM took {extract_elapsed:.1f}s (input ~{len(prompt):,} chars).")
     if llm_output is None:
         sys.exit(0)
@@ -679,6 +684,35 @@ Timestamp: {timestamp}
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _call_litellm(model: str, prompt: str) -> "tuple[str | None, float]":
+    """Call LiteLLM proxy HTTP API. Returns (output, elapsed) or (None, elapsed) on failure."""
+    t0 = time.monotonic()
+    litellm_base = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000/v1")
+    litellm_key = os.environ.get("LITELLM_API_KEY", "sk-litellm-local-dev")
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": 16000,
+        }
+    ).encode("utf-8")
+    url = f"{litellm_base}/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {litellm_key}",
+    }
+    try:
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+            text = data["choices"][0]["message"]["content"]
+            return text, time.monotonic() - t0
+    except Exception as e:
+        log(f"LiteLLM call failed: {e}")
+        return None, time.monotonic() - t0
 
 
 def _call_llm(llm: str, model: str, prompt: str, env: dict) -> "tuple[str | None, float]":

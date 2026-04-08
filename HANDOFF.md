@@ -1,66 +1,41 @@
-# DocVault E2E 修通 Handoff
+# HANDOFF: Synthesis Pipeline 排查
 
 ## Goal
-修通 docvault CLI/API 的 search + QA route，讓少爺能用 `/docvault` 問 PDF 文件的問題。
+排查 memvault synthesis pipeline 為什麼 community_summaries 只有 76/2342（3.2% 產生率），修復後讓 cascade recall L2 summaries 層恢復正常。
 
-## 背景
-少爺想要 memvault（個人記憶）之外，再建一套基於文件事實的 QA 知識圖譜（docvault）。這個 session 完成了：
-- 完整架構設計（Plan: `.claude/plans/flickering-greeting-micali.md`）
-- Slot-based pipeline（5 可替換 Slot + Domain Profiles）
-- 模組骨架（67 files, ~9K LOC, 五層覆蓋）
-- DB schema（6 tables in `docvault.*`）
-- tmux-relay signal fix（pane-exited hook）
-- **底層 E2E 鏈路已通**：PDF parse → chunk → embed → Qdrant index → search
+## Background
+- Synthesis 排程在每日 17:30 跑（`schedules/runners/ws_memvault_synthesis.py`）
+- 調查發現 Step 1（`synthesis_runner.py` → Leiden clustering + LLM summaries）反覆失敗
+- DB 有 2,342 個 communities 但只有 76 個 community_summaries
+- Qdrant 已有 211 個 summary 向量（`backfill_kg_qdrant.py` 已跑過）
 
-## 當前痛點（需要修的）
-CLI/API 的 search 和 QA route 回 500。底層 `hybrid_search()` 已確認能用，問題在 route 層的 request/response 格式。
+## Today's Context
+今天（2026-04-08）完成了 memvault 的大修：
+1. PydanticAI 導入：7 個 httpx → PydanticAI Agent（全走 LiteLLM）
+2. extract.py auth 修復：X-Internal-Key header（860 blocks 孤兒已補吃）
+3. cascade recall blocks 層修復：改用 qdrant_search()
+4. KG Qdrant 向量全層補建：35K+ vectors
+5. 萃取模型切換：LiteLLM gemini-3.1-pro（主）+ Gemini CLI（備援）
 
-### 具體問題
-1. `POST /api/docvault/search` — route 改成接受 body `DocumentSearchParams`，但可能 SDK 和 route 的 params 沒對齊
-2. `POST /api/docvault/qa` — 還沒測過，可能也有類似問題
-3. CLI `docvault search` 和 `docvault qa` 依賴上面的 route
+**唯一剩餘問題**就是 synthesis pipeline L2 summaries 產生率低。
 
-### 已驗證能用的底層
-```python
-# 這些都確認 OK：
-from src.shared.qdrant_search import hybrid_search
-from src.shared.search_types import SearchConfig
-config = SearchConfig(top_k=5, service_ids=["docvault-chunk"])
-results, meta = await hybrid_search("problem-first approach", "default", config)
-# → 3 results, score 0.5/0.33/0.25
-```
+## Key Files
+| File | Purpose |
+|------|---------|
+| `schedules/runners/ws_memvault_synthesis.py` | 排程入口 |
+| `schedules/manifest.json` (line 16-24) | Job config (17:30 daily) |
+| `mcp/memvault/pipelines/synthesis_runner.py` | 實際 pipeline |
+| `mcp/memvault/pipelines/cluster_pipeline.py` | Leiden clustering |
+| `core/src/modules/memvault/kg_services.py` | CommunityService / CommunitySummaryService |
 
-### 已上傳的測試文件
-- Document ID: `019d6381167e774196fc6094797a98e7`
-- Title: "Anthropic Skill Guide"
-- Source: `/tmp/anthropic-skill-guide.pdf` (561KB, 33 pages)
-- 26 chunks indexed in Qdrant (service_id="docvault-chunk")
+## Diagnosis Steps
+1. 讀 synthesis log：`~/Claude/memvault/logs/synthesis.log` 或 Cronicle (port 4105) job log
+2. 找到 Step 1 的具體錯誤訊息
+3. 手動跑一次 synthesis 觀察錯誤
+4. 修復後驗證 summaries 數量增加
 
-## Files Modified
-| Path | What Changed |
-|------|-------------|
-| `core/src/modules/docvault/routes.py` | upload endpoint 已通，search/qa route 需修 body params |
-| `core/src/modules/docvault/schemas.py` | 加了 DocumentSearchParams、DocumentUploadRequest |
-| `core/src/modules/docvault/models.py` | 修了 metadata_ column name |
-| `libs/sdk-client/sdk_client/docvault.py` | upload() 改用 file_path，search params 需對齊 route |
-| `core/cli/docvault.py` | 依賴 SDK，SDK 修好就能用 |
-
-## Next Steps
-1. 修 `routes.py` 的 `search_documents` endpoint — 確認 `DocumentSearchParams` body 和 SDK 的 request 對齊
-2. 修 `routes.py` 的 `qa` endpoint — 確認 `QARequest` body 格式
-3. 重啟 core：`~/.local/bin/python3 scripts/workshop_services.py restart core`
-4. 測試：`~/.local/bin/python3 ~/workshop/core/cli/docvault.py search "problem-first" --json` (需設 CORE_INTERNAL_API_KEY env)
-5. 測試：同上但用 `qa "How does problem-first approach work?"` 
-6. 少爺的最終需求：用 docvault 回答「Anthropic Skill Guide 裡 problem-first 是怎麼處理問題的？」
-
-## Key Decisions
-1. docvault 是獨立 module，不改 memvault（認識論不同：記憶衰減 vs 文件永存）
-2. Slot-based pipeline：不同領域（醫療/法律/金融）用不同 Op 組合
-3. Phase 1 default 用 ContextualChunkOp（Anthropic 方法），不用 LateChunkOp（需改 embed_worker）
-4. 矛盾偵測改異步（emit event），不在讀路徑同步寫
-5. Auth 用 X-Internal-Key header，env: CORE_INTERNAL_API_KEY
-
-## References
-- Plan: `/Users/joneshong/.claude/plans/flickering-greeting-micali.md`
-- Skill: `~/.claude/skills/docvault/SKILL.md`
-- Memory: `~/.claude/projects/-Users-joneshong-workshop/memory/docvault-architecture.md`
+## What's Already Verified
+- DB: blocks 2262, triples 28900, communities 2342, attitudes 2131
+- Qdrant: blocks 2296, triples 28632, communities 2342, summaries 211, attitudes 2146
+- Cascade recall: 四層（summaries/communities/triples/blocks）全通
+- Core API auth: X-Internal-Key working
