@@ -1,4 +1,4 @@
-/* charts.js — Pure SVG gauge rings + sparklines (zero dependencies) */
+/* charts.js — Pure SVG gauge rings + sparklines (Mission Control Edition) */
 
 /**
  * Set a gauge ring's value. Expects SVG structure with .fill circle.
@@ -14,8 +14,11 @@ function setGauge(gaugeId, pct, valueId, detailId, detailText) {
   if (!circle || !valueEl) return;
 
   const clamped = Math.max(0, Math.min(100, pct));
-  const offset = 100 - clamped;
-  circle.setAttribute('stroke-dashoffset', offset);
+
+  // Use stroke-dasharray/offset on a circle with circumference ~100
+  // (viewBox 36x36, r=15.9 → circ ≈ 99.9)
+  circle.setAttribute('stroke-dasharray', `${clamped}, 100`);
+  circle.setAttribute('stroke-dashoffset', '0');
 
   valueEl.textContent = Math.round(clamped) + '%';
 
@@ -59,7 +62,7 @@ function renderSparkline(container, data, opts = {}) {
 
   const points = data.map((v, i) => {
     const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * (height - 4) - 2;
+    const y = height - ((v - min) / range) * (height - 6) - 3;
     return `${x},${y}`;
   });
 
@@ -68,19 +71,27 @@ function renderSparkline(container, data, opts = {}) {
   let fillPath = '';
   if (opts.fill) {
     fillPath = `<path d="${pathD} L${width},${height} L0,${height} Z"
-      fill="${color}" fill-opacity="0.1" stroke="none"/>`;
+      fill="${color}" fill-opacity="0.08" stroke="none"/>`;
   }
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="overflow:visible">
+      <defs>
+        <filter id="spark-glow">
+          <feGaussianBlur stdDeviation="1.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
       ${fillPath}
-      <path d="${pathD}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="${pathD}" fill="none" stroke="${color}" stroke-width="1.5"
+        stroke-linejoin="round" stroke-linecap="round"
+        filter="url(#spark-glow)" opacity="0.9"/>
     </svg>
   `;
 }
 
 /**
- * Create a progress bar element.
+ * Create a progress bar element with gradient fill.
  * @param {number} pct - 0-100
  * @param {string} leftText - Left label
  * @param {string} rightText - Right label
@@ -103,4 +114,37 @@ function progressBar(pct, leftText, rightText) {
       </div>
     </div>
   `;
+}
+
+/**
+ * Build a gauge card HTML string for the quota grid.
+ * @param {string} label - Display label
+ * @param {number|null} pct - Percentage 0-100 or null
+ * @param {string} displayVal - Value to show inside ring
+ * @param {string} fullVal - Full tooltip value
+ * @returns {string} HTML string
+ */
+function buildGaugeCard(label, pct, displayVal, fullVal) {
+  let colorVar = 'var(--green)';
+  let threshClass = 'gauge-ok';
+  if (pct !== null) {
+    if (pct >= 85)      { colorVar = 'var(--red)';    threshClass = 'gauge-crit'; }
+    else if (pct >= 60) { colorVar = 'var(--yellow)'; threshClass = 'gauge-warn'; }
+  }
+  const dashArray = pct !== null ? pct : 0;
+
+  return `<div class="quota-card" title="${fullVal}">
+    <div class="quota-label">${label}</div>
+    <div class="gauge-container">
+      <div class="gauge-ring ${threshClass}">
+        <svg viewBox="0 0 36 36">
+          <circle class="track" cx="18" cy="18" r="15.9"/>
+          <circle class="fill" cx="18" cy="18" r="15.9"
+            stroke-dasharray="${dashArray}, 100"
+            stroke-dashoffset="0"/>
+        </svg>
+        <div class="gauge-value">${displayVal}</div>
+      </div>
+    </div>
+  </div>`;
 }
