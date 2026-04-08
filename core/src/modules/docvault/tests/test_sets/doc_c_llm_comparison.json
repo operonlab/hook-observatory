@@ -1,0 +1,65 @@
+{
+  "_meta": {
+    "document_title": "LLM Provider Comparison Report April 2026",
+    "document_id": "019d6d4025327421ad9041e266181ed2",
+    "description": "Table-heavy comparison document with pricing and benchmarks",
+    "created": "2026-04-08"
+  },
+  "questions": [
+    {
+      "id": "C-01",
+      "document": "llm-comparison",
+      "question": "Which LLM provider has the largest context window?",
+      "expected_answer": "Google DeepMind's Gemini 2.5 Pro with 2,000,000 tokens",
+      "keywords": ["Gemini", "2,000,000", "2M", "Google"],
+      "difficulty": "easy",
+      "type": "direct",
+      "expected_confidence_range": [0.7, 1.0],
+      "notes": "Direct — Gemini 2.5 Pro has the largest context at 2M tokens"
+    },
+    {
+      "id": "C-02",
+      "document": "llm-comparison",
+      "question": "If I want the cheapest LLM API for a high-volume application, which model should I choose?",
+      "expected_answer": "Gemini 2.5 Flash at $0.15/MTok input and $0.60/MTok output, or DeepSeek-V3 at $0.27/$1.10",
+      "keywords": ["Flash", "DeepSeek", "cheap", "0.15", "0.27"],
+      "difficulty": "medium",
+      "type": "paraphrase",
+      "expected_confidence_range": [0.5, 1.0],
+      "notes": "Paraphrase — needs to compare pricing table and find the cheapest"
+    },
+    {
+      "id": "C-03",
+      "document": "llm-comparison",
+      "question": "Which models support both batch API and prompt caching?",
+      "expected_answer": "Claude 4.6, GPT-5.4, and Gemini 2.5 all support prompt caching, but only Claude 4.6 and GPT-5.4 support batch API",
+      "keywords": ["Claude", "GPT", "batch", "caching"],
+      "difficulty": "hard",
+      "type": "cross_section",
+      "expected_confidence_range": [0.4, 0.9],
+      "notes": "Cross-section — needs to check two rows in the feature matrix"
+    },
+    {
+      "id": "C-04",
+      "document": "llm-comparison",
+      "question": "Does the report include pricing information for Cohere's Command-R model?",
+      "expected_answer": "No, the report does not include Cohere or Command-R. It covers Anthropic, OpenAI, Google, Meta, Mistral, xAI, Alibaba (Qwen), and DeepSeek.",
+      "keywords": ["not", "no", "Cohere", "not include", "not mention"],
+      "difficulty": "medium",
+      "type": "negative",
+      "expected_confidence_range": [0.3, 0.8],
+      "notes": "Negative — Cohere is not in the report at all"
+    },
+    {
+      "id": "C-05",
+      "document": "llm-comparison",
+      "question": "What is Claude Opus 4.6's score on SWE-bench Verified?",
+      "expected_answer": "75.2%",
+      "keywords": ["75.2", "SWE-bench"],
+      "difficulty": "medium",
+      "type": "number_verify",
+      "expected_confidence_range": [0.6, 1.0],
+      "notes": "Number verify — exact benchmark score from the table"
+    }
+  ]
+}

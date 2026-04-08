@@ -69,3 +69,22 @@ class GroundednessResult(BaseModel):
     claims: list[ClaimVerdict] = Field(default_factory=list)
     overall_grounded: bool = True
     flagged_claims: list[str] = Field(default_factory=list)
+
+
+# ── Answer judge models (benchmark evaluation) ──
+
+
+class AnswerJudgeSubScores(BaseModel):
+    """Sub-dimensional scores for answer evaluation."""
+
+    relevance: float = Field(default=0.0, ge=0.0, le=1.0)
+    accuracy: float = Field(default=0.0, ge=0.0, le=1.0)
+    completeness: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class AnswerJudgeResult(BaseModel):
+    """Result from LLM-as-Judge answer evaluation."""
+
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    reasoning: str = ""
+    sub_scores: AnswerJudgeSubScores = Field(default_factory=AnswerJudgeSubScores)

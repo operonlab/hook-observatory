@@ -1,0 +1,65 @@
+{
+  "_meta": {
+    "document_title": "Workshop 技術棧規範 (Tech Stack)",
+    "document_id": "019d6d3ef15e7a82b313f0098a8b3fc5",
+    "description": "Chinese-English mixed architecture document with tables",
+    "created": "2026-04-08"
+  },
+  "questions": [
+    {
+      "id": "B-01",
+      "document": "tech-stack",
+      "question": "Workshop 使用什麼前端框架和版本？",
+      "expected_answer": "React 19",
+      "keywords": ["React", "19"],
+      "difficulty": "easy",
+      "type": "direct",
+      "expected_confidence_range": [0.7, 1.0],
+      "notes": "Direct — 表格中明確寫了 React 19"
+    },
+    {
+      "id": "B-02",
+      "document": "tech-stack",
+      "question": "What database does the Workshop project use for its main storage, and how are different modules kept separate?",
+      "expected_answer": "PostgreSQL 17+ with per-module schema isolation (CREATE SCHEMA <module_name>)",
+      "keywords": ["PostgreSQL", "17", "schema", "isolation", "module"],
+      "difficulty": "medium",
+      "type": "paraphrase",
+      "expected_confidence_range": [0.5, 1.0],
+      "notes": "Paraphrase in English — asks about Chinese doc content using different wording"
+    },
+    {
+      "id": "B-03",
+      "document": "tech-stack",
+      "question": "Workshop 有哪些已經從 Core 單體拆出的微服務？各自用什麼 port？",
+      "expected_answer": "paper (10010), intelflow (10011), invest (10012)",
+      "keywords": ["paper", "10010", "intelflow", "10011", "invest", "10012"],
+      "difficulty": "hard",
+      "type": "cross_section",
+      "expected_confidence_range": [0.5, 1.0],
+      "notes": "Cross-section — info from the microservices table at the end of the document"
+    },
+    {
+      "id": "B-04",
+      "document": "tech-stack",
+      "question": "Workshop 使用 GraphQL 嗎？",
+      "expected_answer": "The document does not mention GraphQL. Workshop uses FastAPI with REST API endpoints.",
+      "keywords": ["not", "no", "沒有", "未提及", "REST", "FastAPI"],
+      "difficulty": "medium",
+      "type": "negative",
+      "expected_confidence_range": [0.3, 0.8],
+      "notes": "Negative — GraphQL is not mentioned anywhere in the document"
+    },
+    {
+      "id": "B-05",
+      "document": "tech-stack",
+      "question": "Redis 的速率限制鍵格式是什麼？",
+      "expected_answer": "auth:ratelimit:{ip}",
+      "keywords": ["auth:ratelimit", "ip", "INCR", "EXPIRE"],
+      "difficulty": "medium",
+      "type": "number_verify",
+      "expected_confidence_range": [0.6, 1.0],
+      "notes": "Number/exact verify — specific Redis key pattern from the usage table"
+    }
+  ]
+}
