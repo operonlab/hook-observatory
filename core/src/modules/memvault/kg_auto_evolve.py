@@ -5,11 +5,9 @@ Subscribes to MemvaultEvents.MEMORY_STORED and runs triple extraction via
 local LLM (oMLX), then feeds results into the existing TripleService pipeline.
 """
 
-import json
 import logging
-import os
 
-import httpx
+from pydantic_ai import Agent
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
@@ -17,6 +15,8 @@ from src.events.types import MemvaultEvents
 
 from .kg_config import PREDICATE_VOCABULARY, VALID_PREDICATES, normalize_predicate
 from .kg_schemas import TripleBatchCreate, TripleCreate
+from .llm_config import make_deepseek_model
+from .llm_models import TripleExtractionOutput
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_LLM_URL = os.environ.get("KG_AUTO_EVOLVE_LLM_URL", "https://api.deepseek.com/chat/completions")
-_LLM_API_KEY = os.environ.get("KG_AUTO_EVOLVE_API_KEY", os.environ.get("DEEPSEEK_API_KEY", ""))
-_LLM_TIMEOUT = 20.0  # seconds — external API call
 _MIN_CONTENT_LENGTH = 50
 _SKIP_BLOCK_TYPES = {"general"}  # too noisy for auto-extraction
 
@@ -55,6 +52,19 @@ def _build_predicate_list() -> str:
 
 _PREDICATE_LIST_TEXT = _build_predicate_list()
 
+_triple_agent = Agent(
+    output_type=TripleExtractionOutput,
+    system_prompt=(
+        "You are a knowledge graph triple extractor. "
+        "Extract factual subject-predicate-object triples from the given text. "
+        "ONLY use predicates from the approved vocabulary below — do not invent new ones.\n\n"
+        f"APPROVED PREDICATES:\n{_PREDICATE_LIST_TEXT}\n\n"
+        "Extract 1-5 high-quality triples. Do not hallucinate — only extract facts clearly "
+        "stated or strongly implied by the text."
+    ),
+    retries=2,
+)
+
 
 # ---------------------------------------------------------------------------
 # Triple extraction
@@ -65,107 +75,54 @@ async def extract_triples_from_content(
     content: str,
     block_type: str,
 ) -> list[dict[str, str]]:
-    """Extract subject-predicate-object triples from memory content via oMLX.
+    """Extract subject-predicate-object triples from memory content via LLM.
 
-    Uses the local LLM at port 8000 with a constrained predicate vocabulary.
-    Returns a list of dicts: [{"subject": ..., "predicate": ..., "object": ..., "topic": ...}].
-    Falls back to empty list on timeout or parse failure.
-
-    Args:
-        content: Raw text content of the memory block.
-        block_type: Type hint — "attitude", "skill", "knowledge", or other.
-
-    Returns:
-        List of extracted triple dicts (may be empty on failure).
+    Uses PydanticAI with DeepSeek (configurable via env) and constrained predicate
+    vocabulary. Returns a list of dicts with subject/predicate/object/topic keys.
+    Falls back to empty list on failure.
     """
     predicate_hint = _PREDICATE_HINTS.get(block_type, _DEFAULT_PREDICATE_HINT)
-
-    system_prompt = (
-        "You are a knowledge graph triple extractor. "
-        "Extract factual subject-predicate-object triples from the given text. "
-        "ONLY use predicates from the approved vocabulary below — do not invent new ones.\n\n"
-        f"APPROVED PREDICATES:\n{_PREDICATE_LIST_TEXT}\n\n"
+    user_prompt = (
         f"EXTRACTION GUIDANCE: {predicate_hint}\n\n"
-        "Return ONLY a JSON array. Each element must have exactly these keys: "
-        '"subject", "predicate", "object", "topic". '
-        "topic should be a short phrase (≤5 words) categorising the triple. "
-        "Extract 1-5 high-quality triples. Do not hallucinate — only extract facts clearly "
-        "stated or strongly implied by the text."
+        f"TEXT:\n{content}\n\n"
+        "Extract triples."
     )
 
-    user_prompt = f"TEXT:\n{content}\n\nExtract triples as JSON array:"
-
-    payload = {
-        "model": os.environ.get("KG_AUTO_EVOLVE_MODEL", "deepseek-chat"),
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 512,
-    }
-
     try:
-        headers = {}
-        if _LLM_API_KEY:
-            headers["Authorization"] = f"Bearer {_LLM_API_KEY}"
-        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-            response = await client.post(_LLM_URL, json=payload, headers=headers)
-            response.raise_for_status()
+        result = await _triple_agent.run(
+            user_prompt,
+            model=make_deepseek_model(),
+            model_settings={"temperature": 0.1, "max_tokens": 512, "timeout": 20},
+        )
 
-        result = response.json()
-        raw_text: str = result["choices"][0]["message"]["content"].strip()
-
-        from src.shared.llm_json import parse_llm_json
-
-        triples_raw = parse_llm_json(raw_text)
-        if not isinstance(triples_raw, list):
-            triples_raw = []
-
-        # Validate and filter
+        # Validate and filter against approved predicate vocabulary
         valid_triples: list[dict[str, str]] = []
-        for t in triples_raw:
-            if not isinstance(t, dict):
-                continue
-            subj = str(t.get("subject", "")).strip()
-            pred = str(t.get("predicate", "")).strip()
-            obj = str(t.get("object", "")).strip()
-            topic = str(t.get("topic", "")).strip() or None
+        for t in result.output.triples:
+            subj = t.subject.strip()
+            pred = t.predicate.strip()
+            obj = t.object.strip()
+            topic = (t.topic or "").strip() or None
 
             if not (subj and pred and obj):
                 continue
 
-            # Normalize predicate and reject if not in vocabulary
             canonical = normalize_predicate(pred)
             if canonical not in VALID_PREDICATES:
                 logger.debug("Skipping unknown predicate %r (normalized: %r)", pred, canonical)
                 continue
 
             valid_triples.append(
-                {
-                    "subject": subj,
-                    "predicate": canonical,
-                    "object": obj,
-                    "topic": topic,
-                }
+                {"subject": subj, "predicate": canonical, "object": obj, "topic": topic}
             )
 
         logger.debug(
             "extract_triples_from_content: %d valid / %d raw (block_type=%s)",
             len(valid_triples),
-            len(triples_raw),
+            len(result.output.triples),
             block_type,
         )
         return valid_triples
 
-    except httpx.TimeoutException:
-        logger.warning(
-            "Triple extraction timed out after %.1fs (block_type=%s)", _LLM_TIMEOUT, block_type
-        )
-        return []
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        logger.warning("Triple extraction parse error: %s", exc)
-        return []
     except Exception:
         logger.warning("Triple extraction failed", exc_info=True)
         return []
