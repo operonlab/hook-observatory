@@ -60,7 +60,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ── Base ── */
-html { height: 100%; }
+html { height: 100%; font-size: 20px; }
 
 body {
   font-family: var(--font-ui);
@@ -68,7 +68,7 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
-  font-size: 20px;
+  font-size: inherit;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   position: relative;
