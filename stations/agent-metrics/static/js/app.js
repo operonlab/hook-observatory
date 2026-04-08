@@ -339,8 +339,15 @@ async function refreshCatalog() {
 
   // ── Notable unconfigured models ──
   const ucEl = document.getElementById("catalog-unconfigured");
-  if (ucEl && data.notable_unconfigured) {
-    ucEl.innerHTML = data.notable_unconfigured.map(m => {
+  const nc = data.notable_unconfigured || {};
+  const ncModels = nc.models || nc;
+  const ncSyncedAt = nc.synced_at;
+  const ucTimeEl = document.getElementById("catalog-unconfigured-time");
+  if (ucTimeEl && ncSyncedAt) {
+    ucTimeEl.textContent = "更新：" + fmtTime(ncSyncedAt);
+  }
+  if (ucEl && ncModels.length) {
+    ucEl.innerHTML = ncModels.map(m => {
       const isConfigured = m.access.includes("已設定");
       const accessColor = isConfigured ? "var(--green)" : "var(--overlay0)";
       return `<div class="highlight-card" style="border-left-color:var(--surface1)">

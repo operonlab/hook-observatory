@@ -347,7 +347,7 @@ _SCENARIOS = [
 ]
 
 
-def _get_notable_unconfigured() -> list[dict]:
+def _get_notable_unconfigured() -> dict:
     """Read from Redis (weekly sync) or fall back to hardcoded defaults."""
     try:
         import redis
@@ -361,10 +361,10 @@ def _get_notable_unconfigured() -> list[dict]:
 
             data = json.loads(cached)
             if data.get("models"):
-                return data["models"]
+                return {"models": data["models"], "synced_at": data.get("synced_at")}
     except Exception:
         pass
-    return _NOTABLE_UNCONFIGURED
+    return {"models": _NOTABLE_UNCONFIGURED, "synced_at": "2026-04-08T08:00:00Z"}
 
 
 @router.get("/model-catalog")
