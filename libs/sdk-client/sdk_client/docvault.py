@@ -168,17 +168,18 @@ class DocvaultClient(BaseClient):
         mode: str = "factual",
         domain: str = "default",
         top_k: int = 20,
+        session_id: str | None = None,
     ) -> dict:
         """Ask a question against document corpus. POST /qa"""
-        return self._post(
-            "/qa",
-            {
-                "question": question,
-                "mode": mode,
-                "domain": domain,
-                "top_k": top_k,
-            },
-        )
+        body: dict = {
+            "question": question,
+            "mode": mode,
+            "domain": domain,
+            "top_k": top_k,
+        }
+        if session_id:
+            body["session_id"] = session_id
+        return self._post("/qa", body)
 
     def qa_feedback(self, qa_log_id: str, feedback: str) -> dict:
         """Record QA feedback (positive/negative). PATCH /qa/logs/{id}/feedback"""

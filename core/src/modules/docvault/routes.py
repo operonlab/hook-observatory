@@ -288,6 +288,33 @@ async def upload_document(
         logger.exception("Community indexing failed for space %s", space_id)
         await db.rollback()
 
+    # 13. Pre-generate QA pairs (best-effort, toggle-controlled)
+    try:
+        from .ops.qa_embed import QAEmbedOp
+        from .ops.qa_generation import QA_GENERATION_ENABLED, QAGenerationOp
+        from .ops.qa_validation import QAValidationOp
+
+        if QA_GENERATION_ENABLED:
+            qa_ctx: dict = {
+                "chunks": chunks,  # list of dicts from contextual_chunk()
+                "document_id": doc_instance.id,
+                "version_id": ver_instance.id,
+                "space_id": space_id,
+                "db": db,
+            }
+            await QAGenerationOp()(qa_ctx)
+            await QAValidationOp()(qa_ctx)
+            await QAEmbedOp()(qa_ctx)
+            await db.commit()
+            logger.info(
+                "QA generation: %d pairs for document %s",
+                qa_ctx.get("qa_generation_count", 0),
+                doc_instance.id[:12],
+            )
+    except Exception:
+        logger.exception("QA generation failed for document %s", doc_instance.id)
+        await db.rollback()
+
     return document_service.to_response(doc_instance)
 
 
@@ -474,23 +501,65 @@ async def qa_question(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("docvault.read"),
 ):
-    """QA pipeline: IntentRouter → Search/FanOut → DB enrich → Rerank → Synth → Log."""
+    """QA pipeline: Cache → Conv → IntentRouter → Search → Rerank → Synth → Log."""
     import hashlib as _hashlib
 
     from sqlalchemy import select
 
     from .models import DocumentChunk
     from .ops.cited_answer import CitedAnswerOp
+    from .ops.conversation_context import ConversationContextOp
     from .ops.fan_out import FanOutOp
     from .ops.graph_search import GraphSearchOp
     from .ops.intent_router import IntentRouterOp
     from .ops.jina_rerank import JinaRerankOp
     from .ops.merge import MergeOp
+    from .ops.qa_cache_lookup import QACacheLookupOp
     from .ops.query_expand import QueryExpandOp
     from .schemas import CitationRef
 
-    # ── 1. Intent routing ──
+    # ── 0. QA cache lookup (pre-generated + FAQ) ──
+    cache_ctx: dict = {"query": body.question, "space_id": space_id}
+    try:
+        await QACacheLookupOp()(cache_ctx)
+    except Exception:
+        cache_ctx["cache_hit"] = False
+
+    if cache_ctx.get("cache_hit"):
+        query_hash = _hashlib.sha256(body.question.encode()).hexdigest()[:16]
+        qa_log_data = QALogCreate(
+            query_text=body.question,
+            query_hash=query_hash,
+            answer_text=cache_ctx.get("cached_answer", ""),
+            confidence=cache_ctx.get("cache_confidence", 0.0),
+            crag_verdict="correct",
+            pipeline_used="cache",
+            latency_ms=0,
+            session_id=body.session_id,
+        )
+        qa_log = await qa_log_service.create(db, space_id, qa_log_data)
+        await db.commit()
+        await db.refresh(qa_log)
+        return QAResponse(
+            question=body.question,
+            answer=cache_ctx.get("cached_answer", ""),
+            confidence=cache_ctx.get("cache_confidence", 0.0),
+            crag_verdict="correct",
+            pipeline_used="cache",
+            qa_log_id=qa_log.id,
+            session_id=body.session_id,
+        )
+
+    # ── 0.5. Conversation context resolution ──
     ctx: dict = {"query": body.question, "space_id": space_id, "top_k": body.top_k, "db": db}
+    if body.session_id:
+        ctx["session_id"] = body.session_id
+        try:
+            await ConversationContextOp()(ctx)
+        except Exception:
+            logger.debug("ConversationContextOp failed, using original query")
+
+    # ── 1. Intent routing ──
     await IntentRouterOp()(ctx)
     layer_plan = ctx.get("layer_plan", {})
     pipeline = layer_plan.get("pipeline", "A")
@@ -654,7 +723,7 @@ async def qa_question(
     crag_verdict = crag_eval.verdict.value
 
     # ── 6. Synthesize cited answer ──
-    ctx["question"] = body.question
+    ctx["question"] = ctx.get("rewritten_query", body.question)
     await CitedAnswerOp()(ctx)
 
     answer_text = ctx.get("answer", "No answer found.")
@@ -676,8 +745,9 @@ async def qa_question(
         for c in raw_citations
     ]
 
-    # ── 6. Log QA interaction ──
+    # ── 7. Log QA interaction ──
     query_hash = _hashlib.sha256(body.question.encode()).hexdigest()[:16]
+    turn_number = ctx.get("turn_number")
     qa_log_data = QALogCreate(
         query_text=body.question,
         query_hash=query_hash,
@@ -686,10 +756,26 @@ async def qa_question(
         confidence=confidence,
         crag_verdict=crag_verdict,
         pipeline_used=pipeline,
+        session_id=body.session_id,
+        turn_number=turn_number,
     )
     qa_log = await qa_log_service.create(db, space_id, qa_log_data)
     await db.commit()
     await db.refresh(qa_log)
+
+    # ── 7.5. Store conversation turn in Redis ──
+    if body.session_id:
+        from .ops.conversation_context import store_conversation_turn
+
+        try:
+            await store_conversation_turn(
+                session_id=body.session_id,
+                turn_number=turn_number or 1,
+                question=body.question,
+                answer=answer_text,
+            )
+        except Exception:
+            logger.debug("Failed to store conversation turn")
 
     return QAResponse(
         question=body.question,
@@ -699,6 +785,8 @@ async def qa_question(
         crag_verdict=crag_verdict,
         pipeline_used=pipeline,
         qa_log_id=qa_log.id,
+        session_id=body.session_id,
+        turn_number=turn_number,
     )
 
 
@@ -755,6 +843,22 @@ async def record_qa_feedback(
         raise NotFoundError("QA log not found", code="docvault.qa_log_not_found")
     await db.commit()
     await db.refresh(instance)
+
+    # Fire-and-forget: promote to FAQ if positive + high confidence
+    if body.feedback == "positive":
+        import asyncio
+
+        from .ops.qa_feedback_loop import QAFeedbackLoopOp
+
+        faq_ctx = {
+            "qa_log_id": qa_log_id,
+            "feedback": body.feedback,
+            "confidence": instance.confidence or 0.0,
+            "query_text": instance.query_text,
+            "answer_text": instance.answer_text,
+        }
+        asyncio.get_running_loop().create_task(QAFeedbackLoopOp()(faq_ctx))
+
     return qa_log_service.to_response(instance)
 
 

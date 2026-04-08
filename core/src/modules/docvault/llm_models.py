@@ -88,3 +88,32 @@ class AnswerJudgeResult(BaseModel):
     score: float = Field(default=0.0, ge=0.0, le=1.0)
     reasoning: str = ""
     sub_scores: AnswerJudgeSubScores = Field(default_factory=AnswerJudgeSubScores)
+
+
+# ── Pre-generated QA models ──
+
+
+class QAPair(BaseModel):
+    """A single QA pair generated from document chunks."""
+
+    question: str
+    answer: str
+    question_type: str = "factual"  # factual | definitional | comparative | procedural
+    source_chunk_indices: list[int] = Field(default_factory=list)
+
+
+class QAGenerationResult(BaseModel):
+    """Result from QA generation — a batch of QA pairs."""
+
+    pairs: list[QAPair] = Field(default_factory=list)
+
+
+# ── Conversation context models ──
+
+
+class ConversationRewriteResult(BaseModel):
+    """Result from conversation-aware query rewriting."""
+
+    rewritten_query: str
+    references_used: list[int] = Field(default_factory=list)
+    needs_context: bool = True
