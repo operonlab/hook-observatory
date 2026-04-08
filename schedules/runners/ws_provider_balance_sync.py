@@ -54,6 +54,10 @@ PROVIDERS = {
         "url": "https://console.x.ai/team/f0ca6117-e73f-4fec-b5ab-4391eb612200/billing",
         "total": 25.0,
     },
+    "google": {
+        "url": "https://console.cloud.google.com/billing/credits?hl=zh-tw",
+        "total": 635.0,
+    },
 }
 
 
@@ -213,12 +217,34 @@ def parse_xai(text: str) -> dict | None:
     return None
 
 
+def parse_google(text: str) -> dict | None:
+    """Google Cloud: billing credits — table with '剩餘的抵免額' column (2x CREDIT_TYPE_MONTHLY)."""
+    if not text or "Sign in" in text:
+        return None
+    # Sum all dollar amounts in '剩餘的抵免額' column
+    remaining_matches = re.findall(r"\$\s*([\d,]+\.?\d+)", text)
+    original_matches = re.findall(r"原始值", text)
+    if remaining_matches and original_matches:
+        # Table has pairs: remaining + original per row; extract remaining values
+        vals = [float(v.replace(",", "")) for v in remaining_matches]
+        # Filter for credit-range amounts (> $50)
+        credits = [v for v in vals if 50 < v < 1000]
+        if credits:
+            return {"remaining": round(sum(credits), 2)}
+    # Fallback: '剩餘' near dollar
+    m = re.search(r"剩餘[^\$]*\$\s*([\d,]+\.?\d+)", text)
+    if m:
+        return {"remaining": float(m.group(1).replace(",", ""))}
+    return None
+
+
 PARSERS = {
     "minimax": parse_minimax,
     "moonshot": parse_moonshot,
     "zhipu": parse_zhipu,
     "deepseek": parse_deepseek,
     "xai": parse_xai,
+    "google": parse_google,
 }
 
 

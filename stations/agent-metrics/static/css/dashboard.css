@@ -466,6 +466,32 @@ body {
   white-space: nowrap;
 }
 
+/* --- Highlight Cards (Model Catalog) --- */
+.highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.highlight-card {
+  background: var(--base);
+  border: 1px solid var(--surface0);
+  border-radius: 8px;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.highlight-card .hl-icon { font-size: 1.4rem; margin-bottom: 0.25rem; }
+.highlight-card .hl-label { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--subtext0); margin-bottom: 0.25rem; }
+.highlight-card .hl-name { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.highlight-card .hl-provider { font-size: 0.65rem; color: var(--subtext0); }
+.highlight-card .hl-note { font-size: 0.6rem; color: var(--overlay0); margin-top: 0.15rem; }
+
+.model-cell { text-align: center; }
+.model-cell .mc-name { font-weight: 600; font-size: 0.75rem; color: var(--text); }
+.model-cell .mc-price { font-size: 0.65rem; color: var(--subtext0); }
+.model-cell .mc-note { font-size: 0.6rem; color: var(--overlay0); }
+
 /* --- Scrollbar --- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

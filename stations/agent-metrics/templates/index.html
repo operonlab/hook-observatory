@@ -36,6 +36,7 @@
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="quotas">配額</button>
     <button class="tab-btn" data-tab="usage">用量</button>
+    <button class="tab-btn" data-tab="catalog">模型圖鑑</button>
   </nav>
 
   <!-- ═══ Tab: 配額 ═══ -->
@@ -75,6 +76,38 @@
               <tbody id="litellm-model-tbody"><tr><td colspan="5" class="empty">載入中...</td></tr></tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Tab: 模型圖鑑 ═══ -->
+  <div class="tab-panel" id="panel-catalog">
+    <div class="container">
+      <!-- Highlights -->
+      <div class="card">
+        <div class="card-title">跨廠商最佳選擇</div>
+        <div class="highlight-grid" id="catalog-highlights">
+          <div class="empty">載入中...</div>
+        </div>
+      </div>
+      <!-- Per-provider table -->
+      <div class="card">
+        <div class="card-title">各廠商模型分類 — Smart / Fast / Value</div>
+        <div class="table-wrap">
+          <table class="data-table" id="catalog-table">
+            <thead>
+              <tr>
+                <th>廠商</th>
+                <th style="text-align:center">🧠 Smart（最強）</th>
+                <th style="text-align:center">⚡ Fast（最快）</th>
+                <th style="text-align:center">💰 Value（CP 值）</th>
+              </tr>
+            </thead>
+            <tbody id="catalog-tbody">
+              <tr><td colspan="4" class="empty">載入中...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

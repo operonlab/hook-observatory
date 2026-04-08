@@ -72,6 +72,7 @@ def _extract_provider(model_name: str) -> str:
         "deepseek": "deepseek",
         "qwen": "dashscope",
         "grok": "xai",
+        "gemini": "google",
         "claude": "anthropic",
         "gpt": "openai",
         "llama": "meta",
@@ -274,6 +275,7 @@ _DEFAULT_QUOTAS = {
     "deepseek": {"total": 12.0, "remaining": 10.25},
     "dashscope": {"total": 0.0, "remaining": 0.0},  # 免費額度 (token制)，無儲值
     "xai": {"total": 25.0, "remaining": 25.0},
+    "google": {"total": 635.0, "remaining": 551.72},  # Google Cloud 抵免額 (2x CREDIT_TYPE_MONTHLY)
 }
 
 _PROVIDER_REDIS_PREFIX = "agent-metrics:provider"
@@ -299,7 +301,7 @@ def _get_provider_quotas() -> dict:
         import redis as _redis
 
         r = _redis.from_url(settings.REDIS_URL, decode_responses=True)
-        for name in ("minimax", "moonshot", "zhipu", "deepseek", "xai"):
+        for name in ("minimax", "moonshot", "zhipu", "deepseek", "xai", "google"):
             cached = r.get(f"{_PROVIDER_REDIS_PREFIX}:{name}:balance")
             if cached:
                 data = json.loads(cached)
@@ -348,6 +350,8 @@ def get_litellm_manual_summary():
             fq = get_dashscope_free_quota()
             entry["free_quota"] = fq
             entry["note"] = f"免費額度 {fq['total_models']} 模型，各 1M tokens"
+        elif name == "google":
+            entry["note"] = "Google Cloud 抵免額"
         breakdown.append(entry)
 
     return {

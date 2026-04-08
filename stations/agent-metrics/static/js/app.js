@@ -53,6 +53,7 @@ async function refreshUsage() {
     deepseek: "https://platform.deepseek.com/usage",
     dashscope: "https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=dashboard#/model-usage/free-quota",
     xai: "https://console.x.ai/team/f0ca6117-e73f-4fec-b5ab-4391eb612200/billing",
+    google: "https://console.cloud.google.com/billing/credits?hl=zh-tw",
   };
   const lBody = document.getElementById("litellm-model-tbody");
   if (lBody && byModel.litellm_models) {
@@ -167,6 +168,49 @@ function updateQuotaFromSSE(data) {
   grid.innerHTML = items.join("") || '<div class="empty">暫無配額資料</div>';
 }
 
+/* ── 模型圖鑑 Tab ── */
+async function refreshCatalog() {
+  const data = await api("litellm/model-catalog");
+  if (!data) return;
+
+  const hlEl = document.getElementById("catalog-highlights");
+  if (hlEl && data.highlights) {
+    const h = data.highlights;
+    const cards = [
+      { key: "smart", icon: "🧠", label: "最強", color: "var(--mauve)" },
+      { key: "fast", icon: "⚡", label: "最快", color: "var(--yellow)" },
+      { key: "value", icon: "💰", label: "CP 值最高", color: "var(--green)" },
+      { key: "free", icon: "🎁", label: "免費首選", color: "var(--teal)" },
+    ];
+    hlEl.innerHTML = cards.map(c => {
+      const m = h[c.key];
+      if (!m) return "";
+      return `<div class="highlight-card" style="border-color:${c.color}">
+        <div class="hl-icon">${c.icon}</div>
+        <div class="hl-label" style="color:${c.color}">${c.label}</div>
+        <div class="hl-name">${m.name}</div>
+        <div class="hl-provider">${m.provider}</div>
+        <div class="hl-note">${m.note}</div>
+      </div>`;
+    }).join("");
+  }
+
+  const tbody = document.getElementById("catalog-tbody");
+  if (tbody && data.catalog) {
+    tbody.innerHTML = data.catalog.map(row => {
+      const cell = (m) => `<td class="model-cell">
+        <div class="mc-name">${m.name}</div>
+        <div class="mc-price">${m.price}</div>
+        ${m.note ? `<div class="mc-note">${m.note}</div>` : ""}
+      </td>`;
+      return `<tr>
+        <td style="font-weight:600;white-space:nowrap">${row.provider}</td>
+        ${cell(row.smart)}${cell(row.fast)}${cell(row.value)}
+      </tr>`;
+    }).join("");
+  }
+}
+
 /* ── SSE 連線 ── */
 function connectSSE() {
   if (_sse) { _sse.close(); _sse = null; }
@@ -222,6 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 初次載入所有 Tab 資料
   refreshQuota();
   refreshUsage();
+  refreshCatalog();
   updateTimestamp();
 
   // 啟動 SSE
