@@ -286,7 +286,7 @@ _NOTABLE_UNCONFIGURED = [
         "score": "中文頂級",
         "strengths": "日活 1 億+，中文消費級最強，2026 新版",
         "access": "豆包 API（中國區）",
-        "price": "低於 Qwen/GLM",
+        "price": "~¥0.008/千 tokens",
     },
     {
         "name": "mistral-nemo",
