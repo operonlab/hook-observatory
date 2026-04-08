@@ -18,7 +18,7 @@ semantic arbitration is desired.
 import json
 import logging
 
-import httpx
+from pydantic_ai import Agent
 
 from src.shared.conflict import (
     ConflictDecision,
@@ -26,11 +26,10 @@ from src.shared.conflict import (
     simple_conflict_heuristic,
 )
 
-logger = logging.getLogger(__name__)
+from .llm_config import make_omlx_model
+from .llm_models import ConflictResolutionOutput
 
-# oMLX local LLM inference endpoint
-_OMLX_URL = "http://localhost:8000/v1/chat/completions"
-_LLM_TIMEOUT = 10  # seconds
+logger = logging.getLogger(__name__)
 
 
 def _conflict_threshold(block_type: str = "memory") -> float:
@@ -88,14 +87,9 @@ def build_conflict_prompt(new_content: str, existing_content: str, block_type: s
 # LLM call
 # ---------------------------------------------------------------------------
 
-
-async def _call_llm(new_content: str, existing_content: str, block_type: str) -> ConflictResult:
-    """Call oMLX local LLM and parse the conflict resolution response.
-
-    Raises httpx.HTTPError or json.JSONDecodeError on failure — callers
-    should catch and fall back to the heuristic.
-    """
-    system_prompt = (
+_conflict_agent = Agent(
+    output_type=ConflictResolutionOutput,
+    system_prompt=(
         "You are a memory conflict arbitrator for a personal knowledge management system. "
         "Your task is to compare two memory fragments and decide how to handle them.\n\n"
         "Possible decisions:\n"
@@ -104,14 +98,17 @@ async def _call_llm(new_content: str, existing_content: str, block_type: str) ->
         '- "supersede": The new memory is an update, correction, or more authoritative version '
         "of the existing one. The existing memory should be replaced.\n"
         '- "coexist": The memories represent genuinely different perspectives, time periods, or '
-        "contexts. Both are independently valuable and should be kept as separate entries.\n\n"
-        "Return ONLY valid JSON with this schema (no markdown fences, no extra text):\n"
-        '{"decision": "merge|supersede|coexist", '
-        '"confidence": <float 0-1>, '
-        '"reason": "<one sentence explanation>", '
-        '"merged_content": "<combined text, only for merge decision, else null>"}'
-    )
+        "contexts. Both are independently valuable and should be kept as separate entries."
+    ),
+    retries=2,
+)
 
+
+async def _call_llm(new_content: str, existing_content: str, block_type: str) -> ConflictResult:
+    """Call oMLX local LLM and parse the conflict resolution response.
+
+    Raises on failure — callers should catch and fall back to the heuristic.
+    """
     user_message = (
         f"Block type: {block_type}\n\n"
         f"EXISTING memory:\n{existing_content}\n\n"
@@ -119,46 +116,20 @@ async def _call_llm(new_content: str, existing_content: str, block_type: str) ->
         "Analyze the relationship between these two memories and return the JSON decision."
     )
 
-    payload = {
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": 0.1,  # Low temperature for consistent arbitration
-        "max_tokens": 256,
-    }
-
-    async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-        resp = await client.post(_OMLX_URL, json=payload)
-        resp.raise_for_status()
-
-    from src.shared.llm_json import parse_llm_json
-
-    data = resp.json()
-    raw_text: str = data["choices"][0]["message"]["content"]
-
-    parsed = parse_llm_json(raw_text)
-    if not isinstance(parsed, dict):
-        raise ValueError(f"LLM returned non-dict response: {raw_text[:100]}")
-
-    decision_str = str(parsed.get("decision", "coexist")).lower()
-    try:
-        decision = ConflictDecision(decision_str)
-    except ValueError:
-        logger.warning("LLM returned unknown decision %r — defaulting to coexist", decision_str)
-        decision = ConflictDecision.COEXIST
-
-    confidence = float(parsed.get("confidence", 0.5))
-    confidence = max(0.0, min(1.0, confidence))  # clamp to [0, 1]
-    reason = str(parsed.get("reason", "LLM arbitration"))
-    merged_content: str | None = (
-        parsed.get("merged_content") if decision == ConflictDecision.MERGE else None
+    result = await _conflict_agent.run(
+        user_message,
+        model=make_omlx_model(),
+        model_settings={"temperature": 0.1, "max_tokens": 256, "timeout": 10},
     )
+    output = result.output
+
+    decision = ConflictDecision(output.decision)
+    merged_content = output.merged_content if decision == ConflictDecision.MERGE else None
 
     return ConflictResult(
         decision=decision,
-        confidence=confidence,
-        reason=reason,
+        confidence=output.confidence,
+        reason=output.reason,
         merged_content=merged_content or None,
     )
 
@@ -213,34 +184,11 @@ async def resolve_conflict(
         )
         return result
 
-    except httpx.ConnectError:
-        logger.warning(
-            "oMLX unreachable — using heuristic for conflict resolution (block_id=%s)",
-            existing_block_id,
-        )
-    except httpx.TimeoutException:
-        logger.warning(
-            "oMLX timed out after %ds — using heuristic (block_id=%s)",
-            _LLM_TIMEOUT,
-            existing_block_id,
-        )
-    except httpx.HTTPStatusError as exc:
-        logger.warning(
-            "oMLX HTTP %d — using heuristic (block_id=%s)",
-            exc.response.status_code,
-            existing_block_id,
-        )
-    except (json.JSONDecodeError, KeyError, ValueError) as exc:
-        logger.warning(
-            "LLM response parse error %s — using heuristic (block_id=%s)",
-            exc,
-            existing_block_id,
-        )
     except Exception as exc:
-        logger.exception(
-            "Unexpected error in conflict resolution — using heuristic (block_id=%s): %s",
-            existing_block_id,
+        logger.warning(
+            "LLM conflict resolution failed (%s) — using heuristic (block_id=%s)",
             exc,
+            existing_block_id,
         )
 
     result = simple_conflict_heuristic(new_content, existing_content, similarity)
