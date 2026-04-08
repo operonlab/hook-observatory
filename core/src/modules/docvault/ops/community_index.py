@@ -12,22 +12,21 @@ Operator protocol:
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
-import httpx
+from pydantic_ai import Agent
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid_utils import uuid7
 
 from kg_ops import (
     assign_triples_to_communities,
-    build_community_summary_messages,
     build_entity_graph,
     build_triple_text,
     run_leiden,
 )
+from kg_ops.community_prompts import SUMMARY_PROMPT_ZH
 
 from ..kg_models import (
     DocCommunity,
@@ -35,19 +34,25 @@ from ..kg_models import (
     DocCommunityTriple,
     DocTriple,
 )
+from ..llm_config import make_model
+from ..llm_models import CommunitySummaryResult
 
 logger = logging.getLogger(__name__)
 
 # Minimum triples required to build meaningful communities
 MIN_TRIPLES = 5
 
-# LiteLLM proxy endpoint
-LITELLM_URL = "http://localhost:4000/v1/chat/completions"
-LITELLM_AUTH = "Bearer sk-litellm-local-dev"
+# Community summary model — intentionally fixed (not dynamic)
 SUMMARY_MODEL = "deepseek-v3"
 
 # Community summary Qdrant service identifier
 COMMUNITY_SERVICE_ID = "docvault-community"
+
+_community_agent = Agent(
+    output_type=CommunitySummaryResult,
+    system_prompt=SUMMARY_PROMPT_ZH,
+    retries=1,
+)
 
 
 class CommunityIndexOp:
@@ -209,6 +214,7 @@ class CommunityIndexOp:
         # ── 7. LLM summaries for level-2 (coarse) communities ───────────────
         level2_communities = [c for c in all_communities if c.resolution_level == 2]
         summary_count = 0
+        model = make_model(SUMMARY_MODEL)
 
         for community in level2_communities:
             community_entity_names = set(community.entity_ids or [])
@@ -223,34 +229,18 @@ class CommunityIndexOp:
                 continue
 
             triples_text = build_triple_text(related_triples, max_triples=40)
-            messages = build_community_summary_messages(triples_text, language="zh-TW")
 
             summary_text = f"Community of {len(community_entity_names)} entities"
             key_findings: list[str] = list(community.top_entities or [])[:5]
 
             try:
-                async with httpx.AsyncClient(timeout=20.0) as client:
-                    resp = await client.post(
-                        LITELLM_URL,
-                        json={
-                            "model": SUMMARY_MODEL,
-                            "messages": messages,
-                            "temperature": 0.3,
-                            "max_tokens": 512,
-                        },
-                        headers={"Authorization": LITELLM_AUTH},
-                    )
-                    resp.raise_for_status()
-                    raw_content = resp.json()["choices"][0]["message"]["content"].strip()
-
-                    # LLM returns JSON per community_prompts.py prompt format
-                    try:
-                        parsed = json.loads(raw_content)
-                        summary_text = parsed.get("summary", raw_content)
-                        if isinstance(parsed.get("key_findings"), list):
-                            key_findings = [str(f) for f in parsed["key_findings"]]
-                    except (json.JSONDecodeError, AttributeError):
-                        summary_text = raw_content
+                result = await _community_agent.run(
+                    triples_text,
+                    model=model,
+                    model_settings={"temperature": 0.3, "max_tokens": 512},
+                )
+                summary_text = result.output.summary
+                key_findings = result.output.key_findings
 
             except Exception:
                 logger.warning(

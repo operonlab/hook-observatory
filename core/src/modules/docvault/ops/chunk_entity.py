@@ -16,6 +16,8 @@ import asyncio
 import logging
 from typing import Any
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from kg_ops import extract_triples, normalize_entity_text
 
 from ..kg_models import DocEntity, DocTriple
@@ -43,18 +45,22 @@ async def _extract_chunk_triples(
 
     Returns (chunk, triples). On LLM failure returns empty triples list.
     """
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=4))
+    async def _call_with_retry() -> list[dict[str, str]]:
+        return await extract_triples(
+            chunk["content"],
+            llm_base_url=llm_base_url,
+            llm_api_key=llm_api_key,
+            model=model,
+            max_triples=max_triples,
+        )
+
     async with semaphore:
         try:
-            triples = await extract_triples(
-                chunk["content"],
-                llm_base_url=llm_base_url,
-                llm_api_key=llm_api_key,
-                model=model,
-                max_triples=max_triples,
-            )
+            triples = await _call_with_retry()
         except Exception:
             logger.warning(
-                "ChunkEntityOp: triple extraction failed for chunk db_id=%r",
+                "ChunkEntityOp: triple extraction failed for chunk db_id=%r (after retries)",
                 chunk.get("db_id"),
                 exc_info=True,
             )

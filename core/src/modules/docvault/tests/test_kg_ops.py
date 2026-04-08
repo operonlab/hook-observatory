@@ -547,7 +547,7 @@ class TestCommunityIndexOpAtomicReplace:
             patch("src.modules.docvault.ops.community_index.run_leiden") as mock_leiden,
             patch("src.modules.docvault.ops.community_index.assign_triples_to_communities") as mock_atc,
             patch("src.modules.docvault.ops.community_index.build_triple_text", return_value=""),
-            patch("src.modules.docvault.ops.community_index.build_community_summary_messages", return_value=[]),
+            patch("src.modules.docvault.ops.community_index._community_agent") as _mock_agent,
         ):
             mock_beg.return_value = (MagicMock(), {"S0": 0, "O0": 0})
             # Provide one community at level 0 only (no level 2 → no LLM calls)
@@ -614,7 +614,7 @@ class TestCommunityIndexOpCaps:
             patch("src.modules.docvault.ops.community_index.run_leiden") as mock_leiden,
             patch("src.modules.docvault.ops.community_index.assign_triples_to_communities", return_value={}),
             patch("src.modules.docvault.ops.community_index.build_triple_text", return_value=""),
-            patch("src.modules.docvault.ops.community_index.build_community_summary_messages", return_value=[]),
+            patch("src.modules.docvault.ops.community_index._community_agent") as _mock_agent,
         ):
             mock_beg.return_value = (MagicMock(), entity_to_idx)
             # One community at level 0 with all 100 vertices
@@ -663,7 +663,7 @@ class TestCommunityIndexOpCaps:
             patch("src.modules.docvault.ops.community_index.run_leiden") as mock_leiden,
             patch("src.modules.docvault.ops.community_index.assign_triples_to_communities", return_value={}),
             patch("src.modules.docvault.ops.community_index.build_triple_text", return_value=""),
-            patch("src.modules.docvault.ops.community_index.build_community_summary_messages", return_value=[]),
+            patch("src.modules.docvault.ops.community_index._community_agent") as _mock_agent,
         ):
             mock_beg.return_value = (MagicMock(), {"S0": 0})
             # Provide communities at levels 0, 1, 2
@@ -720,26 +720,34 @@ class TestCommunityIndexOpSummaryFallback:
         ctx, added_objs = await self._setup_with_level2_community()
 
         # entity_to_idx maps entity name → vertex index (integers)
-        entity_to_idx = {"S0": 0, "O0": 1, "S1": 2, "O1": 3, "S2": 4, "O2": 5, "S3": 6, "O3": 7, "S4": 8, "O4": 9}
+        entity_to_idx = {
+            "S0": 0, "O0": 1, "S1": 2, "O1": 3, "S2": 4,
+            "O2": 5, "S3": 6, "O3": 7, "S4": 8, "O4": 9,
+        }
 
         with (
             patch("src.modules.docvault.ops.community_index.build_entity_graph") as mock_beg,
             patch("src.modules.docvault.ops.community_index.run_leiden") as mock_leiden,
-            patch("src.modules.docvault.ops.community_index.assign_triples_to_communities", return_value={}),
-            patch("src.modules.docvault.ops.community_index.build_triple_text", return_value="S0 is O0"),
-            patch("src.modules.docvault.ops.community_index.build_community_summary_messages", return_value=[]),
-            patch("httpx.AsyncClient") as mock_client_cls,
+            patch(
+                "src.modules.docvault.ops.community_index"
+                ".assign_triples_to_communities",
+                return_value={},
+            ),
+            patch(
+                "src.modules.docvault.ops.community_index.build_triple_text",
+                return_value="S0 is O0",
+            ),
+            patch(
+                "src.modules.docvault.ops.community_index._community_agent",
+            ) as mock_agent,
         ):
             mock_beg.return_value = (MagicMock(), entity_to_idx)
-            # One community at level 2 — vertex INDICES (not names)
-            mock_leiden.return_value = {
-                2: [[0, 1, 2, 3, 4]]
-            }
+            mock_leiden.return_value = {2: [[0, 1, 2, 3, 4]]}
 
-            # Make httpx raise
-            mock_client = AsyncMock()
-            mock_client.post.side_effect = ConnectionError("LLM down")
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
+            # Make PydanticAI agent raise
+            mock_agent.run = AsyncMock(
+                side_effect=ConnectionError("LLM down"),
+            )
 
             op = CommunityIndexOp()
             result = await op(ctx)
@@ -757,15 +765,27 @@ class TestCommunityIndexOpSummaryFallback:
 
     async def test_qdrant_failure_does_not_propagate(self):
         """Qdrant indexing failure must be silently absorbed (non-fatal)."""
-        ctx, added_objs = await self._setup_with_level2_community()
+        ctx, _added_objs = await self._setup_with_level2_community()
 
         with (
-            patch("src.modules.docvault.ops.community_index.build_entity_graph") as mock_beg,
-            patch("src.modules.docvault.ops.community_index.run_leiden") as mock_leiden,
-            patch("src.modules.docvault.ops.community_index.assign_triples_to_communities", return_value={}),
-            patch("src.modules.docvault.ops.community_index.build_triple_text", return_value="S0 is O0"),
-            patch("src.modules.docvault.ops.community_index.build_community_summary_messages", return_value=[]),
-            patch("httpx.AsyncClient") as mock_client_cls,
+            patch(
+                "src.modules.docvault.ops.community_index.build_entity_graph",
+            ) as mock_beg,
+            patch(
+                "src.modules.docvault.ops.community_index.run_leiden",
+            ) as mock_leiden,
+            patch(
+                "src.modules.docvault.ops.community_index"
+                ".assign_triples_to_communities",
+                return_value={},
+            ),
+            patch(
+                "src.modules.docvault.ops.community_index.build_triple_text",
+                return_value="S0 is O0",
+            ),
+            patch(
+                "src.modules.docvault.ops.community_index._community_agent",
+            ) as mock_agent,
             patch(
                 "src.shared.qdrant_search.index_documents_batch",
                 side_effect=RuntimeError("Qdrant unavailable"),
@@ -773,25 +793,24 @@ class TestCommunityIndexOpSummaryFallback:
         ):
             mock_beg.return_value = (
                 MagicMock(),
-                {f"S{i}": i * 2 for i in range(5)} | {f"O{i}": i * 2 + 1 for i in range(5)},
+                {f"S{i}": i * 2 for i in range(5)}
+                | {f"O{i}": i * 2 + 1 for i in range(5)},
             )
             mock_leiden.return_value = {2: [[i for i in range(5)]]}
 
-            # LLM succeeds with valid JSON
-            llm_resp = MagicMock()
-            llm_resp.raise_for_status = MagicMock()
-            llm_resp.json.return_value = {
-                "choices": [{"message": {"content": json.dumps({"summary": "test", "key_findings": []})}}]
-            }
-            mock_client = AsyncMock()
-            mock_client.post = AsyncMock(return_value=llm_resp)
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
+            # PydanticAI agent returns valid result
+            from src.modules.docvault.llm_models import CommunitySummaryResult
+
+            agent_result = MagicMock()
+            agent_result.output = CommunitySummaryResult(
+                summary="test", key_findings=[],
+            )
+            mock_agent.run = AsyncMock(return_value=agent_result)
 
             op = CommunityIndexOp()
             # Must not raise
             result = await op(ctx)
 
-        # community_count and summary_count must still be valid
         assert "community_count" in result
         assert "summary_count" in result
 
