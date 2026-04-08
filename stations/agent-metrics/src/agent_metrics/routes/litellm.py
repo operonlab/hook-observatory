@@ -211,42 +211,92 @@ _HIGHLIGHTS_SUBJECTIVE = {
 # Sources: LMSYS Chatbot Arena (2026-04-07), SWE-Bench Verified, ArtificialAnalysis.ai
 _HIGHLIGHTS_BENCHMARK = {
     "overall": {
-        "name": "grok-4.20",
-        "provider": "xAI",
-        "score": "1491 Elo",
-        "note": "Arena 第 3（前 2 為 Claude/Gemini Pro）",
+        "name": "claude-opus-4.6",
+        "provider": "Anthropic",
+        "score": "1504 Elo",
+        "note": "Arena #1（訂閱制，非 LiteLLM）",
+        "configured": False,
     },
     "coding": {
         "name": "grok-4.20",
         "provider": "xAI",
         "score": "79.6% SWE-Bench",
-        "note": "亞軍 Gemini 3 Flash 78%",
+        "note": "亞軍 gemini-3.1-pro 78.8%",
+        "configured": True,
     },
     "reasoning": {
         "name": "kimi-k2.5",
         "provider": "Moonshot",
         "score": "96.1% AIME",
         "note": "數學推理遙遙領先",
+        "configured": True,
     },
     "chinese": {
         "name": "glm-5",
         "provider": "Z.AI",
         "score": "1456 Elo",
         "note": "開源中文模型王，BenchLM 82",
+        "configured": True,
     },
     "speed": {
         "name": "gemini-2.5-flash-lite",
         "provider": "Google",
         "score": "380 tok/s",
         "note": "全場最快出字速度",
+        "configured": True,
     },
     "cost": {
         "name": "deepseek-v3",
         "provider": "DeepSeek",
         "score": "$0.28/M in",
         "note": "品質/價格比最高",
+        "configured": True,
     },
 }
+
+# 未設定但在評測中值得關注的模型
+_NOTABLE_UNCONFIGURED = [
+    {
+        "name": "claude-opus-4.6-thinking",
+        "provider": "Anthropic",
+        "score": "1504 Elo",
+        "strengths": "Arena #1，Hidden CoT，全場最強綜合",
+        "access": "CC Max 訂閱制",
+        "price": "$15/$75",
+    },
+    {
+        "name": "gemini-3.1-pro",
+        "provider": "Google",
+        "score": "1493 Elo",
+        "strengths": "Arena #2，Intelligence 57，SWE-Bench 78.8%",
+        "access": "已設定（LiteLLM）",
+        "price": "$2.00/$12.00",
+    },
+    {
+        "name": "gpt-5.4-high",
+        "provider": "OpenAI",
+        "score": "1484 Elo",
+        "strengths": "Arena #4，平衡型旗艦",
+        "access": "未設定 API key",
+        "price": "$2.50/$10.00",
+    },
+    {
+        "name": "claude-sonnet-4.6",
+        "provider": "Anthropic",
+        "score": "1468 Elo",
+        "strengths": "性價比旗艦，Coding 強",
+        "access": "CC Max 訂閱制",
+        "price": "$3/$15",
+    },
+    {
+        "name": "gpt-5.4-mini",
+        "provider": "OpenAI",
+        "score": "~1420 Elo",
+        "strengths": "低價快速，適合大量 API 呼叫",
+        "access": "未設定 API key",
+        "price": "$0.40/$1.60",
+    },
+]
 
 _SCENARIOS = [
     {
@@ -296,6 +346,7 @@ async def litellm_model_catalog() -> dict:
         "catalog": _MODEL_CATALOG,
         "highlights_subjective": _HIGHLIGHTS_SUBJECTIVE,
         "highlights_benchmark": _HIGHLIGHTS_BENCHMARK,
+        "notable_unconfigured": _NOTABLE_UNCONFIGURED,
         "scenarios": _SCENARIOS,
         "data_sources": {
             "arena": "LMSYS Chatbot Arena (2026-04-07)",

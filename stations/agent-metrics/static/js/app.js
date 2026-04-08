@@ -257,12 +257,15 @@ function _renderHighlights(el, h, cards) {
     const scoreBadge = m.score
       ? `<div class="hl-score-badge" style="background:rgba(49,50,68,0.9);color:${c.color}">${m.score}</div>`
       : "";
-    return `<div class="highlight-card" style="border-left-color:${c.color}">
+    const unconfigured = m.configured === false
+      ? `<span style="font-size:0.5rem;color:var(--overlay0);border:1px solid var(--surface1);border-radius:var(--radius-pill);padding:0.05rem 0.3rem;margin-left:0.3rem">未設定</span>`
+      : "";
+    return `<div class="highlight-card" style="border-left-color:${c.color}${m.configured === false ? ';opacity:0.75' : ''}">
       ${scoreBadge}
       <div class="hl-icon-wrap" style="color:${c.color}">${c.icon}</div>
       <div class="hl-body">
         <div class="hl-label" style="color:${c.color}">${c.label}</div>
-        <div class="hl-name">${m.name}</div>
+        <div class="hl-name">${m.name}${unconfigured}</div>
         <div class="hl-provider">${m.provider}</div>
         <div class="hl-note">${m.note}</div>
       </div>
@@ -331,6 +334,26 @@ async function refreshCatalog() {
         ${cell(row.fast,  "var(--yellow)")}
         ${cell(row.value, "var(--green)")}
       </tr>`;
+    }).join("");
+  }
+
+  // ── Notable unconfigured models ──
+  const ucEl = document.getElementById("catalog-unconfigured");
+  if (ucEl && data.notable_unconfigured) {
+    ucEl.innerHTML = data.notable_unconfigured.map(m => {
+      const isConfigured = m.access.includes("已設定");
+      const accessColor = isConfigured ? "var(--green)" : "var(--overlay0)";
+      return `<div class="highlight-card" style="border-left-color:var(--surface1)">
+        <div class="hl-body">
+          <div class="hl-name" style="font-size:0.75rem">${m.name}</div>
+          <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.15rem">
+            <span class="hl-score-badge" style="position:static;background:var(--surface0);color:var(--lavender)">${m.score}</span>
+            <span style="font-size:0.55rem;color:var(--subtext0)">${m.price}</span>
+          </div>
+          <div class="hl-note" style="margin-top:0.2rem">${m.strengths}</div>
+          <div style="font-size:0.5rem;color:${accessColor};margin-top:0.15rem">${m.access}</div>
+        </div>
+      </div>`;
     }).join("");
   }
 }

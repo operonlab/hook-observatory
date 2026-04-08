@@ -575,6 +575,7 @@ body {
 }
 
 .catalog-mosaic > .card { margin-bottom: 0; }
+.catalog-mosaic-bottom { grid-template-columns: 1fr 280px; }
 .catalog-mosaic-main { min-width: 0; }
 .catalog-mosaic-side { min-width: 0; }
 
