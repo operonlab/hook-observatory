@@ -26,6 +26,7 @@ dependencies = [
     "psutil>=6.0",
     "qdrant-client>=1.12",
     "jieba>=0.42",
+    "snowballstemmer>=3.0",
     "igraph>=0.11",
     "workshop-text-ops",
     "pydantic-ai[openai]>=1.77",
