@@ -218,23 +218,50 @@ def parse_xai(text: str) -> dict | None:
 
 
 def parse_google(text: str) -> dict | None:
-    """Google Cloud: billing credits — table with '剩餘的抵免額' column (2x CREDIT_TYPE_MONTHLY)."""
+    """Google Cloud: billing credits — only sum '可使用' rows, skip '已過期'.
+
+    Page format (per credit row):
+        CREDIT_NAME\n 可使用\t\nPERCENT%\n$REMAINING\n\t$ORIGINAL\t...
+    or: CREDIT_NAME\n 已過期\t\n—\n$REMAINING\n\t$ORIGINAL\t...
+    """
     if not text or "Sign in" in text:
         return None
-    # Sum all dollar amounts in '剩餘的抵免額' column
-    remaining_matches = re.findall(r"\$\s*([\d,]+\.?\d+)", text)
-    original_matches = re.findall(r"原始值", text)
-    if remaining_matches and original_matches:
-        # Table has pairs: remaining + original per row; extract remaining values
-        vals = [float(v.replace(",", "")) for v in remaining_matches]
-        # Filter for credit-range amounts (> $50)
-        credits = [v for v in vals if 50 < v < 1000]
-        if credits:
-            return {"remaining": round(sum(credits), 2)}
-    # Fallback: '剩餘' near dollar
-    m = re.search(r"剩餘[^\$]*\$\s*([\d,]+\.?\d+)", text)
-    if m:
-        return {"remaining": float(m.group(1).replace(",", ""))}
+
+    total_remaining = 0.0
+    total_original = 0.0
+    found = False
+
+    # Split into chunks by credit entries (each starts with a known prefix or has 可使用/已過期)
+    # Strategy: scan line by line, track state
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        # Look for status markers
+        if "可使用" in line:
+            # This credit is active — find the next two dollar amounts (remaining, original)
+            remaining_val = None
+            original_val = None
+            for j in range(i + 1, min(i + 8, len(lines))):
+                m = re.search(r"\$\s*([\d,]+\.?\d+)", lines[j])
+                if m:
+                    val = float(m.group(1).replace(",", ""))
+                    if remaining_val is None:
+                        remaining_val = val
+                    elif original_val is None:
+                        original_val = val
+                        break
+            if remaining_val is not None:
+                total_remaining += remaining_val
+                total_original += original_val or remaining_val
+                found = True
+        elif "已過期" in line:
+            # Skip expired credits — do nothing
+            pass
+        i += 1
+
+    if found:
+        return {"remaining": round(total_remaining, 2), "total": round(total_original, 2)}
     return None
 
 

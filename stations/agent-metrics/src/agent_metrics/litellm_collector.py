@@ -275,7 +275,10 @@ _DEFAULT_QUOTAS = {
     "deepseek": {"total": 12.0, "remaining": 10.25},
     "dashscope": {"total": 0.0, "remaining": 0.0},  # 免費額度 (token制)，無儲值
     "xai": {"total": 25.0, "remaining": 25.0},
-    "google": {"total": 635.0, "remaining": 551.72},  # Google Cloud 抵免額 (2x CREDIT_TYPE_MONTHLY)
+    "google": {
+        "total": 635.0,
+        "remaining": 549.35,
+    },  # Google Cloud 抵免額 (2x CREDIT_TYPE_MONTHLY, 可使用 only)
 }
 
 _PROVIDER_REDIS_PREFIX = "agent-metrics:provider"
