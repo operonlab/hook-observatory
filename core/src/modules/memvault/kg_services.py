@@ -1338,16 +1338,29 @@ class CascadeRecallService:
                 result.triples = triple_results
                 result.layers_searched.append("triples")
 
-        # --- Blocks: semantic or text search ---
+        # --- Blocks: Qdrant hybrid search → keyword fallback ---
         if _should_search("blocks"):
-            if query_embedding:
-                search_results, _meta = await memory_block_service.semantic_search(
-                    db, space_id, query_embedding, top_k=top_k
+            qdrant_result = (
+                await memory_block_service.qdrant_search(
+                    db,
+                    space_id,
+                    query,
+                    query_embedding,
+                    top_k=top_k,
                 )
+                if query_embedding
+                else None
+            )
+            if qdrant_result is not None:
+                search_results, _meta = qdrant_result
                 blocks = [sr.block for sr in search_results]
             else:
-                search_results = await memory_block_service.text_search(
-                    db, space_id, query, top_k=top_k
+                search_results, _meta = await memory_block_service.semantic_search(
+                    db,
+                    space_id,
+                    query_embedding,
+                    top_k=top_k,
+                    query=query,
                 )
                 blocks = [sr.block for sr in search_results]
 
