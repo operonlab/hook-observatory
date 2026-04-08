@@ -255,6 +255,16 @@
       "enabled": true
     },
     {
+      "name": "ws-model-catalog-sync",
+      "label": "com.joneshong.scheduler.ws-model-catalog-sync",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_catalog_sync.py",
+      "schedule": { "calendar": { "DayOfWeek": 1, "Hour": 19, "Minute": 0 } },
+      "description": "每週一 19:00: 爬 Arena 排行榜，推薦未設定的高排名模型（排除御三家+已設定）→ Redis",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-model-freshness-scan",
       "label": "com.joneshong.scheduler.ws-model-freshness-scan",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_freshness_scan.py",

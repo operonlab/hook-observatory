@@ -347,6 +347,26 @@ _SCENARIOS = [
 ]
 
 
+def _get_notable_unconfigured() -> list[dict]:
+    """Read from Redis (weekly sync) or fall back to hardcoded defaults."""
+    try:
+        import redis
+
+        from agent_metrics.config import settings
+
+        r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        cached = r.get("agent-metrics:model-catalog:notable")
+        if cached:
+            import json
+
+            data = json.loads(cached)
+            if data.get("models"):
+                return data["models"]
+    except Exception:
+        pass
+    return _NOTABLE_UNCONFIGURED
+
+
 @router.get("/model-catalog")
 async def litellm_model_catalog() -> dict:
     """Return model catalog with Smart/Fast/Value classification per provider."""
@@ -354,7 +374,7 @@ async def litellm_model_catalog() -> dict:
         "catalog": _MODEL_CATALOG,
         "highlights_subjective": _HIGHLIGHTS_SUBJECTIVE,
         "highlights_benchmark": _HIGHLIGHTS_BENCHMARK,
-        "notable_unconfigured": _NOTABLE_UNCONFIGURED,
+        "notable_unconfigured": _get_notable_unconfigured(),
         "scenarios": _SCENARIOS,
         "data_sources": {
             "arena": "LMSYS Chatbot Arena (2026-04-07)",

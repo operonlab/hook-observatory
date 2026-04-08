@@ -68,7 +68,7 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
-  font-size: 17px;
+  font-size: 20px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   position: relative;
@@ -490,19 +490,6 @@ body {
 .data-table tbody tr:last-child td { border-bottom: none; }
 
 .data-table tbody tr {
-  position: relative;
-  transition: var(--transition);
-}
-
-.data-table tbody tr::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--blue);
-  transform: scaleY(0);
   transition: var(--transition);
 }
 
@@ -510,8 +497,8 @@ body {
   background: rgba(137, 180, 250, 0.05) !important;
 }
 
-.data-table tbody tr:hover::before {
-  transform: scaleY(1);
+.data-table tbody tr:hover td:first-child {
+  box-shadow: inset 2px 0 0 var(--blue);
 }
 
 /* Column headers with icon */
