@@ -567,9 +567,20 @@ body {
 
 /* ── Highlight Cards (Model Catalog) ── */
 .highlight-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--space-md);
+  display: flex;
+  gap: var(--space-sm);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding-bottom: var(--space-xs);
+}
+
+.highlight-grid::-webkit-scrollbar { display: none; }
+
+.highlight-grid > .highlight-card {
+  flex: 1 1 0;
+  min-width: 150px;
+  scroll-snap-align: start;
 }
 
 .highlight-card {
@@ -818,7 +829,7 @@ body {
 
   .two-col { grid-template-columns: 1fr; }
   .summary-row { grid-template-columns: 1fr; }
-  .highlight-grid { grid-template-columns: repeat(2, 1fr); }
+  .highlight-grid { flex-wrap: nowrap; }
   .quota-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -826,6 +837,6 @@ body {
   .header h1 { font-size: 0.9rem; }
   .header-badge { display: none; }
   .header-time { display: none; }
-  .highlight-grid { grid-template-columns: 1fr; }
+  .highlight-grid > .highlight-card { min-width: 130px; }
   .quota-grid { grid-template-columns: repeat(2, 1fr); }
 }
