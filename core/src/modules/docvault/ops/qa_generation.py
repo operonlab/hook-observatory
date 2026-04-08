@@ -57,8 +57,91 @@ def _decide_qa_count(chunk_count: int) -> int:
     return 40
 
 
+async def _get_existing_qa(db: Any, document_id: str) -> list:
+    """Fetch existing pre-generated QA for a document (for incremental update)."""
+    try:
+        from sqlalchemy import select
+
+        from ..models import PreGeneratedQA
+
+        result = await db.execute(
+            select(PreGeneratedQA).where(
+                PreGeneratedQA.document_id == document_id,
+                PreGeneratedQA.status.in_(["pending", "validated"]),
+                PreGeneratedQA.deleted_at == None,  # noqa: E711
+            )
+        )
+        return list(result.scalars().all())
+    except Exception:
+        return []
+
+
+async def _deprecate_stale_qa(db: Any, document_id: str, old_version_id: str) -> int:
+    """Mark QA pairs from old version as deprecated. Returns count."""
+    try:
+        from sqlalchemy import update
+
+        from ..models import PreGeneratedQA
+
+        result = await db.execute(
+            update(PreGeneratedQA)
+            .where(
+                PreGeneratedQA.document_id == document_id,
+                PreGeneratedQA.version_id == old_version_id,
+                PreGeneratedQA.status.in_(["pending", "validated"]),
+            )
+            .values(status="deprecated")
+        )
+        return result.rowcount
+    except Exception:
+        return 0
+
+
+async def _cleanup_deprecated_from_qdrant(document_id: str) -> None:
+    """Remove deprecated QA entries from Qdrant cache."""
+    try:
+        from qdrant_client.http.models import (
+            FieldCondition,
+            Filter,
+            MatchValue,
+        )
+
+        from src.shared import qdrant_client as qclient
+        from src.shared.qdrant_search import COLLECTION_NAME
+
+        client = await qclient.get_client()
+        if not client:
+            return
+
+        await client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="service_id",
+                        match=MatchValue(value="docvault-qa-cache"),
+                    ),
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(value=document_id),
+                    ),
+                ]
+            ),
+        )
+    except Exception:
+        logger.debug("Qdrant cleanup for deprecated QA failed")
+
+
 class QAGenerationOp:
-    """Generate QA pairs from chunks + entities at ingest time."""
+    """Generate QA pairs from chunks + entities at ingest time.
+
+    Incremental update strategy:
+    - If document already has QA pairs from an older version:
+      1. Deprecate old version's QA pairs in DB
+      2. Remove old entries from Qdrant cache
+      3. Generate fresh QA for the new version
+    - If no existing QA: full generation from scratch
+    """
 
     name = "QAGenerationOp"
     input_keys = ("chunks", "document_id", "version_id", "space_id", "db")
@@ -75,6 +158,33 @@ class QAGenerationOp:
         version_id = ctx["version_id"]
         db = ctx["db"]
 
+        # ── Incremental update: handle existing QA from prior versions ──
+        existing_qa = await _get_existing_qa(db, document_id)
+        if existing_qa:
+            old_versions = {q.version_id for q in existing_qa if q.version_id != version_id}
+            if old_versions:
+                for old_ver in old_versions:
+                    deprecated = await _deprecate_stale_qa(db, document_id, old_ver)
+                    logger.info(
+                        "Deprecated %d stale QA pairs (version %s)",
+                        deprecated,
+                        old_ver[:12],
+                    )
+                await _cleanup_deprecated_from_qdrant(document_id)
+
+            # If current version already has QA, skip regeneration
+            current_qa = [q for q in existing_qa if q.version_id == version_id]
+            if current_qa:
+                logger.info(
+                    "Document %s already has %d QA pairs for current version",
+                    document_id[:12],
+                    len(current_qa),
+                )
+                ctx["generated_qa_pairs"] = []
+                ctx["qa_generation_count"] = 0
+                return ctx
+
+        # ── Fresh generation for new version ──
         target_count = _decide_qa_count(len(chunks))
         agent = _get_agent()
         model = await get_model()
