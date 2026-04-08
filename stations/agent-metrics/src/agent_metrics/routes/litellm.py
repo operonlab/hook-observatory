@@ -211,11 +211,11 @@ _HIGHLIGHTS_SUBJECTIVE = {
 # Sources: LMSYS Chatbot Arena (2026-04-07), SWE-Bench Verified, ArtificialAnalysis.ai
 _HIGHLIGHTS_BENCHMARK = {
     "overall": {
-        "name": "claude-opus-4.6",
-        "provider": "Anthropic",
-        "score": "1504 Elo",
-        "note": "Arena #1（訂閱制，非 LiteLLM）",
-        "configured": False,
+        "name": "grok-4.20",
+        "provider": "xAI",
+        "score": "1491 Elo",
+        "note": "LiteLLM 最強（全域 #3，#1/#2 為御三家）",
+        "configured": True,
     },
     "coding": {
         "name": "grok-4.20",
@@ -254,47 +254,55 @@ _HIGHLIGHTS_BENCHMARK = {
     },
 }
 
-# 未設定但在評測中值得關注的模型
+# 未設定但值得關注的模型（排除御三家 Anthropic/OpenAI/Google + 已設定 provider）
 _NOTABLE_UNCONFIGURED = [
     {
-        "name": "claude-opus-4.6-thinking",
-        "provider": "Anthropic",
-        "score": "1504 Elo",
-        "strengths": "Arena #1，Hidden CoT，全場最強綜合",
-        "access": "CC Max 訂閱制",
-        "price": "$15/$75",
+        "name": "mistral-large-3",
+        "provider": "Mistral AI",
+        "score": "~1460 Elo",
+        "strengths": "性價比最佳中端，多平台部署（Bedrock/Azure/OpenRouter）",
+        "access": "Mistral API / OpenRouter",
+        "price": "$2.00/$6.00",
     },
     {
-        "name": "gemini-3.1-pro",
-        "provider": "Google",
-        "score": "1493 Elo",
-        "strengths": "Arena #2，Intelligence 57，SWE-Bench 78.8%",
-        "access": "已設定（LiteLLM）",
-        "price": "$2.00/$12.00",
+        "name": "llama-3.1-405b",
+        "provider": "Meta（開源）",
+        "score": "開源最強",
+        "strengths": "完全開源，Fireworks/Together/DeepInfra 均可用",
+        "access": "Fireworks / Together.ai",
+        "price": "$0.80~1.50/M",
     },
     {
-        "name": "gpt-5.4-high",
-        "provider": "OpenAI",
-        "score": "1484 Elo",
-        "strengths": "Arena #4，平衡型旗艦",
-        "access": "未設定 API key",
+        "name": "reka-core",
+        "provider": "Reka AI",
+        "score": "MMLU 83.2",
+        "strengths": "多模態（視覺）強，HumanEval 76.8%，128K context",
+        "access": "Reka API + SDK",
+        "price": "~$2~3/M in",
+    },
+    {
+        "name": "doubao-2.0",
+        "provider": "ByteDance",
+        "score": "中文頂級",
+        "strengths": "日活 1 億+，中文消費級最強，2026 新版",
+        "access": "豆包 API（中國區）",
+        "price": "低於 Qwen/GLM",
+    },
+    {
+        "name": "mistral-nemo",
+        "provider": "Mistral AI",
+        "score": "1160 Elo",
+        "strengths": "預算級最佳，推理極快，$0.10~0.20/M",
+        "access": "Fireworks / Together.ai",
+        "price": "$0.10/$0.20",
+    },
+    {
+        "name": "command-r-plus",
+        "provider": "Cohere",
+        "score": "企業級",
+        "strengths": "RAG 優化，企業穩定性，生產就緒",
+        "access": "Cohere API",
         "price": "$2.50/$10.00",
-    },
-    {
-        "name": "claude-sonnet-4.6",
-        "provider": "Anthropic",
-        "score": "1468 Elo",
-        "strengths": "性價比旗艦，Coding 強",
-        "access": "CC Max 訂閱制",
-        "price": "$3/$15",
-    },
-    {
-        "name": "gpt-5.4-mini",
-        "provider": "OpenAI",
-        "score": "~1420 Elo",
-        "strengths": "低價快速，適合大量 API 呼叫",
-        "access": "未設定 API key",
-        "price": "$0.40/$1.60",
     },
 ]
 
