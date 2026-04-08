@@ -382,9 +382,9 @@ async def litellm_model_catalog() -> dict:
             "scenarios": dynamic.get("scenarios", _SCENARIOS),
             "synced_at": dynamic.get("synced_at"),
             "data_sources": {
-                "arena": f"LMSYS Chatbot Arena ({dynamic.get('synced_at', '?')[:10]})",
-                "swe_bench": "SWE-Bench Verified (vals.ai)",
-                "speed": "ArtificialAnalysis.ai (72h rolling avg)",
+                "sources_used": dynamic.get("sources_used", []),
+                "source_count": dynamic.get("source_count", 0),
+                "note": f"Consensus ranking from {dynamic.get('source_count', '?')} sources ({dynamic.get('synced_at', '?')[:10]})",
             },
         }
 

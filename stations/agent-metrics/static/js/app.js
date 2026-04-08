@@ -292,7 +292,11 @@ async function refreshCatalog() {
   const srcEl = document.getElementById("catalog-sources");
   if (srcEl && data.data_sources) {
     const s = data.data_sources;
-    srcEl.textContent = `資料來源：${s.arena} · ${s.swe_bench} · ${s.speed}`;
+    if (s.note) {
+      srcEl.textContent = `資料來源：${s.note}`;
+    } else {
+      srcEl.textContent = `資料來源：${s.arena || ""} · ${s.swe_bench || ""} · ${s.speed || ""}`;
+    }
   }
 
   // ── Scenario table ──

@@ -107,7 +107,40 @@ def parse_litellm_config() -> dict:
     return result
 
 
-# ── Arena Scraping ────────────────────────────────────────────
+# ── Multi-Source Scraping (Consensus Ranking) ─────────────────
+#
+# 4 independent sources to prevent single-source bias:
+#   1. LMSYS Chatbot Arena — crowd blind-test Elo
+#   2. LiveBench — auto-updated monthly benchmark
+#   3. ArtificialAnalysis.ai — speed + quality + price
+#   4. OpenRouter rankings — real market usage
+#
+LEADERBOARD_SOURCES = [
+    {
+        "name": "arena",
+        "url": "https://lmarena.ai/?leaderboard",
+        "label": "LMSYS Chatbot Arena",
+        "wait": 8,
+    },
+    {
+        "name": "livebench",
+        "url": "https://livebench.ai/",
+        "label": "LiveBench",
+        "wait": 6,
+    },
+    {
+        "name": "artificialanalysis",
+        "url": "https://artificialanalysis.ai/leaderboards/models",
+        "label": "ArtificialAnalysis.ai",
+        "wait": 6,
+    },
+    {
+        "name": "openrouter",
+        "url": "https://openrouter.ai/rankings",
+        "label": "OpenRouter Rankings",
+        "wait": 5,
+    },
+]
 
 
 def _cfx(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
@@ -115,29 +148,41 @@ def _cfx(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-def scrape_arena() -> str:
-    """Scrape LMSYS Chatbot Arena leaderboard."""
-    url = "https://lmarena.ai/?leaderboard"
+def scrape_all_sources() -> dict[str, str]:
+    """Scrape all leaderboard sources sequentially with one browser session."""
+    results: dict[str, str] = {}
     try:
-        open_r = _cfx("--persistent", "open", url)
+        first = LEADERBOARD_SOURCES[0]
+        open_r = _cfx("--persistent", "open", first["url"])
         if open_r.returncode != 0:
             log(f"ERROR: cfx open failed: {open_r.stderr[:200]}")
-            return ""
-        time.sleep(8)
+            return {}
+        time.sleep(first["wait"])
         eval_r = _cfx("eval", "document.body.innerText.substring(0, 20000)", timeout=20)
-        return eval_r.stdout if eval_r.returncode == 0 else ""
+        results[first["name"]] = eval_r.stdout if eval_r.returncode == 0 else ""
+        log(f"  [{first['name']}] scraped {len(results[first['name']])} chars")
+
+        for src in LEADERBOARD_SOURCES[1:]:
+            _cfx("open", src["url"], timeout=20)
+            time.sleep(src["wait"])
+            eval_r = _cfx("eval", "document.body.innerText.substring(0, 20000)", timeout=20)
+            results[src["name"]] = eval_r.stdout if eval_r.returncode == 0 else ""
+            log(f"  [{src['name']}] scraped {len(results.get(src['name'], ''))} chars")
+
     except subprocess.TimeoutExpired:
-        log("ERROR: arena scrape timeout")
-        return ""
+        log("ERROR: scrape timeout")
+    except Exception as e:
+        log(f"ERROR: scrape failed: {e}")
     finally:
         try:
             _cfx("close", timeout=10)
         except Exception:
             pass
+    return results
 
 
-def parse_all_arena_models(text: str) -> list[dict]:
-    """Parse ALL models with Elo scores from Arena text."""
+def _parse_scores_from_text(text: str) -> list[dict]:
+    """Extract model name + numeric score pairs from leaderboard text."""
     if not text:
         return []
     models = []
@@ -145,20 +190,90 @@ def parse_all_arena_models(text: str) -> list[dict]:
         line = line.strip()
         if not line:
             continue
+        # Look for 4-digit scores (Elo range 1100-1600) or percentage scores
         elo_match = re.search(r"(\d{4})", line)
-        if not elo_match:
-            continue
-        elo = int(elo_match.group(1))
-        if elo < 1100 or elo > 1600:
-            continue
-        name_part = line[: elo_match.start()].strip().rstrip("-").strip()
-        if len(name_part) < 3 or len(name_part) > 60:
-            continue
-        if any(m["name"].lower() == name_part.lower() for m in models):
-            continue
-        models.append({"name": name_part, "elo": elo})
-    models.sort(key=lambda m: m["elo"], reverse=True)
+        if elo_match:
+            score = int(elo_match.group(1))
+            if 1100 <= score <= 1600:
+                name = line[: elo_match.start()].strip().rstrip("-").strip()
+                if 3 <= len(name) <= 60:
+                    models.append({"name": name, "score": score})
+        # Also try percentage scores (e.g., "85.3%")
+        pct_match = re.search(r"([\d.]+)%", line)
+        if pct_match and not elo_match:
+            score = float(pct_match.group(1))
+            if 30 <= score <= 100:
+                name = line[: pct_match.start()].strip().rstrip("-").strip()
+                if 3 <= len(name) <= 60:
+                    models.append({"name": name, "score": score})
     return models
+
+
+def merge_multi_source_rankings(raw_texts: dict[str, str]) -> list[dict]:
+    """Merge rankings from multiple sources into consensus scores.
+
+    Uses Borda count: each source ranks models, position → points.
+    Models appearing in more sources get a bonus.
+    """
+    # Parse each source
+    source_rankings: dict[str, list[dict]] = {}
+    for source_name, text in raw_texts.items():
+        if not text:
+            continue
+        models = _parse_scores_from_text(text)
+        # Deduplicate by name (keep highest score)
+        seen = {}
+        for m in models:
+            key = m["name"].lower()
+            if key not in seen or m["score"] > seen[key]["score"]:
+                seen[key] = m
+        source_rankings[source_name] = sorted(seen.values(), key=lambda x: x["score"], reverse=True)
+
+    if not source_rankings:
+        return []
+
+    # Borda count: rank position → points (1st = 100, 2nd = 99, ...)
+    model_points: dict[
+        str, dict
+    ] = {}  # name_lower → {name, total_points, source_count, best_score}
+    for _source_name, ranked in source_rankings.items():
+        for rank, m in enumerate(ranked[:100]):  # Top 100 per source
+            key = m["name"].lower()
+            points = 100 - rank
+            if key not in model_points:
+                model_points[key] = {
+                    "name": m["name"],
+                    "total_points": 0,
+                    "source_count": 0,
+                    "best_score": 0,
+                    "sources": [],
+                }
+            model_points[key]["total_points"] += points
+            model_points[key]["source_count"] += 1
+            model_points[key]["sources"].append(_source_name)
+            if m["score"] > model_points[key]["best_score"]:
+                model_points[key]["best_score"] = m["score"]
+                model_points[key]["name"] = m["name"]  # Keep best-scoring variant's name
+
+    # Multi-source bonus: models in 3+ sources get 50% bonus
+    for info in model_points.values():
+        if info["source_count"] >= 3:
+            info["total_points"] = int(info["total_points"] * 1.5)
+        elif info["source_count"] >= 2:
+            info["total_points"] = int(info["total_points"] * 1.2)
+
+    # Sort by total points
+    merged = sorted(model_points.values(), key=lambda x: x["total_points"], reverse=True)
+
+    return [
+        {
+            "name": m["name"],
+            "elo": int(m["best_score"]) if m["best_score"] >= 1000 else 0,
+            "consensus_score": m["total_points"],
+            "source_count": m["source_count"],
+        }
+        for m in merged
+    ]
 
 
 # ── Catalog Generation ────────────────────────────────────────
@@ -437,7 +552,7 @@ def store_full_catalog(data: dict) -> bool:
 
 
 def main() -> int:
-    log("=== Model Catalog Full Sync Start ===")
+    log("=== Model Catalog Full Sync Start (Multi-Source) ===")
 
     # 1. Parse LiteLLM config
     config_data = parse_litellm_config()
@@ -445,20 +560,31 @@ def main() -> int:
     log(f"Configured providers: {sorted(configured)}")
     log(f"Models in config: {len(config_data['models'])}")
 
-    # 2. Scrape Arena
-    arena_text = scrape_arena()
-    if not arena_text:
-        log("ERROR: No data from Arena — using fallback")
+    # 2. Scrape 4 leaderboard sources
+    raw_texts = scrape_all_sources()
+    sources_ok = [k for k, v in raw_texts.items() if v]
+    log(f"Sources scraped: {len(sources_ok)}/{len(LEADERBOARD_SOURCES)} ({', '.join(sources_ok)})")
+
+    if not sources_ok:
+        log("ERROR: No data from any source")
         return 1
 
+    # Save raw texts for debugging
     raw_dir = LOG_DIR / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    (raw_dir / "arena_raw.txt").write_text(arena_text)
+    for name, text in raw_texts.items():
+        if text:
+            (raw_dir / f"{name}_raw.txt").write_text(text)
 
-    arena_models = parse_all_arena_models(arena_text)
-    log(f"Arena: parsed {len(arena_models)} models total")
+    # 3. Merge into consensus ranking
+    arena_models = merge_multi_source_rankings(raw_texts)
+    log(f"Consensus ranking: {len(arena_models)} models (from {len(sources_ok)} sources)")
+    for m in arena_models[:10]:
+        log(
+            f"  #{arena_models.index(m) + 1:2d}  {m['name']:30s}  score={m['consensus_score']:>4d}  sources={m['source_count']}"
+        )
 
-    # 3. Generate all 4 sections
+    # 4. Generate all 4 sections
     ts = datetime.now(UTC).isoformat()
 
     benchmark = generate_benchmark_highlights(arena_models, configured)
@@ -475,15 +601,16 @@ def main() -> int:
     for m in notable:
         log(f"  {m['name']:30s} {m['score']:>10s} ({m['provider']})")
 
-    # 4. Store
+    # 5. Store
     full_catalog = {
         "highlights_benchmark": benchmark,
         "scenarios": scenarios,
         "highlights_subjective": subjective,
         "notable_unconfigured": notable,
         "synced_at": ts,
-        "source": "lmsys_arena + litellm_config",
-        "arena_model_count": len(arena_models),
+        "sources_used": sources_ok,
+        "source_count": len(sources_ok),
+        "consensus_model_count": len(arena_models),
     }
 
     store_full_catalog(full_catalog)
@@ -493,7 +620,7 @@ def main() -> int:
         json.dumps(full_catalog, indent=2, ensure_ascii=False)
     )
 
-    log("=== Model Catalog Full Sync Done ===")
+    log(f"=== Model Catalog Full Sync Done ({len(sources_ok)} sources) ===")
     return 0
 
 
