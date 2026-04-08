@@ -571,7 +571,7 @@ body {
   grid-template-columns: 1fr 320px;
   gap: var(--space-md);
   margin-bottom: var(--space-md);
-  align-items: start;
+  align-items: stretch;
 }
 
 .catalog-mosaic > .card { margin-bottom: 0; }
@@ -596,16 +596,25 @@ body {
   scroll-snap-align: start;
 }
 
-/* ── Highlight Stack (Subjective — vertical compact) ── */
+/* ── Highlight Stack (Subjective — vertical compact, fill height) ── */
 .highlight-stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  flex: 1;
 }
 
 .highlight-stack > .highlight-card {
   border-left-width: 3px;
+  flex: 1;
 }
+
+.catalog-mosaic-side {
+  display: flex;
+  flex-direction: column;
+}
+
+.catalog-mosaic-side .card-title { flex-shrink: 0; }
 
 .highlight-card {
   position: relative;
