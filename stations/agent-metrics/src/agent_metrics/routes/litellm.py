@@ -347,37 +347,60 @@ _SCENARIOS = [
 ]
 
 
-def _get_notable_unconfigured() -> dict:
-    """Read from Redis (weekly sync) or fall back to hardcoded defaults."""
+def _get_dynamic_catalog() -> dict | None:
+    """Read full catalog from Redis (weekly sync). Returns None if unavailable."""
     try:
         import redis
 
         from agent_metrics.config import settings
 
         r = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        cached = r.get("agent-metrics:model-catalog:notable")
+        cached = r.get("agent-metrics:model-catalog:full")
         if cached:
             import json
 
-            data = json.loads(cached)
-            if data.get("models"):
-                return {"models": data["models"], "synced_at": data.get("synced_at")}
+            return json.loads(cached)
     except Exception:
         pass
-    return {"models": _NOTABLE_UNCONFIGURED, "synced_at": "2026-04-08T08:00:00Z"}
+    return None
 
 
 @router.get("/model-catalog")
 async def litellm_model_catalog() -> dict:
-    """Return model catalog with Smart/Fast/Value classification per provider."""
+    """Return model catalog — Redis dynamic data with hardcoded fallback."""
+    dynamic = _get_dynamic_catalog()
+
+    if dynamic:
+        return {
+            "catalog": _MODEL_CATALOG,
+            "highlights_subjective": dynamic.get("highlights_subjective", _HIGHLIGHTS_SUBJECTIVE),
+            "highlights_benchmark": dynamic.get("highlights_benchmark", _HIGHLIGHTS_BENCHMARK),
+            "notable_unconfigured": {
+                "models": dynamic.get("notable_unconfigured", _NOTABLE_UNCONFIGURED),
+                "synced_at": dynamic.get("synced_at"),
+            },
+            "scenarios": dynamic.get("scenarios", _SCENARIOS),
+            "synced_at": dynamic.get("synced_at"),
+            "data_sources": {
+                "arena": f"LMSYS Chatbot Arena ({dynamic.get('synced_at', '?')[:10]})",
+                "swe_bench": "SWE-Bench Verified (vals.ai)",
+                "speed": "ArtificialAnalysis.ai (72h rolling avg)",
+            },
+        }
+
+    # Fallback to hardcoded
     return {
         "catalog": _MODEL_CATALOG,
         "highlights_subjective": _HIGHLIGHTS_SUBJECTIVE,
         "highlights_benchmark": _HIGHLIGHTS_BENCHMARK,
-        "notable_unconfigured": _get_notable_unconfigured(),
+        "notable_unconfigured": {
+            "models": _NOTABLE_UNCONFIGURED,
+            "synced_at": "2026-04-08T08:00:00Z",
+        },
         "scenarios": _SCENARIOS,
+        "synced_at": None,
         "data_sources": {
-            "arena": "LMSYS Chatbot Arena (2026-04-07)",
+            "arena": "LMSYS Chatbot Arena (2026-04-07, hardcoded)",
             "swe_bench": "SWE-Bench Verified (vals.ai)",
             "speed": "ArtificialAnalysis.ai (72h rolling avg)",
         },
