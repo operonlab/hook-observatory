@@ -26,6 +26,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from pydantic_ai import Agent
+
+from .llm_config import make_omlx_model
+
 logger = logging.getLogger(__name__)
 
 
@@ -383,8 +387,22 @@ _FUZZY_INDICATORS = re.compile(
     r"差不多|大約|大概|約"  # approximate markers
 )
 
-_LLM_URL = "http://localhost:8000/v1/chat/completions"
-_LLM_TIMEOUT = 15
+_refine_agent = Agent(
+    output_type=str,
+    system_prompt=(
+        "You are a content normalizer for a personal knowledge management system. "
+        "Normalize relative/vague expressions to precise values where possible.\n\n"
+        "Rules:\n"
+        "- Relative dates → YYYY-MM-DD (use the reference date provided)\n"
+        "- Vague quantities (幾個, 一些) → keep as-is if truly unknown\n"
+        "- Vague time (最近, 當時) → keep as-is (insufficient context)\n"
+        "- 大約/大概 + number → add ~ prefix to the number\n"
+        "- Do NOT change anything you're unsure about\n"
+        "- Return ONLY the normalized text, nothing else\n"
+        "- If nothing needs changing, return the original text exactly"
+    ),
+    retries=1,
+)
 
 
 async def _llm_refine(content: str, ctx: NormContext) -> tuple[str, bool]:
@@ -393,37 +411,20 @@ async def _llm_refine(content: str, ctx: NormContext) -> tuple[str, bool]:
     Returns (normalized_content, was_refined).
     Only called when fuzzy indicators are detected after regex ops.
     """
-    import httpx
-
-    system_prompt = (
-        "You are a content normalizer for a personal knowledge management system. "
-        "Normalize relative/vague expressions to precise values where possible.\n\n"
-        "Rules:\n"
-        "- Relative dates → YYYY-MM-DD (reference: {ref_date})\n"
-        "- Vague quantities (幾個, 一些) → keep as-is if truly unknown\n"
-        "- Vague time (最近, 當時) → keep as-is (insufficient context)\n"
-        "- 大約/大概 + number → add ~ prefix to the number\n"
-        "- Do NOT change anything you're unsure about\n"
-        "- Return ONLY the normalized text, nothing else\n"
-        "- If nothing needs changing, return the original text exactly"
-    ).format(ref_date=ctx.created_at.strftime("%Y-%m-%d"))
-
-    payload = {
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": content},
-        ],
-        "temperature": 0.0,
-        "max_tokens": len(content) + 200,
-    }
+    ref_date = ctx.created_at.strftime("%Y-%m-%d")
+    user_msg = f"Reference date: {ref_date}\n\n{content}"
 
     try:
-        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-            resp = await client.post(_LLM_URL, json=payload)
-            resp.raise_for_status()
-
-        data = resp.json()
-        normalized: str = data["choices"][0]["message"]["content"].strip()
+        result = await _refine_agent.run(
+            user_msg,
+            model=make_omlx_model(),
+            model_settings={
+                "temperature": 0.0,
+                "max_tokens": len(content) + 200,
+                "timeout": 15,
+            },
+        )
+        normalized: str = result.output.strip()
 
         # Safety: reject if LLM output is drastically different (>30% length change)
         len_ratio = len(normalized) / max(len(content), 1)

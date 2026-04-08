@@ -21,8 +21,13 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from pydantic_ai import Agent
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+from .llm_config import make_litellm_model
+from .llm_models import DreamReflectionOutput
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +42,24 @@ MAX_MERGES_PER_RUN = 50
 REDIS_KEY_LAST_DREAM = "memvault:dream:last_run_at"
 
 # --- LLM Reflection ---
-_LLM_URL = "http://localhost:4000/v1/chat/completions"
-_LLM_API_KEY = "sk-litellm-local-dev"  # nosec — local dev proxy key
-_LLM_MODEL = "gemini-2.5-flash"
-_REFLECT_TIMEOUT = 30
 _REFLECT_MAX_BLOCKS = 15
 _REFLECT_MAX_ATTITUDES = 15
+
+_reflect_agent = Agent(
+    output_type=DreamReflectionOutput,
+    system_prompt=(
+        "You are performing a dream — a reflective pass over a personal knowledge management "
+        "system. Your goal is to synthesize recent learning into durable, organized insights.\n\n"
+        "Guidelines:\n"
+        "- insights: max 3 items, one sentence each\n"
+        "- merge_candidates: max 3 items, brief description\n"
+        "- knowledge_gaps: max 3 items, topic name only\n"
+        "- suggested_attitudes: max 3 items, one sentence each\n"
+        "- stale_candidates: max 2 items, brief description\n"
+        "- Be extremely concise. Each item under 50 chars. Write in 繁體中文."
+    ),
+    retries=2,
+)
 
 # --- Date Normalization Patterns ---
 _RELATIVE_DATE_PATTERNS: list[tuple[re.Pattern[str], int | None]] = [
@@ -258,7 +275,6 @@ async def _reflect(
     Feeds recent blocks + attitudes + contradiction summary to Haiku,
     which returns structured insights about the memory state.
     """
-    import httpx
     from sqlalchemy import select
 
     from .kg_models import AttitudeFact
@@ -295,28 +311,6 @@ async def _reflect(
     contradictions = signal.get("contradictions_found", 0)
     new_blocks = signal.get("total_new", 0)
 
-    system_prompt = (
-        "You are performing a dream — a reflective pass over a personal knowledge management "
-        "system. Your goal is to synthesize recent learning into durable, organized insights.\n\n"
-        "Review the memory state below and produce a structured analysis. "
-        "Return ONLY valid JSON (no markdown fences) with this schema:\n"
-        "{\n"
-        '  "health_score": <float 0-1, overall memory health>,\n'
-        '  "insights": ["<insight 1>", "<insight 2>", ...],\n'
-        '  "merge_candidates": ["<description of blocks that should be merged>", ...],\n'
-        '  "knowledge_gaps": ["<topic frequently referenced but lacking depth>", ...],\n'
-        '  "suggested_attitudes": ["<belief/preference to record as attitude fact>", ...],\n'
-        '  "stale_candidates": ["<memory that appears outdated>", ...]\n'
-        "}\n\n"
-        "Guidelines:\n"
-        "- insights: max 3 items, one sentence each\n"
-        "- merge_candidates: max 3 items, brief description\n"
-        "- knowledge_gaps: max 3 items, topic name only\n"
-        "- suggested_attitudes: max 3 items, one sentence each\n"
-        "- stale_candidates: max 2 items, brief description\n"
-        "- Be extremely concise. Each item under 50 chars. Write in 繁體中文."
-    )
-
     user_message = (
         f"## Memory Stats\n"
         f"- Total blocks: {orient.get('total_blocks', 0)}\n"
@@ -326,65 +320,13 @@ async def _reflect(
         f"## Current Attitude Facts ({len(attitudes)})\n{attitudes_summary or '(none)'}"
     )
 
-    payload = {
-        "model": _LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": 0.3,
-        "max_tokens": 16000,  # Gemini thinking tokens count toward limit
-    }
-
     try:
-        headers = {
-            "Authorization": f"Bearer {_LLM_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        async with httpx.AsyncClient(timeout=_REFLECT_TIMEOUT) as client:
-            resp = await client.post(_LLM_URL, json=payload, headers=headers)
-            resp.raise_for_status()
-
-        data = resp.json()
-        raw_text: str = data["choices"][0]["message"]["content"]
-
-        # Parse JSON response (strip markdown fences + truncation recovery)
-        import json as _json
-
-        # Strip markdown code fences if present
-        cleaned = raw_text.strip()
-        if cleaned.startswith("```"):
-            first_nl = cleaned.find("\n")
-            if first_nl > 0:
-                cleaned = cleaned[first_nl + 1 :]
-            last_fence = cleaned.rfind("```")
-            if last_fence > 0:
-                cleaned = cleaned[:last_fence]
-            cleaned = cleaned.strip()
-
-        from src.shared.llm_json import parse_llm_json
-
-        parsed = parse_llm_json(cleaned)
-        if not isinstance(parsed, dict):
-            # Try truncated JSON recovery: find last complete array
-            try:
-                last_bracket = cleaned.rfind("]")
-                if last_bracket > 0:
-                    truncated = cleaned[: last_bracket + 1] + "\n}"
-                    parsed = _json.loads(truncated)
-            except Exception:
-                logger.debug("dream.reflect: truncated JSON recovery failed")
-        if not isinstance(parsed, dict):
-            return {"raw": raw_text[:500], "parse_error": "non-dict"}
-
-        return {
-            "health_score": parsed.get("health_score", 0),
-            "insights": parsed.get("insights", []),
-            "merge_candidates": parsed.get("merge_candidates", []),
-            "knowledge_gaps": parsed.get("knowledge_gaps", []),
-            "suggested_attitudes": parsed.get("suggested_attitudes", []),
-            "stale_candidates": parsed.get("stale_candidates", []),
-        }
+        result = await _reflect_agent.run(
+            user_message,
+            model=make_litellm_model("gemini-2.5-flash"),
+            model_settings={"temperature": 0.3, "max_tokens": 16000, "timeout": 30},
+        )
+        return result.output.model_dump()
 
     except Exception as e:
         logger.warning("dream.reflect failed: %s", e)

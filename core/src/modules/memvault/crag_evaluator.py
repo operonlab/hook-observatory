@@ -19,12 +19,26 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from pydantic_ai import Agent
+
 from sdk_client.timeout import dynamic_timeout
+
+from .llm_config import make_litellm_model
+from .llm_models import CRAGVerdictOutput
 
 if TYPE_CHECKING:
     from .kg_schemas import CascadeRecallResult
 
 logger = logging.getLogger(__name__)
+
+_haiku_eval_agent = Agent(
+    output_type=CRAGVerdictOutput,
+    system_prompt=(
+        "You are evaluating search result relevance. Given a query and retrieved results, "
+        "respond with your verdict."
+    ),
+    retries=2,
+)
 
 
 class CRAGVerdict(StrEnum):
@@ -216,8 +230,6 @@ class CRAGEvaluator:
     async def _layer_c_haiku(self, query: str, result: CascadeRecallResult) -> dict | None:
         """Layer C: Haiku LLM evaluation (opt-in, 1-3s)."""
         try:
-            import httpx
-
             # Build context from top results
             context_parts: list[str] = []
             for s in result.summaries[:2]:
@@ -235,53 +247,20 @@ class CRAGEvaluator:
                 context_parts.append(f"[Block] {content}")
 
             context = "\n".join(context_parts)
-
-            prompt = (
-                "You are evaluating search result relevance. Given a query and retrieved results, "
-                "respond with ONLY one of: correct, ambiguous, incorrect\n\n"
-                f"Query: {query}\n\n"
-                f"Results:\n{context}\n\n"
-                "Verdict:"
-            )
+            user_msg = f"Query: {query}\n\nResults:\n{context}"
 
             # Dynamic timeout: scale by context size, cap at 30s
             ctx_chars = len(context)
             timeout = dynamic_timeout(base=5, factor=0.5, context=ctx_chars / 1000, cap=30)
 
-            last_exc: Exception | None = None
-            for attempt in range(2):
-                try:
-                    async with httpx.AsyncClient(timeout=timeout) as client:
-                        response = await client.post(
-                            "http://localhost:4000/v1/chat/completions",
-                            json={
-                                "model": "haiku",
-                                "messages": [{"role": "user", "content": prompt}],
-                                "max_tokens": 10,
-                                "temperature": 0.0,
-                            },
-                        )
-                        response.raise_for_status()
-                        data = response.json()
-                        answer = data["choices"][0]["message"]["content"].strip().lower()
-
-                        score_map = {"correct": 0.8, "ambiguous": 0.5, "incorrect": 0.1}
-                        for v in ("correct", "ambiguous", "incorrect"):
-                            if v in answer:
-                                return {"verdict": v, "score": score_map[v]}
-
-                        return {"verdict": "ambiguous", "score": 0.5, "raw": answer}
-                except (httpx.TimeoutException, httpx.NetworkError) as exc:
-                    last_exc = exc
-                    if attempt == 0:
-                        import asyncio
-                        await asyncio.sleep(1.0)
-                    continue
-                except Exception:
-                    raise
-
-            if last_exc:
-                raise last_exc  # will be caught by outer except
+            ai_result = await _haiku_eval_agent.run(
+                user_msg,
+                model=make_litellm_model("haiku"),
+                model_settings={"temperature": 0.0, "max_tokens": 128, "timeout": timeout},
+            )
+            verdict = ai_result.output.verdict
+            score_map = {"correct": 0.8, "ambiguous": 0.5, "incorrect": 0.1}
+            return {"verdict": verdict, "score": score_map[verdict]}
 
         except Exception as e:
             logger.warning("Layer C (Haiku) evaluation failed: %s", e)
