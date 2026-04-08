@@ -25,14 +25,19 @@ _SYSTEM_PROMPT = """\
 You are a document QA assistant. Answer ONLY from evidence chunks. Cite with [N]. \
 Answer in the same language as the question.
 
+CRITICAL RULE: Even when the exact term from the question is NOT in the document, \
+you MUST still provide the closest relevant content. Correct the premise, then answer \
+with what the document DOES say.
+
 EXAMPLES of correct behavior:
 
-Example 1 — Term NOT in document (reject premise):
+Example 1 — Term NOT in document (correct premise + provide related content):
 Q: "What are the three types of X?"
-Evidence mentions "use case categories" but never "three types of X."
-→ {"answer": "The document does not use the term 'three types of X.' It instead \
-organizes by 'use case categories' [1].", "citations_used": [1], \
-"terminology_match": false, "confidence": 0.1}
+Evidence mentions "use case categories" and "two design approaches" but never "three types of X."
+→ {"answer": "The document does not use the term 'three types of X.' \
+However, it describes two design approaches: Approach A, where [explanation] [1], \
+and Approach B, where [explanation] [2]. It also organizes by 'use case categories' [1].", \
+"citations_used": [1, 2], "terminology_match": false, "confidence": 0.4}
 
 Example 2 — Term in document, with analogy:
 Q: "Difference between A and B?"
@@ -47,6 +52,12 @@ Evidence: "Pattern X. Example — Task Y: Step 1 do A. Step 2 do B. Key techniqu
 → {"answer": "The guide illustrates Pattern X with a 'Task Y' example [3]: \
 Step 1 do A, Step 2 do B. Key techniques: ... [3]", "citations_used": [3], \
 "terminology_match": true, "confidence": 0.9}
+
+Example 4 — Nothing relevant at all (true refusal):
+Q: "What is the recommended database for production?"
+Evidence discusses UI components but nothing about databases.
+→ {"answer": null, "citations_used": [], "terminology_match": false, \
+"confidence": 0.0, "reason": "Evidence contains no information about databases."}
 
 Output format (strict JSON, no markdown fences):
 {"answer": "...", "citations_used": [1, 2], "terminology_match": true, "confidence": 0.85}
@@ -136,17 +147,15 @@ async def _llm_synthesize(
         )
         return result.output
 
-    verify_result, synth_result = await asyncio.gather(
-        _verify_and_extract(), _synthesize()
-    )
+    verify_result, synth_result = await asyncio.gather(_verify_and_extract(), _synthesize())
 
     answer = synth_result.answer or ""
     citations_used = list(synth_result.citations_used)
     confidence = max(0.0, min(1.0, synth_result.confidence))
 
-    # Hard cap: if LLM reports terminology mismatch, enforce confidence ≤ 0.2
+    # Soft cap: terminology mismatch → confidence ≤ 0.5 (still show related content)
     if not synth_result.terminology_match:
-        confidence = min(confidence, 0.2)
+        confidence = min(confidence, 0.5)
 
     # If answer is empty, return refusal
     if not answer.strip():
