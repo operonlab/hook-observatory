@@ -10,6 +10,7 @@ from .community_index import CommunityIndexOp
 from .contextual_chunk import ContextualChunkOp
 from .contradiction import ContradictionDetectionOp
 from .contradiction_aware import ContradictionAwareOp
+from .conversation_context import ConversationContextOp
 from .coverage_gap import CoverageGapOp
 from .fan_out import FanOutOp
 from .flat_index import FlatIndexOp
@@ -20,6 +21,11 @@ from .hybrid_rrf_search import HybridRRFSearchOp
 from .intent_router import IntentRouterOp
 from .jina_rerank import JinaRerankOp
 from .merge import MergeOp
+from .qa_cache_lookup import QACacheLookupOp
+from .qa_embed import QAEmbedOp
+from .qa_feedback_loop import QAFeedbackLoopOp
+from .qa_generation import QAGenerationOp
+from .qa_validation import QAValidationOp
 from .strict_cite import StrictCiteOp
 
 __all__ = [
@@ -29,6 +35,7 @@ __all__ = [
     "ContextualChunkOp",
     "ContradictionAwareOp",
     "ContradictionDetectionOp",
+    "ConversationContextOp",
     "CoverageGapOp",
     "FanOutOp",
     "FlatIndexOp",
@@ -39,5 +46,10 @@ __all__ = [
     "IntentRouterOp",
     "JinaRerankOp",
     "MergeOp",
+    "QACacheLookupOp",
+    "QAEmbedOp",
+    "QAFeedbackLoopOp",
+    "QAGenerationOp",
+    "QAValidationOp",
     "StrictCiteOp",
 ]

@@ -107,8 +107,21 @@ _verify_agent = Agent(
 )
 
 
-def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
-    parts = [f"Question: {question}\n\nEvidence chunks:\n"]
+def _build_user_message(
+    question: str,
+    chunks: list[dict[str, Any]],
+    conversation_history: list[dict] | None = None,
+) -> str:
+    parts = []
+    if conversation_history:
+        parts.append("Conversation context (for reference only, do NOT cite these):\n")
+        for h in conversation_history:
+            parts.append(
+                f"[Turn {h.get('turn', '?')}] User: {h.get('question', '')} "
+                f"Assistant: {h.get('answer', '')[:200]}\n"
+            )
+        parts.append("\n")
+    parts.append(f"Question: {question}\n\nEvidence chunks:\n")
     for i, chunk in enumerate(chunks, 1):
         section = chunk.get("section_path", "")
         page = chunk.get("page_range", "")
@@ -124,14 +137,16 @@ def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
 
 
 async def _llm_synthesize(
-    question: str, chunks: list[dict[str, Any]]
+    question: str,
+    chunks: list[dict[str, Any]],
+    conversation_history: list[dict] | None = None,
 ) -> tuple[str, list[int], float]:
     """Three-pass parallel synthesis with groundedness verification.
 
     Pass 1 (verify/analogy extraction) and Pass 2 (cited answer) run concurrently.
     Then Tier 1-3 groundedness checks validate the answer.
     """
-    user_msg = _build_user_message(question, chunks)
+    user_msg = _build_user_message(question, chunks, conversation_history)
     model = await get_model()
 
     # ── Phase A: Parallel synthesis + verify ──
@@ -306,7 +321,10 @@ class CitedAnswerOp:
         chunks: list[dict[str, Any]] = ctx.get("evidence_chunks", [])
 
         try:
-            answer, citations_used, confidence = await _llm_synthesize(question, chunks)
+            conversation_history = ctx.get("conversation_history")
+            answer, citations_used, confidence = await _llm_synthesize(
+                question, chunks, conversation_history
+            )
 
             # Build structured citations from the indices the LLM referenced
             citations: list[dict[str, Any]] = []

@@ -245,6 +245,7 @@ class QALog(SpaceScopedModel):
         Index("idx_qalog_query_hash", "query_hash"),
         Index("idx_qalog_space_created", "space_id", "created_at"),
         Index("idx_qalog_crag_verdict", "crag_verdict"),
+        Index("idx_qalog_session", "session_id"),
         {"schema": SCHEMA},
     )
 
@@ -261,5 +262,42 @@ class QALog(SpaceScopedModel):
     feedback: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )  # positive | negative | null
-    pipeline_used: Mapped[str] = mapped_column(String(8), server_default=text("'A'"))  # A | B | C
+    pipeline_used: Mapped[str] = mapped_column(
+        String(8), server_default=text("'A'")
+    )  # A | B | C | cache
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    turn_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+# ======================== PreGeneratedQA ========================
+
+
+class PreGeneratedQA(SpaceScopedModel):
+    """Pre-generated QA pair — created at ingest time for cache + benchmark."""
+
+    __tablename__ = "pre_generated_qa"
+    __table_args__ = (
+        Index("idx_preqa_document", "document_id"),
+        Index("idx_preqa_status", "status"),
+        Index("idx_preqa_type", "question_type"),
+        {"schema": SCHEMA},
+    )
+
+    document_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey(f"{SCHEMA}.documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    question_type: Mapped[str] = mapped_column(
+        String(32), server_default=text("'factual'")
+    )  # factual | definitional | comparative | procedural
+    source_chunks: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
+    status: Mapped[str] = mapped_column(
+        String(32), server_default=text("'pending'")
+    )  # pending | validated | promoted | rejected
+    reuse_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))

@@ -184,8 +184,10 @@ class QALogCreate(BaseModel):
     citations: dict | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     crag_verdict: str | None = Field(default=None, pattern="^(correct|ambiguous|incorrect)$")
-    pipeline_used: str = Field(default="A", pattern="^(A|B|C)$")
+    pipeline_used: str = Field(default="A", pattern="^(A|B|C|cache)$")
     latency_ms: int | None = None
+    session_id: str | None = Field(default=None, max_length=64)
+    turn_number: int | None = None
 
 
 class QALogResponse(SpaceScopedResponse):
@@ -198,6 +200,8 @@ class QALogResponse(SpaceScopedResponse):
     feedback: str | None = None
     pipeline_used: str = "A"
     latency_ms: int | None = None
+    session_id: str | None = None
+    turn_number: int | None = None
 
 
 class QAFeedbackUpdate(BaseModel):
@@ -257,6 +261,7 @@ class QARequest(BaseModel):
     mode: str = Field(default="factual", pattern="^(factual|mixed)$")
     domain: str = Field(default="default")
     top_k: int = Field(default=20, ge=1, le=50)
+    session_id: str | None = Field(default=None, max_length=64)
 
 
 class CitationRef(BaseModel):
@@ -280,6 +285,23 @@ class QAResponse(BaseModel):
     crag_verdict: str | None = None
     pipeline_used: str = "A"
     qa_log_id: str | None = None
+    session_id: str | None = None
+    turn_number: int | None = None
+
+
+# ======================== PreGeneratedQA ========================
+
+
+class PreGeneratedQAResponse(SpaceScopedResponse):
+    document_id: str
+    version_id: str
+    question: str
+    answer: str
+    question_type: str = "factual"
+    source_chunks: dict | None = None
+    confidence: float = 0.0
+    status: str = "pending"
+    reuse_count: int = 0
 
 
 # ======================== Dashboard ========================

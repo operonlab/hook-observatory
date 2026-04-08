@@ -21,6 +21,7 @@ from .models import (
     DocumentChunk,
     DocumentRelation,
     DocumentVersion,
+    PreGeneratedQA,
     QALog,
 )
 from .schemas import (
@@ -40,6 +41,7 @@ from .schemas import (
     DocumentVersionResponse,
     DocumentVersionUpdate,
     DocvaultDashboardResponse,
+    PreGeneratedQAResponse,
     QALogCreate,
     QALogResponse,
 )
@@ -532,6 +534,34 @@ class DashboardService:
         )
 
 
+# ======================== PreGeneratedQA Service ========================
+
+
+class PreGeneratedQAService(
+    BaseCRUDService[PreGeneratedQA, None, None, PreGeneratedQAResponse]
+):
+    model = PreGeneratedQA
+    audit_module = "docvault"
+    audit_entity_type = "pre_generated_qa"
+
+    def to_response(self, instance: PreGeneratedQA) -> PreGeneratedQAResponse:
+        return PreGeneratedQAResponse(
+            id=instance.id,
+            space_id=instance.space_id,
+            created_at=instance.created_at,
+            updated_at=instance.updated_at,
+            document_id=instance.document_id,
+            version_id=instance.version_id,
+            question=instance.question,
+            answer=instance.answer,
+            question_type=instance.question_type,
+            source_chunks=instance.source_chunks,
+            confidence=instance.confidence,
+            status=instance.status,
+            reuse_count=instance.reuse_count,
+        )
+
+
 # ======================== Module-level singletons ========================
 
 document_service = DocumentService()
@@ -540,4 +570,5 @@ chunk_service = ChunkService()
 relation_service = RelationService()
 coverage_gap_service = CoverageGapService()
 qa_log_service = QALogService()
+pre_generated_qa_service = PreGeneratedQAService()
 dashboard_service = DashboardService()
