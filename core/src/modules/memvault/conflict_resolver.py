@@ -26,7 +26,7 @@ from src.shared.conflict import (
     simple_conflict_heuristic,
 )
 
-from .llm_config import make_omlx_model
+from .llm_config import get_litellm_model
 from .llm_models import ConflictResolutionOutput
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ async def _call_llm(new_content: str, existing_content: str, block_type: str) ->
 
     result = await _conflict_agent.run(
         user_message,
-        model=make_omlx_model(),
+        model=await get_litellm_model(),
         model_settings={"temperature": 0.1, "max_tokens": 256, "timeout": 10},
     )
     output = result.output

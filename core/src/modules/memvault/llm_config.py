@@ -1,9 +1,8 @@
-"""Memvault LLM configuration — PydanticAI model factories for three backends.
+"""Memvault LLM configuration — PydanticAI model factories.
 
 Backends:
-  - oMLX (localhost:8000): lightweight local inference
-  - LiteLLM (localhost:4000): proxy to external models
-  - DeepSeek (external): configurable via env vars
+  - LiteLLM (localhost:4000): proxy to external models (primary)
+  - DeepSeek (external): configurable via env vars (kg_auto_evolve)
 """
 
 from __future__ import annotations
@@ -19,7 +18,6 @@ from pydantic_ai.providers.openai import OpenAIProvider
 logger = logging.getLogger(__name__)
 
 # ── Backend endpoints ──
-_OMLX_BASE = "http://localhost:8000/v1"
 _LITELLM_BASE = "http://localhost:4000/v1"
 _LITELLM_KEY = "sk-litellm-local-dev"  # nosec — local dev proxy key
 
@@ -74,12 +72,6 @@ async def resolve_model(
 # ── Model factories ──
 
 
-def make_omlx_model(model_name: str = "default") -> OpenAIChatModel:
-    """Create an OpenAIChatModel for oMLX local inference (port 8000)."""
-    provider = OpenAIProvider(base_url=_OMLX_BASE, api_key="not-needed")
-    return OpenAIChatModel(model_name, provider=provider)
-
-
 def make_litellm_model(
     model_name: str,
     base_url: str = _LITELLM_BASE,
@@ -98,12 +90,8 @@ async def get_litellm_model() -> OpenAIChatModel:
 
 def make_deepseek_model() -> OpenAIChatModel:
     """Create an OpenAIChatModel for DeepSeek external API (env-configurable)."""
-    base_url = os.environ.get(
-        "KG_AUTO_EVOLVE_LLM_URL", "https://api.deepseek.com/v1"
-    )
-    api_key = os.environ.get(
-        "KG_AUTO_EVOLVE_API_KEY", os.environ.get("DEEPSEEK_API_KEY", "")
-    )
+    base_url = os.environ.get("KG_AUTO_EVOLVE_LLM_URL", "https://api.deepseek.com/v1")
+    api_key = os.environ.get("KG_AUTO_EVOLVE_API_KEY", os.environ.get("DEEPSEEK_API_KEY", ""))
     model_name = os.environ.get("KG_AUTO_EVOLVE_MODEL", "deepseek-chat")
     # Strip /chat/completions suffix if present (legacy full-URL format)
     if base_url.endswith("/chat/completions"):

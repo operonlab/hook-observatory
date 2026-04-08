@@ -18,7 +18,7 @@ from pydantic_ai import Agent
 
 from sdk_client.timeout import dynamic_timeout
 
-from .llm_config import make_omlx_model
+from .llm_config import get_litellm_model
 
 logger = logging.getLogger(__name__)
 
@@ -509,7 +509,7 @@ async def _call_hyde_llm(query: str) -> str | None:
     try:
         result = await _hyde_agent.run(
             query,
-            model=make_omlx_model(),
+            model=await get_litellm_model(),
             model_settings={"temperature": 0.3, "max_tokens": 200, "timeout": timeout},
         )
         return result.output

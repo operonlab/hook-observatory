@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.tier_manager import TierTransition
 
-from .llm_config import make_omlx_model
+from .llm_config import get_litellm_model
 from .models import BlockArchive, BlockFrozen, MemoryBlock
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ async def generate_digest(content: str, block_type: str, tags: list[str]) -> str
     try:
         result = await _digest_agent.run(
             user_msg,
-            model=make_omlx_model(),
+            model=await get_litellm_model(),
             model_settings={"temperature": 0.2, "max_tokens": 120, "timeout": 5},
         )
         digest = result.output.strip()
