@@ -24,6 +24,8 @@ _WORD_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
 
 # Lazy-load jieba to avoid import overhead when not needed
 _jieba = None
+# Lazy-load Snowball stemmer for English
+_stemmer = None
 
 
 def _get_jieba():
@@ -34,6 +36,20 @@ def _get_jieba():
         jieba.setLogLevel(logging.WARNING)
         _jieba = jieba
     return _jieba
+
+
+def _get_stemmer():
+    global _stemmer
+    if _stemmer is None:
+        import snowballstemmer
+
+        _stemmer = snowballstemmer.stemmer("english")
+    return _stemmer
+
+
+def _stem_english(word: str) -> str:
+    """Stem an English word using Snowball stemmer."""
+    return _get_stemmer().stemWord(word)
 
 # BM25 parameters
 _K1 = 1.5
@@ -49,7 +65,11 @@ def _has_cjk(text: str) -> bool:
 
 
 def tokenize(text: str) -> list[str]:
-    """Tokenize text into normalized tokens (Chinese + English)."""
+    """Tokenize text into normalized, stemmed tokens (Chinese + English).
+
+    English tokens are Snowball-stemmed so 'characters' and 'character'
+    produce the same token hash, improving BM25 recall.
+    """
     text = text.lower().strip()
     tokens = []
 
@@ -63,7 +83,7 @@ def tokenize(text: str) -> list[str]:
         for match in _WORD_PATTERN.finditer(text):
             word = match.group().lower()
             if word not in _STOPWORDS and len(word) > 1:
-                tokens.append(word)
+                tokens.append(_stem_english(word))
 
     return tokens
 
