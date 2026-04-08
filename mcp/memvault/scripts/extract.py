@@ -734,10 +734,14 @@ def _http_post(
 ) -> tuple:
     """HTTP request, return (http_code, response_body). Returns (0, '') on error."""
     try:
+        headers = {"Content-Type": "application/json"}
+        internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
+        if internal_key:
+            headers["X-Internal-Key"] = internal_key
         req = urllib.request.Request(
             url,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method=method,
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
