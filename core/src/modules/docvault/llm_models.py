@@ -49,3 +49,23 @@ class RewriteResult(BaseModel):
     """Result from corrective re-retrieval query rewrite."""
 
     query: str
+
+
+# ── Groundedness verification models ──
+
+
+class ClaimVerdict(BaseModel):
+    """Single claim verification result."""
+
+    claim: str
+    supported: bool
+    chunk_id: int | None = None
+    explanation: str | None = None
+
+
+class GroundednessResult(BaseModel):
+    """Result from Tier 2 NLI-like claim verification."""
+
+    claims: list[ClaimVerdict] = Field(default_factory=list)
+    overall_grounded: bool = True
+    flagged_claims: list[str] = Field(default_factory=list)

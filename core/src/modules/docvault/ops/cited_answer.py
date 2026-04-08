@@ -2,6 +2,7 @@
 
 Default SynthSlot implementation for factual QA.
 Produces an answer where every claim cites a source chunk.
+Three-tier groundedness verification prevents hallucination.
 
 Operator protocol:
   input_keys: ("question", "evidence_chunks")
@@ -18,6 +19,7 @@ from pydantic_ai import Agent
 
 from ..llm_config import get_model
 from ..llm_models import SynthResult, VerifyResult
+from .groundedness import self_consistency_check, validate_spans, verify_claims
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +27,15 @@ _SYSTEM_PROMPT = """\
 You are a document QA assistant. Answer ONLY from evidence chunks. Cite with [N]. \
 Answer in the same language as the question.
 
-CRITICAL RULE: Even when the exact term from the question is NOT in the document, \
+CRITICAL RULES:
+1. Even when the exact term from the question is NOT in the document, \
 you MUST still provide the closest relevant content. Correct the premise, then answer \
 with what the document DOES say.
+2. NEVER invent specific numbers, measurements, or limits that do not appear \
+verbatim in the evidence chunks. If the evidence says "up to 1024 characters", \
+do NOT rephrase as "5000 words" or any other number.
+3. When quoting a specific fact (number, limit, name), use the EXACT wording from \
+the evidence chunk.
 
 EXAMPLES of correct behavior:
 
@@ -118,15 +126,15 @@ def _build_user_message(question: str, chunks: list[dict[str, Any]]) -> str:
 async def _llm_synthesize(
     question: str, chunks: list[dict[str, Any]]
 ) -> tuple[str, list[int], float]:
-    """Two-pass parallel synthesis via PydanticAI agents.
+    """Three-pass parallel synthesis with groundedness verification.
 
     Pass 1 (verify/analogy extraction) and Pass 2 (cited answer) run concurrently.
-    If Pass 1 finds analogies, they are woven into the final answer.
+    Then Tier 1-3 groundedness checks validate the answer.
     """
     user_msg = _build_user_message(question, chunks)
     model = await get_model()
 
-    # ── Parallel: verify+analogy extraction + factual synthesis ──
+    # ── Phase A: Parallel synthesis + verify ──
     async def _verify_and_extract() -> VerifyResult:
         try:
             result = await _verify_agent.run(
@@ -147,13 +155,20 @@ async def _llm_synthesize(
         )
         return result.output
 
-    verify_result, synth_result = await asyncio.gather(_verify_and_extract(), _synthesize())
+    verify_result, synth_result = await asyncio.gather(
+        _verify_and_extract(), _synthesize()
+    )
+
+    # ── Phase B: Tier 3 — Self-consistency (if enabled) ──
+    synth_result = await self_consistency_check(
+        _synth_agent, user_msg, chunks, synth_result
+    )
 
     answer = synth_result.answer or ""
     citations_used = list(synth_result.citations_used)
     confidence = max(0.0, min(1.0, synth_result.confidence))
 
-    # Soft cap: terminology mismatch → confidence ≤ 0.5 (still show related content)
+    # Soft cap: terminology mismatch → confidence ≤ 0.5
     if not synth_result.terminology_match:
         confidence = min(confidence, 0.5)
 
@@ -163,9 +178,7 @@ async def _llm_synthesize(
         return refusal_msg, [], 0.0
 
     # ── Dedup helper ──
-    def _dedup_items(
-        items: list[Any],
-    ) -> list[Any]:
+    def _dedup_items(items: list[Any]) -> list[Any]:
         seen: set[str] = set()
         unique: list[Any] = []
         for item in items:
@@ -200,6 +213,33 @@ async def _llm_synthesize(
             if a.chunk and a.chunk not in citations_used:
                 citations_used.append(a.chunk)
         answer = " ".join(analogy_lines) + "\n\n" + answer
+
+    # ── Phase C: Tier 1 — Span validation (numbers check) ──
+    flagged_spans = validate_spans(answer, chunks)
+    if flagged_spans:
+        logger.warning(
+            "Groundedness T1: %d unsupported numbers in answer: %s",
+            len(flagged_spans),
+            flagged_spans,
+        )
+        # Penalize confidence for each unsupported number
+        penalty = min(0.15 * len(flagged_spans), 0.5)
+        confidence = max(0.0, confidence - penalty)
+
+    # ── Phase D: Tier 2 — NLI claim verification ──
+    groundedness = await verify_claims(answer, chunks)
+    if groundedness.flagged_claims:
+        logger.warning(
+            "Groundedness T2: %d unsupported claims: %s",
+            len(groundedness.flagged_claims),
+            groundedness.flagged_claims[:3],
+        )
+        # Add warning to answer
+        flags = "; ".join(groundedness.flagged_claims[:3])
+        answer += f"\n\n[!] 以下內容未被文件直接支持, 請人工驗證: {flags}"
+        # Penalize confidence
+        penalty = min(0.1 * len(groundedness.flagged_claims), 0.4)
+        confidence = max(0.0, confidence - penalty)
 
     return answer, citations_used, confidence
 
@@ -238,6 +278,11 @@ def _build_fallback_answer(
 
 class CitedAnswerOp:
     """Default synthesis: generate answer with inline citations via LLM.
+
+    Three-tier groundedness verification:
+      Tier 1: Span validation — numbers/measurements must exist in chunks
+      Tier 2: NLI claim verification — LLM-based entailment check
+      Tier 3: Self-consistency — majority vote (DOCVAULT_SELF_CONSISTENCY=1)
 
     Operator protocol:
       input_keys: ("question", "evidence_chunks")
