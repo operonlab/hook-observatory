@@ -565,7 +565,20 @@ body {
   margin-top: 0.2rem;
 }
 
-/* ── Highlight Cards (Model Catalog) ── */
+/* ── Catalog Mosaic Layout ── */
+.catalog-mosaic {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+  align-items: start;
+}
+
+.catalog-mosaic > .card { margin-bottom: 0; }
+.catalog-mosaic-main { min-width: 0; }
+.catalog-mosaic-side { min-width: 0; }
+
+/* ── Highlight Cards (Benchmark — horizontal row) ── */
 .highlight-grid {
   display: flex;
   gap: var(--space-sm);
@@ -581,6 +594,17 @@ body {
   flex: 1 1 0;
   min-width: 150px;
   scroll-snap-align: start;
+}
+
+/* ── Highlight Stack (Subjective — vertical compact) ── */
+.highlight-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.highlight-stack > .highlight-card {
+  border-left-width: 3px;
 }
 
 .highlight-card {
@@ -829,6 +853,7 @@ body {
 
   .two-col { grid-template-columns: 1fr; }
   .summary-row { grid-template-columns: 1fr; }
+  .catalog-mosaic { grid-template-columns: 1fr; }
   .highlight-grid { flex-wrap: nowrap; }
   .quota-grid { grid-template-columns: repeat(2, 1fr); }
 }
