@@ -29,7 +29,7 @@ class MemoryBlockCreate(BaseModel):
     content: str
     block_type: str = Field(default="general")
     tags: list[str] = Field(default_factory=list)
-    # source_session is set server-side only (from request context), not client-writable
+    source_session: str | None = Field(default=None)
 
 
 class MemoryBlockUpdate(BaseModel):
@@ -45,7 +45,9 @@ class MemoryBlockResponse(SpaceScopedResponse):
     tags: list[str] = []
     source_session: str | None = None
     confidence: float = 0.0
-    # embedding intentionally excluded from response (too large)
+    invalid_at: datetime | None = None
+    superseded_by: str | None = None
+    invalidation_reason: str | None = None
 
 
 class MemoryBlockBrief(BaseModel):
@@ -95,13 +97,11 @@ class KnowledgeDomainResponse(SpaceScopedResponse):
 class ProfileScoreResponse(SpaceScopedResponse):
     knowledge_score: float = 0.0
     attitude_score: float = 0.0
-    skill_score: float = 0.0
 
 
 class ProfileScoreUpdate(BaseModel):
     knowledge_score: float | None = Field(default=None, ge=0.0, le=100.0)
     attitude_score: float | None = Field(default=None, ge=0.0, le=100.0)
-    skill_score: float | None = Field(default=None, ge=0.0, le=100.0)
 
 
 # ======================== Search ========================

@@ -519,7 +519,6 @@ async def get_profile(
             updated_at=datetime.now(UTC),
             knowledge_score=0.0,
             attitude_score=0.0,
-            skill_score=0.0,
         )
     return profile
 
@@ -582,9 +581,6 @@ async def recalculate_profile(
     a_base = min(math.log10(max(att_count, 1)) / math.log10(500) * 60, 60)
     attitude_score = round(min(a_base, 100), 1)
 
-    # Skill score: SkillProfile removed (KAS separation); defaulting to 0 until redesign
-    skill_score = 0.0
-
     # Upsert profile
     result = await profile_score_service.upsert(
         db,
@@ -592,7 +588,6 @@ async def recalculate_profile(
         ProfileScoreUpdate(
             knowledge_score=knowledge_score,
             attitude_score=attitude_score,
-            skill_score=skill_score,
         ),
     )
     await db.commit()

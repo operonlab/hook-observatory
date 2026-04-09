@@ -243,46 +243,18 @@ class TestPhaseF_RecalculateProfile:
         )
 
     @pytest.mark.asyncio
-    async def test_inv9_skill_score_always_zero(self):
-        """INV-9: skill_score 固定為 0.0，與 MemoryBlock 數量無關。
+    async def test_inv9_skill_score_removed_from_schema(self):
+        """INV-9: skill_score 已從 ProfileScoreResponse 和 ProfileScoreUpdate schema 移除。
 
-        Mutation target: 誤加入 SkillProfile 計算邏輯，導致 skill_score 非零。
-
-        注意：routes.py:546 目前有 import bug（MemoryBlock 應從 models 引入，
-        不是 kg_models）。此測試透過 sys.modules patch 繞過 import，純測計算邏輯。
+        Mutation target: 誤將 skill_score 加回 schema，暗示 SkillProfile 已重新引入。
         """
-        import sys
-        from src.modules.memvault.routes import recalculate_profile
+        from src.modules.memvault.schemas import ProfileScoreResponse, ProfileScoreUpdate
 
-        mock_result = MagicMock()
-        mock_result.space_id = "default"
-        mock_result.knowledge_score = 0.0
-        mock_result.attitude_score = 0.0
-        mock_result.skill_score = 0.0
-
-        db = _make_db_mock(att_count=999, triple_count=0, cluster_count=0, wisdom_count=0)
-        mock_kg = _make_kg_models_mock_with_memory_block()
-
-        with patch.dict(sys.modules, {"src.modules.memvault.kg_models": mock_kg}):
-            with patch("src.modules.memvault.routes.profile_score_service") as mock_service:
-                captured_update = {}
-
-                async def fake_upsert(db_sess, space_id, body):
-                    captured_update["skill_score"] = body.skill_score
-                    captured_update["attitude_score"] = body.attitude_score
-                    return mock_result
-
-                mock_service.upsert = fake_upsert
-
-                await recalculate_profile(
-                    space_id="default",
-                    db=db,
-                    _user={"sub": "test-user"},
-                )
-
-        assert captured_update["skill_score"] == 0.0, (
-            f"INV-9 violated: skill_score should be 0.0 (SkillProfile removed), "
-            f"got {captured_update['skill_score']}"
+        assert "skill_score" not in ProfileScoreResponse.model_fields, (
+            "INV-9 violated: skill_score should be removed from ProfileScoreResponse schema"
+        )
+        assert "skill_score" not in ProfileScoreUpdate.model_fields, (
+            "INV-9 violated: skill_score should be removed from ProfileScoreUpdate schema"
         )
 
     @pytest.mark.asyncio
@@ -304,7 +276,6 @@ class TestPhaseF_RecalculateProfile:
         mock_result.space_id = "test-space"
         mock_result.knowledge_score = 0.0
         mock_result.attitude_score = expected_score
-        mock_result.skill_score = 0.0
 
         db = _make_db_mock(att_count=att_count, triple_count=0, cluster_count=0, wisdom_count=0)
         mock_kg = _make_kg_models_mock_with_memory_block()
@@ -315,7 +286,6 @@ class TestPhaseF_RecalculateProfile:
 
                 async def fake_upsert(db_sess, space_id, body):
                     captured["attitude_score"] = body.attitude_score
-                    captured["skill_score"] = body.skill_score
                     return mock_result
 
                 mock_service.upsert = fake_upsert
@@ -329,7 +299,6 @@ class TestPhaseF_RecalculateProfile:
         assert abs(captured["attitude_score"] - expected_score) < 0.01, (
             f"Phase F: attitude_score mismatch. expected {expected_score}, got {captured['attitude_score']}"
         )
-        assert captured["skill_score"] == 0.0
 
 
 # ════════════════════════════════════════════════════════════════════════════════

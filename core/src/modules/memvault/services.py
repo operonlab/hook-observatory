@@ -1039,7 +1039,6 @@ class ProfileScoreService:
             updated_at=instance.updated_at,
             knowledge_score=instance.knowledge_score,
             attitude_score=instance.attitude_score,
-            skill_score=instance.skill_score,
         )
 
     async def upsert(
@@ -1064,7 +1063,6 @@ class ProfileScoreService:
             created_by=user_id,
             knowledge_score=data.knowledge_score or 0.0,
             attitude_score=data.attitude_score or 0.0,
-            skill_score=data.skill_score or 0.0,
         )
         db.add(profile)
         await db.flush()
@@ -1080,7 +1078,6 @@ class ProfileScoreService:
             updated_at=instance.updated_at,
             knowledge_score=instance.knowledge_score,
             attitude_score=instance.attitude_score,
-            skill_score=instance.skill_score,
         )
 
 
