@@ -1,8 +1,8 @@
 """Memvault Knowledge Lint — automated knowledge graph health checking.
 
-13 composable checks across 4 layers:
+8 composable checks across 4 layers:
   L0: contradictions, stale, orphan_entities, dangling_refs, community_anomalies, data_gaps
-  L1: predicate_contradictions, temporal_staleness, attitude_chain_integrity, entity_alias_collision
+  L1: predicate_contradictions, temporal_staleness, entity_alias_collision
   L3: grounding (action-grounded validation)
   L4: semantic_contradictions (LLM judgment)
   Pipeline: knowledge_conflicts (L1+L3+L4 → cross-validate → cascade)
@@ -855,114 +855,6 @@ async def check_temporal_staleness(
     return findings
 
 
-async def check_attitude_chain_integrity(
-    db: AsyncSession,
-    space_id: str,
-) -> list[LintFinding]:
-    """Check AttitudeFact supersession chains for cycles, broken links, and duplicates."""
-    from sqlalchemy.orm import aliased as sa_aliased
-
-    from .kg_models import AttitudeFact
-
-    findings: list[LintFinding] = []
-
-    # 3a: Circular references (direct cycle: A.superseded_by = B AND B.superseded_by = A)
-    a1 = sa_aliased(AttitudeFact)
-    a2 = sa_aliased(AttitudeFact)
-    q_cycle = select(a1.id, a2.id).where(
-        a1.space_id == space_id,
-        a2.space_id == space_id,
-        a1.superseded_by == a2.id,
-        a2.superseded_by == a1.id,
-        a1.id < a2.id,
-    )
-    cycles = (await db.execute(q_cycle)).all()
-    for row in cycles:
-        findings.append(
-            LintFinding(
-                check="attitude_chain_integrity",
-                severity="error",
-                entity_id=row[0],
-                entity_type="attitude",
-                message=f"Circular supersession: {row[0][:12]}.. ↔ {row[1][:12]}..",
-                suggested_action="resolve",
-                metadata={"attitude_a": row[0], "attitude_b": row[1], "issue": "circular"},
-            )
-        )
-
-    # 3b: Broken chains (superseded_by points to non-existent ID)
-    q_broken = (
-        select(AttitudeFact.id, AttitudeFact.superseded_by)
-        .outerjoin(
-            a2,
-            AttitudeFact.superseded_by == a2.id,
-        )
-        .where(
-            AttitudeFact.space_id == space_id,
-            AttitudeFact.superseded_by.isnot(None),
-            a2.id.is_(None),
-        )
-    )
-    broken = (await db.execute(q_broken)).all()
-    for row in broken:
-        findings.append(
-            LintFinding(
-                check="attitude_chain_integrity",
-                severity="warning",
-                entity_id=row[0],
-                entity_type="attitude",
-                message=f"Broken chain: superseded_by={row[1][:12]}.. does not exist",
-                suggested_action="resolve",
-                metadata={"attitude_id": row[0], "dangling_ref": row[1], "issue": "broken_chain"},
-            )
-        )
-
-    # 3c: Duplicate current attitudes (same category, high word overlap, both superseded_by=NULL)
-    q_current = select(AttitudeFact).where(
-        AttitudeFact.space_id == space_id,
-        AttitudeFact.superseded_by.is_(None),
-        AttitudeFact.deleted_at.is_(None),
-    )
-    current = (await db.execute(q_current)).scalars().all()
-
-    by_category: dict[str, list] = {}
-    for att in current:
-        by_category.setdefault(att.category, []).append(att)
-
-    for _cat, atts in by_category.items():
-        if len(atts) < 2:
-            continue
-        for i, a in enumerate(atts):
-            words_a = set((a.fact or "").lower().split())
-            for b in atts[i + 1 :]:
-                words_b = set((b.fact or "").lower().split())
-                union = words_a | words_b
-                if not union:
-                    continue
-                jaccard = len(words_a & words_b) / len(union)
-                if jaccard > 0.6:
-                    findings.append(
-                        LintFinding(
-                            check="attitude_chain_integrity",
-                            severity="info",
-                            entity_id=a.id,
-                            entity_type="attitude",
-                            message=(
-                                f"Duplicate current attitudes (jaccard={jaccard:.2f}): "
-                                f'"{(a.fact or "")[:60]}" vs "{(b.fact or "")[:60]}"'
-                            ),
-                            suggested_action="resolve",
-                            metadata={
-                                "attitude_a": a.id,
-                                "attitude_b": b.id,
-                                "jaccard": round(jaccard, 3),
-                                "issue": "duplicate_current",
-                            },
-                        )
-                    )
-
-    return findings
-
 
 async def check_entity_alias_collision(
     db: AsyncSession,
@@ -1073,416 +965,6 @@ async def check_entity_alias_collision(
     return findings
 
 
-# ======================== Attitude Dedup Check ========================
-
-
-async def check_attitude_dedup(
-    db: AsyncSession,
-    space_id: str,
-    *,
-    similarity_threshold: float = 0.90,
-    max_findings: int = 50,
-) -> list[LintFinding]:
-    """Find duplicate current attitudes within the same category.
-
-    Uses Qdrant embedding similarity + Jaccard word overlap cross-validation.
-    This is a DEDUP check (same content, multiple copies), not a conflict check.
-    """
-    from .kg_models import AttitudeFact
-
-    findings: list[LintFinding] = []
-
-    q = select(AttitudeFact).where(
-        AttitudeFact.space_id == space_id,
-        AttitudeFact.superseded_by.is_(None),
-        AttitudeFact.deleted_at.is_(None),
-    )
-    attitudes = (await db.execute(q)).scalars().all()
-
-    if len(attitudes) < 2:
-        return findings
-
-    # Group by category — only check within same category
-    by_category: dict[str, list] = {}
-    for a in attitudes:
-        by_category.setdefault(a.category, []).append(a)
-
-    seen_pairs: set[tuple[str, str]] = set()
-
-    for _cat, atts in by_category.items():
-        if len(atts) < 2 or len(findings) >= max_findings:
-            continue
-
-        for i, a in enumerate(atts):
-            if len(findings) >= max_findings:
-                break
-            fact_a = (a.fact or "").strip().lower()
-            words_a = set(fact_a.split())
-
-            for b in atts[i + 1 :]:
-                pair = tuple(sorted([a.id, b.id]))
-                if pair in seen_pairs:
-                    continue
-                seen_pairs.add(pair)
-
-                fact_b = (b.fact or "").strip().lower()
-
-                # Exact text match
-                if fact_a == fact_b:
-                    findings.append(
-                        LintFinding(
-                            check="attitude_dedup",
-                            severity="error",
-                            entity_id=a.id,
-                            entity_type="attitude",
-                            message=(f'Exact duplicate in [{a.category}]: "{(a.fact or "")[:60]}"'),
-                            suggested_action="delete",
-                            metadata={
-                                "attitude_a": a.id,
-                                "attitude_b": b.id,
-                                "similarity": 1.0,
-                                "detection": "exact_text",
-                            },
-                        )
-                    )
-                    continue
-
-                # Jaccard word overlap
-                words_b = set(fact_b.split())
-                union = words_a | words_b
-                if not union:
-                    continue
-                jaccard = len(words_a & words_b) / len(union)
-                if jaccard >= 0.85:
-                    findings.append(
-                        LintFinding(
-                            check="attitude_dedup",
-                            severity="warning",
-                            entity_id=a.id,
-                            entity_type="attitude",
-                            message=(
-                                f"Near-duplicate in [{a.category}] "
-                                f"(jaccard={jaccard:.2f}): "
-                                f'"{(a.fact or "")[:50]}" vs '
-                                f'"{(b.fact or "")[:50]}"'
-                            ),
-                            suggested_action="delete",
-                            metadata={
-                                "attitude_a": a.id,
-                                "attitude_b": b.id,
-                                "jaccard": round(jaccard, 3),
-                                "detection": "jaccard_overlap",
-                            },
-                        )
-                    )
-
-    return findings
-
-
-# ======================== Attitude Conflict Checks ========================
-
-
-async def check_attitude_semantic_contradictions(
-    db: AsyncSession,
-    space_id: str,
-    *,
-    max_llm_calls: int = 10,
-) -> list[LintFinding]:
-    """Find semantically contradictory attitudes within the same category.
-
-    Uses _is_attitude_contradiction() heuristic as fast filter,
-    then LLM judgment for candidates that pass.
-    This is a CONFLICT check (different claims on same topic), not dedup.
-    """
-    from .kg_models import AttitudeFact
-    from .kg_services import _is_attitude_contradiction
-
-    findings: list[LintFinding] = []
-
-    q = select(AttitudeFact).where(
-        AttitudeFact.space_id == space_id,
-        AttitudeFact.superseded_by.is_(None),
-        AttitudeFact.deleted_at.is_(None),
-    )
-    attitudes = (await db.execute(q)).scalars().all()
-
-    if len(attitudes) < 2:
-        return findings
-
-    # Group by category
-    by_category: dict[str, list] = {}
-    for a in attitudes:
-        by_category.setdefault(a.category, []).append(a)
-
-    # Heuristic pass: find pairs with contradiction signals
-    candidates: list[tuple] = []  # (att_a, att_b)
-    seen_pairs: set[tuple[str, str]] = set()
-
-    for _cat, atts in by_category.items():
-        if len(atts) < 2:
-            continue
-        for i, a in enumerate(atts):
-            for b in atts[i + 1 :]:
-                pair = tuple(sorted([a.id, b.id]))
-                if pair in seen_pairs:
-                    continue
-                seen_pairs.add(pair)
-
-                if _is_attitude_contradiction(a.fact or "", b.fact or ""):
-                    candidates.append((a, b))
-                    if len(candidates) >= max_llm_calls * 2:
-                        break
-            if len(candidates) >= max_llm_calls * 2:
-                break
-
-    if not candidates:
-        return findings
-
-    # LLM pass for top candidates
-    from pydantic_ai import Agent as PydanticAgent
-
-    from .llm_config import make_litellm_model, resolve_model
-    from .llm_models import SemanticLintOutput
-
-    batch_candidates = [
-        "kimi-k2.5",
-        "deepseek-v3",
-        "qwen3.5-flash",
-        "grok-4.1-fast",
-        "gemini-3.1-flash",
-    ]
-    model_name = await resolve_model(candidates=batch_candidates)
-    model = make_litellm_model(model_name)
-
-    _agent = PydanticAgent(
-        output_type=SemanticLintOutput,
-        system_prompt=(
-            "You are a belief auditor. Compare two attitude/preference statements "
-            "from the same personal knowledge base and classify their relationship.\n\n"
-            'Decisions:\n- "contradiction": Directly conflicting beliefs.\n'
-            '- "evolution": The user\'s preference changed over time.\n'
-            '- "compatible": Different aspects, not contradictory.\n\n'
-            "Set stale_id to the outdated statement's ID, or null if compatible."
-        ),
-        retries=1,
-    )
-
-    import asyncio as _asyncio
-
-    llm_calls = 0
-    for att_a, att_b in candidates:
-        if llm_calls >= max_llm_calls:
-            break
-
-        # Determine older/newer
-        if att_a.created_at and att_b.created_at:
-            older = att_a if att_a.created_at < att_b.created_at else att_b
-            newer = att_b if att_a.created_at < att_b.created_at else att_a
-        else:
-            older, newer = att_a, att_b
-
-        user_msg = (
-            f"OLDER attitude (ID: {older.id}, category: {older.category}, "
-            f"created: {older.created_at}):\n{(older.fact or '')[:300]}\n\n"
-            f"NEWER attitude (ID: {newer.id}, category: {newer.category}, "
-            f"created: {newer.created_at}):\n{(newer.fact or '')[:300]}\n\n"
-            "Classify the relationship."
-        )
-
-        output = None
-        for attempt in range(2):
-            try:
-                result = await _agent.run(
-                    user_msg,
-                    model=model,
-                    model_settings={
-                        "temperature": 0.1,
-                        "max_tokens": 256,
-                        "timeout": 15,
-                    },
-                )
-                output = result.output
-                break
-            except Exception as exc:
-                if attempt == 0 and "429" in str(exc):
-                    await _asyncio.sleep(3)
-                    continue
-                logger.debug(
-                    "attitude_semantic: LLM failed for (%s, %s): %s",
-                    att_a.id,
-                    att_b.id,
-                    exc,
-                )
-                break
-
-        llm_calls += 1
-        if output is None:
-            continue
-        await _asyncio.sleep(1)
-
-        if output.relationship == "compatible":
-            continue
-
-        stale_id = output.stale_id or older.id
-        fresh_id = newer.id if stale_id == older.id else older.id
-
-        findings.append(
-            LintFinding(
-                check="attitude_semantic_contradictions",
-                severity="warning",
-                entity_id=stale_id,
-                entity_type="attitude",
-                message=(
-                    f"Attitude {output.relationship} in [{att_a.category}] "
-                    f"(confidence={output.confidence:.2f}): {output.reason}"
-                ),
-                suggested_action="invalidate",
-                metadata={
-                    "relationship": output.relationship,
-                    "stale_id": stale_id,
-                    "fresh_id": fresh_id,
-                    "attitude_a": att_a.id,
-                    "attitude_b": att_b.id,
-                    "confidence": output.confidence,
-                },
-            )
-        )
-
-    return findings
-
-
-async def check_attitude_temporal_staleness(
-    db: AsyncSession,
-    space_id: str,
-    *,
-    days_threshold: int = 90,
-) -> list[LintFinding]:
-    """Find same-category attitudes that diverge across long time periods.
-
-    If the oldest and newest current attitudes in the same category are
-    90+ days apart and semantically different, the oldest is a drift candidate.
-    """
-    from .kg_models import AttitudeFact
-
-    findings: list[LintFinding] = []
-
-    q = (
-        select(AttitudeFact)
-        .where(
-            AttitudeFact.space_id == space_id,
-            AttitudeFact.superseded_by.is_(None),
-            AttitudeFact.deleted_at.is_(None),
-        )
-        .order_by(AttitudeFact.category, AttitudeFact.created_at.desc())
-    )
-    attitudes = (await db.execute(q)).scalars().all()
-
-    # Group by category
-    by_category: dict[str, list] = {}
-    for a in attitudes:
-        by_category.setdefault(a.category, []).append(a)
-
-    for _cat, atts in by_category.items():
-        if len(atts) < 2:
-            continue
-
-        newest = atts[0]  # ordered desc
-        newest_ts = newest.created_at
-        if not newest_ts:
-            continue
-
-        for older in atts[1:]:
-            older_ts = older.created_at
-            if not older_ts:
-                continue
-
-            age = abs((newest_ts - older_ts).days)
-            if age < days_threshold:
-                continue
-
-            # Check content difference (not just age)
-            words_new = set((newest.fact or "").lower().split())
-            words_old = set((older.fact or "").lower().split())
-            union = words_new | words_old
-            if not union:
-                continue
-            jaccard = len(words_new & words_old) / len(union)
-
-            # Same content = not a conflict, just old
-            if jaccard > 0.8:
-                continue
-
-            findings.append(
-                LintFinding(
-                    check="attitude_temporal_staleness",
-                    severity="info",
-                    entity_id=older.id,
-                    entity_type="attitude",
-                    message=(
-                        f"Attitude drift ({age}d) in [{older.category}]: "
-                        f'old="{(older.fact or "")[:50]}" '
-                        f'vs new="{(newest.fact or "")[:50]}"'
-                    ),
-                    suggested_action="invalidate",
-                    metadata={
-                        "stale_id": older.id,
-                        "fresh_id": newest.id,
-                        "age_days": age,
-                        "jaccard": round(jaccard, 3),
-                        "category": older.category,
-                    },
-                )
-            )
-
-    return findings
-
-
-# ======================== Skill Profile Drift ========================
-
-
-async def check_skill_profile_drift(
-    db: AsyncSession,
-    space_id: str,
-    *,
-    stale_days: int = 30,
-) -> list[LintFinding]:
-    """Find skill profiles that haven't synced recently or show anomalous drift."""
-    from .kg_models import SkillProfile
-
-    findings: list[LintFinding] = []
-    now_dt = datetime.now(UTC)
-
-    q = select(SkillProfile).where(SkillProfile.space_id == space_id)
-    profiles = (await db.execute(q)).scalars().all()
-
-    for sp in profiles:
-        # Stale sync check
-        if sp.last_synced_at:
-            age = (now_dt - sp.last_synced_at).days
-            if age >= stale_days:
-                findings.append(
-                    LintFinding(
-                        check="skill_profile_drift",
-                        severity="info",
-                        entity_id=sp.id,
-                        entity_type="skill",
-                        message=(
-                            f'Skill "{sp.skill_name}" last synced {age}d ago '
-                            f"(threshold: {stale_days}d)"
-                        ),
-                        suggested_action="none",
-                        metadata={
-                            "skill_name": sp.skill_name,
-                            "last_synced_at": str(sp.last_synced_at),
-                            "age_days": age,
-                            "issue": "stale_sync",
-                        },
-                    )
-                )
-
-    return findings
-
-
 # ======================== Layer 3: Action-Grounded Validation ========================
 
 
@@ -1581,41 +1063,6 @@ async def check_grounding(
                 )
             )
 
-    # --- Attitude facts: check deprecated references ---
-    from .kg_models import AttitudeFact
-
-    aq = (
-        select(AttitudeFact)
-        .where(
-            AttitudeFact.space_id == space_id,
-            AttitudeFact.superseded_by.is_(None),
-            AttitudeFact.deleted_at.is_(None),
-        )
-        .limit(500)
-    )
-    att_facts = (await db.execute(aq)).scalars().all()
-
-    for a in att_facts:
-        fact_text = a.fact or ""
-        dep = check_deprecated_reference(fact_text, truth)
-        if dep:
-            findings.append(
-                LintFinding(
-                    check="grounding",
-                    severity="warning",
-                    entity_id=a.id,
-                    entity_type="attitude",
-                    message=(
-                        f'Deprecated reference "{dep}" in attitude [{a.category}]: {fact_text[:80]}'
-                    ),
-                    suggested_action="invalidate",
-                    metadata={
-                        "grounding_category": "deprecated",
-                        "deprecated_name": dep,
-                    },
-                )
-            )
-
     return findings
 
 
@@ -1635,10 +1082,6 @@ def _finding_to_candidate(finding: LintFinding, detection_layer: int) -> Candida
         eid_a = meta.get("stale_id", finding.entity_id)
         eid_b = meta.get("fresh_id")
         confidence = 0.7
-    elif check == "attitude_chain_integrity":
-        eid_a = meta.get("attitude_a", finding.entity_id)
-        eid_b = meta.get("attitude_b")
-        confidence = 0.9 if meta.get("issue") == "circular" else 0.6
     elif check == "grounding":
         eid_a = finding.entity_id
         eid_b = None
@@ -1654,14 +1097,6 @@ def _finding_to_candidate(finding: LintFinding, detection_layer: int) -> Candida
         else:
             return None
         confidence = meta.get("confidence", 0.6)
-    elif check == "attitude_semantic_contradictions":
-        eid_a = meta.get("stale_id", meta.get("attitude_a", finding.entity_id))
-        eid_b = meta.get("fresh_id", meta.get("attitude_b"))
-        confidence = meta.get("confidence", 0.7)
-    elif check == "attitude_temporal_staleness":
-        eid_a = meta.get("stale_id", finding.entity_id)
-        eid_b = meta.get("fresh_id")
-        confidence = 0.6
     else:
         return None
 
@@ -1866,8 +1301,6 @@ async def check_knowledge_conflicts(
     for check_fn in [
         check_predicate_contradictions,
         check_temporal_staleness,
-        check_attitude_chain_integrity,
-        check_attitude_temporal_staleness,
     ]:
         try:
             _dedup_add(await check_fn(db, space_id), layer=1)
@@ -1889,14 +1322,6 @@ async def check_knowledge_conflicts(
         )
     except Exception as exc:
         logger.warning("knowledge_conflicts L4 blocks: %s", exc)
-
-    try:
-        _dedup_add(
-            await check_attitude_semantic_contradictions(db, space_id, max_llm_calls=half_llm),
-            layer=4,
-        )
-    except Exception as exc:
-        logger.warning("knowledge_conflicts L4 attitudes: %s", exc)
 
     logger.info("knowledge_conflicts: %d candidates from L1+L3+L4", len(candidates))
 
@@ -1951,17 +1376,9 @@ ALL_CHECKS: dict[str, object] = {
     # Layer 1: Graph structure (deterministic, fast)
     "predicate_contradictions": check_predicate_contradictions,
     "temporal_staleness": check_temporal_staleness,
-    "attitude_chain_integrity": check_attitude_chain_integrity,
     "entity_alias_collision": check_entity_alias_collision,
     # Layer 3: Action-grounded validation
     "grounding": check_grounding,
-    # Dedup checks (same content, multiple copies)
-    "attitude_dedup": check_attitude_dedup,
-    # Attitude conflict checks (different claims on same topic)
-    "attitude_semantic_contradictions": check_attitude_semantic_contradictions,
-    "attitude_temporal_staleness": check_attitude_temporal_staleness,
-    # Skill drift
-    "skill_profile_drift": check_skill_profile_drift,
     # Unified pipeline: L1+L3+L4 → cross-validate → cascade
     "knowledge_conflicts": check_knowledge_conflicts,
 }
@@ -1973,11 +1390,7 @@ FAST_CHECKS = [
     "data_gaps",
     "predicate_contradictions",
     "temporal_staleness",
-    "attitude_chain_integrity",
     "entity_alias_collision",
-    "attitude_dedup",
-    "attitude_temporal_staleness",
-    "skill_profile_drift",
 ]
 
 
@@ -2273,53 +1686,3 @@ async def remediate_knowledge_conflicts(
     return count
 
 
-async def remediate_attitude_conflicts(
-    db: AsyncSession,
-    findings: list[LintFinding],
-    *,
-    dry_run: bool = True,
-) -> int:
-    """Remediate attitude semantic contradiction and temporal staleness findings.
-
-    evolution/temporal → set invalid_at + invalidation_reason on stale attitude.
-    contradiction → use conflict_resolver for LLM judgment.
-    dry_run=True by default.
-    """
-    from .kg_models import AttitudeFact
-
-    count = 0
-    now = datetime.now(UTC)
-    valid_checks = {"attitude_semantic_contradictions", "attitude_temporal_staleness"}
-
-    for f in findings:
-        if f.check not in valid_checks or not f.entity_id:
-            continue
-        if dry_run:
-            continue
-
-        meta = f.metadata
-        stale_id = meta.get("stale_id")
-
-        if not stale_id:
-            continue
-
-        reason = f.check.replace(
-            "attitude_", ""
-        )  # "semantic_contradictions" or "temporal_staleness"
-
-        await db.execute(
-            update(AttitudeFact)
-            .where(
-                AttitudeFact.id == stale_id,
-                AttitudeFact.invalid_at.is_(None),
-            )
-            .values(
-                invalid_at=now,
-                invalidation_reason=reason,
-            )
-        )
-        count += 1
-
-    if count > 0:
-        await db.commit()
-    return count
