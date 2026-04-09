@@ -282,7 +282,6 @@ class PrefetchExecutorOp:
     async def _run_search(self, fp: PrefetchFingerprint) -> list[dict]:
         """Execute search using predicted tags as synthetic query."""
         from .injection_guard import sanitize_for_injection
-        from .kg_services import attitude_service
         from .query_runtime import _search_blocks
         from .schemas import MemoryQueryRequest
 
@@ -319,26 +318,36 @@ class PrefetchExecutorOp:
                     "source": "speculative_prefetch",
                 })
 
-            # Also prefetch attitudes
+            # Also prefetch attitude blocks (KAS Phase B)
             try:
-                attitudes = await attitude_service.semantic_search(
-                    db, fp.space_id, synthetic_query, top_k=2
-                )
-                for att in attitudes:
-                    fact = sanitize_for_injection(att.get("fact", ""))
-                    cards.append({
-                        "id": f"prefetch:attitude:{att.get('id', '')}",
-                        "title": f"偏好 / {att.get('category', 'preference')}",
-                        "summary": fact[:180],
-                        "why_relevant": "預測式預載 — 相關工作偏好。",
-                        "use_now": "延續這個偏好或工作原則。",
-                        "layer": "fast",
-                        "source_type": "attitude",
-                        "confidence": round(float(att.get("score", 0.5)), 3),
-                        "tags": [att.get("category", "preference")],
-                        "evidence_refs": [],
-                        "source": "speculative_prefetch",
-                    })
+                from .embedding import get_embedding
+
+                _att_emb = await get_embedding(synthetic_query, task_type="search_query")
+                if _att_emb:
+                    from .services import memory_block_service
+
+                    _att_result = await memory_block_service.qdrant_search(
+                        db, fp.space_id, synthetic_query, _att_emb,
+                        top_k=2, block_type="attitude",
+                    )
+                    if _att_result:
+                        for r in _att_result[0]:
+                            block = r.block
+                            fact = sanitize_for_injection(block.content or "")
+                            category = (block.tags or ["preference"])[0]
+                            cards.append({
+                                "id": f"prefetch:attitude:{block.id}",
+                                "title": f"偏好 / {category}",
+                                "summary": fact[:180],
+                                "why_relevant": "預測式預載 — 相關工作偏好。",
+                                "use_now": "延續這個偏好或工作原則。",
+                                "layer": "fast",
+                                "source_type": "attitude",
+                                "confidence": round(float(r.score or 0.5), 3),
+                                "tags": [category],
+                                "evidence_refs": [],
+                                "source": "speculative_prefetch",
+                            })
             except Exception:
                 logger.debug("slow_thinker.attitude_prefetch failed", exc_info=True)
 

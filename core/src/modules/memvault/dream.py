@@ -225,7 +225,6 @@ async def _reflect(
     """
     from sqlalchemy import select
 
-    from .kg_models import AttitudeFact
     from .models import MemoryBlock
 
     # Gather recent blocks
@@ -241,19 +240,22 @@ async def _reflect(
     blocks = (await db.execute(bq)).scalars().all()
     blocks_summary = "\n".join(f"- [{b.block_type}] {(b.content or '')[:80]}" for b in blocks)
 
-    # Gather recent attitudes
+    # Gather recent attitude blocks (KAS Phase B)
     aq = (
-        select(AttitudeFact)
+        select(MemoryBlock)
         .where(
-            AttitudeFact.space_id == space_id,
-            AttitudeFact.superseded_by.is_(None),
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.block_type == "attitude",
+            MemoryBlock.deleted_at.is_(None),
+            MemoryBlock.invalid_at.is_(None),
         )
-        .order_by(AttitudeFact.created_at.desc())
+        .order_by(MemoryBlock.created_at.desc())
         .limit(_REFLECT_MAX_ATTITUDES)
     )
     attitudes = (await db.execute(aq)).scalars().all()
     attitudes_summary = "\n".join(
-        f"- [{a.category}] {a.fact} (confidence: {a.confidence:.2f})" for a in attitudes
+        f"- [{(a.tags or ['preference'])[0]}] {a.content} (confidence: {a.confidence:.2f})"
+        for a in attitudes
     )
 
     contradictions = signal.get("contradictions_found", 0)

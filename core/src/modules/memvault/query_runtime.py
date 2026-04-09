@@ -15,7 +15,7 @@ from src.shared.prefetch import PrefetchFingerprint
 
 from .embedding import get_embedding
 from .injection_guard import sanitize_for_injection
-from .kg_services import attitude_service, cascade_recall_service
+from .kg_services import cascade_recall_service
 from .models import MemoryBlock
 from .schemas import (
     MemoryCard,
@@ -176,6 +176,19 @@ def _block_card(block, layer: str, task_mode: str, score: float | None = None) -
             )
         ],
     )
+
+
+def _block_result_to_attitude_dict(result) -> dict:
+    """Convert a SemanticSearchResult with block_type='attitude' to attitude dict."""
+    block = result.block
+    return {
+        "id": str(block.id),
+        "fact": block.content or "",
+        "category": (block.tags or ["preference"])[0],
+        "confidence": float(block.confidence or 0.5),
+        "score": float(result.score or 0.0),
+        "freshness": block.updated_at.isoformat() if block.updated_at else None,
+    }
 
 
 def _attitude_card(attitude: dict, layer: str, task_mode: str) -> MemoryCard:
@@ -457,13 +470,19 @@ async def run_memory_query(
         for result in search_results[: budget["fast"]]
     ]
 
-    attitude_hits = await attitude_service.semantic_search(
-        db,
-        space_id,
-        request.q,
-        top_k=budget["attitudes"],
+    _att_emb = await get_embedding(request.q, task_type="search_query")
+    _att_blocks: list = []
+    if _att_emb:
+        _att_result = await memory_block_service.qdrant_search(
+            db, space_id, request.q, _att_emb,
+            top_k=budget["attitudes"], block_type="attitude",
+        )
+        if _att_result:
+            _att_blocks, _ = _att_result
+    fast_cards.extend(
+        _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
+        for r in _att_blocks
     )
-    fast_cards.extend(_attitude_card(item, "fast", task_mode) for item in attitude_hits)
     fast_cards = _unique_cards(fast_cards)[: request.top_k]
 
     # Phase B2: Merge prefetch hits (after stable results, before working)
