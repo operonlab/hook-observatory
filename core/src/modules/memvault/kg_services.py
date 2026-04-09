@@ -436,6 +436,76 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             c for c in candidates if c.object.strip().lower() != new_triple.object.strip().lower()
         ]
 
+    async def get_justification_chain(
+        self,
+        db: AsyncSession,
+        triple_id: str,
+    ) -> dict:
+        """Trace a triple back to its source blocks and session (TMS-style).
+
+        Returns {triple, source_blocks, session_id, superseded_chain}.
+        """
+        from .models import MemoryBlock
+
+        t = (await db.execute(select(Triple).where(Triple.id == triple_id))).scalar_one_or_none()
+        if not t:
+            return {"triple": None, "source_blocks": [], "session_id": None, "superseded_chain": []}
+
+        result: dict = {
+            "triple": {
+                "id": t.id,
+                "subject": t.subject,
+                "predicate": t.predicate,
+                "object": t.object,
+                "source_session": t.source_session,
+                "created_at": str(t.created_at) if t.created_at else None,
+                "invalid_at": str(t.invalid_at) if t.invalid_at else None,
+            },
+            "source_blocks": [],
+            "session_id": t.source_session,
+            "superseded_chain": [],
+        }
+
+        # Trace source blocks via source_session
+        if t.source_session:
+            bq = select(MemoryBlock).where(
+                MemoryBlock.source_session == t.source_session,
+                MemoryBlock.deleted_at.is_(None),
+            )
+            blocks = (await db.execute(bq)).scalars().all()
+            result["source_blocks"] = [
+                {
+                    "id": b.id,
+                    "block_type": b.block_type,
+                    "content": (b.content or "")[:200],
+                    "invalid_at": str(b.invalid_at) if b.invalid_at else None,
+                }
+                for b in blocks
+            ]
+
+        # Trace supersession chain (if invalidated)
+        if t.invalidated_by:
+            chain = []
+            current_id = t.invalidated_by
+            seen = {t.id}
+            while current_id and current_id not in seen and len(chain) < 10:
+                seen.add(current_id)
+                sq = select(Triple).where(Triple.id == current_id)
+                successor = (await db.execute(sq)).scalar_one_or_none()
+                if not successor:
+                    break
+                chain.append(
+                    {
+                        "id": successor.id,
+                        "object": successor.object,
+                        "created_at": str(successor.created_at) if successor.created_at else None,
+                    }
+                )
+                current_id = successor.invalidated_by
+            result["superseded_chain"] = chain
+
+        return result
+
 
 # ======================== GraphTraversalService ========================
 

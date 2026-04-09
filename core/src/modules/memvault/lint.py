@@ -1437,6 +1437,52 @@ async def check_attitude_temporal_staleness(
     return findings
 
 
+# ======================== Skill Profile Drift ========================
+
+
+async def check_skill_profile_drift(
+    db: AsyncSession,
+    space_id: str,
+    *,
+    stale_days: int = 30,
+) -> list[LintFinding]:
+    """Find skill profiles that haven't synced recently or show anomalous drift."""
+    from .kg_models import SkillProfile
+
+    findings: list[LintFinding] = []
+    now_dt = datetime.now(UTC)
+
+    q = select(SkillProfile).where(SkillProfile.space_id == space_id)
+    profiles = (await db.execute(q)).scalars().all()
+
+    for sp in profiles:
+        # Stale sync check
+        if sp.last_synced_at:
+            age = (now_dt - sp.last_synced_at).days
+            if age >= stale_days:
+                findings.append(
+                    LintFinding(
+                        check="skill_profile_drift",
+                        severity="info",
+                        entity_id=sp.id,
+                        entity_type="skill",
+                        message=(
+                            f'Skill "{sp.skill_name}" last synced {age}d ago '
+                            f"(threshold: {stale_days}d)"
+                        ),
+                        suggested_action="none",
+                        metadata={
+                            "skill_name": sp.skill_name,
+                            "last_synced_at": str(sp.last_synced_at),
+                            "age_days": age,
+                            "issue": "stale_sync",
+                        },
+                    )
+                )
+
+    return findings
+
+
 # ======================== Layer 3: Action-Grounded Validation ========================
 
 
@@ -1914,6 +1960,8 @@ ALL_CHECKS: dict[str, object] = {
     # Attitude conflict checks (different claims on same topic)
     "attitude_semantic_contradictions": check_attitude_semantic_contradictions,
     "attitude_temporal_staleness": check_attitude_temporal_staleness,
+    # Skill drift
+    "skill_profile_drift": check_skill_profile_drift,
     # Unified pipeline: L1+L3+L4 → cross-validate → cascade
     "knowledge_conflicts": check_knowledge_conflicts,
 }
@@ -1929,6 +1977,7 @@ FAST_CHECKS = [
     "entity_alias_collision",
     "attitude_dedup",
     "attitude_temporal_staleness",
+    "skill_profile_drift",
 ]
 
 
@@ -2196,7 +2245,8 @@ async def remediate_knowledge_conflicts(
             )
             count += 1
 
-            # Cascade DOWN: invalidate same-session triples with content overlap
+            # Cascade DOWN: degrade confidence of same-session triples
+            # (TMS-style: don't invalidate, just reduce trust — 寧漏勿殺)
             if source_session:
                 bq = select(MemoryBlock.content).where(MemoryBlock.id == stale_id)
                 block_content = (await db.execute(bq)).scalar_one_or_none()
@@ -2209,16 +2259,12 @@ async def remediate_knowledge_conflicts(
                     for t in (await db.execute(tq)).scalars().all():
                         t_words = set(f"{t.subject} {t.predicate} {t.object}".lower().split())
                         if len(block_words & t_words) >= 3:
+                            # Halve access_count as confidence signal
+                            new_count = max(0, (t.access_count or 0) // 2)
                             await db.execute(
                                 update(Triple)
-                                .where(
-                                    Triple.id == t.id,
-                                    Triple.invalid_at.is_(None),
-                                )
-                                .values(
-                                    invalid_at=now,
-                                    invalidation_reason="cascade_from_block",
-                                )
+                                .where(Triple.id == t.id)
+                                .values(access_count=new_count)
                             )
                             count += 1
 
