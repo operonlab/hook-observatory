@@ -155,6 +155,21 @@ async def create_block(
                 await db.refresh(existing)
                 return memory_block_service.to_response(existing)
 
+        if dedup_result.decision == DedupDecision.SUPERSEDE:
+            # Invalidate old block and fall through to create the new one
+            logger.info(
+                "Dedup SUPERSEDE: %s (existing=%s)",
+                dedup_result.reason,
+                dedup_result.existing_block_id,
+            )
+            if dedup_result.existing_block_id:
+                await memory_block_service.invalidate_block(
+                    db,
+                    block_id=dedup_result.existing_block_id,
+                    superseded_by_id="__pending__",
+                    reason="superseded",
+                )
+
     # Normal creation path
     instance = await memory_block_service.create(db, space_id, body)
     try:
@@ -527,8 +542,8 @@ async def recalculate_profile(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
-    """Recalculate KAS scores from actual KG data."""
-    from .kg_models import AttitudeFact, Community, CommunitySummary, Triple
+    """Recalculate profile scores from actual KG data (post-KAS separation)."""
+    from .kg_models import Community, CommunitySummary, MemoryBlock, Triple
 
     # Knowledge score: based on triples + clusters + wisdom
     triple_count = (
@@ -555,41 +570,19 @@ async def recalculate_profile(
     k_wisdom_bonus = min(wisdom_count * 2, 15)
     knowledge_score = round(min(k_base + k_cluster_bonus + k_wisdom_bonus, 100), 1)
 
-    # Attitude score: based on attitude count + confidence
-    attitude_result = await db.execute(
-        select(func.count(), func.avg(AttitudeFact.confidence)).where(
-            AttitudeFact.space_id == space_id, AttitudeFact.superseded_by.is_(None)
+    # Attitude score: based on attitude blocks (migrated from attitude_facts)
+    att_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(MemoryBlock)
+            .where(MemoryBlock.space_id == space_id, MemoryBlock.block_type == "attitude")
         )
-    )
-    att_row = attitude_result.one()
-    att_count = att_row[0] or 0
-    att_avg_conf = att_row[1] or 0.0
+    ).scalar() or 0
     a_base = min(math.log10(max(att_count, 1)) / math.log10(500) * 60, 60)
-    a_conf_bonus = att_avg_conf * 40
-    attitude_score = round(min(a_base + a_conf_bonus, 100), 1)
+    attitude_score = round(min(a_base, 100), 1)
 
-    # Skill score: based on SkillProfile aggregates (KAS Skill dimension)
-    from statistics import mean as _mean
-
-    from .kg_models import SkillProfile
-
-    skill_profiles = (
-        (await db.execute(select(SkillProfile).where(SkillProfile.space_id == space_id)))
-        .scalars()
-        .all()
-    )
-
-    if skill_profiles:
-        total_skills = len(skill_profiles)
-        avg_sr = _mean(p.success_rate for p in skill_profiles)
-        expert_count = sum(1 for p in skill_profiles if p.proficiency_level == "expert")
-
-        s_diversity = min(total_skills * 3, 30)
-        s_proficiency = avg_sr * 40
-        s_mastery = min(expert_count * 5, 30)
-        skill_score = round(min(s_diversity + s_proficiency + s_mastery, 100), 1)
-    else:
-        skill_score = 0.0
+    # Skill score: SkillProfile removed (KAS separation); defaulting to 0 until redesign
+    skill_score = 0.0
 
     # Upsert profile
     result = await profile_score_service.upsert(

@@ -1,12 +1,10 @@
-"""Memvault Knowledge Graph ORM models — Triples, Communities, Summaries, Attitudes, Skills.
+"""Memvault Knowledge Graph ORM models — Triples, Communities, Summaries.
 
 Knowledge Graph layers (GraphRAG / HiRAG inspired):
   L0 — Triple           : raw subject-predicate-object facts (graph edges)
   L0 — EntityCanonical  : deduplicated entity nodes (graph vertices)
   L1 — Community        : Leiden graph communities at multiple resolution levels
   L2 — CommunitySummary : pre-generated LLM summaries per community
-  Attitude Layer        — AttitudeFact : versioned attitude/belief facts
-  Skill Layer           — SkillProfile : per-skill proficiency profiles (synced from Anvil)
 
 References: GraphRAG (2404.16130), HiRAG (2503.10150), LeanRAG (2508.10391)
 All tables live in the `memvault` PostgreSQL schema.
@@ -213,82 +211,3 @@ class CommunitySummary(SpaceScopedModel):
     generation_batch: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
-# ---------------------------------------------------------------------------
-# Attitude Layer — AttitudeFact
-# ---------------------------------------------------------------------------
-
-
-class AttitudeFact(SpaceScopedModel):
-    """A versioned attitude or belief fact — NULL superseded_by means current version."""
-
-    __tablename__ = "attitude_facts"
-    __table_args__ = (
-        Index("idx_attitude_facts_category", "category"),
-        Index(
-            "idx_attitude_facts_current",
-            "space_id",
-            postgresql_where=text("superseded_by IS NULL"),
-        ),
-        {"schema": SCHEMA},
-    )
-
-    fact: Mapped[str] = mapped_column(Text)
-    category: Mapped[str] = mapped_column(String(100))
-    operation: Mapped[str] = mapped_column(String(20))  # ADD / UPDATE / NOOP
-    confidence: Mapped[float] = mapped_column(Float, server_default=text("0.5"))
-    source_sessions: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    superseded_by: Mapped[str | None] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.attitude_facts.id"),
-        nullable=True,
-    )  # NULL = current version
-    previous_version: Mapped[str | None] = mapped_column(
-        String(32),
-        ForeignKey(f"{SCHEMA}.attitude_facts.id"),
-        nullable=True,
-    )
-    # Temporal validity (Zep/Graphiti-inspired — mirrors Block/Triple pattern)
-    invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    invalidation_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    # Access tracking for effective half-life computation
-    access_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    last_accessed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-
-# ---------------------------------------------------------------------------
-# Skill Layer — SkillProfile (KAS Skill dimension L1/L2/L3)
-# NOTE: SkillInvocation table removed — Anvil station is now the sole source
-# of raw skill invocation telemetry. SkillProfile syncs from Anvil daily.
-# ---------------------------------------------------------------------------
-
-
-class SkillProfile(SpaceScopedModel):
-    """Per-skill proficiency profile — KAS Skill dimension (L1/L2/L3)."""
-
-    __tablename__ = "skill_profiles"
-    __table_args__ = (
-        UniqueConstraint("space_id", "skill_name", name="uq_skill_profiles_space_skill"),
-        {"schema": SCHEMA},
-    )
-
-    skill_name: Mapped[str] = mapped_column(String(200))
-    # L1 — 基礎使用 (from Anvil invocations)
-    total_uses: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    recent_uses: Mapped[int] = mapped_column(Integer, server_default=text("0"))  # 30d
-    success_rate: Mapped[float] = mapped_column(Float, server_default=text("0"))
-    avg_duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # L2 — 偏好熟練 (from LLM analysis of invocation patterns)
-    auto_rate: Mapped[float | None] = mapped_column(Float, nullable=True)  # auto / total
-    common_patterns: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    learned_preferences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    pitfalls: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
-    # L3 — 創意熟練 (derived metrics)
-    proficiency_level: Mapped[str] = mapped_column(
-        String(20), server_default=text("'novice'")
-    )  # novice | proficient | expert
-    health_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    evolution_notes: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    # Sync metadata
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
