@@ -33,6 +33,10 @@ _THINKING_MODES = {"auto", "fast", "slow"}
 _LOAD_BUDGETS = {"light", "standard", "deep"}
 _CONSUMERS = {"agent", "human", "ui"}
 
+# Hard prompt budget — keeps system prompt cache-friendly and cost-predictable.
+# Inspired by Hermes Agent memory injection design.
+PROMPT_BUDGET_CHARS = 2000
+
 # Reuse the same SpeculativePrefetchCache instance from slow_thinker
 # to keep metrics unified (reviewer finding #8)
 from .slow_thinker import _prefetch_cache
@@ -136,13 +140,24 @@ def _task_use_now(task_mode: str, source_type: str, summary: str) -> str:
 def _block_card(block, layer: str, task_mode: str, score: float | None = None) -> MemoryCard:
     safe_content = sanitize_for_injection(block.content)
     title = _block_title(block.block_type, block.tags or [], block.source_session)
-    why = "這是與查詢最接近的原始記憶區塊。"
-    if block.tags:
+    # Skill blocks in fast/working layers use a short index summary (80 chars);
+    # full content is available on-demand via inspect mode — mirrors Hermes index separation.
+    is_skill_index = block.block_type == "skill" and layer in ("fast", "working")
+    clip_limit = 80 if is_skill_index else 180
+    if is_skill_index:
+        why = (
+            f"技能索引（完整內容請用 inspect mode）：{', '.join(block.tags[:3])}"
+            if block.tags
+            else "技能索引（完整內容請用 inspect mode）"
+        )
+    elif block.tags:
         why = f"命中標籤 {', '.join(block.tags[:3])}，適合作為{layer}上下文。"
+    else:
+        why = "這是與查詢最接近的原始記憶區塊。"
     return MemoryCard(
         id=f"{layer}:block:{block.id}",
         title=title,
-        summary=_clip(safe_content, 180),
+        summary=_clip(safe_content, clip_limit),
         why_relevant=why,
         use_now=_task_use_now(task_mode, "block", safe_content),
         layer=layer,
@@ -524,22 +539,61 @@ def build_injection_payload(response: MemoryQueryResponse) -> MemoryInjectRespon
     agent_cards = response.fast_cards[:3]
     if not agent_cards:
         agent_cards = response.working_cards[:2]
-    prompt_lines = ["[Memvault Fast Memory]"]
-    for idx, card in enumerate(agent_cards, start=1):
-        prompt_lines.append(f"{idx}. {card.title}: {card.summary}")
-        prompt_lines.append(f"   Use now: {card.use_now}")
+    original_card_count = len(agent_cards)
+
+    def _build_lines(cards: list, include_use_now: bool) -> list[str]:
+        lines = ["[Memvault Fast Memory]"]
+        for idx, card in enumerate(cards, start=1):
+            lines.append(f"{idx}. {card.title}: {card.summary}")
+            if include_use_now:
+                lines.append(f"   Use now: {card.use_now}")
+        return lines
+
+    # Phase 1: full output
+    prompt_lines = _build_lines(agent_cards, include_use_now=True)
+    system_prompt_memory = "\n".join(prompt_lines)
+
+    if len(system_prompt_memory) > PROMPT_BUDGET_CHARS:
+        # Phase 2: drop use_now lines
+        prompt_lines = _build_lines(agent_cards, include_use_now=False)
+        system_prompt_memory = "\n".join(prompt_lines)
+
+    if len(system_prompt_memory) > PROMPT_BUDGET_CHARS:
+        # Phase 3: clip each summary to 80 chars
+        clipped_lines = ["[Memvault Fast Memory]"]
+        for idx, card in enumerate(agent_cards, start=1):
+            clipped_lines.append(f"{idx}. {card.title}: {_clip(card.summary, 80)}")
+        system_prompt_memory = "\n".join(clipped_lines)
+
+    if len(system_prompt_memory) > PROMPT_BUDGET_CHARS:
+        # Phase 4: drop cards from the end until within budget
+        while len(agent_cards) > 1 and len(system_prompt_memory) > PROMPT_BUDGET_CHARS:
+            agent_cards = agent_cards[:-1]
+            clipped_lines = ["[Memvault Fast Memory]"]
+            for idx, card in enumerate(agent_cards, start=1):
+                clipped_lines.append(f"{idx}. {card.title}: {_clip(card.summary, 80)}")
+            system_prompt_memory = "\n".join(clipped_lines)
+
     decision_bias = [
         card.summary for card in response.fast_cards if card.source_type == "attitude"
     ][:3]
     working_context = [card.summary for card in response.working_cards[:3]]
+
+    budget_meta: dict = {
+        "prompt_budget_chars": PROMPT_BUDGET_CHARS,
+        "prompt_used_chars": len(system_prompt_memory),
+        "cards_trimmed": original_card_count - len(agent_cards),
+    }
+    merged_metadata = {**(response.metadata or {}), **budget_meta}
+
     return MemoryInjectResponse(
         query=response.query,
         strategy=response.strategy,
-        system_prompt_memory="\n".join(prompt_lines),
+        system_prompt_memory=system_prompt_memory,
         working_context=working_context,
         decision_bias=decision_bias,
         cards=agent_cards,
-        metadata=response.metadata,
+        metadata=merged_metadata,
     )
 
 
