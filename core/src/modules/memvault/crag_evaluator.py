@@ -54,6 +54,36 @@ class CRAGEvaluation:
     metadata: dict = field(default_factory=dict)
 
 
+@dataclass
+class CRAGWeights:
+    """Tunable weights for CRAG evaluation layers."""
+
+    coverage: float = 0.4  # Layer A: coverage vs density
+    density: float = 0.6
+    rules: float = 0.3  # Layer A+B combination: rules vs rerank
+    rerank: float = 0.7
+
+
+# Intent-dependent CRAG weights (AttnRes-inspired)
+INTENT_CRAG_WEIGHTS: dict[str, CRAGWeights] = {
+    # Entity lookup → density matters (want specific hits)
+    "entity_lookup": CRAGWeights(coverage=0.3, density=0.7, rules=0.2, rerank=0.8),
+    # Conceptual → balanced
+    "conceptual": CRAGWeights(coverage=0.4, density=0.6, rules=0.3, rerank=0.7),
+    # Factual → reranker is most reliable for fact verification
+    "factual": CRAGWeights(coverage=0.3, density=0.7, rules=0.2, rerank=0.8),
+    # Exploratory → coverage matters (want breadth across layers)
+    "exploratory": CRAGWeights(coverage=0.6, density=0.4, rules=0.4, rerank=0.6),
+    # Cross-domain → coverage for breadth
+    "cross_domain": CRAGWeights(coverage=0.5, density=0.5, rules=0.3, rerank=0.7),
+}
+
+
+def crag_weights_for_intent(intent: str) -> CRAGWeights:
+    """Return intent-tuned CRAG weights, falling back to default."""
+    return INTENT_CRAG_WEIGHTS.get(intent, CRAGWeights())
+
+
 class CRAGEvaluator:
     """Multi-layer result quality evaluator."""
 
@@ -62,14 +92,18 @@ class CRAGEvaluator:
         query: str,
         result: CascadeRecallResult,
         evaluate: str = "default",
+        intent: str = "unknown",
     ) -> CRAGEvaluation:
         """Evaluate cascade recall results.
 
         Args:
             evaluate: "default" (Layer A+B), "deep" (+Haiku), "rlm" (+RLM), "none" (skip).
+            intent: Query intent for weight tuning (AttnRes-inspired).
         """
+        weights = crag_weights_for_intent(intent)
+
         # Layer A: Rule-based heuristics
-        layer_a = self._layer_a_rules(result)
+        layer_a = self._layer_a_rules(result, weights)
 
         # Early exit if empty
         if layer_a["result_count"] == 0:
@@ -83,7 +117,7 @@ class CRAGEvaluator:
         layer_b = await self._layer_b_rerank(query, result)
 
         # Combine Layer A + B scores
-        combined_score = self._combine_scores(layer_a, layer_b)
+        combined_score = self._combine_scores(layer_a, layer_b, weights)
         verdict = self._score_to_verdict(combined_score, layer_b)
 
         metadata: dict = {
@@ -112,7 +146,7 @@ class CRAGEvaluator:
             metadata=metadata,
         )
 
-    def _layer_a_rules(self, result: CascadeRecallResult) -> dict:
+    def _layer_a_rules(self, result: CascadeRecallResult, weights: CRAGWeights) -> dict:
         """Layer A: Rule-based heuristics (<5ms)."""
         layers = result.layers_searched
         n_summaries = len(result.summaries)
@@ -127,8 +161,8 @@ class CRAGEvaluator:
         # Result density score
         density = min(total / 10.0, 1.0)  # cap at 10 results
 
-        # Combine
-        score = coverage * 0.4 + density * 0.6
+        # Combine with intent-tuned weights
+        score = coverage * weights.coverage + density * weights.density
 
         return {
             "result_count": total,
@@ -195,14 +229,14 @@ class CRAGEvaluator:
             "score": round(avg_score, 3),
         }
 
-    def _combine_scores(self, layer_a: dict, layer_b: dict) -> float:
+    def _combine_scores(self, layer_a: dict, layer_b: dict, weights: CRAGWeights) -> float:
         """Combine Layer A (rules) and Layer B (cross-encoder) scores."""
         a_score = layer_a.get("score", 0.0)
         b_score = layer_b.get("score", 0.5)  # default 0.5 if reranker unavailable
 
-        # Weight: cross-encoder is more reliable than heuristics
+        # Intent-tuned blend weights
         if layer_b.get("status") == "ok":
-            return a_score * 0.3 + b_score * 0.7
+            return a_score * weights.rules + b_score * weights.rerank
         else:
             # No reranker — rely more on rules
             return a_score

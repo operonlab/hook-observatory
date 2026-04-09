@@ -38,7 +38,8 @@ _COMMUNITY_SERVICE_ID = "docvault-community"
 _GRAPH_BASE_SCORE = 0.5
 
 # Score boost applied when a chunk appears in BOTH vector results and graph path
-_OVERLAP_BOOST = 0.15
+# Dual-source corroboration is strong signal for factual QA
+_OVERLAP_BOOST = 0.25
 
 
 class GraphSearchOp:

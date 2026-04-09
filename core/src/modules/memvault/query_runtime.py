@@ -246,6 +246,7 @@ async def _search_blocks(
     query: str,
     top_k: int,
     scoring_config: ScoringConfig | None = None,
+    intent: str = "unknown",
 ) -> tuple[list, dict]:
     embedding = await get_embedding(query, task_type="search_query")
     if embedding:
@@ -256,6 +257,7 @@ async def _search_blocks(
             embedding,
             top_k=top_k,
             scoring_config=scoring_config,
+            intent=intent,
         )
         if qdrant_result is not None:
             results, meta = qdrant_result
@@ -268,6 +270,7 @@ async def _search_blocks(
             top_k=top_k,
             query=query,
             scoring_config=scoring_config,
+            intent=intent,
         )
         return results, {
             "backend": meta.backend or "pgvector-fallback",
@@ -432,6 +435,7 @@ async def run_memory_query(
         request.q,
         top_k=max(request.top_k, budget["search_top_k"]),
         scoring_config=intent_scoring,
+        intent=intent_value,
     )
     fast_cards = [
         _block_card(result.block, "fast", task_mode, result.score)

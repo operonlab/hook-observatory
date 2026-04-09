@@ -260,6 +260,7 @@ class MemoryBlockService(
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         keywords: list[str] | None = None,
+        intent: str = "unknown",
     ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
         """Text-based fallback search (keyword + warm tier).
 
@@ -373,7 +374,9 @@ class MemoryBlockService(
 
         # Phase C2: Optional cross-encoder reranking (attention-gated)
         if query:
-            scored_dicts, reranked, gate_reason = await rerank_results(query, scored_dicts)
+            scored_dicts, reranked, gate_reason = await rerank_results(
+                query, scored_dicts, intent=intent,
+            )
             if reranked:
                 meta.reranker_used = True
             elif gate_reason:
@@ -422,6 +425,7 @@ class MemoryBlockService(
         scope: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        intent: str = "unknown",
     ) -> tuple[list[SemanticSearchResult], SearchMetadata] | None:
         """Search via Qdrant hybrid (BM25 + dense) with full scoring pipeline.
 
@@ -520,7 +524,9 @@ class MemoryBlockService(
         scored_dicts, scoring_meta = await pipeline.apply(scored_dicts, query_embedding)
 
         # Optional cross-encoder reranking (attention-gated)
-        scored_dicts, reranked, gate_reason = await rerank_results(query, scored_dicts)
+        scored_dicts, reranked, gate_reason = await rerank_results(
+            query, scored_dicts, intent=intent,
+        )
         if reranked:
             meta.reranker_used = True
         elif gate_reason:
