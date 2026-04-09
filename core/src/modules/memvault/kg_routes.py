@@ -15,10 +15,6 @@ from .embedding import get_embedding, get_embeddings_batch
 from .entity_resolution import entity_resolution_service, normalize_entity_text
 from .interest_profile import interest_profile_service
 from .kg_schemas import (
-    AttitudeEvolveRequest,
-    AttitudeEvolveResult,
-    AttitudeFactCreate,
-    AttitudeFactResponse,
     CascadeRecallResult,
     CommunityDetail,
     CommunityRegenerateRequest,
@@ -31,21 +27,16 @@ from .kg_schemas import (
     EntityResolutionStats,
     GraphTraversalResult,
     LintReportResponse,
-    SkillProfileResponse,
-    SkillProfileUpsert,
     TripleBatchCreate,
     TripleCreate,
     TripleInvalidateRequest,
     TripleResponse,
 )
 from .kg_services import (
-    attitude_service,
     cascade_recall_service,
     community_service,
     community_summary_service,
-    confidence_decay_service,
     graph_traversal_service,
-    skill_profile_service,
     triple_service,
 )
 from .lint import (
@@ -295,119 +286,6 @@ async def regenerate_summaries(
     return {"saved": saved, "generated_at": body.generated_at}
 
 
-# ======================== Attitude ========================
-
-
-@router.get("/attitudes/relevant")
-async def get_relevant_attitudes(
-    q: str = Query(..., min_length=1),
-    space_id: str = Query("default"),
-    top_k: int = Query(3, ge=1, le=10),
-    db: AsyncSession = Depends(get_db),
-):
-    """Semantic search for attitude facts relevant to a query — used by autoRecall."""
-    return await attitude_service.semantic_search(db, space_id, q, top_k=top_k)
-
-
-@router.get("/attitudes", response_model=list[AttitudeFactResponse])
-async def list_attitudes(
-    space_id: str = Query("default"),
-    category: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),
-):
-    return await attitude_service.get_current(db, space_id, category=category)
-
-
-@router.post("/attitudes", response_model=AttitudeFactResponse, status_code=201)
-async def create_attitude(
-    body: AttitudeFactCreate,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    instance = await attitude_service.create_fact(db, space_id, body)
-    await db.commit()
-    await db.refresh(instance)
-    return attitude_service.to_response(instance)
-
-
-@router.post("/attitudes/evolve", response_model=AttitudeEvolveResult)
-async def evolve_attitude(
-    body: AttitudeEvolveRequest,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await attitude_service.evolve(db, space_id, body)
-    await db.commit()
-    return result
-
-
-@router.get("/attitudes/history/{fact_id}", response_model=list[AttitudeFactResponse])
-async def attitude_history(
-    fact_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    return await attitude_service.get_history(db, fact_id)
-
-
-@router.delete("/attitudes/{fact_id}", status_code=204)
-async def delete_attitude(
-    fact_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    await attitude_service.delete_by_id(db, fact_id)
-    await db.commit()
-    return None
-
-
-@router.put("/attitudes/{fact_id}", response_model=AttitudeFactResponse)
-async def update_attitude(
-    fact_id: str,
-    body: AttitudeFactCreate,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    instance = await attitude_service.update_by_id(db, fact_id, body)
-    await db.commit()
-    await db.refresh(instance)
-    return attitude_service.to_response(instance)
-
-
-# ======================== Skill Profiles ========================
-
-
-@router.get("/skill-profiles", response_model=list[SkillProfileResponse])
-async def list_skill_profiles(
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    return await skill_profile_service.get_all(db, space_id)
-
-
-@router.get("/skill-profiles/{skill_name}", response_model=SkillProfileResponse)
-async def get_skill_profile(
-    skill_name: str,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await skill_profile_service.get_by_skill(db, space_id, skill_name)
-    if not result:
-        raise NotFoundError("Skill profile not found", code="memvault.skill_profile_not_found")
-    return result
-
-
-@router.put("/skill-profiles/{skill_name}", response_model=SkillProfileResponse)
-async def upsert_skill_profile(
-    skill_name: str,
-    body: SkillProfileUpsert,
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    instance = await skill_profile_service.upsert(db, space_id, skill_name, body)
-    await db.commit()
-    await db.refresh(instance)
-    return skill_profile_service.to_response(instance)
-
-
 # ======================== Cascade Recall ========================
 
 
@@ -428,24 +306,6 @@ async def cascade_recall(
         skip_routing=skip_routing,
         evaluate=evaluate,
     )
-
-
-# ======================== Confidence Decay ========================
-
-
-@router.post("/decay", status_code=200)
-async def apply_confidence_decay(
-    space_id: str = Query("default"),
-    db: AsyncSession = Depends(get_db),
-):
-    """Apply exponential confidence decay to all current attitude facts in the space.
-
-    Designed to be called periodically (e.g., weekly via cron/launchd).
-    Returns counts of facts checked and updated.
-    """
-    result = await confidence_decay_service.apply_decay(db, space_id)
-    await db.commit()
-    return result
 
 
 # ======================== Embedding Backfill ========================
@@ -619,14 +479,14 @@ async def backfill_embeddings(
     batch_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    """Backfill missing embeddings for triples and attitude_facts.
+    """Backfill missing embeddings for triples.
 
     Processes in batches via Ollama nomic-embed-text. Designed for one-shot
     migration backfill or periodic catch-up.
     """
     from sqlalchemy import select
 
-    from .kg_models import AttitudeFact, Triple
+    from .kg_models import Triple
 
     # --- Triples ---
     triple_q = (
@@ -648,30 +508,9 @@ async def backfill_embeddings(
                 triple_updated += 1
         await db.flush()
 
-    # --- Attitude Facts ---
-    attitude_q = (
-        select(AttitudeFact)
-        .where(AttitudeFact.space_id == space_id, AttitudeFact.embedding.is_(None))
-        .order_by(AttitudeFact.created_at)
-    )
-    result = await db.execute(attitude_q)
-    attitudes = list(result.scalars().all())
-
-    attitude_updated = 0
-    for i in range(0, len(attitudes), batch_size):
-        batch = attitudes[i : i + batch_size]
-        texts = [f"{a.category}: {a.fact}" for a in batch]
-        embeddings = await get_embeddings_batch(texts)
-        for a, emb in zip(batch, embeddings, strict=True):
-            if emb:
-                a.embedding = emb
-                attitude_updated += 1
-        await db.flush()
-
     await db.commit()
     return {
         "triples": {"total_missing": len(triples), "updated": triple_updated},
-        "attitudes": {"total_missing": len(attitudes), "updated": attitude_updated},
     }
 
 
@@ -858,41 +697,6 @@ async def get_knowledge_gaps(
     Returns queries with INCORRECT verdict that appeared 2+ times in the period.
     """
     return await interest_profile_service.get_knowledge_gaps(db, space_id, days=days, limit=limit)
-
-
-@router.get("/insights", status_code=200)
-async def get_meta_insights(
-    space_id: str = Query("default"),
-    limit: int = Query(5, ge=1, le=20),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get recent meta_insight attitude facts — system-generated user insights."""
-    from sqlalchemy import select
-
-    from .kg_models import AttitudeFact
-
-    q = (
-        select(AttitudeFact)
-        .where(
-            AttitudeFact.space_id == space_id,
-            AttitudeFact.category == "meta_insight",
-            AttitudeFact.superseded_by.is_(None),
-            AttitudeFact.deleted_at.is_(None),
-        )
-        .order_by(AttitudeFact.created_at.desc())
-        .limit(limit)
-    )
-    facts = (await db.execute(q)).scalars().all()
-    return [
-        {
-            "id": f.id,
-            "fact": f.fact,
-            "confidence": f.confidence,
-            "created_at": f.created_at.isoformat() if f.created_at else None,
-        }
-        for f in facts
-    ]
-
 
 # ======================== KG Lint ========================
 
