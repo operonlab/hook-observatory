@@ -247,6 +247,14 @@ class AttitudeFact(SpaceScopedModel):
         ForeignKey(f"{SCHEMA}.attitude_facts.id"),
         nullable=True,
     )
+    # Temporal validity (Zep/Graphiti-inspired — mirrors Block/Triple pattern)
+    invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalidation_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Access tracking for effective half-life computation
+    access_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 # ---------------------------------------------------------------------------

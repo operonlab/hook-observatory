@@ -1179,6 +1179,264 @@ async def check_attitude_dedup(
     return findings
 
 
+# ======================== Attitude Conflict Checks ========================
+
+
+async def check_attitude_semantic_contradictions(
+    db: AsyncSession,
+    space_id: str,
+    *,
+    max_llm_calls: int = 10,
+) -> list[LintFinding]:
+    """Find semantically contradictory attitudes within the same category.
+
+    Uses _is_attitude_contradiction() heuristic as fast filter,
+    then LLM judgment for candidates that pass.
+    This is a CONFLICT check (different claims on same topic), not dedup.
+    """
+    from .kg_models import AttitudeFact
+    from .kg_services import _is_attitude_contradiction
+
+    findings: list[LintFinding] = []
+
+    q = select(AttitudeFact).where(
+        AttitudeFact.space_id == space_id,
+        AttitudeFact.superseded_by.is_(None),
+        AttitudeFact.deleted_at.is_(None),
+    )
+    attitudes = (await db.execute(q)).scalars().all()
+
+    if len(attitudes) < 2:
+        return findings
+
+    # Group by category
+    by_category: dict[str, list] = {}
+    for a in attitudes:
+        by_category.setdefault(a.category, []).append(a)
+
+    # Heuristic pass: find pairs with contradiction signals
+    candidates: list[tuple] = []  # (att_a, att_b)
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for _cat, atts in by_category.items():
+        if len(atts) < 2:
+            continue
+        for i, a in enumerate(atts):
+            for b in atts[i + 1 :]:
+                pair = tuple(sorted([a.id, b.id]))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+
+                if _is_attitude_contradiction(a.fact or "", b.fact or ""):
+                    candidates.append((a, b))
+                    if len(candidates) >= max_llm_calls * 2:
+                        break
+            if len(candidates) >= max_llm_calls * 2:
+                break
+
+    if not candidates:
+        return findings
+
+    # LLM pass for top candidates
+    from pydantic_ai import Agent as PydanticAgent
+
+    from .llm_config import make_litellm_model, resolve_model
+    from .llm_models import SemanticLintOutput
+
+    batch_candidates = [
+        "kimi-k2.5",
+        "deepseek-v3",
+        "qwen3.5-flash",
+        "grok-4.1-fast",
+        "gemini-3.1-flash",
+    ]
+    model_name = await resolve_model(candidates=batch_candidates)
+    model = make_litellm_model(model_name)
+
+    _agent = PydanticAgent(
+        output_type=SemanticLintOutput,
+        system_prompt=(
+            "You are a belief auditor. Compare two attitude/preference statements "
+            "from the same personal knowledge base and classify their relationship.\n\n"
+            'Decisions:\n- "contradiction": Directly conflicting beliefs.\n'
+            '- "evolution": The user\'s preference changed over time.\n'
+            '- "compatible": Different aspects, not contradictory.\n\n'
+            "Set stale_id to the outdated statement's ID, or null if compatible."
+        ),
+        retries=1,
+    )
+
+    import asyncio as _asyncio
+
+    llm_calls = 0
+    for att_a, att_b in candidates:
+        if llm_calls >= max_llm_calls:
+            break
+
+        # Determine older/newer
+        if att_a.created_at and att_b.created_at:
+            older = att_a if att_a.created_at < att_b.created_at else att_b
+            newer = att_b if att_a.created_at < att_b.created_at else att_a
+        else:
+            older, newer = att_a, att_b
+
+        user_msg = (
+            f"OLDER attitude (ID: {older.id}, category: {older.category}, "
+            f"created: {older.created_at}):\n{(older.fact or '')[:300]}\n\n"
+            f"NEWER attitude (ID: {newer.id}, category: {newer.category}, "
+            f"created: {newer.created_at}):\n{(newer.fact or '')[:300]}\n\n"
+            "Classify the relationship."
+        )
+
+        output = None
+        for attempt in range(2):
+            try:
+                result = await _agent.run(
+                    user_msg,
+                    model=model,
+                    model_settings={
+                        "temperature": 0.1,
+                        "max_tokens": 256,
+                        "timeout": 15,
+                    },
+                )
+                output = result.output
+                break
+            except Exception as exc:
+                if attempt == 0 and "429" in str(exc):
+                    await _asyncio.sleep(3)
+                    continue
+                logger.debug(
+                    "attitude_semantic: LLM failed for (%s, %s): %s",
+                    att_a.id,
+                    att_b.id,
+                    exc,
+                )
+                break
+
+        llm_calls += 1
+        if output is None:
+            continue
+        await _asyncio.sleep(1)
+
+        if output.relationship == "compatible":
+            continue
+
+        stale_id = output.stale_id or older.id
+        fresh_id = newer.id if stale_id == older.id else older.id
+
+        findings.append(
+            LintFinding(
+                check="attitude_semantic_contradictions",
+                severity="warning",
+                entity_id=stale_id,
+                entity_type="attitude",
+                message=(
+                    f"Attitude {output.relationship} in [{att_a.category}] "
+                    f"(confidence={output.confidence:.2f}): {output.reason}"
+                ),
+                suggested_action="invalidate",
+                metadata={
+                    "relationship": output.relationship,
+                    "stale_id": stale_id,
+                    "fresh_id": fresh_id,
+                    "attitude_a": att_a.id,
+                    "attitude_b": att_b.id,
+                    "confidence": output.confidence,
+                },
+            )
+        )
+
+    return findings
+
+
+async def check_attitude_temporal_staleness(
+    db: AsyncSession,
+    space_id: str,
+    *,
+    days_threshold: int = 90,
+) -> list[LintFinding]:
+    """Find same-category attitudes that diverge across long time periods.
+
+    If the oldest and newest current attitudes in the same category are
+    90+ days apart and semantically different, the oldest is a drift candidate.
+    """
+    from .kg_models import AttitudeFact
+
+    findings: list[LintFinding] = []
+
+    q = (
+        select(AttitudeFact)
+        .where(
+            AttitudeFact.space_id == space_id,
+            AttitudeFact.superseded_by.is_(None),
+            AttitudeFact.deleted_at.is_(None),
+        )
+        .order_by(AttitudeFact.category, AttitudeFact.created_at.desc())
+    )
+    attitudes = (await db.execute(q)).scalars().all()
+
+    # Group by category
+    by_category: dict[str, list] = {}
+    for a in attitudes:
+        by_category.setdefault(a.category, []).append(a)
+
+    for _cat, atts in by_category.items():
+        if len(atts) < 2:
+            continue
+
+        newest = atts[0]  # ordered desc
+        newest_ts = newest.created_at
+        if not newest_ts:
+            continue
+
+        for older in atts[1:]:
+            older_ts = older.created_at
+            if not older_ts:
+                continue
+
+            age = abs((newest_ts - older_ts).days)
+            if age < days_threshold:
+                continue
+
+            # Check content difference (not just age)
+            words_new = set((newest.fact or "").lower().split())
+            words_old = set((older.fact or "").lower().split())
+            union = words_new | words_old
+            if not union:
+                continue
+            jaccard = len(words_new & words_old) / len(union)
+
+            # Same content = not a conflict, just old
+            if jaccard > 0.8:
+                continue
+
+            findings.append(
+                LintFinding(
+                    check="attitude_temporal_staleness",
+                    severity="info",
+                    entity_id=older.id,
+                    entity_type="attitude",
+                    message=(
+                        f"Attitude drift ({age}d) in [{older.category}]: "
+                        f'old="{(older.fact or "")[:50]}" '
+                        f'vs new="{(newest.fact or "")[:50]}"'
+                    ),
+                    suggested_action="invalidate",
+                    metadata={
+                        "stale_id": older.id,
+                        "fresh_id": newest.id,
+                        "age_days": age,
+                        "jaccard": round(jaccard, 3),
+                        "category": older.category,
+                    },
+                )
+            )
+
+    return findings
+
+
 # ======================== Layer 3: Action-Grounded Validation ========================
 
 
@@ -1277,6 +1535,41 @@ async def check_grounding(
                 )
             )
 
+    # --- Attitude facts: check deprecated references ---
+    from .kg_models import AttitudeFact
+
+    aq = (
+        select(AttitudeFact)
+        .where(
+            AttitudeFact.space_id == space_id,
+            AttitudeFact.superseded_by.is_(None),
+            AttitudeFact.deleted_at.is_(None),
+        )
+        .limit(500)
+    )
+    att_facts = (await db.execute(aq)).scalars().all()
+
+    for a in att_facts:
+        fact_text = a.fact or ""
+        dep = check_deprecated_reference(fact_text, truth)
+        if dep:
+            findings.append(
+                LintFinding(
+                    check="grounding",
+                    severity="warning",
+                    entity_id=a.id,
+                    entity_type="attitude",
+                    message=(
+                        f'Deprecated reference "{dep}" in attitude [{a.category}]: {fact_text[:80]}'
+                    ),
+                    suggested_action="invalidate",
+                    metadata={
+                        "grounding_category": "deprecated",
+                        "deprecated_name": dep,
+                    },
+                )
+            )
+
     return findings
 
 
@@ -1315,6 +1608,14 @@ def _finding_to_candidate(finding: LintFinding, detection_layer: int) -> Candida
         else:
             return None
         confidence = meta.get("confidence", 0.6)
+    elif check == "attitude_semantic_contradictions":
+        eid_a = meta.get("stale_id", meta.get("attitude_a", finding.entity_id))
+        eid_b = meta.get("fresh_id", meta.get("attitude_b"))
+        confidence = meta.get("confidence", 0.7)
+    elif check == "attitude_temporal_staleness":
+        eid_a = meta.get("stale_id", finding.entity_id)
+        eid_b = meta.get("fresh_id")
+        confidence = 0.6
     else:
         return None
 
@@ -1520,26 +1821,36 @@ async def check_knowledge_conflicts(
         check_predicate_contradictions,
         check_temporal_staleness,
         check_attitude_chain_integrity,
+        check_attitude_temporal_staleness,
     ]:
         try:
             _dedup_add(await check_fn(db, space_id), layer=1)
         except Exception as exc:
             logger.warning("knowledge_conflicts L1 %s: %s", check_fn.__name__, exc)
 
-    # L3: Grounding (~15ms, deterministic)
+    # L3: Grounding (~15ms, deterministic — triples + attitudes)
     try:
         _dedup_add(await check_grounding(db, space_id), layer=3)
     except Exception as exc:
         logger.warning("knowledge_conflicts L3: %s", exc)
 
-    # L4: Semantic LLM (slow, ≤max_llm_calls)
+    # L4: Semantic LLM (slow, ≤max_llm_calls — blocks + attitudes)
+    half_llm = max(max_llm_calls // 2, 5)
     try:
         _dedup_add(
-            await check_semantic_contradictions(db, space_id, max_llm_calls=max_llm_calls),
+            await check_semantic_contradictions(db, space_id, max_llm_calls=half_llm),
             layer=4,
         )
     except Exception as exc:
-        logger.warning("knowledge_conflicts L4: %s", exc)
+        logger.warning("knowledge_conflicts L4 blocks: %s", exc)
+
+    try:
+        _dedup_add(
+            await check_attitude_semantic_contradictions(db, space_id, max_llm_calls=half_llm),
+            layer=4,
+        )
+    except Exception as exc:
+        logger.warning("knowledge_conflicts L4 attitudes: %s", exc)
 
     logger.info("knowledge_conflicts: %d candidates from L1+L3+L4", len(candidates))
 
@@ -1600,6 +1911,9 @@ ALL_CHECKS: dict[str, object] = {
     "grounding": check_grounding,
     # Dedup checks (same content, multiple copies)
     "attitude_dedup": check_attitude_dedup,
+    # Attitude conflict checks (different claims on same topic)
+    "attitude_semantic_contradictions": check_attitude_semantic_contradictions,
+    "attitude_temporal_staleness": check_attitude_temporal_staleness,
     # Unified pipeline: L1+L3+L4 → cross-validate → cascade
     "knowledge_conflicts": check_knowledge_conflicts,
 }
@@ -1614,6 +1928,7 @@ FAST_CHECKS = [
     "attitude_chain_integrity",
     "entity_alias_collision",
     "attitude_dedup",
+    "attitude_temporal_staleness",
 ]
 
 
@@ -1906,6 +2221,58 @@ async def remediate_knowledge_conflicts(
                                 )
                             )
                             count += 1
+
+    if count > 0:
+        await db.commit()
+    return count
+
+
+async def remediate_attitude_conflicts(
+    db: AsyncSession,
+    findings: list[LintFinding],
+    *,
+    dry_run: bool = True,
+) -> int:
+    """Remediate attitude semantic contradiction and temporal staleness findings.
+
+    evolution/temporal → set invalid_at + invalidation_reason on stale attitude.
+    contradiction → use conflict_resolver for LLM judgment.
+    dry_run=True by default.
+    """
+    from .kg_models import AttitudeFact
+
+    count = 0
+    now = datetime.now(UTC)
+    valid_checks = {"attitude_semantic_contradictions", "attitude_temporal_staleness"}
+
+    for f in findings:
+        if f.check not in valid_checks or not f.entity_id:
+            continue
+        if dry_run:
+            continue
+
+        meta = f.metadata
+        stale_id = meta.get("stale_id")
+
+        if not stale_id:
+            continue
+
+        reason = f.check.replace(
+            "attitude_", ""
+        )  # "semantic_contradictions" or "temporal_staleness"
+
+        await db.execute(
+            update(AttitudeFact)
+            .where(
+                AttitudeFact.id == stale_id,
+                AttitudeFact.invalid_at.is_(None),
+            )
+            .values(
+                invalid_at=now,
+                invalidation_reason=reason,
+            )
+        )
+        count += 1
 
     if count > 0:
         await db.commit()

@@ -928,6 +928,14 @@ async def lint_knowledge_graph(
         remediations += await remediate_semantic(db, semantic_findings, dry_run=dry_run)
         kc_findings = [f for f in report.findings if f.check == "knowledge_conflicts"]
         remediations += await remediate_knowledge_conflicts(db, kc_findings, dry_run=dry_run)
+        from .lint import remediate_attitude_conflicts
+
+        att_findings = [
+            f
+            for f in report.findings
+            if f.check in ("attitude_semantic_contradictions", "attitude_temporal_staleness")
+        ]
+        remediations += await remediate_attitude_conflicts(db, att_findings, dry_run=dry_run)
 
     return LintReportResponse(
         space_id=report.space_id,
