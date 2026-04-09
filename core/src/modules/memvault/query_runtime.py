@@ -26,6 +26,7 @@ from .schemas import (
     MemoryQueryResponse,
     MemoryQueryStrategy,
 )
+from .scoring_pipeline import ScoringConfig, scoring_config_for_intent
 from .services import memory_block_service
 
 _TASK_MODES = {"auto", "lookup", "decide", "build", "reflect"}
@@ -259,6 +260,8 @@ async def _search_blocks(
     space_id: str,
     query: str,
     top_k: int,
+    scoring_config: ScoringConfig | None = None,
+    intent: str = "unknown",
 ) -> tuple[list, dict]:
     embedding = await get_embedding(query, task_type="search_query")
     if embedding:
@@ -268,6 +271,8 @@ async def _search_blocks(
             query,
             embedding,
             top_k=top_k,
+            scoring_config=scoring_config,
+            intent=intent,
         )
         if qdrant_result is not None:
             results, meta = qdrant_result
@@ -279,6 +284,8 @@ async def _search_blocks(
             embedding,
             top_k=top_k,
             query=query,
+            scoring_config=scoring_config,
+            intent=intent,
         )
         return results, {
             "backend": meta.backend or "pgvector-fallback",
@@ -395,11 +402,14 @@ async def run_memory_query(
     task_mode = _normalize(request.task_mode, _TASK_MODES, "auto")
 
     # task_mode=auto → infer from query content via classify_query()
+    # AttnRes-inspired: also derive intent-tuned ScoringConfig
+    intent_value: str = "unknown"
     if task_mode == "auto":
         try:
             from .query_router import QueryIntent, classify_query
 
             plan = classify_query(request.q)
+            intent_value = plan.intent.value
             _INTENT_TO_TASK: dict[str, str] = {
                 QueryIntent.ENTITY_LOOKUP: "lookup",
                 QueryIntent.FACTUAL: "lookup",
@@ -411,6 +421,9 @@ async def run_memory_query(
             task_mode = _INTENT_TO_TASK.get(plan.intent, "build")
         except Exception:
             task_mode = "build"
+
+    intent_scoring = scoring_config_for_intent(intent_value)
+
     thinking_mode_requested = _normalize(request.thinking_mode, _THINKING_MODES, "auto")
     load_budget = _normalize(request.load_budget, _LOAD_BUDGETS, "standard")
     consumer = _normalize(request.consumer, _CONSUMERS, "human")
@@ -436,6 +449,8 @@ async def run_memory_query(
         space_id,
         request.q,
         top_k=max(request.top_k, budget["search_top_k"]),
+        scoring_config=intent_scoring,
+        intent=intent_value,
     )
     fast_cards = [
         _block_card(result.block, "fast", task_mode, result.score)
@@ -523,7 +538,7 @@ async def run_memory_query(
                 "task_mode": task_mode,
                 "thinking_mode_used": thinking_mode_used,
                 "load_budget": load_budget,
-                "intent": "unknown",
+                "intent": intent_value,
                 "tags": [c.tags[0] for c in fast_cards[:3] if c.tags],
                 "result_count": len(fast_cards) + len(working_cards),
                 "latency_ms": round((_t_end - _t_start) * 1000, 1),

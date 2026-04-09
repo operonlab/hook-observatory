@@ -67,6 +67,58 @@ class ScoringConfig:
     )
 
 
+# ---------------------------------------------------------------------------
+# Intent-Dependent Scoring Weights (AttnRes-inspired)
+#
+# Instead of fixed aggregation weights for all queries, each query intent
+# gets tuned weights — analogous to AttnRes replacing fixed residual
+# connections with content-dependent attention.
+# ---------------------------------------------------------------------------
+
+INTENT_SCORING_CONFIGS: dict[str, ScoringConfig] = {
+    # "What is entity X?" — semantic similarity is king, recency less relevant
+    "entity_lookup": ScoringConfig(
+        recency_weight=0.05,
+        semantic_boost=0.5,
+        trust_penalty=0.2,
+        feedback_weight=0.15,
+    ),
+    # "What do I think about X?" — deep semantic match, trust matters less
+    "conceptual": ScoringConfig(
+        recency_weight=0.05,
+        semantic_boost=0.5,
+        trust_penalty=0.1,
+        feedback_weight=0.20,
+    ),
+    # "When did X happen?" — balanced, trust important for facts
+    "factual": ScoringConfig(
+        recency_weight=0.15,
+        semantic_boost=0.3,
+        trust_penalty=0.5,
+        feedback_weight=0.10,
+    ),
+    # "What's been going on with X recently?" — recency is king
+    "exploratory": ScoringConfig(
+        recency_weight=0.35,
+        semantic_boost=0.1,
+        trust_penalty=0.2,
+        feedback_weight=0.15,
+    ),
+    # Cross-domain queries — balanced with strong semantic
+    "cross_domain": ScoringConfig(
+        recency_weight=0.10,
+        semantic_boost=0.4,
+        trust_penalty=0.2,
+        feedback_weight=0.15,
+    ),
+}
+
+
+def scoring_config_for_intent(intent: str) -> ScoringConfig:
+    """Return intent-tuned ScoringConfig, falling back to default."""
+    return INTENT_SCORING_CONFIGS.get(intent, ScoringConfig())
+
+
 @dataclass
 class ScoringMetadata:
     stages_applied: list[str] = field(default_factory=list)

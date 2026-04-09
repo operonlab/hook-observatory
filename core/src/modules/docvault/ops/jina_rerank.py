@@ -32,8 +32,8 @@ class JinaRerankOp:
     def __init__(
         self,
         max_candidates: int = 20,
-        weight_original: float = 0.3,
-        weight_rerank: float = 0.7,
+        weight_original: float = 0.2,
+        weight_rerank: float = 0.8,
     ) -> None:
         self._max_candidates = max_candidates
         self._weight_original = weight_original

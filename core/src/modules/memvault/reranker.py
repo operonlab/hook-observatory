@@ -24,6 +24,34 @@ _GATE_FORCE_DISABLED = os.environ.get("MEMVAULT_RERANKER_GATE_DISABLED", "").low
 
 
 @dataclass
+class RerankerWeights:
+    """Original vs cross-encoder blend weights."""
+
+    original: float = 0.3
+    rerank: float = 0.7
+
+
+# Intent-dependent reranker blend (AttnRes-inspired)
+INTENT_RERANKER_WEIGHTS: dict[str, RerankerWeights] = {
+    # Entity lookup → cross-encoder excels at entity matching
+    "entity_lookup": RerankerWeights(original=0.2, rerank=0.8),
+    # Conceptual → original embedding captures conceptual similarity better
+    "conceptual": RerankerWeights(original=0.4, rerank=0.6),
+    # Factual → cross-encoder good at fact matching
+    "factual": RerankerWeights(original=0.2, rerank=0.8),
+    # Exploratory → scoring pipeline already boosted recency, preserve that
+    "exploratory": RerankerWeights(original=0.5, rerank=0.5),
+    # Cross-domain → slightly favor reranker for broader matching
+    "cross_domain": RerankerWeights(original=0.35, rerank=0.65),
+}
+
+
+def reranker_weights_for_intent(intent: str) -> RerankerWeights:
+    """Return intent-tuned reranker weights, falling back to default."""
+    return INTENT_RERANKER_WEIGHTS.get(intent, RerankerWeights())
+
+
+@dataclass
 class RerankerConfig:
     enabled: bool = True
     max_candidates: int = 20  # Only rerank top N
@@ -128,6 +156,7 @@ class LocalReranker:
         self,
         query: str,
         results: list[dict],
+        intent: str = "unknown",
     ) -> tuple[list[dict], bool, str | None]:
         """Rerank results using Jina cross-encoder.
 
@@ -149,6 +178,9 @@ class LocalReranker:
                 extra={"reason": gate_reason, "n_candidates": len(results)},
             )
             return results, False, gate_reason
+
+        # Intent-dependent blend weights (AttnRes-inspired)
+        weights = reranker_weights_for_intent(intent)
 
         try:
             from src.shared import rerank_bridge
@@ -183,8 +215,8 @@ class LocalReranker:
                     # Normalize cross-encoder score from [-1, 1] to [0, 1]
                     ce_normalized = (ce_score + 1) / 2
                     r["score"] = (
-                        self.config.weight_original * r["score"]
-                        + self.config.weight_rerank * ce_normalized
+                        weights.original * r["score"]
+                        + weights.rerank * ce_normalized
                     )
 
             # Re-sort candidates by new score
@@ -203,6 +235,8 @@ class LocalReranker:
 _reranker = LocalReranker()
 
 
-async def rerank_results(query: str, results: list[dict]) -> tuple[list[dict], bool, str | None]:
+async def rerank_results(
+    query: str, results: list[dict], intent: str = "unknown",
+) -> tuple[list[dict], bool, str | None]:
     """Convenience function using module singleton."""
-    return await _reranker.rerank(query, results)
+    return await _reranker.rerank(query, results, intent=intent)

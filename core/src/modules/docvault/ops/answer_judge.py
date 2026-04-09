@@ -42,7 +42,7 @@ NOT in the document), give high scores if the actual answer also correctly refus
 states the information is unavailable.
 - Synonyms and paraphrases are acceptable (e.g., "1M tokens" = "1,000,000 tokens").
 - Different formatting of the same number is acceptable (e.g., "$75" = "75 dollars").
-- The overall score should be a weighted average: accuracy 0.4 + relevance 0.3 + completeness 0.3.
+- The overall score should be a weighted average: accuracy 0.5 + relevance 0.25 + completeness 0.25.
 - Provide brief reasoning (1-2 sentences) explaining your judgment.
 """
 
