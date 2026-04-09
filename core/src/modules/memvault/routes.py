@@ -543,7 +543,8 @@ async def recalculate_profile(
     _user: dict = require_permission("memvault.write"),
 ):
     """Recalculate profile scores from actual KG data (post-KAS separation)."""
-    from .kg_models import Community, CommunitySummary, MemoryBlock, Triple
+    from .kg_models import Community, CommunitySummary, Triple
+    from .models import MemoryBlock
 
     # Knowledge score: based on triples + clusters + wisdom
     triple_count = (
