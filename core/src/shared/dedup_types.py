@@ -1,5 +1,16 @@
 """Dedup types and category rules — shared vocabulary for deduplication decisions.
 
+**Dedup vs Conflict** — these are fundamentally different problems:
+- Dedup: same content appears multiple times → SKIP (don't create) or MERGE (combine)
+- Conflict: same topic, different claims → SUPERSEDE (newer wins) or COEXIST (both valid)
+
+Dedup decisions (this module): SKIP / MERGE / CREATE / SUPERSEDE
+Conflict decisions (conflict.py): MERGE / SUPERSEDE / COEXIST
+
+Lint naming convention:
+- Dedup checks: ``*_dedup`` (e.g., attitude_dedup)
+- Conflict checks: ``*_contradictions`` (e.g., predicate_contradictions)
+
 Extracted from memvault dedup.py. The DB-coupled check_duplicate() and
 find_similar_blocks() remain in memvault; only pure types, enums,
 rules, and threshold functions are shared.

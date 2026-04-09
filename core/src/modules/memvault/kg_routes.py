@@ -48,7 +48,13 @@ from .kg_services import (
     skill_profile_service,
     triple_service,
 )
-from .lint import remediate_orphans, remediate_stale, run_lint
+from .lint import (
+    remediate_knowledge_conflicts,
+    remediate_orphans,
+    remediate_semantic,
+    remediate_stale,
+    run_lint,
+)
 
 router = APIRouter(prefix="/kg", tags=["memvault-kg"])
 
@@ -918,6 +924,10 @@ async def lint_knowledge_graph(
         orphan_findings = [f for f in report.findings if f.check == "orphan_entities"]
         remediations += await remediate_stale(db, stale_findings, dry_run=dry_run)
         remediations += await remediate_orphans(db, orphan_findings, dry_run=dry_run)
+        semantic_findings = [f for f in report.findings if f.check == "semantic_contradictions"]
+        remediations += await remediate_semantic(db, semantic_findings, dry_run=dry_run)
+        kc_findings = [f for f in report.findings if f.check == "knowledge_conflicts"]
+        remediations += await remediate_knowledge_conflicts(db, kc_findings, dry_run=dry_run)
 
     return LintReportResponse(
         space_id=report.space_id,

@@ -53,6 +53,75 @@ logger = logging.getLogger(__name__)
 # Module-level set to prevent fire-and-forget tasks from being GC'd
 _kg_bg_tasks: set[asyncio.Task] = set()
 
+# ---------------------------------------------------------------------------
+# Attitude contradiction detection helpers
+# ---------------------------------------------------------------------------
+
+_NEGATION_WORDS = {"not", "don't", "doesn't", "no", "never", "dislike", "hate", "avoid"}
+_ANTONYM_PAIRS = {
+    frozenset({"like", "dislike"}),
+    frozenset({"prefer", "avoid"}),
+    frozenset({"good", "bad"}),
+    frozenset({"love", "hate"}),
+    frozenset({"enjoy", "dislike"}),
+    frozenset({"favor", "oppose"}),
+}
+
+
+def _is_attitude_contradiction(existing_fact: str, new_fact: str) -> bool:
+    """Heuristic: detect if two attitude facts contradict each other."""
+    import re
+
+    words_old = set(existing_fact.lower().split())
+    words_new = set(new_fact.lower().split())
+    shared = words_old & words_new
+
+    stopwords = {
+        "i",
+        "a",
+        "the",
+        "is",
+        "am",
+        "are",
+        "to",
+        "of",
+        "in",
+        "for",
+        "and",
+        "or",
+        "that",
+        "it",
+        "my",
+    }
+    content_shared = shared - stopwords - _NEGATION_WORDS
+    if len(content_shared) < 2:
+        return False
+
+    # Negation asymmetry
+    old_has_neg = bool(words_old & _NEGATION_WORDS)
+    new_has_neg = bool(words_new & _NEGATION_WORDS)
+    if old_has_neg != new_has_neg:
+        return True
+
+    # Antonym pairs
+    all_words = words_old | words_new
+    for pair in _ANTONYM_PAIRS:
+        if pair <= all_words:
+            return True
+
+    # "prefer X over Y" vs "prefer Y over X"
+    if "prefer" in shared and "over" in shared:
+        pattern = r"prefer\s+(\w+)\s+over\s+(\w+)"
+        old_match = re.search(pattern, existing_fact.lower())
+        new_match = re.search(pattern, new_fact.lower())
+        if old_match and new_match:
+            if old_match.group(1) == new_match.group(2) and old_match.group(2) == new_match.group(
+                1
+            ):
+                return True
+
+    return False
+
 
 # ======================== TripleUpdate (lightweight) ========================
 
@@ -951,6 +1020,7 @@ class AttitudeService:
         q = select(AttitudeFact).where(
             AttitudeFact.space_id == space_id,
             AttitudeFact.superseded_by.is_(None),
+            AttitudeFact.deleted_at.is_(None),
         )
         if category is not None:
             q = q.where(AttitudeFact.category == category)
@@ -958,14 +1028,92 @@ class AttitudeService:
         rows = (await db.execute(q)).scalars().all()
         return [self.to_response(r) for r in rows]
 
+    async def _find_best_match(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        fact_text: str,
+        category: str,
+    ) -> tuple[AttitudeFact | None, float]:
+        """Find the best-matching current attitude in the same category via Qdrant.
+
+        Returns (best_fact, best_similarity). Used by create_fact() and evolve()
+        to prevent duplicate creation and detect contradictions.
+        """
+        new_embedding = await get_embedding(fact_text)
+
+        q = select(AttitudeFact).where(
+            AttitudeFact.space_id == space_id,
+            AttitudeFact.category == category,
+            AttitudeFact.superseded_by.is_(None),
+            AttitudeFact.deleted_at.is_(None),
+        )
+        current_facts = (await db.execute(q)).scalars().all()
+
+        if not new_embedding or not current_facts:
+            return None, 0.0
+
+        from src.shared.qdrant_client import is_available as qdrant_available
+        from src.shared.qdrant_search import vector_search
+        from src.shared.search_types import SearchConfig
+
+        if not await qdrant_available():
+            return None, 0.0
+
+        config = SearchConfig(
+            top_k=1,
+            score_threshold=0.0,
+            service_ids=["memvault-attitude"],
+        )
+        results = await vector_search(new_embedding, space_id, config)
+        if not results:
+            return None, 0.0
+
+        best_id = results[0].entity_id
+        best_similarity = results[0].score
+        for f in current_facts:
+            if str(f.id) == best_id:
+                return f, best_similarity
+
+        return None, 0.0
+
     async def create_fact(
         self,
         db: AsyncSession,
         space_id: str,
         data: AttitudeFactCreate,
     ) -> AttitudeFact:
-        """Directly create an attitude fact with operation=ADD."""
-        embedding = await get_embedding(data.fact)
+        """Create an attitude fact with dedup guard.
+
+        Checks for existing similar attitudes before inserting:
+        - sim > 0.9 → return existing (NOOP, bump confidence)
+        - sim > 0.8 → supersede old with new (UPDATE)
+        - else → create new (ADD)
+        """
+        best_fact, best_sim = await self._find_best_match(db, space_id, data.fact, data.category)
+
+        if best_fact and best_sim > 0.9:
+            best_fact.confidence = min(1.0, best_fact.confidence + 0.05)
+            await db.flush()
+            return best_fact
+
+        if best_fact and best_sim > 0.8:
+            old_id = best_fact.id
+            new_fact = AttitudeFact(
+                space_id=space_id,
+                fact=data.fact,
+                category=data.category,
+                operation="UPDATE",
+                confidence=max(best_fact.confidence, 0.5),
+                source_sessions=data.source_sessions or [],
+                previous_version=old_id,
+            )
+            db.add(new_fact)
+            await db.flush()
+            best_fact.superseded_by = new_fact.id
+            await db.flush()
+            return new_fact
+
         fact = AttitudeFact(
             space_id=space_id,
             fact=data.fact,
@@ -989,42 +1137,9 @@ class AttitudeService:
         Compares the incoming fact against current facts in the same category
         via cosine similarity and applies ADD/UPDATE/NOOP accordingly.
         """
-        new_embedding = await get_embedding(request.fact)
-
-        # Fetch current facts in the same category
-        q = select(AttitudeFact).where(
-            AttitudeFact.space_id == space_id,
-            AttitudeFact.category == request.category,
-            AttitudeFact.superseded_by.is_(None),
+        best_fact, best_similarity = await self._find_best_match(
+            db, space_id, request.fact, request.category
         )
-        current_facts = (await db.execute(q)).scalars().all()
-
-        best_fact: AttitudeFact | None = None
-        best_similarity: float = 0.0
-
-        if new_embedding and current_facts:
-            from src.shared.qdrant_client import is_available as qdrant_available
-            from src.shared.qdrant_search import vector_search
-            from src.shared.search_types import SearchConfig
-
-            if await qdrant_available():
-                config = SearchConfig(
-                    top_k=1,
-                    score_threshold=0.0,
-                    service_ids=["memvault-attitude"],
-                )
-                results = await vector_search(new_embedding, space_id, config)
-                if results:
-                    best_id = results[0].entity_id
-                    best_similarity = results[0].score
-                    for f in current_facts:
-                        if str(f.id) == best_id:
-                            best_fact = f
-                            break
-            else:
-                # pgvector fallback removed — embedding column dropped.
-                # best_fact / best_similarity remain None/0.0 → decision logic below treats as NEW.
-                pass
 
         # Decision logic
         if best_fact and best_similarity > 0.9:
@@ -1087,6 +1202,54 @@ class AttitudeService:
                 operation="UPDATE",
                 fact_id=new_fact.id,
                 message=f"Updated existing fact (similarity={best_similarity:.2f}).",
+                previous_id=old_id,
+            )
+
+        # Contradiction check: same category, overlapping entities, opposing sentiment
+        if (
+            best_fact
+            and best_similarity > 0.5
+            and _is_attitude_contradiction(best_fact.fact, request.fact)
+        ):
+            # Contradiction detected — supersede old with new (use UPDATE path)
+            old_id = best_fact.id
+            best_fact.superseded_by = old_id  # mark as superseded (self-ref placeholder)
+
+            new_fact = AttitudeFact(
+                space_id=space_id,
+                fact=request.fact,
+                category=request.category,
+                operation="UPDATE",
+                confidence=max(best_fact.confidence, 0.5),
+                source_sessions=([request.source_session] if request.source_session else []),
+                previous_version=old_id,
+            )
+            db.add(new_fact)
+            await db.flush()
+            # Now set superseded_by on old fact to the new fact's id
+            best_fact.superseded_by = new_fact.id
+            await db.flush()
+
+            event_bus.publish_fire_and_forget(
+                Event(
+                    type=MemvaultEvents.ATTITUDE_EVOLVED,
+                    data={
+                        "space_id": space_id,
+                        "operation": "UPDATE",
+                        "fact_id": new_fact.id,
+                        "previous_id": old_id,
+                        "similarity": best_similarity,
+                    },
+                    source="memvault",
+                )
+            )
+            return AttitudeEvolveResult(
+                operation="UPDATE",
+                fact_id=new_fact.id,
+                message=(
+                    f"Contradiction detected — superseded existing fact "
+                    f"(similarity={best_similarity:.2f})."
+                ),
                 previous_id=old_id,
             )
 

@@ -1,5 +1,12 @@
 """Conflict resolution types and heuristic — shared by memvault, docvault.
 
+**Conflict vs Dedup** — these are fundamentally different problems:
+- Conflict: same topic, different claims → MERGE / SUPERSEDE / COEXIST
+- Dedup: same content, multiple copies → handled by dedup_types.py
+
+Conflict arises when two pieces of knowledge disagree (e.g., belief evolution,
+factual contradiction). Resolution requires judgment (LLM or heuristic).
+
 Extracted from memvault conflict_resolver.py. The LLM-based resolution
 and RLM escalation remain in memvault; only the pure types and fallback
 heuristic are shared.

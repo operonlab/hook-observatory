@@ -67,11 +67,12 @@ def main() -> None:
     duration = data.get("run_duration_ms", 0)
     log(f"Results: {total} findings in {duration:.0f}ms — {summary}")
 
-    # Auto-remediate safe categories (stale + orphans, NOT contradictions)
+    # Auto-remediate safe categories (stale + orphans + semantic + knowledge_conflicts)
     if total > 0:
         fix_url = (
             f"{CORE_API}/kg/lint?space_id={SPACE_ID}"
-            "&checks=stale,orphan_entities&fix=true&dry_run=false"
+            "&checks=stale,orphan_entities,semantic_contradictions,knowledge_conflicts"
+            "&fix=true&dry_run=false"
         )
         log(f"POST {fix_url}")
         fix_status, fix_data = api_post(fix_url)
