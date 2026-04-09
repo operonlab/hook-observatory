@@ -26,6 +26,7 @@ from src.shared.text_utils import is_cjk, is_cjk_dominant
 from src.shared.tier_config import get_threshold
 from text_ops.noise import QUARANTINE_TAG, check_noise, filter_results
 
+from .injection_guard import is_unsafe_for_injection
 from .models import (
     EMBEDDING_DIM,
     BlockArchive,
@@ -174,6 +175,19 @@ class MemoryBlockService(
             if QUARANTINE_TAG not in tags:
                 tags = [*tags, QUARANTINE_TAG]
             d["tags"] = tags
+        # Phase H1: Write-side injection guard — quarantine, don't reject
+        unsafe, reason = is_unsafe_for_injection(d.get("content", ""))
+        if unsafe:
+            tags = d.get("tags") or []
+            injection_tag = f"_quarantine:injection:{reason}"
+            if injection_tag not in tags:
+                tags = [*tags, injection_tag]
+            d["tags"] = tags
+            logger.warning(
+                "Write-side injection guard triggered: %s (type=%s)",
+                reason,
+                d.get("block_type"),
+            )
         return d
 
     event_types = {"created": MemvaultEvents.MEMORY_STORED}
@@ -192,7 +206,23 @@ class MemoryBlockService(
             tags=instance.tags or [],
             source_session=instance.source_session,
             confidence=instance.confidence or 0.0,
+            invalid_at=instance.invalid_at,
+            superseded_by=instance.superseded_by,
+            invalidation_reason=instance.invalidation_reason,
         )
+
+    async def invalidate_block(
+        self, db: AsyncSession, block_id: str, superseded_by_id: str, reason: str = "superseded"
+    ) -> None:
+        """Mark a block as invalid (superseded by newer knowledge). Does NOT delete."""
+        from datetime import UTC, datetime
+
+        block = await self.get(db, block_id)
+        if not block:
+            return
+        block.invalid_at = datetime.now(UTC)
+        block.superseded_by = superseded_by_id
+        block.invalidation_reason = reason
 
     async def list_by_tags(
         self,
@@ -375,7 +405,9 @@ class MemoryBlockService(
         # Phase C2: Optional cross-encoder reranking (attention-gated)
         if query:
             scored_dicts, reranked, gate_reason = await rerank_results(
-                query, scored_dicts, intent=intent,
+                query,
+                scored_dicts,
+                intent=intent,
             )
             if reranked:
                 meta.reranker_used = True
@@ -525,7 +557,9 @@ class MemoryBlockService(
 
         # Optional cross-encoder reranking (attention-gated)
         scored_dicts, reranked, gate_reason = await rerank_results(
-            query, scored_dicts, intent=intent,
+            query,
+            scored_dicts,
+            intent=intent,
         )
         if reranked:
             meta.reranker_used = True
