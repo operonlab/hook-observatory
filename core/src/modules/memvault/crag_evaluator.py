@@ -68,8 +68,8 @@ class CRAGWeights:
 INTENT_CRAG_WEIGHTS: dict[str, CRAGWeights] = {
     # Entity lookup → density matters (want specific hits)
     "entity_lookup": CRAGWeights(coverage=0.3, density=0.7, rules=0.2, rerank=0.8),
-    # Conceptual → balanced
-    "conceptual": CRAGWeights(coverage=0.4, density=0.6, rules=0.3, rerank=0.7),
+    # Conceptual → slightly favor coverage for breadth, feedback-weighted rerank
+    "conceptual": CRAGWeights(coverage=0.45, density=0.55, rules=0.35, rerank=0.65),
     # Factual → reranker is most reliable for fact verification
     "factual": CRAGWeights(coverage=0.3, density=0.7, rules=0.2, rerank=0.8),
     # Exploratory → coverage matters (want breadth across layers)

@@ -41,8 +41,8 @@ INTENT_RERANKER_WEIGHTS: dict[str, RerankerWeights] = {
     "factual": RerankerWeights(original=0.2, rerank=0.8),
     # Exploratory → scoring pipeline already boosted recency, preserve that
     "exploratory": RerankerWeights(original=0.5, rerank=0.5),
-    # Cross-domain → balanced
-    "cross_domain": RerankerWeights(original=0.3, rerank=0.7),
+    # Cross-domain → slightly favor reranker for broader matching
+    "cross_domain": RerankerWeights(original=0.35, rerank=0.65),
 }
 
 
