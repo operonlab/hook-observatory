@@ -19,10 +19,10 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 _HOME = str(Path.home())
 _PROJECTS_BASE = os.path.join(_HOME, ".claude", "projects")
-_READ_SIZE = 65536          # 64 KB tail read
-_TIMEOUT_S = 0.4            # bail if we exceed this
+_READ_SIZE = 65536  # 64 KB tail read
+_TIMEOUT_S = 0.4  # bail if we exceed this
 _MAX_USER_MSGS = 3
-_MAX_FILE_PATHS = 10        # deduplicated; show up to 5
+_MAX_FILE_PATHS = 10  # deduplicated; show up to 5
 _MAX_SHOW_PATHS = 5
 _MAX_SHOW_TOOLS = 4
 _MSG_TRUNCATE = 100
@@ -33,11 +33,12 @@ _MIN_FILE_BYTES = 100
 # Private helpers
 # ---------------------------------------------------------------------------
 
+
 def _tail_read_lines(filepath: str, read_size: int = _READ_SIZE) -> list[str]:
     """Seek to end-read_size, decode, split lines, discard possibly-truncated first."""
     try:
         size = os.path.getsize(filepath)
-        if size < _MIN_FILE_BYTES:
+        if size == 0:
             return []
         with open(filepath, "rb") as fh:
             fh.seek(max(0, size - read_size))
@@ -92,13 +93,14 @@ def _find_transcript(session_id: str, cwd: str) -> str:
 def _shorten_path(p: str) -> str:
     """Replace home directory prefix with ~."""
     if p.startswith(_HOME):
-        return "~" + p[len(_HOME):]
+        return "~" + p[len(_HOME) :]
     return p
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def extract_session_context(session_id: str, cwd: str, current_prompt: str) -> str:
     """Extract recent session context for Memvault recall injection.
@@ -113,6 +115,13 @@ def extract_session_context(session_id: str, cwd: str, current_prompt: str) -> s
         if not transcript_path:
             return ""
 
+        # Skip tiny files (< 100 bytes) — not real transcripts
+        try:
+            if os.path.getsize(transcript_path) < _MIN_FILE_BYTES:
+                return ""
+        except OSError:
+            return ""
+
         lines = _tail_read_lines(transcript_path)
         if not lines:
             return ""
@@ -122,8 +131,8 @@ def extract_session_context(session_id: str, cwd: str, current_prompt: str) -> s
             return ""
 
         # Iterate from END to START
-        user_messages: list[str] = []   # collected newest-first, reversed before output
-        file_paths: list[str] = []       # ordered by discovery (newest-first)
+        user_messages: list[str] = []  # collected newest-first, reversed before output
+        file_paths: list[str] = []  # ordered by discovery (newest-first)
         seen_paths: set[str] = set()
         tool_counts: dict[str, int] = {}
 
@@ -151,7 +160,9 @@ def extract_session_context(session_id: str, cwd: str, current_prompt: str) -> s
                     if prompt_stripped and text_stripped == prompt_stripped:
                         continue
                     # Skip interrupt markers and XML-like prefixes
-                    if text_stripped.startswith("[Request interrupted") or text_stripped.startswith("<"):
+                    if text_stripped.startswith("[Request interrupted") or text_stripped.startswith(
+                        "<"
+                    ):
                         continue
                     truncated = text_stripped[:_MSG_TRUNCATE]
                     user_messages.append(truncated)
