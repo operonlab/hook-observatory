@@ -1,23 +1,17 @@
 import { Route, Routes } from 'react-router-dom'
+import JourneyView from '../components/JourneyView'
 import MemvaultLayout from '../components/MemvaultLayout'
 import RecallView from '../components/RecallView'
+import UnderstandView from '../components/UnderstandView'
 import { useMemvaultStore } from '../stores'
 
 function LensRouter() {
   const activeLens = useMemvaultStore((s) => s.activeLens)
 
-  if (activeLens === 'recall') return <RecallView />
+  if (activeLens === 'journey') return <JourneyView />
+  if (activeLens === 'understand') return <UnderstandView />
 
-  return (
-    <div
-      className="mx-auto max-w-5xl px-3 py-16 text-center"
-      style={{ color: 'var(--subtext0)' }}
-    >
-      <p className="text-sm">
-        {activeLens === 'journey' ? 'Journey — 即將推出' : 'Understand — 即將推出'}
-      </p>
-    </div>
-  )
+  return <RecallView />
 }
 
 export default function MemvaultPages() {
