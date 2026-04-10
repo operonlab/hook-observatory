@@ -7,7 +7,7 @@ import type {
   PaginatedResponse,
   SemanticSearchResult,
 } from '@/types'
-import type { MemoryInspectResponse, MemoryQueryOptions, MemoryQueryResponse } from '../types'
+import type { MemoryInspectResponse, MemoryQueryOptions, MemoryQueryResponse, SessionSummary } from '../types'
 
 export interface SyncScanResult {
   total: number
@@ -123,6 +123,14 @@ const realApi = {
 
   recalculateProfile: (): Promise<KASProfile> =>
     request<KASProfile>('/memvault/profile/recalculate', { method: 'POST' }),
+
+  listSessions: (
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedResponse<SessionSummary>> =>
+    request<PaginatedResponse<SessionSummary>>(
+      `/memvault/sessions${buildParams({ page, page_size: pageSize })}`,
+    ),
 }
 
 import { mockMemvaultApi } from './mock'

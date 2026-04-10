@@ -1,3 +1,5 @@
+export type Lens = 'recall' | 'journey' | 'understand'
+
 export type BlockType = 'knowledge' | 'skill' | 'attitude' | 'general'
 
 export type ViewMode = 'grid' | 'list'
@@ -199,6 +201,16 @@ export interface SkillProfile {
   health_score: number | null
   evolution_notes: string[] | null
   last_synced_at: string | null
+}
+
+// ── Session types (mirrors schemas.py SessionSummary) ──
+
+export interface SessionSummary {
+  source_session: string
+  block_count: number
+  first_at: string
+  last_at: string
+  block_types: string[]
 }
 
 export interface CascadeRecallResult {

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { withJournal } from '@/shared/utils/journalMiddleware'
 import type { MemoryBlock } from '@/types'
-import type { BlockFilters, BrowserTab, GalaxyLayer, ViewMode } from '../types'
+import type { BlockFilters, BrowserTab, GalaxyLayer, Lens, ViewMode } from '../types'
 
 const DEFAULT_FILTERS: BlockFilters = {
   blockType: null,
@@ -20,6 +20,8 @@ interface MemvaultState {
   searchQuery: string
   kg_activeTab: BrowserTab
   kg_galaxyLayers: Set<GalaxyLayer>
+  activeLens: Lens
+  showAdvancedQuery: boolean
 
   selectBlock: (block: MemoryBlock | null) => void
   setPage: (page: number) => void
@@ -29,6 +31,8 @@ interface MemvaultState {
   clearSearch: () => void
   setKgActiveTab: (tab: BrowserTab) => void
   setKgGalaxyLayers: (layers: Set<GalaxyLayer>) => void
+  setActiveLens: (lens: Lens) => void
+  toggleAdvancedQuery: () => void
 }
 
 export const useMemvaultStore = create<MemvaultState>()(
@@ -42,6 +46,8 @@ export const useMemvaultStore = create<MemvaultState>()(
       searchQuery: '',
       kg_activeTab: 'fast',
       kg_galaxyLayers: new Set<GalaxyLayer>(['blocks', 'summaries', 'communities']),
+      activeLens: 'recall',
+      showAdvancedQuery: false,
 
       selectBlock: (block) => set({ selectedBlock: block }, false, 'memvault/selectBlock'),
       setPage: (page) => set({ page }, false, 'memvault/setPage'),
@@ -57,6 +63,9 @@ export const useMemvaultStore = create<MemvaultState>()(
       setKgActiveTab: (tab) => set({ kg_activeTab: tab }, false, 'memvault/setKgActiveTab'),
       setKgGalaxyLayers: (layers) =>
         set({ kg_galaxyLayers: layers }, false, 'memvault/setKgGalaxyLayers'),
+      setActiveLens: (lens) => set({ activeLens: lens }, false, 'memvault/setActiveLens'),
+      toggleAdvancedQuery: () =>
+        set((s) => ({ showAdvancedQuery: !s.showAdvancedQuery }), false, 'memvault/toggleAdvancedQuery'),
     })),
     { name: 'memvaultStore' },
   ),
