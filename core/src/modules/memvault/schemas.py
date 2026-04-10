@@ -246,6 +246,19 @@ class CurateResponse(BaseModel):
 # ======================== Search Feedback ========================
 
 
+class SessionSummary(BaseModel):
+    """Aggregated session view — one row per source_session."""
+
+    source_session: str
+    block_count: int
+    first_at: datetime
+    last_at: datetime
+    block_types: list[str] = []
+
+
+# ======================== Search Feedback ========================
+
+
 class SearchFeedbackCreate(BaseModel):
     entity_id: str = Field(..., description="Block ID that was rated")
     query: str = Field(..., min_length=1, max_length=2000, description="Original search query")

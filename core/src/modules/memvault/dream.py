@@ -539,11 +539,83 @@ async def _prune_and_report(
 # --- Main Orchestrator ---
 
 
+async def _run_dream_pipeline(
+    db: AsyncSession,
+    space_id: str,
+    dry_run: bool,
+    force: bool,
+) -> DreamReport:
+    """Run dream via Reactive Pipeline."""
+    from .pipeline_config import MemvaultPipelineConfig
+    from .pipelines.dream_pipeline import build_dream_pipeline
+
+    config = MemvaultPipelineConfig.from_env()
+    pipeline = build_dream_pipeline(config)
+
+    ctx = await pipeline.execute({
+        "db": db,
+        "space_id": space_id,
+        "dry_run": dry_run,
+        "force": force,
+    })
+
+    meta = ctx.get("_pipeline_meta")
+    report = DreamReport(dry_run=dry_run)
+    report.phase_orient = ctx.get("orient_stats", {})
+    report.phase_signal = ctx.get("signal_stats", {})
+    report.phase_reflect = ctx.get("reflect_result", {})
+    report.phase_consolidate = ctx.get("consolidate_stats", {})
+    report.phase_prune = ctx.get("prune_stats", {})
+    report.skipped = not ctx.get("should_proceed", False)
+    report.finished_at = datetime.now(UTC)
+
+    if meta and meta.stage_errors:
+        report.errors = [f"{k}: {v[:200]}" for k, v in meta.stage_errors.items()]
+
+    # Post-execution: Redis update + event publish (same as sequential path)
+    if not dry_run and not report.skipped:
+        try:
+            from src.shared.redis import get_redis
+
+            redis = get_redis()
+            await redis.set(
+                REDIS_KEY_LAST_DREAM,
+                report.finished_at.isoformat(),
+                ex=86400 * 30,
+            )
+        except Exception:
+            logger.debug("dream: failed to update Redis last_dream_at")
+
+        try:
+            from src.events.bus import Event, event_bus
+            from src.events.types import MemvaultEvents
+
+            event_bus.publish_fire_and_forget(
+                Event(
+                    type=MemvaultEvents.DREAM_COMPLETED,
+                    data=report.to_dict(),
+                    source="memvault.dream",
+                )
+            )
+        except Exception:
+            logger.debug("dream: failed to publish DREAM_COMPLETED event")
+
+    elapsed = (report.finished_at - report.started_at).total_seconds()
+    logger.info(
+        "dream.done(pipeline) dry_run=%s elapsed=%.1fs errors=%d",
+        dry_run,
+        elapsed,
+        len(report.errors),
+    )
+    return report
+
+
 async def run_dream(
     db: AsyncSession,
     space_id: str = "default",
     dry_run: bool = True,
     force: bool = False,
+    use_pipeline: bool = False,
 ) -> DreamReport:
     """Execute the Dream Loop: Orient → Gather Signal → Consolidate → Prune.
 
@@ -552,10 +624,14 @@ async def run_dream(
         space_id: Space to consolidate.
         dry_run: If True, report what would change without mutations.
         force: If True, skip dual-gate trigger check.
+        use_pipeline: If True, run via Reactive Pipeline instead of sequential path.
 
     Returns:
         DreamReport with per-phase results.
     """
+    if use_pipeline:
+        return await _run_dream_pipeline(db, space_id, dry_run, force)
+
     report = DreamReport(dry_run=dry_run)
     logger.info("dream.start space=%s dry_run=%s force=%s", space_id, dry_run, force)
 

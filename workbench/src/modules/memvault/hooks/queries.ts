@@ -2,9 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { kgApi, memvaultApi } from '../api'
 import type { BlockFilters, MemoryQueryOptions } from '../types'
 
+import type { SessionSummary } from '../types'
+
 const STALE_TIME = 5 * 60 * 1000
 
 export const memvaultKeys = {
+  sessions: (page: number) => ['memvault', 'sessions', page] as const,
   blocks: (page: number, pageSize: number, filters: BlockFilters) =>
     ['memvault', 'blocks', { page, pageSize, blockType: filters.blockType, tag: filters.tag }] as const,
   profile: () => ['memvault', 'profile'] as const,
@@ -108,6 +111,14 @@ export function useSkills() {
   return useQuery({
     queryKey: memvaultKeys.kg.skills(),
     queryFn: () => kgApi.skillProfiles(),
+    staleTime: STALE_TIME,
+  })
+}
+
+export function useSessions(page: number) {
+  return useQuery({
+    queryKey: memvaultKeys.sessions(page),
+    queryFn: () => memvaultApi.listSessions(page, 20),
     staleTime: STALE_TIME,
   })
 }

@@ -37,6 +37,7 @@ from .schemas import (
     SearchFeedbackCreate,
     SearchMetadata,
     SemanticSearchParams,  # noqa: F401 — available for future use
+    SessionSummary,
     TagResponse,
 )
 from .services import (
@@ -207,6 +208,65 @@ async def delete_block(
     if not deleted:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
     await db.commit()
+
+
+# ======================== Sessions ========================
+
+
+@router.get("/sessions", response_model=PaginatedResponse[SessionSummary])
+async def list_sessions(
+    space_id: str = Query("default"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Aggregate blocks by source_session — block_count, first/last timestamps, block types."""
+    from sqlalchemy.dialects.postgresql import array_agg
+
+    from .models import MemoryBlock
+
+    base = (
+        select(
+            MemoryBlock.source_session,
+            func.count().label("block_count"),
+            func.min(MemoryBlock.created_at).label("first_at"),
+            func.max(MemoryBlock.created_at).label("last_at"),
+            array_agg(func.distinct(MemoryBlock.block_type)).label("block_types"),
+        )
+        .where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.source_session.isnot(None),
+            MemoryBlock.deleted_at.is_(None),
+        )
+        .group_by(MemoryBlock.source_session)
+    )
+
+    total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+
+    rows = (
+        await db.execute(
+            base.order_by(func.max(MemoryBlock.created_at).desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).all()
+
+    return PaginatedResponse[SessionSummary](
+        items=[
+            SessionSummary(
+                source_session=r.source_session,
+                block_count=r.block_count,
+                first_at=r.first_at,
+                last_at=r.last_at,
+                block_types=r.block_types or [],
+            )
+            for r in rows
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 # ======================== Semantic Search ========================
