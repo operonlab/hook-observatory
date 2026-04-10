@@ -414,36 +414,6 @@ def cmd_summaries(client: MemvaultClient, args: argparse.Namespace) -> None:
         print()
 
 
-def cmd_attitude(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """List active attitude facts."""
-    data = client.attitudes(category=args.category)
-    if json_out(data, args):
-        return
-
-    attitudes = data if isinstance(data, list) else data.get("attitudes", data.get("facts", []))
-
-    if not attitudes:
-        if not args.quiet:
-            print("  No attitude facts found.")
-        return
-
-    if args.quiet:
-        for a in attitudes:
-            print(f"{a.get('category', '?')}: {a.get('content', a.get('fact', ''))}")
-        return
-
-    print("  Attitude Facts")
-    print("  " + "-" * 50)
-    for i, a in enumerate(attitudes, 1):
-        category = a.get("category", "?")
-        content = a.get("content", a.get("fact", "?"))
-        conf = a.get("confidence", "?")
-        op = a.get("operation", "?")
-        print(f"  {i}. [{category}] {truncate(content, 200)}")
-        print(f"     Confidence: {conf} | Operation: {op}")
-        print()
-
-
 def cmd_health(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Check API connectivity."""
     healthy = client.health()
@@ -907,69 +877,6 @@ def cmd_community_get(client: MemvaultClient, args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 
-def cmd_attitude_history(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Get attitude fact evolution history."""
-    data = client.attitude_history(args.fact_id)
-    if json_out(data, args):
-        return
-
-    facts = data if isinstance(data, list) else data.get("history", [])
-    if not facts:
-        if not args.quiet:
-            print("  No history found.")
-        return
-
-    if not args.quiet:
-        print(f"  Attitude History for {args.fact_id[:12]}...")
-        print("  " + "-" * 50)
-
-    for a in facts:
-        fid = a.get("id", "?")[:12]
-        fact = a.get("fact", a.get("content", "?"))
-        op = a.get("operation", "?")
-        conf = a.get("confidence", "?")
-        created = fmt_dt(a.get("created_at"))
-        if args.quiet:
-            print(f"{op} {fact}")
-        else:
-            print(f"  {fid}  [{op}] confidence={conf}  {created}")
-            print(f"    {truncate(fact, 200)}")
-            print()
-
-
-# ---------------------------------------------------------------------------
-# Command handlers — NEW: Skill history
-# ---------------------------------------------------------------------------
-
-
-def cmd_skill_history(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Get invocation history for a skill."""
-    data = client.skill_history(args.skill_name, limit=args.limit)
-    if json_out(data, args):
-        return
-
-    invocations = data if isinstance(data, list) else data.get("invocations", [])
-    if not invocations:
-        if not args.quiet:
-            print(f"  No history for '{args.skill_name}'.")
-        return
-
-    if not args.quiet:
-        print(f"  Skill History: {args.skill_name} ({len(invocations)} invocations)")
-        print("  " + "-" * 50)
-
-    for inv in invocations:
-        iid = inv.get("id", "?")[:12]
-        outcome = inv.get("outcome", "?")
-        duration = inv.get("duration_ms")
-        created = fmt_dt(inv.get("created_at"))
-        dur_str = f" {duration}ms" if duration else ""
-        if args.quiet:
-            print(f"{outcome}{dur_str} {created}")
-        else:
-            print(f"  {iid}  {outcome}{dur_str}  {created}")
-
-
 # ---------------------------------------------------------------------------
 # Command handlers — NEW: Frozen tier
 # ---------------------------------------------------------------------------
@@ -1074,20 +981,6 @@ def cmd_recalculate(client: MemvaultClient, args: argparse.Namespace) -> None:
         print(f"  Skill     : {data.get('skill_score', 0):.1f}")
 
 
-def cmd_decay(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Apply confidence decay to attitude facts."""
-    data = client.apply_decay()
-    if json_out(data, args):
-        return
-
-    checked = data.get("checked", "?")
-    updated = data.get("updated", "?")
-    if args.quiet:
-        print(f"checked={checked} updated={updated}")
-    else:
-        print(f"  Decay applied: checked={checked}, updated={updated}")
-
-
 def cmd_backfill(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Backfill missing embeddings."""
     data = client.backfill_embeddings(batch_size=args.batch_size)
@@ -1141,32 +1034,6 @@ def cmd_sync_scan(client: MemvaultClient, args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 
-def cmd_skill_proficiency(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Show skill proficiency ranking."""
-    data = client.skill_proficiency()
-    if json_out(data, args):
-        return
-
-    skills = data if isinstance(data, list) else data.get("skills", [])
-    if not skills:
-        if not args.quiet:
-            print("  No skill proficiency data.")
-        return
-
-    if not args.quiet:
-        print("  Skill Proficiency Ranking")
-        print("  " + "-" * 50)
-
-    for i, s in enumerate(skills, 1):
-        name = s.get("skill_name", s.get("name", "?"))
-        count = s.get("invocation_count", s.get("count", 0))
-        success = s.get("success_rate", s.get("rate", 0))
-        if args.quiet:
-            print(f"{name} count={count} success={success:.0%}")
-        else:
-            print(f"  {i}. {name:30s} invocations={count}  success={success:.0%}")
-
-
 def cmd_triple_create(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Create a KG triple."""
     data = client.create_triple(
@@ -1195,57 +1062,11 @@ def cmd_triple_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
         print(f"  Triple deleted: {args.triple_id}")
 
 
-def cmd_attitude_create(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Create an attitude fact."""
-    data = client.create_attitude(
-        args.fact,
-        args.category,
-        confidence=args.confidence,
-    )
-    if json_out(data, args):
-        return
-
-    if args.quiet:
-        print(data.get("id", "?"))
-    else:
-        print(f"  Attitude created: {data.get('id', '?')}")
-        print(f"  [{args.category}] {args.fact}")
-
-
-def cmd_attitude_evolve(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Evolve an attitude fact (ADD/UPDATE/NOOP)."""
-    data = client.attitude_evolve(
-        args.fact,
-        args.category,
-        source_session=args.session,
-    )
-    if json_out(data, args):
-        return
-
-    op = data.get("operation", "?")
-    fid = data.get("id", data.get("fact_id", "?"))
-    if args.quiet:
-        print(f"{op} {fid}")
-    else:
-        print(f"  Attitude evolved: {op}")
-        print(f"  Fact ID: {fid}")
-
-
-def cmd_attitude_delete(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Delete an attitude fact."""
-    client.delete_attitude(args.fact_id)
-    if json_out({"deleted": args.fact_id}, args):
-        return
-    if not args.quiet:
-        print(f"  Attitude deleted: {args.fact_id}")
-
-
 def cmd_profile_upsert(client: MemvaultClient, args: argparse.Namespace) -> None:
-    """Upsert KAS profile scores."""
+    """Upsert profile scores."""
     data = client.upsert_profile(
         knowledge_score=args.knowledge,
         attitude_score=args.attitude,
-        skill_score=args.skill,
     )
     if json_out(data, args):
         return
@@ -1253,13 +1074,11 @@ def cmd_profile_upsert(client: MemvaultClient, args: argparse.Namespace) -> None
     if args.quiet:
         k = data.get("knowledge_score", 0)
         a = data.get("attitude_score", 0)
-        s = data.get("skill_score", 0)
-        print(f"K={k} A={a} S={s}")
+        print(f"K={k} A={a}")
     else:
         print("  Profile updated:")
         print(f"  Knowledge : {data.get('knowledge_score', 0)}")
         print(f"  Attitude  : {data.get('attitude_score', 0)}")
-        print(f"  Skill     : {data.get('skill_score', 0)}")
 
 
 # ---------------------------------------------------------------------------
@@ -1363,10 +1182,6 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("summaries", parents=[common], help="List community summaries")
     p.add_argument("--tag", default=None, help="Filter by tag")
 
-    # attitude
-    p = sub.add_parser("attitude", parents=[common], help="List active attitude facts")
-    p.add_argument("--category", default=None, help="Filter by category")
-
     # health
     sub.add_parser("health", parents=[common], help="API health check")
 
@@ -1438,17 +1253,6 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("community", parents=[common], help="Get community detail")
     p.add_argument("community_id", help="Community ID")
 
-    # ---- NEW: Attitude extended ----
-
-    p = sub.add_parser("attitude-history", parents=[common], help="Attitude fact evolution history")
-    p.add_argument("fact_id", help="Attitude fact ID")
-
-    # ---- NEW: Skill history ----
-
-    p = sub.add_parser("skill-history", parents=[common], help="Skill invocation history")
-    p.add_argument("skill_name", help="Skill name")
-    p.add_argument("--limit", type=int, default=20, help="Max results (default: 20)")
-
     # ---- NEW: Frozen tier ----
 
     p = sub.add_parser("frozen", parents=[common, paginated], help="List frozen blocks")
@@ -1462,7 +1266,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", parents=[common], help="Module status")
     sub.add_parser("recalculate", parents=[common], help="Recalculate KAS profile from KG data")
-    sub.add_parser("decay", parents=[common], help="Apply confidence decay to attitude facts")
     sub.add_parser("sync-stats", parents=[common], help="Show sync/extraction statistics")
 
     p = sub.add_parser("backfill", parents=[common], help="Backfill missing embeddings")
@@ -1471,9 +1274,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("sync-scan", parents=[common], help="Trigger sync scan for new memories")
 
     # ---- NEW: Missing commands from review ----
-
-    # skill-proficiency
-    sub.add_parser("skill-proficiency", parents=[common], help="Skill proficiency ranking")
 
     # triple-create
     p = sub.add_parser("triple-create", parents=[common], help="Create a KG triple")
@@ -1487,31 +1287,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("triple-delete", parents=[common], help="Delete a KG triple")
     p.add_argument("triple_id", help="Triple ID")
 
-    # attitude-create
-    p = sub.add_parser("attitude-create", parents=[common], help="Create an attitude fact")
-    p.add_argument("fact", help="Attitude fact text")
-    p.add_argument("category", help="Category (e.g. preference, belief, value)")
-    p.add_argument("--confidence", type=float, default=None, help="Confidence (0.0-1.0)")
-
-    # attitude-evolve
-    p = sub.add_parser(
-        "attitude-evolve",
-        parents=[common],
-        help="Evolve an attitude (ADD/UPDATE/NOOP)",
-    )
-    p.add_argument("fact", help="Attitude fact text")
-    p.add_argument("category", help="Category")
-    p.add_argument("--session", default=None, help="Source session ID")
-
-    # attitude-delete
-    p = sub.add_parser("attitude-delete", parents=[common], help="Delete an attitude fact")
-    p.add_argument("fact_id", help="Attitude fact ID")
-
     # profile-upsert
     p = sub.add_parser("profile-upsert", parents=[common], help="Upsert KAS profile scores")
     p.add_argument("--knowledge", type=float, default=None, help="Knowledge score")
     p.add_argument("--attitude", type=float, default=None, help="Attitude score")
-    p.add_argument("--skill", type=float, default=None, help="Skill score")
 
     # ---- Edge Invalidation + Entity Resolution + Graph Traversal ----
 
@@ -1583,6 +1362,44 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["daily", "weekly"],
     )
     p.add_argument("--period", default="", help="Period label (e.g., 2026-W11)")
+
+    # ---- Five-Layer Sync additions ----
+
+    sub.add_parser("sessions", parents=[common, paginated], help="List sessions")
+    sub.add_parser("prefetch-metrics", parents=[common], help="Prefetch cache metrics")
+
+    p = sub.add_parser("feedback", parents=[common], help="Record search feedback")
+    p.add_argument("entity_id", help="Block/entity ID")
+    p.add_argument("query", help="Original query")
+    p.add_argument("--signal", default="positive", choices=["positive", "negative"])
+    p.add_argument("--source", default="agent", choices=["agent", "user", "implicit"])
+
+    p = sub.add_parser("feedback-get", parents=[common], help="Get feedback aggregate")
+    p.add_argument("entity_id", help="Block/entity ID")
+
+    p = sub.add_parser("triple-update", parents=[common], help="Update a KG triple")
+    p.add_argument("triple_id", help="Triple ID")
+    p.add_argument("subject", help="Subject entity")
+    p.add_argument("predicate", help="Predicate/relation")
+    p.add_argument("object", help="Object entity")
+
+    p = sub.add_parser("triple-batch", parents=[common], help="Batch ingest triples from JSON")
+    p.add_argument("--file", default=None, help="JSON file (default: stdin)")
+    p.add_argument("--session-id", default=None, help="Source session ID")
+
+    p = sub.add_parser("community-regenerate", parents=[common], help="Regenerate communities")
+    p.add_argument("file", help="JSON file with communities + generated_at")
+
+    p = sub.add_parser("summary-regenerate", parents=[common], help="Regenerate summaries")
+    p.add_argument("file", help="JSON file with summaries + generated_at")
+
+    sub.add_parser("interest-generate", parents=[common], help="Generate interest snapshot")
+
+    sub.add_parser("interest-attention", parents=[common], help="Attention profile")
+
+    p = sub.add_parser("interest-gaps", parents=[common], help="Knowledge gaps")
+    p.add_argument("--days", type=int, default=7, help="Lookback days (default: 7)")
+    p.add_argument("--limit", type=int, default=20, help="Max results (default: 20)")
 
     return parser
 
@@ -1693,13 +1510,9 @@ def cmd_entity_auto_merge(
     args: argparse.Namespace,
 ) -> None:
     """Auto-merge entities above similarity threshold."""
-    data = client._post(
-        "/kg/entities/auto-merge",
-        params={
-            "space_id": args.space_id,
-            "threshold": args.threshold,
-            "max_merges": args.max_merges,
-        },
+    data = client.auto_merge_entities(
+        threshold=args.threshold,
+        max_merges=args.max_merges,
     )
     if json_out(data, args):
         return
@@ -1738,13 +1551,7 @@ def cmd_traverse(client: MemvaultClient, args: argparse.Namespace) -> None:
 
 def cmd_session_context(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Get all blocks + triples + entities for a source_session."""
-    data = client._get(
-        "/kg/session-context",
-        params={
-            "source_session": args.source_session,
-            "space_id": args.space_id,
-        },
-    )
+    data = client.session_context(args.source_session)
     if json_out(data, args):
         return
     s = data.get("summary", {})
@@ -1763,20 +1570,155 @@ def cmd_session_context(client: MemvaultClient, args: argparse.Namespace) -> Non
 
 def cmd_intelligence_ingest(client: MemvaultClient, args: argparse.Namespace) -> None:
     """Ingest intelligence digest into memvault."""
-    data = client._post(
-        "/kg/intelligence/ingest",
-        params={
-            "space_id": args.space_id,
-            "digest_type": args.digest_type,
-            "period": args.period,
-            "content": resolve_text_arg(args.content),
-        },
+    data = client.intelligence_ingest(
+        content=resolve_text_arg(args.content),
+        digest_type=args.digest_type,
+        period=args.period,
     )
     if json_out(data, args):
         return
     print(f"  Status: {data.get('status', '?')}")
     print(f"  Type: {data.get('digest_type', '?')}")
     print(f"  Period: {data.get('period', '?')}")
+
+
+# ---------------------------------------------------------------------------
+# New commands — Five-Layer Sync (2026-04-10)
+# ---------------------------------------------------------------------------
+
+
+def cmd_sessions(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """List sessions aggregated by source_session."""
+    data = client.list_sessions(page=args.page, page_size=args.page_size)
+    if json_out(data, args):
+        return
+    items = data.get("items", [])
+    if not items:
+        print("  No sessions found.")
+        return
+    for s in items:
+        sid = s.get("source_session", "?")
+        cnt = s.get("block_count", 0)
+        types = ", ".join(s.get("block_types", []))
+        print(f"  {sid}  blocks={cnt}  types=[{types}]")
+
+
+def cmd_prefetch_metrics(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Speculative prefetch cache metrics."""
+    data = client.prefetch_metrics()
+    if json_out(data, args):
+        return
+    print("  Prefetch Metrics:")
+    print(f"  Hit rate : {data.get('hit_rate', 0):.2%}")
+    print(f"  Waste    : {data.get('waste_rate', 0):.2%}")
+    print(f"  Latency  : {data.get('avg_latency_saved_ms', 0):.1f}ms saved")
+    print(f"  Queries  : {data.get('query_count', 0)}")
+
+
+def cmd_feedback(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Record search result feedback."""
+    data = client.feedback(
+        entity_id=args.entity_id,
+        query=args.query,
+        signal=args.signal,
+        feedback_source=args.source,
+    )
+    if json_out(data, args):
+        return
+    print(f"  Feedback recorded: {data.get('signal', '?')} for {data.get('entity_id', '?')}")
+
+
+def cmd_feedback_get(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Get aggregated feedback for an entity."""
+    data = client.get_feedback(args.entity_id)
+    if json_out(data, args):
+        return
+    print(f"  Entity: {data.get('entity_id', '?')}")
+    print(f"  Positive: {data.get('positive_count', 0)}")
+    print(f"  Negative: {data.get('negative_count', 0)}")
+    print(f"  Net signal: {data.get('net_signal', 0)}")
+
+
+def cmd_triple_update(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Update a KG triple."""
+    data = client.update_triple(args.triple_id, args.subject, args.predicate, args.object)
+    if json_out(data, args):
+        return
+    print(f"  Triple updated: {data.get('subject', '?')} --[{data.get('predicate', '?')}]--> {data.get('object', '?')}")
+
+
+def cmd_triple_batch(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Batch ingest KG triples from JSON."""
+    import json as _json
+
+    if args.file:
+        with open(args.file) as f:
+            payload = _json.load(f)
+    else:
+        payload = _json.load(sys.stdin)
+    triples = payload if isinstance(payload, list) else payload.get("triples", [])
+    data = client.batch_ingest_triples(triples, session_id=args.session_id)
+    if json_out(data, args):
+        return
+    print(f"  Ingested: {data.get('ingested', 0)} triples")
+
+
+def cmd_community_regenerate(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Regenerate communities from pipeline output."""
+    import json as _json
+
+    with open(args.file) as f:
+        payload = _json.load(f)
+    data = client.regenerate_communities(payload["communities"], payload["generated_at"])
+    if json_out(data, args):
+        return
+    print(f"  Saved: {data.get('saved', 0)} communities")
+
+
+def cmd_summary_regenerate(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Regenerate community summaries from pipeline output."""
+    import json as _json
+
+    with open(args.file) as f:
+        payload = _json.load(f)
+    data = client.regenerate_summaries(payload["summaries"], payload["generated_at"])
+    if json_out(data, args):
+        return
+    print(f"  Saved: {data.get('saved', 0)} summaries")
+
+
+def cmd_interest_generate(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Generate daily interest snapshot."""
+    data = client.generate_interest()
+    if json_out(data, args):
+        return
+    print("  Interest snapshot generated.")
+
+
+def cmd_interest_attention(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Get attention profile."""
+    data = client.get_attention()
+    if json_out(data, args):
+        return
+    for section in ("active", "fading", "historical"):
+        entities = data.get(section, [])
+        if entities:
+            print(f"  {section.title()} ({len(entities)}):")
+            for e in entities[:10]:
+                print(f"    {e}")
+
+
+def cmd_interest_gaps(client: MemvaultClient, args: argparse.Namespace) -> None:
+    """Show knowledge gaps."""
+    data = client.get_knowledge_gaps(days=args.days, limit=args.limit)
+    if json_out(data, args):
+        return
+    items = data if isinstance(data, list) else data.get("items", data.get("gaps", []))
+    if not items:
+        print("  No knowledge gaps found.")
+        return
+    for g in items:
+        print(f"  {g}")
 
 
 COMMAND_MAP = {
@@ -1790,7 +1732,6 @@ COMMAND_MAP = {
     "profile": cmd_profile,
     "cascade": cmd_cascade,
     "summaries": cmd_summaries,
-    "attitude": cmd_attitude,
     "health": cmd_health,
     "lint": cmd_lint,
     "dream": cmd_dream,
@@ -1812,27 +1753,18 @@ COMMAND_MAP = {
     # KG Communities
     "communities": cmd_communities,
     "community": cmd_community_get,
-    # Attitude extended
-    "attitude-history": cmd_attitude_history,
-    # Skill history
-    "skill-history": cmd_skill_history,
     # Frozen tier
     "frozen": cmd_frozen,
     "thaw": cmd_thaw,
     # Admin / Maintenance
     "status": cmd_status,
     "recalculate": cmd_recalculate,
-    "decay": cmd_decay,
     "backfill": cmd_backfill,
     "sync-stats": cmd_sync_stats,
     "sync-scan": cmd_sync_scan,
     # Review round — missing commands
-    "skill-proficiency": cmd_skill_proficiency,
     "triple-create": cmd_triple_create,
     "triple-delete": cmd_triple_delete,
-    "attitude-create": cmd_attitude_create,
-    "attitude-evolve": cmd_attitude_evolve,
-    "attitude-delete": cmd_attitude_delete,
     "profile-upsert": cmd_profile_upsert,
     # Edge Invalidation + Entity Resolution + Graph Traversal
     "triple-invalidate": cmd_triple_invalidate,
@@ -1846,6 +1778,18 @@ COMMAND_MAP = {
     # Flywheel bridge
     "session-context": cmd_session_context,
     "intelligence-ingest": cmd_intelligence_ingest,
+    # Five-Layer Sync additions
+    "sessions": cmd_sessions,
+    "prefetch-metrics": cmd_prefetch_metrics,
+    "feedback": cmd_feedback,
+    "feedback-get": cmd_feedback_get,
+    "triple-update": cmd_triple_update,
+    "triple-batch": cmd_triple_batch,
+    "community-regenerate": cmd_community_regenerate,
+    "summary-regenerate": cmd_summary_regenerate,
+    "interest-generate": cmd_interest_generate,
+    "interest-attention": cmd_interest_attention,
+    "interest-gaps": cmd_interest_gaps,
 }
 
 
