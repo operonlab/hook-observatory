@@ -8,12 +8,60 @@ All ops require ("db", "space_id") in ctx.
 
 from __future__ import annotations
 
+import logging
+import time
+import traceback
 from typing import Any
 
-from ._base import MemvaultOp
+from ._base import MemvaultOp, PipelineMeta
+
+logger = logging.getLogger(__name__)
 
 
-class LintContradictionOp(MemvaultOp):
+class LintOp(MemvaultOp):
+    """Base for lint check operators.
+
+    Overrides MemvaultOp.__call__ so that failures produce a LintFinding
+    with severity="error" instead of silently swallowing the exception.
+    This matches the behaviour of the original sequential run_lint() path.
+    """
+
+    async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
+        meta: PipelineMeta = ctx.setdefault("_pipeline_meta", PipelineMeta())
+
+        if not self._config.is_enabled(self._stage_name):
+            meta.stages_skipped.append(self._stage_name)
+            return ctx
+
+        t0 = time.monotonic()
+        try:
+            ctx = await self.execute(ctx)
+            meta.stages_applied.append(self._stage_name)
+        except Exception as exc:
+            logger.exception("LintOp '%s' failed", self._stage_name)
+            meta.stages_skipped.append(self._stage_name)
+            meta.stage_errors[self._stage_name] = traceback.format_exc()
+
+            # Produce an error LintFinding so the report is never falsely clean
+            from ..lint import LintFinding
+
+            check_name = self._stage_name.removeprefix("lint.")
+            error_finding = LintFinding(
+                check=check_name,
+                severity="error",
+                entity_id="",
+                entity_type="system",
+                message=f"Check '{check_name}' failed: {exc}",
+                suggested_action="none",
+            )
+            findings_key = f"findings_{check_name}"
+            ctx.setdefault(findings_key, []).append(error_finding)
+
+        meta.stage_timings[self._stage_name] = (time.monotonic() - t0) * 1000
+        return ctx
+
+
+class LintContradictionOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -34,7 +82,7 @@ class LintContradictionOp(MemvaultOp):
         return ctx
 
 
-class LintStaleOp(MemvaultOp):
+class LintStaleOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -55,7 +103,7 @@ class LintStaleOp(MemvaultOp):
         return ctx
 
 
-class LintOrphanOp(MemvaultOp):
+class LintOrphanOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -72,7 +120,7 @@ class LintOrphanOp(MemvaultOp):
         return ctx
 
 
-class LintDanglingRefOp(MemvaultOp):
+class LintDanglingRefOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -89,7 +137,7 @@ class LintDanglingRefOp(MemvaultOp):
         return ctx
 
 
-class LintCommunityAnomalyOp(MemvaultOp):
+class LintCommunityAnomalyOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -106,7 +154,7 @@ class LintCommunityAnomalyOp(MemvaultOp):
         return ctx
 
 
-class LintDataGapOp(MemvaultOp):
+class LintDataGapOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -123,7 +171,7 @@ class LintDataGapOp(MemvaultOp):
         return ctx
 
 
-class LintPredicateContradictionOp(MemvaultOp):
+class LintPredicateContradictionOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -140,7 +188,7 @@ class LintPredicateContradictionOp(MemvaultOp):
         return ctx
 
 
-class LintTemporalStalenessOp(MemvaultOp):
+class LintTemporalStalenessOp(LintOp):
     @property
     def input_keys(self) -> tuple[str, ...]:
         return ("db", "space_id")
@@ -172,11 +220,15 @@ _FINDINGS_KEYS = (
 
 
 class MergeFindingsOp(MemvaultOp):
-    """Collect all findings_* keys into a single 'findings' list."""
+    """Collect all findings_* keys present in ctx into a single 'findings' list.
+
+    input_keys is empty so compile() never rejects partial check runs.
+    The op dynamically scans for any key matching the findings_* prefix.
+    """
 
     @property
     def input_keys(self) -> tuple[str, ...]:
-        return _FINDINGS_KEYS
+        return ()  # no hard dependency — partial runs are valid
 
     @property
     def output_keys(self) -> tuple[str, ...]:
@@ -184,7 +236,8 @@ class MergeFindingsOp(MemvaultOp):
 
     async def execute(self, ctx: dict[str, Any]) -> dict[str, Any]:
         merged: list = []
-        for key in _FINDINGS_KEYS:
-            merged.extend(ctx.get(key) or [])
+        for key in list(ctx):
+            if key.startswith("findings_"):
+                merged.extend(ctx.get(key) or [])
         ctx["findings"] = merged
         return ctx

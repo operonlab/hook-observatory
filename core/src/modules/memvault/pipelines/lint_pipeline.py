@@ -60,11 +60,21 @@ def build_lint_pipeline(
             continue
         ops.append(op_cls(stage_name, config))
 
-    parallel = ParallelOp(*ops, name="lint.parallel")
-    merge = MergeFindingsOp("lint.merge", config)
+    if not ops:
+        # No checks selected — return pipeline that just produces empty findings
+        pipeline = Pipeline(name="lint_pipeline")
+        merge = MergeFindingsOp("lint.merge", config)
+        pipeline.pipe(merge)
+        return pipeline
 
+    merge = MergeFindingsOp("lint.merge", config)
     pipeline = Pipeline(name="lint_pipeline")
-    pipeline.pipe(parallel, merge)
+
+    if len(ops) >= 2:
+        pipeline.pipe(ParallelOp(*ops, name="lint.parallel"), merge)
+    else:
+        # Single check — no ParallelOp needed (requires ≥2 ops)
+        pipeline.pipe(ops[0], merge)
 
     missing = pipeline.compile(initial_keys={"db", "space_id"})
     if missing:
