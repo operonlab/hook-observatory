@@ -1035,12 +1035,12 @@ async def run_dream_consolidation(
 
 
 @router.get("/review-queue")
-@require_permission("memvault.read")
 async def list_review_queue(
     space_id: str = Query(default="default"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     """List pending review items: __pending__ blocks + recent dream invalidations."""
     from .kg_schemas import ReviewItem
@@ -1092,10 +1092,10 @@ async def list_review_queue(
 
 
 @router.post("/review-queue/{item_id}/approve")
-@require_permission("memvault.write")
 async def approve_review(
     item_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Approve a pending review item — confirms the dream/dedup decision."""
     from sqlalchemy import update
@@ -1121,10 +1121,10 @@ async def approve_review(
 
 
 @router.post("/review-queue/{item_id}/reject")
-@require_permission("memvault.write")
 async def reject_review(
     item_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Reject a pending review item — restores the block to active state."""
     from sqlalchemy import update
@@ -1150,10 +1150,10 @@ async def reject_review(
 
 
 @router.post("/review-queue/{item_id}/defer")
-@require_permission("memvault.write")
 async def defer_review(
     item_id: str,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Defer a review — mark as seen but keep pending."""
     from sqlalchemy import update

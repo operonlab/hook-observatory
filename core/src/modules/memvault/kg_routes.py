@@ -770,12 +770,12 @@ async def lint_knowledge_graph(
 
 
 @router.get("/entity-edges", response_model=list[EntityEdgeResponse])
-@require_permission("memvault.read")
 async def list_entity_edges(
     space_id: str = Query(default="default"),
     min_weight: float = Query(default=0.1),
     limit: int = Query(default=500, ge=1, le=5000),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     """List entity edges with composite_weight >= min_weight."""
     from sqlalchemy import select
@@ -826,11 +826,11 @@ async def list_entity_edges(
 
 
 @router.post("/entity-edges/recompute", status_code=202)
-@require_permission("memvault.write")
 async def recompute_edge_weights(
     space_id: str = Query(default="default"),
     body: EdgeRecomputeRequest | None = None,
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
 ):
     """Trigger full edge weight recomputation via the Edge Pipeline."""
 
@@ -860,12 +860,12 @@ async def recompute_edge_weights(
 
 
 @router.get("/entity-edges/surprises", response_model=list[SurpriseConnection])
-@require_permission("memvault.read")
 async def get_surprise_connections(
     space_id: str = Query(default="default"),
     strategy: str | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
 ):
     """Discover unexpected knowledge connections via multi-signal analysis."""
     from .pipeline_config import MemvaultPipelineConfig
