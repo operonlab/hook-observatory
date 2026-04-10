@@ -30,6 +30,9 @@ class MemoryBlockCreate(BaseModel):
     block_type: str = Field(default="general")
     tags: list[str] = Field(default_factory=list)
     source_session: str | None = Field(default=None)
+    created_at: datetime | None = Field(
+        default=None, description="Override creation time (e.g. session actual time)"
+    )
 
 
 class MemoryBlockUpdate(BaseModel):
@@ -139,6 +142,7 @@ class SearchMetadata(BaseModel):
     scope: str | None = None
     backend: str | None = None
     routing_tags: list[str] | None = None  # NEW: inferred domain tags used for pre-filtering
+    temporal_fallback: bool = False  # True = results from date-range listing, not semantic search
 
 
 class EnhancedSearchResult(BaseModel):

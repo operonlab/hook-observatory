@@ -55,6 +55,61 @@ _QUESTION_EN = re.compile(
 _SPECIFIC_TOKENS = re.compile(r"[A-Z][a-z]+[A-Z]|[a-z]+_[a-z]+|`[^`]+`|\d{4,}|http[s]?://")
 
 # ---------------------------------------------------------------------------
+# Temporal resolution — resolve "上週", "last Monday" → date range
+# ---------------------------------------------------------------------------
+
+
+def _resolve_temporal_range(query: str) -> tuple[str | None, str | None]:
+    """Extract a date range from temporal expressions in the query.
+
+    Returns (date_from, date_to) as ISO date strings, or (None, None).
+    Uses TemporalNormalizer from text_ops — same engine as content_normalizer.
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        from text_ops.normalize import NormContext
+        from text_ops.temporal import TemporalNormalizer
+
+        tn = TemporalNormalizer()
+        now = datetime.now()
+        ctx = NormContext(created_at=now)
+        _, changes = tn.normalize(query, ctx)
+
+        if not changes:
+            return None, None
+
+        # Collect all resolved dates
+        dates = []
+        for c in changes:
+            frag = c.normalized_fragment
+            # TemporalNormalizer outputs ISO date "YYYY-MM-DD" or datetime
+            if len(frag) == 10 and frag[4] == "-" and frag[7] == "-":
+                dates.append(frag)
+
+        if not dates:
+            return None, None
+
+        # Single date (e.g. "上週" → one anchor date)
+        # Infer a week-sized range: Sun-Sat (user preference: week starts on Sunday)
+        if len(dates) == 1:
+            anchor = datetime.strptime(dates[0], "%Y-%m-%d")
+            # isoweekday: Mon=1 … Sun=7; shift so Sun=0 for Sun-Sat week
+            days_since_sunday = anchor.isoweekday() % 7  # Sun=0, Mon=1, ..., Sat=6
+            sunday = anchor - timedelta(days=days_since_sunday)
+            saturday = sunday + timedelta(days=6)
+            return sunday.strftime("%Y-%m-%d"), saturday.strftime("%Y-%m-%d")
+
+        # Multiple dates (e.g. "上週一到上週五") → use min/max
+        dates.sort()
+        return dates[0], dates[-1]
+
+    except Exception as e:
+        logger.debug("temporal resolution failed: %s", e)
+        return None, None
+
+
+# ---------------------------------------------------------------------------
 # Data class
 # ---------------------------------------------------------------------------
 
@@ -66,6 +121,9 @@ class ExpandedQuery:
     keywords: list[str] = field(default_factory=list)  # Extracted keywords for keyword search
     expansion_used: str = "passthrough"  # "hyde" | "keyword" | "passthrough"
     inferred_tags: list[str] = field(default_factory=list)  # NEW: domain routing tags
+    # Temporal: resolved date range from relative expressions ("上週", "last Monday", …)
+    temporal_from: str | None = None  # ISO date string e.g. "2026-04-03"
+    temporal_to: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -242,16 +300,20 @@ _hyde_agent = Agent(
 async def expand_query(query: str) -> ExpandedQuery:
     """Expand a query for better retrieval.
 
-    1. Check if expansion is needed (should_expand)
-    2. If yes, try HyDE via local LLM (oMLX port 8000)
-    3. Extract keywords regardless
-    4. Infer domain tags for pre-filtering
-    5. Return ExpandedQuery
+    1. Resolve temporal expressions ("上週", "last Monday") → date range
+    2. Check if expansion is needed (should_expand)
+    3. If yes, try HyDE via local LLM (oMLX port 8000)
+    4. Extract keywords regardless
+    5. Infer domain tags for pre-filtering
+    6. Return ExpandedQuery
 
     Falls back to keyword-only expansion if LLM unavailable.
     """
     keywords = extract_keywords(query)
     inferred_tags = _infer_domain_tags(query)
+
+    # Step 0: Resolve temporal expressions → date_from / date_to
+    temporal_from, temporal_to = _resolve_temporal_range(query)
 
     if not should_expand(query):
         return ExpandedQuery(
@@ -260,6 +322,8 @@ async def expand_query(query: str) -> ExpandedQuery:
             keywords=keywords,
             expansion_used="passthrough",
             inferred_tags=inferred_tags,
+            temporal_from=temporal_from,
+            temporal_to=temporal_to,
         )
 
     # Try HyDE via local LLM
@@ -283,6 +347,8 @@ async def expand_query(query: str) -> ExpandedQuery:
             keywords=merged_keywords[:8],
             expansion_used="hyde",
             inferred_tags=inferred_tags,
+            temporal_from=temporal_from,
+            temporal_to=temporal_to,
         )
 
     # LLM unavailable — fall back to keyword-only expansion
@@ -293,6 +359,8 @@ async def expand_query(query: str) -> ExpandedQuery:
         keywords=keywords,
         expansion_used="keyword",
         inferred_tags=inferred_tags,
+        temporal_from=temporal_from,
+        temporal_to=temporal_to,
     )
 
 
@@ -451,6 +519,8 @@ async def expand_query_rlm(
                 keywords=merged_kw[:10],
                 expansion_used="rlm",
                 inferred_tags=hyde_result.inferred_tags,
+                temporal_from=hyde_result.temporal_from,
+                temporal_to=hyde_result.temporal_to,
             )
     except Exception as exc:
         logger.warning("RLM query expansion failed — using hyde result: %s", exc)

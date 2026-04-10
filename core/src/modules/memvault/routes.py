@@ -64,6 +64,8 @@ async def list_blocks(
     tag: str | None = Query(None, description="Single tag filter"),
     tags: str | None = Query(None, description="Comma-separated tag filter"),
     block_type: str | None = Query(None, description="Block type filter"),
+    date_from: datetime | None = Query(None, description="Filter: created_at >= date_from"),
+    date_to: datetime | None = Query(None, description="Filter: created_at <= date_to"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.read"),
 ):
@@ -76,10 +78,30 @@ async def list_blocks(
         tag_list = [tag]
 
     if tag_list:
-        return await memory_block_service.list_by_tags(db, space_id, tag_list, pagination)
+        return await memory_block_service.list_by_tags(
+            db,
+            space_id,
+            tag_list,
+            pagination,
+            date_from=date_from,
+            date_to=date_to,
+        )
     if block_type:
-        return await memory_block_service.list_by_type(db, space_id, block_type, pagination)
-    return await memory_block_service.list(db, space_id, pagination)
+        return await memory_block_service.list_by_type(
+            db,
+            space_id,
+            block_type,
+            pagination,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    return await memory_block_service.list(
+        db,
+        space_id,
+        pagination,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @router.get("/blocks/{block_id}", response_model=MemoryBlockResponse)
@@ -173,6 +195,9 @@ async def create_block(
 
     # Normal creation path
     instance = await memory_block_service.create(db, space_id, body)
+    # Override created_at if caller provided actual event time (e.g. session timestamp)
+    if body.created_at:
+        instance.created_at = body.created_at
     try:
         if embedding:
             await memory_block_service.update_embedding(db, instance.id, embedding)
@@ -327,6 +352,28 @@ async def search(
     inferred_tags = expanded.inferred_tags if expanded else []
     routing_tags = inferred_tags if (inferred_tags and not skip_routing) else None
 
+    # Temporal: use resolved dates from query if caller didn't pass explicit ones
+    if expanded and not date_from and expanded.temporal_from:
+        try:
+            date_from = datetime.fromisoformat(expanded.temporal_from).replace(
+                hour=0,
+                minute=0,
+                second=0,
+                tzinfo=UTC,
+            )
+        except ValueError:
+            pass
+    if expanded and not date_to and expanded.temporal_to:
+        try:
+            date_to = datetime.fromisoformat(expanded.temporal_to).replace(
+                hour=23,
+                minute=59,
+                second=59,
+                tzinfo=UTC,
+            )
+        except ValueError:
+            pass
+
     try:
         query_embedding = await get_embedding(embed_text, task_type="search_query")
     except Exception:
@@ -397,6 +444,28 @@ async def search(
                 r.block.content = sanitize_for_injection(r.block.content)
                 meta.injection_sanitized = (meta.injection_sanitized or 0) + 1
         meta.routing_tags = inferred_tags if inferred_tags else None
+
+        # Temporal fallback: semantic search returned 0 but temporal dates are active
+        # → list blocks in date range (temporal queries like "上週做了什麼" need listing, not matching)
+        if not results and expanded and expanded.temporal_from:
+            from .schemas import SemanticSearchResult
+
+            blocks_page = await memory_block_service.list(
+                db,
+                space_id,
+                PaginationParams(page=1, page_size=top_k),
+                date_from=date_from,
+                date_to=date_to,
+            )
+            results = [
+                SemanticSearchResult(
+                    block=b,
+                    score=1.0,
+                )
+                for b in blocks_page.items
+            ]
+            meta.temporal_fallback = True
+
         return EnhancedSearchResult(
             results=results,
             metadata=meta if include_metadata else None,

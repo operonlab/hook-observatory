@@ -27,6 +27,8 @@ class MemvaultClient(BaseClient):
         tag: str | None = None,
         tags: str | None = None,
         block_type: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> dict:
         """List memory blocks with optional filters. GET /blocks"""
         params: dict = {"page": page, "page_size": page_size}
@@ -36,6 +38,10 @@ class MemvaultClient(BaseClient):
             params["tags"] = tags
         if block_type:
             params["block_type"] = block_type
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
         return self._get("/blocks", params)
 
     def get_block(self, block_id: str) -> dict:
@@ -413,7 +419,9 @@ class MemvaultClient(BaseClient):
 
     def update_community_description(self, community_id: str, description_zh: str) -> dict:
         """Update community description. POST /kg/communities/{id}/description"""
-        return self._post(f"/kg/communities/{community_id}/description", {"description_zh": description_zh})
+        return self._post(
+            f"/kg/communities/{community_id}/description", {"description_zh": description_zh}
+        )
 
     # ======================== KG — Community Summaries ========================
 

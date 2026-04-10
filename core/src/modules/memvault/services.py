@@ -4,6 +4,8 @@ This is the PUBLIC API of the memvault module.
 Other modules import from here, never from models.py.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from datetime import UTC, datetime, timedelta
@@ -224,12 +226,51 @@ class MemoryBlockService(
         block.superseded_by = superseded_by_id
         block.invalidation_reason = reason
 
+    @staticmethod
+    def _apply_date_filter(q, date_from=None, date_to=None):
+        if date_from:
+            q = q.where(MemoryBlock.created_at >= date_from)
+        if date_to:
+            q = q.where(MemoryBlock.created_at <= date_to)
+        return q
+
+    async def list(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        pagination: PaginationParams | None = None,
+        date_from=None,
+        date_to=None,
+    ) -> PaginatedResponse[MemoryBlockResponse]:
+        p = pagination or PaginationParams()
+        base = select(MemoryBlock).where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.deleted_at == None,  # noqa: E711
+        )
+        base = self._apply_date_filter(base, date_from, date_to)
+        count_q = select(func.count()).select_from(base.subquery())
+        total = (await db.execute(count_q)).scalar_one()
+        q = (
+            base.order_by(MemoryBlock.created_at.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[MemoryBlockResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
+        )
+
     async def list_by_tags(
         self,
         db: AsyncSession,
         space_id: str,
         tags: list[str],
         pagination: PaginationParams | None = None,
+        date_from=None,
+        date_to=None,
     ) -> PaginatedResponse[MemoryBlockResponse]:
         """List blocks that contain ALL specified tags."""
         p = pagination or PaginationParams()
@@ -238,6 +279,7 @@ class MemoryBlockService(
             MemoryBlock.tags.contains(tags),
             MemoryBlock.deleted_at == None,  # noqa: E711
         )
+        base = self._apply_date_filter(base, date_from, date_to)
         count_q = select(func.count()).select_from(base.subquery())
         total = (await db.execute(count_q)).scalar_one()
         q = base.offset((p.page - 1) * p.page_size).limit(p.page_size)
@@ -255,6 +297,8 @@ class MemoryBlockService(
         space_id: str,
         block_type: str,
         pagination: PaginationParams | None = None,
+        date_from=None,
+        date_to=None,
     ) -> PaginatedResponse[MemoryBlockResponse]:
         """List blocks filtered by block_type."""
         p = pagination or PaginationParams()
@@ -263,6 +307,7 @@ class MemoryBlockService(
             MemoryBlock.block_type == block_type,
             MemoryBlock.deleted_at == None,  # noqa: E711
         )
+        base = self._apply_date_filter(base, date_from, date_to)
         count_q = select(func.count()).select_from(base.subquery())
         total = (await db.execute(count_q)).scalar_one()
         q = base.offset((p.page - 1) * p.page_size).limit(p.page_size)
@@ -918,7 +963,7 @@ class MemoryBlockService(
 
     async def find_by_source_session(
         self, db: AsyncSession, space_id: str, source_session: str
-    ) -> "MemoryBlockResponse | None":
+    ) -> MemoryBlockResponse | None:
         """Return the first block matching source_session for idempotency checks."""
         q = (
             select(MemoryBlock)

@@ -94,6 +94,7 @@ def main() -> None:
     user_count = 0
     assistant_count = 0
     thinking_chars = 0
+    session_timestamp = None  # Actual session start time (from first JSONL entry with timestamp)
 
     try:
         with open(transcript, encoding="utf-8") as f:
@@ -105,6 +106,10 @@ def main() -> None:
                     entry = json.loads(raw_line)
                 except json.JSONDecodeError:
                     continue
+
+                # Capture earliest timestamp from transcript as session actual time
+                if not session_timestamp and entry.get("timestamp"):
+                    session_timestamp = entry["timestamp"]
 
                 entry_type = entry.get("type", "")
                 if entry_type not in ("user", "assistant"):
@@ -606,14 +611,15 @@ Timestamp: {timestamp}
         if api_block_type not in {"knowledge", "skill", "attitude", "general"}:
             api_block_type = "knowledge"
 
-        payload = json.dumps(
-            {
-                "content": storage_content,
-                "block_type": api_block_type,
-                "tags": tags,
-                "source_session": session_id,
-            }
-        ).encode("utf-8")
+        block_body = {
+            "content": storage_content,
+            "block_type": api_block_type,
+            "tags": tags,
+            "source_session": session_id,
+        }
+        if session_timestamp:
+            block_body["created_at"] = session_timestamp
+        payload = json.dumps(block_body).encode("utf-8")
 
         http_code, response_body = _http_post(
             f"{MEMVAULT_API_URL}/api/memvault/blocks?space_id={MEMVAULT_SPACE_ID}",

@@ -33,6 +33,10 @@ class MemoryBlock(SpaceScopedModel):
     )  # knowledge | skill | attitude | general
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Temporal validity — mirrors Triple's Graphiti-inspired pattern
+    invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    invalidation_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # G6: Access tracking — increment on each retrieval for effective half-life computation
     access_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     last_accessed_at: Mapped[datetime | None] = mapped_column(

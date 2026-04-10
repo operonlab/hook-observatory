@@ -88,8 +88,12 @@ def parse_input() -> tuple:
 # ---------------------------------------------------------------------------
 # 2 & 3. Extract conversation + count exchanges
 # ---------------------------------------------------------------------------
+_session_timestamp: str | None = None  # Captured from first JSONL entry with timestamp
+
+
 def extract_conversation(transcript_path: str) -> str:
     """Parse JSONL transcript, return formatted conversation string."""
+    global _session_timestamp
     lines = []
     try:
         with open(transcript_path, encoding="utf-8") as f:
@@ -101,6 +105,10 @@ def extract_conversation(transcript_path: str) -> str:
                     entry = json.loads(raw_line)
                 except json.JSONDecodeError:
                     continue
+
+                # Capture earliest timestamp as session actual time
+                if not _session_timestamp and entry.get("timestamp"):
+                    _session_timestamp = entry["timestamp"]
 
                 entry_type = entry.get("type", "")
                 if entry_type not in ("user", "assistant"):
@@ -392,14 +400,15 @@ def main() -> None:
             }
         )
 
-    batch_payload = json.dumps(
-        {
-            "triples": batch_triples,
-            "session_id": session_id,
-            "topic": topic,
-            "tags": tags,
-        }
-    ).encode("utf-8")
+    batch_body = {
+        "triples": batch_triples,
+        "session_id": session_id,
+        "topic": topic,
+        "tags": tags,
+    }
+    if _session_timestamp:
+        batch_body["timestamp"] = _session_timestamp
+    batch_payload = json.dumps(batch_body).encode("utf-8")
 
     # ---------------------------------------------------------------------------
     # 11. POST to Core API (primary path)
