@@ -7,8 +7,28 @@ Base class: MemvaultOp (toggle + error isolation + timing).
 """
 
 from ._base import MemvaultOp, PipelineMeta
+from .lint_ops import (
+    LintCommunityAnomalyOp,
+    LintContradictionOp,
+    LintDanglingRefOp,
+    LintDataGapOp,
+    LintOrphanOp,
+    LintPredicateContradictionOp,
+    LintStaleOp,
+    LintTemporalStalenessOp,
+    MergeFindingsOp,
+)
 
 __all__ = [
+    "LintCommunityAnomalyOp",
+    "LintContradictionOp",
+    "LintDanglingRefOp",
+    "LintDataGapOp",
+    "LintOrphanOp",
+    "LintPredicateContradictionOp",
+    "LintStaleOp",
+    "LintTemporalStalenessOp",
     "MemvaultOp",
+    "MergeFindingsOp",
     "PipelineMeta",
 ]
