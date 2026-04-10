@@ -7,6 +7,13 @@ Base class: MemvaultOp (toggle + error isolation + timing).
 """
 
 from ._base import MemvaultOp, PipelineMeta
+from .dream_ops import (
+    DreamConsolidateOp,
+    DreamGatherSignalOp,
+    DreamOrientOp,
+    DreamPruneOp,
+    DreamReflectOp,
+)
 from .lint_ops import (
     LintCommunityAnomalyOp,
     LintContradictionOp,
@@ -20,6 +27,11 @@ from .lint_ops import (
 )
 
 __all__ = [
+    "DreamConsolidateOp",
+    "DreamGatherSignalOp",
+    "DreamOrientOp",
+    "DreamPruneOp",
+    "DreamReflectOp",
     "LintCommunityAnomalyOp",
     "LintContradictionOp",
     "LintDanglingRefOp",
