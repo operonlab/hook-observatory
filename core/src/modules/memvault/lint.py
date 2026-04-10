@@ -1394,12 +1394,12 @@ FAST_CHECKS = [
 ]
 
 
-async def run_lint(
+async def _run_lint_sequential(
     db: AsyncSession,
-    space_id: str = "default",
-    checks: list[str] | None = None,
+    space_id: str,
+    checks: list[str] | None,
 ) -> LintReport:
-    """Run knowledge lint checks. If checks is None, run all."""
+    """Run knowledge lint checks sequentially. If checks is None, run all."""
     selected = checks or list(ALL_CHECKS.keys())
     findings: list[LintFinding] = []
     start = time.monotonic()
@@ -1436,6 +1436,75 @@ async def run_lint(
         run_duration_ms=elapsed,
         run_at=datetime.now(UTC),
     )
+
+
+async def _run_lint_pipeline(
+    db: AsyncSession,
+    space_id: str,
+    checks: list[str] | None,
+) -> LintReport:
+    """Run lint via Reactive Pipeline (parallel execution)."""
+    from .pipeline_config import MemvaultPipelineConfig
+    from .pipelines.lint_pipeline import _CHECK_REGISTRY, build_lint_pipeline
+
+    config = MemvaultPipelineConfig.from_env()
+
+    # Check if all requested checks are in the pipeline registry
+    if checks:
+        registry_names = {name for name, _, _ in _CHECK_REGISTRY}
+        unsupported = set(checks) - registry_names
+        if unsupported:
+            logger.warning(
+                "lint pipeline: checks %s not in registry, falling back to sequential",
+                unsupported,
+            )
+            return await _run_lint_sequential(db, space_id, checks)
+
+    pipeline = build_lint_pipeline(checks=checks, config=config)
+
+    t0 = time.time()
+    ctx = await pipeline.execute({"db": db, "space_id": space_id})
+    elapsed = (time.time() - t0) * 1000
+
+    findings = ctx.get("findings", [])
+    meta = ctx.get("_pipeline_meta")
+
+    checks_run = []
+    if meta:
+        checks_run = [s.removeprefix("lint.") for s in meta.stages_applied]
+
+    summary: dict[str, int] = {}
+    for f in findings:
+        summary[f.check] = summary.get(f.check, 0) + 1
+
+    return LintReport(
+        space_id=space_id,
+        checks_run=checks_run,
+        findings=findings,
+        summary=summary,
+        run_duration_ms=meta.total_ms if meta else elapsed,
+        run_at=datetime.now(UTC),
+    )
+
+
+async def run_lint(
+    db: AsyncSession,
+    space_id: str = "default",
+    checks: list[str] | None = None,
+    use_pipeline: bool = False,
+) -> LintReport:
+    """Run knowledge lint checks. If checks is None, run all.
+
+    Args:
+        db: Database session.
+        space_id: Space to lint.
+        checks: Which checks to run. None means all.
+        use_pipeline: If True, use the Reactive Pipeline (parallel execution).
+                      Falls back to sequential if unsupported checks are requested.
+    """
+    if use_pipeline:
+        return await _run_lint_pipeline(db, space_id, checks)
+    return await _run_lint_sequential(db, space_id, checks)
 
 
 # ======================== Remediation ========================

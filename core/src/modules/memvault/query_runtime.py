@@ -406,11 +406,252 @@ def _merge_prefetch_cards(
     return merged
 
 
-async def run_memory_query(
+async def _run_query_with_pipeline(
     db: AsyncSession,
     space_id: str,
     request: MemoryQueryRequest,
 ) -> MemoryQueryResponse:
+    """Pipeline path: QueryRouteOp → QueryExpandOp → search → (slow: RerankOp → CRAGEvalOp).
+
+    Adds query expansion, intent-tuned scoring, and optional CRAG evaluation on top of the
+    standard sequential search logic.  All failures are isolated — pre-pipeline failure
+    falls back to defaults; post-pipeline failure is skipped silently.
+    """
+    _t_start = _time.monotonic()
+
+    # Build pipeline objects (config from env)
+    from .pipeline_config import MemvaultPipelineConfig
+    from .pipelines.query_pipeline import (
+        build_query_post_pipeline,
+        build_query_pre_pipeline,
+    )
+
+    config = MemvaultPipelineConfig.from_env()
+    pre_pipeline = build_query_pre_pipeline(config)
+    post_pipeline = build_query_post_pipeline(config)
+
+    # --- Pre-search phase ---
+    intent_value: str = "unknown"
+    search_query: str = request.q
+    task_mode_from_intent: str = "build"
+
+    try:
+        pre_ctx = await pre_pipeline.execute({"query": request.q})
+
+        # Extract intent (QueryIntent enum → str)
+        raw_intent = pre_ctx.get("intent")
+        if raw_intent is not None:
+            intent_value = (
+                str(raw_intent.value) if hasattr(raw_intent, "value") else str(raw_intent)
+            )
+
+        # Map intent → task_mode (mirrors sequential path)
+        try:
+            from .query_router import QueryIntent
+
+            intent_to_task: dict = {
+                QueryIntent.ENTITY_LOOKUP: "lookup",
+                QueryIntent.FACTUAL: "lookup",
+                QueryIntent.CONCEPTUAL: "reflect",
+                QueryIntent.EXPLORATORY: "reflect",
+                QueryIntent.CROSS_DOMAIN: "decide",
+                QueryIntent.UNKNOWN: "build",
+            }
+            raw_intent_obj = pre_ctx.get("intent")
+            task_mode_from_intent = intent_to_task.get(raw_intent_obj, "build")
+        except Exception:
+            logger.debug("query pipeline: intent extraction failed, using default")
+
+        # Use expanded query text when available
+        expanded = pre_ctx.get("expanded_query")
+        if expanded is not None and hasattr(expanded, "expanded_text") and expanded.expanded_text:
+            search_query = expanded.expanded_text
+
+    except Exception:
+        # Pre-pipeline failed: fall back to original query + unknown intent
+        logger.warning("query pre-pipeline failed, falling back to defaults", exc_info=True)
+        intent_value = "unknown"
+        search_query = request.q
+        task_mode_from_intent = "build"
+
+    task_mode = _normalize(task_mode_from_intent, _TASK_MODES, "build")
+    intent_scoring = scoring_config_for_intent(intent_value)
+
+    thinking_mode_requested = _normalize(request.thinking_mode, _THINKING_MODES, "auto")
+    load_budget = _normalize(request.load_budget, _LOAD_BUDGETS, "standard")
+    consumer = _normalize(request.consumer, _CONSUMERS, "human")
+    thinking_mode_used = choose_thinking_mode(
+        task_mode=task_mode,
+        thinking_mode=thinking_mode_requested,
+        load_budget=load_budget,
+        consumer=consumer,
+    )
+    budget = _budget_config(load_budget)
+
+    # Phase B2: Check speculative prefetch cache
+    prefetch_hit, _prefetch_check_ms = await _check_prefetch_cache(
+        space_id,
+        consumer,
+        task_mode,
+        request.q,
+        request.top_k,
+    )
+
+    # --- Search phase (inline, same as sequential path) ---
+    search_results, search_meta = await _search_blocks(
+        db,
+        space_id,
+        search_query,
+        top_k=max(request.top_k, budget["search_top_k"]),
+        scoring_config=intent_scoring,
+        intent=intent_value,
+    )
+    fast_cards = [
+        _block_card(result.block, "fast", task_mode, result.score)
+        for result in search_results[: budget["fast"]]
+    ]
+
+    _att_emb = await get_embedding(request.q, task_type="search_query")
+    _att_blocks: list = []
+    if _att_emb:
+        _att_result = await memory_block_service.qdrant_search(
+            db, space_id, request.q, _att_emb,
+            top_k=budget["attitudes"], block_type="attitude",
+        )
+        if _att_result:
+            _att_blocks, _ = _att_result
+    fast_cards.extend(
+        _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
+        for r in _att_blocks
+    )
+    fast_cards = _unique_cards(fast_cards)[: request.top_k]
+
+    # Phase B2: Merge prefetch hits
+    if prefetch_hit:
+        fast_cards = _merge_prefetch_cards(fast_cards, prefetch_hit, budget["fast"] + 2)
+
+    working_cards = await _working_cards(
+        db,
+        space_id,
+        task_mode,
+        limit=budget["working"],
+        primary_results=search_results,
+    )
+
+    deep_cards: list[MemoryCard] = []
+    layers_searched: list[str] = []
+    evaluation_verdict: str | None = None
+    cascade_result = None
+
+    if thinking_mode_used == "slow":
+        cascade_result = await cascade_recall_service.recall(
+            db,
+            space_id,
+            request.q,
+            top_k=budget["deep"],
+            evaluate="none",
+        )
+        deep_cards.extend(
+            _summary_card(item, "deep", task_mode) for item in cascade_result.summaries
+        )
+        deep_cards.extend(
+            _triple_card(item, "deep", task_mode)
+            for item in cascade_result.triples[: budget["deep"]]
+        )
+        deep_cards.extend(
+            _block_card(item, "deep", task_mode)
+            for item in cascade_result.blocks[: max(1, budget["deep"] // 2)]
+        )
+        deep_cards = _unique_cards(deep_cards)[: budget["deep"]]
+        layers_searched = cascade_result.layers_searched
+        evaluation_verdict = cascade_result.evaluation_verdict
+
+    # --- Post-search phase (slow thinking only) ---
+    verdict: str | None = None
+    confidence_score: float | None = None
+    evaluation_meta: dict | None = None
+
+    if thinking_mode_used == "slow" and cascade_result is not None:
+        try:
+            post_ctx = await post_pipeline.execute({
+                "query": request.q,
+                "results": cascade_result,
+                "intent": intent_value,
+            })
+            verdict = post_ctx.get("verdict")
+            confidence_score = post_ctx.get("confidence_score")
+            evaluation_meta = post_ctx.get("evaluation_meta")
+        except Exception:
+            # Post-pipeline failure: skip CRAG evaluation, continue without it
+            logger.debug("query post-pipeline failed, skipping CRAG", exc_info=True)
+
+    strategy = MemoryQueryStrategy(
+        task_mode=task_mode,
+        thinking_mode_requested=thinking_mode_requested,
+        thinking_mode_used=thinking_mode_used,
+        load_budget=load_budget,
+        consumer=consumer,
+    )
+    highlights = [card.use_now for card in fast_cards[:2]]
+    if not highlights:
+        highlights = [card.summary for card in working_cards[:1]]
+
+    metadata: dict = {
+        "backend": search_meta["backend"],
+        "layers_searched": layers_searched,
+        "evaluation_verdict": evaluation_verdict,
+        "pipeline": True,
+    }
+    if verdict is not None:
+        metadata["crag_verdict"] = verdict
+    if confidence_score is not None:
+        metadata["crag_confidence"] = confidence_score
+    if evaluation_meta is not None:
+        metadata["crag_meta"] = evaluation_meta
+
+    response = MemoryQueryResponse(
+        query=request.q,
+        strategy=strategy,
+        fast_cards=fast_cards,
+        working_cards=working_cards,
+        deep_cards=deep_cards,
+        highlights=highlights,
+        metadata=metadata,
+    )
+
+    # Slow Thinker: fire-and-forget query completion event
+    _t_end = _time.monotonic()
+    event_bus.publish_fire_and_forget(
+        Event(
+            type=MemvaultEvents.QUERY_COMPLETED,
+            data={
+                "space_id": space_id,
+                "query": request.q,
+                "consumer": consumer,
+                "task_mode": task_mode,
+                "thinking_mode_used": thinking_mode_used,
+                "load_budget": load_budget,
+                "intent": intent_value,
+                "tags": [c.tags[0] for c in fast_cards[:3] if c.tags],
+                "result_count": len(fast_cards) + len(working_cards),
+                "latency_ms": round((_t_end - _t_start) * 1000, 1),
+            },
+            source="memvault",
+        )
+    )
+
+    return response
+
+
+async def run_memory_query(
+    db: AsyncSession,
+    space_id: str,
+    request: MemoryQueryRequest,
+    use_pipeline: bool = False,
+) -> MemoryQueryResponse:
+    if use_pipeline:
+        return await _run_query_with_pipeline(db, space_id, request)
+
     _t_start = _time.monotonic()
     task_mode = _normalize(request.task_mode, _TASK_MODES, "auto")
 
@@ -423,7 +664,7 @@ async def run_memory_query(
 
             plan = classify_query(request.q)
             intent_value = plan.intent.value
-            _INTENT_TO_TASK: dict[str, str] = {
+            intent_to_task: dict[str, str] = {
                 QueryIntent.ENTITY_LOOKUP: "lookup",
                 QueryIntent.FACTUAL: "lookup",
                 QueryIntent.CONCEPTUAL: "reflect",
@@ -431,7 +672,7 @@ async def run_memory_query(
                 QueryIntent.CROSS_DOMAIN: "decide",
                 QueryIntent.UNKNOWN: "build",
             }
-            task_mode = _INTENT_TO_TASK.get(plan.intent, "build")
+            task_mode = intent_to_task.get(plan.intent, "build")
         except Exception:
             task_mode = "build"
 
