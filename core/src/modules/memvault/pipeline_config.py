@@ -27,7 +27,8 @@ class MemvaultPipelineConfig:
             "dream.reflect": True,
             "dream.consolidate": True,
             "dream.prune": True,
-            # Dream consolidate sub-steps
+            # Dream consolidate sub-steps (reserved for future DreamConsolidateOp decomposition;
+            # currently NOT checked by any is_enabled() call — DreamConsolidateOp is monolithic)
             "dream.consolidate.contradictions": True,
             "dream.consolidate.dedup": True,
             "dream.consolidate.normalize": True,
@@ -40,13 +41,13 @@ class MemvaultPipelineConfig:
             "lint.data_gaps": True,
             "lint.predicate_contradictions": True,
             "lint.temporal_staleness": True,
-            "lint.semantic_contradictions": False,  # opt-in (expensive LLM)
+            "lint.semantic_contradictions": False,  # opt-in; no LintOp yet (placeholder)
             # Query pipeline
             "query.route": True,
             "query.expand": True,
             "query.rerank": True,
             "query.crag_eval": True,
-            # CRAG evaluation layers
+            # CRAG layers (reserved; controlled by `evaluate` param, not these toggles)
             "crag.layer_a": True,
             "crag.layer_b": True,
             "crag.layer_c": False,  # opt-in (Haiku LLM)

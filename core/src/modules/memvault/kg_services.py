@@ -1171,7 +1171,10 @@ class CascadeRecallService:
                 from .crag_evaluator import CRAGEvaluator
 
                 evaluator = CRAGEvaluator()
-                evaluation = await evaluator.evaluate(query, result, evaluate=evaluate)
+                evaluation = await evaluator.evaluate(
+                    query, result, evaluate=evaluate,
+                    intent=result.routing_intent or "unknown",
+                )
                 result.confidence_score = evaluation.confidence_score
                 result.evaluation_verdict = evaluation.verdict.value
                 result.evaluation_metadata = evaluation.metadata
