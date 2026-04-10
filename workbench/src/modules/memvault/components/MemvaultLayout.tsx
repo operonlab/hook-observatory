@@ -1,6 +1,11 @@
-import { Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import '../styles/memvault.css'
-import LensSelector from './LensSelector'
+
+const LENSES = [
+  { to: 'recall', label: 'Recall' },
+  { to: 'journey', label: 'Journey' },
+  { to: 'knowledge', label: 'Knowledge' },
+] as const
 
 export default function MemvaultLayout() {
   return (
@@ -27,7 +32,30 @@ export default function MemvaultLayout() {
           </span>
         </div>
 
-        <LensSelector />
+        <nav
+          className="inline-flex rounded-xl border p-1"
+          style={{
+            backgroundColor: 'var(--crust)',
+            borderColor: 'var(--surface0)',
+          }}
+        >
+          {LENSES.map((lens) => (
+            <NavLink
+              key={lens.to}
+              to={lens.to}
+              className="rounded-lg px-5 py-2 text-sm font-medium transition-all"
+              style={({ isActive }) => ({
+                backgroundColor: isActive
+                  ? 'color-mix(in srgb, var(--blue) 18%, var(--surface0))'
+                  : 'transparent',
+                color: isActive ? 'var(--blue)' : 'var(--subtext1)',
+                minHeight: 36,
+              })}
+            >
+              {lens.label}
+            </NavLink>
+          ))}
+        </nav>
       </header>
 
       <main className="flex-1 min-w-0 overflow-y-auto">
