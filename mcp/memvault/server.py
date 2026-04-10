@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Memvault MCP Server — Slim adapter — 15 tools + 2 resources. Uses workshop.clients.memvault SDK.
+"""Memvault MCP Server — Slim adapter — 17 tools + 2 resources. Uses sdk_client.memvault SDK.
 
 Usage:
     python3 mcp/memvault/server.py
@@ -92,13 +92,12 @@ async def memvault_extract(
 @mcp.tool()
 @mcp_error_handler("Memvault")
 async def memvault_profile(rebuild: bool = False) -> str:
-    """查看或重建 KAS Profile（Knowledge/Attitude/Skills 三維量化）"""
+    """查看或重建 Profile（Knowledge/Attitude 二維量化）"""
     profile = await to_thread(client.profile, rebuild=rebuild)
     return (
-        f"# KAS Profile\n\n"
+        f"# Profile\n\n"
         f"- Knowledge: {profile.get('knowledge_score', 0)}\n"
         f"- Attitude: {profile.get('attitude_score', 0)}\n"
-        f"- Skill: {profile.get('skill_score', 0)}\n"
         f"- Updated: {profile.get('updated_at', 'N/A')}"
     )
 
@@ -206,78 +205,6 @@ async def memvault_kg_cascade_recall(
         parts.append("No results found across all layers.")
 
     return "\n".join(parts)
-
-
-@mcp.tool()
-@mcp_error_handler("Memvault")
-async def memvault_attitude_current(category: str = "", limit: int = 20) -> str:
-    """查詢當前有效的態度事實（attitude facts，非 superseded）"""
-    result = await to_thread(client.attitudes, category=category or None)
-    if not result:
-        return "No active attitude facts found."
-
-    total = len(result)
-    items = result[:limit]
-
-    facts_text = "\n\n---\n\n".join(
-        f"**[{a['category']}]** {a['fact']}\n"
-        f"Confidence: {a.get('confidence', 0.5):.2f} | Operation: {a.get('operation', 'ADD')}"
-        for a in items
-    )
-    truncated = f" (showing {limit} of {total})" if total > limit else ""
-    return f"# Current Attitudes ({total} active{truncated})\n\n{facts_text}"
-
-
-@mcp.tool()
-@mcp_error_handler("Memvault")
-async def memvault_attitude_evolve(
-    fact: str,
-    category: str,
-    source_session: str = "",
-) -> str:
-    """態度演化：輸入新 fact，系統判斷 ADD / UPDATE / NOOP（Mem0 pattern）"""
-    result = await to_thread(
-        client.attitude_evolve,
-        fact=fact,
-        category=category,
-        source_session=source_session or None,
-    )
-    operation = result.get("operation", "?")
-    fact_id = result.get("fact_id", "?")
-    message = result.get("message", "")
-    previous_id = result.get("previous_id")
-
-    lines = [
-        f"Attitude evolve: **{operation}**",
-        f"Fact ID: {fact_id}",
-        f"Message: {message}",
-    ]
-    if previous_id:
-        lines.append(f"Supersedes: {previous_id}")
-
-    return "\n".join(lines)
-
-
-@mcp.tool()
-@mcp_error_handler("Memvault")
-async def memvault_skill_proficiency(limit: int = 20) -> str:
-    """查詢 Skill 熟練度排行（按 proficiency score 降序）"""
-    result = await to_thread(client.skill_proficiency)
-    if not result:
-        return "No skill proficiency data found."
-
-    total = len(result)
-    items = result[:limit]
-
-    rows = "\n".join(
-        f"  {i + 1:2d}. {p['skill_name']:<40s} "
-        f"proficiency={p.get('proficiency', 0):.2f}  "
-        f"invocations={p.get('invocation_count', 0)}  "
-        f"success_rate={p.get('success_rate', 0):.0%}"
-        for i, p in enumerate(items)
-    )
-    truncated = f" (showing {limit} of {total})" if total > limit else ""
-    return f"# Skill Proficiency Ranking ({total} skills{truncated})\n\n{rows}"
 
 
 @mcp.tool()
@@ -495,6 +422,151 @@ async def memvault_feedback(
 
 @mcp.tool()
 @mcp_error_handler("Memvault")
+async def memvault_query(
+    query: str,
+    task_mode: str = "auto",
+    thinking_mode: str = "auto",
+    load_budget: str = "standard",
+    consumer: str = "human",
+    top_k: int = 6,
+) -> str:
+    """多層記憶查詢 — fast/working/deep 三層 cards，task_mode 自動推斷意圖。
+
+    task_mode: auto|lookup|decide|build|reflect
+    thinking_mode: auto|fast|slow
+    load_budget: light|standard|deep
+    consumer: human|agent|ui
+    """
+    result = await to_thread(
+        client.query_memory,
+        query=query,
+        task_mode=task_mode,
+        thinking_mode=thinking_mode,
+        load_budget=load_budget,
+        consumer=consumer,
+        top_k=top_k,
+    )
+    strategy = result.get("strategy", {})
+    parts = [
+        f'# Memory Query: "{query}"',
+        f"Mode: {strategy.get('task_mode', '?')} | Thinking: {strategy.get('thinking_mode_used', '?')} | Budget: {strategy.get('load_budget', '?')}",
+        "",
+    ]
+
+    for layer, label in [("fast_cards", "Fast"), ("working_cards", "Working"), ("deep_cards", "Deep")]:
+        cards = result.get(layer, [])
+        if cards:
+            parts.append(f"## {label} Layer ({len(cards)} cards)")
+            for c in cards:
+                parts.append(f"  **{c.get('title', '?')}** [{c.get('layer', '?')}]")
+                parts.append(f"  {c.get('summary', '')[:200]}")
+                if c.get("why_relevant"):
+                    parts.append(f"  Why: {c['why_relevant']}")
+                parts.append("")
+
+    highlights = result.get("highlights", [])
+    if highlights:
+        parts.append("## Highlights")
+        for h in highlights:
+            parts.append(f"  - {h}")
+
+    if not any(result.get(k) for k in ("fast_cards", "working_cards", "deep_cards")):
+        parts.append("No memory cards found.")
+
+    return "\n".join(parts)
+
+
+@mcp.tool()
+@mcp_error_handler("Memvault")
+async def memvault_inject(
+    query: str,
+    task_mode: str = "build",
+    thinking_mode: str = "auto",
+    load_budget: str = "light",
+    top_k: int = 6,
+) -> str:
+    """Agent system prompt 記憶注入 — 回傳預格式化的 system_prompt_memory + working_context"""
+    result = await to_thread(
+        client.inject,
+        query=query,
+        task_mode=task_mode,
+        thinking_mode=thinking_mode,
+        load_budget=load_budget,
+        top_k=top_k,
+    )
+    parts = [
+        f'# Memory Injection: "{query}"',
+        "",
+        "## System Prompt Memory",
+        result.get("system_prompt_memory", "(empty)"),
+        "",
+    ]
+
+    working = result.get("working_context")
+    if working:
+        parts.append("## Working Context")
+        parts.append(working)
+        parts.append("")
+
+    bias = result.get("decision_bias")
+    if bias:
+        parts.append("## Decision Bias")
+        parts.append(bias)
+
+    return "\n".join(parts)
+
+
+@mcp.tool()
+@mcp_error_handler("Memvault")
+async def memvault_inspect(
+    query: str,
+    task_mode: str = "reflect",
+    load_budget: str = "deep",
+    top_k: int = 6,
+) -> str:
+    """深度記憶檢視 — 慢思考模式，完整證據鏈 + raw sections"""
+    result = await to_thread(
+        client.inspect,
+        query=query,
+        task_mode=task_mode,
+        load_budget=load_budget,
+        top_k=top_k,
+    )
+    strategy = result.get("strategy", {})
+    parts = [
+        f'# Memory Inspection: "{query}"',
+        f"Mode: {strategy.get('task_mode', '?')} | Thinking: slow | Budget: {strategy.get('load_budget', '?')}",
+        "",
+    ]
+
+    cards = result.get("cards", [])
+    if cards:
+        parts.append(f"## Cards ({len(cards)})")
+        for c in cards:
+            parts.append(f"### {c.get('title', '?')} [{c.get('layer', '?')}]")
+            parts.append(c.get("summary", ""))
+            refs = c.get("evidence_refs", [])
+            if refs:
+                parts.append("Evidence:")
+                for r in refs[:5]:
+                    parts.append(f"  - [{r.get('kind', '?')}] {r.get('title', '?')}: {r.get('snippet', '')[:100]}")
+            parts.append("")
+
+    for section, label in [("fast", "Fast"), ("working", "Working"), ("deep", "Deep")]:
+        raw = result.get("raw_sections", {}).get(section)
+        if raw:
+            parts.append(f"## Raw {label} Section")
+            parts.append(str(raw)[:500])
+            parts.append("")
+
+    if not cards:
+        parts.append("No inspection results found.")
+
+    return "\n".join(parts)
+
+
+@mcp.tool()
+@mcp_error_handler("Memvault")
 async def annotate_insight(
     insight: str,
     block_type: str = "knowledge",
@@ -559,19 +631,21 @@ async def annotate_insight(
 @mcp.resource(
     "memvault://attitudes/current",
     name="attitudes-current",
-    description="當前有效的態度事實快照",
+    description="當前有效的態度事實快照 (block_type=attitude)",
     mime_type="text/markdown",
 )
 async def attitudes_current() -> str:
-    """當前有效的態度事實快照"""
+    """當前有效的態度 blocks 快照"""
     try:
-        result = await to_thread(client.attitudes)
-        if not result:
-            return "No active attitude facts."
+        result = await to_thread(client.list_blocks, block_type="attitude", page_size=50)
+        items = result.get("items", []) if isinstance(result, dict) else result
+        if not items:
+            return "No active attitude blocks."
         return "\n\n---\n\n".join(
-            f"## [{a['category']}]\n**{a['fact']}**\n"
-            f"Confidence: {a.get('confidence', 0.5):.2f} | Operation: {a.get('operation', 'ADD')}"
-            for a in result
+            f"## {', '.join(b.get('tags', ['untagged']))}\n"
+            f"**{b.get('content', '')[:300]}**\n"
+            f"Created: {b.get('created_at', 'N/A')}"
+            for b in items
         )
     except (APIError, APIConnectionError) as e:
         return f"memvault error: {type(e).__name__}: {e}"
@@ -582,18 +656,17 @@ async def attitudes_current() -> str:
 @mcp.resource(
     "memvault://profile/kas",
     name="kas-profile",
-    description="KAS 人格檔案（Knowledge/Attitude/Skills 三維量化）",
+    description="Profile（Knowledge/Attitude 二維量化）",
     mime_type="text/markdown",
 )
 async def kas_profile() -> str:
-    """KAS 人格檔案（Knowledge/Attitude/Skills 三維量化）"""
+    """Profile（Knowledge/Attitude 二維量化）"""
     try:
         profile = await to_thread(client.profile)
         return (
-            f"# KAS Profile\n\n"
+            f"# Profile\n\n"
             f"- Knowledge: {profile.get('knowledge_score', 0)}\n"
             f"- Attitude: {profile.get('attitude_score', 0)}\n"
-            f"- Skill: {profile.get('skill_score', 0)}\n"
             f"- Updated: {profile.get('updated_at', 'N/A')}"
         )
     except (APIError, APIConnectionError) as e:
