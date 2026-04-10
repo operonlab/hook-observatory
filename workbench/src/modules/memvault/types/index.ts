@@ -58,8 +58,6 @@ export const KG_LAYER_CONFIG: Record<GalaxyLayer, { label: string; color: string
 
 // ── KG API types (mirrors kg_schemas.py) ──
 
-export type BrowserTab = 'fast' | 'working' | 'deep' | 'skills'
-
 export interface MemoryQueryOptions {
   taskMode: TaskMode
   thinkingMode: ThinkingMode
