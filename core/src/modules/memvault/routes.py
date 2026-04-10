@@ -1015,6 +1015,7 @@ async def run_dream_consolidation(
     space_id: str = Query("default"),
     dry_run: bool = Query(True),
     force: bool = Query(False),
+    use_pipeline: bool = Query(False, description="Use reactive pipeline instead of sequential"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
@@ -1025,7 +1026,7 @@ async def run_dream_consolidation(
     """
     from .dream import run_dream
 
-    report = await run_dream(db, space_id, dry_run=dry_run, force=force)
+    report = await run_dream(db, space_id, dry_run=dry_run, force=force, use_pipeline=use_pipeline)
     if not dry_run and not report.skipped:
         await db.commit()
     return report.to_dict()

@@ -71,12 +71,12 @@ def choose_thinking_mode(
 
     # Intent-based routing (replaces consumer-based routing)
     _INTENT_TO_THINKING: dict[str, str] = {
-        "entity_lookup": "fast",   # 查實體不需要 cascade
-        "factual": "fast",         # 查事實不需要 cascade
-        "conceptual": "slow",      # 需要 KG 摘要+三元組
-        "exploratory": "slow",     # 需要完整記憶脈絡
-        "cross_domain": "slow",    # 需要跨領域 cascade
-        "unknown": "slow",         # 不確定就全搜
+        "entity_lookup": "fast",  # 查實體不需要 cascade
+        "factual": "fast",  # 查事實不需要 cascade
+        "conceptual": "slow",  # 需要 KG 摘要+三元組
+        "exploratory": "slow",  # 需要完整記憶脈絡
+        "cross_domain": "slow",  # 需要跨領域 cascade
+        "unknown": "slow",  # 不確定就全搜
     }
     return _INTENT_TO_THINKING.get(intent, "slow")
 
@@ -527,7 +527,7 @@ async def _run_query_with_pipeline(
             space_id,
             request.q,
             top_k=budget["cascade"],
-            evaluate="none",
+            evaluate=getattr(request, "evaluate", "default"),
             mode=getattr(request, "retrieval_mode", "auto"),
         )
         cascade_cards.extend(
@@ -721,7 +721,7 @@ async def run_memory_query(
             space_id,
             request.q,
             top_k=budget["cascade"],
-            evaluate="none",
+            evaluate=getattr(request, "evaluate", "default"),
             mode=getattr(request, "retrieval_mode", "auto"),
         )
         cascade_cards.extend(

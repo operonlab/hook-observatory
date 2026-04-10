@@ -723,7 +723,7 @@ async def lint_knowledge_graph(
                 code="memvault.forbidden",
             )
     check_list = None if checks == "all" else [c.strip() for c in checks.split(",")]
-    report = await run_lint(db, space_id, checks=check_list)
+    report = await run_lint(db, space_id, checks=check_list, use_pipeline=True)
 
     remediations = 0
     if fix:
