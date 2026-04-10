@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { withJournal } from '@/shared/utils/journalMiddleware'
 import type { MemoryBlock } from '@/types'
-import type { BlockFilters, GalaxyLayer, Lens, ViewMode } from '../types'
+import type { BlockFilters, GalaxyLayer, ViewMode } from '../types'
 
 const DEFAULT_FILTERS: BlockFilters = {
   blockType: null,
@@ -19,7 +19,6 @@ interface MemvaultState {
   selectedBlock: MemoryBlock | null
   searchQuery: string
   kg_galaxyLayers: Set<GalaxyLayer>
-  activeLens: Lens
   showAdvancedQuery: boolean
 
   selectBlock: (block: MemoryBlock | null) => void
@@ -29,7 +28,6 @@ interface MemvaultState {
   setSearchQuery: (query: string) => void
   clearSearch: () => void
   setKgGalaxyLayers: (layers: Set<GalaxyLayer>) => void
-  setActiveLens: (lens: Lens) => void
   toggleAdvancedQuery: () => void
 }
 
@@ -43,7 +41,6 @@ export const useMemvaultStore = create<MemvaultState>()(
       selectedBlock: null,
       searchQuery: '',
       kg_galaxyLayers: new Set<GalaxyLayer>(['blocks', 'summaries', 'communities']),
-      activeLens: 'recall',
       showAdvancedQuery: false,
 
       selectBlock: (block) => set({ selectedBlock: block }, false, 'memvault/selectBlock'),
@@ -59,7 +56,6 @@ export const useMemvaultStore = create<MemvaultState>()(
       clearSearch: () => set({ searchQuery: '' }, false, 'memvault/clearSearch'),
       setKgGalaxyLayers: (layers) =>
         set({ kg_galaxyLayers: layers }, false, 'memvault/setKgGalaxyLayers'),
-      setActiveLens: (lens) => set({ activeLens: lens }, false, 'memvault/setActiveLens'),
       toggleAdvancedQuery: () =>
         set((s) => ({ showAdvancedQuery: !s.showAdvancedQuery }), false, 'memvault/toggleAdvancedQuery'),
     })),

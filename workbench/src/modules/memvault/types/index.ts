@@ -1,4 +1,4 @@
-export type Lens = 'recall' | 'journey' | 'understand'
+export type Lens = 'recall' | 'journey' | 'knowledge'
 
 export type BlockType = 'knowledge' | 'skill' | 'attitude' | 'general'
 
