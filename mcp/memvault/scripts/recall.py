@@ -4,6 +4,11 @@ Triggered by Claude Code UserPromptSubmit hook.
 Searches Core API (cascade recall → attitude autoRecall → search fallback)
 and returns plain text context.
 
+Helpers (optional, fail-safe):
+  recall_dedup.py   — cascade result deduplication (P2)
+  recall_cache.py   — local file cache fallback (P1)
+  recall_session.py — session context window (P3)
+
 stdin: JSON {"session_id", "prompt", "cwd"}
 stdout: Plain text context (or empty for no match)
 """
@@ -17,6 +22,33 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Optional helper imports (each can be disabled via env var)
+# ---------------------------------------------------------------------------
+_dedup_fn = None
+_cache_mod = None
+_session_fn = None
+
+if os.environ.get("MEMVAULT_RECALL_DEDUP") != "0":
+    try:
+        from recall_dedup import dedup_cascade
+        _dedup_fn = dedup_cascade
+    except Exception:
+        pass
+
+if os.environ.get("MEMVAULT_RECALL_CACHE") != "0":
+    try:
+        import recall_cache as _cache_mod
+    except Exception:
+        pass
+
+if os.environ.get("MEMVAULT_RECALL_SESSION") != "0":
+    try:
+        from recall_session import extract_session_context
+        _session_fn = extract_session_context
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -42,6 +74,7 @@ SPACE_ID = os.environ.get("MEMVAULT_SPACE_ID", "default")
 LOG_DIR = Path.home() / "Claude" / "memvault" / "logs"
 LOG_FILE = LOG_DIR / "recall.log"
 MAX_PROMPT_LEN = 2000
+MAX_OUTPUT_CHARS = 4000
 CURL_TIMEOUT = 10
 PYTHON = str(Path.home() / ".local" / "bin" / "python3")
 
@@ -171,7 +204,18 @@ def _main() -> None:
         log(f"Skipping long prompt ({len(prompt)} chars)")
         return
 
+    cwd = input_data.get("cwd", "").strip()
     log(f"Session: {session_id or 'unknown'} | Prompt: {prompt[:80]}")
+
+    # ── Session Context Window (P3) ──────────────────────────────────────────
+    session_context = ""
+    if _session_fn and session_id:
+        try:
+            session_context = _session_fn(session_id, cwd, prompt)
+            if session_context:
+                log(f"Session context: {len(session_context)} chars")
+        except Exception:
+            pass
 
     # ── URL-encode the query ──────────────────────────────────────────────────
     encoded_q = urllib.parse.quote(prompt)
@@ -180,14 +224,52 @@ def _main() -> None:
     cascade_url = f"{CORE_API_URL}/api/memvault/kg/recall?q={encoded_q}&top_k=5&space_id={SPACE_ID}"
     _, cascade_body = http_get(cascade_url, timeout=CURL_TIMEOUT)
 
+    cache_stale = False
     formatted = ""
+
+    # ── Cache integration (P1) ───────────────────────────────────────────────
+    if _cache_mod:
+        normalized_q = _cache_mod.normalize_query(prompt)
+        q_hash = _cache_mod.query_hash(normalized_q)
 
     if cascade_body:
         try:
             cascade_data = json.loads(cascade_body)
         except json.JSONDecodeError:
             cascade_data = {}
+        # Write to cache on success
+        if _cache_mod and cascade_data.get("layers_searched"):
+            _cache_mod.write_cache(
+                _cache_mod.CASCADE_CACHE_DIR, q_hash, prompt, normalized_q,
+                cascade_data, _cache_mod.CASCADE_TTL,
+            )
+    else:
+        cascade_data = {}
+        # API failed → try cache fallback
+        if _cache_mod:
+            log("API failed, trying cache fallback")
+            cached, is_stale = _cache_mod.read_cache(
+                _cache_mod.CASCADE_CACHE_DIR, q_hash,
+                _cache_mod.CASCADE_TTL, _cache_mod.CASCADE_STALE_TTL,
+            )
+            if cached is None:
+                cached, is_stale = _cache_mod.read_latest(
+                    _cache_mod.CASCADE_CACHE_DIR, _cache_mod.CASCADE_STALE_TTL,
+                )
+            if cached:
+                cascade_data = cached
+                cache_stale = is_stale
+                log(f"Cache {'stale ' if is_stale else ''}hit")
 
+    # ── Dedup (P2) ───────────────────────────────────────────────────────────
+    if _dedup_fn and cascade_data.get("layers_searched"):
+        try:
+            cascade_data = _dedup_fn(cascade_data)
+            log("Dedup applied")
+        except Exception:
+            pass
+
+    if cascade_data:
         if "layers_searched" in cascade_data:
             layers_list = cascade_data.get("layers_searched", [])
             layers = ", ".join(layers_list) if layers_list else ""
@@ -195,15 +277,20 @@ def _main() -> None:
             if layers:
                 formatted = f"## 相關記憶（cascade recall: {layers}）"
 
-                # Summaries (L2 — CommunitySummary)
+                # Summaries (L2 — CommunitySummary, enriched by dedup with community metadata)
                 summaries = cascade_data.get("summaries", [])
                 if summaries:
                     formatted += "\n\n### 智慧節點"
                     for s in summaries:
                         summary_text = s.get("summary", "")
                         key_findings = s.get("key_findings", [])
+                        c_name = s.get("_community_name")
+                        c_size = s.get("_community_size", 0)
                         if summary_text:
-                            formatted += f"\n- {summary_text}"
+                            if c_name:
+                                formatted += f"\n- **{c_name}** (size: {c_size}): {summary_text}"
+                            else:
+                                formatted += f"\n- {summary_text}"
                             if key_findings:
                                 for kf in key_findings:
                                     formatted += f"\n  - {kf}"
@@ -357,19 +444,59 @@ def _main() -> None:
             f"?q={encoded_q}&top_k=3&space_id={SPACE_ID}"
         )
         _, att_body = http_get(att_url, timeout=3)
+        att_from_cache = False
+        if not att_body and _cache_mod:
+            att_hash = _cache_mod.query_hash(_cache_mod.normalize_query(prompt))
+            cached_att, _ = _cache_mod.read_cache(
+                _cache_mod.ATTITUDE_CACHE_DIR, att_hash,
+                _cache_mod.ATTITUDE_TTL, _cache_mod.ATTITUDE_STALE_TTL,
+            )
+            if cached_att:
+                att_body = json.dumps(cached_att)
+                att_from_cache = True
         if att_body:
             att_section = _format_attitudes(att_body)
             if att_section:
                 formatted += att_section
-                log("Attitude autoRecall injected")
+                log("Attitude autoRecall injected" + (" (cache)" if att_from_cache else ""))
+            # Cache successful attitude response
+            if _cache_mod and not att_from_cache:
+                try:
+                    att_data = json.loads(att_body)
+                    if isinstance(att_data, list) and att_data:
+                        att_hash = _cache_mod.query_hash(_cache_mod.normalize_query(prompt))
+                        _cache_mod.write_cache(
+                            _cache_mod.ATTITUDE_CACHE_DIR, att_hash, prompt,
+                            _cache_mod.normalize_query(prompt), att_data,
+                            _cache_mod.ATTITUDE_TTL,
+                        )
+                except Exception:
+                    pass
 
     # ── No results ────────────────────────────────────────────────────────────
-    if not formatted:
+    if not formatted and not session_context:
         log("No results from API")
         return
 
-    # ── Output formatted text ─────────────────────────────────────────────────
-    print(formatted)
+    # ── Assemble output ──────────────────────────────────────────────────────
+    output_parts = []
+    if session_context:
+        output_parts.append(session_context)
+    if formatted:
+        output_parts.append(formatted)
+
+    # Stale cache warning
+    if cache_stale:
+        output_parts.append("\n> ⚠️ 此記憶來自快取（可能已過時），Core API 暫時無法連線")
+
+    full_output = "\n\n".join(output_parts)
+
+    # ── Token budget cap ─────────────────────────────────────────────────────
+    if len(full_output) > MAX_OUTPUT_CHARS:
+        full_output = full_output[:MAX_OUTPUT_CHARS]
+        log(f"Output truncated to {MAX_OUTPUT_CHARS} chars")
+
+    print(full_output)
 
     # ── Skill suggestion ──────────────────────────────────────────────────────
     triggers_file = Path.home() / ".claude" / "data" / "skill-index" / "triggers.json"
