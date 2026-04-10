@@ -51,6 +51,21 @@ class MemvaultPipelineConfig:
             "crag.layer_b": True,
             "crag.layer_c": False,  # opt-in (Haiku LLM)
             "crag.layer_d": False,  # opt-in (RLM escalation)
+            # Edge signal pipeline
+            "edge.cooccurrence": True,
+            "edge.session_overlap": True,
+            "edge.adamic_adar": True,
+            "edge.type_affinity": True,
+            "edge.semantic_similarity": True,
+            "edge.composite": True,
+            "edge.persist": True,
+            # Surprise discovery
+            "surprise.indirect_strong": True,
+            "surprise.cross_community": True,
+            "surprise.knowledge_gap": True,
+            "surprise.merge": True,
+            # Review auto-approve
+            "review.auto_approve": True,
         }
     )
 
@@ -70,6 +85,24 @@ class MemvaultPipelineConfig:
     # Curate parameters (used by DreamPruneOp)
     curate_confidence_threshold: float = 0.15
     curate_max_soft_delete: int = 50
+
+    # Edge signal pipeline parameters
+    edge_composite_weights: dict = field(
+        default_factory=lambda: {
+            "cooccurrence": 0.30,
+            "session_overlap": 0.20,
+            "adamic_adar": 0.20,
+            "type_affinity": 0.10,
+            "semantic_similarity": 0.20,
+        }
+    )
+    edge_min_cooccurrence: int = 1  # minimum co-occurrences to create an edge
+
+    # Surprise discovery parameters
+    surprise_limit: int = 10  # max results per strategy
+
+    # Review auto-approve parameters
+    review_auto_approve_days: int = 14  # auto-approve pending items older than N days
 
     def is_enabled(self, stage_name: str) -> bool:
         """Check if a stage is enabled. Unknown stages default to True."""

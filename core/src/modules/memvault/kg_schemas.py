@@ -232,6 +232,73 @@ class GraphTraversalResult(BaseModel):
     truncated: bool = False
 
 
+# ======================== Entity Edge (Multi-Signal) ========================
+
+
+class EntityEdgeResponse(SpaceScopedResponse):
+    """Weighted edge between two canonical entities."""
+
+    entity_a_id: str
+    entity_b_id: str
+    entity_a_name: str = ""
+    entity_b_name: str = ""
+    # Five signals
+    cooccurrence_count: int = 0
+    session_overlap: float = 0.0
+    adamic_adar: float = 0.0
+    type_affinity: float = 0.0
+    semantic_similarity: float = 0.0
+    # Composite
+    composite_weight: float = 0.0
+    last_computed_at: datetime | None = None
+
+
+class EdgeRecomputeRequest(BaseModel):
+    """Request to recompute specific edge signals."""
+
+    signals: list[str] | None = None  # None = all signals
+
+
+# ======================== Surprise Connections ========================
+
+
+class SurpriseConnection(BaseModel):
+    """An unexpected or noteworthy connection discovered via multi-signal analysis."""
+
+    entity_a: str
+    entity_b: str
+    entity_a_id: str = ""
+    entity_b_id: str = ""
+    strategy: str  # indirect_strong | cross_community | knowledge_gap
+    signal_breakdown: dict[str, float] = {}
+    explanation: str = ""
+    community_a: str | None = None
+    community_b: str | None = None
+
+
+# ======================== Review Queue ========================
+
+
+class ReviewItem(BaseModel):
+    """A pending item awaiting human review."""
+
+    id: str
+    item_type: str  # block | triple
+    content_preview: str
+    invalidation_reason: str | None = None
+    superseded_by: str | None = None
+    replacement_preview: str | None = None
+    created_at: datetime | None = None
+    invalidated_at: datetime | None = None
+
+
+class ReviewAction(BaseModel):
+    """Action on a review queue item."""
+
+    action: str  # approve | reject | defer
+    note: str | None = None
+
+
 # ======================== Lint ========================
 
 

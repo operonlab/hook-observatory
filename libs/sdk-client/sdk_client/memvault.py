@@ -565,6 +565,68 @@ class MemvaultClient(BaseClient):
         }
         return self._post("/dream", params=params, timeout=180)
 
+    # ======================== Entity Edges (Multi-Signal) ========================
+
+    def list_entity_edges(
+        self,
+        min_weight: float = 0.1,
+        limit: int = 500,
+        space_id: str = "default",
+    ) -> list[dict]:
+        """List weighted entity edges above min_weight threshold."""
+        return self._get(
+            "/kg/entity-edges",
+            params={"space_id": space_id, "min_weight": min_weight, "limit": limit},
+        )
+
+    def recompute_edge_weights(self, space_id: str = "default") -> dict:
+        """Trigger full edge weight recomputation via Edge Pipeline."""
+        return self._post(
+            "/kg/entity-edges/recompute",
+            params={"space_id": space_id},
+            timeout=120,
+        )
+
+    def surprise_connections(
+        self,
+        strategy: str | None = None,
+        limit: int = 10,
+        space_id: str = "default",
+    ) -> list[dict]:
+        """Discover unexpected knowledge connections."""
+        params: dict = {"space_id": space_id, "limit": limit}
+        if strategy:
+            params["strategy"] = strategy
+        return self._get("/kg/entity-edges/surprises", params=params)
+
+    # ======================== Review Queue ========================
+
+    def list_review_queue(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        space_id: str = "default",
+    ) -> dict:
+        """List pending review items."""
+        return self._get(
+            "/review-queue",
+            params={"space_id": space_id, "page": page, "page_size": page_size},
+        )
+
+    def review_approve(self, item_id: str) -> dict:
+        """Approve a pending review item."""
+        return self._post(f"/review-queue/{item_id}/approve")
+
+    def review_reject(self, item_id: str) -> dict:
+        """Reject a pending review item."""
+        return self._post(f"/review-queue/{item_id}/reject")
+
+    def review_defer(self, item_id: str) -> dict:
+        """Defer a review item."""
+        return self._post(f"/review-queue/{item_id}/defer")
+
+    # ======================== Health ========================
+
     def health(self) -> bool:
         """Check API connectivity. Returns True if API responds."""
         try:

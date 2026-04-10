@@ -1,4 +1,4 @@
-"""Dream Pipeline factory — Orient → conditional body (Gather → Reflect → Consolidate → Prune).
+"""Dream Pipeline — Orient → body (Gather → Reflect → Consolidate → Prune → ReviewAutoApprove).
 
 Usage:
     pipeline = build_dream_pipeline(config)
@@ -14,6 +14,7 @@ Usage:
             "reflect":     ctx["reflect_result"],
             "consolidate": ctx["consolidate_stats"],
             "prune":       ctx["prune_stats"],
+            "review":      ctx.get("review_auto_approved_count", 0),
         }
 """
 
@@ -28,6 +29,7 @@ from ..ops.dream_ops import (
     DreamPruneOp,
     DreamReflectOp,
 )
+from ..ops.review_ops import ReviewAutoApproveOp
 from ..pipeline_config import MemvaultPipelineConfig
 
 
@@ -46,13 +48,14 @@ def build_dream_pipeline(
     if config is None:
         config = MemvaultPipelineConfig()
 
-    # Phases 2-4: the conditional body
+    # Phases 2-4 + review auto-approve: the conditional body
     body = Pipeline(name="dream.body")
     body.pipe(
         DreamGatherSignalOp("dream.gather_signal", config),
         DreamReflectOp("dream.reflect", config),
         DreamConsolidateOp("dream.consolidate", config),
         DreamPruneOp("dream.prune", config),
+        ReviewAutoApproveOp("review.auto_approve", config),
     )
 
     gate = ConditionalOp(

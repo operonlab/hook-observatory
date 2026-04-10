@@ -14,6 +14,15 @@ from .dream_ops import (
     DreamPruneOp,
     DreamReflectOp,
 )
+from .edge_ops import (
+    EdgeAdamicAdarOp,
+    EdgeCompositeOp,
+    EdgeCooccurrenceOp,
+    EdgePersistOp,
+    EdgeSemanticSimilarityOp,
+    EdgeSessionOverlapOp,
+    EdgeTypeAffinityOp,
+)
 from .lint_ops import (
     LintCommunityAnomalyOp,
     LintContradictionOp,
@@ -26,6 +35,13 @@ from .lint_ops import (
     LintTemporalStalenessOp,
     MergeFindingsOp,
 )
+from .review_ops import ReviewAutoApproveOp
+from .surprise_ops import (
+    MergeSurprisesOp,
+    SurpriseCrossCommunityOp,
+    SurpriseIndirectStrongOp,
+    SurpriseKnowledgeGapOp,
+)
 
 __all__ = [
     "DreamConsolidateOp",
@@ -33,6 +49,13 @@ __all__ = [
     "DreamOrientOp",
     "DreamPruneOp",
     "DreamReflectOp",
+    "EdgeAdamicAdarOp",
+    "EdgeCompositeOp",
+    "EdgeCooccurrenceOp",
+    "EdgePersistOp",
+    "EdgeSemanticSimilarityOp",
+    "EdgeSessionOverlapOp",
+    "EdgeTypeAffinityOp",
     "LintCommunityAnomalyOp",
     "LintContradictionOp",
     "LintDanglingRefOp",
@@ -44,5 +67,10 @@ __all__ = [
     "LintTemporalStalenessOp",
     "MemvaultOp",
     "MergeFindingsOp",
+    "MergeSurprisesOp",
     "PipelineMeta",
+    "ReviewAutoApproveOp",
+    "SurpriseCrossCommunityOp",
+    "SurpriseIndirectStrongOp",
+    "SurpriseKnowledgeGapOp",
 ]

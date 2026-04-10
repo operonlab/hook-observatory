@@ -1029,3 +1029,146 @@ async def run_dream_consolidation(
     if not dry_run and not report.skipped:
         await db.commit()
     return report.to_dict()
+
+
+# ======================== Review Queue ========================
+
+
+@router.get("/review-queue")
+@require_permission("memvault.read")
+async def list_review_queue(
+    space_id: str = Query(default="default"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """List pending review items: __pending__ blocks + recent dream invalidations."""
+    from .kg_schemas import ReviewItem
+    from .models import MemoryBlock
+
+    offset = (page - 1) * page_size
+
+    # Pending blocks (superseded_by = '__pending__')
+    stmt = (
+        select(MemoryBlock)
+        .where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.deleted_at.is_(None),
+            MemoryBlock.superseded_by == "__pending__",
+        )
+        .order_by(MemoryBlock.updated_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    blocks = result.scalars().all()
+
+    items = [
+        ReviewItem(
+            id=b.id,
+            item_type="block",
+            content_preview=b.content[:200] if b.content else "",
+            invalidation_reason=b.invalidation_reason,
+            superseded_by=b.superseded_by,
+            created_at=b.created_at,
+            invalidated_at=b.invalid_at,
+        )
+        for b in blocks
+    ]
+
+    # Count total for pagination
+    count_stmt = (
+        select(func.count())
+        .select_from(MemoryBlock)
+        .where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.deleted_at.is_(None),
+            MemoryBlock.superseded_by == "__pending__",
+        )
+    )
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.post("/review-queue/{item_id}/approve")
+@require_permission("memvault.write")
+async def approve_review(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve a pending review item — confirms the dream/dedup decision."""
+    from sqlalchemy import update
+
+    from .models import MemoryBlock
+
+    result = await db.execute(
+        update(MemoryBlock)
+        .where(
+            MemoryBlock.id == item_id,
+            MemoryBlock.superseded_by == "__pending__",
+        )
+        .values(
+            superseded_by="__approved__",
+            invalidation_reason="review_approved",
+            invalid_at=datetime.now(UTC),
+        )
+    )
+    if result.rowcount == 0:
+        raise NotFoundError("Review item not found or already resolved")
+    await db.commit()
+    return {"status": "approved", "id": item_id}
+
+
+@router.post("/review-queue/{item_id}/reject")
+@require_permission("memvault.write")
+async def reject_review(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reject a pending review item — restores the block to active state."""
+    from sqlalchemy import update
+
+    from .models import MemoryBlock
+
+    result = await db.execute(
+        update(MemoryBlock)
+        .where(
+            MemoryBlock.id == item_id,
+            MemoryBlock.superseded_by == "__pending__",
+        )
+        .values(
+            superseded_by=None,
+            invalidation_reason=None,
+            invalid_at=None,
+        )
+    )
+    if result.rowcount == 0:
+        raise NotFoundError("Review item not found or already resolved")
+    await db.commit()
+    return {"status": "rejected", "id": item_id}
+
+
+@router.post("/review-queue/{item_id}/defer")
+@require_permission("memvault.write")
+async def defer_review(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Defer a review — mark as seen but keep pending."""
+    from sqlalchemy import update
+
+    from .models import MemoryBlock
+
+    result = await db.execute(
+        update(MemoryBlock)
+        .where(
+            MemoryBlock.id == item_id,
+            MemoryBlock.superseded_by == "__pending__",
+        )
+        .values(updated_at=datetime.now(UTC))  # touch timestamp to push down in queue
+    )
+    if result.rowcount == 0:
+        raise NotFoundError("Review item not found or already resolved")
+    await db.commit()
+    return {"status": "deferred", "id": item_id}
