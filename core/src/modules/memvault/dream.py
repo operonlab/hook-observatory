@@ -142,12 +142,27 @@ async def _orient(
         (now - last_dream_at).total_seconds() / 3600 if last_dream_at else DUAL_GATE_HOURS + 1
     )
 
+    # Count stale community summaries (updated > 30 days ago)
+    stale_summaries = 0
+    try:
+        from .kg_models import CommunitySummary
+
+        stale_cutoff = now - timedelta(days=30)
+        stale_q = select(func.count()).where(
+            CommunitySummary.space_id == space_id,
+            CommunitySummary.updated_at < stale_cutoff,
+        )
+        stale_summaries = (await db.execute(stale_q)).scalar() or 0
+    except Exception:
+        logger.debug("dream.orient: stale summary count failed")
+
     stats = {
         "total_blocks": total_blocks,
         "block_stats": block_stats,
         "last_dream_at": last_dream_at.isoformat() if last_dream_at else None,
         "sessions_since": sessions_since,
         "hours_since": round(hours_since, 1),
+        "stale_summaries": stale_summaries,
     }
 
     # Dual-gate check
@@ -203,11 +218,41 @@ async def _gather_signal(
     )
     resolvable = [f for f in contradiction_findings if f.suggested_action == "resolve"]
 
+    # PPR centrality analysis — identify hub and orphan entities
+    hub_entities: list[str] = []
+    orphan_entities: list[str] = []
+    try:
+        from .kg_models import Triple
+
+        triple_q = (
+            select(Triple.subject, Triple.object)
+            .where(
+                Triple.space_id == space_id,
+                Triple.invalid_at.is_(None),
+            )
+            .limit(2000)
+        )
+        triple_rows = (await db.execute(triple_q)).all()
+        if len(triple_rows) >= 50:
+            from kg_ops.community import build_entity_graph
+            from kg_ops.pagerank import global_pagerank
+
+            triple_dicts = [{"subject": r[0], "object": r[1]} for r in triple_rows]
+            graph, _idx = build_entity_graph(triple_dicts)
+            pr_results = global_pagerank(graph, top_k=graph.vcount())
+            if pr_results:
+                hub_entities = [name for name, _ in pr_results[:10]]
+                orphan_entities = [name for name, score in pr_results[-10:] if score < 0.001]
+    except Exception:
+        logger.debug("dream.gather_signal: PPR centrality failed", exc_info=True)
+
     return {
         "new_blocks_since_last": new_blocks,
         "total_new": sum(new_blocks.values()),
         "contradictions_found": len(contradiction_findings),
         "contradictions_resolvable": len(resolvable),
+        "hub_entities": hub_entities,
+        "orphan_entities": orphan_entities,
         "_findings": resolvable,  # internal, passed to consolidate
     }
 
@@ -532,6 +577,64 @@ async def _prune_and_report(
     except Exception as e:
         logger.warning("dream.prune.lint failed: %s", e)
         result["lint_summary"] = {"error": str(e)}
+
+    # Mark stale community summaries for regeneration
+    stale_summary_count = 0
+    try:
+        from sqlalchemy import func, select
+
+        from .kg_models import CommunitySummary, CommunityTriple, Triple
+
+        stale_cutoff = datetime.now(UTC) - timedelta(days=30)
+
+        # Find summaries where > 50% of member triples were updated after the summary
+        stale_ids: list[str] = []
+        summaries = (
+            await db.execute(
+                select(CommunitySummary).where(
+                    CommunitySummary.space_id == space_id,
+                    CommunitySummary.updated_at < stale_cutoff,
+                )
+            )
+        ).scalars().all()
+
+        for summary in summaries:
+            # Count member triples updated after this summary
+            member_count = (
+                await db.execute(
+                    select(func.count()).select_from(CommunityTriple).where(
+                        CommunityTriple.community_id == summary.community_id,
+                    )
+                )
+            ).scalar() or 0
+
+            if member_count == 0:
+                continue
+
+            updated_count = (
+                await db.execute(
+                    select(func.count())
+                    .select_from(CommunityTriple)
+                    .join(Triple, CommunityTriple.triple_id == Triple.id)
+                    .where(
+                        CommunityTriple.community_id == summary.community_id,
+                        Triple.updated_at > summary.updated_at,
+                    )
+                )
+            ).scalar() or 0
+
+            if updated_count / member_count > 0.5:
+                stale_ids.append(str(summary.id))
+
+        if stale_ids and not dry_run:
+            logger.info("dream.prune: marking %d stale summaries for regeneration", len(stale_ids))
+            stale_summary_count = len(stale_ids)
+
+        result["stale_summaries_flagged"] = len(stale_ids)
+
+    except Exception as e:
+        logger.debug("dream.prune.stale_summaries failed: %s", e)
+        result["stale_summaries_flagged"] = 0
 
     return result
 

@@ -91,6 +91,29 @@ _ENTITY_PATTERNS = re.compile(
     r"[a-z]+\.\w+)",  # dotted identifiers
 )
 
+# CJK entity extraction: 2-4 char proper noun-like terms (used for PPR seeds)
+_CJK_ENTITY_RE = re.compile(r"[\u4e00-\u9fff]{2,4}")
+
+
+def extract_query_entities(query: str) -> list[str]:
+    """Extract entity-like mentions from a query string.
+
+    Combines ASCII patterns (CamelCase, kebab-case, acronyms)
+    with CJK multi-char terms. Used as PPR seed entities.
+    """
+    entities: list[str] = []
+    entities.extend(_ENTITY_PATTERNS.findall(query))
+    entities.extend(_CJK_ENTITY_RE.findall(query))
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for e in entities:
+        lower = e.lower()
+        if lower not in seen:
+            seen.add(lower)
+            result.append(e)
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Scoring
@@ -192,6 +215,22 @@ _LAYER_MATRIX: dict[QueryIntent, dict[str, str]] = {
         "blocks": "HYBRID",
     },
 }
+
+# Intent → RetrievalMode mapping (LightRAG-inspired)
+_INTENT_TO_MODE: dict[QueryIntent, str] = {
+    QueryIntent.ENTITY_LOOKUP: "local",
+    QueryIntent.FACTUAL: "local",
+    QueryIntent.CONCEPTUAL: "global",
+    QueryIntent.EXPLORATORY: "global",
+    QueryIntent.CROSS_DOMAIN: "hybrid",
+    QueryIntent.UNKNOWN: "hybrid",
+}
+
+
+def intent_to_retrieval_mode(intent: QueryIntent) -> str:
+    """Map a QueryIntent to a RetrievalMode string."""
+    return _INTENT_TO_MODE.get(intent, "hybrid")
+
 
 def _route_confidence_threshold(query_len: int) -> float:
     """Dynamic routing confidence threshold based on query length.

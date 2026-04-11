@@ -550,6 +550,7 @@ async def _run_query_with_pipeline(
             request.q,
             top_k=budget["deep"],
             evaluate="none",
+            mode=getattr(request, "retrieval_mode", "auto"),
         )
         deep_cards.extend(
             _summary_card(item, "deep", task_mode) for item in cascade_result.summaries
@@ -653,6 +654,15 @@ async def run_memory_query(
         return await _run_query_with_pipeline(db, space_id, request)
 
     _t_start = _time.monotonic()
+
+    # Scale-graded strategy — detect knowledge volume and adapt
+    try:
+        from .scale_service import KnowledgeScale, detect_scale
+
+        scale = await detect_scale(db, space_id)
+    except Exception:
+        scale = KnowledgeScale.MEDIUM  # safe default
+
     task_mode = _normalize(request.task_mode, _TASK_MODES, "auto")
 
     # task_mode=auto → infer from query content via classify_query()
@@ -748,6 +758,7 @@ async def run_memory_query(
             request.q,
             top_k=budget["deep"],
             evaluate="none",
+            mode=getattr(request, "retrieval_mode", "auto"),
         )
         deep_cards.extend(_summary_card(item, "deep", task_mode) for item in cascade.summaries)
         deep_cards.extend(
@@ -783,6 +794,7 @@ async def run_memory_query(
             "backend": search_meta["backend"],
             "layers_searched": layers_searched,
             "evaluation_verdict": evaluation_verdict,
+            "knowledge_scale": scale.value,
         },
     )
 

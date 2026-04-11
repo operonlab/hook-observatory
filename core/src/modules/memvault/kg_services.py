@@ -996,6 +996,7 @@ class CascadeRecallService:
         top_k: int = 5,
         skip_routing: bool = False,
         evaluate: str = "default",
+        mode: str = "auto",
     ) -> CascadeRecallResult:
         """Cascade recall across all KG layers plus memory blocks.
 
@@ -1003,6 +1004,8 @@ class CascadeRecallService:
             skip_routing: If True, search all layers (bypass query router).
             evaluate: CRAG evaluation depth — "default" (Layer A+B), "deep" (+Haiku),
                       "rlm" (+RLM query decomposition), "none" (skip evaluation).
+            mode: RetrievalMode — "auto" (router decides), "local" (PPR+L0+blocks),
+                  "global" (L2+L1), "hybrid" (all layers).
         """
         from .services import memory_block_service
 
@@ -1024,8 +1027,28 @@ class CascadeRecallService:
             except Exception as e:
                 logger.warning("Query router failed (searching all layers): %s", e)
 
+        # Resolve retrieval mode
+        effective_mode = mode
+        if effective_mode == "auto" and layer_plan:
+            from .query_router import intent_to_retrieval_mode
+
+            effective_mode = intent_to_retrieval_mode(layer_plan.intent)
+        elif effective_mode == "auto":
+            effective_mode = "hybrid"
+        result.retrieval_mode = effective_mode
+
+        # Mode-aware layer restrictions
+        _MODE_LAYERS: dict[str, set[str]] = {
+            "local": {"triples", "blocks", "ppr"},
+            "global": {"summaries", "communities"},
+            "hybrid": {"summaries", "communities", "triples", "blocks", "ppr"},
+        }
+        allowed_layers = _MODE_LAYERS.get(effective_mode, _MODE_LAYERS["hybrid"])
+
         # Helper: check if a layer should be searched
         def _should_search(layer: str) -> bool:
+            if layer not in allowed_layers:
+                return False
             if layer_plan is None:
                 return True  # no routing → search all
             return layer_plan.layers.get(layer, "SKIP") != "SKIP"
@@ -1043,7 +1066,10 @@ class CascadeRecallService:
             if not summary_rows:
                 summary_rows = await self._search_summaries_ilike(db, space_id, pattern, top_k)
             if summary_rows:
-                result.summaries = [community_summary_service.to_response(r) for r in summary_rows]
+                summaries = [community_summary_service.to_response(r) for r in summary_rows]
+                # Apply temporal decay to summary scores
+                summaries = self._apply_summary_staleness(summaries)
+                result.summaries = summaries
                 result.layers_searched.append("summaries")
 
         # --- L1: Communities (Qdrant semantic → ILIKE fallback) ---
@@ -1082,6 +1108,20 @@ class CascadeRecallService:
             if triple_results:
                 result.triples = triple_results
                 result.layers_searched.append("triples")
+
+        # --- PPR: Personalized PageRank graph walk (HippoRAG) ---
+        ppr_intent = result.routing_intent or ""
+        if ppr_intent in ("entity_lookup", "factual", "cross_domain", ""):
+            ppr_triples = await self._ppr_recall(db, space_id, query, top_k)
+            if ppr_triples:
+                # Merge PPR triples with existing, avoiding duplicates
+                existing_ids = {t.id for t in result.triples}
+                for t in ppr_triples:
+                    if t.id not in existing_ids:
+                        result.triples.append(t)
+                        existing_ids.add(t.id)
+                if "ppr" not in result.layers_searched:
+                    result.layers_searched.append("ppr")
 
         # --- Blocks: Qdrant hybrid search → keyword fallback ---
         if _should_search("blocks"):
@@ -1153,6 +1193,123 @@ class CascadeRecallService:
         result.communities = self._rerank_by_access(result.communities)
 
         return result
+
+    _PPR_MIN_TRIPLES = 50  # Minimum triples for PPR to be meaningful
+    _PPR_MAX_TRIPLES = 2000  # Sample size for large graphs
+    _PPR_CACHE_TTL = 300  # 5 min Redis cache for triple graph
+
+    async def _ppr_recall(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        query: str,
+        top_k: int,
+    ) -> list:
+        """Run Personalized PageRank from query entities to find related triples.
+
+        Gate: skipped when < _PPR_MIN_TRIPLES in the space (graph too sparse).
+        """
+        from kg_ops import normalize_entity_text
+        from kg_ops.pagerank import ppr_from_triples
+
+        from .query_router import extract_query_entities
+
+        # Extract seed entities from query
+        raw_entities = extract_query_entities(query)
+        if not raw_entities:
+            return []
+
+        seed_entities = [normalize_entity_text(e) for e in raw_entities]
+
+        # Count valid triples
+        from sqlalchemy import func, select
+
+        from .kg_models import Triple
+
+        count = (
+            await db.execute(
+                select(func.count()).where(
+                    Triple.space_id == space_id,
+                    Triple.invalid_at.is_(None),
+                )
+            )
+        ).scalar() or 0
+
+        if count < self._PPR_MIN_TRIPLES:
+            return []
+
+        # Load triples (sample if too many)
+        q = (
+            select(Triple.id, Triple.subject, Triple.predicate, Triple.object)
+            .where(
+                Triple.space_id == space_id,
+                Triple.invalid_at.is_(None),
+            )
+            .order_by(Triple.created_at.desc())
+            .limit(self._PPR_MAX_TRIPLES)
+        )
+        rows = (await db.execute(q)).all()
+        triple_dicts = [
+            {"id": str(r[0]), "subject": r[1], "object": r[3]}
+            for r in rows
+        ]
+
+        # Run PPR
+        try:
+            ppr_results = ppr_from_triples(
+                triple_dicts, seed_entities, top_k=top_k * 2,
+                subject_key="subject", object_key="object",
+            )
+        except Exception:
+            logger.debug("PPR computation failed", exc_info=True)
+            return []
+
+        if not ppr_results:
+            return []
+
+        # Get triples involving top PPR entities
+        top_entities = {name for name, _score in ppr_results[:top_k]}
+        matching_ids = [
+            t["id"] for t in triple_dicts
+            if t["subject"] in top_entities or t["object"] in top_entities
+        ][:top_k]
+
+        if not matching_ids:
+            return []
+
+        # Fetch full triple objects
+        full_triples = (
+            (await db.execute(select(Triple).where(Triple.id.in_(matching_ids))))
+            .scalars()
+            .all()
+        )
+        return [triple_service.to_response(t) for t in full_triples]
+
+    @staticmethod
+    def _apply_summary_staleness(
+        summaries: list,
+        stale_days: int = 30,
+    ) -> list:
+        """Apply Weibull temporal decay to community summaries.
+
+        Summaries not updated in > stale_days get demoted. Uses 'warm' tier
+        decay curve (λ=30, β=1.2) to progressively reduce relevance.
+        """
+        from datetime import UTC, datetime
+
+        from src.shared.decay import weibull_decay
+
+        now = datetime.now(UTC)
+        for s in summaries:
+            if not s.updated_at:
+                continue
+            age_days = (now - s.updated_at).total_seconds() / 86400
+            if age_days > stale_days:
+                decay = weibull_decay(age_days - stale_days, tier="warm")
+                s.staleness_score = round(1.0 - decay, 3)
+            else:
+                s.staleness_score = 0.0
+        return summaries
 
     # --- L2 semantic search helpers ---
 

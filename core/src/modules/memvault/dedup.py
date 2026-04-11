@@ -154,12 +154,23 @@ async def check_duplicate(
 
             from .conflict_resolver import resolve_conflict
 
+            # Fetch existing block's created_at for temporal context
+            existing_ts = None
+            ts_row = (
+                await db.execute(
+                    select(MemoryBlock.created_at).where(MemoryBlock.id == best_id)
+                )
+            ).scalar_one_or_none()
+            if ts_row:
+                existing_ts = ts_row
+
             cr = await resolve_conflict(
                 new_content=content,
                 existing_content=best_content,
                 existing_block_id=best_id,
                 block_type=block_type or "general",
                 similarity=best_sim,
+                existing_timestamp=existing_ts,
             )
             decision_map = {
                 ConflictDecision.MERGE: DedupDecision.MERGE,
