@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time as _time
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -28,6 +29,8 @@ from .schemas import (
 )
 from .scoring_pipeline import ScoringConfig, scoring_config_for_intent
 from .services import memory_block_service
+
+logger = logging.getLogger(__name__)
 
 _TASK_MODES = {"auto", "lookup", "decide", "build", "reflect"}
 _THINKING_MODES = {"auto", "fast", "slow"}
@@ -76,10 +79,10 @@ def choose_thinking_mode(
 def _budget_config(load_budget: str) -> dict[str, int]:
     normalized = _normalize(load_budget, _LOAD_BUDGETS, "standard")
     if normalized == "light":
-        return {"search_top_k": 5, "fast": 3, "working": 2, "deep": 2, "attitudes": 2}
+        return {"search_top_k": 5, "fast": 5, "cascade": 2, "attitudes": 2}
     if normalized == "deep":
-        return {"search_top_k": 12, "fast": 5, "working": 4, "deep": 6, "attitudes": 4}
-    return {"search_top_k": 8, "fast": 4, "working": 3, "deep": 4, "attitudes": 3}
+        return {"search_top_k": 12, "fast": 9, "cascade": 6, "attitudes": 4}
+    return {"search_top_k": 8, "fast": 7, "cascade": 4, "attitudes": 3}
 
 
 def _clip(text: str | None, limit: int = 180) -> str:
@@ -141,9 +144,9 @@ def _task_use_now(task_mode: str, source_type: str, summary: str) -> str:
 def _block_card(block, layer: str, task_mode: str, score: float | None = None) -> MemoryCard:
     safe_content = sanitize_for_injection(block.content)
     title = _block_title(block.block_type, block.tags or [], block.source_session)
-    # Skill blocks in fast/working layers use a short index summary (80 chars);
+    # Skill blocks in fast layer use a short index summary (80 chars);
     # full content is available on-demand via inspect mode — mirrors Hermes index separation.
-    is_skill_index = block.block_type == "skill" and layer in ("fast", "working")
+    is_skill_index = block.block_type == "skill" and layer == "fast"
     clip_limit = 80 if is_skill_index else 180
     if is_skill_index:
         why = (
@@ -306,37 +309,22 @@ async def _search_blocks(
         }
 
     results = await memory_block_service.text_search(db, space_id, query, top_k=top_k)
-    return results, {"backend": "text", "input_count": len(results)}
+    if results:
+        return results, {"backend": "text", "input_count": len(results)}
 
-
-async def _working_cards(
-    db: AsyncSession,
-    space_id: str,
-    task_mode: str,
-    limit: int,
-    primary_results: list,
-) -> list[MemoryCard]:
-    recent_rows = []
-    if primary_results:
-        recent_rows = sorted(
-            [result.block for result in primary_results],
-            key=lambda block: block.created_at,
-            reverse=True,
-        )[:limit]
-    else:
-        q = (
-            select(MemoryBlock)
-            .where(
-                MemoryBlock.space_id == space_id,
-                MemoryBlock.deleted_at.is_(None),
-            )
-            .order_by(MemoryBlock.created_at.desc())
-            .limit(limit)
+    # Final fallback: recent memory blocks from DB when all search backends return empty
+    q = (
+        select(MemoryBlock)
+        .where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.deleted_at.is_(None),
         )
-        recent_rows = [
-            memory_block_service.to_response(row) for row in (await db.execute(q)).scalars().all()
-        ]
-    return [_block_card(block, "working", task_mode) for block in recent_rows]
+        .order_by(MemoryBlock.created_at.desc())
+        .limit(top_k)
+    )
+    recent_rows = (await db.execute(q)).scalars().all()
+    recent_results = [memory_block_service.to_response(row) for row in recent_rows]
+    return recent_results, {"backend": "recent-fallback", "input_count": len(recent_results)}
 
 
 async def _check_prefetch_cache(
@@ -498,47 +486,40 @@ async def _run_query_with_pipeline(
     )
 
     # --- Search phase (inline, same as sequential path) ---
-    search_results, search_meta = await _search_blocks(
-        db,
-        space_id,
-        search_query,
-        top_k=max(request.top_k, budget["search_top_k"]),
-        scoring_config=intent_scoring,
-        intent=intent_value,
-    )
-    fast_cards = [
-        _block_card(result.block, "fast", task_mode, result.score)
-        for result in search_results[: budget["fast"]]
-    ]
-
-    _att_emb = await get_embedding(request.q, task_type="search_query")
-    _att_blocks: list = []
-    if _att_emb:
-        _att_result = await memory_block_service.qdrant_search(
-            db, space_id, request.q, _att_emb,
-            top_k=budget["attitudes"], block_type="attitude",
-        )
-        if _att_result:
-            _att_blocks, _ = _att_result
-    fast_cards.extend(
-        _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
-        for r in _att_blocks
-    )
-    fast_cards = _unique_cards(fast_cards)[: request.top_k]
-
-    # Phase B2: Merge prefetch hits
     if prefetch_hit:
-        fast_cards = _merge_prefetch_cards(fast_cards, prefetch_hit, budget["fast"] + 2)
+        fast_cards = prefetch_hit[: budget["fast"]]
+        search_results = []
+        search_meta = {"backend": "prefetch-cache", "input_count": len(prefetch_hit)}
+    else:
+        search_results, search_meta = await _search_blocks(
+            db,
+            space_id,
+            search_query,
+            top_k=max(request.top_k, budget["search_top_k"]),
+            scoring_config=intent_scoring,
+            intent=intent_value,
+        )
+        fast_cards = [
+            _block_card(result.block, "fast", task_mode, result.score)
+            for result in search_results[: budget["fast"]]
+        ]
 
-    working_cards = await _working_cards(
-        db,
-        space_id,
-        task_mode,
-        limit=budget["working"],
-        primary_results=search_results,
-    )
+        _att_emb = await get_embedding(request.q, task_type="search_query")
+        _att_blocks: list = []
+        if _att_emb:
+            _att_result = await memory_block_service.qdrant_search(
+                db, space_id, request.q, _att_emb,
+                top_k=budget["attitudes"], block_type="attitude",
+            )
+            if _att_result:
+                _att_blocks, _ = _att_result
+        fast_cards.extend(
+            _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
+            for r in _att_blocks
+        )
+        fast_cards = _unique_cards(fast_cards)[: request.top_k]
 
-    deep_cards: list[MemoryCard] = []
+    cascade_cards: list[MemoryCard] = []
     layers_searched: list[str] = []
     evaluation_verdict: str | None = None
     cascade_result = None
@@ -548,22 +529,22 @@ async def _run_query_with_pipeline(
             db,
             space_id,
             request.q,
-            top_k=budget["deep"],
+            top_k=budget["cascade"],
             evaluate="none",
             mode=getattr(request, "retrieval_mode", "auto"),
         )
-        deep_cards.extend(
-            _summary_card(item, "deep", task_mode) for item in cascade_result.summaries
+        cascade_cards.extend(
+            _summary_card(item, "cascade", task_mode) for item in cascade_result.summaries
         )
-        deep_cards.extend(
-            _triple_card(item, "deep", task_mode)
-            for item in cascade_result.triples[: budget["deep"]]
+        cascade_cards.extend(
+            _triple_card(item, "cascade", task_mode)
+            for item in cascade_result.triples[: budget["cascade"]]
         )
-        deep_cards.extend(
-            _block_card(item, "deep", task_mode)
-            for item in cascade_result.blocks[: max(1, budget["deep"] // 2)]
+        cascade_cards.extend(
+            _block_card(item, "cascade", task_mode)
+            for item in cascade_result.blocks[: max(1, budget["cascade"] // 2)]
         )
-        deep_cards = _unique_cards(deep_cards)[: budget["deep"]]
+        cascade_cards = _unique_cards(cascade_cards)[: budget["cascade"]]
         layers_searched = cascade_result.layers_searched
         evaluation_verdict = cascade_result.evaluation_verdict
 
@@ -595,7 +576,7 @@ async def _run_query_with_pipeline(
     )
     highlights = [card.use_now for card in fast_cards[:2]]
     if not highlights:
-        highlights = [card.summary for card in working_cards[:1]]
+        highlights = [card.summary for card in fast_cards]
 
     metadata: dict = {
         "backend": search_meta["backend"],
@@ -613,9 +594,8 @@ async def _run_query_with_pipeline(
     response = MemoryQueryResponse(
         query=request.q,
         strategy=strategy,
-        fast_cards=fast_cards,
-        working_cards=working_cards,
-        deep_cards=deep_cards,
+        cards=fast_cards,
+        cascade_cards=cascade_cards,
         highlights=highlights,
         metadata=metadata,
     )
@@ -634,7 +614,7 @@ async def _run_query_with_pipeline(
                 "load_budget": load_budget,
                 "intent": intent_value,
                 "tags": [c.tags[0] for c in fast_cards[:3] if c.tags],
-                "result_count": len(fast_cards) + len(working_cards),
+                "result_count": len(fast_cards),
                 "latency_ms": round((_t_end - _t_start) * 1000, 1),
             },
             source="memvault",
@@ -708,47 +688,40 @@ async def run_memory_query(
         request.top_k,
     )
 
-    search_results, search_meta = await _search_blocks(
-        db,
-        space_id,
-        request.q,
-        top_k=max(request.top_k, budget["search_top_k"]),
-        scoring_config=intent_scoring,
-        intent=intent_value,
-    )
-    fast_cards = [
-        _block_card(result.block, "fast", task_mode, result.score)
-        for result in search_results[: budget["fast"]]
-    ]
-
-    _att_emb = await get_embedding(request.q, task_type="search_query")
-    _att_blocks: list = []
-    if _att_emb:
-        _att_result = await memory_block_service.qdrant_search(
-            db, space_id, request.q, _att_emb,
-            top_k=budget["attitudes"], block_type="attitude",
-        )
-        if _att_result:
-            _att_blocks, _ = _att_result
-    fast_cards.extend(
-        _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
-        for r in _att_blocks
-    )
-    fast_cards = _unique_cards(fast_cards)[: request.top_k]
-
-    # Phase B2: Merge prefetch hits (after stable results, before working)
     if prefetch_hit:
-        fast_cards = _merge_prefetch_cards(fast_cards, prefetch_hit, budget["fast"] + 2)
+        fast_cards = prefetch_hit[: budget["fast"]]
+        search_results = []
+        search_meta = {"backend": "prefetch-cache", "input_count": len(prefetch_hit)}
+    else:
+        search_results, search_meta = await _search_blocks(
+            db,
+            space_id,
+            request.q,
+            top_k=max(request.top_k, budget["search_top_k"]),
+            scoring_config=intent_scoring,
+            intent=intent_value,
+        )
+        fast_cards = [
+            _block_card(result.block, "fast", task_mode, result.score)
+            for result in search_results[: budget["fast"]]
+        ]
 
-    working_cards = await _working_cards(
-        db,
-        space_id,
-        task_mode,
-        limit=budget["working"],
-        primary_results=search_results,
-    )
+        _att_emb = await get_embedding(request.q, task_type="search_query")
+        _att_blocks: list = []
+        if _att_emb:
+            _att_result = await memory_block_service.qdrant_search(
+                db, space_id, request.q, _att_emb,
+                top_k=budget["attitudes"], block_type="attitude",
+            )
+            if _att_result:
+                _att_blocks, _ = _att_result
+        fast_cards.extend(
+            _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
+            for r in _att_blocks
+        )
+        fast_cards = _unique_cards(fast_cards)[: request.top_k]
 
-    deep_cards: list[MemoryCard] = []
+    cascade_cards: list[MemoryCard] = []
     layers_searched: list[str] = []
     evaluation_verdict: str | None = None
     if thinking_mode_used == "slow":
@@ -756,19 +729,22 @@ async def run_memory_query(
             db,
             space_id,
             request.q,
-            top_k=budget["deep"],
+            top_k=budget["cascade"],
             evaluate="none",
             mode=getattr(request, "retrieval_mode", "auto"),
         )
-        deep_cards.extend(_summary_card(item, "deep", task_mode) for item in cascade.summaries)
-        deep_cards.extend(
-            _triple_card(item, "deep", task_mode) for item in cascade.triples[: budget["deep"]]
+        cascade_cards.extend(
+            _summary_card(item, "cascade", task_mode) for item in cascade.summaries
         )
-        deep_cards.extend(
-            _block_card(item, "deep", task_mode)
-            for item in cascade.blocks[: max(1, budget["deep"] // 2)]
+        cascade_cards.extend(
+            _triple_card(item, "cascade", task_mode)
+            for item in cascade.triples[: budget["cascade"]]
         )
-        deep_cards = _unique_cards(deep_cards)[: budget["deep"]]
+        cascade_cards.extend(
+            _block_card(item, "cascade", task_mode)
+            for item in cascade.blocks[: max(1, budget["cascade"] // 2)]
+        )
+        cascade_cards = _unique_cards(cascade_cards)[: budget["cascade"]]
         layers_searched = cascade.layers_searched
         evaluation_verdict = cascade.evaluation_verdict
 
@@ -781,14 +757,13 @@ async def run_memory_query(
     )
     highlights = [card.use_now for card in fast_cards[:2]]
     if not highlights:
-        highlights = [card.summary for card in working_cards[:1]]
+        highlights = [card.summary for card in fast_cards]
 
     response = MemoryQueryResponse(
         query=request.q,
         strategy=strategy,
-        fast_cards=fast_cards,
-        working_cards=working_cards,
-        deep_cards=deep_cards,
+        cards=fast_cards,
+        cascade_cards=cascade_cards,
         highlights=highlights,
         metadata={
             "backend": search_meta["backend"],
@@ -812,7 +787,7 @@ async def run_memory_query(
                 "load_budget": load_budget,
                 "intent": intent_value,
                 "tags": [c.tags[0] for c in fast_cards[:3] if c.tags],
-                "result_count": len(fast_cards) + len(working_cards),
+                "result_count": len(fast_cards),
                 "latency_ms": round((_t_end - _t_start) * 1000, 1),
             },
             source="memvault",
@@ -823,9 +798,7 @@ async def run_memory_query(
 
 
 def build_injection_payload(response: MemoryQueryResponse) -> MemoryInjectResponse:
-    agent_cards = response.fast_cards[:3]
-    if not agent_cards:
-        agent_cards = response.working_cards[:2]
+    agent_cards = response.cards[:3]
     original_card_count = len(agent_cards)
 
     def _build_lines(cards: list, include_use_now: bool) -> list[str]:
@@ -862,9 +835,14 @@ def build_injection_payload(response: MemoryQueryResponse) -> MemoryInjectRespon
             system_prompt_memory = "\n".join(clipped_lines)
 
     decision_bias = [
-        card.summary for card in response.fast_cards if card.source_type == "attitude"
+        card.summary for card in response.cards if card.source_type == "attitude"
     ][:3]
-    working_context = [card.summary for card in response.working_cards[:3]]
+    working_context = sorted(
+        response.cards,
+        key=lambda c: c.freshness or "",
+        reverse=True,
+    )[:3]
+    working_context = [card.summary for card in working_context]
 
     budget_meta: dict = {
         "prompt_budget_chars": PROMPT_BUDGET_CHARS,
@@ -886,14 +864,13 @@ def build_injection_payload(response: MemoryQueryResponse) -> MemoryInjectRespon
 
 def build_inspect_payload(response: MemoryQueryResponse) -> MemoryInspectResponse:
     raw_sections = {
-        "fast": [ref for card in response.fast_cards for ref in card.evidence_refs],
-        "working": [ref for card in response.working_cards for ref in card.evidence_refs],
-        "deep": [ref for card in response.deep_cards for ref in card.evidence_refs],
+        "fast": [ref for card in response.cards for ref in card.evidence_refs],
+        "cascade": [ref for card in response.cascade_cards for ref in card.evidence_refs],
     }
     return MemoryInspectResponse(
         query=response.query,
         strategy=response.strategy,
-        cards=[*response.fast_cards, *response.working_cards, *response.deep_cards],
+        cards=[*response.cards, *response.cascade_cards],
         raw_sections=raw_sections,
         metadata=response.metadata,
     )

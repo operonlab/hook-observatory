@@ -485,7 +485,7 @@ class TestFastSlowQueryRuntime:
     def test_choose_thinking_mode_reflect_prefers_slow(self):
         assert choose_thinking_mode("reflect", "auto", "standard", "human") == "slow"
 
-    def test_build_injection_payload_prefers_fast_cards(self):
+    def test_build_injection_payload_uses_cards(self):
         response = MemoryQueryResponse(
             query="python preferences",
             strategy=MemoryQueryStrategy(
@@ -495,7 +495,7 @@ class TestFastSlowQueryRuntime:
                 load_budget="light",
                 consumer="agent",
             ),
-            fast_cards=[
+            cards=[
                 MemoryCard(
                     id="fast-1",
                     title="偏好 / architecture",
@@ -515,8 +515,7 @@ class TestFastSlowQueryRuntime:
                     ],
                 )
             ],
-            working_cards=[],
-            deep_cards=[],
+            cascade_cards=[],
             highlights=["延續這個原則處理目前變更。"],
             metadata={"backend": "mock"},
         )

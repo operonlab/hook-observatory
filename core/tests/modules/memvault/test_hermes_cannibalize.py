@@ -75,9 +75,8 @@ def _make_card(
 
 
 def _make_response(
-    fast_cards: list[MemoryCard] | None = None,
-    working_cards: list[MemoryCard] | None = None,
-    deep_cards: list[MemoryCard] | None = None,
+    cards: list[MemoryCard] | None = None,
+    cascade_cards: list[MemoryCard] | None = None,
     strategy: MemoryQueryStrategy | None = None,
 ) -> MemoryQueryResponse:
     if strategy is None:
@@ -91,9 +90,8 @@ def _make_response(
     return MemoryQueryResponse(
         query="test query",
         strategy=strategy,
-        fast_cards=fast_cards or [],
-        working_cards=working_cards or [],
-        deep_cards=deep_cards or [],
+        cards=cards or [],
+        cascade_cards=cascade_cards or [],
     )
 
 
@@ -126,7 +124,7 @@ class TestPromptBudget:
             _make_card("Title B", "Short summary B.", use_now="Use B.", idx=1),
             _make_card("Title C", "Short summary C.", use_now="Use C.", idx=2),
         ]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert isinstance(result, MemoryInjectResponse)
         assert len(result.system_prompt_memory) <= budget, (
@@ -141,7 +139,7 @@ class TestPromptBudget:
             _make_card("Beta", "Summary beta 50c.", use_now="Apply beta now.", idx=1),
             _make_card("Gamma", "Summary gamma 50c.", use_now="Apply gamma now.", idx=2),
         ]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         # At least one "use_now" phrase should appear in the prompt
         assert any(
@@ -157,7 +155,7 @@ class TestPromptBudget:
         cards = [
             _make_card(f"Title {i}", long_summary, use_now=long_use_now, idx=i) for i in range(3)
         ]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert len(result.system_prompt_memory) <= budget, (
             f"Budget exceeded with huge cards: {len(result.system_prompt_memory)} > {budget}"
@@ -171,7 +169,7 @@ class TestPromptBudget:
             _make_card(f"Big {i}", long_summary, use_now="Must do this right now!", idx=i)
             for i in range(3)
         ]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert result.metadata is not None, "metadata must not be None"
         assert "cards_trimmed" in result.metadata, "metadata must contain 'cards_trimmed'"
@@ -181,36 +179,35 @@ class TestPromptBudget:
         """Invariant: 10 cards x 300 chars each must still fit within budget."""
         fn, budget = self._import_fn()
         cards = [_make_card(f"Card{i}", "M" * 200, use_now="Do it " * 15, idx=i) for i in range(10)]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert len(result.system_prompt_memory) <= budget, (
             f"Budget exceeded with 10 cards: {len(result.system_prompt_memory)} > {budget}"
         )
 
-    def test_fallback_to_working_cards(self, default_strategy):
-        """Empty fast_cards + some working_cards: working cards used in output."""
+    def test_non_empty_cards_produce_non_empty_output(self, default_strategy):
+        """Non-empty cards list must produce non-empty system_prompt_memory."""
         fn, budget = self._import_fn()
-        working = [
+        cards = [
             _make_card(
-                "Work A",
-                "Working summary A.",
-                use_now="Use work A.",
-                layer="working",
+                "Card A",
+                "Summary A.",
+                use_now="Use A.",
+                layer="fast",
                 idx=0,
             ),
             _make_card(
-                "Work B",
-                "Working summary B.",
-                use_now="Use work B.",
-                layer="working",
+                "Card B",
+                "Summary B.",
+                use_now="Use B.",
+                layer="fast",
                 idx=1,
             ),
         ]
-        resp = _make_response(fast_cards=[], working_cards=working, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
-        # Result should not be totally empty when working_cards provided
         assert len(result.system_prompt_memory) > 0, (
-            "system_prompt_memory must not be empty when working_cards exist"
+            "system_prompt_memory must not be empty when cards provided"
         )
         assert len(result.system_prompt_memory) <= budget
 
@@ -218,7 +215,7 @@ class TestPromptBudget:
         """metadata must contain: prompt_budget_chars, prompt_used_chars, cards_trimmed."""
         fn, budget = self._import_fn()
         cards = [_make_card("A", "Summary.", use_now="Do it.", idx=0)]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert result.metadata is not None, "metadata must not be None"
         required_keys = {"prompt_budget_chars", "prompt_used_chars", "cards_trimmed"}
@@ -232,7 +229,7 @@ class TestPromptBudget:
             _make_card("Card1", "Some summary text.", use_now="Do something.", idx=0),
             _make_card("Card2", "Another summary.", use_now="Do another thing.", idx=1),
         ]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert result.metadata is not None
         actual_len = len(result.system_prompt_memory)
@@ -245,7 +242,7 @@ class TestPromptBudget:
         """metadata['prompt_budget_chars'] must equal PROMPT_BUDGET_CHARS."""
         fn, budget = self._import_fn()
         cards = [_make_card("X", "Short.", use_now="Now.", idx=0)]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert result.metadata is not None
         assert result.metadata["prompt_budget_chars"] == budget, (
@@ -256,7 +253,7 @@ class TestPromptBudget:
         """cards_trimmed must always be >= 0."""
         fn, budget = self._import_fn()
         cards = [_make_card(f"T{i}", "Short.", use_now="Now.", idx=i) for i in range(5)]
-        resp = _make_response(fast_cards=cards, strategy=default_strategy)
+        resp = _make_response(cards=cards, strategy=default_strategy)
         result = fn(resp)
         assert result.metadata is not None
         assert result.metadata["cards_trimmed"] >= 0
@@ -462,33 +459,24 @@ class TestSkillIndexSeparation:
             f"Skill+fast summary should be <=81 chars, got {len(card.summary)}: {card.summary!r}"
         )
 
-    def test_skill_working_summary_clipped_to_80(self):
-        """Skill + working layer: summary <= 81 chars (same as fast)."""
+    def test_skill_cascade_summary_normal_limit(self):
+        """Skill + cascade layer: summary <= 181 chars (normal 180 + possible ellipsis)."""
         fn = self._import_fn()
         block = self._make_skill_block(summary_len=500)
-        card = fn(block, layer="working", task_mode="general")
-        assert len(card.summary) <= 81, (
-            f"Skill+working summary should be <=81 chars, got {len(card.summary)}: {card.summary!r}"
-        )
-
-    def test_skill_deep_summary_normal_limit(self):
-        """Skill + deep layer: summary <= 181 chars (normal 180 + possible ellipsis)."""
-        fn = self._import_fn()
-        block = self._make_skill_block(summary_len=500)
-        card = fn(block, layer="deep", task_mode="general")
+        card = fn(block, layer="cascade", task_mode="general")
         assert len(card.summary) <= 181, (
             f"Skill+deep summary should be <=181 chars, got {len(card.summary)}: {card.summary!r}"
         )
 
-    def test_skill_deep_longer_than_fast(self):
-        """Skill deep summary limit must be bigger than fast — verifies the two limits differ."""
+    def test_skill_cascade_longer_than_fast(self):
+        """Skill cascade summary limit must be bigger than fast — verifies the two limits differ."""
         fn = self._import_fn()
         block = self._make_skill_block(summary_len=500)
         card_fast = fn(block, layer="fast", task_mode="general")
-        card_deep = fn(block, layer="deep", task_mode="general")
-        # Deep allows more chars than fast
+        card_deep = fn(block, layer="cascade", task_mode="general")
+        # Cascade allows more chars than fast
         assert len(card_deep.summary) > len(card_fast.summary), (
-            "Deep layer must allow longer summary than fast for skill blocks"
+            "Cascade layer must allow longer summary than fast for skill blocks"
         )
 
     def test_knowledge_fast_uses_180_limit(self):
@@ -547,15 +535,6 @@ class TestSkillIndexSeparation:
         card = fn(block, layer="fast", task_mode="general")
         assert "inspect mode" in card.why_relevant, (
             f"Skill+fast why_relevant must contain 'inspect mode'. Got: {card.why_relevant!r}"
-        )
-
-    def test_skill_working_why_relevant_contains_skill_index(self):
-        """Skill + working layer: why_relevant must also contain '技能索引'."""
-        fn = self._import_fn()
-        block = self._make_skill_block(summary_len=200)
-        card = fn(block, layer="working", task_mode="general")
-        assert "技能索引" in card.why_relevant, (
-            f"Skill+working why_relevant must contain '技能索引'. Got: {card.why_relevant!r}"
         )
 
     def test_returns_memory_card_type(self):

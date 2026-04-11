@@ -141,20 +141,15 @@ def cmd_query(client: MemvaultClient, args: argparse.Namespace) -> None:
     )
     print()
 
-    if data.get("fast_cards"):
-        print("  Fast Memory")
-        print("  -----------")
-        _print_memory_cards(data["fast_cards"], args.quiet)
+    if data.get("cards"):
+        print("  Memory Cards")
+        print("  ------------")
+        _print_memory_cards(data["cards"], args.quiet)
 
-    if data.get("working_cards"):
-        print("  Working Memory")
+    if data.get("cascade_cards"):
+        print("  Cascade Memory")
         print("  --------------")
-        _print_memory_cards(data["working_cards"], args.quiet)
-
-    if data.get("deep_cards"):
-        print("  Deep Memory")
-        print("  -----------")
-        _print_memory_cards(data["deep_cards"], args.quiet)
+        _print_memory_cards(data["cascade_cards"], args.quiet)
 
     highlights = data.get("highlights", [])
     if highlights and not args.quiet:

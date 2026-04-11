@@ -58,8 +58,8 @@ class TestThinkingModePrecedence:
 class TestInjectionPayloadFallbacks:
     """Contract tests for agent-facing payload assembly."""
 
-    def test_inject_uses_fast_cards_before_working_cards(self):
-        """Mutation target: swapping fallback order would lose preference memory."""
+    def test_inject_uses_cards(self):
+        """Mutation target: cards list must be surfaced in prompt memory."""
         response = MemoryQueryResponse(
             query="architectural preference",
             strategy=MemoryQueryStrategy(
@@ -69,7 +69,7 @@ class TestInjectionPayloadFallbacks:
                 load_budget="light",
                 consumer="agent",
             ),
-            fast_cards=[
+            cards=[
                 MemoryCard(
                     id="fast-1",
                     title="偏好 / architecture",
@@ -89,29 +89,15 @@ class TestInjectionPayloadFallbacks:
                     ],
                 )
             ],
-            working_cards=[
-                MemoryCard(
-                    id="working-1",
-                    title="working note",
-                    summary="暫存工作上下文",
-                    why_relevant="暫時性上下文",
-                    use_now="先讀這張卡。",
-                    layer="working",
-                    source_type="block",
-                    confidence=0.6,
-                    evidence_refs=[],
-                )
-            ],
-            deep_cards=[],
+            cascade_cards=[],
             highlights=[],
         )
         payload = build_injection_payload(response)
         assert "偏好漸進式重構而非全面重寫" in payload.system_prompt_memory
-        assert payload.working_context == ["暫存工作上下文"]
         assert payload.decision_bias == ["偏好漸進式重構而非全面重寫"]
 
-    def test_inject_falls_back_to_working_cards_when_fast_missing(self):
-        """Mutation target: empty fast memory must not produce empty prompt payload."""
+    def test_inject_non_empty_cards_produce_non_empty_payload(self):
+        """Mutation target: non-empty cards must not produce empty prompt payload."""
         response = MemoryQueryResponse(
             query="session status",
             strategy=MemoryQueryStrategy(
@@ -121,26 +107,25 @@ class TestInjectionPayloadFallbacks:
                 load_budget="light",
                 consumer="agent",
             ),
-            fast_cards=[],
-            working_cards=[
+            cards=[
                 MemoryCard(
-                    id="working-1",
-                    title="working note",
-                    summary="目前正在重構 memvault fast/slow query runtime",
+                    id="card-1",
+                    title="session note",
+                    summary="目前正在重構 memvault dual-track query runtime",
                     why_relevant="目前任務上下文",
                     use_now="把這段上下文注入提示詞。",
-                    layer="working",
+                    layer="fast",
                     source_type="block",
                     confidence=0.7,
                     evidence_refs=[],
                 )
             ],
-            deep_cards=[],
+            cascade_cards=[],
             highlights=[],
         )
         payload = build_injection_payload(response)
-        assert "目前正在重構 memvault fast/slow query runtime" in payload.system_prompt_memory
-        assert payload.cards[0].layer == "working"
+        assert "目前正在重構 memvault dual-track query runtime" in payload.system_prompt_memory
+        assert payload.cards[0].layer == "fast"
 
 
 class TestSdkWireContracts:
@@ -222,7 +207,7 @@ class TestRouteContracts:
                     load_budget=request.load_budget,
                     consumer=request.consumer,
                 ),
-                deep_cards=[],
+                cascade_cards=[],
             )
 
         def fake_build_inspect(response):

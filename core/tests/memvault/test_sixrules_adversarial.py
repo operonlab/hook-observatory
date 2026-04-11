@@ -158,21 +158,13 @@ class TestFingerprintConsistency:
             "這表示 run_memory_query 寫死 intent='unknown' 會導致永遠 miss。"
         )
 
-    def test_query_completed_event_intent_is_hardcoded_unknown(self):
-        """Mutation: run_memory_query 發射 QUERY_COMPLETED 時 intent 固定為 'unknown'。
-
-        這個 mutation 使 write path 永遠寫入 intent=unknown，
-        但 read path 用 classify_query 得到真實 intent → 永遠 miss。
-        """
-        # 從 query_runtime.py 第 470 行的事件 payload 結構可知
-        # "intent": "unknown" 是 hardcoded 值
-        # 這裡確認這個問題的存在性
+    def test_query_completed_event_intent_uses_classified_value(self):
+        """Verify: run_memory_query uses classified intent_value, not hardcoded 'unknown'."""
         import inspect
         import src.modules.memvault.query_runtime as qr
         source = inspect.getsource(qr.run_memory_query)
-        assert '"intent": "unknown"' in source, (
-            "run_memory_query 應該有 'intent': 'unknown' hardcoded — "
-            "如果這個斷言失敗代表問題已修復"
+        assert '"intent": intent_value' in source, (
+            "run_memory_query should use intent_value variable, not hardcoded 'unknown'"
         )
 
 
@@ -408,15 +400,14 @@ class TestMergePrefetchCardsBudget:
     def test_query_runtime_uses_fast_plus_2_as_budget(self):
         """query_runtime.py 用 budget['fast'] + 2 作為 merge budget。
 
-        standard budget['fast'] = 4，所以 merge budget = 6。
-        如果 fast_cards 已達 4 張，prefetch 只能補 2 張。
+        standard budget['fast'] = 7（合併 working 後），所以 merge budget = 9。
         """
         from src.modules.memvault.query_runtime import _budget_config
         budget = _budget_config("standard")
         merge_budget = budget["fast"] + 2
-        assert merge_budget == 6, f"Expected merge budget 6, got {merge_budget}"
+        assert merge_budget == 9, f"Expected merge budget 9, got {merge_budget}"
 
-        # 如果 fast_cards 達到 fast budget (4張)，只剩 2 格給 prefetch
+        # 如果 fast_cards 達到 fast budget，只剩 2 格給 prefetch
         existing = [_make_card(f"e{i}") for i in range(budget["fast"])]
         prefetched = [_make_card(f"p{i}", source="speculative_prefetch") for i in range(4)]
         result = _merge_prefetch_cards(existing, prefetched, merge_budget)

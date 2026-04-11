@@ -197,9 +197,8 @@ class MemoryQueryStrategy(BaseModel):
 class MemoryQueryResponse(BaseModel):
     query: str
     strategy: MemoryQueryStrategy
-    fast_cards: list[MemoryCard] = []
-    working_cards: list[MemoryCard] = []
-    deep_cards: list[MemoryCard] = []
+    cards: list[MemoryCard] = []              # main results (was fast_cards + working_cards)
+    cascade_cards: list[MemoryCard] = []      # KG enrichment from Cascade Recall (was deep_cards)
     highlights: list[str] = []
     metadata: dict | None = None
 

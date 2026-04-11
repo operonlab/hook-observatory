@@ -430,7 +430,7 @@ async def memvault_query(
     consumer: str = "human",
     top_k: int = 6,
 ) -> str:
-    """多層記憶查詢 — fast/working/deep 三層 cards，task_mode 自動推斷意圖。
+    """多層記憶查詢 — main/cascade 雙軌 cards，task_mode 自動推斷意圖。
 
     task_mode: auto|lookup|decide|build|reflect
     thinking_mode: auto|fast|slow
@@ -453,7 +453,7 @@ async def memvault_query(
         "",
     ]
 
-    for layer, label in [("fast_cards", "Fast"), ("working_cards", "Working"), ("deep_cards", "Deep")]:
+    for layer, label in [("cards", "Main"), ("cascade_cards", "Cascade")]:
         cards = result.get(layer, [])
         if cards:
             parts.append(f"## {label} Layer ({len(cards)} cards)")
@@ -470,7 +470,7 @@ async def memvault_query(
         for h in highlights:
             parts.append(f"  - {h}")
 
-    if not any(result.get(k) for k in ("fast_cards", "working_cards", "deep_cards")):
+    if not any(result.get(k) for k in ("cards", "cascade_cards")):
         parts.append("No memory cards found.")
 
     return "\n".join(parts)
@@ -552,7 +552,7 @@ async def memvault_inspect(
                     parts.append(f"  - [{r.get('kind', '?')}] {r.get('title', '?')}: {r.get('snippet', '')[:100]}")
             parts.append("")
 
-    for section, label in [("fast", "Fast"), ("working", "Working"), ("deep", "Deep")]:
+    for section, label in [("fast", "Fast"), ("cascade", "Cascade")]:
         raw = result.get("raw_sections", {}).get(section)
         if raw:
             parts.append(f"## Raw {label} Section")
