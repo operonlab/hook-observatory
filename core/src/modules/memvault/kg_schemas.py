@@ -1,10 +1,23 @@
 """Memvault KG Pydantic schemas — request/response types for Knowledge Graph."""
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import AliasChoices, BaseModel, Field
 
 from src.shared.schemas import SpaceScopedResponse
+
+
+# ======================== Retrieval Mode (LightRAG-inspired) ========================
+
+
+class RetrievalMode(StrEnum):
+    """Retrieval mode for cascade recall — LightRAG-inspired dual-layer switching."""
+
+    LOCAL = "local"  # Entity-centric: PPR + L0 triples + blocks
+    GLOBAL = "global"  # Community-level: L2 summaries + L1 communities
+    HYBRID = "hybrid"  # Both (current default)
+    AUTO = "auto"  # Router decides based on intent
 
 # ======================== Triple ========================
 
@@ -93,6 +106,16 @@ class CommunitySummaryResponse(SpaceScopedResponse):
     evidence_count: int | None = None
     tags: list[str] = []
     llm_model: str | None = None
+    staleness_score: float | None = None  # 0.0=fresh, 1.0=very stale
+
+    @property
+    def is_stale(self) -> bool:
+        """Summary is considered stale if updated_at > 30 days ago."""
+        from datetime import UTC, datetime, timedelta
+
+        if not self.updated_at:
+            return False
+        return (datetime.now(UTC) - self.updated_at) > timedelta(days=30)
 
 
 
@@ -128,6 +151,8 @@ class CascadeRecallResult(BaseModel):
     # Phase 2: Query routing metadata
     routing_intent: str | None = None
     routing_confidence: float | None = None
+    # LightRAG retrieval mode
+    retrieval_mode: str | None = None
     # Phase 3: CRAG evaluation metadata
     confidence_score: float | None = None
     evaluation_verdict: str | None = None

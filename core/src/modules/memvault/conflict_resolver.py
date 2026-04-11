@@ -17,6 +17,7 @@ semantic arbitration is desired.
 
 import json
 import logging
+from datetime import datetime
 
 from pydantic_ai import Agent
 
@@ -40,7 +41,7 @@ def _conflict_threshold(block_type: str = "memory") -> float:
     tolerate more divergence before triggering arbitration.
     Clamped to [0.80, 0.92].
     """
-    adjustments = {"attitude": 0.03, "skill": 0.02, "memory": 0, "knowledge": -0.02}
+    adjustments = {"attitude": 0.00, "skill": 0.02, "memory": 0, "knowledge": -0.02}
     return max(0.80, min(0.92, 0.85 + adjustments.get(block_type, 0)))
 
 
@@ -98,19 +99,37 @@ _conflict_agent = Agent(
         '- "supersede": The new memory is an update, correction, or more authoritative version '
         "of the existing one. The existing memory should be replaced.\n"
         '- "coexist": The memories represent genuinely different perspectives, time periods, or '
-        "contexts. Both are independently valuable and should be kept as separate entries."
+        "contexts. Both are independently valuable and should be kept as separate entries.\n\n"
+        "When timestamps are provided, consider temporal context: a newer memory about the same "
+        "topic usually supersedes an older one, especially for factual or preference content."
     ),
     retries=2,
 )
 
 
-async def _call_llm(new_content: str, existing_content: str, block_type: str) -> ConflictResult:
+async def _call_llm(
+    new_content: str,
+    existing_content: str,
+    block_type: str,
+    existing_timestamp: datetime | None = None,
+    new_timestamp: datetime | None = None,
+) -> ConflictResult:
     """Call oMLX local LLM and parse the conflict resolution response.
 
     Raises on failure — callers should catch and fall back to the heuristic.
     """
+    temporal_ctx = ""
+    if existing_timestamp or new_timestamp:
+        parts = []
+        if existing_timestamp:
+            parts.append(f"EXISTING created: {existing_timestamp.isoformat()}")
+        if new_timestamp:
+            parts.append(f"NEW created: {new_timestamp.isoformat()}")
+        temporal_ctx = "\n".join(parts) + "\n\n"
+
     user_message = (
         f"Block type: {block_type}\n\n"
+        f"{temporal_ctx}"
         f"EXISTING memory:\n{existing_content}\n\n"
         f"NEW memory:\n{new_content}\n\n"
         "Analyze the relationship between these two memories and return the JSON decision."
@@ -145,6 +164,8 @@ async def resolve_conflict(
     existing_block_id: str,
     block_type: str = "knowledge",
     similarity: float = 0.0,
+    existing_timestamp: datetime | None = None,
+    new_timestamp: datetime | None = None,
 ) -> ConflictResult:
     """Resolve a potential memory conflict using LLM arbitration.
 
@@ -174,7 +195,10 @@ async def resolve_conflict(
     )
 
     try:
-        result = await _call_llm(new_content, existing_content, block_type)
+        result = await _call_llm(
+            new_content, existing_content, block_type,
+            existing_timestamp=existing_timestamp, new_timestamp=new_timestamp,
+        )
         logger.info(
             "conflict_resolved(llm): block_id=%s decision=%s confidence=%.2f reason=%r",
             existing_block_id,

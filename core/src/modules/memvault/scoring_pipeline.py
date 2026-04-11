@@ -298,6 +298,34 @@ class TimeDecayOp(ScoringOp):
         return results
 
 
+class PPRBoostOp(ScoringOp):
+    """Stage 4.3: PPR Centrality Boost — HippoRAG-inspired.
+
+    Boosts results whose content mentions entities ranked highly by
+    Personalized PageRank. Only active when PPR scores are available
+    in the pipeline context (set by CascadeRecallService._ppr_recall).
+    """
+
+    PPR_WEIGHT = 0.3  # max boost factor
+
+    def transform(self, results: list[dict], ctx: dict[str, Any]) -> list[dict]:
+        ppr_scores: dict[str, float] | None = ctx.get("ppr_scores")
+        if not ppr_scores:
+            return results
+
+        for r in results:
+            content = r.get("content", "").lower()
+            # Check if content mentions any PPR-ranked entities
+            max_ppr = 0.0
+            for entity, score in ppr_scores.items():
+                if entity.lower() in content:
+                    max_ppr = max(max_ppr, score)
+            if max_ppr > 0:
+                r["score"] *= 1.0 + self.PPR_WEIGHT * max_ppr
+
+        return results
+
+
 class SemanticBoostOp(ScoringOp):
     """Stage 4.5: Semantic Relevance Boost — FadeMem-inspired."""
 
@@ -398,6 +426,7 @@ class ScoringPipeline:
             FeedbackBoostOp("feedback_boost", self.config),
             LengthNormOp("length_norm", self.config),
             TimeDecayOp("time_decay", self.config),
+            PPRBoostOp("ppr_boost", self.config),
             SemanticBoostOp("semantic_boost", self.config),
             MinScoreOp("min_score", self.config),
             NoiseFilterOp("noise_filter", self.config),

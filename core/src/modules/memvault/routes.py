@@ -132,6 +132,7 @@ async def create_block(
         logger.warning("Embedding failed for dedup check, skipping", exc_info=True)
         embedding = None
 
+    superseded_block_id = None
     if embedding and not skip_dedup:
         dedup_result = await check_duplicate(
             db, space_id, body.content, embedding, block_type=body.block_type
@@ -186,9 +187,10 @@ async def create_block(
                 dedup_result.existing_block_id,
             )
             if dedup_result.existing_block_id:
+                superseded_block_id = dedup_result.existing_block_id
                 await memory_block_service.invalidate_block(
                     db,
-                    block_id=dedup_result.existing_block_id,
+                    block_id=superseded_block_id,
                     superseded_by_id="__pending__",
                     reason="superseded",
                 )
@@ -203,6 +205,16 @@ async def create_block(
             await memory_block_service.update_embedding(db, instance.id, embedding)
     except Exception:
         logger.warning("Failed to store embedding for block %s", instance.id, exc_info=True)
+
+    # Backfill superseded_by with the actual new block ID
+    if superseded_block_id:
+        await memory_block_service.invalidate_block(
+            db,
+            block_id=superseded_block_id,
+            superseded_by_id=str(instance.id),
+            reason="superseded",
+        )
+
     await db.commit()
     await db.refresh(instance)
     return memory_block_service.to_response(instance)

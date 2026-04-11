@@ -160,6 +160,7 @@ class MemoryQueryRequest(BaseModel):
     load_budget: str = Field(default="standard", description="light | standard | deep")
     consumer: str = Field(default="human", description="agent | human | ui")
     top_k: int = Field(default=6, ge=1, le=20)
+    retrieval_mode: str = Field(default="auto", description="auto | local | global | hybrid")
 
 
 class MemoryEvidenceRef(BaseModel):
