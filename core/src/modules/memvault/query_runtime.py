@@ -357,9 +357,9 @@ async def _check_prefetch_cache(
     # so we only need to match the same 3 stable fields.
     intent_guess = task_mode  # coarse heuristic: task_mode correlates with intent
     try:
-        from .query_router import classify_query
+        from .query_router import classify_query_full
 
-        plan = classify_query(query)
+        plan = await classify_query_full(query)
         intent_guess = plan.intent.value
     except Exception:
         pass  # graceful degradation — use task_mode as intent proxy
@@ -670,9 +670,9 @@ async def run_memory_query(
     intent_value: str = "unknown"
     if task_mode == "auto":
         try:
-            from .query_router import QueryIntent, classify_query
+            from .query_router import QueryIntent, classify_query_full
 
-            plan = classify_query(request.q)
+            plan = await classify_query_full(request.q)
             intent_value = plan.intent.value
             intent_to_task: dict[str, str] = {
                 QueryIntent.ENTITY_LOOKUP: "lookup",
