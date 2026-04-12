@@ -53,24 +53,29 @@ def choose_thinking_mode(
     thinking_mode: str,
     load_budget: str,
     consumer: str,
+    intent: str = "unknown",
 ) -> str:
-    """Choose a concrete thinking mode from the request."""
-    task_mode = _normalize(task_mode, _TASK_MODES, "build")
-    thinking_mode = _normalize(thinking_mode, _THINKING_MODES, "auto")
-    load_budget = _normalize(load_budget, _LOAD_BUDGETS, "standard")
-    consumer = _normalize(consumer, _CONSUMERS, "human")
+    """Choose a concrete thinking mode from intent — consumer is irrelevant.
 
+    Design: QueryClassifyOp determines intent, intent determines thinking mode.
+    Consumer/entry-point only affects output format, never retrieval depth.
+    """
+    thinking_mode = _normalize(thinking_mode, _THINKING_MODES, "auto")
+
+    # Explicit override: user requested fast or slow directly
     if thinking_mode != "auto":
         return thinking_mode
-    if consumer == "agent":
-        return "fast"
-    if consumer == "ui":
-        return "slow"
-    if load_budget == "deep":
-        return "slow"
-    if task_mode in {"decide", "reflect"}:
-        return "slow"
-    return "fast"
+
+    # Intent-based routing (replaces consumer-based routing)
+    _INTENT_TO_THINKING: dict[str, str] = {
+        "entity_lookup": "fast",   # 查實體不需要 cascade
+        "factual": "fast",         # 查事實不需要 cascade
+        "conceptual": "slow",      # 需要 KG 摘要+三元組
+        "exploratory": "slow",     # 需要完整記憶脈絡
+        "cross_domain": "slow",    # 需要跨領域 cascade
+        "unknown": "slow",         # 不確定就全搜
+    }
+    return _INTENT_TO_THINKING.get(intent, "slow")
 
 
 def _budget_config(load_budget: str) -> dict[str, int]:
@@ -485,6 +490,7 @@ async def _run_query_with_pipeline(
         thinking_mode=thinking_mode_requested,
         load_budget=load_budget,
         consumer=consumer,
+        intent=intent_value,
     )
     budget = _budget_config(load_budget)
 
@@ -696,6 +702,7 @@ async def run_memory_query(
         thinking_mode=thinking_mode_requested,
         load_budget=load_budget,
         consumer=consumer,
+        intent=intent_value,
     )
     budget = _budget_config(load_budget)
 
