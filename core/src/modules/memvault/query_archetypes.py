@@ -220,79 +220,81 @@ def match_preset_qa(query: str) -> dict | None:
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # Lazy-initialized singleton: pre-embed all INTENT_ARCHETYPES queries,
-# compute per-intent centroid vectors, then compare incoming queries
-# via cosine similarity.
+# store per-intent embedding lists. At query time, compare against each
+# archetype and take max similarity per intent (not centroid average).
+#
+# Max-similarity > centroid because a single close archetype match is
+# more meaningful than average distance to all archetypes. Centroid
+# dilutes signal when archetypes cover diverse phrasings.
 
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
-_archetype_centroids: dict[str, list[float]] | None = None
+_archetype_embeddings: dict[str, list[list[float]]] | None = None
 _init_lock = asyncio.Lock()
 
 
-async def ensure_archetype_embeddings() -> dict[str, list[float]]:
-    """Pre-embed all archetype queries and compute per-intent centroids.
+async def ensure_archetype_embeddings() -> dict[str, list[list[float]]]:
+    """Pre-embed all archetype queries and store per-intent embedding lists.
 
     Lazy singleton — first call embeds ~40 queries (~5s), subsequent calls
-    return cached centroids instantly. Thread-safe via asyncio.Lock.
+    return cached embeddings instantly. Thread-safe via asyncio.Lock.
 
-    Returns dict of {intent: centroid_vector} or empty dict on failure.
+    Returns dict of {intent: [embedding_vectors]} or empty dict on failure.
     """
-    global _archetype_centroids
-    if _archetype_centroids is not None:
-        return _archetype_centroids
+    global _archetype_embeddings
+    if _archetype_embeddings is not None:
+        return _archetype_embeddings
 
     async with _init_lock:
-        # Double-check after acquiring lock
-        if _archetype_centroids is not None:
-            return _archetype_centroids
+        if _archetype_embeddings is not None:
+            return _archetype_embeddings
 
         from .embedding import get_embeddings_batch
 
-        centroids: dict[str, list[float]] = {}
+        cache: dict[str, list[list[float]]] = {}
         for intent, queries in INTENT_ARCHETYPES.items():
             embeddings = await get_embeddings_batch(queries, task_type="classification")
             valid = [e for e in embeddings if e is not None]
             if not valid:
                 logger.warning("No valid embeddings for intent %s", intent)
                 continue
-            dim = len(valid[0])
-            centroid = [sum(v[i] for v in valid) / len(valid) for i in range(dim)]
-            centroids[intent] = centroid
-            logger.debug(
-                "Archetype centroid for %s: %d vectors → %d-dim centroid",
-                intent,
-                len(valid),
-                dim,
-            )
+            cache[intent] = valid
+            logger.debug("Archetype embeddings for %s: %d vectors", intent, len(valid))
 
-        _archetype_centroids = centroids
-        logger.info("Archetype embeddings initialized: %d intents", len(centroids))
-        return centroids
+        _archetype_embeddings = cache
+        logger.info("Archetype embeddings initialized: %d intents, %d total vectors",
+                     len(cache), sum(len(v) for v in cache.values()))
+        return cache
 
 
 async def semantic_intent_scores(query: str) -> dict[str, float]:
-    """Tier 2: Compare query embedding against archetype centroids.
+    """Tier 2: Compare query embedding against all archetypes, take max per intent.
 
-    Returns {intent: cosine_similarity} or empty dict on failure.
-    Graceful degradation: embedding unavailable → empty dict → Tier 1 only.
+    Max-similarity avoids centroid dilution: "為什麼用這個 port 範圍架構" matches
+    conceptual archetype "為什麼要用這個 port 範圍的架構" perfectly, but centroid
+    averages this out with 9 other unrelated conceptual archetypes.
+
+    Returns {intent: max_cosine_similarity} or empty dict on failure.
     """
-    from .embedding import get_embedding
     from src.shared.scoring_stages import cosine_similarity
+
+    from .embedding import get_embedding
 
     query_emb = await get_embedding(query, task_type="search_query")
     if query_emb is None:
         return {}
 
-    centroids = await ensure_archetype_embeddings()
-    if not centroids:
+    all_embeddings = await ensure_archetype_embeddings()
+    if not all_embeddings:
         return {}
 
     scores: dict[str, float] = {}
-    for intent, centroid in centroids.items():
-        scores[intent] = cosine_similarity(query_emb, centroid)
+    for intent, embeddings in all_embeddings.items():
+        max_sim = max(cosine_similarity(query_emb, arch_emb) for arch_emb in embeddings)
+        scores[intent] = max_sim
     return scores
 
 
