@@ -30,7 +30,9 @@ from .normalize import NormalizerOp, NormChange, NormContext
 # str.maketrans for pass-0 conversion: maps simplified chars to traditional
 _S2T = str.maketrans(
     {
-        "周": "週",
+        # NOTE: "周" intentionally excluded from full-text translate — it's a
+        # very common surname (周建宏/周杰倫). Pass 0.6 below handles the
+        # context-bound 周→週 conversion (週末/週年/週一..週日/上下這本周).
         "个": "個",
         "后": "後",
         "点": "點",
@@ -40,6 +42,27 @@ _S2T = str.maketrans(
         "这": "這",
     }
 )
+
+# Context-aware 周→週 conversion. Only fires when 周 sits in an unambiguously
+# temporal position. Avoids destroying surnames like 周建宏/周杰倫.
+_PASS06_ZHOU_PATTERNS = [
+    # Weekday: 周一/周二/.../周日/周天
+    (re.compile(r"周(?=[一二三四五六日天])"), "週"),
+    # Period prefixes: 上周/下周/這周/本周/每周/前周/後周/这周
+    (re.compile(r"(?<=[上下這本每前後这])周"), "週"),
+    # Compound nouns: 周末/周年
+    (re.compile(r"周(?=[末年])"), "週"),
+    # N 周前/N 周後 (after Pass 0.5 turned ZH numbers to Arabic)
+    (re.compile(r"(?<=\d)\s*周(?=[前後])"), "週"),
+    # 個周 (e.g., "兩個周末" → after pass 0.5, "2個周末")
+    (re.compile(r"(?<=個)周(?=[末年])"), "週"),
+]
+
+
+def _apply_pass06_zhou(text: str) -> str:
+    for pat, repl in _PASS06_ZHOU_PATTERNS:
+        text = pat.sub(repl, text)
+    return text
 
 # ======================== Core lookup tables ========================
 
@@ -348,6 +371,9 @@ class TemporalNormalizer(NormalizerOp):
         from .normalize import preprocess_chinese
 
         normalised = preprocess_chinese(normalised)
+
+        # ---- Pass 0.6: context-bound 周→週 (preserves surnames like 周建宏) ----
+        normalised = _apply_pass06_zhou(normalised)
 
         # ---- Pass 0.7: Week synonym normalization ----
         # "上禮拜"/"下禮拜"/"這禮拜"/"本禮拜" (standalone) → 上週/下週/這週/本週
@@ -1057,11 +1083,12 @@ def normalize_temporal_range(text: str, ref: datetime | None = None) -> str:
     try:
         from .normalize import NormContext
 
-        # Pass 0 + 0.5: S2T + ZH number → Arabic
+        # Pass 0 + 0.5 + 0.6: S2T + ZH number → Arabic + context-bound 周→週
         t = text.translate(_S2T)
         from .normalize import preprocess_chinese
 
         t = preprocess_chinese(t)
+        t = _apply_pass06_zhou(t)
 
         # Range pre-pass: consume period expressions as ranges
         t = _range_prepass(t, ref)
