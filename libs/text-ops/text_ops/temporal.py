@@ -268,6 +268,7 @@ class TemporalNormalizer(NormalizerOp):
         (re.compile(r"今年"), 0, "year_start"),
         (re.compile(r"本[月]"), 0, "month_start"),
         (re.compile(r"本[週周]"), 0, "date"),
+        (re.compile(r"這[週周]"), 0, "date"),
         (re.compile(r"\blast\s+week\b", re.IGNORECASE), -7, "date"),
         (re.compile(r"\bnext\s+week\b", re.IGNORECASE), 7, "date"),
         (re.compile(r"\blast\s+month\b", re.IGNORECASE), -30, "date"),
@@ -347,6 +348,16 @@ class TemporalNormalizer(NormalizerOp):
         from .normalize import preprocess_chinese
 
         normalised = preprocess_chinese(normalised)
+
+        # ---- Pass 0.7: Week synonym normalization ----
+        # "上禮拜"/"下禮拜"/"這禮拜"/"本禮拜" (standalone) → 上週/下週/這週/本週
+        # Skip when followed by weekday char (一二三四五六日天) so Pass 2 can still
+        # match patterns like "上禮拜三".
+        normalised = re.sub(
+            r"([上下這本])禮拜(?![一二三四五六日天])",
+            r"\1週",
+            normalised,
+        )
 
         # ---- Pass 7: double relative (before pass 4 to prevent partial match) ----
         normalised = self._pass7(normalised, ref, changes, content)
@@ -689,3 +700,356 @@ def _extract_weekday(matched: str) -> str | None:
         if key in matched:
             return key
     return None
+
+
+# ======================== Range helpers (for normalize_temporal_range) ========================
+
+
+def _week_range(ref: datetime, offset_weeks: int) -> tuple[datetime, datetime]:
+    """Return (Monday, Sunday) of the week that is offset_weeks from ref's week."""
+    this_monday = ref - timedelta(days=ref.isoweekday() - 1)
+    start = this_monday + timedelta(weeks=offset_weeks)
+    end = start + timedelta(days=6)
+    return start, end
+
+
+def _month_range(ref: datetime, offset_months: int) -> tuple[datetime, datetime]:
+    """Return (1st, last day) of month that is offset_months from ref's month."""
+    year = ref.year
+    month = ref.month + offset_months
+    while month < 1:
+        month += 12
+        year -= 1
+    while month > 12:
+        month -= 12
+        year += 1
+    last_day = calendar.monthrange(year, month)[1]
+    return datetime(year, month, 1), datetime(year, month, last_day)
+
+
+def _year_range(ref: datetime, offset_years: int) -> tuple[datetime, datetime]:
+    year = ref.year + offset_years
+    return datetime(year, 1, 1), datetime(year, 12, 31)
+
+
+def _quarter_range_pair(year: int, q: int) -> tuple[datetime, datetime]:
+    """q is 1..4. Returns (1st of q's first month, last day of q's last month)."""
+    start_month = (q - 1) * 3 + 1
+    end_month = q * 3
+    last_day = calendar.monthrange(year, end_month)[1]
+    return datetime(year, start_month, 1), datetime(year, end_month, last_day)
+
+
+def _fmt_range(start: datetime, end: datetime) -> str:
+    return f"{start.strftime('%Y-%m-%d')} 到 {end.strftime('%Y-%m-%d')}"
+
+
+# Negative-lookahead fragments used by the range pre-pass
+_NOT_WEEKDAY = r"(?![一二三四五六日天])"
+_NOT_DAY_NUM = r"(?!\d+[號号日])"
+
+
+def _range_prepass(text: str, ref: datetime) -> str:
+    """Replace range-valued period expressions with 'YYYY-MM-DD 到 YYYY-MM-DD'.
+
+    Order matters: longer / more-specific patterns run first so leftover
+    single-date expressions can fall through to TemporalNormalizer.normalize().
+    """
+    cur_q = (ref.month - 1) // 3 + 1
+    year_off_map = {
+        "前年": -2,
+        "去年": -1,
+        "今年": 0,
+        "明年": 1,
+        "後年": 2,
+        "后年": 2,
+    }
+
+    # ---- Year + month combo FIRST (前年三月, 去年12月) — must beat plain 去年 ----
+    month_alts = TemporalNormalizer._MONTH_ALTS
+
+    def _year_month_repl(m: re.Match[str]) -> str:
+        year_word = m.group(1)
+        month_str = m.group(2)
+        y = ref.year + year_off_map.get(year_word, 0)
+        mn = TemporalNormalizer._MONTH_ZH_MAP.get(month_str)
+        if mn is None:
+            return m.group(0)
+        last_day = calendar.monthrange(y, mn)[1]
+        return _fmt_range(datetime(y, mn, 1), datetime(y, mn, last_day))
+
+    text = re.sub(
+        r"(前年|去年|今年|明年|[後后]年)(?:的)?(" + month_alts + r")",
+        _year_month_repl,
+        text,
+    )
+
+    # ---- Double-relative week (上上週, 下下禮拜) — before single week ----
+    _WEEK = r"(?:[週周]|星期|禮拜)"
+    text = re.sub(
+        r"上上[個个]?" + _WEEK + _NOT_WEEKDAY,
+        lambda m: _fmt_range(*_week_range(ref, -2)),
+        text,
+    )
+    text = re.sub(
+        r"下下[個个]?" + _WEEK + _NOT_WEEKDAY,
+        lambda m: _fmt_range(*_week_range(ref, 2)),
+        text,
+    )
+
+    # ---- Double-relative month (上上月, 下下個月) — before single month ----
+    text = re.sub(
+        r"上上[個个]?月" + _NOT_DAY_NUM,
+        lambda m: _fmt_range(*_month_range(ref, -2)),
+        text,
+    )
+    text = re.sub(
+        r"下下[個个]?月" + _NOT_DAY_NUM,
+        lambda m: _fmt_range(*_month_range(ref, 2)),
+        text,
+    )
+
+    # ---- 最近 N units (last N <unit>, count-based range ending today) ----
+    def _recent_days(m: re.Match[str]) -> str:
+        n = max(int(m.group(1)), 1)
+        start = ref - timedelta(days=n - 1)
+        return _fmt_range(start, ref)
+
+    text = re.sub(r"最近(\d+)\s*天", _recent_days, text)
+
+    def _recent_weeks(m: re.Match[str]) -> str:
+        n = max(int(m.group(1)), 1)
+        start = ref - timedelta(weeks=n)
+        return _fmt_range(start, ref)
+
+    text = re.sub(r"最近(\d+)\s*(?:" + _WEEK + r")", _recent_weeks, text)
+
+    def _recent_months(m: re.Match[str]) -> str:
+        n = max(int(m.group(1)), 1)
+        start = ref - timedelta(days=n * 30)
+        return _fmt_range(start, ref)
+
+    text = re.sub(r"最近(\d+)\s*[個个]?月", _recent_months, text)
+
+    def _recent_years(m: re.Match[str]) -> str:
+        n = max(int(m.group(1)), 1)
+        start = ref - timedelta(days=n * 365)
+        return _fmt_range(start, ref)
+
+    text = re.sub(r"最近(\d+)\s*年", _recent_years, text)
+
+    # "最近一週" / "最近一個月" / "最近一年" (explicit 1 unit, no digit)
+    text = re.sub(
+        r"最近一[個个]?(?:" + _WEEK + r")",
+        lambda m: _fmt_range(ref - timedelta(weeks=1), ref),
+        text,
+    )
+    text = re.sub(
+        r"最近一[個个]?月",
+        lambda m: _fmt_range(ref - timedelta(days=30), ref),
+        text,
+    )
+    text = re.sub(
+        r"最近一年",
+        lambda m: _fmt_range(ref - timedelta(days=365), ref),
+        text,
+    )
+
+    # ---- Week synonym: 上禮拜 → 上週 (Pass 2 weekday safe via lookahead) ----
+    text = re.sub(r"([上下這本])禮拜" + _NOT_WEEKDAY, r"\1週", text)
+
+    # ---- Single-word week (上週/下週/本週/這週) with neg lookahead weekday ----
+    text = re.sub(
+        r"上[週周]" + _NOT_WEEKDAY,
+        lambda m: _fmt_range(*_week_range(ref, -1)),
+        text,
+    )
+    text = re.sub(
+        r"下[週周]" + _NOT_WEEKDAY,
+        lambda m: _fmt_range(*_week_range(ref, 1)),
+        text,
+    )
+    text = re.sub(
+        r"(?:本|這)[週周]" + _NOT_WEEKDAY,
+        lambda m: _fmt_range(*_week_range(ref, 0)),
+        text,
+    )
+
+    # ---- Single-word month (上月/下月/本月/這月) with neg lookahead day ----
+    text = re.sub(
+        r"上[個个]?月" + _NOT_DAY_NUM,
+        lambda m: _fmt_range(*_month_range(ref, -1)),
+        text,
+    )
+    text = re.sub(
+        r"下[個个]?月" + _NOT_DAY_NUM,
+        lambda m: _fmt_range(*_month_range(ref, 1)),
+        text,
+    )
+    text = re.sub(
+        r"(?:本|這)[個个]?月" + _NOT_DAY_NUM,
+        lambda m: _fmt_range(*_month_range(ref, 0)),
+        text,
+    )
+
+    # ---- Year (去年/今年/明年/前年/後年) — safe since year+month already consumed ----
+    text = re.sub(r"前年", lambda m: _fmt_range(*_year_range(ref, -2)), text)
+    text = re.sub(r"去年", lambda m: _fmt_range(*_year_range(ref, -1)), text)
+    text = re.sub(r"今年", lambda m: _fmt_range(*_year_range(ref, 0)), text)
+    text = re.sub(r"明年", lambda m: _fmt_range(*_year_range(ref, 1)), text)
+    text = re.sub(r"[後后]年", lambda m: _fmt_range(*_year_range(ref, 2)), text)
+
+    # ---- Half year / quarter ----
+    text = re.sub(
+        r"上半年",
+        lambda m: _fmt_range(
+            datetime(ref.year, 1, 1), datetime(ref.year, 6, 30)
+        ),
+        text,
+    )
+    text = re.sub(
+        r"下半年",
+        lambda m: _fmt_range(
+            datetime(ref.year, 7, 1), datetime(ref.year, 12, 31)
+        ),
+        text,
+    )
+
+    def _last_q_repl(m: re.Match[str]) -> str:
+        q = cur_q - 1 if cur_q > 1 else 4
+        y = ref.year if cur_q > 1 else ref.year - 1
+        return _fmt_range(*_quarter_range_pair(y, q))
+
+    def _next_q_repl(m: re.Match[str]) -> str:
+        q = cur_q + 1 if cur_q < 4 else 1
+        y = ref.year if cur_q < 4 else ref.year + 1
+        return _fmt_range(*_quarter_range_pair(y, q))
+
+    def _this_q_repl(m: re.Match[str]) -> str:
+        return _fmt_range(*_quarter_range_pair(ref.year, cur_q))
+
+    text = re.sub(r"上一?季", _last_q_repl, text)
+    text = re.sub(r"下一?季", _next_q_repl, text)
+    text = re.sub(r"(?:這一?季|本季)", _this_q_repl, text)
+
+    return text
+
+
+# ======================== ISO date spacing for downstream regex ========================
+
+_ISO_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
+
+def _pad_iso_dates(text: str) -> str:
+    """Ensure each YYYY-MM-DD is surrounded by whitespace.
+
+    Rationale: Python 3 regex ``\\b`` treats CJK characters as word chars
+    (Unicode ``\\w``), so downstream patterns like ``\\b20\\d{2}-\\d{2}-\\d{2}\\b``
+    fail to match ISO dates adjacent to Chinese text (e.g. ``查2026-04-06``).
+    Padding with spaces restores ASCII word-boundary semantics.
+    """
+
+    def _repl(m: re.Match[str]) -> str:
+        start, end = m.span()
+        lead = "" if start == 0 or text[start - 1] == " " else " "
+        trail = "" if end == len(text) or text[end] == " " else " "
+        return f"{lead}{m.group(0)}{trail}"
+
+    return _ISO_DATE_RE.sub(_repl, text)
+
+
+# ======================== Public pure-function API ========================
+
+_SINGLETON = TemporalNormalizer()
+
+
+def normalize_temporal(text: str, ref: datetime | None = None) -> str:
+    """Rewrite relative temporal expressions to absolute ISO single dates.
+
+    Thin pure-function wrapper over :class:`TemporalNormalizer` that drops the
+    :class:`NormContext` requirement, accepting a plain ``datetime`` instead.
+    Period expressions ("上週", "上個月") are treated as anchor points (single
+    dates). For range-aware rewriting, use :func:`normalize_temporal_range`.
+
+    Args:
+        text: input text (Chinese or English).
+        ref:  reference datetime for "today". Defaults to ``datetime.now()``.
+
+    Returns:
+        Rewritten text. Never raises; falls back to the original on any error.
+
+    Examples:
+        >>> from datetime import datetime
+        >>> ref = datetime(2026, 4, 13)  # Monday
+        >>> normalize_temporal("三天前開的刀", ref)
+        ' 2026-04-10 開的刀'
+    """
+    if not text:
+        return text
+    if ref is None:
+        ref = datetime.now()
+    try:
+        from .normalize import NormContext
+
+        normalised, _ = _SINGLETON.normalize(text, NormContext(created_at=ref))
+        return _pad_iso_dates(normalised)
+    except Exception:
+        return text
+
+
+def normalize_temporal_range(text: str, ref: datetime | None = None) -> str:
+    """Rewrite relative temporal expressions, expanding periods to full date ranges.
+
+    Behaviour:
+
+    - Period expressions (``上週``, ``上個月``, ``去年``, ``最近3天``) become
+      ``"YYYY-MM-DD 到 YYYY-MM-DD"`` (Traditional Chinese "to").
+    - Single-date expressions (``今天``, ``昨天``, ``3天前``, ``上週一``) remain
+      as single absolute ISO dates, identical to :func:`normalize_temporal`.
+    - Output dates are space-padded so downstream regex using ``\\b`` can match
+      them when adjacent to CJK characters (see :func:`_pad_iso_dates`).
+
+    This is the preferred form when feeding queries to LLM tool-callers that
+    take separate ``start`` / ``end`` parameters — the LLM (or a deterministic
+    regex parser) can copy both dates verbatim instead of inferring a range.
+
+    Args:
+        text: input text (Chinese or English).
+        ref:  reference datetime for "today". Defaults to ``datetime.now()``.
+
+    Returns:
+        Rewritten text. Never raises.
+
+    Examples:
+        >>> from datetime import datetime
+        >>> ref = datetime(2026, 4, 13)  # Monday
+        >>> normalize_temporal_range("查上週的手術", ref)
+        '查 2026-04-06 到 2026-04-12 的手術'
+        >>> normalize_temporal_range("去年三月有多少", ref)
+        ' 2025-03-01 到 2025-03-31 有多少'
+        >>> normalize_temporal_range("最近3天開幾刀", ref)
+        ' 2026-04-11 到 2026-04-13 開幾刀'
+        >>> normalize_temporal_range("3天前那台手術", ref)
+        ' 2026-04-10 那台手術'
+    """
+    if not text:
+        return text
+    if ref is None:
+        ref = datetime.now()
+    try:
+        from .normalize import NormContext
+
+        # Pass 0 + 0.5: S2T + ZH number → Arabic
+        t = text.translate(_S2T)
+        from .normalize import preprocess_chinese
+
+        t = preprocess_chinese(t)
+
+        # Range pre-pass: consume period expressions as ranges
+        t = _range_prepass(t, ref)
+
+        # Fall through to single-date normalizer for leftovers
+        t, _ = _SINGLETON.normalize(t, NormContext(created_at=ref))
+        return _pad_iso_dates(t)
+    except Exception:
+        return text
