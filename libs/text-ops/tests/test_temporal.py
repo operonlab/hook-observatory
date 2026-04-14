@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
+
+from text_ops.normalize import NormContext
 from text_ops.temporal import (
     TemporalIntent,
     TemporalNormalizer,
@@ -11,9 +14,8 @@ from text_ops.temporal import (
     normalize_temporal_range,
     resolve_temporal_intent,
 )
-from text_ops.normalize import NormContext
 
-UTC = timezone.utc
+UTC = UTC
 REF = datetime(2026, 4, 8, 14, 0, 0, tzinfo=UTC)  # Wednesday
 CTX = NormContext(created_at=REF)
 
@@ -83,9 +85,7 @@ class TestPrefixWeekday:
             ("這週五", "2026-04-10"),
         ],
     )
-    def test_weekday_resolution(
-        self, tn: TemporalNormalizer, expr: str, expected: str
-    ) -> None:
+    def test_weekday_resolution(self, tn: TemporalNormalizer, expr: str, expected: str) -> None:
         result, changes = tn.normalize(expr, CTX)
         assert expected in result
         assert len(changes) >= 1
@@ -138,9 +138,7 @@ class TestRelativePeriod:
             ("last week", "2026-04-01"),
         ],
     )
-    def test_relative_period(
-        self, tn: TemporalNormalizer, expr: str, expected: str
-    ) -> None:
+    def test_relative_period(self, tn: TemporalNormalizer, expr: str, expected: str) -> None:
         result, _ = tn.normalize(expr, CTX)
         assert expected in result
 
@@ -193,9 +191,7 @@ class TestDoubleRelative:
             ("前年", "2024"),
         ],
     )
-    def test_double_relative(
-        self, tn: TemporalNormalizer, expr: str, expected: str
-    ) -> None:
+    def test_double_relative(self, tn: TemporalNormalizer, expr: str, expected: str) -> None:
         result, _ = tn.normalize(expr, CTX)
         assert expected in result
 
@@ -230,9 +226,7 @@ class TestTemporalIntent:
         assert '"type": "relative"' in s
 
     def test_resolve_simple_past(self) -> None:
-        intent = TemporalIntent(
-            type="relative", direction="past", unit="day", quantity=3
-        )
+        intent = TemporalIntent(type="relative", direction="past", unit="day", quantity=3)
         result = resolve_temporal_intent(intent, REF)
         assert result is not None
         assert result.day == 5  # April 5
@@ -257,9 +251,7 @@ class TestWeekSynonym:
             ("這禮拜", "2026-04-08"),
         ],
     )
-    def test_standalone_礼拜(
-        self, tn: TemporalNormalizer, expr: str, expected: str
-    ) -> None:
+    def test_standalone_礼拜(self, tn: TemporalNormalizer, expr: str, expected: str) -> None:
         result, _ = tn.normalize(expr, CTX)
         assert expected in result
 
@@ -377,6 +369,28 @@ class TestNormalizeTemporalRange:
     def test_realistic_query_recent_3_days(self) -> None:
         result = normalize_temporal_range("最近三天有幾台手術", REF.replace(tzinfo=None))
         assert "2026-04-06 到 2026-04-08" in result
+
+    @pytest.mark.parametrize(
+        "expr, expected",
+        [
+            # Cross-period ranges: "X 到 Y" with both X and Y as period
+            # expressions should collapse into a single outer range.
+            # REF = Wed 2026-04-08
+            ("去年一月到今年三月之間", "2025-01-01 到 2026-03-31"),
+            ("上週到下週", "2026-03-30 到 2026-04-19"),
+            ("上個月到本月", "2026-03-01 到 2026-04-30"),
+            ("去年到今年", "2025-01-01 到 2026-12-31"),
+        ],
+    )
+    def test_cross_period_collapse(self, expr: str, expected: str) -> None:
+        """A 到 B 到 C 到 D chains must collapse to (earliest, latest)."""
+        result = normalize_temporal_range(expr, REF.replace(tzinfo=None))
+        assert expected in result
+
+    def test_simple_range_not_collapsed(self) -> None:
+        """Single period (2-date range) must not be touched by chain collapsing."""
+        result = normalize_temporal_range("上週", REF.replace(tzinfo=None))
+        assert "2026-03-30 到 2026-04-05" in result
 
     def test_iso_dates_space_padded(self) -> None:
         """Range output must also be space-padded so \\b regex works downstream."""

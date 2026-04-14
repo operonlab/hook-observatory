@@ -902,16 +902,12 @@ def _range_prepass(text: str, ref: datetime) -> str:
     # ---- Half year / quarter ----
     text = re.sub(
         r"上半年",
-        lambda m: _fmt_range(
-            datetime(ref.year, 1, 1), datetime(ref.year, 6, 30)
-        ),
+        lambda m: _fmt_range(datetime(ref.year, 1, 1), datetime(ref.year, 6, 30)),
         text,
     )
     text = re.sub(
         r"下半年",
-        lambda m: _fmt_range(
-            datetime(ref.year, 7, 1), datetime(ref.year, 12, 31)
-        ),
+        lambda m: _fmt_range(datetime(ref.year, 7, 1), datetime(ref.year, 12, 31)),
         text,
     )
 
@@ -938,6 +934,28 @@ def _range_prepass(text: str, ref: datetime) -> str:
 # ======================== ISO date spacing for downstream regex ========================
 
 _ISO_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
+# Collapse a chain of 3+ ISO dates joined by 到/至 into a single (earliest, latest)
+# range. Rationale: "去年一月到今年三月" expands to
+#   "2025-01-01 到 2025-01-31 到 2026-03-01 到 2026-03-31"
+# after range_prepass (each period → its own range). Downstream parsers that
+# take only the first two dates would wrongly return just 2025-01, so we
+# collapse the chain into a single outer-bound range before emitting.
+_ISO_CHAIN_RE = re.compile(r"(\d{4}-\d{2}-\d{2})(?:\s*(?:到|至)\s*\d{4}-\d{2}-\d{2}){2,}")
+
+
+def _collapse_iso_chains(text: str) -> str:
+    """Collapse ``A 到 B 到 C 到 D`` → ``A 到 D`` (time-sorted first/last)."""
+
+    def _repl(m: re.Match[str]) -> str:
+        chain = m.group(0)
+        dates = re.findall(r"\d{4}-\d{2}-\d{2}", chain)
+        if not dates:
+            return chain
+        sorted_dates = sorted(dates)  # ISO YYYY-MM-DD lexicographic = chronological
+        return f"{sorted_dates[0]} 到 {sorted_dates[-1]}"
+
+    return _ISO_CHAIN_RE.sub(_repl, text)
 
 
 def _pad_iso_dates(text: str) -> str:
@@ -1050,6 +1068,11 @@ def normalize_temporal_range(text: str, ref: datetime | None = None) -> str:
 
         # Fall through to single-date normalizer for leftovers
         t, _ = _SINGLETON.normalize(t, NormContext(created_at=ref))
+
+        # Collapse "A 到 B 到 C 到 D" chains into single (earliest, latest) range
+        # so "去年一月到今年三月" → "2025-01-01 到 2026-03-31" (not split 4 ways).
+        t = _collapse_iso_chains(t)
+
         return _pad_iso_dates(t)
     except Exception:
         return text
