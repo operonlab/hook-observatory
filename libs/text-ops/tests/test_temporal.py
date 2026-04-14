@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 from datetime import datetime, timezone
-from text_ops.temporal import TemporalNormalizer, TemporalIntent, resolve_temporal_intent
+from text_ops.temporal import (
+    TemporalIntent,
+    TemporalNormalizer,
+    normalize_temporal,
+    normalize_temporal_range,
+    resolve_temporal_intent,
+)
 from text_ops.normalize import NormContext
 
 UTC = timezone.utc
@@ -230,6 +236,156 @@ class TestTemporalIntent:
         result = resolve_temporal_intent(intent, REF)
         assert result is not None
         assert result.day == 5  # April 5
+
+
+# ======================== Week Synonym (Pass 0.7) ========================
+
+
+class TestWeekSynonym:
+    """Standalone "上禮拜" / "下禮拜" must be treated as "上週" / "下週".
+
+    (Was an upstream gap: Pass 4 regex only covered 上週/下週, missing 禮拜
+    variant when not followed by a weekday character.)
+    """
+
+    @pytest.mark.parametrize(
+        "expr, expected",
+        [
+            ("上禮拜", "2026-04-01"),  # same as 上週 (ref - 7 days)
+            ("下禮拜", "2026-04-15"),  # same as 下週 (ref + 7 days)
+            ("本禮拜", "2026-04-08"),  # same as 本週 (ref)
+            ("這禮拜", "2026-04-08"),
+        ],
+    )
+    def test_standalone_礼拜(
+        self, tn: TemporalNormalizer, expr: str, expected: str
+    ) -> None:
+        result, _ = tn.normalize(expr, CTX)
+        assert expected in result
+
+    def test_礼拜_with_weekday_preserved(self, tn: TemporalNormalizer) -> None:
+        """上禮拜三 should still resolve via Pass 2 (not mangled by Pass 0.7)."""
+        result, _ = tn.normalize("上禮拜三", CTX)
+        # Pass 2 last-weekday-Wednesday from ref=Wed 2026-04-08 → 2026-04-01
+        assert "2026-04-01" in result
+
+
+# ======================== normalize_temporal (pure function API) ========================
+
+
+class TestNormalizeTemporalPure:
+    """Pure-function wrapper accepting a plain datetime instead of NormContext."""
+
+    def test_accepts_datetime(self) -> None:
+        result = normalize_temporal("3天前", REF)
+        assert "2026-04-05" in result
+
+    def test_uses_now_when_ref_none(self) -> None:
+        # Just verify no exception + output contains some date
+        import re as _re
+
+        result = normalize_temporal("今天")
+        assert _re.search(r"\d{4}-\d{2}-\d{2}", result) is not None
+
+    def test_fail_open_on_empty(self) -> None:
+        assert normalize_temporal("", REF) == ""
+        assert normalize_temporal("no temporal words", REF).strip() == "no temporal words"
+
+    def test_iso_dates_space_padded(self) -> None:
+        """Output YYYY-MM-DD must have space on both sides so \\b regex works."""
+        result = normalize_temporal("查3天前的手術", REF)
+        assert " 2026-04-05 " in result
+
+
+# ======================== normalize_temporal_range (range API) ========================
+
+
+class TestNormalizeTemporalRange:
+    """Range-aware variant: period expressions → 'YYYY-MM-DD 到 YYYY-MM-DD'."""
+
+    @pytest.mark.parametrize(
+        "expr, expected",
+        [
+            # Week ranges (ref is Wed 2026-04-08; last week Mon-Sun = Mar 30 - Apr 5)
+            ("上週", "2026-03-30 到 2026-04-05"),
+            ("上禮拜", "2026-03-30 到 2026-04-05"),
+            ("本週", "2026-04-06 到 2026-04-12"),
+            ("下週", "2026-04-13 到 2026-04-19"),
+            ("上上週", "2026-03-23 到 2026-03-29"),
+            # Month ranges
+            ("上個月", "2026-03-01 到 2026-03-31"),
+            ("本月", "2026-04-01 到 2026-04-30"),
+            ("下個月", "2026-05-01 到 2026-05-31"),
+            ("上上個月", "2026-02-01 到 2026-02-28"),
+            # Year ranges
+            ("去年", "2025-01-01 到 2025-12-31"),
+            ("今年", "2026-01-01 到 2026-12-31"),
+            ("明年", "2027-01-01 到 2027-12-31"),
+            ("前年", "2024-01-01 到 2024-12-31"),
+            # Year + month (month range within year)
+            ("去年三月", "2025-03-01 到 2025-03-31"),
+            ("去年12月", "2025-12-01 到 2025-12-31"),
+            ("今年一月", "2026-01-01 到 2026-01-31"),
+            # Half year / quarter (ref is Q2 = Apr-Jun)
+            ("上半年", "2026-01-01 到 2026-06-30"),
+            ("下半年", "2026-07-01 到 2026-12-31"),
+            ("上季", "2026-01-01 到 2026-03-31"),
+            ("下季", "2026-07-01 到 2026-09-30"),
+            ("本季", "2026-04-01 到 2026-06-30"),
+            # 最近 N units
+            ("最近3天", "2026-04-06 到 2026-04-08"),
+            ("最近三天", "2026-04-06 到 2026-04-08"),
+            ("最近一週", "2026-04-01 到 2026-04-08"),
+            ("最近2週", "2026-03-25 到 2026-04-08"),
+            ("最近一個月", "2026-03-09 到 2026-04-08"),
+            ("最近3個月", "2026-01-08 到 2026-04-08"),
+        ],
+    )
+    def test_range_expressions(self, expr: str, expected: str) -> None:
+        result = normalize_temporal_range(expr, REF.replace(tzinfo=None))
+        assert expected in result
+
+    @pytest.mark.parametrize(
+        "expr, expected",
+        [
+            # Pass 2 weekday must still resolve to a single date
+            ("上週一", "2026-03-30"),
+            ("下週五", "2026-04-17"),
+            ("上禮拜三", "2026-04-01"),
+            # Pass 5 month+day single date
+            ("上個月3號", "2026-03-03"),
+            ("下個月15日", "2026-05-15"),
+            # Pass 3 N ago / later
+            ("3天前", "2026-04-05"),
+            ("5天後", "2026-04-13"),
+            ("一週前", "2026-04-01"),
+            # Pass 1 single day
+            ("今天", "2026-04-08"),
+            ("昨天", "2026-04-07"),
+            ("大後天", "2026-04-11"),
+        ],
+    )
+    def test_single_date_preserved(self, expr: str, expected: str) -> None:
+        """Single-date expressions must not be mangled by the range pre-pass."""
+        result = normalize_temporal_range(expr, REF.replace(tzinfo=None))
+        assert expected in result
+
+    def test_realistic_query_last_week(self) -> None:
+        result = normalize_temporal_range("查上禮拜所有的手術", REF.replace(tzinfo=None))
+        assert "2026-03-30 到 2026-04-05" in result
+
+    def test_realistic_query_recent_3_days(self) -> None:
+        result = normalize_temporal_range("最近三天有幾台手術", REF.replace(tzinfo=None))
+        assert "2026-04-06 到 2026-04-08" in result
+
+    def test_iso_dates_space_padded(self) -> None:
+        """Range output must also be space-padded so \\b regex works downstream."""
+        result = normalize_temporal_range("查上週手術", REF.replace(tzinfo=None))
+        # Leading and trailing spaces around ISO dates
+        assert " 2026-03-30 " in result
+
+    def test_fail_open_on_empty(self) -> None:
+        assert normalize_temporal_range("", REF) == ""
 
 
 # ======================== Deprecation ========================

@@ -14,7 +14,13 @@ from .normalize import (
     preprocess_chinese,
 )
 from .overlap import jaccard_word_overlap
-from .temporal import TemporalIntent, TemporalNormalizer, resolve_temporal_intent
+from .temporal import (
+    TemporalIntent,
+    TemporalNormalizer,
+    normalize_temporal,
+    normalize_temporal_range,
+    resolve_temporal_intent,
+)
 
 __all__ = [
     "QUARANTINE_TAG",
@@ -33,6 +39,8 @@ __all__ = [
     "filter_results",
     "jaccard_word_overlap",
     "merge_content",
+    "normalize_temporal",
+    "normalize_temporal_range",
     "preprocess_chinese",
     "resolve_temporal_intent",
 ]
