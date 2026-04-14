@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # LLM defaults — matches LiteLLM local-dev config
 _DEFAULT_LLM_BASE_URL = "http://localhost:4000/v1"
-_DEFAULT_LLM_API_KEY = "sk-litellm-local-dev"
+_DEFAULT_LLM_API_KEY = "sk-litellm-local-dev"  # nosec — local LiteLLM proxy dev placeholder, not a real API key
 _DEFAULT_MODEL = "deepseek-v3"
 _DEFAULT_MAX_TRIPLES = 5
 _DEFAULT_MAX_CONCURRENT = 5
@@ -45,6 +45,7 @@ async def _extract_chunk_triples(
 
     Returns (chunk, triples). On LLM failure returns empty triples list.
     """
+
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=4))
     async def _call_with_retry() -> list[dict[str, str]]:
         return await extract_triples(
@@ -153,9 +154,7 @@ class ChunkEntityOp:
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
         db = ctx.get("db")
         if db is None:
-            logger.warning(
-                "ChunkEntityOp: 'db' not found in ctx — skipping KG extraction"
-            )
+            logger.warning("ChunkEntityOp: 'db' not found in ctx — skipping KG extraction")
             ctx["entity_count"] = 0
             ctx["triple_count"] = 0
             ctx["doc_entities"] = []
@@ -195,9 +194,7 @@ class ChunkEntityOp:
         chunk_triples_pairs: list[tuple[dict[str, Any], list[dict[str, str]]]] = []
         for result in raw_results:
             if isinstance(result, BaseException):
-                logger.warning(
-                    "ChunkEntityOp: unexpected error in gather result: %r", result
-                )
+                logger.warning("ChunkEntityOp: unexpected error in gather result: %r", result)
                 continue
             chunk_triples_pairs.append(result)
 
@@ -224,9 +221,7 @@ class ChunkEntityOp:
         await db.flush()
 
         # Build canonical_name → entity.id lookup
-        canonical_to_id: dict[str, str] = {
-            e.canonical_name: e.id for e in entity_orm_list
-        }
+        canonical_to_id: dict[str, str] = {e.canonical_name: e.id for e in entity_orm_list}
 
         # ---- Step 4: batch insert DocTriple records -----------------------------
         triple_orm_list: list[DocTriple] = []
