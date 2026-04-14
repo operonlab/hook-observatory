@@ -59,50 +59,67 @@ _SPECIFIC_TOKENS = re.compile(r"[A-Z][a-z]+[A-Z]|[a-z]+_[a-z]+|`[^`]+`|\d{4,}|ht
 # ---------------------------------------------------------------------------
 
 
-def _resolve_temporal_range(query: str) -> tuple[str | None, str | None]:
+def _resolve_temporal_range(
+    query: str, _now: "datetime | None" = None
+) -> tuple[str | None, str | None]:
     """Extract a date range from temporal expressions in the query.
 
     Returns (date_from, date_to) as ISO date strings, or (None, None).
-    Uses TemporalNormalizer from text_ops — same engine as content_normalizer.
+
+    Uses :func:`text_ops.normalize_temporal_range` which handles:
+      - period expressions: 上週 / 上個月 / 去年 / 去年三月 / 上半年 / 上一季 / …
+      - count-based ranges: 最近3天 / 最近一週 / 最近2個月 / …
+      - cross-period chains: 去年一月到今年三月 / 上個月到本月 / …
+      - single-date anchors: 今天 / 昨天 / 3天前 / 上週一 / …
+
+    User preferences preserved:
+      - **Single-date anchors** are expanded to **Sun-Sat** weeks (user pref:
+        week starts on Sunday). This keeps the long-standing memvault behavior
+        where "上週一" or "昨天" retrieves the whole week's blocks.
+      - **Week-typed 7-day ranges** from queries explicitly mentioning
+        週/周/禮拜/礼拜/week/星期 are shifted from Mon-Sun (upstream default)
+        to Sun-Sat.
+      - Month / year / quarter / half-year ranges remain as upstream emits them
+        (full calendar period).
     """
     try:
         from datetime import datetime, timedelta
 
-        from text_ops.normalize import NormContext
-        from text_ops.temporal import TemporalNormalizer
+        from text_ops.temporal import normalize_temporal_range
 
-        tn = TemporalNormalizer()
-        now = datetime.now()
-        ctx = NormContext(created_at=now)
-        _, changes = tn.normalize(query, ctx)
+        now = _now or datetime.now()
+        expanded = normalize_temporal_range(query, now)
+        if expanded == query:
+            return None, None  # no temporal expression matched
 
-        if not changes:
-            return None, None
-
-        # Collect all resolved dates
-        dates = []
-        for c in changes:
-            frag = c.normalized_fragment
-            # TemporalNormalizer outputs ISO date "YYYY-MM-DD" or datetime
-            if len(frag) == 10 and frag[4] == "-" and frag[7] == "-":
-                dates.append(frag)
-
+        dates = re.findall(r"\d{4}-\d{2}-\d{2}", expanded)
         if not dates:
             return None, None
 
-        # Single date (e.g. "上週" → one anchor date)
-        # Infer a week-sized range: Sun-Sat (user preference: week starts on Sunday)
-        if len(dates) == 1:
-            anchor = datetime.strptime(dates[0], "%Y-%m-%d")
-            # isoweekday: Mon=1 … Sun=7; shift so Sun=0 for Sun-Sat week
+        dates.sort()
+        date_from, date_to = dates[0], dates[-1]
+
+        # Single-date anchor (e.g. "上週一", "昨天", "3天前") — preserve legacy
+        # behavior by expanding to a Sun-Sat week centered on the anchor.
+        if date_from == date_to:
+            anchor = datetime.strptime(date_from, "%Y-%m-%d")
             days_since_sunday = anchor.isoweekday() % 7  # Sun=0, Mon=1, ..., Sat=6
             sunday = anchor - timedelta(days=days_since_sunday)
             saturday = sunday + timedelta(days=6)
             return sunday.strftime("%Y-%m-%d"), saturday.strftime("%Y-%m-%d")
 
-        # Multiple dates (e.g. "上週一到上週五") → use min/max
-        dates.sort()
-        return dates[0], dates[-1]
+        # Week-type range: exactly 7 days AND query mentions a week keyword →
+        # shift upstream's Mon-Sun range to Sun-Sat (user preference).
+        d_from = datetime.strptime(date_from, "%Y-%m-%d")
+        d_to = datetime.strptime(date_to, "%Y-%m-%d")
+        is_week_query = bool(re.search(r"[週周禮礼]|\bweek\b|星期", query, re.IGNORECASE))
+        if is_week_query and (d_to - d_from).days == 6:
+            days_since_sunday = d_from.isoweekday() % 7
+            sunday = d_from - timedelta(days=days_since_sunday)
+            saturday = sunday + timedelta(days=6)
+            return sunday.strftime("%Y-%m-%d"), saturday.strftime("%Y-%m-%d")
+
+        return date_from, date_to
 
     except Exception as e:
         logger.debug("temporal resolution failed: %s", e)
