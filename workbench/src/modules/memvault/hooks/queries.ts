@@ -2,24 +2,16 @@ import { useQuery } from '@tanstack/react-query'
 import { kgApi, memvaultApi } from '../api'
 import type { BlockFilters, MemoryQueryOptions } from '../types'
 
-import type { SessionSummary } from '../types'
-
 const STALE_TIME = 5 * 60 * 1000
 
 export const memvaultKeys = {
-  sessions: (page: number) => ['memvault', 'sessions', page] as const,
   blocks: (page: number, pageSize: number, filters: BlockFilters) =>
     ['memvault', 'blocks', { page, pageSize, blockType: filters.blockType, tag: filters.tag }] as const,
   profile: () => ['memvault', 'profile'] as const,
   search: (query: string, options: Partial<MemoryQueryOptions>) =>
     ['memvault', 'search', query, options] as const,
-  syncStats: () => ['memvault', 'syncStats'] as const,
   kg: {
-    triplesFiltered: (page: number, predicate?: string, subject?: string) =>
-      ['memvault', 'kg', 'triples', { page, predicate, subject }] as const,
     triples: (page: number) => ['memvault', 'kg', 'triples', page] as const,
-    summariesFiltered: (resolutionLevel?: number, tag?: string) =>
-      ['memvault', 'kg', 'summaries', { resolutionLevel, tag }] as const,
     communities: () => ['memvault', 'kg', 'communities'] as const,
     communityDetail: (id: string) => ['memvault', 'kg', 'community', id] as const,
     summaries: () => ['memvault', 'kg', 'summaries'] as const,
@@ -120,43 +112,11 @@ export function useSkills() {
   })
 }
 
-export function useSessions(page: number) {
-  return useQuery({
-    queryKey: memvaultKeys.sessions(page),
-    queryFn: () => memvaultApi.listSessions(page, 20),
-    staleTime: STALE_TIME,
-  })
-}
-
 export function useCascadeRecall(query: string) {
   return useQuery({
     queryKey: memvaultKeys.kg.cascade(query),
     queryFn: () => kgApi.cascadeRecall(query),
     enabled: !!query.trim(),
-    staleTime: STALE_TIME,
-  })
-}
-
-export function useTriplesFiltered(page: number, predicate?: string, subject?: string) {
-  return useQuery({
-    queryKey: memvaultKeys.kg.triplesFiltered(page, predicate, subject),
-    queryFn: () => kgApi.listTriples(page, 20, predicate, subject),
-    staleTime: STALE_TIME,
-  })
-}
-
-export function useSummariesFiltered(resolutionLevel?: number, tag?: string) {
-  return useQuery({
-    queryKey: memvaultKeys.kg.summariesFiltered(resolutionLevel, tag),
-    queryFn: () => kgApi.listSummaries(resolutionLevel, tag),
-    staleTime: STALE_TIME,
-  })
-}
-
-export function useSyncStats() {
-  return useQuery({
-    queryKey: memvaultKeys.syncStats(),
-    queryFn: () => memvaultApi.syncStats(),
     staleTime: STALE_TIME,
   })
 }

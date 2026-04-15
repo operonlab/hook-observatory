@@ -1,5 +1,3 @@
-export type Lens = 'recall' | 'journey' | 'knowledge'
-
 export type BlockType = 'knowledge' | 'skill' | 'attitude' | 'general'
 
 export type ViewMode = 'grid' | 'list'
@@ -57,6 +55,8 @@ export const KG_LAYER_CONFIG: Record<GalaxyLayer, { label: string; color: string
 }
 
 // ── KG API types (mirrors kg_schemas.py) ──
+
+export type BrowserTab = 'fast' | 'working' | 'deep' | 'skills'
 
 export interface MemoryQueryOptions {
   taskMode: TaskMode
@@ -199,16 +199,6 @@ export interface SkillProfile {
   health_score: number | null
   evolution_notes: string[] | null
   last_synced_at: string | null
-}
-
-// ── Session types (mirrors schemas.py SessionSummary) ──
-
-export interface SessionSummary {
-  source_session: string
-  block_count: number
-  first_at: string
-  last_at: string
-  block_types: string[]
 }
 
 export interface CascadeRecallResult {
