@@ -5,7 +5,7 @@ import type { AppInfo } from '@/types'
 
 const STORAGE_KEY = 'workshop-app-order'
 
-type SavedOrder = { internal: string[]; external: string[] }
+type SavedOrder = { internal: string[]; external: string[]; hidden?: string[] }
 
 // --- Local cache (localStorage as offline fallback + instant UI) ---
 
@@ -87,6 +87,18 @@ function sortApps(apps: AppInfo[], savedIds: string[] | undefined): AppInfo[] {
 
 // --- Hook ---
 
+function persistMerged(patch: Partial<SavedOrder>) {
+  const prev = readCache()
+  const next: SavedOrder = {
+    internal: patch.internal ?? prev?.internal ?? [],
+    external: patch.external ?? prev?.external ?? [],
+    hidden: patch.hidden ?? prev?.hidden ?? [],
+  }
+  writeCache(next)
+  emitChange()
+  persistToBackend(next)
+}
+
 export function useAppOrder() {
   const saved = useSyncExternalStore(subscribe, getSnapshotCached, () => null)
 
@@ -94,12 +106,18 @@ export function useAppOrder() {
     syncFromBackend()
   }, [])
 
-  const internal = APP_LIST.filter((a) => a.status === 'available')
-  const external = APP_LIST.filter((a) => a.status === 'external')
+  const hiddenSet = new Set(saved?.hidden ?? [])
+
+  const internal = APP_LIST.filter((a) => a.status === 'available' && !hiddenSet.has(a.id))
+  const external = APP_LIST.filter((a) => a.status === 'external' && !hiddenSet.has(a.id))
   const comingSoon = APP_LIST.filter((a) => a.status === 'coming-soon')
 
   const sortedInternal = sortApps(internal, saved?.internal)
   const sortedExternal = sortApps(external, saved?.external)
+
+  const hiddenApps = APP_LIST.filter(
+    (a) => hiddenSet.has(a.id) && (a.status === 'available' || a.status === 'external'),
+  )
 
   const reorder = useCallback(
     (section: 'internal' | 'external', fromId: string, toId: string) => {
@@ -111,20 +129,39 @@ export function useAppOrder() {
       const [moved] = list.splice(fromIdx, 1)
       list.splice(toIdx, 0, moved)
 
-      const prev = readCache()
-      const next: SavedOrder = {
-        internal: section === 'internal' ? list.map((a) => a.id) : (prev?.internal ?? []),
-        external: section === 'external' ? list.map((a) => a.id) : (prev?.external ?? []),
-      }
-      // Optimistic: write local immediately, persist async
-      writeCache(next)
-      emitChange()
-      persistToBackend(next)
+      const patch: Partial<SavedOrder> =
+        section === 'internal'
+          ? { internal: list.map((a) => a.id) }
+          : { external: list.map((a) => a.id) }
+      persistMerged(patch)
     },
     [sortedInternal, sortedExternal],
   )
 
+  const hide = useCallback((id: string) => {
+    const prev = readCache()
+    const prevHidden = prev?.hidden ?? []
+    if (prevHidden.includes(id)) return
+    persistMerged({ hidden: [...prevHidden, id] })
+  }, [])
+
+  const unhide = useCallback((id: string) => {
+    const prev = readCache()
+    const prevHidden = prev?.hidden ?? []
+    if (!prevHidden.includes(id)) return
+    persistMerged({ hidden: prevHidden.filter((x) => x !== id) })
+  }, [])
+
   const allOrdered = [...sortedInternal, ...sortedExternal]
 
-  return { sortedInternal, sortedExternal, comingSoon, allOrdered, reorder }
+  return {
+    sortedInternal,
+    sortedExternal,
+    comingSoon,
+    hiddenApps,
+    allOrdered,
+    reorder,
+    hide,
+    unhide,
+  }
 }

@@ -4,11 +4,14 @@ import { useAppOrder } from '@/hooks/useAppOrder'
 import { useAuth } from '@/hooks/useAuth'
 import type { AppInfo } from '@/types'
 
+const LONG_PRESS_MS = 500
+
 function AppCard({
   app,
   isHovered,
   onHover,
   onClick,
+  onHide,
   isDragOver,
   onDragStart,
   onDragOver,
@@ -19,17 +22,29 @@ function AppCard({
   isHovered: boolean
   onHover: (id: string | null) => void
   onClick: () => void
+  onHide: () => void
   isDragOver: boolean
   onDragStart: () => void
   onDragOver: (e: React.DragEvent) => void
   onDragEnd: () => void
   onDrop: (e: React.DragEvent) => void
 }) {
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressed = useRef(false)
+
+  const clearPress = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+  }
+
   return (
     <button
       type="button"
       draggable
       onDragStart={(e) => {
+        clearPress()
         e.dataTransfer.effectAllowed = 'move'
         e.currentTarget.style.opacity = '0.4'
         onDragStart()
@@ -40,9 +55,34 @@ function AppCard({
         onDragEnd()
       }}
       onDrop={onDrop}
-      onClick={onClick}
+      onPointerDown={() => {
+        longPressed.current = false
+        clearPress()
+        pressTimer.current = setTimeout(() => {
+          longPressed.current = true
+          onHide()
+        }, LONG_PRESS_MS)
+      }}
+      onPointerUp={clearPress}
+      onPointerLeave={clearPress}
+      onPointerCancel={clearPress}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onHide()
+      }}
+      onClick={(e) => {
+        if (longPressed.current) {
+          e.preventDefault()
+          longPressed.current = false
+          return
+        }
+        onClick()
+      }}
       onMouseEnter={() => onHover(app.id)}
-      onMouseLeave={() => onHover(null)}
+      onMouseLeave={() => {
+        clearPress()
+        onHover(null)
+      }}
       className="group relative flex items-start gap-4 p-6 text-left transition-all"
       style={{
         backgroundColor: isHovered ? `${app.color}14` : 'transparent',
@@ -103,7 +143,12 @@ function DraggableGrid({
   apps: AppInfo[]
   section: 'internal' | 'external'
   onReorder: (section: 'internal' | 'external', fromId: string, toId: string) => void
-  renderCard: (app: AppInfo, isDragOver: boolean, handlers: DragHandlers) => React.ReactNode
+  renderCard: (
+    app: AppInfo,
+    isDragOver: boolean,
+    handlers: DragHandlers,
+    section: 'internal' | 'external',
+  ) => React.ReactNode
 }) {
   const dragId = useRef<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -135,7 +180,7 @@ function DraggableGrid({
             setDragOverId(null)
           },
         }
-        return renderCard(app, dragOverId === app.id, handlers)
+        return renderCard(app, dragOverId === app.id, handlers, section)
       })}
     </div>
   )
@@ -152,21 +197,30 @@ export default function Home() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const { sortedInternal, sortedExternal, comingSoon, reorder } = useAppOrder()
+  const { sortedInternal, sortedExternal, comingSoon, hiddenApps, reorder, hide, unhide } =
+    useAppOrder()
 
-  const renderCard = (app: AppInfo, isDragOver: boolean, handlers: DragHandlers) => (
+  const openApp = (app: AppInfo) => {
+    if (app.externalUrl) {
+      window.location.href = app.externalUrl
+    } else {
+      navigate(app.path)
+    }
+  }
+
+  const renderCard = (
+    app: AppInfo,
+    isDragOver: boolean,
+    handlers: DragHandlers,
+    _section: 'internal' | 'external',
+  ) => (
     <AppCard
       key={app.id}
       app={app}
       isHovered={hoveredId === app.id}
       onHover={setHoveredId}
-      onClick={() => {
-        if (app.externalUrl) {
-          window.location.href = app.externalUrl
-        } else {
-          navigate(app.path)
-        }
-      }}
+      onClick={() => openApp(app)}
+      onHide={() => hide(app.id)}
       isDragOver={isDragOver}
       onDragStart={handlers.onDragStart}
       onDragOver={handlers.onDragOver}
@@ -197,7 +251,7 @@ export default function Home() {
           {user?.name ? `${user.name}` : 'Welcome'}
         </h1>
         <p className="mt-2 text-sm" style={{ color: 'rgba(255, 255, 255, 0.3)' }}>
-          拖拽調整順序，選擇一個應用開始
+          拖拽調整順序 · 長按隱藏入口 · 選擇一個應用開始
         </p>
       </div>
 
@@ -232,6 +286,51 @@ export default function Home() {
             onReorder={reorder}
             renderCard={renderCard}
           />
+        </div>
+      )}
+
+      {/* Hidden apps — stashed via long-press */}
+      {hiddenApps.length > 0 && (
+        <div className="mx-auto w-full max-w-6xl px-6 pb-8">
+          <p
+            className="mb-4 text-xs tracking-wider uppercase"
+            style={{ color: 'rgba(255, 255, 255, 0.2)', letterSpacing: '0.15em' }}
+          >
+            已隱藏（點擊復原）
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {hiddenApps.map((app) => (
+              <button
+                type="button"
+                key={app.id}
+                onClick={() => unhide(app.id)}
+                className="group flex items-center gap-2 px-3 py-1.5 transition-all"
+                style={{
+                  backgroundColor: `${app.color}10`,
+                  border: `1px solid ${app.color}30`,
+                  borderRadius: '6px',
+                  opacity: 0.6,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '1'
+                  e.currentTarget.style.backgroundColor = `${app.color}20`
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '0.6'
+                  e.currentTarget.style.backgroundColor = `${app.color}10`
+                }}
+                title={`復原 ${app.name}`}
+              >
+                <span className="text-sm">{app.icon}</span>
+                <span className="text-xs" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                  {app.name}
+                </span>
+                <span className="text-xs" style={{ color: app.color }}>
+                  ↺
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
