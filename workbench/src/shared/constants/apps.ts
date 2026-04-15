@@ -284,16 +284,6 @@ export const APP_LIST: AppInfo[] = [
     externalUrl: '/apps/ocr/',
   },
   {
-    id: 'fsm-dashboard',
-    name: '狀態機儀表板',
-    description: 'FSM 狀態圖視覺化、轉換模擬器、全域狀態機總覽',
-    icon: '🔄',
-    path: '/fsm-dashboard',
-    color: '#a29bfe',
-    status: 'external',
-    externalUrl: '/fsm-dashboard.html',
-  },
-  {
     id: 'mlt-editor',
     name: '剪輯時間軸',
     description: 'MLT 專案時間軸編輯器',
@@ -306,10 +296,11 @@ export const APP_LIST: AppInfo[] = [
   {
     id: 'toolbox',
     name: '工具箱',
-    description: '獨立靜態網頁小工具集合 — SRT 修正、Memvault 技術全景…',
+    description: '獨立靜態網頁小工具集合 — SRT 修正、FSM 儀表板、PWA Debug…',
     icon: '🧰',
     path: '/toolbox',
     color: '#89dceb',
-    status: 'available',
+    status: 'external',
+    externalUrl: '/toolbox',
   },
 ]
