@@ -1,0 +1,40 @@
+## tmux-webui configuration
+## Copy this file to config.yaml and edit as needed.
+
+# ── Server ──
+host: "127.0.0.1"   # use "0.0.0.0" to allow remote access
+port: 9527
+
+# ── Polling ──
+poll_interval: 0.4       # seconds between pane captures
+metrics_interval: 5.0    # seconds between metrics polls
+capture_lines: 150        # lines of pane history to capture
+
+# ── UI ──
+theme: "catppuccin-mocha"
+
+# ── System Metrics (optional) ──
+# Set to an HTTP endpoint that returns a sysmon-compatible JSON response.
+# Leave blank to disable the metrics bar entirely.
+# sysmon_url: "http://127.0.0.1:10103/sysmon/current"
+sysmon_url:
+
+# ── File Uploads (optional) ──
+# Directory where uploaded files are saved. Defaults to ./uploads
+# upload_dir: "/tmp/tmux-webui-uploads"
+upload_dir:
+
+# ── Quick Actions ──
+# Always-visible buttons in the toolbar.
+quick_actions:
+  - { label: "Esc", key: "Escape" }
+  - { label: "Tab", key: "Tab" }
+  - { label: "C-c", key: "C-c" }
+  - { label: "Enter", key: "Enter" }
+
+# ── Extra Keys ──
+# Toggleable second key row. Modifiers use FSM: tap=armed(3s), double-tap=locked.
+extra_keys:
+  modifiers: ["Ctrl", "Alt", "Cmd"]
+  controls: ["C-d", "C-z", "C-l", "⇧Tab"]
+  shell_chars: ["|", "~", "`", "\\"]
