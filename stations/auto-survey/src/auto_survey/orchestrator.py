@@ -8,13 +8,19 @@ from pathlib import Path
 import click
 from sqlalchemy.orm import Session
 
-from .analyzer import analyze_quiz, reanalyze_wrong
+from .analyzer import analyze_quiz, is_transient_error, reanalyze_wrong
 from .config import settings
 from .db import get_session
 from .filler import fill_form
 from .models import Person, Submission, Survey
 from .pw import cleanup_session, create_session
 from .recon import classify_subjects, recon_survey, save_survey
+
+# Phase 1 (recon) + Phase 2 (analyze) are read-only against SurveyCake and
+# idempotent against the DB (upsert Survey). Phase 3 (fill) is NEVER retried
+# here — individual fill errors are handled inside filler.fill_form so that
+# we do not double-submit any single person.
+_RECON_ANALYZE_MAX_ATTEMPTS = 2
 
 # Wire reactive store — add station root to sys.path
 _station_root = Path(__file__).resolve().parents[2]
@@ -54,6 +60,67 @@ def _dispatch_store(action_creator, **kwargs):
         pass  # noqa: S110 — store dispatch is best-effort
 
 
+def _recon_and_analyze(
+    db: Session, url: str, survey_type: str
+) -> tuple[Survey, dict, dict[str, str]]:
+    """Phase 1 (recon) + Phase 2 (analyze) wrapped in one retry unit.
+
+    Both phases are read-only against SurveyCake and idempotent against the
+    DB (upsert Survey by URL). We retry together so that a fresh browser
+    session + fresh LLM client are used on each attempt, recovering cleanly
+    from transient subprocess or proxy blips without polluting Phase 3.
+    """
+    last_exc: BaseException | None = None
+    for attempt in range(1, _RECON_ANALYZE_MAX_ATTEMPTS + 1):
+        try:
+            _log(
+                f"Phase 1: Recon — extracting form structure... "
+                f"(attempt {attempt}/{_RECON_ANALYZE_MAX_ATTEMPTS})"
+            )
+            pw = create_session()
+            try:
+                structure = recon_survey(pw, url)
+                classified = classify_subjects(structure.get("subjects", []))
+                survey = save_survey(db, url, survey_type, structure, classified)
+                _log(f"Survey: {survey.title} ({survey.type})")
+
+                if classified["questions"]:
+                    _log(f"  Found {len(classified['questions'])} quiz questions")
+                if classified["company"]:
+                    _log(f"  Company options: {classified['company']['options']}")
+            finally:
+                pw.close()
+                cleanup_session(pw)
+
+            answers: dict[str, str] = {}
+            if survey_type == "quiz" and classified["questions"]:
+                _log("Phase 2: Analyze — getting answers from LLM...")
+                answers = analyze_quiz(db, survey)
+                _log(f"  Got {len(answers)} answers")
+                for sid, ans in answers.items():
+                    _log(f"    {sid}: {ans}")
+
+            return survey, classified, answers
+
+        except Exception as exc:  # noqa: BLE001 — classified via _is_transient_error
+            last_exc = exc
+            transient = is_transient_error(exc)
+            if attempt == _RECON_ANALYZE_MAX_ATTEMPTS or not transient:
+                raise
+            backoff = 3 * attempt
+            _log(
+                f"  Recon/Analyze transient error ({type(exc).__name__}): "
+                f"{str(exc)[:160]} — retry in {backoff}s"
+            )
+            try:
+                db.rollback()
+            except Exception:  # noqa: BLE001 — rollback best-effort
+                pass
+            time.sleep(backoff)
+
+    raise RuntimeError(f"Recon/Analyze exhausted retries: {last_exc}")
+
+
 def _run_pipeline(db: Session, url: str, survey_type: str, dry_run: bool = False):
     from store import SurveyStarted
 
@@ -65,31 +132,8 @@ def _run_pipeline(db: Session, url: str, survey_type: str, dry_run: bool = False
     _log(f"Found {len(people)} active people")
     _dispatch_store(SurveyStarted, survey_type=survey_type, url=url, people_count=len(people))
 
-    # Phase 1: Recon
-    _log("Phase 1: Recon — extracting form structure...")
-    pw = create_session()
-    try:
-        structure = recon_survey(pw, url)
-        classified = classify_subjects(structure.get("subjects", []))
-        survey = save_survey(db, url, survey_type, structure, classified)
-        _log(f"Survey: {survey.title} ({survey.type})")
-
-        if classified["questions"]:
-            _log(f"  Found {len(classified['questions'])} quiz questions")
-        if classified["company"]:
-            _log(f"  Company options: {classified['company']['options']}")
-    finally:
-        pw.close()
-        cleanup_session(pw)
-
-    # Phase 2: Analyze (quiz only)
-    answers: dict[str, str] = {}
-    if survey_type == "quiz" and classified["questions"]:
-        _log("Phase 2: Analyze — getting answers from LLM...")
-        answers = analyze_quiz(db, survey)
-        _log(f"  Got {len(answers)} answers")
-        for sid, ans in answers.items():
-            _log(f"    {sid}: {ans}")
+    # Phase 1 + Phase 2 (retriable — read-only, idempotent)
+    survey, classified, answers = _recon_and_analyze(db, url, survey_type)
 
     if dry_run:
         _log("Dry run — skipping form filling")
