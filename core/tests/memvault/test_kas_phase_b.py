@@ -316,16 +316,12 @@ class TestSlowThinkerAttitudePrefetch:
         ctx_manager.__aenter__ = AsyncMock(return_value=fake_db)
         ctx_manager.__aexit__ = AsyncMock(return_value=False)
 
+        att_block.block.block_type = "attitude"
         with (
             patch("src.shared.database.async_session_factory", return_value=ctx_manager),
             patch(
                 "src.modules.memvault.query_runtime._search_blocks",
-                new=AsyncMock(return_value=([], {})),
-            ),
-            patch("src.modules.memvault.embedding.get_embedding", AsyncMock(return_value=b"emb")),
-            patch(
-                "src.modules.memvault.services.memory_block_service.qdrant_search",
-                AsyncMock(return_value=([[att_block], {}])),
+                new=AsyncMock(return_value=([att_block], {})),
             ),
         ):
             cards = await op._run_search(fp)
@@ -351,16 +347,12 @@ class TestSlowThinkerAttitudePrefetch:
         ctx_manager.__aenter__ = AsyncMock(return_value=fake_db)
         ctx_manager.__aexit__ = AsyncMock(return_value=False)
 
+        att_block.block.block_type = "attitude"
         with (
             patch("src.shared.database.async_session_factory", return_value=ctx_manager),
             patch(
                 "src.modules.memvault.query_runtime._search_blocks",
-                new=AsyncMock(return_value=([], {})),
-            ),
-            patch("src.modules.memvault.embedding.get_embedding", AsyncMock(return_value=b"emb")),
-            patch(
-                "src.modules.memvault.services.memory_block_service.qdrant_search",
-                AsyncMock(return_value=([[att_block], {}])),
+                new=AsyncMock(return_value=([att_block], {})),
             ),
         ):
             cards = await op._run_search(fp)
@@ -373,42 +365,9 @@ class TestSlowThinkerAttitudePrefetch:
             )
             assert "xyz-999" in c["id"]
 
-    # ── INV-13 ──────────────────────────────────────────────────────────────
-    @pytest.mark.asyncio
-    async def test_qdrant_called_with_block_type_attitude(self):
-        """INV-13 — Mutation: change `block_type='attitude'` to 'knowledge' or remove kwarg.
-        qdrant_search MUST be called with block_type='attitude'.
-        """
-        fp = self._make_fp()
-        from src.modules.memvault.slow_thinker import PrefetchExecutorOp
-
-        op = PrefetchExecutorOp.__new__(PrefetchExecutorOp)
-        fake_db = AsyncMock()
-        ctx_manager = AsyncMock()
-        ctx_manager.__aenter__ = AsyncMock(return_value=fake_db)
-        ctx_manager.__aexit__ = AsyncMock(return_value=False)
-
-        qdrant_mock = AsyncMock(return_value=None)
-
-        with (
-            patch("src.shared.database.async_session_factory", return_value=ctx_manager),
-            patch(
-                "src.modules.memvault.query_runtime._search_blocks",
-                new=AsyncMock(return_value=([], {})),
-            ),
-            patch("src.modules.memvault.embedding.get_embedding", AsyncMock(return_value=b"emb")),
-            patch(
-                "src.modules.memvault.services.memory_block_service.qdrant_search",
-                qdrant_mock,
-            ),
-        ):
-            await op._run_search(fp)
-
-        qdrant_mock.assert_awaited_once()
-        _, kwargs = qdrant_mock.call_args
-        assert kwargs.get("block_type") == "attitude", (
-            f"Expected block_type='attitude', got {kwargs.get('block_type')!r}"
-        )
+    # INV-13 (test_qdrant_called_with_block_type_attitude) removed:
+    # attitude blocks no longer use a separate qdrant_search call — they flow
+    # through the main _search_blocks path and are dispatched by block_type.
 
     # ── INV-14 ──────────────────────────────────────────────────────────────
     @pytest.mark.asyncio

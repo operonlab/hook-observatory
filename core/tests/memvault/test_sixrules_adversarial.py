@@ -8,26 +8,27 @@
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import json
+import os
+
+# ─── 直接從 worktree 根目錄的 source 引入 ───────────────────────────────────
+import sys
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-# ─── 直接從 worktree 根目錄的 source 引入 ───────────────────────────────────
-
-import sys
-import os
 
 # 確保 src 路徑可用（worktree 隔離，不依賴安裝）
 _CORE = os.path.join(os.path.dirname(__file__), "..", "..")
 if _CORE not in sys.path:
     sys.path.insert(0, _CORE)
 
-from src.shared.prefetch import PrefetchFingerprint, PrefetchMetrics, SpeculativePrefetchCache
+from src.modules.memvault.query_runtime import (
+    _merge_prefetch_cards,
+    choose_thinking_mode,
+)
+from src.modules.memvault.schemas import MemoryCard
 from src.modules.memvault.slow_thinker import (
+    _MIN_SAMPLE_THRESHOLD,
     AdmissionGateOp,
     CacheWriterOp,
     EvictionOp,
@@ -35,16 +36,9 @@ from src.modules.memvault.slow_thinker import (
     PrefetchExecutorOp,
     QueryEventRecorderOp,
     _build_fingerprint_from_ctx,
-    _MIN_SAMPLE_THRESHOLD,
 )
-from src.modules.memvault.query_runtime import (
-    _merge_prefetch_cards,
-    choose_thinking_mode,
-)
-from src.modules.memvault.schemas import MemoryCard, MemoryQueryRequest
-from src.shared.prefetch import PrefetchFingerprint
+from src.shared.prefetch import PrefetchFingerprint, PrefetchMetrics, SpeculativePrefetchCache
 from src.shared.reactive import Pipeline
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures
@@ -161,7 +155,9 @@ class TestFingerprintConsistency:
     def test_query_completed_event_intent_uses_classified_value(self):
         """Verify: run_memory_query uses classified intent_value, not hardcoded 'unknown'."""
         import inspect
+
         import src.modules.memvault.query_runtime as qr
+
         source = inspect.getsource(qr.run_memory_query)
         assert '"intent": intent_value' in source, (
             "run_memory_query should use intent_value variable, not hardcoded 'unknown'"
@@ -283,8 +279,12 @@ class TestIntentPredictorTransitions:
         op = IntentPredictorOp()
         # 根據規格和 query_router 可能的 intent 值
         known_intents = [
-            "entity_lookup", "conceptual", "exploratory", "cross_domain",
-            "factual", "unknown"
+            "entity_lookup",
+            "conceptual",
+            "exploratory",
+            "cross_domain",
+            "factual",
+            "unknown",
         ]
         for intent in known_intents:
             predicted = op._TRANSITIONS.get(intent, intent)
@@ -400,12 +400,13 @@ class TestMergePrefetchCardsBudget:
     def test_query_runtime_uses_fast_plus_2_as_budget(self):
         """query_runtime.py 用 budget['fast'] + 2 作為 merge budget。
 
-        standard budget['fast'] = 7（合併 working 後），所以 merge budget = 9。
+        standard budget['fast'] = 10（合併 working + attitudes 後），所以 merge budget = 12。
         """
         from src.modules.memvault.query_runtime import _budget_config
+
         budget = _budget_config("standard")
         merge_budget = budget["fast"] + 2
-        assert merge_budget == 9, f"Expected merge budget 9, got {merge_budget}"
+        assert merge_budget == 12, f"Expected merge budget 12, got {merge_budget}"
 
         # 如果 fast_cards 達到 fast budget，只剩 2 格給 prefetch
         existing = [_make_card(f"e{i}") for i in range(budget["fast"])]
@@ -459,7 +460,9 @@ class TestSourceFieldPreservation:
         """
         # 驗證程式碼中確實有設置 source 欄位
         import inspect
+
         import src.modules.memvault.query_runtime as qr
+
         source = inspect.getsource(qr._check_prefetch_cache)
         assert "speculative_prefetch" in source, (
             "_check_prefetch_cache 應設置 source='speculative_prefetch'"
@@ -479,7 +482,6 @@ class TestPipelineCompile:
 
     def test_slow_thinker_pipeline_compiles_without_missing_keys(self):
         """slow_thinker_b1 pipeline 的 key 依賴鏈完整。"""
-        from src.shared.reactive import Pipeline
         ops = [
             QueryEventRecorderOp(),
             AdmissionGateOp(),
@@ -489,8 +491,15 @@ class TestPipelineCompile:
         ]
         pipeline = Pipeline(name="slow_thinker_b1_test").pipe(*ops)
         initial_keys = {
-            "space_id", "query", "intent", "tags", "consumer",
-            "task_mode", "thinking_mode_used", "load_budget", "result_count",
+            "space_id",
+            "query",
+            "intent",
+            "tags",
+            "consumer",
+            "task_mode",
+            "thinking_mode_used",
+            "load_budget",
+            "result_count",
         }
         missing = pipeline.compile(initial_keys=initial_keys)
         assert missing == [], (
@@ -522,8 +531,15 @@ class TestPipelineCompile:
         ]
         # 模擬 Pipeline.compile 邏輯
         available = {
-            "space_id", "query", "intent", "tags", "consumer",
-            "task_mode", "thinking_mode_used", "load_budget", "result_count",
+            "space_id",
+            "query",
+            "intent",
+            "tags",
+            "consumer",
+            "task_mode",
+            "thinking_mode_used",
+            "load_budget",
+            "result_count",
         }
         for op in ops:
             available |= set(op.output_keys)
@@ -635,6 +651,7 @@ class TestInflightLockFailOpen:
     @pytest.mark.asyncio
     async def test_redis_failure_returns_true(self):
         """Redis 故障時 try_acquire_inflight 應回傳 True（fail-open）。"""
+
         def failing_redis():
             raise ConnectionError("Redis unavailable")
 
