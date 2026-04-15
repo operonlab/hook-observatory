@@ -66,15 +66,31 @@ export default function ToolboxPopover({ open, anchorRect, onClose }: ToolboxPop
   useEffect(() => {
     if (open) {
       setMounted(true)
-      // Next frame so the initial styles commit before transitioning in
-      const raf = requestAnimationFrame(() => setEntered(true))
-      return () => cancelAnimationFrame(raf)
+      return
     }
     setEntered(false)
-    // Wait for exit transition before unmounting
-    const t = setTimeout(() => setMounted(false), 250)
+    const t = setTimeout(() => setMounted(false), 260)
     return () => clearTimeout(t)
   }, [open])
+
+  // After mount commits the initial (scaled-down) style, wait for the
+  // browser to paint one frame (double rAF) and a forced reflow before
+  // flipping to `entered`. Without this, React may batch the mount+enter
+  // into a single commit and the CSS transition never runs — the card
+  // appears frozen at its initial offset.
+  useEffect(() => {
+    if (!open || !mounted) return
+    let raf1 = 0
+    let raf2 = 0
+    raf1 = requestAnimationFrame(() => {
+      cardRef.current?.getBoundingClientRect()
+      raf2 = requestAnimationFrame(() => setEntered(true))
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [open, mounted])
 
   useEffect(() => {
     if (!open) return
