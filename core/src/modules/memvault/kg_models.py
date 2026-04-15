@@ -23,7 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSON
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.shared.models import SpaceScopedModel
@@ -209,5 +209,4 @@ class CommunitySummary(SpaceScopedModel):
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     generation_batch: Mapped[str | None] = mapped_column(String(32), nullable=True)
-
 

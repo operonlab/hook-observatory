@@ -79,10 +79,10 @@ def choose_thinking_mode(
 def _budget_config(load_budget: str) -> dict[str, int]:
     normalized = _normalize(load_budget, _LOAD_BUDGETS, "standard")
     if normalized == "light":
-        return {"search_top_k": 5, "fast": 5, "cascade": 2, "attitudes": 2}
+        return {"search_top_k": 8, "fast": 7, "cascade": 2}
     if normalized == "deep":
-        return {"search_top_k": 12, "fast": 9, "cascade": 6, "attitudes": 4}
-    return {"search_top_k": 8, "fast": 7, "cascade": 4, "attitudes": 3}
+        return {"search_top_k": 16, "fast": 13, "cascade": 6}
+    return {"search_top_k": 12, "fast": 10, "cascade": 4}
 
 
 def _clip(text: str | None, limit: int = 180) -> str:
@@ -499,24 +499,15 @@ async def _run_query_with_pipeline(
             scoring_config=intent_scoring,
             intent=intent_value,
         )
+        # attitude blocks flow through the same qdrant_search — KAS: Block = SSoT
         fast_cards = [
-            _block_card(result.block, "fast", task_mode, result.score)
+            (
+                _attitude_card(_block_result_to_attitude_dict(result), "fast", task_mode)
+                if result.block.block_type == "attitude"
+                else _block_card(result.block, "fast", task_mode, result.score)
+            )
             for result in search_results[: budget["fast"]]
         ]
-
-        _att_emb = await get_embedding(request.q, task_type="search_query")
-        _att_blocks: list = []
-        if _att_emb:
-            _att_result = await memory_block_service.qdrant_search(
-                db, space_id, request.q, _att_emb,
-                top_k=budget["attitudes"], block_type="attitude",
-            )
-            if _att_result:
-                _att_blocks, _ = _att_result
-        fast_cards.extend(
-            _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
-            for r in _att_blocks
-        )
         fast_cards = _unique_cards(fast_cards)[: request.top_k]
 
     cascade_cards: list[MemoryCard] = []
@@ -555,11 +546,13 @@ async def _run_query_with_pipeline(
 
     if thinking_mode_used == "slow" and cascade_result is not None:
         try:
-            post_ctx = await post_pipeline.execute({
-                "query": request.q,
-                "results": cascade_result,
-                "intent": intent_value,
-            })
+            post_ctx = await post_pipeline.execute(
+                {
+                    "query": request.q,
+                    "results": cascade_result,
+                    "intent": intent_value,
+                }
+            )
             verdict = post_ctx.get("verdict")
             confidence_score = post_ctx.get("confidence_score")
             evaluation_meta = post_ctx.get("evaluation_meta")
@@ -701,24 +694,15 @@ async def run_memory_query(
             scoring_config=intent_scoring,
             intent=intent_value,
         )
+        # attitude blocks flow through the same qdrant_search — KAS: Block = SSoT
         fast_cards = [
-            _block_card(result.block, "fast", task_mode, result.score)
+            (
+                _attitude_card(_block_result_to_attitude_dict(result), "fast", task_mode)
+                if result.block.block_type == "attitude"
+                else _block_card(result.block, "fast", task_mode, result.score)
+            )
             for result in search_results[: budget["fast"]]
         ]
-
-        _att_emb = await get_embedding(request.q, task_type="search_query")
-        _att_blocks: list = []
-        if _att_emb:
-            _att_result = await memory_block_service.qdrant_search(
-                db, space_id, request.q, _att_emb,
-                top_k=budget["attitudes"], block_type="attitude",
-            )
-            if _att_result:
-                _att_blocks, _ = _att_result
-        fast_cards.extend(
-            _attitude_card(_block_result_to_attitude_dict(r), "fast", task_mode)
-            for r in _att_blocks
-        )
         fast_cards = _unique_cards(fast_cards)[: request.top_k]
 
     cascade_cards: list[MemoryCard] = []
@@ -834,9 +818,7 @@ def build_injection_payload(response: MemoryQueryResponse) -> MemoryInjectRespon
                 clipped_lines.append(f"{idx}. {card.title}: {_clip(card.summary, 80)}")
             system_prompt_memory = "\n".join(clipped_lines)
 
-    decision_bias = [
-        card.summary for card in response.cards if card.source_type == "attitude"
-    ][:3]
+    decision_bias = [card.summary for card in response.cards if card.source_type == "attitude"][:3]
     working_context = sorted(
         response.cards,
         key=lambda c: c.freshness or "",

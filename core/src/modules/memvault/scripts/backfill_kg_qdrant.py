@@ -1,4 +1,4 @@
-"""Backfill KG data (triples, attitudes) into Qdrant.
+"""Backfill KG data (triples, attitude blocks) into Qdrant.
 
 Run from workshop root:
     cd core && ../.venv/bin/python3 src/modules/memvault/scripts/backfill_kg_qdrant.py
@@ -67,13 +67,14 @@ def _row_to_triple_doc(row) -> IndexDocument:
 
 
 def _row_to_attitude_doc(row) -> IndexDocument:
+    tags = row.tags if isinstance(row.tags, list) else []
     return IndexDocument(
         service_id="memvault-attitude",
         entity_id=str(row.id),
         entity_type="attitude",
         space_id=str(row.space_id),
-        content=f"{row.category}: {row.fact}",
-        tags=[row.category],
+        content=row.content,
+        tags=tags,
         created_at=row.created_at if isinstance(row.created_at, datetime) else None,
     )
 
@@ -163,8 +164,12 @@ async def main() -> None:
         ).fetchall()
         attitude_rows = conn.execute(
             text(
-                "SELECT id, space_id, category, fact, created_at"
-                " FROM memvault.attitude_facts WHERE superseded_by IS NULL ORDER BY created_at"
+                "SELECT id, space_id, content, tags, created_at"
+                " FROM memvault.blocks"
+                " WHERE block_type = 'attitude'"
+                " AND deleted_at IS NULL"
+                " AND invalid_at IS NULL"
+                " ORDER BY created_at"
             )
         ).fetchall()
         community_rows = conn.execute(
@@ -182,7 +187,7 @@ async def main() -> None:
     engine.dispose()
 
     print(f"      Found {len(triple_rows)} valid triples")
-    print(f"      Found {len(attitude_rows)} active attitudes")
+    print(f"      Found {len(attitude_rows)} attitude blocks")
     print(f"      Found {len(community_rows)} communities (L1)")
     print(f"      Found {len(summary_rows)} community summaries (L2)")
 
@@ -195,15 +200,15 @@ async def main() -> None:
     community_docs = [_row_to_community_doc(r) for r in community_rows]
     summary_docs = [_row_to_summary_doc(r) for r in summary_rows]
 
-    # 3. Index triples + attitudes
-    print(f"\n[3/5] Indexing triples + attitudes (batch_size={BATCH_SIZE})...")
+    # 3. Index triples + attitude blocks
+    print(f"\n[3/5] Indexing triples + attitude blocks (batch_size={BATCH_SIZE})...")
     t_idx = a_idx = 0
     if triple_docs:
         print(f"\n  --- Triples ({len(triple_docs)}) ---")
         t_idx = await _index_in_batches(triple_docs, "triples")
     if attitude_docs:
-        print(f"\n  --- Attitudes ({len(attitude_docs)}) ---")
-        a_idx = await _index_in_batches(attitude_docs, "attitudes")
+        print(f"\n  --- Attitude blocks ({len(attitude_docs)}) ---")
+        a_idx = await _index_in_batches(attitude_docs, "attitude-blocks")
 
     # 4. Index communities (L1)
     print(f"\n[4/5] Indexing communities L1 ({len(community_docs)})...")
@@ -222,7 +227,7 @@ async def main() -> None:
     total_all = len(triple_docs) + len(attitude_docs) + len(community_docs) + len(summary_docs)
     print(f"\n=== Summary: {total_ok}/{total_all} indexed ===")
     print(f"  Triples: {t_idx}/{len(triple_docs)}")
-    print(f"  Attitudes: {a_idx}/{len(attitude_docs)}")
+    print(f"  Attitude blocks: {a_idx}/{len(attitude_docs)}")
     print(f"  Communities (L1): {c_idx}/{len(community_docs)}")
     print(f"  Summaries (L2): {s_idx}/{len(summary_docs)}")
     if total_ok < total_all:

@@ -16,7 +16,6 @@ from collections import Counter
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import EventBus, event_bus
 from src.events.types import MemvaultEvents
@@ -283,7 +282,6 @@ class PrefetchExecutorOp:
         """Execute search using predicted tags as synthetic query."""
         from .injection_guard import sanitize_for_injection
         from .query_runtime import _search_blocks
-        from .schemas import MemoryQueryRequest
 
         tags = fp.fields.get("tags", "").split(",")
         tags = [t.strip() for t in tags if t.strip()]
@@ -296,60 +294,46 @@ class PrefetchExecutorOp:
 
         async with async_session_factory() as db:
             # Reuse existing search infrastructure
-            search_results, _ = await _search_blocks(
-                db, fp.space_id, synthetic_query, top_k=top_k
-            )
+            search_results, _ = await _search_blocks(db, fp.space_id, synthetic_query, top_k=top_k)
 
+            # Dispatch by block_type: attitude blocks flow through same search (KAS: Block = SSoT)
             cards = []
             for result in search_results[:top_k]:
                 block = result.block
-                safe_content = sanitize_for_injection(block.content)
-                cards.append({
-                    "id": f"prefetch:block:{block.id}",
-                    "title": f"{block.block_type} / {(block.tags or [''])[0]}",
-                    "summary": safe_content[:180],
-                    "why_relevant": "預測式預載 — 基於近期查詢模式。",
-                    "use_now": f"預載上下文：{safe_content[:70]}",
-                    "layer": "fast",
-                    "source_type": "block",
-                    "confidence": round(float(result.score or 0.5), 3),
-                    "tags": list(block.tags or []),
-                    "evidence_refs": [],
-                    "source": "speculative_prefetch",
-                })
-
-            # Also prefetch attitude blocks (KAS Phase B)
-            try:
-                from .embedding import get_embedding
-
-                _att_emb = await get_embedding(synthetic_query, task_type="search_query")
-                if _att_emb:
-                    from .services import memory_block_service
-
-                    _att_result = await memory_block_service.qdrant_search(
-                        db, fp.space_id, synthetic_query, _att_emb,
-                        top_k=2, block_type="attitude",
+                safe_content = sanitize_for_injection(block.content or "")
+                if block.block_type == "attitude":
+                    category = (block.tags or ["preference"])[0]
+                    cards.append(
+                        {
+                            "id": f"prefetch:attitude:{block.id}",
+                            "title": f"偏好 / {category}",
+                            "summary": safe_content[:180],
+                            "why_relevant": "預測式預載 — 相關工作偏好。",
+                            "use_now": "延續這個偏好或工作原則。",
+                            "layer": "fast",
+                            "source_type": "attitude",
+                            "confidence": round(float(result.score or 0.5), 3),
+                            "tags": [category],
+                            "evidence_refs": [],
+                            "source": "speculative_prefetch",
+                        }
                     )
-                    if _att_result:
-                        for r in _att_result[0]:
-                            block = r.block
-                            fact = sanitize_for_injection(block.content or "")
-                            category = (block.tags or ["preference"])[0]
-                            cards.append({
-                                "id": f"prefetch:attitude:{block.id}",
-                                "title": f"偏好 / {category}",
-                                "summary": fact[:180],
-                                "why_relevant": "預測式預載 — 相關工作偏好。",
-                                "use_now": "延續這個偏好或工作原則。",
-                                "layer": "fast",
-                                "source_type": "attitude",
-                                "confidence": round(float(r.score or 0.5), 3),
-                                "tags": [category],
-                                "evidence_refs": [],
-                                "source": "speculative_prefetch",
-                            })
-            except Exception:
-                logger.debug("slow_thinker.attitude_prefetch failed", exc_info=True)
+                else:
+                    cards.append(
+                        {
+                            "id": f"prefetch:block:{block.id}",
+                            "title": f"{block.block_type} / {(block.tags or [''])[0]}",
+                            "summary": safe_content[:180],
+                            "why_relevant": "預測式預載 — 基於近期查詢模式。",
+                            "use_now": f"預載上下文：{safe_content[:70]}",
+                            "layer": "fast",
+                            "source_type": "block",
+                            "confidence": round(float(result.score or 0.5), 3),
+                            "tags": list(block.tags or []),
+                            "evidence_refs": [],
+                            "source": "speculative_prefetch",
+                        }
+                    )
 
             return cards
 
@@ -466,8 +450,15 @@ def wire_slow_thinker_flow(
     # compile() pre-flight check
     check = Pipeline(name="slow_thinker_b1").pipe(*ops)
     initial_keys = {
-        "space_id", "query", "intent", "tags", "consumer",
-        "task_mode", "thinking_mode_used", "load_budget", "result_count",
+        "space_id",
+        "query",
+        "intent",
+        "tags",
+        "consumer",
+        "task_mode",
+        "thinking_mode_used",
+        "load_budget",
+        "result_count",
     }
     missing = check.compile(initial_keys=initial_keys)
     if missing:
