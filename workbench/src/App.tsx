@@ -6,6 +6,7 @@ import { useManifest } from '@/hooks/useManifest'
 import AppsPage from '@/pages/AppsPage'
 import Login from '@/pages/Login'
 import NotFound from '@/pages/NotFound'
+import ToolboxPage from '@/pages/ToolboxPage'
 import AppShell from '@/shell/AppShell'
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -163,6 +164,16 @@ function AppRoutes() {
           <AuthGuard>
             <AppShell>
               <AppsPage />
+            </AppShell>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/toolbox"
+        element={
+          <AuthGuard>
+            <AppShell>
+              <ToolboxPage />
             </AppShell>
           </AuthGuard>
         }
