@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { TOOL_LIST, type ToolEntry } from '@/shared/constants/tools'
 
 interface ToolboxPopoverProps {
@@ -108,7 +109,12 @@ export default function ToolboxPopover({ open, anchorRect, onClose }: ToolboxPop
   const originX = anchorRect ? anchorRect.left + anchorRect.width / 2 : window.innerWidth / 2
   const originY = anchorRect ? anchorRect.top + anchorRect.height / 2 : window.innerHeight / 2
 
-  return (
+  // Render via portal into document.body to escape any ancestor that
+  // establishes a containing block (AppsPage's sliding container uses
+  // `transform: translateX(...)` which would otherwise pin our
+  // `position: fixed` overlay to the 200vw transformed parent instead
+  // of the viewport, making the card land on the left edge.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -200,6 +206,7 @@ export default function ToolboxPopover({ open, anchorRect, onClose }: ToolboxPop
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
