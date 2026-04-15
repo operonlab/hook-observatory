@@ -371,7 +371,8 @@ Timestamp: {timestamp}
         pass  # model stays empty unless explicitly set
 
     # Primary: LiteLLM HTTP (uses Google API quota), fallback: Gemini CLI headless
-    litellm_model = os.environ.get("MEMVAULT_LITELLM_MODEL", "gemini-3.1-pro")
+    # 2026-04: defaulted to 2.5-pro — 3.1-pro charges thinking tokens (3-5x cost) + monthly cap risk
+    litellm_model = os.environ.get("MEMVAULT_LITELLM_MODEL", "gemini-2.5-pro")
     pipeline_t0 = time.monotonic()
     llm_output, extract_elapsed = _call_litellm(litellm_model, prompt)
     if llm_output is not None:
@@ -752,7 +753,7 @@ def _run_cmd(cmd: list, input_text: str, env: dict, label: str) -> "str | None":
             capture_output=True,
             text=True,
             env=env,
-            timeout=300,
+            timeout=90,
         )
         if result.returncode != 0:
             log(f"{label} call failed (exit {result.returncode}), skipping.")

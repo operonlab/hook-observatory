@@ -177,12 +177,21 @@ def count_exchanges(conversation: str) -> tuple:
 # HTTP helpers
 # ---------------------------------------------------------------------------
 def http_post(url: str, data: bytes, timeout: int = 15) -> tuple:
-    """POST request, return (status_code, response_body). Returns (0, '') on error."""
+    """POST request, return (status_code, response_body). Returns (0, '') on error.
+
+    Sends X-Internal-Key header when CORE_INTERNAL_API_KEY is set — required by
+    Core API middleware for /api/memvault/kg/triples/batch and related endpoints.
+    Without this header, Core returns 401 and this script falls back to local JSONL.
+    """
     try:
+        headers = {"Content-Type": "application/json"}
+        internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
+        if internal_key:
+            headers["X-Internal-Key"] = internal_key
         req = urllib.request.Request(
             url,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -196,6 +205,43 @@ def http_post(url: str, data: bytes, timeout: int = 15) -> tuple:
         return e.code, body
     except Exception:
         return 0, ""
+
+
+def _call_litellm(model: str, prompt: str) -> "tuple[str | None, float]":
+    """Call LiteLLM proxy HTTP API. Returns (output, elapsed) or (None, elapsed) on failure."""
+    t0 = time.monotonic()
+    litellm_base = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000/v1")
+    litellm_key = os.environ.get("LITELLM_API_KEY", "sk-litellm-local-dev")
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Extract knowledge triples from the conversation below. "
+                        "Output ONLY valid JSON per the instruction.\n\n" + prompt
+                    ),
+                }
+            ],
+            "temperature": 0.2,
+            "max_tokens": 16000,
+        }
+    ).encode("utf-8")
+    url = f"{litellm_base}/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {litellm_key}",
+    }
+    try:
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+            text = data["choices"][0]["message"]["content"]
+            return text, time.monotonic() - t0
+    except Exception as e:
+        log(f"LiteLLM call failed: {e}")
+        return None, time.monotonic() - t0
 
 
 # ---------------------------------------------------------------------------
@@ -267,36 +313,44 @@ def main() -> None:
     )
     full_prompt = prompt_text + "\n\n" + conversation
 
+    # Primary: LiteLLM HTTP (shared Google API quota, no CLI cold start, no hook loop).
+    # Fallback: Gemini CLI headless — only if LiteLLM unreachable.
+    # 2026-04: defaulted to 2.5-pro (3.1-pro burns thinking tokens 3-5x cost).
     triple_model = os.environ.get("TRIPLE_MODEL", "gemini-2.5-pro")
-    log(f"Calling {triple_model} for triple extraction ...")
+    log(f"Calling {triple_model} for triple extraction via LiteLLM ...")
 
-    try:
-        result = subprocess.run(
-            [
-                "gemini",
-                "-m",
-                triple_model,
-                "-p",
-                "Extract knowledge triples from the conversation below. Output ONLY valid JSON per the instruction.",
-            ],
-            input=full_prompt,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if result.returncode != 0:
-            log(f"Gemini call failed (exit {result.returncode}), skipping.")
+    raw_output, elapsed = _call_litellm(triple_model, full_prompt)
+    if raw_output is not None:
+        log(f"Triple extraction via LiteLLM took {elapsed:.1f}s.")
+    else:
+        log(f"LiteLLM failed after {elapsed:.1f}s, falling back to gemini CLI ...")
+        try:
+            result = subprocess.run(
+                [
+                    "gemini",
+                    "-m",
+                    triple_model,
+                    "-p",
+                    "Extract knowledge triples from the conversation below. Output ONLY valid JSON per the instruction.",
+                ],
+                input=full_prompt,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            if result.returncode != 0:
+                log(f"Gemini CLI fallback failed (exit {result.returncode}), skipping.")
+                sys.exit(0)
+            raw_output = result.stdout
+        except FileNotFoundError:
+            log("gemini not found in PATH, skipping.")
             sys.exit(0)
-        raw_output = result.stdout
-    except FileNotFoundError:
-        log("gemini not found in PATH, skipping.")
-        sys.exit(0)
-    except subprocess.TimeoutExpired:
-        log("Gemini call timed out, skipping.")
-        sys.exit(0)
-    except Exception as e:
-        log(f"Gemini call error: {e}, skipping.")
-        sys.exit(0)
+        except subprocess.TimeoutExpired:
+            log("Gemini CLI fallback timed out, skipping.")
+            sys.exit(0)
+        except Exception as e:
+            log(f"Gemini CLI fallback error: {e}, skipping.")
+            sys.exit(0)
 
     # ---------------------------------------------------------------------------
     # 6. Clean output
