@@ -6,7 +6,7 @@ import re
 from sqlalchemy.orm import Session
 
 from .models import Person, Submission, Survey
-from .pw import PlaywrightSession
+from .pw import BrowserSession, adapt_js_for_backend
 
 log = logging.getLogger("auto_survey")
 
@@ -16,86 +16,68 @@ def _build_fill_script(
     survey: Survey,
     answers: dict[str, str] | None = None,
 ) -> str:
-    """Generate JavaScript for Playwright CLI run-code to fill the form."""
+    """Generate JavaScript in Playwright async (page) => format.
+
+    Will be auto-converted to camoufox format by adapt_js_for_backend().
+    """
     company = person.company
     company_options = survey.company_options or []
 
     # Determine company selection strategy
     if company in company_options:
-        company_click = f"await page.click('[data-qa=\"option-{company}\"]');"
+        company_click = f"await page.locator('[data-qa=\"option-{company}\"]').first().click();"
         company_fill = ""
     else:
-        # Select "其他" and fill text input
-        company_click = "await page.click('[data-qa=\"option-其他\"]');"
+        # Select "其他" and fill text input (input appears in subject-2 after clicking)
+        company_click = "await page.locator('[data-qa=\"option-其他\"]').first().click();"
         company_fill = f"""
     await page.waitForTimeout(500);
-    const otherInput = page.locator('[data-qa="subject-1"] input[type="text"], [data-qa="subject-1"] textarea, [data-qa="option-其他"] ~ input, [data-qa="option-其他"] ~ div input').first();
+    const otherInput = page.locator('[data-qa="subject-2"] input, [data-qa="subject-2"] textarea, [data-qa="subject-1"] input').first();
     if (await otherInput.count() > 0) {{
       await otherInput.fill('{_js_escape(company)}');
-    }} else {{
-      const inputs = page.locator('input[placeholder*="填入"], input[placeholder*="輸入"]');
-      const count = await inputs.count();
-      for (let i = 0; i < count; i++) {{
-        if (await inputs.nth(i).isVisible()) {{
-          await inputs.nth(i).fill('{_js_escape(company)}');
-          break;
-        }}
-      }}
     }}"""
 
-    # Build answer clicks for quiz — match via getAttribute('data-qa')
-    # to avoid CSS selector crashes and hasText mismatch with spacing/escapes
+    # Build answer clicks for quiz
     answer_clicks = ""
     if answers:
         for subject_id, answer_text in answers.items():
             escaped = _js_escape(answer_text)
             answer_clicks += f"""
-    {{
-      const subj = page.locator('[data-qa="{subject_id}"]');
-      const opts = subj.locator('[data-qa^="option-"]');
-      const count = await opts.count();
+    await page.evaluate(() => {{
+      const subj = document.querySelector('[data-qa="{subject_id}"]');
+      if (!subj) return;
+      const opts = subj.querySelectorAll('[data-qa^="option-"]');
       let clicked = false;
-      // Pass 1: exact match
-      for (let i = 0; i < count; i++) {{
-        const qa = await opts.nth(i).getAttribute('data-qa');
+      for (const opt of opts) {{
+        const qa = opt.getAttribute('data-qa');
         if (qa === 'option-{escaped}') {{
-          await opts.nth(i).click();
+          opt.click();
           clicked = true;
           break;
         }}
       }}
-      // Pass 2: fuzzy match — option text contains LLM answer or vice versa
       if (!clicked) {{
         const needle = '{escaped}'.replace(/\\s+/g, '');
-        for (let i = 0; i < count; i++) {{
-          const qa = (await opts.nth(i).getAttribute('data-qa')) || '';
+        for (const opt of opts) {{
+          const qa = (opt.getAttribute('data-qa')) || '';
           const optText = qa.replace('option-', '').replace(/\\s+/g, '');
           if (optText && (optText.includes(needle) || needle.includes(optText))) {{
-            await opts.nth(i).click();
+            opt.click();
             clicked = true;
             break;
           }}
         }}
       }}
-      // Pass 3: click by visible text content similarity (first 20 chars)
-      if (!clicked && '{escaped}'.length > 10) {{
-        const prefix = '{escaped}'.substring(0, 20);
-        for (let i = 0; i < count; i++) {{
-          const text = (await opts.nth(i).innerText()).trim();
-          if (text.includes(prefix) || prefix.includes(text.substring(0, 20))) {{
-            await opts.nth(i).click();
-            clicked = true;
-            break;
-          }}
-        }}
-      }}
-    }}
+    }});
     await page.waitForTimeout(300);"""
 
     name_escaped = _js_escape(person.name)
     email_escaped = _js_escape(person.email)
 
     script = f"""async (page) => {{
+    // 0. Wait for React render
+    await page.waitForTimeout(3000);
+
     // 1. Select company
     {company_click}
     {company_fill}
@@ -200,7 +182,7 @@ def _extract_score(page_text: str) -> int | None:
 
 
 def fill_form(
-    pw: PlaywrightSession,
+    pw: BrowserSession,
     db: Session,
     survey: Survey,
     person: Person,
@@ -217,18 +199,21 @@ def fill_form(
         return existing
 
     script = _build_fill_script(person, survey, answers)
+    # Adapt JS for the backend
+    adapted_js = adapt_js_for_backend(script, pw.backend)
 
     try:
         pw.open(survey.url)
-        raw_output = pw.run_code(script, timeout=90)
+        raw_output = pw.run_code(adapted_js, timeout=90)
 
-        # Parse result text from Playwright CLI output
-        result_text = ""
-        result_match = re.search(r"### Result\s*\n(.*?)(?=\n###|\Z)", raw_output, re.DOTALL)
-        if result_match:
-            result_text = result_match.group(1).strip().strip('"')
-        else:
-            result_text = raw_output
+        # Parse result text
+        result_text = raw_output.strip()
+
+        # Playwright wraps result in "### Result"
+        if "### Result" in result_text:
+            result_match = re.search(r"### Result\s*\n(.*?)(?=\n###|\Z)", result_text, re.DOTALL)
+            if result_match:
+                result_text = result_match.group(1).strip().strip('"')
 
         score = _extract_score(result_text) if survey.type == "quiz" else None
 
@@ -257,9 +242,9 @@ def fill_form(
             submission.score = None
         else:
             submission.status = "success"
+            submission.error_message = None
             submission.score = score
         submission.answers_snapshot = answers
-        submission.error_message = None
 
         if not existing:
             db.add(submission)

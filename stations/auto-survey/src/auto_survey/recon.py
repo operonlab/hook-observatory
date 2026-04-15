@@ -3,19 +3,23 @@
 import hashlib
 import json
 import re
+import time
 
 from sqlalchemy.orm import Session
 
 from .models import Question, Survey
-from .pw import PlaywrightSession
+from .pw import BrowserSession, adapt_js_for_backend
 
-# JS to extract full form structure (all DOM access via page.evaluate)
-EXTRACT_JS = r"""async (page) => {
+# JS to extract full form structure — written in Playwright async (page) => format
+# Will be auto-converted to camoufox format by adapt_js_for_backend()
+EXTRACT_JS = """async (page) => {
   await page.waitForTimeout(3000);
 
-  const data = await page.evaluate(() => {
-    const title = document.title.replace(/ » SurveyCake$/, '').trim();
+  const title = await page.evaluate(() => {
+    return document.title.replace(/ » SurveyCake$/, '').trim();
+  });
 
+  const subjects = await page.evaluate(() => {
     const items = document.querySelectorAll('[data-qa]');
     const subjects = [];
     let currentSubject = null;
@@ -24,11 +28,11 @@ EXTRACT_JS = r"""async (page) => {
       const qa = el.getAttribute('data-qa');
       if (qa.startsWith('subject-') && !qa.startsWith('subject-type-')) {
         if (currentSubject) subjects.push(currentSubject);
-        const numMatch = qa.match(/subject-(\d+)/);
+        const numMatch = qa.match(/subject-(\\d+)/);
         currentSubject = {
           id: qa,
           num: numMatch ? parseInt(numMatch[1]) : 0,
-          text: el.innerText.replace(/^\d+\n/, '').split('\n')[0].trim(),
+          text: el.innerText.replace(/^\\d+\\n/, '').split('\\n')[0].trim(),
           fullText: el.innerText.trim(),
           type: 'unknown',
           options: [],
@@ -45,36 +49,43 @@ EXTRACT_JS = r"""async (page) => {
       }
     }
     if (currentSubject) subjects.push(currentSubject);
-
-    const bodyText = document.body.innerText;
-    return { title, subjects, bodyText };
+    return subjects;
   });
 
-  return data;
+  const bodyText = await page.evaluate(() => document.body.innerText);
+  return JSON.stringify({ title, subjects, bodyText });
 }"""
 
 
-def recon_survey(pw: PlaywrightSession, url: str) -> dict:
+def recon_survey(pw: BrowserSession, url: str) -> dict:
     """Open URL and extract form structure. Returns parsed structure."""
     pw.open(url)
-    raw = pw.run_code(EXTRACT_JS, timeout=30)
+    time.sleep(3)  # Wait for page to load
 
-    # Playwright CLI returns: ### Result\n{json}\n### Ran Playwright code...
-    # Find the JSON object between "### Result" and next "###"
-    result_section = re.search(r"### Result\s*\n(.*?)(?=\n###|\Z)", raw, re.DOTALL)
-    if not result_section:
-        raise RuntimeError(f"Failed to extract form structure from: {raw[:500]}")
+    # Adapt JS for the backend
+    adapted_js = adapt_js_for_backend(EXTRACT_JS, pw.backend)
+    raw = pw.run_code(adapted_js, timeout=30)
 
-    text = result_section.group(1).strip()
+    # Parse result
+    text = raw.strip()
 
-    # The CLI may return as JS object representation or JSON
-    # Try direct JSON parse first
+    # Camoufox returns raw result; Playwright wraps in "### Result"
+    if "### Result" in text:
+        result_section = re.search(r"### Result\s*\n(.*?)(?=\n###|\Z)", text, re.DOTALL)
+        if result_section:
+            text = result_section.group(1).strip()
+
+    # Strip quotes if present
+    if text.startswith('"') and text.endswith('"'):
+        text = text[1:-1]
+
+    # Parse JSON
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Try extracting JSON from within quotes (CLI wraps strings in quotes)
+    # Try extracting JSON from within text
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         try:

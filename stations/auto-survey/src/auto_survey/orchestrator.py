@@ -16,8 +16,10 @@ from .models import Person, Submission, Survey
 from .pw import cleanup_session, create_session
 from .recon import classify_subjects, recon_survey, save_survey
 
-# Wire reactive store
-sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+# Wire reactive store — add station root to sys.path
+_station_root = Path(__file__).resolve().parents[2]
+if str(_station_root) not in sys.path:
+    sys.path.insert(0, str(_station_root))
 
 
 def _log(msg: str):
