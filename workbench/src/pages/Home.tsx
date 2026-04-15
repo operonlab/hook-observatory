@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppOrder } from '@/hooks/useAppOrder'
 import { useAuth } from '@/hooks/useAuth'
+import ToolboxPopover from '@/shell/ToolboxPopover'
 import type { AppInfo } from '@/types'
 
 const LONG_PRESS_MS = 500
@@ -21,7 +22,7 @@ function AppCard({
   app: AppInfo
   isHovered: boolean
   onHover: (id: string | null) => void
-  onClick: () => void
+  onClick: (rect: DOMRect) => void
   onHide: () => void
   isDragOver: boolean
   onDragStart: () => void
@@ -76,7 +77,7 @@ function AppCard({
           longPressed.current = false
           return
         }
-        onClick()
+        onClick(e.currentTarget.getBoundingClientRect())
       }}
       onMouseEnter={() => onHover(app.id)}
       onMouseLeave={() => {
@@ -197,10 +198,17 @@ export default function Home() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [toolboxOpen, setToolboxOpen] = useState(false)
+  const [toolboxAnchor, setToolboxAnchor] = useState<DOMRect | null>(null)
   const { sortedInternal, sortedExternal, comingSoon, hiddenApps, reorder, hide, unhide } =
     useAppOrder()
 
-  const openApp = (app: AppInfo) => {
+  const openApp = (app: AppInfo, rect: DOMRect) => {
+    if (app.id === 'toolbox') {
+      setToolboxAnchor(rect)
+      setToolboxOpen(true)
+      return
+    }
     if (app.externalUrl) {
       window.location.href = app.externalUrl
     } else {
@@ -219,7 +227,7 @@ export default function Home() {
       app={app}
       isHovered={hoveredId === app.id}
       onHover={setHoveredId}
-      onClick={() => openApp(app)}
+      onClick={(rect) => openApp(app, rect)}
       onHide={() => hide(app.id)}
       isDragOver={isDragOver}
       onDragStart={handlers.onDragStart}
@@ -333,6 +341,12 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <ToolboxPopover
+        open={toolboxOpen}
+        anchorRect={toolboxAnchor}
+        onClose={() => setToolboxOpen(false)}
+      />
 
       {/* Coming soon section */}
       {comingSoon.length > 0 && (
