@@ -334,17 +334,6 @@
       "type": "periodic",
       "enabled": true
     },
-    {
-      "name": "ws-memvault-decay",
-      "label": "com.joneshong.scheduler.ws-memvault-decay",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_decay.py",
-      "schedule": { "calendar": { "Weekday": 0, "Hour": 4, "Minute": 30 } },
-      "description": "每週日 4:30AM: AttitudeFact confidence 指數衰減（半衰期按 category，避開 dream 4AM）",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
       "name": "ws-paper-digest",
       "label": "com.joneshong.scheduler.ws-paper-digest",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_paper_digest.py",
@@ -423,27 +412,6 @@
       "enabled": true,
       "description": "每週日 6:30AM: Export skill routing training data (Memento-Skills Phase 4)"
     },
-    {
-      "name": "ws-memvault-attitude",
-      "label": "com.joneshong.scheduler.ws-memvault-attitude",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_attitude.py",
-      "schedule": { "calendar": { "Hour": 5, "Minute": 0 } },
-      "description": "每日 5AM: Attitude corrections 自動處理 + 高 drift 通知",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-memvault-skill-sync",
-      "label": "com.joneshong.scheduler.ws-memvault-skill-sync",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_skill_sync.py",
-      "schedule": { "calendar": { "Hour": 5, "Minute": 30 } },
-      "description": "每日 5:30AM: Anvil → KAS Skill Profile sync（L1 stats + proficiency level）",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
       "name": "ws-nginx-autoban",
       "label": "com.joneshong.scheduler.ws-nginx-autoban",
       "command": "~/.local/bin/python3 ~/workshop/scripts/nginx_autoban.py",
