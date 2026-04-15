@@ -44,6 +44,10 @@ dotclaude
 
 # Worktrees
 .worktrees/
+.claude/worktrees/
+
+# OMX runtime (logs + state snapshots)
+.omx/
 
 # Checkpoints (session state snapshots)
 .checkpoints/
