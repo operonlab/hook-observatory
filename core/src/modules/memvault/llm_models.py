@@ -46,3 +46,12 @@ class CRAGVerdictOutput(BaseModel):
     """LLM output for CRAG Layer C evaluation."""
 
     verdict: Literal["correct", "ambiguous", "incorrect"]
+
+
+class IntentClassificationOutput(BaseModel):
+    """LLM output for Tier 3 intent classification (QueryClassifyOp fallback)."""
+
+    intent: Literal[
+        "entity_lookup", "conceptual", "factual", "exploratory", "cross_domain", "unknown"
+    ]
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)

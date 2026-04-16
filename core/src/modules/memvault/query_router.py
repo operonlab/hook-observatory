@@ -13,6 +13,14 @@ import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from .query_archetypes import (
+    ACTIVITY_PATTERNS,
+    CONTINUATION_PATTERNS,
+    PROGRESS_PATTERNS,
+    llm_classify,
+    match_preset_qa,
+    semantic_intent_scores,
+)
 from .query_expander import (
     _CJK_RANGES,
     _SPECIFIC_TOKENS,
@@ -41,6 +49,10 @@ class LayerPlan:
     confidence: float
     # Layer → search mode: SEMANTIC | HYBRID | ILIKE | SKIP
     layers: dict[str, str] = field(default_factory=dict)
+    # Preset QA hints (set when matched by match_preset_qa)
+    preset_hint: str | None = None
+    time_window_days: int = 0
+    sort_by: str = "relevance"
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +131,7 @@ def extract_query_entities(query: str) -> list[str]:
 # Scoring
 # ---------------------------------------------------------------------------
 
+
 def _score_intent(query: str, keywords: list[str]) -> dict[QueryIntent, float]:
     """Score each intent based on pattern matches and keyword analysis."""
     scores: dict[QueryIntent, float] = {intent: 0.0 for intent in QueryIntent}
@@ -139,6 +152,14 @@ def _score_intent(query: str, keywords: list[str]) -> dict[QueryIntent, float]:
 
     if _EXPLORATORY_PATTERNS.search(query):
         scores[QueryIntent.EXPLORATORY] += 0.4
+
+    # Supplementary patterns from real usage (query_archetypes.py)
+    if ACTIVITY_PATTERNS.search(query):
+        scores[QueryIntent.EXPLORATORY] += 0.45
+    if PROGRESS_PATTERNS.search(query):
+        scores[QueryIntent.EXPLORATORY] += 0.4
+    if CONTINUATION_PATTERNS.search(query):
+        scores[QueryIntent.CONCEPTUAL] += 0.45
 
     # Entity detection
     entity_matches = _ENTITY_PATTERNS.findall(query)
@@ -246,12 +267,27 @@ def _route_confidence_threshold(query_len: int) -> float:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def classify_query(query: str) -> LayerPlan:
     """Classify a query and return the layer plan.
 
-    Returns LayerPlan with intent=UNKNOWN and full-scan layers if confidence
-    is below the dynamic threshold (shorter queries use a lower bar).
+    Fast path: preset QA patterns bypass scoring for high-frequency queries.
+    Normal path: keyword + pattern scoring with dynamic confidence threshold.
     """
+    # Fast path: preset QA match (high-frequency queries get optimized routing)
+    preset = match_preset_qa(query)
+    if preset:
+        forced_intent = QueryIntent(preset["intent"])
+        plan = LayerPlan(
+            intent=forced_intent,
+            confidence=0.95,
+            layers=_LAYER_MATRIX[forced_intent].copy(),
+        )
+        plan.preset_hint = preset.get("retrieval_hint")
+        plan.time_window_days = preset.get("time_window_days", 0)
+        plan.sort_by = preset.get("sort_by", "relevance")
+        return plan
+
     keywords = extract_keywords(query)
     scores = _score_intent(query, keywords)
 
@@ -279,6 +315,75 @@ def classify_query(query: str) -> LayerPlan:
     )
 
 
+async def classify_query_full(query: str) -> LayerPlan:
+    """Tier 1∥2 parallel fusion + Tier 3 LLM fallback.
+
+    - Preset QA fast path (unchanged, bypasses all tiers)
+    - Tier 1: keyword scoring (sync, <1ms)
+    - Tier 2: semantic vector vs archetype centroids (async, ~5ms)
+    - Fusion: weighted average (0.4 keyword + 0.6 semantic)
+    - Tier 3: LLM classification (async, ~500ms, only on low fused confidence)
+
+    Falls back gracefully: embedding down → Tier 1 only; LLM down → Tier 1+2 only.
+    """
+    # Fast path: preset QA match
+    preset = match_preset_qa(query)
+    if preset:
+        forced_intent = QueryIntent(preset["intent"])
+        plan = LayerPlan(
+            intent=forced_intent,
+            confidence=0.95,
+            layers=_LAYER_MATRIX[forced_intent].copy(),
+        )
+        plan.preset_hint = preset.get("retrieval_hint")
+        plan.time_window_days = preset.get("time_window_days", 0)
+        plan.sort_by = preset.get("sort_by", "relevance")
+        return plan
+
+    # Tier 1: keyword scoring (sync, instant)
+    keywords = extract_keywords(query)
+    tier1_scores = _score_intent(query, keywords)
+
+    # Tier 2: semantic scoring (async, ~5ms)
+    tier2_scores = await semantic_intent_scores(query)
+
+    # Fusion: weighted average when Tier 2 is available
+    if tier2_scores:
+        all_intents = set(tier1_scores) | set(tier2_scores)
+        fused = {
+            intent: 0.4 * tier1_scores.get(intent, 0.0) + 0.6 * tier2_scores.get(intent, 0.0)
+            for intent in all_intents
+        }
+    else:
+        fused = tier1_scores
+
+    best_intent = max(fused, key=lambda k: fused[k])
+    best_score = fused[best_intent]
+    threshold = _route_confidence_threshold(len(query))
+
+    # Tier 3: LLM fallback (fused confidence still low)
+    if best_score < threshold:
+        llm_result = await llm_classify(query)
+        if llm_result:
+            intent_str, conf = llm_result
+            return LayerPlan(
+                intent=QueryIntent(intent_str),
+                confidence=conf,
+                layers=_LAYER_MATRIX[QueryIntent(intent_str)].copy(),
+            )
+        return LayerPlan(
+            intent=QueryIntent.UNKNOWN,
+            confidence=best_score,
+            layers=_LAYER_MATRIX[QueryIntent.UNKNOWN].copy(),
+        )
+
+    return LayerPlan(
+        intent=best_intent,
+        confidence=round(min(best_score, 1.0), 3),
+        layers=_LAYER_MATRIX[best_intent].copy(),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Personalized Query Router
 # ---------------------------------------------------------------------------
@@ -300,8 +405,15 @@ class PersonalizedQueryRouter:
         self.attention = attention_profile or {}
 
     def classify(self, query: str) -> LayerPlan:
-        """Classify query with personalization overlay."""
+        """Classify query with personalization overlay (Tier 1 only)."""
         base = classify_query(query)
+        if not self.attention:
+            return base
+        return self._adjust_layers(query, base)
+
+    async def classify_full(self, query: str) -> LayerPlan:
+        """Classify query with Tier 1∥2 + Tier 3 + personalization overlay."""
+        base = await classify_query_full(query)
         if not self.attention:
             return base
         return self._adjust_layers(query, base)
@@ -340,7 +452,9 @@ class PersonalizedQueryRouter:
                 adjusted.layers["communities"] = "SEMANTIC"
 
         # Rule 3: Unknown intent + dominant historical intent → bias
-        if base.intent == QueryIntent.UNKNOWN and base.confidence < _route_confidence_threshold(len(query)):
+        if base.intent == QueryIntent.UNKNOWN and base.confidence < _route_confidence_threshold(
+            len(query)
+        ):
             dominant = self._get_dominant_intent()
             if dominant and dominant in _LAYER_MATRIX:
                 # Merge dominant intent layers (don't override non-SKIP)

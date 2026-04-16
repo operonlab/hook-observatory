@@ -1021,7 +1021,7 @@ class CascadeRecallService:
 
                 attention = await self._get_cached_attention(db, space_id)
                 router = PersonalizedQueryRouter(attention)
-                layer_plan = router.classify(query)
+                layer_plan = await router.classify_full(query)
                 result.routing_intent = layer_plan.intent.value
                 result.routing_confidence = layer_plan.confidence
             except Exception as e:
