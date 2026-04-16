@@ -247,7 +247,7 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
 
 <!-- ════════ PATHS ════════ -->
 
-<!-- WRITE TRACK: User Input → Guard → Noise → Dedup (sequential) → ∥ fork -->
+<!-- WRITE TRACK: User Input → Noise → Injection Guard → Dedup (sequential) → ∥ fork -->
 <path id="p1" class="df-path write" d="M 280 72 L 280 100"/>
 <path id="p2" class="df-path write" d="M 280 156 L 280 172"/>
 <path id="p3" class="df-path write" d="M 280 228 L 280 244"/>
@@ -317,21 +317,21 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
   <text class="node-desc" x="280" y="60">記憶進入點</text>
 </g>
 
-<!-- Gate sequence: Dedup → Noise → Guard (actual code order from routes.py/services.py) -->
-<g class="df-node write" id="n-dedup">
-  <rect x="205" y="100" width="150" height="56" rx="8" ry="8"/>
-  <text class="node-name" x="280" y="122">Dedup (G1)</text>
-  <text class="node-desc" x="280" y="138">SKIP · MERGE · SUPERSEDE</text>
-</g>
+<!-- Gate sequence: Noise → Injection Guard → Dedup (routes.py — noise/guard must precede dedup to prevent pollution) -->
 <g class="df-node write" id="n-noise">
-  <rect x="205" y="172" width="150" height="56" rx="8" ry="8"/>
-  <text class="node-name" x="280" y="194">Noise Filter</text>
-  <text class="node-desc" x="280" y="210">quarantine tag（不拒絕）</text>
+  <rect x="205" y="100" width="150" height="56" rx="8" ry="8"/>
+  <text class="node-name" x="280" y="122">Noise Filter</text>
+  <text class="node-desc" x="280" y="138">quarantine → skip dedup</text>
 </g>
 <g class="df-node write" id="n-inject">
+  <rect x="205" y="172" width="150" height="56" rx="8" ry="8"/>
+  <text class="node-name" x="280" y="194">Injection Guard</text>
+  <text class="node-desc" x="280" y="210">quarantine → skip dedup</text>
+</g>
+<g class="df-node write" id="n-dedup">
   <rect x="205" y="244" width="150" height="56" rx="8" ry="8"/>
-  <text class="node-name" x="280" y="266">Injection Guard</text>
-  <text class="node-desc" x="280" y="282">quarantine tag（不拒絕）</text>
+  <text class="node-name" x="280" y="266">Dedup (G3)</text>
+  <text class="node-desc" x="280" y="282">SKIP · MERGE · SUPERSEDE</text>
 </g>
 
 <!-- Fork: Embedding+Qdrant | KG L0 (parallel after gates) -->
@@ -638,9 +638,9 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
     </div>
     <div style="display:grid;grid-template-columns:1fr;gap:12px;padding-left:18px;border-left:2px solid rgba(166,227,161,.2)">
       <div class="card" style="border-left:3px solid var(--green)">
-        <div class="card-name" style="color:var(--green)">入口閘門 <span style="font-size:.7rem;color:var(--subtext0);font-weight:400">— 三道安檢同時跑</span></div>
-        <div class="card-desc">記憶一進來就同時過三道門：<em>Noise Filter</em> 過濾廢話、<em>Dedup</em> 查有沒有說過、<em>Injection Guard</em> 擋惡意內容。像機場安檢同時 X 光包包、掃護照、檢查液體。</div>
-        <div class="flow-branch"><span class="flow-tag" style="border-color:var(--green);color:var(--green)">並行</span><span class="flow-tag">Noise Filter</span><span class="flow-tag">Two-Stage Dedup</span><span class="flow-tag">Injection Guard</span></div>
+        <div class="card-name" style="color:var(--green)">入口閘門 <span style="font-size:.7rem;color:var(--subtext0);font-weight:400">— 三道安檢循序跑</span></div>
+        <div class="card-desc">記憶進來依序過三道門：❶ <em>Noise Filter</em> 過濾廢話 → ❷ <em>Injection Guard</em> 擋惡意內容 → ❸ <em>Dedup</em> 查有沒有說過。<strong>順序不可換</strong>——雜訊和注入內容必須先被攔截，否則會在 Dedup MERGE 時污染現有記憶。</div>
+        <div class="flow-branch"><span class="flow-tag" style="border-color:var(--green);color:var(--green)">循序</span><span class="flow-tag">❶ Noise</span><span class="flow-tag">❷ Guard</span><span class="flow-tag">❸ Dedup</span></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="card" style="border-left:3px solid var(--blue)">
@@ -659,18 +659,7 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
         <div class="card-desc">Leiden 分群 (L1) → LLM 摘要 (L2)。<strong>排程批次</strong>——像期末考完才整理筆記。</div>
         <div class="flow-branch"><span class="flow-tag" style="border-color:var(--yellow);color:var(--yellow)">非同步</span><span class="flow-tag">L1 Leiden</span><span class="flow-tag">L2 Summary</span></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="card" style="border-left:3px solid var(--red)">
-          <div class="card-name" style="color:var(--red)">GRC Adapter</div>
-          <div class="card-desc">治理、風險、合規三合一閘門——存入前的<strong>品管關卡</strong>。低信心度記憶自動標記審查，但 lesson/correction 等受保護類型豁免。</div>
-          <div class="flow-branch"><span class="flow-tag" style="border-color:var(--red);color:var(--red)">品管</span><span class="flow-tag">confidence gate</span><span class="flow-tag">protected types</span></div>
-        </div>
-        <div class="card" style="border-left:3px solid var(--teal)">
-          <div class="card-name" style="color:var(--teal)">Content Normalizer</div>
-          <div class="card-desc">統一記憶格式——像把各種字體的筆記重新謄寫成<strong>同一格式</strong>。修正 encoding、標準化空白、截斷保護。</div>
-          <div class="flow-branch"><span class="flow-tag">whitespace</span><span class="flow-tag">encoding</span><span class="flow-tag">truncation guard</span></div>
-        </div>
-      </div>
+      <!-- GRC Adapter + Content Normalizer 屬於 Background Track（排程/手動觸發），不在即時寫入 pipeline 內 -->
     </div>
   </div>
 
@@ -741,6 +730,18 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
         <div class="card" style="border-left:3px dashed var(--sapphire)">
           <div class="card-name" style="color:var(--sapphire)">Tier Digest</div>
           <div class="card-desc">根據記憶重要程度產生不同精度摘要——重要的給全文，次要的壓縮。Hot/Warm/Cold 分級。</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="card" style="border-left:3px dashed var(--red)">
+          <div class="card-name" style="color:var(--red)">GRC Adapter <span style="font-size:.7rem;color:var(--subtext0);font-weight:400">— API 觸發</span></div>
+          <div class="card-desc">治理、風險、合規三合一閘門。低信心度記憶自動標記審查，但 lesson/correction 等受保護類型豁免。<strong>排程或手動觸發</strong>，不在即時寫入 pipeline 內。</div>
+          <div class="flow-branch"><span class="flow-tag" style="border-color:var(--red);color:var(--red)">排程</span><span class="flow-tag">confidence gate</span><span class="flow-tag">protected types</span></div>
+        </div>
+        <div class="card" style="border-left:3px dashed var(--teal)">
+          <div class="card-name" style="color:var(--teal)">Content Normalizer <span style="font-size:.7rem;color:var(--subtext0);font-weight:400">— Dream 內</span></div>
+          <div class="card-desc">統一記憶格式——修正 encoding、標準化空白、截斷保護。<strong>在 Dream Loop Consolidate 階段執行</strong>，不在即時寫入 pipeline。</div>
+          <div class="flow-branch"><span class="flow-tag" style="border-color:var(--teal);color:var(--teal)">Dream 內</span><span class="flow-tag">whitespace</span><span class="flow-tag">encoding</span><span class="flow-tag">truncation</span></div>
         </div>
       </div>
     </div>
@@ -903,7 +904,7 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
     <div class="card">
       <div class="card-name">10 Noise Filter</div>
       <div class="card-desc">「過濾掉沒營養的對話——像整理筆記時丟掉塗鴉」</div>
-      <div class="card-impl">text_ops.noise · 7 類: greeting/too_short/heartbeat/status_only/error_trace/json_dump/repetitive · 記憶關鍵字保護</div>
+      <div class="card-impl">text_ops.noise · 7 類: greeting/too_short/heartbeat/status_only/raw_error_trace/raw_json_dump/repetitive · 記憶關鍵字保護</div>
     </div>
     <div class="card">
       <div class="card-name">11 Pairwise Dedup</div>
