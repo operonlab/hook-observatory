@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod error;
 mod models;
+mod remediation;
 mod sse;
 mod state;
 mod tasks;
@@ -53,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("db migrated");
 
     let engine = Arc::new(InterventionEngine::new(cfg.clone()));
+    let remediator = Arc::new(remediation::Remediator::new(engine.clone(), pool.clone()));
     let sse_hub = sse::SseHub::new(256);
     let token = CancellationToken::new();
 
@@ -64,6 +66,15 @@ async fn main() -> anyhow::Result<()> {
         let t = token.clone();
         let interval = cfg.check_light_interval_sec;
         tokio::spawn(async move { tasks::light_loop::run(e, p, s, interval, t).await })
+    };
+
+    let repair_handle = {
+        let e = engine.clone();
+        let r = remediator.clone();
+        let t = token.clone();
+        let cooldown = cfg.notification_cooldown_sec;
+        let interval = cfg.repair_monitor_interval_sec;
+        tokio::spawn(async move { tasks::repair_loop::run(e, r, cooldown, interval, t).await })
     };
 
     let purge_handle = {
@@ -104,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Wait tasks to drain
     let _ = tokio::time::timeout(std::time::Duration::from_secs(3), light_handle).await;
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(3), repair_handle).await;
     let _ = tokio::time::timeout(std::time::Duration::from_secs(3), purge_handle).await;
     Ok(())
 }
