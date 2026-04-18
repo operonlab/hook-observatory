@@ -81,6 +81,12 @@ DEFAULTS = {
         "browser_tab_warn_gb": 2.0,
         "notify_cooldown_minutes": 15,
     },
+    "orbstack": {
+        "watch_threshold_gb": 3.5,
+        "warn_threshold_gb": 5.0,
+        "crit_threshold_gb": 7.0,
+        "notify_cooldown_minutes": 120,
+    },
 }
 
 
@@ -231,6 +237,25 @@ def _get_browser_memory() -> dict:
         }
 
     return {"browser": "none", "total_gb": 0.0, "tab_count": 0, "main_alive": False}
+
+
+def _get_orbstack_rss_gb() -> dict:
+    """Measure OrbStack Helper RSS (VM overhead + container memory).
+
+    OrbStack VM memory cannot be shrunk without a full restart. This only
+    reports; it never touches OrbStack (never_restart=True by design — prior
+    incident: session-archiver write blocked when VM mem-limit was set).
+    """
+    total_kb = 0
+    procs = 0
+    for p in _find_processes("OrbStack Helper"):
+        total_kb += p["rss_kb"]
+        procs += 1
+    return {
+        "running": procs > 0,
+        "rss_gb": round(total_kb / (1024 * 1024), 2),
+        "helper_count": procs,
+    }
 
 
 def _close_chrome_tabs(max_close: int = 10) -> dict:
@@ -644,6 +669,51 @@ class MemoryGuardian:
                     freed_mb += mem_mb
         return killed, freed_mb
 
+    def orbstack_check(self, user_idle: int = -1) -> dict:
+        """Observe OrbStack Helper RSS — notify only, never restart.
+
+        Why no auto-restart: setting VM mem-limit once broke session-archiver
+        writes (Postgres WAL/IO stalls). OrbStack restart must be human-gated
+        to avoid colliding with scheduled DB writes. See docs/orb-maintenance.
+        """
+        orb_cfg = self.cfg.get("orbstack", DEFAULTS.get("orbstack", {}))
+        watch_gb = orb_cfg.get("watch_threshold_gb", 3.5)
+        warn_gb = orb_cfg.get("warn_threshold_gb", 5.0)
+        crit_gb = orb_cfg.get("crit_threshold_gb", 7.0)
+        cooldown_min = orb_cfg.get("notify_cooldown_minutes", 120)
+
+        info = _get_orbstack_rss_gb()
+        result = {
+            "status": "ok",
+            "running": info["running"],
+            "rss_gb": info["rss_gb"],
+            "thresholds": {"watch": watch_gb, "warn": warn_gb, "crit": crit_gb},
+        }
+        if not info["running"] or info["rss_gb"] < watch_gb:
+            return result
+
+        rss = info["rss_gb"]
+        level = "crit" if rss >= crit_gb else ("warn" if rss >= warn_gb else "watch")
+        result["status"] = level
+
+        ts = datetime.now().strftime("%m/%d %H:%M:%S")
+        self._log(
+            f"[{ts}] ORBSTACK {level.upper()}: helper_rss={rss}GB "
+            f"(watch={watch_gb} warn={warn_gb} crit={crit_gb})"
+        )
+
+        if level in ("warn", "crit"):
+            cooldown_path = Path(_get(self.cfg, "log_dir")).expanduser() / ".orb_notify_cooldown"
+            if _check_cooldown(cooldown_path, cooldown_min):
+                hint = "手動執行 ~/workshop/stations/system-monitor/orb-maintenance.sh"
+                msg = f"OrbStack Helper {rss}GB ≥ {warn_gb}GB\n建議找安靜時段{hint}"
+                _send_notification(f"OrbStack 記憶體{level.upper()}", msg, "orbstack")
+                cooldown_path.parent.mkdir(parents=True, exist_ok=True)
+                cooldown_path.write_text(str(time.time()))
+                result["notified"] = True
+
+        return result
+
     def compressed_sweep(self, user_idle: int = -1) -> dict:
         """Orthogonal sweep for compressed memory pressure (independent of P0-P3).
 
@@ -834,6 +904,9 @@ class MemoryGuardian:
                         shutil.rmtree(d, ignore_errors=True)
                 except OSError:
                     pass
+
+        # OrbStack check runs unconditionally (orthogonal to mem pressure)
+        result["orbstack"] = self.orbstack_check(user_idle)
 
         if mem_level > warn_th:
             # Memory OK — still run compressed sweep (orthogonal dimension)

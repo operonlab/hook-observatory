@@ -57,6 +57,12 @@
       "browser_tab_warn_gb": 2.0,
       "notify_cooldown_minutes": 15
     },
+    "orbstack": {
+      "watch_threshold_gb": 3.5,
+      "warn_threshold_gb": 5.0,
+      "crit_threshold_gb": 7.0,
+      "notify_cooldown_minutes": 120
+    },
     "expendables": [
       { "pattern": "Google Chrome Helper (Renderer)", "label": "Chrome 分頁", "browser": true },
       { "pattern": "Google Chrome Helper (GPU)", "label": "Chrome GPU", "browser": true },
