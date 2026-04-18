@@ -1,0 +1,634 @@
+[
+  {
+    "annotations": {
+      "title": "Batch Design",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Execute multiple insert/copy/update/replace/move/delete/image operations in a single call.\n\n## Usage\n\n- Keep each batch_design call to **maximum 25 operations** for optimal performance.\n- For larger designs, split work into multiple batch_design calls by logical sections (e.g., screen structure first, then sidebar content, then main content).\n- Avoid creating large operation objects like an insert with multiple descendants. Prefer breaking it down into many separate operations instead.\n- If one of the operations fails, all previously executed operations in that block will be rolled back.\n- Important: always create new binding names for every operation list, DO NOT reuse binding names across operation lists.\n- A list of potential issues will be returned in the response message. Try to fix them in the next batch_design call.\n\n## Working with Component Instances\n\nWhen you insert a component instance and want to modify its descendants:\n\n1. **Update properties** → Use U() with the instance path:\n``` javascript\ncard=I(body, {type: \"ref\", ref: \"CardComp\"})\nU(card+\"/titleText\", {content: \"New Title\"})\n```\n\n2. **Replace a descendant entirely** → R() with the instance path:\n\n``` javascript\ncard=I(body, {type: \"ref\", ref: \"CardComp\"})\nnewTitle=R(card+\"/headerSlot\", {type: \"text\", content: \"Custom Title\"})\n```\n\n3. **Add new children** → Use I() on regular frames or document root:\n\n``` javascript\ncontainer=I(body, {type: \"frame\", layout: \"vertical\"})\nitem=I(container, {type: \"text\", content: \"New item\"})\n```\n\n## Operation list format\n\nYou can create a list of operations in the following syntax:\n\n- Every single operation must follow the Javascript syntax described below.\n- ONLY these operation functions are supported.\n- Every single operation line must be a single operation call with a possible binding assignment and nothing else.\n- For node data, always follow the .pen schema.\n- This parent node will be used for the operations inserted/copied/moved. For these operations defining a parent is REQUIRED.\n- The \"document\" binding is a predefined binding and it references the root node of the document, ONLY use this, when creating screens and container frames. DO NOT create \"document\" as binding name.\n\n## Working with Existing Frames\n\n- Use the frame's ID directly as the parent: `existingFrameId`\n- If you update a frame's layout/placeholder properties, insert children INTO that same frame using its ID\n- To insert into a slot (a non-unique node with overridden children), use the slot's canonicalized path: `instanceId/slotId`\n\n## Using bindings for paths and node ids\n\n- You can use a binding variable name instead of an inline string an operation call\n- If you want to combine it with some other binding or a string use the \"+\" operator\n- IMPORTANT: DO NOT try to Update (U) a node's descendant that you just copied (C), since copying will recreate the descendant nodes and it will assign new IDs to those children nodes.\n\nFor example:\n\n``` javascript\nfoo=I({ type: \"ref\", ref: \"caSd2fv\" })\nU(foo+\"/Csawf3\", {content: \"+240%\"})\nD(foo)\n```\n\nExample - Adding content to existing frame \"MmNEt\":\n\n``` javascript\nU(\"MmNEt\", {placeholder: true, layout: \"horizontal\", gap: 16})\nsidebar=I(\"MmNEt\", {type: \"ref\", ref: \"JRlf7\", width: 240})\ncontent=I(\"MmNEt\", {type: \"frame\", layout: \"vertical\"})\nheader=C(\"A2sa3f\", content, {width: \"fill_container\", height: \"fill_container\"})\n```\n\nExample - Inserting into a slot inside a component instance \"cardInstance\" with slot \"contentSlot\" with a quote inside:\n\n``` javascript\nitem=I(\"cardInstance/contentSlot\", {type: \"text\", content: \"&quot;Example quote in slot content&quot;\"})\n```\n\n### Examples\n\n**Example: Dashboard layout structure (8 ops)**\n\nAdd Sidebar and main content structure to a dashboard frame. Prefer adding components directly into an existing frame.\n\n``` javascript\nsidebar=I(\"29c0s\", {type: \"ref\", ref: \"JRlf7\", x: 0, y: 0, width: 240, height: \"fill_container\"})\nmainContent=I(\"29c0s\", {type: \"frame\", layout: \"vertical\", gap: 24, padding: 32})\nstats=I(mainContent, {type: \"frame\", layout: \"vertical\", gap: 16})\ncard1=I(stats, {type: \"ref\", ref: \"QMBKc\", width: \"fill_container\", height: 120})\ncard2=I(stats, {type: \"ref\", ref: \"QMBKc\", width: \"fill_container\", height: 120})\ncard3=I(stats, {type: \"ref\", ref: \"QMBKc\", width: \"fill_container\", height: 120})\nU(\"FVge3x/vdS2egl\", {width: \"fill_container\", height: \"fill_container\"})\nU(\"FVge3x/gDsgE6S\", {content: \"Submit\"})\n```\n\n**Example: Form inputs section (8 ops)**\n\nAdd form inputs with labels to an existing content area.\n\n``` javascript\nlabel1=I(\"mainContent\", {type: \"ref\", ref: \"NKYzH\"})\nU(label1+\"/ZopUS/jEYMs\", {content: \"First Name\"})\ninput1=I(\"mainContent\", {type: \"ref\", ref: \"FmgD2\", width: \"fill_container\"})\nU(input1+\"/CvD2R\", {content: \"First Name\"})\ninput2=I(\"mainContent\", {type: \"ref\", ref: \"FmgD2\", width: \"fill_container\"})\nU(input2+\"/CvD2R\", {content: \"Last Name\"})\ncontact=R(\"FmgD2/vfRs3a\", {ref: \"1YtpE\", type: \"ref\", width: \"fill_container\"})\nU(contact+\"/oknii\", {content: \"Full Name\"})\n```\n\nThis example inserts a component directly into an existing frame.\n\n``` javascript\nsidebar=I(\"d3902\", {type: \"ref\", ref: \"JRlf7\", x: 0, y: 0, width: 240, height: \"fill_container(500)\"})\n```\n\nCopying a non-reusable frame (e.g., duplicating a screen). This copies the dashboard created above and tweaks it as another variation:\n\n``` javascript\ndashboardV2=C(\"Xk9f2\", document, {name: \"Dashboard V2\", positionDirection: \"right\", positionPadding: 100})\nD(dashboardV2+\"/sidebar\")\nU(dashboardV2+\"/stats/card1\", {fill: \"#E8F5E9\"})\nU(dashboardV2+\"/stats/card2\", {fill: \"#FFF3E0\"})\nnewContent=R(dashboardV2+\"/stats/card3\", {\"type\": \"text\", \"content\": \"New Content\"})\n```\n\nTo insert a component instance with their children overridden:\n\n``` javascript\nfoo=I(\"pcCAt2f\", {\"type\": \"ref\", \"ref\": \"CMXky\", \"children\": [{\"type\": \"text\", \"content\": \"0 m/h\", \"fontSize\": 14}]})\n```\n\n### Response\n\nA list of created nodes with children (depth 2).\n\n### Insert (I)\n\nDefinition: insertedNodeId=I(parent: string, nodeData: Schema.Child)\n\n- Important: \"id\"s are always created automatically for nodes, never create \"id\" properties in new node data.\n- An insert can only be a single node, if you want to add children to it, use bindings and do it in a new Inert (I) operation.\n- When working with components (reusable: true), insert their instances as refs with their properties overridden. If you want to override properties of subcomponents use subsequent Update (U) operations.\n- Use the Replace (R) operation to override children inside a component instance, e.g. 'R(\"myInstance/childId\", {\"type\": \"text\", ...})'\n- Returns the inserted node ID as string\n\n### Copy (C)\n\nDefinition: copiedNodeId=C(path: string, parent: string, copyNodeData: Schema.Child & { positionPadding?: number; positionDirection?: string })\n\n- When copying a node and modifying its descendants, you MUST use the \"descendants\" property in the Copy operation itself. DO NOT use separate Update operations for descendants of copied nodes, as this will fail due to ID mismatches. The copied node and its descendants receive new IDs, so Update operations referencing the original descendant IDs will fail.\n- \"path\": The ID of the existing node to copy. If you want to customize some properties of the copied node, just add them next to the 'path' property. If you want to customize nested nodes _under_ the copied one, use the same kind of 'descendants' map that 'ref' nodes use!\n- \"descendants\": Optional, used for components. An object which keys are node IDs or paths to descendant objects inside the component used to customize the properties of descendant objects.\n- Example of correct usage: 'label1=C(\"NKYzH\", container, {\"descendants\": {\"ZopUS/jEYMs\": { \"content\": \"First Name\" }}})'\n- \"positionPadding\": The minimum padding distance from other element when positioning if needed.\n- \"positionDirection\": The direction to search for empty space relative to the node, to position the copied node if needed. Possible values are: \"top\", \"right\", \"bottom\", \"left\"\n- Copying a reusable node creates a connected instance (a 'ref' node).\n- Returns the copied node ID as string\n\n### Update (U)\n\nDefinition: U(path: string, updateData: Schema.Child)\n\n- Update the properties of existing nodes, without listing their children.\n- Use this operation to create small incremental updates to the properties of existing nodes.\n- DO NOT use this operation to update the node's \"children\", use Replace (R) operation for that.\n- This operation CANNOT change the 'id', 'type' or 'ref' properties of any node!\n- \"path\": The valid ID of the existing node to update (DO NOT use bindings in \"path\"), or if you want to update a nested node inside a component, use the ID of the nested node must be prefixed with the ID of the component instance and a slash (/). E.g. consider this component:\n{\n\t\"id\": \"button\",\n\t\"type\": \"frame\",\n\t\"reusable\": true,\n\t\"children\": [{ \"id\": \"container\", \"type\": \"frame\", \"children\": [{\"id\": \"label\", \"type\": \"text\", \"content\": \"Button text\"}] }]\n}\nAnd then an instance of this component like this: {\"id\": \"submit-button\", \"type\": \"ref\", \"ref\": \"button\"}\nThe label text of 'submit-button' can be changed by passing the following as the \"nodes\" parameter:\n\n``` javascript\nU(\"submit-button/label\", {content: \"Submit\"})\n```\n\nThis slash-separated instance ID scheme works for any number of nesting levels, not just two.\n\n- \"updateData\": The node data to update\n\n### Replace (R)\n\nDefinition: replacedNodeId=R(path: string, nodeData: Schema.Child)\n\n- Replace a node in the .pen file.\n- This tool is ideal for swapping out parts of a component instance with new nodes.\n- Important: \"id\"s are always created automatically for nodes, never create \"id\" properties in new node data.\n- Returns the replaced node ID as string\n- \"path\": The path of the node which will be replaced\n- \"nodeData\": The properties of the new node\n\n### Move (M)\n\nDefinition: M(nodeId: string, parent: string | undefined, index?: number)\n\n- Move a nodes to a different location in the node tree in a .pen file.\n- \"path\": The id of the moved node. ALWAYS use a valid node id, NOT a path or binding.\n- \"parent\": Optional parent node Id or binding\n- \"index\": Optional new position of the moved node among its siblings. If omitted, the node is placed at the end.\n\n### Delete (D)\n\nDefinition: D(nodeId: string)\n\n- Delete a node from a .pen file.\n- \"nodeId\": The ID of the node to delete. ALWAYS use a valid node id, NOT a path or binding.\n\n### Generate/Get Stock Image (G)\n\nDefinition: G(nodeId: string, type: \"ai\" | \"stock\", prompt: string)\n\n- IMPORTANT: There is NO \"image\" node type! Images are applied as FILLS to frame/rectangle nodes.\n- Do not generate random URLs for image fills, always use the G operation to get an image from a stock or AI service.\n- To display an image: first Insert a frame or rectangle, then use G to apply the image as a fill.\n- \"nodeId\": The ID of the frame/rectangle node to apply the image fill to. Can be a valid node ID or a binding name (e.g., \"myFrame\") created earlier in this operation list.\n- \"type\": Either \"ai\" for AI-generated images or \"stock\" for stock photos from Unsplash.\n- \"prompt\": The text prompt describing the image to generate (for \"ai\" type) or search keywords for finding the stock image (for \"stock\" type).\n\nExamples:\n- First create a frame, then apply an ai generated image:\n\n``` javascript\nheroImg=I(\"parentId\", {\"type\": \"frame\", \"name\": \"Hero Image\", \"width\": 400, height: 300})\nG(heroImg, \"ai\", \"modern office workspace bright\")\n```\n\n- AI-generated image on existing node:\n\n``` javascript\nG(\"logo-frame\", \"ai\", \"minimalist coffee shop logo, flat design\")\n```\n\n## Key Points\n\n- Every Insert (I), Copy (C) and Replace (R) operation MUST have a binding name. To reference a parent node in later operations, use the binding name from an earlier Insert, Copy or Replace operation in the same operation list.\n- Not all bindings need to be used as parents later - it's okay to have \"unused\" bindings. The requirement exists to enforce deliberate structure.\n- Bindings only work within the same batch_design call for parent references\n- Operations execute sequentially; on error, all operations in the list will be rolled back.\n- The 'placeholder:true' property marks a frame as a container for child content. Use that frame's ID as the parent target for operations that add children.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "operations": {
+          "description": "List of insert/copy/update/replace/move/delete/image operations to execute based on the format in the tool description. Aim for maximum 25 operations per call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath",
+        "operations"
+      ]
+    },
+    "name": "batch_design"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Retrieve nodes by searching for matching patterns and by node ids in batches.\n\n- IMPORTANT: Combine multiple search patterns and node ID searches into one call.\n- IMPORTANT: When you want to perform multiple searches and node id reads after another, combine them into one call.\n- If neither patterns nor nodeIds is specified, returns the top-level children of the document.\n- When using design system components, AVOID reading each component one-by-one. Instead list all of the available components in a single tool call.\n- To list components of a design system, search for reusable nodes inside the design systems frame.\n- Use this tool in the beginning to list components of a design system or design kit to understand its available components.\n- This tool will return the searched nodes and its direct children. Use searchDepth to define how many levels to search in.\n- Be careful using readDepth > 3, because it can return large amounts of data overflowing the context. Prefer using low numbers.\n- Path geometry is abbreviated by default; set includePathGeometry=true for full geometry data\n- Set resolveVariables=true to see computed values instead of variable references\n\nTraversing large documents:\n1. Start by reading top-level nodes, or nodes you already know the IDs of to understand overall structure\n2. Decide if the nodes you have already read are sufficient for your task\n2. If you need more data and you see \"...\" for children, make new read calls with those specific child IDs\n\n## Example\n\nTo search for the reusable components in the design system:\n{\n  \"filePath\": \"designs/forms.pen\",\n  \"patterns\": [{ \"reusable\": true }],\n  \"readDepth\": 2,\n  \"searchDepth\": 3\n}\n",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "includePathGeometry": {
+          "description": "By default the `geometry` property of `path` nodes is replaced with \"...\". To see the path geometry in full, pass `true` for this flag.",
+          "type": "boolean"
+        },
+        "nodeIds": {
+          "description": "Array of node IDs to read. Prefer reading multiple node IDs to read at once rather than separately.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "parentId": {
+          "description": "Parent node ID to search within. If omitted, will search the whole document.",
+          "type": "string"
+        },
+        "patterns": {
+          "description": "List of search patterns",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "description": "Only return nodes whose name matches this Regex pattern",
+                "type": "string"
+              },
+              "reusable": {
+                "description": "Only return nodes with `reusable` equal to this value",
+                "type": "boolean"
+              },
+              "type": {
+                "description": "Only return nodes with this type",
+                "enum": [
+                  "frame",
+                  "group",
+                  "rectangle",
+                  "ellipse",
+                  "line",
+                  "polygon",
+                  "path",
+                  "text",
+                  "connection",
+                  "note",
+                  "icon_font",
+                  "image",
+                  "ref"
+                ],
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "readDepth": {
+          "description": "Limit how deep to descend in the node tree for a read node. If omitted, set to 1, meaning only the node itself is returned and its direct children. When maxDepth is reached, omitted children are replaced with \"...\".",
+          "type": "number"
+        },
+        "resolveInstances": {
+          "description": "If you pass `true` for this flag, then `ref` nodes won't appear in the output; component instances will be fully expanded. This can be used to examine the full structure of a component instance. The `id`s of resolved shadow nodes will be their full ID paths, which can be used to customize them via update_properties.",
+          "type": "boolean"
+        },
+        "resolveVariables": {
+          "description": "Node properties can be bound to variables, whose value depends on the theme settings of the node. If you want to see the currently visible values of such properties, pass `true` for this flag.",
+          "type": "boolean"
+        },
+        "searchDepth": {
+          "description": "Limit how deep the search should descend in the node tree. If omitted, the search is unlimited in depth.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "filePath"
+      ]
+    },
+    "name": "batch_get"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Find empty space in a .pen file for a given direction and desired size.\n\nIf nodeId is provided, finds space around that specific node.\nIf nodeId is omitted, finds space around the entire canvas content.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "description": "The direction to search for empty space relative to the node",
+          "enum": [
+            "top",
+            "right",
+            "bottom",
+            "left"
+          ],
+          "type": "string"
+        },
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "height": {
+          "description": "The height of the required empty space",
+          "type": "number"
+        },
+        "nodeId": {
+          "description": "Optional starting point node ID to find space around. If omitted, the empty space will be found around the canvas content.",
+          "type": "string"
+        },
+        "padding": {
+          "description": "The minimum padding distance from other element",
+          "type": "number"
+        },
+        "width": {
+          "description": "The width of the required empty space",
+          "type": "number"
+        }
+      },
+      "required": [
+        "filePath",
+        "width",
+        "height",
+        "padding",
+        "direction"
+      ]
+    },
+    "name": "find_empty_space_on_canvas"
+  },
+  {
+    "annotations": {
+      "title": "Get Editor State",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get the currently active canvas editor, the current user selection and other essential design information to get started on a design task.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "include_schema": {
+          "description": "Set this flag to true if you want the .pen file schema to be included. If you are aware of the .pen file schema already, set this to false",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "include_schema"
+      ]
+    },
+    "name": "get_editor_state"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "This tool returns the design guidelines and rules for working with .pen files.\n\nUsage:\n- IMPORTANT: Follow the guidelines and design rules to solve your design tasks.\n- Call this tool multiple times with different topics to retrieve the relevant guidelines based on what you will work on next.\n- This tool provides essential information about the .pen file schema, components, layout, positioning, typography, and other design rules.\n\nAvailable topics:\n- code: Coding guidelines to generate code from .pen files. Use this tool when your task involves generating code or implementations from .pen files.\n- table: Guidelines to work with tables in .pen files. Use this when asked to insert, update or move tables or dashboards.\n- tailwind: Tailwind v4 specific implementation guidelines. Use when implementing designs with Tailwind CSS.\n- landing-page: Guidelines for designing high-conversion landing page websites from scratch. Use this when asked to design landing pages, websites, or promotional web pages.\n- mobile-app: Guidelines for designing mobile apps from scratch. Use this when asked to design mobile apps or mobile websites.\n- web-app: Guidelines for designing web apps from scratch. Use this when asked to design web apps or web websites.\n- slides: Guidelines for designing slides for presentations. Use this when asked to design slides for presentations.\n- design-system: Guidelines for composing screens and dashboards using design system components. Use this when building SaaS apps, dashboards, or screens with existing reusable components.\n",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "description": "A topic to return the design guidelines for. You can only pick a single one at a time.",
+          "enum": [
+            "code",
+            "table",
+            "tailwind",
+            "landing-page",
+            "design-system"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic"
+      ]
+    },
+    "name": "get_guidelines"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "\nThis tool returns a screenshot of a node in a .pen file.\n\nUsage:\n- IMPORTANT: Always analyze the returned screenshot image to make sure that the generated result looks correct, satisfies the design requirements and doesn't contain any visual errors, glitches or misalignment.\n- IMPORTANT: Think carefully after you received a screenshot to detect any possible design issues or inconsistencies in the generated design.\n- Use this tool to get a screenshot image representation of specific nodes, frames or other elements based on their IDs. This is useful to verify and compare the generated layout with the original design.\n- You can also use this tool to check elements and design system components, to verify their layout and look.\n",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "The ID of the node to get a screenshot of",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath",
+        "nodeId"
+      ]
+    },
+    "name": "get_screenshot"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "This tool returns a style guide for design inspiration based on a set of tags.\n\nUsage:\n- USE for any design task that benefits from creative direction or visual inspiration\n- USE when creating landing pages, marketing sites, dashboards, or app screens\n- USE when the user asks for a specific aesthetic, style, or mood\n- USE when designing from scratch, on a blank canvas, or exploring new directions\n- USE when remixing, restyling, or creating variations\n- Consider SKIPPING only when the task is purely compositional (e.g., \"add a button here\") with an existing design system\n- Try to include mobile, website, or webapp tag if possible\n- ONLY use tags received from the earlier \"get_style_guide_tags\" call.\n- If a style guide name is explicitly provided, just pass the name to this tool to use it to retrieve a specific style guide by name instead of searching by tags.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Optional style guide name to retrieve a specific style guide by name instead of searching by tags",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Optional: Specify 5-10 tags best fitting for the current design task based on the available set of tags returned by \"get_style_guide_tags\"",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      }
+    },
+    "name": "get_style_guide"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "This tool returns all the available style guide tags available.\n\nUsage:\n- USE for any design task that benefits from creative direction or visual inspiration\n- USE when creating landing pages, marketing sites, dashboards, or app screens\n- USE when the user asks for a specific aesthetic, style, or mood\n- USE when designing from scratch or on a blank canvas\n- USE when remixing, restyling, or exploring variations\n- Consider SKIPPING only when the task is purely compositional (e.g., \"add a button here\") with an existing design system\n- Call this tool first, then use the tags or style guide name in \"get_style_guide\".",
+    "inputSchema": {
+      "type": "object"
+    },
+    "name": "get_style_guide_tags"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Get the variables and themes defined in this .pen file.\n\n- Use the result of this tool to create global CSS rules to use in a codebase.\n- When generating code from a design, use this tool to get the global styling rules associated with the design.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath"
+      ]
+    },
+    "name": "get_variables"
+  },
+  {
+    "annotations": {
+      "title": "Open Document",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Use this tool in the following two scenarios ONLY:\n- if there is no active editor opened currently, pass \"new\" to open new document or\n- if user requests to open a specific .pen file, pass the absolute file path to open it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePathOrTemplate": {
+          "description": "File path to an existing .pen file, OR 'new' for a new document. No other template names are valid.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePathOrTemplate"
+      ]
+    },
+    "name": "open_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Recursively replace all matching properties on the entire node tree on provided parent ids.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "parents": {
+          "description": "IDs of all parent nodes to search",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "properties": {
+          "description": "List of replacements for each property.",
+          "properties": {
+            "cornerRadius": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  "to": {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "fillColor": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "fontFamily": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "fontSize": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "number"
+                  },
+                  "to": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "fontWeight": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "gap": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "number"
+                  },
+                  "to": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "padding": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "number"
+                  },
+                  "to": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "strokeColor": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "strokeThickness": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "number"
+                  },
+                  "to": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "textColor": {
+              "items": {
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "filePath",
+        "parents",
+        "properties"
+      ]
+    },
+    "name": "replace_all_matching_properties"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Recursively search for all unique properties on the entire node tree on provided parent ids.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "parents": {
+          "description": "IDs of all parent nodes to search",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "properties": {
+          "description": "List of properties to search for",
+          "items": {
+            "enum": [
+              "fillColor",
+              "textColor",
+              "strokeColor",
+              "strokeThickness",
+              "cornerRadius",
+              "padding",
+              "gap",
+              "fontSize",
+              "fontFamily",
+              "fontWeight"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "filePath",
+        "parents",
+        "properties"
+      ]
+    },
+    "name": "search_all_unique_properties"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Update the variables and themes defined in this .pen file.\n\n- Don't specify themes separately! If a variable is using theming, theme axes and values that aren't yet present in the document will be automatically registered.\n- IMPORTANT: variable names are arbitrary strings. They don't have to begin with a dollar sign!",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "replace": {
+          "description": "By default, the variables are merged into the document's existing variable definitions. If you want to completely replace the document's existing variable definitions, pass `true` for this flag.",
+          "type": "boolean"
+        },
+        "variables": {
+          "description": "Follow the variable definition in the .pen file schema. If you are not familiar with the .pen file schema, you can retrieve it by getting the `general` guidelines.",
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "filePath",
+        "variables"
+      ]
+    },
+    "name": "set_variables"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "description": "Check the current layout structure of an .pen file.\n\n- Be careful with omitting the maxDepth parameter, as large maxDepth values can result in a lot of data.\n- If you're only interested in overlapping elements, clipped elements, etc. then use the problemsOnly parameter.\n\nExample:\n- maxDepth=0 means only the top level nodes layout will be returned. Useful for finding space for a new frame on the canvas.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "description": "An optional file path to access a .pen file.",
+          "type": "string"
+        },
+        "maxDepth": {
+          "description": "Limit how deep to descend in the node tree. If omitted, the search is limited to the node and its direct children. When maxDepth is reached, omitted children are replaced with \"...\". Unlimited depth can result in a lot of data, prefer specifying a maxDepth.",
+          "type": "number"
+        },
+        "parentId": {
+          "description": "Only return the layout rectangles in this node's subtree. If omitted returns the layout of the whole document.",
+          "type": "string"
+        },
+        "problemsOnly": {
+          "description": "Only return nodes that have some kind of problem with their layout, e.g. they are clipped by their parents. If omitted, the value is `false`.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "filePath"
+      ]
+    },
+    "name": "snapshot_layout"
+  }
+]

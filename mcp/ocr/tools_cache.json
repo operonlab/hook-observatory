@@ -1,0 +1,64 @@
+[
+  {
+    "name": "ocr_extract",
+    "description": "Extract text from image or PDF. Returns full text and block-level details.",
+    "inputSchema": {
+      "properties": {
+        "file_path": {
+          "title": "File Path",
+          "type": "string"
+        },
+        "languages": {
+          "default": "zh-Hant,en",
+          "title": "Languages",
+          "type": "string"
+        },
+        "engine": {
+          "default": "apple",
+          "title": "Engine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_path"
+      ],
+      "title": "ocr_extractArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "ocr_extractOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "ocr_engines",
+    "description": "List available OCR engines (e.g. Apple Vision, Tesseract) with supported languages and capabilities.",
+    "inputSchema": {
+      "properties": {},
+      "title": "ocr_enginesArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "ocr_enginesOutput",
+      "type": "object"
+    }
+  }
+]

@@ -1,0 +1,417 @@
+[
+  {
+    "name": "docvault_upload",
+    "description": "上傳文件到 DocVault。tags 用逗號分隔。",
+    "inputSchema": {
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "source_type": {
+          "default": "markdown",
+          "title": "Source Type",
+          "type": "string"
+        },
+        "source_uri": {
+          "default": "",
+          "title": "Source Uri",
+          "type": "string"
+        },
+        "tags": {
+          "default": "",
+          "title": "Tags",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "content_hash"
+      ],
+      "title": "docvault_uploadArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_uploadOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_search",
+    "description": "語義搜尋文件 chunks。",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "top_k": {
+          "default": 10,
+          "title": "Top K",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "docvault_searchArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_searchOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_qa",
+    "description": "問答(Pipeline A — 事實回答 + citation)。",
+    "inputSchema": {
+      "properties": {
+        "question": {
+          "title": "Question",
+          "type": "string"
+        },
+        "domain": {
+          "default": "default",
+          "title": "Domain",
+          "type": "string"
+        },
+        "top_k": {
+          "default": 6,
+          "title": "Top K",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "title": "docvault_qaArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_qaOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_qa_mixed",
+    "description": "混合查詢(Pipeline C — memvault ∥ docvault merge)。",
+    "inputSchema": {
+      "properties": {
+        "question": {
+          "title": "Question",
+          "type": "string"
+        },
+        "domain": {
+          "default": "default",
+          "title": "Domain",
+          "type": "string"
+        },
+        "top_k": {
+          "default": 6,
+          "title": "Top K",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "title": "docvault_qa_mixedArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_qa_mixedOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_info",
+    "description": "取得文件詳細資訊 + 版本歷史。",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "title": "docvault_infoArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_infoOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_relations",
+    "description": "查看文件的關係圖(cites, extends, contradicts, supersedes)。",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "title": "docvault_relationsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_relationsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_contradictions",
+    "description": "偵測指定文件的矛盾關係。",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "title": "docvault_contradictionsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_contradictionsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_gaps",
+    "description": "列出覆蓋缺口(CRAG INCORRECT 時自動建立)。",
+    "inputSchema": {
+      "properties": {
+        "status": {
+          "default": "pending",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "docvault_gapsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_gapsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_supersede",
+    "description": "更新文件版本(content_hash 不同 → 新版本, 舊版 superseded)。",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "new_content_hash": {
+          "title": "New Content Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "new_content_hash"
+      ],
+      "title": "docvault_supersedeArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_supersedeOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_stats",
+    "description": "統計概覽(文件數, chunks, QA logs, coverage gaps)。",
+    "inputSchema": {
+      "properties": {},
+      "title": "docvault_statsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_statsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_feedback",
+    "description": "對 QA 結果提供反饋(positive/negative)。",
+    "inputSchema": {
+      "properties": {
+        "qa_log_id": {
+          "title": "Qa Log Id",
+          "type": "string"
+        },
+        "feedback": {
+          "default": "positive",
+          "title": "Feedback",
+          "type": "string"
+        }
+      },
+      "required": [
+        "qa_log_id"
+      ],
+      "title": "docvault_feedbackArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_feedbackOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "docvault_bulk_import",
+    "description": "批量匯入目錄中的文件。tags 用逗號分隔。",
+    "inputSchema": {
+      "properties": {
+        "directory": {
+          "title": "Directory",
+          "type": "string"
+        },
+        "source_type": {
+          "default": "markdown",
+          "title": "Source Type",
+          "type": "string"
+        },
+        "tags": {
+          "default": "",
+          "title": "Tags",
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory"
+      ],
+      "title": "docvault_bulk_importArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "docvault_bulk_importOutput",
+      "type": "object"
+    }
+  }
+]

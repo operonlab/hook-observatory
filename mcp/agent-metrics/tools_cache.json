@@ -1,0 +1,393 @@
+[
+  {
+    "name": "maestro_plan",
+    "description": "Analyze a task and return recommended orchestration pattern, complexity, categories, and phases. No execution.",
+    "inputSchema": {
+      "properties": {
+        "task": {
+          "title": "Task",
+          "type": "string"
+        },
+        "budget": {
+          "default": "balanced",
+          "title": "Budget",
+          "type": "string"
+        },
+        "pattern": {
+          "default": "",
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task"
+      ],
+      "title": "maestro_planArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "maestro_planOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "maestro_run",
+    "description": "Execute a dispatch: analyze task → route to CLI(s) → run agents → return report. Long-running — may take minutes. Use from background agent for true async.",
+    "inputSchema": {
+      "properties": {
+        "task": {
+          "title": "Task",
+          "type": "string"
+        },
+        "budget": {
+          "default": "balanced",
+          "title": "Budget",
+          "type": "string"
+        },
+        "pattern": {
+          "default": "",
+          "title": "Pattern",
+          "type": "string"
+        },
+        "cwd": {
+          "default": "",
+          "title": "Cwd",
+          "type": "string"
+        },
+        "timeout": {
+          "default": 300,
+          "title": "Timeout",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task"
+      ],
+      "title": "maestro_runArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "maestro_runOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "maestro_runs",
+    "description": "List recent dispatch run history with name, pattern, status, duration.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "default": 20,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "maestro_runsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "maestro_runsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "project_list",
+    "description": "List team-task projects with name, mode, status, goal.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "default": 20,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "project_listArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "project_listOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "project_create",
+    "description": "Create a new team-task project. Modes: linear (sequential pipeline), dag (dependency graph), debate (multi-perspective review).",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "mode": {
+          "default": "dag",
+          "title": "Mode",
+          "type": "string"
+        },
+        "goal": {
+          "default": "",
+          "title": "Goal",
+          "type": "string"
+        },
+        "pipeline": {
+          "default": "",
+          "title": "Pipeline",
+          "type": "string"
+        },
+        "workspace": {
+          "default": "",
+          "title": "Workspace",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "project_createArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "project_createOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "project_status",
+    "description": "Get full project state including all tasks/stages and their statuses.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "project_statusArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "project_statusOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "project_add_task",
+    "description": "Add a task to a DAG project with optional dependencies and agent assignment.",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "agent": {
+          "default": "",
+          "title": "Agent",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "deps": {
+          "default": "",
+          "title": "Deps",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "task_id"
+      ],
+      "title": "project_add_taskArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "project_add_taskOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "project_ready",
+    "description": "Get ready-to-dispatch tasks: all dependencies resolved, status pending. DAG mode only.",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "title": "Project",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "title": "project_readyArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "project_readyOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "project_update_task",
+    "description": "Update task status (pending → in-progress → done/failed/skipped).",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "task_id",
+        "status"
+      ],
+      "title": "project_update_taskArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "project_update_taskOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "project_round",
+    "description": "Manage debate rounds: start, submit response, cross-review, synthesize, or check status. Debate mode only.",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "debater_id": {
+          "default": "",
+          "title": "Debater Id",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "action"
+      ],
+      "title": "project_roundArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "project_roundOutput",
+      "type": "object"
+    }
+  }
+]

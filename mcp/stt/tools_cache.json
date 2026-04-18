@@ -1,0 +1,98 @@
+[
+  {
+    "name": "stt_transcribe",
+    "description": "Transcribe audio file to text. Returns text, segments, and metadata.\n\n    operators: Comma-separated preprocessors, e.g. \"denoise,vad-trim,normalize\"\n    ",
+    "inputSchema": {
+      "properties": {
+        "file_path": {
+          "title": "File Path",
+          "type": "string"
+        },
+        "language": {
+          "default": "zh-TW",
+          "title": "Language",
+          "type": "string"
+        },
+        "engine": {
+          "default": "apple",
+          "title": "Engine",
+          "type": "string"
+        },
+        "operators": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operators"
+        }
+      },
+      "required": [
+        "file_path"
+      ],
+      "title": "stt_transcribeArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "stt_transcribeOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "stt_engines",
+    "description": "List available speech-to-text engines (e.g. Apple, Whisper) with supported languages and capabilities.",
+    "inputSchema": {
+      "properties": {},
+      "title": "stt_enginesArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "stt_enginesOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "stt_operators",
+    "description": "List available audio preprocessing operators for STT (e.g. denoise, vad-trim, normalize).",
+    "inputSchema": {
+      "properties": {},
+      "title": "stt_operatorsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "stt_operatorsOutput",
+      "type": "object"
+    }
+  }
+]

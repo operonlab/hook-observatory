@@ -1,0 +1,97 @@
+[
+  {
+    "name": "tts_synthesize",
+    "description": "Synthesize speech from text. Returns audio file path and metadata.",
+    "inputSchema": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "voice": {
+          "default": "default",
+          "title": "Voice",
+          "type": "string"
+        },
+        "speed": {
+          "default": 1.0,
+          "title": "Speed",
+          "type": "number"
+        },
+        "engine": {
+          "default": "apple",
+          "title": "Engine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "tts_synthesizeArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "tts_synthesizeOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "tts_voices",
+    "description": "List available voices for a TTS engine.",
+    "inputSchema": {
+      "properties": {
+        "engine": {
+          "default": "apple",
+          "title": "Engine",
+          "type": "string"
+        }
+      },
+      "title": "tts_voicesArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "tts_voicesOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "tts_engines",
+    "description": "List available text-to-speech engines (e.g. Apple, Edge TTS) with supported languages and capabilities.",
+    "inputSchema": {
+      "properties": {},
+      "title": "tts_enginesArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "tts_enginesOutput",
+      "type": "object"
+    }
+  }
+]

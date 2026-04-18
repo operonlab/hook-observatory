@@ -1,0 +1,51 @@
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls -la\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"pwd\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin main\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push --force origin main\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push --force-with-lease origin feature\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sudo apt update\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf /tmp/old-dir\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf /\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf ~\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"chmod 777 /etc/passwd\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"mkfs.ext4 /dev/sda1\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"dd if=/dev/zero of=/tmp/x bs=1M count=10\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"docker run --privileged image\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh repo delete owner/repo\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"npm publish\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 60 && ssh host nvidia-smi\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hello; ls\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat file.txt | grep foo\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo $(whoami)\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/tmp/test.py\",\"content\":\"print('hello')\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/tmp/test.py\",\"old_string\":\"hello\",\"new_string\":\"world\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/tmp/test.py\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Agent\",\"tool_input\":{\"description\":\"my task\",\"prompt\":\"do X\",\"subagent_type\":\"worker\",\"name\":\"my-task\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Agent\",\"tool_input\":{\"description\":\"task without name\",\"prompt\":\"do X\",\"subagent_type\":\"worker\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Task\",\"tool_input\":{\"description\":\"run build\"}}"}
+{"event":"PreToolUse","input":"{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"frontend-design\"}}"}
+{"event":"PostToolUse","input":"{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/tmp/test.py\"},\"tool_response\":{\"success\":true}}"}
+{"event":"PostToolUse","input":"{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/tmp/test.ts\"}}"}
+{"event":"PostToolUse","input":"{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m 'msg'\"}}"}
+{"event":"PostToolUse","input":"{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"memvault\"}}"}
+{"event":"PostToolUse","input":"{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/tmp/a.txt\"}}"}
+{"event":"PostToolUse","input":"{\"tool_name\":\"ExitPlanMode\",\"tool_input\":{\"plan\":\"my plan\"}}"}
+{"event":"Stop","input":"{\"session_id\":\"abc123\",\"stop_hook_active\":false}"}
+{"event":"Stop","input":"{\"session_id\":\"xyz789\"}"}
+{"event":"Stop","input":"{}"}
+{"event":"Notification","input":"{\"session_id\":\"abc123\",\"message\":\"test\"}"}
+{"event":"Notification","input":"{}"}
+{"event":"SessionStart","input":"{\"session_id\":\"new-session\",\"source\":\"startup\"}"}
+{"event":"SessionStart","input":"{\"session_id\":\"resumed\",\"source\":\"resume\"}"}
+{"event":"SessionEnd","input":"{\"session_id\":\"abc123\",\"transcript_path\":\"/nonexistent/tr.jsonl\"}"}
+{"event":"SessionEnd","input":"{}"}
+{"event":"UserPromptSubmit","input":"{\"session_id\":\"abc123\",\"prompt\":\"hello\"}"}
+{"event":"UserPromptSubmit","input":"{\"session_id\":\"abc123\",\"prompt\":\"test prompt\"}"}
+{"event":"SubagentStart","input":"{\"session_id\":\"sa1\",\"agent_type\":\"worker\",\"agent_name\":\"test\"}"}
+{"event":"SubagentStop","input":"{\"session_id\":\"sa1\",\"agent_type\":\"worker\"}"}
+{"event":"PreCompact","input":"{\"session_id\":\"abc\"}"}
+{"event":"PreToolUse","input":""}
+{"event":"PreToolUse","input":"{}"}
+{"event":"PreToolUse","input":"not-json"}
+{"event":"","input":"{}"}

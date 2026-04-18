@@ -13,3 +13,35 @@ tmux-auto() {
     *)      echo "Current: ${$(cat "$mode_file" 2>/dev/null):-always}"; echo "Usage: tmux-auto <always|once|off>" ;;
   esac
 }
+
+# ── 自動啟動邏輯 ──
+# 讀 mode file 決定是否 exec tmux。由 init.sh 在 interactive shell 啟動時觸發。
+_tmux_autostart_maybe() {
+  # 防嵌套 / 非 interactive / ssh 連線一律 skip
+  [ -n "$TMUX" ] && return 0
+  [[ ! -o interactive ]] && return 0
+  [ -n "$SSH_CONNECTION" ] && return 0
+  command -v tmux >/dev/null 2>&1 || return 0
+
+  local mode_file="$HOME/.config/tmux-autostart-mode"
+  local mode="$(cat "$mode_file" 2>/dev/null || echo always)"
+
+  case "$mode" in
+    off)    return 0 ;;
+    once)
+      # 每次開機只在第一個 interactive shell 進 tmux
+      # 抓第一個 >=10 位數字（epoch seconds），避開 usec 的 6 位數值
+      local boot_sec
+      boot_sec=$(sysctl -n kern.boottime 2>/dev/null | grep -oE '[0-9]{10,}' | head -1)
+      local sentinel="/tmp/tmux-autostart-boot-${boot_sec:-0}"
+      [ -f "$sentinel" ] && return 0
+      touch "$sentinel" 2>/dev/null
+      ;;
+    always) ;;
+    *)      return 0 ;;
+  esac
+
+  exec tmux new-session -A -s default
+}
+_tmux_autostart_maybe
+unset -f _tmux_autostart_maybe
