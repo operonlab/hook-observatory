@@ -1,0 +1,11 @@
+/Users/joneshong/workshop/.worktrees/refactor/sentinel-rust/stations/sentinel-rs/target/release/deps/socket2-19b281f1bf46eb7a.d: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockaddr.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/socket.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockref.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sys/unix.rs
+
+/Users/joneshong/workshop/.worktrees/refactor/sentinel-rust/stations/sentinel-rs/target/release/deps/libsocket2-19b281f1bf46eb7a.rlib: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockaddr.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/socket.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockref.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sys/unix.rs
+
+/Users/joneshong/workshop/.worktrees/refactor/sentinel-rust/stations/sentinel-rs/target/release/deps/libsocket2-19b281f1bf46eb7a.rmeta: /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/lib.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockaddr.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/socket.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockref.rs /Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sys/unix.rs
+
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/lib.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockaddr.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/socket.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sockref.rs:
+/Users/joneshong/.cargo/registry/src/github.com-25cdd57fae9f0462/socket2-0.6.3/src/sys/unix.rs:
