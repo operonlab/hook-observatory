@@ -120,9 +120,22 @@ impl InterventionEngine {
             t.state = if success { State::Healthy } else { State::Escalated };
             t.repair_pane = None;
             t.repair_started_at = 0.0;
+            t.incident_id = None;
             if success {
                 t.first_failure_at = 0.0;
             }
+        }
+    }
+
+    pub fn mark_notified(&self, service: &str) {
+        if let Some(mut t) = self.trackers.get_mut(service) {
+            t.last_notified_at = now_epoch();
+        }
+    }
+
+    pub fn set_incident_id(&self, service: &str, id: Option<String>) {
+        if let Some(mut t) = self.trackers.get_mut(service) {
+            t.incident_id = id;
         }
     }
 

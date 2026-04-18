@@ -4,6 +4,7 @@ mod db;
 mod error;
 mod models;
 mod notify;
+mod prompt_templates;
 mod push;
 mod remediation;
 mod routes;
@@ -58,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("db migrated");
 
     let engine = Arc::new(InterventionEngine::new(cfg.clone()));
-    let remediator = Arc::new(remediation::Remediator::new(engine.clone(), pool.clone()));
+    let remediator = Arc::new(remediation::Remediator::new(engine.clone(), pool.clone(), cfg.clone()));
     let sse_hub = sse::SseHub::new(256);
     let token = CancellationToken::new();
 

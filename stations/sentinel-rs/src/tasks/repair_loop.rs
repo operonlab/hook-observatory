@@ -21,12 +21,17 @@ pub async fn run(
                 return;
             }
             _ = ticker.tick() => {
+                // 1. Resolve pending REPAIRING jobs (Layer 3 signal file check)
+                remediator.check_pending_repairs().await;
+
+                // 2. Dispatch fresh INTERVENING services
                 let candidates: Vec<String> = engine
                     .all()
                     .into_iter()
                     .filter(|t| t.state == State::Intervening)
                     .filter(|t| {
-                        now_epoch() - t.last_notified_at >= cooldown_sec as f64
+                        t.last_notified_at == 0.0
+                            || (now_epoch() - t.last_notified_at) >= cooldown_sec as f64
                     })
                     .map(|t| t.service)
                     .collect();
