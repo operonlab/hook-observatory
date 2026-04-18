@@ -1,17 +1,8 @@
-//! Integration smoke test: starts the full app and exercises real endpoints.
+//! Integration smoke test: exercises real endpoints against a running service.
 //!
-//! These tests require no mocks — they bind a real TCP port, run a real
-//! axum router, persist to a real tempfile SQLite DB, and call real HTTP.
-
-use sentinel_rs::*;
-
-#[path = "../src/config.rs"]
-mod config_mod;
-
-// The smoke test exercises the binary via integration — we don't import
-// internals here. Instead we shell out to the running service (tests assume
-// `cargo run` is active on :4102). See scripts/parity_check.sh for the full
-// parity suite.
+//! These tests require no mocks. They skip gracefully if sentinel-rs
+//! is not running on :4102. For the full comparison suite see
+//! scripts/parity_check.sh.
 
 #[tokio::test]
 async fn endpoint_health_returns_healthy() {
@@ -44,7 +35,7 @@ async fn endpoint_status_has_expected_shape() {
         .await
     {
         Ok(r) => r,
-        Err(_) => return, // skip if not running
+        Err(_) => return,
     };
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
