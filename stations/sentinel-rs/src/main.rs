@@ -3,15 +3,19 @@ mod config;
 mod db;
 mod error;
 mod models;
+mod notify;
+mod push;
 mod remediation;
+mod routes;
 mod sse;
 mod state;
 mod tasks;
 
-use axum::extract::{Path, State};
-use axum::{routing::get, Json, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use clap::Parser;
-use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -27,11 +31,11 @@ struct Cli {
 }
 
 #[derive(Clone)]
-struct AppState {
-    cfg: Arc<Config>,
-    pool: sqlx::SqlitePool,
-    engine: Arc<InterventionEngine>,
-    sse: sse::SseHub,
+pub struct AppState {
+    pub cfg: Arc<Config>,
+    pub pool: sqlx::SqlitePool,
+    pub engine: Arc<InterventionEngine>,
+    pub sse: sse::SseHub,
 }
 
 #[tokio::main]
@@ -58,7 +62,6 @@ async fn main() -> anyhow::Result<()> {
     let sse_hub = sse::SseHub::new(256);
     let token = CancellationToken::new();
 
-    // Spawn background tasks
     let light_handle = {
         let e = engine.clone();
         let p = pool.clone();
@@ -93,9 +96,21 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let app = Router::new()
-        .route("/api/sentinel/health", get(health))
-        .route("/api/sentinel/status", get(status_all))
-        .route("/api/sentinel/status/:service", get(status_one))
+        .route("/api/sentinel/health", get(routes::health))
+        .route("/api/sentinel/status", get(routes::status_all))
+        .route("/api/sentinel/status/:service", get(routes::status_one))
+        .route("/api/sentinel/notify", post(routes::notify))
+        .route("/api/sentinel/resolve", post(routes::resolve))
+        .route("/api/sentinel/operations", get(routes::operations))
+        .route("/api/sentinel/incidents", get(routes::incidents_list))
+        .route("/api/sentinel/incidents/:id", get(routes::incident_detail))
+        .route("/api/sentinel/uptime", get(routes::uptime))
+        .route("/api/sentinel/subscribe", post(routes::subscribe))
+        .route("/api/sentinel/events", get(routes::sse_events))
+        .route(
+            "/api/sysmon/*subpath",
+            get(routes::sysmon_proxy).post(routes::sysmon_proxy),
+        )
         .with_state(state);
 
     let addr: SocketAddr = format!("{}:{}", cfg.host, cfg.port).parse()?;
@@ -113,44 +128,8 @@ async fn main() -> anyhow::Result<()> {
         tracing::error!("server error: {}", e);
     }
 
-    // Wait tasks to drain
     let _ = tokio::time::timeout(std::time::Duration::from_secs(3), light_handle).await;
     let _ = tokio::time::timeout(std::time::Duration::from_secs(3), repair_handle).await;
     let _ = tokio::time::timeout(std::time::Duration::from_secs(3), purge_handle).await;
     Ok(())
-}
-
-async fn health() -> Json<serde_json::Value> {
-    Json(json!({
-        "status": "healthy",
-        "service": "sentinel-rs",
-        "version": env!("CARGO_PKG_VERSION"),
-    }))
-}
-
-async fn status_all(State(s): State<AppState>) -> Json<serde_json::Value> {
-    Json(tasks::light_loop::build_status_payload(&s.engine))
-}
-
-async fn status_one(
-    State(s): State<AppState>,
-    Path(service): Path<String>,
-) -> Result<Json<serde_json::Value>, error::SentinelError> {
-    let t = s.engine.get_or_create(&service);
-    if t.light_status.is_none() {
-        return Err(error::SentinelError::NotFound(format!(
-            "no data for {}",
-            service
-        )));
-    }
-    Ok(Json(json!({
-        "service": t.service,
-        "state": t.state,
-        "light_status": t.light_status,
-        "response_ms": t.response_ms,
-        "last_light_check": t.last_light_check,
-        "first_failure_at": t.first_failure_at,
-        "agent_id": t.agent_id,
-        "incident_id": t.incident_id,
-    })))
 }
