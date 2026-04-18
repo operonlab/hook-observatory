@@ -116,24 +116,13 @@ SERVICES = [
     },
     {
         "name": "sentinel",
-        "type": "uvicorn",
-        "cmd": (
-            "/Users/joneshong/workshop/stations/sentinel/.venv/bin/python3"
-            f" -m uvicorn main:app --host 127.0.0.1 --port {get_port('sentinel')}"
-        ),
-        "port": get_port("sentinel"),
-        "health": get("sentinel").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/sentinel",
-    },
-    {
-        "name": "sentinel-rs",
         "type": "binary",
         "cmd": (
             "/Users/joneshong/workshop/stations/sentinel-rs/target/release/sentinel-rs"
             " --config /Users/joneshong/workshop/stations/sentinel-rs/config.yaml"
         ),
-        "port": get_port("sentinel-rs"),
-        "health": get("sentinel-rs").health_url,
+        "port": get_port("sentinel"),
+        "health": get("sentinel").health_url,
         "workdir": "/Users/joneshong/workshop/stations/sentinel-rs",
     },
     {

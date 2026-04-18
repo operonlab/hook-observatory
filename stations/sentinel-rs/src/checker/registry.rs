@@ -64,7 +64,7 @@ pub const CHECKS: &[Check] = &[
     Check { name: "anvil", kind: CheckKind::Http, target: "http://127.0.0.1:10301/docs", expect_contains: None, expect_json: None, timeout_sec: 10, group: "external", optional: false },
     Check { name: "blog", kind: CheckKind::Http, target: "http://127.0.0.1:10302/zh/", expect_contains: Some("JonesHong"), expect_json: None, timeout_sec: 10, group: "external", optional: false },
     Check { name: "cronicle", kind: CheckKind::Http, target: "http://127.0.0.1:4105/api/app/ping", expect_contains: None, expect_json: Some(r#"{"code":0}"#), timeout_sec: 10, group: "external", optional: false },
-    Check { name: "sentinel-rs", kind: CheckKind::Http, target: "http://127.0.0.1:4102/api/sentinel/health", expect_contains: None, expect_json: Some(r#"{"status":"healthy"}"#), timeout_sec: 10, group: "system", optional: false },
+    Check { name: "sentinel", kind: CheckKind::Http, target: "http://127.0.0.1:4101/api/sentinel/health", expect_contains: None, expect_json: Some(r#"{"status":"healthy"}"#), timeout_sec: 10, group: "system", optional: false },
 
     // ── AI workers (optional: skipped on connection refused) ──
     Check { name: "stt", kind: CheckKind::Http, target: "http://127.0.0.1:10200/health", expect_contains: None, expect_json: None, timeout_sec: 10, group: "external", optional: true },

@@ -141,13 +141,6 @@ PORTS: list[ServicePort] = [
         nginx_path="/apps/sentinel/",
     ),
     ServicePort(
-        "sentinel-rs",
-        4102,
-        "station-infra",
-        health_path="/api/sentinel/health",
-        env_var="SENTINEL_RS_URL",
-    ),
-    ServicePort(
         "fleet",
         10106,
         "station-infra",
@@ -343,7 +336,6 @@ MIGRATION_MAP: dict[str, int] = {
     "capture-console": 10104,
     "tmux-webui": 10105,
     "sentinel": 4101,
-    "sentinel-rs": 4102,
     "fleet": 10106,
     # Stations: AI & Media
     "stt": 10200,

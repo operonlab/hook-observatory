@@ -1,4 +1,4 @@
-port: 4102
+port: 4101
 host: "127.0.0.1"
 
 database_path: "/opt/homebrew/var/lib/workshop/sentinel.db"
