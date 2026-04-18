@@ -11,6 +11,7 @@ pub const WORKSHOP_SERVICES: &[&str] = &[
     "auto-survey", "capture-console", "anvil", "blog",
     "cronicle", "mcpproxy", "tmux-webui", "fleet",
     "stt", "ocr", "voice-gateway", "translate",
+    "sentinel-rs",
 ];
 
 /// Docker container names keyed by sentinel service name.

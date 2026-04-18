@@ -126,6 +126,17 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/sentinel",
     },
     {
+        "name": "sentinel-rs",
+        "type": "binary",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/sentinel-rs/target/release/sentinel-rs"
+            " --config /Users/joneshong/workshop/stations/sentinel-rs/config.yaml"
+        ),
+        "port": get_port("sentinel-rs"),
+        "health": get("sentinel-rs").health_url,
+        "workdir": "/Users/joneshong/workshop/stations/sentinel-rs",
+    },
+    {
         "name": "system-monitor",
         "type": "uvicorn",
         "cmd": (
