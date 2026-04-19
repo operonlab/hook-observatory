@@ -158,51 +158,41 @@ pub fn activate_line_and_go_to_community(name: &str) -> bool {
 // Get LINE's CGWindowID
 // ---------------------------------------------------------------------------
 
-/// Python one-liner that calls Quartz CGWindowListCopyWindowInfo to get the true
-/// CGWindowNumber (kCGWindowNumber) required by `screencapture -l`.
-/// This is the correct approach mirroring Python line_reader.py:107-118.
-const PYTHON_GET_CG_WID: &str = r#"import Quartz,sys
-ws=Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly|Quartz.kCGWindowListExcludeDesktopElements,Quartz.kCGNullWindowID)
-for w in ws:
-    if w.get('kCGWindowOwnerName')=='LINE' and w.get('kCGWindowName'):
-        print(int(w['kCGWindowNumber']));sys.exit(0)
-sys.exit(1)"#;
+/// Path to the Swift-compiled helper that prints LINE's kCGWindowNumber.
+/// Source: `stations/auto-survey-rs/bin/src/get_cg_wid.swift`
+/// Build:  `stations/auto-survey-rs/bin/build.sh`
+fn get_cg_wid_binary() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("bin")
+        .join("get_cg_wid")
+}
 
-/// Get LINE's CGWindowID using Quartz via Python3 subprocess.
-///
-/// Uses `CGWindowListCopyWindowInfo` → `kCGWindowNumber` — the same approach
-/// as Python `line_reader.py:_get_line_window_id()`. This is the correct
+/// Get LINE's CGWindowID using a small Swift helper that calls
+/// `CGWindowListCopyWindowInfo` → `kCGWindowNumber`. This is the correct
 /// Quartz CGWindowID required by `screencapture -l <wid>`.
 ///
-/// Falls back to `osascript do shell script` if the direct Python call fails.
+/// Mirrors Python `line_reader.py:_get_line_window_id()` but uses a compiled
+/// Swift binary (no Python/pyobjc dependency, ~10ms cold start).
 pub fn get_line_window_id() -> Option<u32> {
-    // Primary: Python3 + Quartz (pyobjc available on macOS)
-    let result = Command::new("/usr/bin/python3")
-        .args(["-c", PYTHON_GET_CG_WID])
-        .output();
+    let binary = get_cg_wid_binary();
+    let out = Command::new(&binary).arg("LINE").output().ok()?;
 
-    if let Ok(out) = result {
-        if out.status.success() {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            if let Some(wid) = stdout.trim().parse::<u32>().ok().filter(|&id| id > 0) {
-                tracing::debug!("CGWindowID via Python3/Quartz: {}", wid);
-                return Some(wid);
-            }
-        } else {
-            tracing::debug!(
-                "python3 CGWindowListCopyWindowInfo failed: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
+    if out.status.success() {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let wid = stdout.trim().parse::<u32>().ok().filter(|&id| id > 0);
+        if let Some(w) = wid {
+            tracing::debug!("CGWindowID via Swift/Quartz: {}", w);
+            return Some(w);
         }
     }
 
-    // Fallback: osascript do shell script wrapping the same Python snippet
-    let osascript_fallback = format!(
-        r#"do shell script "/usr/bin/python3 -c '{}'"#,
-        PYTHON_GET_CG_WID.replace('\'', "\\'")
+    tracing::debug!(
+        "get_cg_wid {:?} failed: status={} stderr={}",
+        binary,
+        out.status,
+        String::from_utf8_lossy(&out.stderr).trim()
     );
-    let out = run_osascript(&osascript_fallback, 10)?;
-    out.trim().parse::<u32>().ok().filter(|&id| id > 0)
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -324,10 +314,44 @@ pub fn crop_message_area(src: &Path) -> Option<PathBuf> {
 // URL extraction helpers
 // ---------------------------------------------------------------------------
 
+/// OCR artifact characters that commonly appear at line ends — typically
+/// Apple Vision misreads the slug tail letter `l` or `I` as pipe `|`,
+/// or adds trailing punctuation that isn't part of the URL.
+fn strip_ocr_line_artifacts(line: &str) -> String {
+    line.trim()
+        .trim_end_matches(|c: char| matches!(c, '|' | '｜' | ' ' | '\t'))
+        .to_string()
+}
+
 /// Extract SurveyCake URLs from raw OCR text.
+///
+/// Performs multi-line reassembly: OCR often splits a URL across 3 lines
+/// (`https://`, `www.surveycake.com/s/`, `SLUG`). We join adjacent lines
+/// when the following line starts with a URL continuation pattern (or is
+/// a plausible slug). Trailing `|` artifacts are stripped before matching
+/// because Apple Vision misreads the letter `l` as pipe.
 pub fn extract_surveycake_urls(ocr_text: &str) -> Vec<String> {
+    let url_continuation =
+        Regex::new(r"^(w{2,3}\.|surveycake|[A-Za-z0-9]{3,8}$)").expect("regex");
+
+    let mut merged: Vec<String> = Vec::new();
+    for line in ocr_text.lines() {
+        let stripped = strip_ocr_line_artifacts(line);
+        if merged
+            .last()
+            .map(|last| last.contains("surveycake.com/s/") || last.ends_with("https:/")
+                || last.ends_with("https:") || last.ends_with("https://"))
+            .unwrap_or(false)
+            && url_continuation.is_match(&stripped)
+        {
+            merged.last_mut().unwrap().push_str(&stripped);
+        } else {
+            merged.push(stripped);
+        }
+    }
+    let reassembled = merged.join("\n");
     surveycake_re()
-        .find_iter(ocr_text)
+        .find_iter(&reassembled)
         .map(|m| m.as_str().to_string())
         .collect()
 }
@@ -408,78 +432,413 @@ pub fn extract_survey_urls(text: &str) -> (Option<String>, Option<String>) {
 // Main public API
 // ---------------------------------------------------------------------------
 
-/// Fetch the latest SurveyCake URLs from LINE community.
+/// Fetch SurveyCake URLs from LINE using the **search-by-URL** strategy.
 ///
-/// Flow: activate → (scroll_pages iterations of: scroll_up → capture → crop → OCR → regex)
-/// Returns deduplicated URLs in the order found (older pages prepended).
+/// Instead of scrolling through chat rooms, we paste `https://www.surveyca`
+/// into LINE's left-side search box. LINE then:
+///   1. Filters the left chat list to rooms containing that substring
+///   2. Opens the most recent matching message in the right pane (automatic)
+///   3. Displays N/N navigation arrows on the right pane
+///
+/// This is **dramatically more reliable** than scroll+cliclick navigation:
+/// no community selection, no pagination, no coordinate guessing.
+///
+/// Flow:
+///   1. Activate LINE + get CGWindowID
+///   2. Save existing clipboard (restore at end)
+///   3. OCR current window to locate left search box
+///   4. cliclick search box → cmd+A, delete, cmd+V `https://www.surveyca`
+///   5. screencapture + OCR entire window → regex for `surveycake.com/s/SLUG`
+///   6. ESC to clear search, restore clipboard
+///
+/// Returns deduplicated SurveyCake URLs found in the currently visible message.
+/// Note: OCR may misread slug characters (e.g. `8` → `B`). Caller should
+/// HEAD-validate URLs before treating as authoritative.
 pub async fn fetch_latest_survey_urls(
     cfg: &Settings,
     client: &reqwest::Client,
-    scroll_pages: u32,
+    _scroll_pages_unused: u32,
 ) -> Vec<String> {
-    let name = &cfg.line_community_name;
+    // --- Step 1: activate LINE + get window ID ---
+    if Command::new("osascript")
+        .args(["-e", r#"tell application "LINE" to activate"#])
+        .output()
+        .is_err()
+    {
+        tracing::warn!("Failed to activate LINE");
+    }
+    sleep(Duration::from_millis(400)).await;
 
-    // Step 1: Activate LINE
-    activate_line_and_go_to_community(name);
-
-    // Step 2: Get LINE window ID
     let wid = match get_line_window_id() {
         Some(id) => id,
         None => {
-            tracing::warn!("Cannot get LINE window ID");
+            tracing::warn!("Cannot get LINE window ID — is LINE running?");
             return vec![];
         }
     };
+    tracing::info!("LINE CGWindowID = {}", wid);
 
-    let mut all_urls: Vec<String> = Vec::new();
-    let ocr_langs = &["zh-Hant", "zh-Hans", "en"];
+    // --- Step 2: save current clipboard (restore at end) ---
+    let saved_clip = Command::new("pbpaste")
+        .output()
+        .ok()
+        .map(|o| o.stdout);
 
-    for page in 0..scroll_pages.max(1) {
-        if page > 0 {
-            // Scroll up for subsequent pages
-            run_osascript(SCRIPT_SCROLL_UP, 5);
-            sleep(Duration::from_millis(500)).await;
+    // --- Step 3: locate search box via OCR ---
+    let initial_shot = match capture_line_window(wid) {
+        Some(p) => p,
+        None => {
+            tracing::warn!("initial screencapture failed");
+            return vec![];
         }
+    };
+    let search_coord = find_search_box_coord(client, &cfg.ocr_url, &initial_shot, wid).await;
+    let _ = std::fs::remove_file(&initial_shot);
+    let (sx, sy) = match search_coord {
+        Some(c) => c,
+        None => {
+            tracing::warn!("Cannot find search box coord — aborting");
+            return vec![];
+        }
+    };
+    tracing::info!("search box at ({}, {})", sx, sy);
 
-        let screenshot = match capture_line_window(wid) {
-            Some(p) => p,
-            None => {
-                tracing::warn!("capture_line_window failed (page {})", page);
-                continue;
-            }
-        };
+    // --- Step 4: directly set search field value via AXValue ---
+    //
+    // We use AppleScript `set value of text field 1 to ...` rather than
+    // cliclick+cmd+V because the AXValue mutation is atomic and doesn't
+    // depend on input-method state or frontmost-app timing. (cliclick+paste
+    // works some of the time but is flaky when frontmost app switches
+    // between bash and LINE between osascript calls.)
+    let _ = (sx, sy); // (coord unused in this strategy; kept for debugging)
+    let set_result = Command::new("osascript")
+        .args([
+            "-e", r#"tell application "System Events""#,
+            "-e", r#"tell process "LINE""#,
+            "-e", r#"tell front window"#,
+            "-e", r#"tell splitter group 1"#,
+            "-e", r#"set value of text field 1 to "https://www.surveyca""#,
+            "-e", r#"end tell"#,
+            "-e", r#"end tell"#,
+            "-e", r#"end tell"#,
+            "-e", r#"end tell"#,
+        ])
+        .output();
+    if let Ok(out) = &set_result {
+        if !out.status.success() {
+            tracing::warn!(
+                "set search value failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            cleanup_line_search(saved_clip).await;
+            return vec![];
+        }
+    }
+    sleep(Duration::from_millis(1500)).await; // wait LINE to filter AND auto-open top match
+    // Note: LINE automatically opens the most recent matching message in the
+    // right pane after search filter populates. No row-click needed.
 
-        let src_for_ocr = match crop_message_area(&screenshot) {
-            Some(cropped) => cropped,
-            None => screenshot.clone(),
-        };
+    // --- Step 5: screencapture + OCR + extract URLs ---
+    let screenshot = match capture_line_window(wid) {
+        Some(p) => p,
+        None => {
+            tracing::warn!("post-search screencapture failed");
+            cleanup_line_search(saved_clip).await;
+            return vec![];
+        }
+    };
+    let ocr_langs = &["zh-Hant", "zh-Hans", "en"];
+    let ocr_text = match ocr_client::extract_text(client, &cfg.ocr_url, &screenshot, ocr_langs).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!("OCR failed (apple): {}", e);
+            String::new()
+        }
+    };
+    let apple_urls = extract_surveycake_urls(&ocr_text);
+    tracing::info!("apple OCR URLs: {:?}", apple_urls);
 
-        let ocr_text = match ocr_client::extract_text(client, &cfg.ocr_url, &src_for_ocr, ocr_langs).await {
+    // --- Step 5b: HEAD-validate each URL; if any invalid, retry with Claude Vision ---
+    let valid_set = validate_surveycake_urls(client, &apple_urls).await;
+    let all_invalid_count = apple_urls.len() - valid_set.len();
+    let needs_fallback = !apple_urls.is_empty() && all_invalid_count > 0;
+
+    let final_urls: Vec<String> = if needs_fallback {
+        tracing::info!(
+            "{}/{} apple URLs failed HEAD — falling back to claude engine",
+            all_invalid_count,
+            apple_urls.len()
+        );
+        let claude_text = match ocr_client::extract_text_with_engine(
+            client,
+            &cfg.ocr_url,
+            &screenshot,
+            ocr_langs,
+            "claude",
+        )
+        .await
+        {
             Ok(t) => t,
             Err(e) => {
-                tracing::warn!("OCR failed (page {}): {}", page, e);
+                tracing::warn!("claude OCR failed: {}", e);
                 String::new()
             }
         };
-
-        // Cleanup temp files
-        let _ = std::fs::remove_file(&screenshot);
-        if src_for_ocr != screenshot {
-            let _ = std::fs::remove_file(&src_for_ocr);
+        let claude_urls = extract_surveycake_urls(&claude_text);
+        tracing::info!("claude OCR URLs: {:?}", claude_urls);
+        // Prefer claude URLs that HEAD-validate; fill in with valid apple ones
+        let claude_valid = validate_surveycake_urls(client, &claude_urls).await;
+        let mut merged: Vec<String> = claude_urls
+            .iter()
+            .filter(|u| claude_valid.contains(*u))
+            .cloned()
+            .collect();
+        for u in &apple_urls {
+            if valid_set.contains(u) && !merged.contains(u) {
+                merged.push(u.clone());
+            }
         }
+        // If nothing validated, return the raw claude list (better OCR than apple)
+        if merged.is_empty() && !claude_urls.is_empty() {
+            claude_urls
+        } else if merged.is_empty() {
+            apple_urls
+        } else {
+            merged
+        }
+    } else {
+        apple_urls
+    };
+    let _ = std::fs::remove_file(&screenshot);
 
-        let page_urls = extract_surveycake_urls(&ocr_text);
-        // Prepend older pages (scroll_up = older messages appear)
-        let mut new_all = page_urls;
-        new_all.extend(all_urls);
-        all_urls = new_all;
-    }
+    // --- Step 6: cleanup — clear search box, restore clipboard ---
+    cleanup_line_search(saved_clip).await;
 
     // Dedup while preserving order
     let mut seen = std::collections::HashSet::new();
-    all_urls.retain(|u| seen.insert(u.clone()));
+    let mut unique: Vec<String> = Vec::new();
+    for u in final_urls {
+        if seen.insert(u.clone()) {
+            unique.push(u);
+        }
+    }
+    unique
+}
 
-    run_osascript(SCRIPT_ESCAPE, 5);
+/// HEAD-validate each SurveyCake URL against the live service.
+/// Returns the subset that responded with a successful HTTP status.
+///
+/// SurveyCake returns 200 for valid slugs and 404 for invalid slugs, so
+/// this is a cheap OCR-accuracy gate before spending Claude Vision credits.
+async fn validate_surveycake_urls(
+    client: &reqwest::Client,
+    urls: &[String],
+) -> std::collections::HashSet<String> {
+    let mut valid = std::collections::HashSet::new();
+    for u in urls {
+        let ok = match client
+            .head(u)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(resp) => resp.status().is_success(),
+            Err(e) => {
+                tracing::debug!("HEAD {} failed: {}", u, e);
+                false
+            }
+        };
+        tracing::debug!("validate {} → {}", u, if ok { "VALID" } else { "invalid" });
+        if ok {
+            valid.insert(u.clone());
+        }
+    }
+    valid
+}
 
-    all_urls
+/// Find screen coordinates of LINE's left search box ("搜尋聊天和訊息").
+///
+/// Uses OCR to locate the "Q" icon or the placeholder text, then returns
+/// absolute screen coordinates suitable for `cliclick c:X,Y`. Returns `None`
+/// if the icon cannot be found (e.g. LINE UI changed drastically).
+async fn find_search_box_coord(
+    client: &reqwest::Client,
+    ocr_base_url: &str,
+    screenshot: &Path,
+    wid: u32,
+) -> Option<(i32, i32)> {
+    // Query LINE window position + size (absolute screen coords)
+    let pos_script = r#"tell application "System Events"
+    tell process "LINE"
+        tell front window
+            set p to position
+            set s to size
+            return (item 1 of p as text) & "," & (item 2 of p as text) & "," & (item 1 of s as text) & "," & (item 2 of s as text)
+        end tell
+    end tell
+end tell"#;
+    let pos_out = Command::new("osascript")
+        .args(["-e", pos_script])
+        .output()
+        .ok()?;
+    let pos_str = String::from_utf8_lossy(&pos_out.stdout);
+    let nums: Vec<i32> = pos_str
+        .trim()
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+    if nums.len() != 4 {
+        tracing::debug!("window pos parse failed: {:?}", pos_str);
+        let _ = wid; // silence unused
+        return None;
+    }
+    let (win_x, win_y, win_w, win_h) = (nums[0], nums[1], nums[2], nums[3]);
+
+    // Get screenshot pixel dims (Retina may 2x; but sips reports actual pixels)
+    let (img_w, img_h) = sips_dimensions(screenshot)?;
+
+    // POST OCR
+    let ocr_resp = client
+        .post(format!(
+            "{}/extract?engine=apple&languages=zh-Hant,zh-Hans,en&path={}",
+            ocr_base_url.trim_end_matches('/'),
+            urlencoding::encode(screenshot.to_str()?)
+        ))
+        .send()
+        .await
+        .ok()?;
+    let body: serde_json::Value = ocr_resp.json().await.ok()?;
+    let blocks = body.get("blocks")?.as_array()?;
+
+    // Prefer the "搜尋聊天和訊息" placeholder if visible; fall back to lone "Q"
+    let mut best: Option<(String, f64, f64, f64, f64)> = None;
+    for b in blocks {
+        let text = b.get("text")?.as_str().unwrap_or("");
+        let x = b.get("x")?.as_f64().unwrap_or(0.0);
+        let y = b.get("y")?.as_f64().unwrap_or(0.0);
+        let w = b.get("width")?.as_f64().unwrap_or(0.0);
+        let h = b.get("height")?.as_f64().unwrap_or(0.0);
+        if text.contains("搜尋聊天") {
+            best = Some((text.to_string(), x, y, w, h));
+            break;
+        }
+        if text == "Q" && (best.is_none() || best.as_ref().map(|b| b.0 != "搜尋聊天和訊息").unwrap_or(true)) {
+            // keep first "Q" as fallback
+            if best.is_none() {
+                best = Some((text.to_string(), x, y, w, h));
+            }
+        }
+    }
+    let (_, x, y, w, h) = best?;
+
+    // Apple Vision Y: 0 = bottom, 1 = top. Convert to screen-relative.
+    let sx_img = x * img_w as f64 + w * img_w as f64 / 2.0;
+    let sy_img = (1.0 - y - h) * img_h as f64 + h * img_h as f64 / 2.0;
+    // Scale image px → window px (Retina could double; sips reports logical dims)
+    let scale_x = win_w as f64 / img_w as f64;
+    let scale_y = win_h as f64 / img_h as f64;
+    let sx = (win_x as f64 + sx_img * scale_x) as i32;
+    let sy = (win_y as f64 + sy_img * scale_y) as i32;
+    Some((sx, sy))
+}
+
+/// Find coordinates of the first row matching the search (e.g. "微光早餐會").
+///
+/// Currently unused — LINE auto-opens the top match after `set value` on the
+/// search field. Kept for potential future use if LINE behavior changes.
+#[allow(dead_code)]
+async fn find_first_matching_row_coord(
+    client: &reqwest::Client,
+    ocr_base_url: &str,
+    screenshot: &Path,
+    img_dims: Option<(u32, u32)>,
+) -> Option<(i32, i32)> {
+    // Window position
+    let pos_script = r#"tell application "System Events"
+    tell process "LINE"
+        tell front window
+            set p to position
+            set s to size
+            return (item 1 of p as text) & "," & (item 2 of p as text) & "," & (item 1 of s as text) & "," & (item 2 of s as text)
+        end tell
+    end tell
+end tell"#;
+    let pos_out = Command::new("osascript")
+        .args(["-e", pos_script])
+        .output()
+        .ok()?;
+    let pos_str = String::from_utf8_lossy(&pos_out.stdout);
+    let nums: Vec<i32> = pos_str
+        .trim()
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+    if nums.len() != 4 {
+        return None;
+    }
+    let (win_x, win_y, win_w, win_h) = (nums[0], nums[1], nums[2], nums[3]);
+    let (img_w, img_h) = img_dims?;
+
+    // OCR
+    let resp = client
+        .post(format!(
+            "{}/extract?engine=apple&languages=zh-Hant,zh-Hans,en&path={}",
+            ocr_base_url.trim_end_matches('/'),
+            urlencoding::encode(screenshot.to_str()?)
+        ))
+        .send()
+        .await
+        .ok()?;
+    let body: serde_json::Value = resp.json().await.ok()?;
+    let blocks = body.get("blocks")?.as_array()?;
+
+    // Find "找到 N 則訊息" blocks — the first one is the top result
+    // We click just above it (on the community-name row, which is 20-30px higher)
+    for b in blocks {
+        let text = b.get("text")?.as_str().unwrap_or("");
+        if text.contains("找到") && text.contains("訊息") {
+            let x = b.get("x")?.as_f64().unwrap_or(0.0);
+            let y = b.get("y")?.as_f64().unwrap_or(0.0);
+            let w = b.get("width")?.as_f64().unwrap_or(0.0);
+            let h = b.get("height")?.as_f64().unwrap_or(0.0);
+            let sx_img = x * img_w as f64 + w * img_w as f64 / 2.0;
+            // Click ~20 screen px above (on the room name) to ensure hit
+            let sy_img = (1.0 - y - h) * img_h as f64 + h * img_h as f64 / 2.0 - 20.0;
+            let scale_x = win_w as f64 / img_w as f64;
+            let scale_y = win_h as f64 / img_h as f64;
+            let rx = (win_x as f64 + sx_img * scale_x) as i32;
+            let ry = (win_y as f64 + sy_img * scale_y) as i32;
+            return Some((rx, ry));
+        }
+    }
+    None
+}
+
+/// Clean up LINE after a search: clear search box (cmd+A, delete) + restore
+/// clipboard. Does NOT press Escape (that can cause LINE to close the
+/// current window in some states).
+async fn cleanup_line_search(saved_clip: Option<Vec<u8>>) {
+    // Clear search box via cmd+A then delete (safer than ESC)
+    let _ = Command::new("osascript")
+        .args(["-e", r#"tell application "System Events" to keystroke "a" using {command down}"#])
+        .output();
+    sleep(Duration::from_millis(100)).await;
+    let _ = Command::new("osascript")
+        .args(["-e", r#"tell application "System Events" to key code 51"#])
+        .output();
+    sleep(Duration::from_millis(100)).await;
+
+    // Restore clipboard
+    if let Some(content) = saved_clip {
+        if let Ok(mut child) = Command::new("pbcopy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+        {
+            if let Some(stdin) = child.stdin.as_mut() {
+                use std::io::Write;
+                let _ = stdin.write_all(&content);
+            }
+            let _ = child.wait();
+        }
+    }
 }

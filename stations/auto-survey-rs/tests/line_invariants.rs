@@ -66,25 +66,40 @@ fn test_window_id_script_does_not_use_quartz_cg_window_number() {
     );
 }
 
-/// NEW positive test (C1): verify src/line.rs uses CGWindowList API for CGWindowID
+/// NEW positive test (C1): verify the CGWindowID path uses a Swift helper binary.
+///
+/// Strategy evolved: originally planned Python3+Quartz subprocess, then switched
+/// to a compiled Swift helper at `bin/get_cg_wid` (no Python/pyobjc dependency,
+/// ~10ms cold start). Both approaches use `CGWindowListCopyWindowInfo` +
+/// `kCGWindowNumber` under the hood — the Swift binary just wraps it cleanly.
 #[test]
-fn test_get_line_window_id_uses_cg_window_api() {
-    // Read the source file and verify it contains CGWindowListCopyWindowInfo.
-    // This is a structural invariant: the correct Quartz API must be present in the impl.
+fn test_get_line_window_id_uses_swift_helper() {
+    // 1. Source must reference the Swift helper binary path.
     let src = include_str!("../src/line.rs");
     assert!(
-        src.contains("CGWindowListCopyWindowInfo"),
-        "get_line_window_id() must use CGWindowListCopyWindowInfo (Quartz CGWindowID), \
+        src.contains("get_cg_wid"),
+        "get_line_window_id() must shell out to bin/get_cg_wid (Swift helper), \
         NOT AppleScript 'id of front window' (System Events AXWindow id)"
     );
+
+    // 2. Swift source must exist and reference the Quartz CGWindow APIs.
+    let swift_src_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("bin")
+        .join("src")
+        .join("get_cg_wid.swift");
+    let swift_src = std::fs::read_to_string(&swift_src_path)
+        .expect("bin/src/get_cg_wid.swift must exist — run bin/build.sh");
     assert!(
-        src.contains("kCGWindowNumber"),
-        "get_line_window_id() must extract kCGWindowNumber — the true CGWindowID \
-        required by screencapture -l"
+        swift_src.contains("CGWindowListCopyWindowInfo"),
+        "get_cg_wid.swift must use CGWindowListCopyWindowInfo"
     );
     assert!(
-        src.contains("kCGWindowOwnerName"),
-        "get_line_window_id() must filter by kCGWindowOwnerName == 'LINE'"
+        swift_src.contains("kCGWindowNumber"),
+        "get_cg_wid.swift must extract kCGWindowNumber"
+    );
+    assert!(
+        swift_src.contains("kCGWindowOwnerName"),
+        "get_cg_wid.swift must filter by kCGWindowOwnerName"
     );
 }
 

@@ -26,7 +26,7 @@ enum OcrResponse {
     Err(OcrError),
 }
 
-/// Call the OCR service and return the recognised text.
+/// Call the OCR service with the default engine (apple / Swift Vision).
 ///
 /// `languages` controls the Vision recognition hints, e.g. `&["zh-Hant", "zh-Hans", "en"]`.
 /// An empty slice defaults to `zh-Hant,zh-Hans,en`.
@@ -35,6 +35,19 @@ pub async fn extract_text(
     ocr_base_url: &str,
     image_path: &Path,
     languages: &[&str],
+) -> Result<String> {
+    extract_text_with_engine(client, ocr_base_url, image_path, languages, "apple").await
+}
+
+/// Same as [`extract_text`] but allows choosing the underlying engine.
+/// Useful for falling back to `claude` (higher accuracy, API cost) when the
+/// default apple engine produces URL slugs that fail HEAD validation.
+pub async fn extract_text_with_engine(
+    client: &reqwest::Client,
+    ocr_base_url: &str,
+    image_path: &Path,
+    languages: &[&str],
+    engine: &str,
 ) -> Result<String> {
     let abs = image_path
         .canonicalize()
@@ -53,16 +66,18 @@ pub async fn extract_text(
     let encoded_path = urlencoding::encode(path_str);
 
     let url = format!(
-        "{base}/extract?engine=apple&languages={langs}&path={path}",
+        "{base}/extract?engine={engine}&languages={langs}&path={path}",
         base = ocr_base_url.trim_end_matches('/'),
+        engine = engine,
         langs = langs,
         path = encoded_path,
     );
 
     tracing::debug!("OCR request: {}", url);
 
+    // ocr station's /extract is POST (all query params, no body)
     let resp = client
-        .get(&url)
+        .post(&url)
         .send()
         .await
         .map_err(|e| anyhow!("OCR HTTP error: {}", e))?;
