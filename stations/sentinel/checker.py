@@ -247,6 +247,17 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="external",
         url=_url("auto-survey", "/api/people"),
     ),
+    # auto-survey-rs: Rust replacement, on-demand (Wed/Fri 10:00-18:00 only)
+    # Shares port 10300 with Python auto-survey during migration.
+    # optional=True so sentinel reports "skipped" (not "unhealthy") when off-duty.
+    # TODO: add time-gate logic in sentinel runner to skip outside Wed/Fri 10-18
+    #   suggested: in ws_sentinel_check.py, check weekday/hour before calling this check
+    LightCheck(
+        name="auto-survey-rs",
+        group="external",
+        url=_url("auto-survey", "/status"),
+        optional=True,
+    ),
     LightCheck(
         name="capture-console",
         group="external",
