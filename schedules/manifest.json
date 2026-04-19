@@ -453,6 +453,7 @@
       "enabled": true,
       "description": "每週日 6:30AM: Export skill routing training data (Memento-Skills Phase 4)"
     },
+    {
       "name": "ws-nginx-autoban",
       "label": "com.joneshong.scheduler.ws-nginx-autoban",
       "command": "~/.local/bin/python3 ~/workshop/scripts/nginx_autoban.py",
