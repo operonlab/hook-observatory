@@ -1,0 +1,19 @@
+# Rust
+/target/
+Cargo.lock.backup
+
+# SQLite data (migrated from PG, machine-specific)
+/data/*.db
+/data/*.db-journal
+/data/*.db-wal
+/data/*.db-shm
+
+# sqlx offline cache — only commit if running CI without DB
+/.sqlx/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store

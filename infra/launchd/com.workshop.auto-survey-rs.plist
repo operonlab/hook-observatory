@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.workshop.auto-survey-rs</string>
+
+  <!-- Never start on boot, never auto-restart — Cronicle controls lifecycle -->
+  <key>RunAtLoad</key>
+  <false/>
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/joneshong/workshop/stations/auto-survey-rs/target/release/auto-survey-rs</string>
+    <string>serve</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/joneshong/workshop/stations/auto-survey-rs</string>
+
+  <!-- Fixed log paths — logrotate / workshop_services.py handles rotation -->
+  <key>StandardOutPath</key>
+  <string>/opt/homebrew/var/log/workshop/auto-survey-rs/stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/opt/homebrew/var/log/workshop/auto-survey-rs/stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Database -->
+    <key>AUTO_SURVEY_SQLITE_PATH</key>
+    <string>/Users/joneshong/workshop/stations/auto-survey-rs/data/auto_survey.db</string>
+
+    <!-- LLM Backend -->
+    <key>AUTO_SURVEY_LLM_BACKEND</key>
+    <string>litellm</string>
+    <key>AUTO_SURVEY_LLM_MODEL</key>
+    <string>grok-4.1-fast</string>
+    <key>AUTO_SURVEY_LITELLM_BASE_URL</key>
+    <string>http://localhost:4000/v1</string>
+    <key>AUTO_SURVEY_LITELLM_API_KEY</key>
+    <string>sk-litellm-local-dev</string>
+
+    <!-- Browser -->
+    <key>AUTO_SURVEY_HEADLESS</key>
+    <string>true</string>
+    <key>AUTO_SURVEY_CAMOUFOX_CLI</key>
+    <string>camoufox-cli</string>
+    <key>AUTO_SURVEY_CAMOUFOX_PROFILE</key>
+    <string>/Users/joneshong/.camoufox-profiles/master</string>
+    <key>AUTO_SURVEY_PLAYWRIGHT_CLI</key>
+    <string>playwright-cli</string>
+    <key>AUTO_SURVEY_PW_PROFILE_DIR</key>
+    <string></string>
+
+    <!-- Timing -->
+    <key>AUTO_SURVEY_MIN_DELAY</key>
+    <string>5</string>
+    <key>AUTO_SURVEY_MAX_DELAY</key>
+    <string>15</string>
+    <key>AUTO_SURVEY_EXECUTION_HOUR</key>
+    <string>14</string>
+
+    <!-- Server -->
+    <key>AUTO_SURVEY_WEB_PORT</key>
+    <string>10300</string>
+
+    <!-- Notifications -->
+    <key>AUTO_SURVEY_BARK_DEVICE_KEY</key>
+    <string>gx7KnK5f8iAKuqNLWzy5hP</string>
+    <key>AUTO_SURVEY_BARK_SERVER</key>
+    <string>http://localhost:8090</string>
+
+    <!-- LINE Reader -->
+    <key>AUTO_SURVEY_LINE_COMMUNITY_NAME</key>
+    <string>微光早餐會</string>
+    <key>AUTO_SURVEY_LINE_ENABLED</key>
+    <string>true</string>
+    <key>AUTO_SURVEY_LINE_SCROLL_PAGES</key>
+    <string>3</string>
+
+    <!-- PATH for subprocess (camoufox-cli, screencapture, sips, etc.) -->
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/joneshong/.local/bin</string>
+  </dict>
+</dict>
+</plist>

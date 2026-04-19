@@ -1,0 +1,50 @@
+[package]
+name = "auto-survey-rs"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Workshop auto-survey station — Rust rewrite (on-demand Wed/Fri 10:00-18:00)"
+
+[[bin]]
+name = "auto-survey-rs"
+path = "src/main.rs"
+
+[lib]
+name = "auto_survey_rs"
+path = "src/lib.rs"
+
+[dependencies]
+axum = { version = "0.7", features = ["multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "uuid", "chrono", "json"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+clap = { version = "4", features = ["derive"] }
+urlencoding = "2"
+md-5 = "0.10"
+rand = "0.8"
+csv = "1"
+tempfile = "3"
+async-trait = "0.1"
+tokio-stream = "0.1"
+futures-core = "0.3"
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.6"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
