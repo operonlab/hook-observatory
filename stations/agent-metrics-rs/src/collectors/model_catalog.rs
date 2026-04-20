@@ -584,6 +584,35 @@ pub fn generate_scenarios(
     out
 }
 
+/// Top N models with Big-3 (OpenAI/Claude/Gemini) families filtered out.
+///
+/// Different from `notable_unconfigured`: this list keeps configured
+/// providers (grok/glm/kimi/...) so the user sees the *full* non-Big-3
+/// competitive landscape, not just hidden gems. Score is the consensus
+/// Borda-count points so ranking is comparable across LiveBench (0-100)
+/// and Arena (Elo 1100-1600) sources.
+pub fn generate_non_big3_ranking(arena_models: &[ArenaModel], top_n: usize) -> Vec<Value> {
+    let mut out = Vec::new();
+    for m in arena_models {
+        let lower = m.name.to_lowercase();
+        if name_lower_contains_any(&lower, BIG3_KEYWORDS) {
+            continue;
+        }
+        let entry = serde_json::json!({
+            "rank": out.len() + 1,
+            "name": m.name,
+            "provider": infer_provider(&m.name),
+            "consensus_score": m.consensus_score,
+            "source_count": m.source_count,
+        });
+        out.push(entry);
+        if out.len() >= top_n {
+            break;
+        }
+    }
+    out
+}
+
 pub fn generate_notable_unconfigured(
     arena_models: &[ArenaModel],
     configured: &BTreeSet<String>,
@@ -815,12 +844,16 @@ pub async fn run_once(redis_url: &str) -> Result<bool> {
     let scenarios = generate_scenarios(&arena_models, &config.configured_providers);
     let subjective = generate_subjective(&config);
     let notable = generate_notable_unconfigured(&arena_models, &config.configured_providers);
+    // 非 Big3 排行 — 少爺要求永久內建：撇除 Claude/OpenAI/Gemini 系列，
+    // 但保留 grok/glm/kimi/qwen/... 等 configured providers。
+    let non_big3_ranking = generate_non_big3_ranking(&arena_models, 15);
 
     let full_catalog = json!({
         "highlights_benchmark": benchmark,
         "scenarios": scenarios,
         "highlights_subjective": subjective,
         "notable_unconfigured": notable,
+        "non_big3_ranking": non_big3_ranking,
         "synced_at": synced_at,
         "sources_used": sources_ok,
         "source_count": sources_ok.len(),
@@ -941,6 +974,76 @@ Kimi K2.5 Thinking\tMoonshot AI\t69.07\t75.96\n\
         // GPT-5 is Big-3 → skipped; Grok wins.
         assert_eq!(overall["name"], "Grok 4.20");
         assert_eq!(overall["provider"], "xAI");
+    }
+
+    #[test]
+    fn non_big3_ranking_keeps_configured_drops_big3() {
+        let arena = vec![
+            ArenaModel {
+                name: "GPT-5 Pro".into(),
+                elo: 0,
+                consensus_score: 100,
+                source_count: 1,
+            },
+            ArenaModel {
+                name: "Claude 4.7 Opus Thinking".into(),
+                elo: 0,
+                consensus_score: 99,
+                source_count: 1,
+            },
+            ArenaModel {
+                name: "Gemini 3 Pro".into(),
+                elo: 0,
+                consensus_score: 92,
+                source_count: 1,
+            },
+            ArenaModel {
+                name: "Kimi K2.5 Thinking".into(),
+                elo: 0,
+                consensus_score: 80,
+                source_count: 1,
+            },
+            ArenaModel {
+                name: "Qwen 3.6 Plus".into(),
+                elo: 0,
+                consensus_score: 75,
+                source_count: 1,
+            },
+            ArenaModel {
+                name: "Mistral Large".into(),
+                elo: 0,
+                consensus_score: 60,
+                source_count: 1,
+            },
+        ];
+        let r = generate_non_big3_ranking(&arena, 10);
+        let names: Vec<&str> =
+            r.iter().map(|v| v["name"].as_str().unwrap_or("")).collect();
+        // Big-3 trio dropped.
+        assert!(!names.contains(&"GPT-5 Pro"));
+        assert!(!names.contains(&"Claude 4.7 Opus Thinking"));
+        assert!(!names.contains(&"Gemini 3 Pro"));
+        // Configured + hidden gem all kept, ranking densely from 1.
+        assert_eq!(names, vec!["Kimi K2.5 Thinking", "Qwen 3.6 Plus", "Mistral Large"]);
+        assert_eq!(r[0]["rank"], 1);
+        assert_eq!(r[1]["rank"], 2);
+        assert_eq!(r[2]["rank"], 3);
+        assert_eq!(r[0]["provider"], "Moonshot");
+        assert_eq!(r[1]["provider"], "Qwen");
+    }
+
+    #[test]
+    fn non_big3_ranking_respects_top_n() {
+        let arena: Vec<ArenaModel> = (0..30)
+            .map(|i| ArenaModel {
+                name: format!("model-{}", i),
+                elo: 0,
+                consensus_score: 100 - i,
+                source_count: 1,
+            })
+            .collect();
+        let r = generate_non_big3_ranking(&arena, 5);
+        assert_eq!(r.len(), 5);
     }
 
     #[test]
