@@ -18,8 +18,10 @@ use axum::{
 };
 use clap::Parser;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
+use tower_http::services::{ServeDir, ServeFile};
 
 use config::Config;
 use state::InterventionEngine;
@@ -96,6 +98,9 @@ async fn main() -> anyhow::Result<()> {
         sse: sse_hub,
     };
 
+    let static_dir: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
+    let index_path = static_dir.join("index.html");
+
     let app = Router::new()
         .route("/api/sentinel/health", get(routes::health))
         .route("/api/sentinel/status", get(routes::status_all))
@@ -112,6 +117,8 @@ async fn main() -> anyhow::Result<()> {
             "/api/sysmon/*subpath",
             get(routes::sysmon_proxy).post(routes::sysmon_proxy),
         )
+        .route_service("/", ServeFile::new(&index_path))
+        .nest_service("/static", ServeDir::new(&static_dir))
         .with_state(state);
 
     let addr: SocketAddr = format!("{}:{}", cfg.host, cfg.port).parse()?;

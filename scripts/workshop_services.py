@@ -745,6 +745,9 @@ def start_all() -> None:
     wait_for_docker()
     ensure_containers()
     for svc in SERVICES:
+        if svc.get("schedule") == "on-demand":
+            log(f"Skipping {svc['name']} (schedule=on-demand, lifecycle managed externally)")
+            continue
         start_service(svc)
 
 
@@ -944,6 +947,8 @@ def _check_bind_addresses() -> None:
 
 def health_check_all() -> None:
     for svc in SERVICES:
+        if svc.get("schedule") == "on-demand":
+            continue
         name = svc["name"]
         if is_running(name, svc["port"]) is None:
             log(f"ALERT: {name} is down — restarting...")
