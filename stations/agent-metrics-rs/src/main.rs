@@ -43,6 +43,8 @@ enum Cmd {
     UsageToday,
     /// Print quota formatted snapshot read from Redis.
     QuotaCurrent,
+    /// Force a single quota refresh (bypass loop) and print formatted output.
+    QuotaRefresh,
     /// Run the API server (Phase 4 — not implemented yet).
     Serve,
 }
@@ -110,6 +112,16 @@ async fn main() -> Result<()> {
         Cmd::QuotaCurrent => {
             let r = agent_metrics_rs::collectors::quota::get_quota(&cfg).await;
             println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
+        Cmd::QuotaRefresh => {
+            let (raw_cc, raw_cx, raw_gm) =
+                agent_metrics_rs::collectors::quota_writer::raw_dump(&cfg).await;
+            eprintln!("=== raw cc ===\n{}", serde_json::to_string_pretty(&raw_cc)?);
+            eprintln!("=== raw cx ===\n{}", serde_json::to_string_pretty(&raw_cx)?);
+            eprintln!("=== raw gm ===\n{}", serde_json::to_string_pretty(&raw_gm)?);
+            let r = agent_metrics_rs::collectors::quota_writer::refresh_once(&cfg).await?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }
         Cmd::Serve => {
