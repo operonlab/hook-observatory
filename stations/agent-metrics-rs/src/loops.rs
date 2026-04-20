@@ -44,7 +44,19 @@ pub async fn sysmon_tick(
     sweep_cfg: &SweepConfig,
     tick: u64,
 ) -> Result<SysmonSnapshot> {
-    let snap = collect_all().await;
+    let mut snap = collect_all().await;
+
+    // Merge Redis-cached quota into the snapshot so the `llm_*` fields are
+    // populated for /sysmon/current consumers and the atomic file readers
+    // (tmux statusline). Best-effort: if Redis is down, leave defaults.
+    let q = crate::collectors::quota::get_quota(settings).await;
+    snap.llm_cc_5h = q.llm_cc_5h;
+    snap.llm_cc_7d = q.llm_cc_7d;
+    snap.llm_cc_ex = q.llm_cc_ex;
+    snap.llm_cx_5h = q.llm_cx_5h;
+    snap.llm_cx_7d = q.llm_cx_7d;
+    snap.llm_gm_pro = q.llm_gm_pro;
+    snap.llm_display = q.llm_display;
 
     {
         let mut latest = state.latest.write().await;
@@ -66,8 +78,11 @@ pub async fn sysmon_tick(
         tracing::warn!(error = %e, "guardian_tick_error");
     }
 
+    // Match Python's pre-increment semantics: only fire sweep on tick > 0
+    // (Python increments _tick_count to 1 BEFORE the first modulo check, so
+    // the very first tick never triggers sweep).
     let sweep_ticks = (sweep_cfg.interval as u64).saturating_div(settings.sysmon_collect_interval);
-    if sweep_ticks > 0 && tick % sweep_ticks == 0 {
+    if sweep_ticks > 0 && tick > 0 && tick % sweep_ticks == 0 {
         if let Err(e) = maybe_run_sweep(pool, sweep_cfg).await {
             tracing::warn!(error = %e, "sweep_tick_error");
         }
@@ -109,6 +124,12 @@ fn atomic_write(path: &str, data: &str) {
         .unwrap_or_default();
     let tmp = dir.join(format!(".am-rs-{}-{}.tmp", pid, nanos));
     if std::fs::write(&tmp, data).is_ok() {
-        let _ = std::fs::rename(&tmp, path);
+        if std::fs::rename(&tmp, path).is_err() {
+            // rename failed (cross-device, perms, ...) — never leave the tmp behind
+            let _ = std::fs::remove_file(&tmp);
+        }
+    } else {
+        // write itself failed (e.g. dir disappeared) — best-effort cleanup in case
+        let _ = std::fs::remove_file(&tmp);
     }
 }

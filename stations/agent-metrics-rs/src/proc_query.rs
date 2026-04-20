@@ -192,27 +192,57 @@ pub fn parse_etime(s: &str) -> i64 {
 }
 
 /// Parse the `ps -eo lstart=` format ("Wed Apr  9 10:15:30 2026") into UNIX epoch.
-fn parse_lstart(s: &str) -> Option<i64> {
-    use chrono::{NaiveDateTime, Utc, TimeZone};
-    let candidates = [
-        "%a %b %e %H:%M:%S %Y",
-        "%a %b  %e %H:%M:%S %Y",
-        "%a %b %d %H:%M:%S %Y",
-    ];
-    for fmt in candidates {
-        if let Ok(dt) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Utc.from_utc_datetime(&dt).timestamp().into();
-        }
+///
+/// IMPORTANT: `ps lstart` emits **local** wall-clock time. Python's
+/// `datetime.strptime(...).timestamp()` interprets a naive datetime as local
+/// and returns UTC epoch — so we must convert via `Local`, not `Utc`.
+/// Treating it as UTC offsets the returned epoch by the local tz, which would
+/// shift the guardian Claude-process age comparison by hours.
+///
+/// Day-of-month handling: `ps` left-pads single-digit days with a space
+/// ("Apr  9"). chrono's `%e` does not accept this padding form, so we collapse
+/// runs of whitespace to one and zero-pad the day before applying `%d`.
+pub fn parse_lstart(s: &str) -> Option<i64> {
+    use chrono::{Local, NaiveDateTime, TimeZone};
+
+    let normalized = normalize_lstart(s)?;
+
+    // Try with year first (full lstart output)
+    if let Ok(dt) = NaiveDateTime::parse_from_str(&normalized, "%a %b %d %H:%M:%S %Y") {
+        return Local
+            .from_local_datetime(&dt)
+            .single()
+            .map(|d| d.timestamp());
     }
-    // ps may omit year — try without year
-    let candidates_no_year = ["%a %b %e %H:%M:%S", "%a %b  %e %H:%M:%S"];
-    let now = Utc::now();
-    for fmt in candidates_no_year {
-        if let Ok(dt) = NaiveDateTime::parse_from_str(&format!("{} {}", s, now.format("%Y")), &format!("{} %Y", fmt)) {
-            return Utc.from_utc_datetime(&dt).timestamp().into();
-        }
+    // ps may omit year — assume current local year
+    let now = Local::now();
+    let with_year = format!("{} {}", normalized, now.format("%Y"));
+    if let Ok(dt) = NaiveDateTime::parse_from_str(&with_year, "%a %b %d %H:%M:%S %Y") {
+        return Local
+            .from_local_datetime(&dt)
+            .single()
+            .map(|d| d.timestamp());
     }
     None
+}
+
+/// Collapse multiple whitespace and zero-pad the day-of-month token, e.g.
+///   "Wed Apr  9 10:15:30 2026"  →  "Wed Apr 09 10:15:30 2026"
+fn normalize_lstart(s: &str) -> Option<String> {
+    let parts: Vec<&str> = s.split_whitespace().collect();
+    if parts.len() < 4 {
+        return None;
+    }
+    // Layout: [Wday, Mon, Day, HH:MM:SS, Year?]
+    let day = parts[2];
+    let day_padded = if day.len() == 1 && day.chars().all(|c| c.is_ascii_digit()) {
+        format!("0{}", day)
+    } else {
+        day.to_string()
+    };
+    let mut rebuilt: Vec<String> = parts.iter().map(|s| s.to_string()).collect();
+    rebuilt[2] = day_padded;
+    Some(rebuilt.join(" "))
 }
 
 #[cfg(test)]
@@ -237,5 +267,45 @@ mod tests {
     #[test]
     fn etime_empty() {
         assert_eq!(parse_etime(""), 0);
+    }
+
+    #[test]
+    fn lstart_matches_python_local_tz() {
+        // Python: datetime.strptime("Wed Apr 16 12:34:56 2025", "%c").timestamp()
+        // Result depends on machine local TZ — we just assert the Rust epoch
+        // matches what the same conversion yields locally.
+        use chrono::{Local, NaiveDate, TimeZone};
+        let expected = Local
+            .from_local_datetime(
+                &NaiveDate::from_ymd_opt(2025, 4, 16)
+                    .unwrap()
+                    .and_hms_opt(12, 34, 56)
+                    .unwrap(),
+            )
+            .single()
+            .unwrap()
+            .timestamp();
+        let got = parse_lstart("Wed Apr 16 12:34:56 2025").expect("parse");
+        assert_eq!(got, expected, "parse_lstart must use local tz");
+    }
+
+    #[test]
+    fn lstart_handles_double_space_day() {
+        // ps left-pads single-digit days with an extra space.
+        // Apr 9 2026 is a Thursday — chrono validates %a against date.
+        assert!(parse_lstart("Thu Apr  9 10:15:30 2026").is_some());
+    }
+
+    #[test]
+    fn lstart_year_omitted_uses_current_year() {
+        // %c without year — should fall back to current Local year.
+        // Use today's date so day-of-week always matches.
+        use chrono::{Datelike, Local};
+        let now = Local::now();
+        let weekday = now.format("%a").to_string();
+        let month = now.format("%b").to_string();
+        let day = now.day();
+        let s = format!("{} {} {} 12:34:56", weekday, month, day);
+        assert!(parse_lstart(&s).is_some(), "failed for input: {s}");
     }
 }

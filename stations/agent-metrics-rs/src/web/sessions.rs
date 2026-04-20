@@ -15,7 +15,41 @@ pub async fn ingest(
     Json(req): Json<crate::session::IngestRequest>,
 ) -> Json<Value> {
     let resp = state.session_store.ingest(req).await;
+
+    // Match Python: write a fallback snapshot to disk so /current can serve
+    // a consistent view even if the in-memory store is empty (e.g. right
+    // after restart, before the first ingest of the new process).
+    let snapshot = state.session_store.get_snapshot().await;
+    let path = state.settings.fallback_path.clone();
+    tokio::task::spawn_blocking(move || write_fallback(&path, &snapshot));
+
     Json(serde_json::to_value(resp).unwrap_or(Value::Null))
+}
+
+fn write_fallback(path: &str, snapshot: &Value) {
+    let p = std::path::Path::new(path);
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let body = match serde_json::to_string(snapshot) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    // Atomic write via tmp + rename
+    let dir = p.parent().unwrap_or_else(|| std::path::Path::new("/tmp"));
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let tmp = dir.join(format!(".am-rs-fb-{}-{}.tmp", pid, nanos));
+    if std::fs::write(&tmp, body).is_ok() {
+        if std::fs::rename(&tmp, p).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+    } else {
+        let _ = std::fs::remove_file(&tmp);
+    }
 }
 
 pub async fn current(State(state): State<AppState>) -> Json<Value> {

@@ -26,6 +26,20 @@ pub async fn run_aggregator(store: SessionStore, pool: SqlitePool, _settings: Se
 
         if last_flush.elapsed() >= Duration::from_secs(FLUSH_EVERY_SECONDS) {
             last_flush = std::time::Instant::now();
+
+            // Upsert sessions FIRST so foreign-key-style joins on snapshots
+            // can resolve `session_id` → session metadata (Python aggregator
+            // never wrote this table; Rust does because the route advertises
+            // a DB-backed `?active_only=false` query).
+            let active = store.get_active_sessions().await;
+            if !active.is_empty() {
+                if let Err(e) = upsert_sessions(&pool, &active).await {
+                    tracing::error!(error = %e, "sessions_upsert_failed");
+                } else {
+                    tracing::debug!(count = active.len(), "sessions_upserted");
+                }
+            }
+
             let snaps = store.collect_pending_snapshots().await;
             if !snaps.is_empty() {
                 if let Err(e) = flush_snapshots(&pool, &snaps).await {
@@ -67,6 +81,65 @@ async fn flush_snapshots(pool: &SqlitePool, snaps: &[crate::session::SnapshotRow
         .bind(s.context_used_pct)
         .bind(s.input_tokens)
         .bind(s.output_tokens)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Public entry for the main binary's shutdown path — flush any in-memory
+/// snapshots that the periodic loop hasn't drained yet.
+pub async fn final_flush(
+    pool: &SqlitePool,
+    snaps: &[crate::session::SnapshotRow],
+) -> Result<()> {
+    flush_snapshots(pool, snaps).await
+}
+
+async fn upsert_sessions(
+    pool: &SqlitePool,
+    sessions: &[crate::session::SessionInfo],
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    for s in sessions {
+        sqlx::query(
+            "INSERT INTO sessions \
+             (id, sid, cli, model_id, model_display, project, cost_usd, context_used_pct, \
+              context_window_size, input_tokens, output_tokens, cache_creation_tokens, \
+              cache_read_tokens, first_seen, last_seen, is_active) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) \
+             ON CONFLICT(id) DO UPDATE SET \
+                cli                   = excluded.cli, \
+                model_id              = excluded.model_id, \
+                model_display         = excluded.model_display, \
+                project               = excluded.project, \
+                cost_usd              = excluded.cost_usd, \
+                context_used_pct      = excluded.context_used_pct, \
+                context_window_size   = excluded.context_window_size, \
+                input_tokens          = excluded.input_tokens, \
+                output_tokens         = excluded.output_tokens, \
+                cache_creation_tokens = excluded.cache_creation_tokens, \
+                cache_read_tokens     = excluded.cache_read_tokens, \
+                last_seen             = excluded.last_seen, \
+                is_active             = excluded.is_active",
+        )
+        .bind(&s.id)
+        .bind(&s.sid)
+        .bind(&s.cli)
+        .bind(&s.model_id)
+        .bind(&s.model_display)
+        .bind(&s.project)
+        .bind(s.cost_usd)
+        .bind(s.context_used_pct)
+        .bind(s.context_window_size)
+        .bind(s.input_tokens)
+        .bind(s.output_tokens)
+        .bind(s.cache_creation_tokens)
+        .bind(s.cache_read_tokens)
+        .bind(&s.first_seen)
+        .bind(&s.last_seen)
+        .bind(if s.is_active { 1_i64 } else { 0_i64 })
         .execute(&mut *tx)
         .await?;
     }

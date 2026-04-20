@@ -118,8 +118,8 @@ async fn main() -> Result<()> {
             let loop_state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size);
             let session_store = agent_metrics_rs::session::SessionStore::default();
 
-            // Sysmon background loop
-            {
+            // Track background tasks so we can flush + abort cleanly on Ctrl+C.
+            let sysmon_handle = {
                 let s = loop_state.clone();
                 let c = cfg.clone();
                 let p = pool.clone();
@@ -127,10 +127,9 @@ async fn main() -> Result<()> {
                     if let Err(e) = agent_metrics_rs::loops::run_sysmon_loop(s, c, p).await {
                         tracing::error!(error = %e, "sysmon_loop_exited");
                     }
-                });
-            }
-            // Aggregator background loop
-            {
+                })
+            };
+            let aggregator_handle = {
                 let store = session_store.clone();
                 let p = pool.clone();
                 let c = cfg.clone();
@@ -138,21 +137,48 @@ async fn main() -> Result<()> {
                     if let Err(e) = agent_metrics_rs::aggregator::run_aggregator(store, p, c).await {
                         tracing::error!(error = %e, "aggregator_exited");
                     }
-                });
-            }
+                })
+            };
 
             let app_state = agent_metrics_rs::web::AppState {
                 settings: std::sync::Arc::new(cfg.clone()),
-                pool,
+                pool: pool.clone(),
                 loop_state,
-                session_store,
+                session_store: session_store.clone(),
             };
             let app = agent_metrics_rs::web::build_router(app_state);
 
             let addr: std::net::SocketAddr = format!("{}:{}", cfg.host, cfg.port).parse()?;
             tracing::info!(%addr, "agent-metrics-rs serving");
             let listener = tokio::net::TcpListener::bind(addr).await?;
-            axum::serve(listener, app).await?;
+
+            let shutdown = async {
+                let _ = tokio::signal::ctrl_c().await;
+                tracing::info!("shutdown signal received");
+            };
+            axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown)
+                .await?;
+
+            // Final flush of pending session snapshots before exit
+            tracing::info!("flushing pending snapshots before exit");
+            let pending = session_store.collect_pending_snapshots().await;
+            if !pending.is_empty() {
+                if let Err(e) = agent_metrics_rs::aggregator::final_flush(&pool, &pending).await {
+                    tracing::error!(error = %e, "final_flush_failed");
+                } else {
+                    tracing::info!(count = pending.len(), "final_flush_done");
+                }
+            }
+
+            // Abort background tasks (we already drained pending snapshots)
+            sysmon_handle.abort();
+            aggregator_handle.abort();
+            let _ = sysmon_handle.await;
+            let _ = aggregator_handle.await;
+
+            pool.close().await;
+            tracing::info!("agent-metrics-rs stopped cleanly");
             Ok(())
         }
     }
