@@ -168,6 +168,25 @@ SERVICES = [
             "AGENT_METRICS_SQLITE_PATH": "/Users/joneshong/workshop/stations/agent-metrics-rs/data/agent_metrics.sqlite",
         },
     },
+    # quota sidecar — runs Python quota_collector (OAuth + Playwright) in a
+    # 60s loop and writes Redis (`agent-metrics:quota:*`). The Rust binary
+    # reads from Redis (collectors/quota.rs shim). Keeps the 827-line OAuth
+    # logic in Python until Phase 5b ports it. No HTTP port — pure worker.
+    {
+        "name": "agent-metrics-quota",
+        "type": "binary",
+        "cmd": (
+            "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
+            " /Users/joneshong/workshop/stations/agent-metrics/scripts/quota_sidecar.py"
+        ),
+        "port": 10198,
+        "health": "http://127.0.0.1:10198/health",
+        "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
+        "env": {
+            "AGENT_METRICS_QUOTA_INTERVAL_S": "60",
+            "AGENT_METRICS_QUOTA_PORT": "10198",
+        },
+    },
     # Python auto-survey retired 2026-04-19 — replaced by auto-survey-rs (below).
     # Kept commented as rollback reference for 30 days, remove after 2026-05-19.
     # {
