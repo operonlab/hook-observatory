@@ -38,6 +38,8 @@ async-trait = "0.1"
 futures = "0.3"
 once_cell = "1"
 nix = { version = "0.29", features = ["signal"] }
+regex = "1"
+fs2 = "0.4"
 
 [dev-dependencies]
 tokio-test = "0.4"

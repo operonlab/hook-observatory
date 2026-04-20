@@ -3,6 +3,7 @@
 //! the migration; full quota Rust port is a separate phase).
 
 pub mod litellm;
+pub mod provider_balance;
 pub mod quota;
 pub mod quota_writer;
 pub mod usage;

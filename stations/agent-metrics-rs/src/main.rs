@@ -45,6 +45,9 @@ enum Cmd {
     QuotaCurrent,
     /// Force a single quota refresh (bypass loop) and print formatted output.
     QuotaRefresh,
+    /// One-shot scrape of LLM provider billing pages (camoufox-cli).
+    /// Cronicle invokes this — replaces ws_provider_balance_sync.py.
+    ProviderBalanceSync,
     /// Run the API server (Phase 4 — not implemented yet).
     Serve,
 }
@@ -112,6 +115,15 @@ async fn main() -> Result<()> {
         Cmd::QuotaCurrent => {
             let r = agent_metrics_rs::collectors::quota::get_quota(&cfg).await;
             println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
+        Cmd::ProviderBalanceSync => {
+            let n =
+                agent_metrics_rs::collectors::provider_balance::run_once(&cfg.redis_url).await?;
+            // Exit non-zero if nothing succeeded (matches Python behavior).
+            if n == 0 {
+                anyhow::bail!("provider-balance-sync: 0 providers ok");
+            }
             Ok(())
         }
         Cmd::QuotaRefresh => {
