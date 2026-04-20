@@ -78,9 +78,16 @@ pub fn build_status_payload(engine: &InterventionEngine) -> serde_json::Value {
     let services: Vec<serde_json::Value> = trackers
         .iter()
         .map(|t| {
+            let group = crate::checker::registry::CHECKS
+                .iter()
+                .find(|c| c.name == t.service)
+                .map(|c| c.group)
+                .unwrap_or("external");
             json!({
                 "service": t.service,
                 "state": t.state,
+                "status": t.state,
+                "group": group,
                 "light_status": t.light_status,
                 "response_ms": t.response_ms,
                 "last_light_check": t.last_light_check,

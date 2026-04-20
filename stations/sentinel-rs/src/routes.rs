@@ -218,30 +218,57 @@ pub async fn incident_detail(
 pub async fn uptime(AxumState(s): AxumState<AppState>) -> Result<Json<Value>, SentinelError> {
     let rows = sqlx::query(
         "SELECT service, \
+         substr(created_at, 1, 10) as day, \
          SUM(CASE WHEN status IN ('healthy','operational','skipped') THEN 1 ELSE 0 END) as healthy, \
          COUNT(*) as total \
          FROM health_checks \
          WHERE created_at >= datetime('now','-90 days') \
-         GROUP BY service",
+         GROUP BY service, day \
+         ORDER BY service, day",
     )
     .fetch_all(&s.pool)
     .await?;
 
-    let items: Vec<Value> = rows
-        .iter()
-        .map(|r| {
-            let healthy: i64 = r.get("healthy");
-            let total: i64 = r.get("total");
-            let pct = if total > 0 {
-                (healthy as f64 / total as f64) * 100.0
+    use std::collections::BTreeMap;
+    let mut per_service: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    let mut totals: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+
+    for r in &rows {
+        let svc: String = r.get("service");
+        let day: String = r.get("day");
+        let healthy: i64 = r.get("healthy");
+        let total: i64 = r.get("total");
+        let pct = if total > 0 {
+            (healthy as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        per_service.entry(svc.clone()).or_default().push(json!({
+            "date": day,
+            "uptime_pct": (pct * 100.0).round() / 100.0,
+            "healthy_checks": healthy,
+            "total_checks": total,
+        }));
+        let agg = totals.entry(svc).or_insert((0, 0));
+        agg.0 += healthy;
+        agg.1 += total;
+    }
+
+    let items: Vec<Value> = per_service
+        .into_iter()
+        .map(|(svc, days)| {
+            let (h, t) = totals.get(&svc).copied().unwrap_or((0, 0));
+            let pct = if t > 0 {
+                (h as f64 / t as f64) * 100.0
             } else {
                 0.0
             };
             json!({
-                "service": r.get::<String, _>("service"),
+                "service": svc,
                 "uptime_pct": (pct * 100.0).round() / 100.0,
-                "healthy_checks": healthy,
-                "total_checks": total,
+                "healthy_checks": h,
+                "total_checks": t,
+                "days": days,
             })
         })
         .collect();
