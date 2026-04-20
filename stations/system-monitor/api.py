@@ -43,10 +43,10 @@ REPORTS_DIR = Path(
 ).expanduser()
 
 # ── Timing constants ──────────────────────────────────────────────────────────
-_SLEEP_STARTUP_DELAY = 5        # seconds — short delay before first broadcast on startup
+_SLEEP_STARTUP_DELAY = 5  # seconds — short delay before first broadcast on startup
 _SLEEP_DISK_STARTUP_DELAY = 15  # seconds — let dashboard loop run first before disk loop
-_TIMEOUT_LAUNCHCTL = 10         # seconds — launchctl load/unload/list commands
-_TIMEOUT_SSE_KEEPALIVE = 30     # seconds — SSE queue.get before sending keepalive comment
+_TIMEOUT_LAUNCHCTL = 10  # seconds — launchctl load/unload/list commands
+_TIMEOUT_SSE_KEEPALIVE = 30  # seconds — SSE queue.get before sending keepalive comment
 
 # Background broadcast intervals
 _DASHBOARD_INTERVAL = 30  # seconds — hardware + status + alerts + history
@@ -472,16 +472,19 @@ async def guardian_log():
         result["current_status"] = status.get("status")
         result["compressed_gb"] = status.get("compressed_gb")
 
-    # Live snapshot of compressed memory + Safari memory
-    from memory_guardian import _get_compressed_memory_gb, _get_safari_memory
+    # Live snapshot of compressed memory + browser memory (Safari + Chrome etc.)
+    from memory_guardian import _get_browser_memory, _get_compressed_memory_gb
 
     loop = asyncio.get_event_loop()
-    compressed, safari = await asyncio.gather(
+    compressed, browser = await asyncio.gather(
         loop.run_in_executor(None, _get_compressed_memory_gb),
-        loop.run_in_executor(None, _get_safari_memory),
+        loop.run_in_executor(None, _get_browser_memory),
     )
     result["compressed_memory"] = compressed
-    result["safari_memory"] = safari
+    result["browser_memory"] = browser
+    # Back-compat: older UIs read `safari_memory` — keep the key but populate
+    # from the unified browser snapshot.
+    result["safari_memory"] = browser
     return result
 
 

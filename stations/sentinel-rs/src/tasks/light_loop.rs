@@ -74,6 +74,7 @@ async fn persist_batch(pool: &SqlitePool, results: &[CheckResult]) -> anyhow::Re
 }
 
 pub fn build_status_payload(engine: &InterventionEngine) -> serde_json::Value {
+    use crate::models::State;
     let trackers = engine.all();
     let services: Vec<serde_json::Value> = trackers
         .iter()
@@ -83,10 +84,18 @@ pub fn build_status_payload(engine: &InterventionEngine) -> serde_json::Value {
                 .find(|c| c.name == t.service)
                 .map(|c| c.group)
                 .unwrap_or("external");
+            // Map internal State to the frontend's status enum (operational/degraded/...)
+            // so the UI's `s.status === 'operational'` check + STATUS_LABELS_SHORT lookup work.
+            let ui_status = match t.state {
+                State::Healthy => "operational",
+                State::Observing | State::Intervening | State::Repairing => "degraded",
+                State::Escalated => "major_outage",
+                State::Maintenance => "maintenance",
+            };
             json!({
                 "service": t.service,
                 "state": t.state,
-                "status": t.state,
+                "status": ui_status,
                 "group": group,
                 "light_status": t.light_status,
                 "response_ms": t.response_ms,
