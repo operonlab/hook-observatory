@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub mod dashboard;
 pub mod litellm;
 pub mod logs;
+pub mod sessions;
 pub mod sysmon;
 pub mod usage;
 
@@ -21,6 +22,7 @@ pub struct AppState {
     pub settings: Arc<Settings>,
     pub pool: SqlitePool,
     pub loop_state: LoopState,
+    pub session_store: crate::session::SessionStore,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -48,7 +50,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/quota/formatted", get(sysmon::quota_formatted))
         // guardian + sweep logs
         .route("/guardian/log", get(logs::guardian_log))
-        .route("/sweep/log", get(logs::sweep_log));
+        .route("/sweep/log", get(logs::sweep_log))
+        // sessions / ingest / current / history
+        .route("/ingest", axum::routing::post(sessions::ingest))
+        .route("/current", get(sessions::current))
+        .route("/sessions", get(sessions::list_sessions))
+        .route("/sessions/:sid", get(sessions::get_session))
+        .route("/history", get(sessions::history));
 
     let static_dir = std::path::PathBuf::from(&state.settings.static_dir);
     let api = if static_dir.exists() {

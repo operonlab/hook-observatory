@@ -19,4 +19,6 @@ pub mod loops;
 
 pub mod collectors;
 
+pub mod aggregator;
+pub mod session;
 pub mod web;

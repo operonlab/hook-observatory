@@ -10,7 +10,6 @@
 //! Python module value-for-value so JSON parity is preserved.
 
 use crate::config::Settings;
-use anyhow::Result;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

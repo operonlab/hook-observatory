@@ -116,21 +116,36 @@ async fn main() -> Result<()> {
             let pool = agent_metrics_rs::db::init_pool(&cfg.sqlite_path).await?;
             agent_metrics_rs::db::run_migrations(&pool).await?;
             let loop_state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size);
+            let session_store = agent_metrics_rs::session::SessionStore::default();
 
-            // Spawn the sysmon background loop
-            let bg_state = loop_state.clone();
-            let bg_cfg = cfg.clone();
-            let bg_pool = pool.clone();
-            tokio::spawn(async move {
-                if let Err(e) = agent_metrics_rs::loops::run_sysmon_loop(bg_state, bg_cfg, bg_pool).await {
-                    tracing::error!(error = %e, "sysmon_loop_exited");
-                }
-            });
+            // Sysmon background loop
+            {
+                let s = loop_state.clone();
+                let c = cfg.clone();
+                let p = pool.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = agent_metrics_rs::loops::run_sysmon_loop(s, c, p).await {
+                        tracing::error!(error = %e, "sysmon_loop_exited");
+                    }
+                });
+            }
+            // Aggregator background loop
+            {
+                let store = session_store.clone();
+                let p = pool.clone();
+                let c = cfg.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = agent_metrics_rs::aggregator::run_aggregator(store, p, c).await {
+                        tracing::error!(error = %e, "aggregator_exited");
+                    }
+                });
+            }
 
             let app_state = agent_metrics_rs::web::AppState {
                 settings: std::sync::Arc::new(cfg.clone()),
                 pool,
                 loop_state,
+                session_store,
             };
             let app = agent_metrics_rs::web::build_router(app_state);
 
