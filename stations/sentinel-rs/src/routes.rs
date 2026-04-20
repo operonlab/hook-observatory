@@ -280,11 +280,23 @@ pub async fn uptime(AxumState(s): AxumState<AppState>) -> Result<Json<Value>, Se
         } else {
             0.0
         };
+        // Map daily uptime % to the frontend's tl-cell colour enum
+        // (operational = green, degraded = yellow, outage = red).
+        let day_status = if total == 0 {
+            "no_data"
+        } else if pct >= 99.0 {
+            "operational"
+        } else if pct >= 90.0 {
+            "degraded"
+        } else {
+            "outage"
+        };
         per_service.entry(svc.clone()).or_default().push(json!({
             "date": day,
             "uptime_pct": (pct * 100.0).round() / 100.0,
             "healthy_checks": healthy,
             "total_checks": total,
+            "status": day_status,
         }));
         let agg = totals.entry(svc).or_insert((0, 0));
         agg.0 += healthy;
