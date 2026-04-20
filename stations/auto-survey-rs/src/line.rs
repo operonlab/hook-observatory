@@ -368,25 +368,74 @@ fn strip_ocr_line_artifacts(line: &str) -> String {
 /// a plausible slug). Trailing `|` artifacts are stripped before matching
 /// because Apple Vision misreads the letter `l` as pipe.
 pub fn extract_surveycake_urls(ocr_text: &str) -> Vec<String> {
-    let url_continuation =
-        Regex::new(r"^(w{2,3}\.|surveycake|[A-Za-z0-9]{3,8}$)").expect("regex");
+    // PaddleOCR returns blocks in *spatial* order (top-to-bottom, left-to-right).
+    // A single URL that wraps across two lines in a chat bubble therefore appears
+    // as multiple blocks with unrelated chat-list / timestamp blocks interleaved
+    // between them — e.g.
+    //   [23] "簽到連結：https://"
+    //   [24] "你大膽假設小心求證，並..."    ← chat list noise
+    //   [25] "www.surveycake.com/s/"
+    //   [26] "上午11:09"                    ← timestamp noise
+    //   [27] "8ZKzl"
+    //
+    // The old reassembly only consulted the previous line, so a single noise
+    // line broke the join. New strategy: drop anything that doesn't look like
+    // part of a SurveyCake URL, then concatenate in order.
+    let domain_re = Regex::new(r"^w{2,3}\.surveycake\.com/s/?$").expect("regex");
+    let slug_re = Regex::new(r"^[A-Za-z0-9]{4,12}$").expect("regex");
 
-    let mut merged: Vec<String> = Vec::new();
+    // Phase 1: keep only URL-shaped fragments, preserving input order.
+    let mut frags: Vec<String> = Vec::new();
     for line in ocr_text.lines() {
-        let stripped = strip_ocr_line_artifacts(line);
-        if merged
-            .last()
-            .map(|last| last.contains("surveycake.com/s/") || last.ends_with("https:/")
-                || last.ends_with("https:") || last.ends_with("https://"))
-            .unwrap_or(false)
-            && url_continuation.is_match(&stripped)
-        {
-            merged.last_mut().unwrap().push_str(&stripped);
-        } else {
-            merged.push(stripped);
+        let s = strip_ocr_line_artifacts(line);
+        if s.is_empty() {
+            continue;
+        }
+        let keep = s.contains("surveycake.com/s/")
+            || s.ends_with("https://")
+            || s.ends_with("htps://") // common PaddleOCR typo
+            || s.ends_with("https:/")
+            || s.ends_with("htps:/")
+            || s.ends_with("https:")
+            || s.ends_with("htps:")
+            || domain_re.is_match(&s)
+            || slug_re.is_match(&s);
+        if keep {
+            frags.push(s);
         }
     }
-    let reassembled = merged.join("\n");
+
+    // Phase 2: concatenate when the tail of the previous fragment expects more.
+    let mut merged: Vec<String> = Vec::new();
+    for f in frags {
+        let wants_more = merged
+            .last()
+            .map(|last| {
+                last.ends_with("https://")
+                    || last.ends_with("htps://")
+                    || last.ends_with("https:/")
+                    || last.ends_with("htps:/")
+                    || last.ends_with("https:")
+                    || last.ends_with("htps:")
+                    || last.ends_with("surveycake.com/s/")
+                    || last.ends_with('/')
+            })
+            .unwrap_or(false);
+        if wants_more {
+            merged.last_mut().unwrap().push_str(&f);
+        } else {
+            merged.push(f);
+        }
+    }
+
+    // Normalize the common OCR typo `htps://` → `https://` so the final regex
+    // (which requires the full `https?://` prefix) still matches.
+    let reassembled = merged
+        .join("\n")
+        .replace("htps://", "https://")
+        .replace("htps:/", "https://")
+        .replace("htps:", "https:");
+
     surveycake_re()
         .find_iter(&reassembled)
         .map(|m| m.as_str().to_string())
@@ -602,15 +651,32 @@ pub async fn fetch_latest_survey_urls(
         }
     };
     let ocr_langs = &["zh-Hant", "zh-Hans", "en"];
-    let ocr_text = match ocr_client::extract_text(client, &cfg.ocr_url, &screenshot, ocr_langs).await {
+
+    // Primary engine: PaddleOCR. It reads LINE message bubbles far more
+    // accurately than Apple Vision — the latter truncates or misreads
+    // slug characters when URLs wrap at bubble boundaries (verified vs.
+    // live 4/17 ground-truth: apple → 8ZKz/cMBo, paddle → 8ZKzl/dvMBo).
+    // Slower (~22 s for one LINE window screenshot) but the flow has
+    // budget: cronicle fires at 13:00 and survey submission window ends
+    // at 14:00.
+    let primary_engine = "paddle";
+    let ocr_text = match ocr_client::extract_text_with_engine(
+        client,
+        &cfg.ocr_url,
+        &screenshot,
+        ocr_langs,
+        primary_engine,
+    )
+    .await
+    {
         Ok(t) => t,
         Err(e) => {
-            tracing::warn!("OCR failed (apple): {}", e);
+            tracing::warn!("primary OCR failed ({}): {}", primary_engine, e);
             String::new()
         }
     };
-    let apple_urls = extract_surveycake_urls(&ocr_text);
-    tracing::info!("apple OCR URLs: {:?}", apple_urls);
+    let primary_urls = extract_surveycake_urls(&ocr_text);
+    tracing::info!("{} OCR URLs: {:?}", primary_engine, primary_urls);
 
     // --- Step 5b: HEAD-validate each URL; if any invalid, retry with Claude Vision ---
     //
@@ -619,15 +685,16 @@ pub async fn fetch_latest_survey_urls(
     // Content-based validation is a separate follow-up (see save_debug_artifact
     // diagnostics). Brute-force suffix repair was prototyped and removed because
     // /s/8ZKz + any single char all return 200, so repairs land on random surveys.
-    let valid_set = validate_surveycake_urls(client, &apple_urls).await;
-    let all_invalid_count = apple_urls.len() - valid_set.len();
-    let needs_fallback = !apple_urls.is_empty() && all_invalid_count > 0;
+    let valid_set = validate_surveycake_urls(client, &primary_urls).await;
+    let all_invalid_count = primary_urls.len() - valid_set.len();
+    let needs_fallback = !primary_urls.is_empty() && all_invalid_count > 0;
 
     let final_urls: Vec<String> = if needs_fallback {
         tracing::info!(
-            "{}/{} apple URLs failed HEAD — falling back to claude engine",
+            "{}/{} {} URLs failed HEAD — falling back to claude engine",
             all_invalid_count,
-            apple_urls.len()
+            primary_urls.len(),
+            primary_engine,
         );
         let claude_text = match ocr_client::extract_text_with_engine(
             client,
@@ -646,28 +713,28 @@ pub async fn fetch_latest_survey_urls(
         };
         let claude_urls = extract_surveycake_urls(&claude_text);
         tracing::info!("claude OCR URLs: {:?}", claude_urls);
-        // Prefer claude URLs that HEAD-validate; fill in with valid apple ones
+        // Prefer claude URLs that HEAD-validate; fill in with valid primary ones
         let claude_valid = validate_surveycake_urls(client, &claude_urls).await;
         let mut merged: Vec<String> = claude_urls
             .iter()
             .filter(|u| claude_valid.contains(*u))
             .cloned()
             .collect();
-        for u in &apple_urls {
+        for u in &primary_urls {
             if valid_set.contains(u) && !merged.contains(u) {
                 merged.push(u.clone());
             }
         }
-        // If nothing validated, return the raw claude list (better OCR than apple)
-        if merged.is_empty() && !claude_urls.is_empty() {
-            claude_urls
+        // If nothing validated, prefer the primary list (paddle > claude on LINE)
+        if merged.is_empty() && !primary_urls.is_empty() {
+            primary_urls
         } else if merged.is_empty() {
-            apple_urls
+            claude_urls
         } else {
             merged
         }
     } else {
-        apple_urls
+        primary_urls
     };
     let _ = std::fs::remove_file(&screenshot);
 
