@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 """
+[DEPRECATED 2026-04-20] Replaced by `agent-metrics-rs provider-balance-sync`
+(stations/agent-metrics-rs/src/collectors/provider_balance.rs).
+
+Cronicle registry repointed to the Rust binary. This file is retained as a
+30-day rollback reference; safe to delete after 2026-05-20.
+
+Rollback:
+  cd ~/workshop
+  python3 schedules/scheduler.py remove ws-provider-balance-sync
+  python3 schedules/scheduler.py add ws-provider-balance-sync \\
+      "~/.local/bin/python3 ~/workshop/schedules/runners/ws_provider_balance_sync.py" \\
+      '{"calendar": {"Hour": 18, "Minute": 15}}' "rollback to Python"
+
+================================================================================
 ws_provider_balance_sync.py — Sync LLM provider balances via camoufox-cli
 
 Scrapes balance/usage dashboards for MiniMax, Moonshot, Z.AI, DeepSeek, xAI.

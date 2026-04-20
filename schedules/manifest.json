@@ -287,9 +287,9 @@
     {
       "name": "ws-provider-balance-sync",
       "label": "com.joneshong.scheduler.ws-provider-balance-sync",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_provider_balance_sync.py",
+      "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs provider-balance-sync",
       "schedule": { "calendar": { "Hour": 18, "Minute": 15 } },
-      "description": "每日 18:15: LLM 供應商餘額爬取同步 → Redis（錯開 memvault synthesis 防 GPU 競爭）",
+      "description": "每日 18:15: LLM 供應商餘額爬取同步 → Redis。2026-04-20 cutover: Python ws_provider_balance_sync.py → agent-metrics-rs provider-balance-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_provider_balance_sync.py",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
