@@ -1,9 +1,11 @@
-//! agent-metrics-rs binary entry — Phase 1 skeleton.
+//! agent-metrics-rs binary entry.
 //!
-//! Currently exposes:
-//!   - `agent-metrics-rs migrate`   — open SQLite, apply migrations, exit
-//!   - `agent-metrics-rs serve`     — placeholder, prints config & exits non-zero
-//! Phase 2+ adds the actual loops and HTTP server.
+//! Subcommands:
+//!   migrate           apply SQLite migrations
+//!   config            print resolved Settings
+//!   sysmon-once       collect a single sysmon snapshot, print JSON
+//!   sysmon-loop       run the sysmon background loop (sysmon + guardian + sweep)
+//!   serve             Phase 4 — placeholder
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -22,6 +24,10 @@ enum Cmd {
     Migrate,
     /// Print the resolved configuration (sanity check).
     Config,
+    /// Collect a single sysmon snapshot and print as JSON.
+    SysmonOnce,
+    /// Run the sysmon background loop (sysmon + guardian + sweep) until cancelled.
+    SysmonLoop,
     /// Run the API server (Phase 4 — not implemented yet).
     Serve,
 }
@@ -47,8 +53,22 @@ async fn main() -> Result<()> {
             println!("{:#?}", cfg);
             Ok(())
         }
+        Cmd::SysmonOnce => {
+            // Network rates need two ticks to compute — first call seeds the
+            // baseline, second call gives a real reading.
+            let _seed = agent_metrics_rs::sysmon::collect_all().await;
+            let snap = agent_metrics_rs::sysmon::collect_all().await;
+            println!("{}", serde_json::to_string(&snap)?);
+            Ok(())
+        }
+        Cmd::SysmonLoop => {
+            let pool = agent_metrics_rs::db::init_pool(&cfg.sqlite_path).await?;
+            agent_metrics_rs::db::run_migrations(&pool).await?;
+            let state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size);
+            agent_metrics_rs::loops::run_sysmon_loop(state, cfg, pool).await
+        }
         Cmd::Serve => {
-            anyhow::bail!("serve command lands in Phase 4; current build is Phase 1 skeleton");
+            anyhow::bail!("serve command lands in Phase 4; current build is Phase 2");
         }
     }
 }

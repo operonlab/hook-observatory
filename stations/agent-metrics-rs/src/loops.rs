@@ -1,0 +1,114 @@
+//! Background loops driver — sysmon tick + guardian + sweep.
+//!
+//! Mirrors `sysmon_loop` in Python:
+//!   - every `interval` seconds, collect a snapshot
+//!   - write to atomic file (FALLBACK_PATH / SYSMON_OUTPUT_PATH)
+//!   - push to in-memory ring buffer for /sysmon/history (Phase 4)
+//!   - per-tick guardian invocation
+//!   - per-N-ticks sweep invocation
+//!
+//! Quota merge + SSE broadcast are deferred to Phase 3/4.
+
+use crate::config::Settings;
+use crate::guardian::{maybe_run_guardian, GuardianConfig};
+use crate::sweep::{maybe_run_sweep, SweepConfig};
+use crate::sysmon::{collect_all, SysmonSnapshot};
+use anyhow::Result;
+use sqlx::SqlitePool;
+use std::collections::VecDeque;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+#[derive(Clone)]
+pub struct LoopState {
+    pub latest: Arc<RwLock<Option<SysmonSnapshot>>>,
+    pub history: Arc<RwLock<VecDeque<SysmonSnapshot>>>,
+    pub history_size: usize,
+}
+
+impl LoopState {
+    pub fn new(history_size: usize) -> Self {
+        Self {
+            latest: Arc::new(RwLock::new(None)),
+            history: Arc::new(RwLock::new(VecDeque::with_capacity(history_size))),
+            history_size,
+        }
+    }
+}
+
+pub async fn sysmon_tick(
+    state: &LoopState,
+    settings: &Settings,
+    pool: &SqlitePool,
+    guardian_cfg: &GuardianConfig,
+    sweep_cfg: &SweepConfig,
+    tick: u64,
+) -> Result<SysmonSnapshot> {
+    let snap = collect_all().await;
+
+    {
+        let mut latest = state.latest.write().await;
+        *latest = Some(snap.clone());
+    }
+    {
+        let mut hist = state.history.write().await;
+        if hist.len() == state.history_size {
+            hist.pop_front();
+        }
+        hist.push_back(snap.clone());
+    }
+
+    if let Ok(json) = serde_json::to_string(&snap) {
+        atomic_write(&settings.sysmon_output_path, &json);
+    }
+
+    if let Err(e) = maybe_run_guardian(pool, guardian_cfg, snap.mem_pressure).await {
+        tracing::warn!(error = %e, "guardian_tick_error");
+    }
+
+    let sweep_ticks = (sweep_cfg.interval as u64).saturating_div(settings.sysmon_collect_interval);
+    if sweep_ticks > 0 && tick % sweep_ticks == 0 {
+        if let Err(e) = maybe_run_sweep(pool, sweep_cfg).await {
+            tracing::warn!(error = %e, "sweep_tick_error");
+        }
+    }
+
+    Ok(snap)
+}
+
+pub async fn run_sysmon_loop(
+    state: LoopState,
+    settings: Settings,
+    pool: SqlitePool,
+) -> Result<()> {
+    let guardian_cfg = GuardianConfig::default_for(&settings);
+    let sweep_cfg = SweepConfig::default_for(&settings);
+    let interval = std::time::Duration::from_secs(settings.sysmon_collect_interval);
+
+    tracing::info!(
+        interval_s = settings.sysmon_collect_interval,
+        "sysmon_loop_started"
+    );
+    let mut tick: u64 = 0;
+    loop {
+        if let Err(e) = sysmon_tick(&state, &settings, &pool, &guardian_cfg, &sweep_cfg, tick).await {
+            tracing::error!(error = %e, "sysmon_collect_error");
+        }
+        tick = tick.wrapping_add(1);
+        tokio::time::sleep(interval).await;
+    }
+}
+
+fn atomic_write(path: &str, data: &str) {
+    let path_buf = std::path::Path::new(path);
+    let dir = path_buf.parent().unwrap_or_else(|| std::path::Path::new("/tmp"));
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let tmp = dir.join(format!(".am-rs-{}-{}.tmp", pid, nanos));
+    if std::fs::write(&tmp, data).is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+    }
+}
