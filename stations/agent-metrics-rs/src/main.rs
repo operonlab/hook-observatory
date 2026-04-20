@@ -139,6 +139,17 @@ async fn main() -> Result<()> {
                     }
                 })
             };
+            // Quota writer background loop — replaces Python `quota_sidecar.py`.
+            let quota_handle = {
+                let c = cfg.clone();
+                tokio::spawn(async move {
+                    if let Err(e) =
+                        agent_metrics_rs::collectors::quota_writer::run_quota_loop(c, 60).await
+                    {
+                        tracing::error!(error = %e, "quota_writer_exited");
+                    }
+                })
+            };
 
             let app_state = agent_metrics_rs::web::AppState {
                 settings: std::sync::Arc::new(cfg.clone()),
@@ -174,8 +185,10 @@ async fn main() -> Result<()> {
             // Abort background tasks (we already drained pending snapshots)
             sysmon_handle.abort();
             aggregator_handle.abort();
+            quota_handle.abort();
             let _ = sysmon_handle.await;
             let _ = aggregator_handle.await;
+            let _ = quota_handle.await;
 
             pool.close().await;
             tracing::info!("agent-metrics-rs stopped cleanly");

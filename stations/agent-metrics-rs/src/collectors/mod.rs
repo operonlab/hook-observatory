@@ -4,4 +4,5 @@
 
 pub mod litellm;
 pub mod quota;
+pub mod quota_writer;
 pub mod usage;
