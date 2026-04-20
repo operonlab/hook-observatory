@@ -38,6 +38,7 @@ tempfile = "3"
 async-trait = "0.1"
 tokio-stream = "0.1"
 futures-core = "0.3"
+workshop-sqlite-pool = { path = "../../libs/rust-sqlite-pool" }
 
 [dev-dependencies]
 tokio-test = "0.4"
