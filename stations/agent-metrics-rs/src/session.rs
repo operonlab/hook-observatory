@@ -399,4 +399,52 @@ mod tests {
         assert!(snaps.iter().any(|s| s.sid == "xxxx"));
         assert!(snaps.iter().any(|s| s.sid == "yyyy"));
     }
+
+    /// Mutation-killer: empty session_id falls back to sid; non-empty wins.
+    /// (catches regressions like flipping `if !req.session_id.is_empty()` to `if req.session_id.is_empty()`)
+    #[tokio::test]
+    async fn key_selection_prefers_session_id_over_sid() {
+        let store = SessionStore::default();
+        let mut r = req("aaaa", 0.5);
+        r.session_id = "full-uuid-1".into();
+        store.ingest(r.clone()).await;
+
+        // Same session_id with different sid should map to same record (delta update)
+        let mut r2 = req("bbbb", 1.5);
+        r2.session_id = "full-uuid-1".into();
+        let resp = store.ingest(r2).await;
+        // Only ONE session because key is session_id="full-uuid-1"
+        assert_eq!(resp.sessions, 1, "session_id should be the dedup key");
+        assert!((resp.daily - 1.5).abs() < 1e-6, "delta = 1.5 - 0.5 = 1.0; new daily = 1.5");
+    }
+
+    /// Mutation-killer: round4 actually rounds to 4 places (catches changing 10_000 → 100_000).
+    #[tokio::test]
+    async fn daily_cost_rounds_to_four_places() {
+        let store = SessionStore::default();
+        // 0.123456789 → expected 0.1235 after round4
+        store.ingest(req("aaaa", 0.123456789)).await;
+        let resp = store.ingest(req("aaaa", 0.123456789)).await;
+        assert_eq!(resp.daily, 0.1235, "round4 must keep 4 places, got {}", resp.daily);
+    }
+
+    /// Mutation-killer: stale sessions (last_seen > SESSION_EXPIRY_SECONDS ago)
+    /// must be excluded from `total` aggregation.
+    #[tokio::test]
+    async fn stale_sessions_excluded_from_total() {
+        let store = SessionStore::default();
+        store.ingest(req("aaaa", 0.5)).await;
+        // Manually fudge last_seen_ts to be older than expiry
+        {
+            let mut inner = store.inner.lock().await;
+            for s in inner.sessions.values_mut() {
+                s.last_seen_ts = now_ts() - SESSION_EXPIRY_SECONDS - 100.0;
+            }
+        }
+        // Add a fresh one
+        let resp = store.ingest(req("bbbb", 0.25)).await;
+        // Only 'bbbb' should count toward the active total (aaaa is stale)
+        assert_eq!(resp.sessions, 1, "stale session must not count");
+        assert!((resp.total - 0.25).abs() < 1e-6, "total only sums non-stale; got {}", resp.total);
+    }
 }

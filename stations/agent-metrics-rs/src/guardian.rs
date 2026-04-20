@@ -131,48 +131,30 @@ async fn read_pressure() -> Option<i64> {
     String::from_utf8_lossy(&out.stdout).trim().parse().ok()
 }
 
-fn safe_kill(pid: i32, sig: i32) -> &'static str {
-    // Probe with signal 0 (existence check) — same as Python `os.kill(pid, 0)`
-    let probe = unsafe { libc_kill(pid, 0) };
-    if probe != 0 {
-        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if errno == 3 {
-            return "already_dead"; // ESRCH
-        }
-        if errno == 1 {
-            return "failed"; // EPERM
-        }
-        return "failed";
+/// Send `sig` to `pid` after probing existence — replaces the previous
+/// hand-rolled `extern "C" kill()` FFI block with `nix::sys::signal::kill`.
+/// Errors map to Python's `os.kill` semantics: ESRCH → "already_dead",
+/// EPERM → "failed".
+fn safe_kill(pid: i32, sig: nix::sys::signal::Signal) -> &'static str {
+    use nix::errno::Errno;
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+    let p = Pid::from_raw(pid);
+    if let Err(e) = kill(p, None) {
+        return match e {
+            Errno::ESRCH => "already_dead",
+            _ => "failed",
+        };
     }
-    let r = unsafe { libc_kill(pid, sig) };
-    if r != 0 {
-        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if errno == 3 {
-            return "already_dead";
-        }
-        if errno == 1 {
-            return "failed";
-        }
-        return "failed";
+    match kill(p, sig) {
+        Ok(()) => "success",
+        Err(Errno::ESRCH) => "already_dead",
+        Err(_) => "failed",
     }
-    "success"
 }
 
-extern "C" {
-    fn kill(pid: libc_pid_t, sig: libc_c_int) -> libc_c_int;
-}
-
-#[allow(non_camel_case_types)]
-type libc_pid_t = i32;
-#[allow(non_camel_case_types)]
-type libc_c_int = i32;
-
-unsafe fn libc_kill(pid: i32, sig: i32) -> i32 {
-    kill(pid as libc_pid_t, sig as libc_c_int)
-}
-
-const SIGTERM: i32 = 15;
-const SIGKILL: i32 = 9;
+const SIGTERM: nix::sys::signal::Signal = nix::sys::signal::Signal::SIGTERM;
+const SIGKILL: nix::sys::signal::Signal = nix::sys::signal::Signal::SIGKILL;
 
 async fn kill_expendables(cfg: &GuardianConfig, level: &str) -> Vec<GuardianAction> {
     let mut actions = Vec::new();
@@ -271,13 +253,13 @@ async fn kill_claude_code(cfg: &GuardianConfig, level: &str) -> Vec<GuardianActi
 fn spawn_grace_kill(pid: i32, grace_seconds: u64) {
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(grace_seconds)).await;
-        let probe = unsafe { libc_kill(pid, 0) };
-        if probe == 0 {
-            let r = unsafe { libc_kill(pid, SIGKILL) };
-            if r == 0 {
-                tracing::warn!(pid, "guardian_force_kill");
-            } else {
-                tracing::warn!(pid, "guardian_force_kill_denied");
+        use nix::sys::signal::kill;
+        use nix::unistd::Pid;
+        let p = Pid::from_raw(pid);
+        if kill(p, None).is_ok() {
+            match kill(p, SIGKILL) {
+                Ok(()) => tracing::warn!(pid, "guardian_force_kill"),
+                Err(_) => tracing::warn!(pid, "guardian_force_kill_denied"),
             }
         }
     });

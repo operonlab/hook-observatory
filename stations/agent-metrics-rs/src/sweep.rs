@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SIGTERM: i32 = 15;
-const SIGCHLD: i32 = 20;
+const SIGTERM: nix::sys::signal::Signal = nix::sys::signal::Signal::SIGTERM;
+const SIGCHLD: nix::sys::signal::Signal = nix::sys::signal::Signal::SIGCHLD;
 
 const MCP_CACHE_TTL: f64 = 300.0;
 
@@ -325,43 +325,24 @@ fn is_node_command(cmd: &str) -> bool {
     false
 }
 
-fn safe_signal(pid: i32, sig: i32) -> &'static str {
-    let probe = unsafe { libc_kill(pid, 0) };
-    if probe != 0 {
-        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if errno == 3 {
-            return "already_dead";
-        }
-        if errno == 1 {
-            return "no_permission";
-        }
-        return "no_permission";
+/// Send `sig` to `pid` after probing existence — replaces the previous
+/// hand-rolled `extern "C" kill()` FFI block with `nix::sys::signal::kill`.
+fn safe_signal(pid: i32, sig: nix::sys::signal::Signal) -> &'static str {
+    use nix::errno::Errno;
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+    let p = Pid::from_raw(pid);
+    if let Err(e) = kill(p, None) {
+        return match e {
+            Errno::ESRCH => "already_dead",
+            _ => "no_permission",
+        };
     }
-    let r = unsafe { libc_kill(pid, sig) };
-    if r != 0 {
-        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if errno == 3 {
-            return "already_dead";
-        }
-        if errno == 1 {
-            return "no_permission";
-        }
-        return "no_permission";
+    match kill(p, sig) {
+        Ok(()) => "success",
+        Err(Errno::ESRCH) => "already_dead",
+        Err(_) => "no_permission",
     }
-    "success"
-}
-
-extern "C" {
-    fn kill(pid: libc_pid_t, sig: libc_c_int) -> libc_c_int;
-}
-
-#[allow(non_camel_case_types)]
-type libc_pid_t = i32;
-#[allow(non_camel_case_types)]
-type libc_c_int = i32;
-
-unsafe fn libc_kill(pid: i32, sig: i32) -> i32 {
-    kill(pid as libc_pid_t, sig as libc_c_int)
 }
 
 fn truncate(s: &str, n: usize) -> String {
@@ -391,5 +372,39 @@ mod tests {
         assert!(!is_node_command("node"));
         assert!(!is_node_command("nodejs script.js"));
         assert!(is_node_command("/opt/homebrew/bin/node\targ"));
+    }
+
+    /// Mutation-killer: prev-char must be `/` or string-start.
+    /// Catches mutations like `prev_ok = i == 0` (drops the `/` clause).
+    #[test]
+    fn rejects_node_with_non_slash_prefix() {
+        assert!(!is_node_command("xnode script.js"));
+        assert!(!is_node_command("a-node script.js"));
+        assert!(!is_node_command(".node script.js"));
+        assert!(!is_node_command("not-node script.js"));
+    }
+
+    /// Mutation-killer: must be followed by whitespace.
+    /// Catches mutations like `next_ok = true` or accepting "node-extra".
+    #[test]
+    fn rejects_node_glued_to_more_chars() {
+        assert!(!is_node_command("/usr/bin/nodejs script"));
+        assert!(!is_node_command("/usr/bin/node_modules"));
+        assert!(!is_node_command("/usr/bin/node-foo bar"));
+    }
+
+    /// Edge: tab and newline both count as whitespace; CR also.
+    #[test]
+    fn whitespace_chars_all_match() {
+        assert!(is_node_command("node arg"));
+        assert!(is_node_command("node\targ"));
+        assert!(is_node_command("/bin/node\nstuff"));
+        assert!(is_node_command("/bin/node\rstuff"));
+    }
+
+    /// Edge: pure root-relative path — `/node script.js`.
+    #[test]
+    fn root_slash_node_matches() {
+        assert!(is_node_command("/node script.js"));
     }
 }

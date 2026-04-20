@@ -541,12 +541,57 @@ fn now_secs() -> f64 {
         .as_secs_f64()
 }
 
+/// Python `round(v, n)` uses banker's rounding (round-half-to-even),
+/// while Rust's `f64::round` is round-half-away-from-zero. The two
+/// disagree at exact .5 boundaries (e.g. 2.5 → Python 2, Rust 3).
+/// To preserve byte-for-byte parity with the Python sysmon snapshots
+/// already on disk, replicate banker's rounding here.
 fn round1(v: f64) -> f64 {
-    (v * 10.0).round() / 10.0
+    banker_round(v * 10.0) / 10.0
 }
 
 fn round0(v: f64) -> f64 {
-    v.round()
+    banker_round(v)
+}
+
+fn banker_round(v: f64) -> f64 {
+    let floor = v.floor();
+    let frac = v - floor;
+    if frac < 0.5 {
+        floor
+    } else if frac > 0.5 {
+        floor + 1.0
+    } else {
+        // Exactly half — round to even
+        if (floor as i64) % 2 == 0 {
+            floor
+        } else {
+            floor + 1.0
+        }
+    }
+}
+
+#[cfg(test)]
+mod sysmon_round_tests {
+    use super::banker_round;
+
+    #[test]
+    fn banker_round_matches_python_at_halves() {
+        assert_eq!(banker_round(0.5), 0.0);
+        assert_eq!(banker_round(1.5), 2.0);
+        assert_eq!(banker_round(2.5), 2.0);
+        assert_eq!(banker_round(3.5), 4.0);
+        assert_eq!(banker_round(-0.5), 0.0);
+        assert_eq!(banker_round(-1.5), -2.0);
+    }
+
+    #[test]
+    fn banker_round_unaffected_for_non_halves() {
+        assert_eq!(banker_round(1.4), 1.0);
+        assert_eq!(banker_round(1.6), 2.0);
+        assert_eq!(banker_round(2.4), 2.0);
+        assert_eq!(banker_round(2.6), 3.0);
+    }
 }
 
 #[allow(dead_code)]
