@@ -588,9 +588,16 @@ pub fn generate_notable_unconfigured(
     arena_models: &[ArenaModel],
     configured: &BTreeSet<String>,
 ) -> Vec<Value> {
+    // NB: 順序敏感 — 先比對較長/特殊的 keyword（如 "devstral" 必須在
+    // "mistral" 前面，避免被吞），再比對通用 keyword。"nemotron" 必須在
+    // "nemo" 前面。
     let provider_enrichment: &[(&str, &str, &str, &str)] = &[
+        ("devstral", "Mistral AI", "Mistral API / OpenRouter", "$0.40/$2.00（促銷免費）"),
+        ("nemotron", "NVIDIA（Open License）", "OpenRouter / DeepInfra", "$0.09/$0.45"),
         ("mistral", "Mistral AI", "Mistral API / OpenRouter", "$2.00/$6.00"),
         ("llama", "Meta（開源）", "Fireworks / Together.ai", "$0.80~1.50/M"),
+        ("gemma", "Google（開源）", "HuggingFace / OpenRouter / Together.ai", "$0.13/$0.38"),
+        ("mimo", "小米 Xiaomi", "Xiaomi 官方 / OpenRouter", "$1.00/$3.00"),
         ("reka", "Reka AI", "Reka API + SDK", "~$2~3/M"),
         ("doubao", "ByteDance", "豆包 API（中國區）", "~¥0.008/千 tokens"),
         ("command", "Cohere", "Cohere API", "$2.50/$10.00"),
@@ -600,6 +607,8 @@ pub fn generate_notable_unconfigured(
         ("phi", "Microsoft", "Azure / HuggingFace", "開源免費"),
         ("jamba", "AI21 Labs", "AI21 API", "~$0.50/$0.70"),
         ("intern", "上海 AI Lab", "OpenRouter / HuggingFace", "開源"),
+        ("trinity", "Arcee AI（400B MoE 開源）", "OpenRouter（Preview 期）", "免費"),
+        ("elephant", "OpenRouter 匿名（100B 閉源）", "OpenRouter", "Alpha 期免費"),
     ];
 
     let mut out = Vec::new();
