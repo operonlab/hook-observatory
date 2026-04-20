@@ -13,6 +13,8 @@ use std::sync::Arc;
 pub mod dashboard;
 pub mod litellm;
 pub mod logs;
+pub mod maestro;
+pub mod projects;
 pub mod sessions;
 pub mod sysmon;
 pub mod usage;
@@ -56,7 +58,25 @@ pub fn build_router(state: AppState) -> Router {
         .route("/current", get(sessions::current))
         .route("/sessions", get(sessions::list_sessions))
         .route("/sessions/:sid", get(sessions::get_session))
-        .route("/history", get(sessions::history));
+        .route("/history", get(sessions::history))
+        // maestro orchestration
+        .route("/maestro/plan", axum::routing::post(maestro::plan))
+        .route("/maestro/run", axum::routing::post(maestro::run_dispatch))
+        .route("/maestro/runs", get(maestro::list_runs))
+        .route("/maestro/runs/:name", get(maestro::get_run))
+        .route("/maestro/tier-stats", get(maestro::tier_stats))
+        .route("/maestro/routing-table", get(maestro::routing_table))
+        // projects (team-task)
+        .route("/projects/", get(projects::list_projects).post(projects::create_project))
+        .route("/projects/:name", get(projects::get_project))
+        .route("/projects/:name/tasks", axum::routing::post(projects::add_task))
+        .route("/projects/:name/ready", get(projects::ready_tasks))
+        .route("/projects/:name/next", get(projects::next_stage))
+        .route("/projects/:name/tasks/:task_id", axum::routing::patch(projects::update_task))
+        .route("/projects/:name/tasks/:task_id/result", axum::routing::post(projects::record_result))
+        .route("/projects/:name/debaters", axum::routing::post(projects::add_debater))
+        .route("/projects/:name/rounds", axum::routing::post(projects::manage_round))
+        .route("/projects/:name/reset", axum::routing::post(projects::reset_project));
 
     let static_dir = std::path::PathBuf::from(&state.settings.static_dir);
     let api = if static_dir.exists() {

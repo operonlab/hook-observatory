@@ -28,6 +28,10 @@ pub struct Settings {
 
     pub static_dir: String,
     pub templates_dir: String,
+
+    pub routing_table_path: String,
+    pub skills_dir: String,
+    pub default_timeout_s: u64,
 }
 
 impl Settings {
@@ -69,6 +73,24 @@ impl Settings {
                 "TEMPLATES_DIR",
                 default_templates.to_string_lossy().as_ref(),
             ),
+
+            routing_table_path: env_or(
+                "ROUTING_TABLE_PATH",
+                parent
+                    .join("agent-metrics")
+                    .join("config")
+                    .join("routing_table.yaml")
+                    .to_string_lossy()
+                    .as_ref(),
+            ),
+            skills_dir: env_or(
+                "SKILLS_DIR",
+                std::env::var("HOME")
+                    .map(|h| format!("{h}/.claude/skills"))
+                    .unwrap_or_else(|_| "/Users/joneshong/.claude/skills".into())
+                    .as_str(),
+            ),
+            default_timeout_s: env_or("DEFAULT_TIMEOUT", "300").parse().unwrap_or(300),
         }
     }
 }
