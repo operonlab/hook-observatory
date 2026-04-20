@@ -4,6 +4,7 @@
 
 use crate::config::Settings;
 use crate::session::SessionStore;
+use crate::web::sse::EventBus;
 use anyhow::Result;
 use sqlx::SqlitePool;
 use std::time::Duration;
@@ -13,7 +14,12 @@ const EXPIRY_CHECK_EVERY_SECONDS: u64 = 10;
 const RETENTION_SNAPSHOTS_DAYS: i64 = 30;
 const RETENTION_DAILY_DAYS: i64 = 365;
 
-pub async fn run_aggregator(store: SessionStore, pool: SqlitePool, _settings: Settings) -> Result<()> {
+pub async fn run_aggregator(
+    store: SessionStore,
+    pool: SqlitePool,
+    _settings: Settings,
+    event_bus: Option<EventBus>,
+) -> Result<()> {
     tracing::info!("aggregator_started");
 
     let mut last_flush = std::time::Instant::now();
@@ -38,6 +44,21 @@ pub async fn run_aggregator(store: SessionStore, pool: SqlitePool, _settings: Se
                 } else {
                     tracing::debug!(count = active.len(), "sessions_upserted");
                 }
+            }
+            // SSE: emit a `sessions` event so subscribed dashboards can refresh
+            // without a polling tick. Frontend treats this as an invalidation
+            // signal and re-fetches /sessions or /current.
+            if let Some(bus) = event_bus.as_ref() {
+                bus.emit(
+                    "sessions",
+                    serde_json::json!({"active_count": active.len()}),
+                );
+                // `usage` is computed on-demand; emit a tick so the frontend
+                // refetches /usage/budget + /usage/by-model after each flush.
+                bus.emit(
+                    "usage",
+                    serde_json::json!({"flushed_at": chrono::Utc::now().to_rfc3339()}),
+                );
             }
 
             let snaps = store.collect_pending_snapshots().await;

@@ -16,6 +16,7 @@ pub mod logs;
 pub mod maestro;
 pub mod projects;
 pub mod sessions;
+pub mod sse;
 pub mod sysmon;
 pub mod usage;
 
@@ -25,6 +26,7 @@ pub struct AppState {
     pub pool: SqlitePool,
     pub loop_state: LoopState,
     pub session_store: crate::session::SessionStore,
+    pub event_bus: sse::EventBus,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -35,6 +37,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         // dashboard html
         .route("/", get(dashboard::index))
+        // SSE stream — replaces 5 setInterval polls in app.js
+        .route("/events/stream", get(sse::stream_handler))
         // litellm
         .route("/litellm/status", get(litellm::status))
         .route("/litellm/model-catalog", get(litellm::model_catalog))

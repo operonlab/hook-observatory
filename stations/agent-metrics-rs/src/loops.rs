@@ -7,12 +7,14 @@
 //!   - per-tick guardian invocation
 //!   - per-N-ticks sweep invocation
 //!
-//! Quota merge + SSE broadcast are deferred to Phase 3/4.
+//! Quota merge happens inline; SSE broadcast emits `system` and `quota`
+//! events when an `EventBus` is wired into `LoopState`.
 
 use crate::config::Settings;
 use crate::guardian::{maybe_run_guardian, GuardianConfig};
 use crate::sweep::{maybe_run_sweep, SweepConfig};
 use crate::sysmon::{collect_all, SysmonSnapshot};
+use crate::web::sse::EventBus;
 use anyhow::Result;
 use sqlx::SqlitePool;
 use std::collections::VecDeque;
@@ -24,6 +26,7 @@ pub struct LoopState {
     pub latest: Arc<RwLock<Option<SysmonSnapshot>>>,
     pub history: Arc<RwLock<VecDeque<SysmonSnapshot>>>,
     pub history_size: usize,
+    pub event_bus: Option<EventBus>,
 }
 
 impl LoopState {
@@ -32,7 +35,13 @@ impl LoopState {
             latest: Arc::new(RwLock::new(None)),
             history: Arc::new(RwLock::new(VecDeque::with_capacity(history_size))),
             history_size,
+            event_bus: None,
         }
+    }
+
+    pub fn with_event_bus(mut self, bus: EventBus) -> Self {
+        self.event_bus = Some(bus);
+        self
     }
 }
 
@@ -72,6 +81,25 @@ pub async fn sysmon_tick(
 
     if let Ok(json) = serde_json::to_string(&snap) {
         atomic_write(&settings.sysmon_output_path, &json);
+    }
+
+    // SSE: push `system` snapshot every tick + `quota` event whenever any quota
+    // field is non-default. Frontend uses `quota` to refresh its quota panel
+    // and `system` for CPU/MEM/NET widgets.
+    if let Some(bus) = state.event_bus.as_ref() {
+        if let Ok(v) = serde_json::to_value(&snap) {
+            bus.emit("system", v);
+        }
+        let q = serde_json::json!({
+            "llm_cc_5h": snap.llm_cc_5h,
+            "llm_cc_7d": snap.llm_cc_7d,
+            "llm_cc_ex": snap.llm_cc_ex,
+            "llm_cx_5h": snap.llm_cx_5h,
+            "llm_cx_7d": snap.llm_cx_7d,
+            "llm_gm_pro": snap.llm_gm_pro,
+            "llm_display": snap.llm_display,
+        });
+        bus.emit("quota", q);
     }
 
     if let Err(e) = maybe_run_guardian(pool, guardian_cfg, snap.mem_pressure).await {
