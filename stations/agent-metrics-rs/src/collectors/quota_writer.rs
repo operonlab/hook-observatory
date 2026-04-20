@@ -55,76 +55,32 @@ fn round_pct(v: f64) -> i64 {
 }
 
 fn http_client() -> Result<reqwest::Client> {
-    // Reserved for local-only HTTP (Redis is via redis crate, LiteLLM via
-    // litellm.rs). Quota fetches go through `curl` (see `curl_get/_post`)
-    // because LuLu firewall blocks unsigned new agent-metrics-rs binaries
-    // from arbitrary outbound HTTPS, while `curl` is permanently approved.
     reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
         .context("build reqwest client")
 }
 
-/// Shell out to system `curl` for HTTPS GET — bypasses LuLu binary signing
-/// per-build prompts. Returns parsed JSON body or Value::Null on any error.
-async fn curl_get(url: &str, headers: &[(&str, &str)]) -> Value {
-    let mut cmd = Command::new("curl");
-    cmd.arg("-sSf").arg("--max-time").arg("15");
-    for (k, v) in headers {
-        cmd.arg("-H").arg(format!("{k}: {v}"));
-    }
-    cmd.arg(url);
-    let out = match cmd.output().await {
-        Ok(o) => o,
-        Err(e) => {
-            tracing::warn!(url, error = %e, "curl_get_spawn_failed");
-            return Value::Null;
-        }
-    };
-    if !out.status.success() {
-        tracing::warn!(
-            url,
-            rc = ?out.status.code(),
-            stderr = %String::from_utf8_lossy(&out.stderr),
-            "curl_get_failed"
-        );
-        return Value::Null;
-    }
-    serde_json::from_slice(&out.stdout).unwrap_or(Value::Null)
-}
-
-/// Shell out to system `curl` for HTTPS POST with JSON body.
-async fn curl_post_json(url: &str, headers: &[(&str, &str)], body: &Value) -> Value {
-    let body_str = body.to_string();
-    let mut cmd = Command::new("curl");
-    cmd.arg("-sSf").arg("--max-time").arg("15").arg("-X").arg("POST");
-    cmd.arg("-H").arg("Content-Type: application/json");
-    for (k, v) in headers {
-        cmd.arg("-H").arg(format!("{k}: {v}"));
-    }
-    cmd.arg("-d").arg(body_str).arg(url);
-    let out = match cmd.output().await {
-        Ok(o) => o,
-        Err(e) => {
-            tracing::warn!(url, error = %e, "curl_post_spawn_failed");
-            return Value::Null;
-        }
-    };
-    if !out.status.success() {
-        tracing::warn!(
-            url,
-            rc = ?out.status.code(),
-            stderr = %String::from_utf8_lossy(&out.stderr),
-            "curl_post_failed"
-        );
-        return Value::Null;
-    }
-    serde_json::from_slice(&out.stdout).unwrap_or(Value::Null)
-}
-
 async fn open_redis(cfg: &Settings) -> Option<redis::aio::ConnectionManager> {
     let c = redis::Client::open(cfg.redis_url.clone()).ok()?;
     redis::aio::ConnectionManager::new(c).await.ok()
+}
+
+/// Read the persisted CC raw payload from Redis. Used as a fallback when
+/// the Anthropic API is rate-limited and we have no in-process state.
+async fn read_cc_raw_redis() -> Value {
+    let url = std::env::var("AGENT_METRICS_REDIS_URL")
+        .unwrap_or_else(|_| "redis://localhost:6379/0".into());
+    let client = match redis::Client::open(url) {
+        Ok(c) => c,
+        Err(_) => return Value::Null,
+    };
+    let mut conn = match redis::aio::ConnectionManager::new(client).await {
+        Ok(c) => c,
+        Err(_) => return Value::Null,
+    };
+    let raw: Option<String> = conn.get(RKEY_CC_RAW).await.ok();
+    raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null)
 }
 
 // ── Anthropic / Claude Code ─────────────────────────────────────
@@ -164,17 +120,35 @@ async fn read_cc_token() -> Option<String> {
     token
 }
 
-async fn fetch_cc(_client: &reqwest::Client) -> Value {
-    {
+async fn fetch_cc(client: &reqwest::Client) -> Value {
+    // Backoff path: skip the API entirely while rate-limited. Compute the
+    // decision in a non-async block so the MutexGuard is fully released
+    // before any `.await`.
+    enum BackoffDecision {
+        Proceed,
+        UseLast(Value),
+        UseRedisFallback,
+    }
+    let decision = {
         let state = CC_STATE.lock().unwrap();
         if let Some(b) = state.backoff_until {
             if Instant::now() < b {
-                if let Some(last) = &state.last_success {
-                    return last.clone();
+                if let Some(last) = state.last_success.clone() {
+                    BackoffDecision::UseLast(last)
+                } else {
+                    BackoffDecision::UseRedisFallback
                 }
-                return Value::Null;
+            } else {
+                BackoffDecision::Proceed
             }
+        } else {
+            BackoffDecision::Proceed
         }
+    };
+    match decision {
+        BackoffDecision::UseLast(v) => return v,
+        BackoffDecision::UseRedisFallback => return read_cc_raw_redis().await,
+        BackoffDecision::Proceed => {}
     }
 
     let token = match read_cc_token().await {
@@ -182,31 +156,89 @@ async fn fetch_cc(_client: &reqwest::Client) -> Value {
         None => return Value::Null,
     };
 
-    let auth = format!("Bearer {token}");
-    let data = curl_get(
-        "https://api.anthropic.com/api/oauth/usage",
-        &[("Authorization", &auth), ("anthropic-beta", "oauth-2025-04-20")],
-    )
-    .await;
+    let resp = client
+        .get("https://api.anthropic.com/api/oauth/usage")
+        .header("Authorization", format!("Bearer {token}"))
+        .header("anthropic-beta", "oauth-2025-04-20")
+        .send()
+        .await;
 
-    if data == Value::Null {
-        let mut state = CC_STATE.lock().unwrap();
-        state.last_fetch_mode = "error_fallback".into();
-        return state.last_success.clone().unwrap_or(Value::Null);
+    let resp = match resp {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "cc_quota_send_failed");
+            let mut state = CC_STATE.lock().unwrap();
+            state.last_fetch_mode = "error_fallback".into();
+            return state.last_success.clone().unwrap_or(Value::Null);
+        }
+    };
+
+    if resp.status() == 429 {
+        let retry_after_hdr = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0);
+        let last_success_age = {
+            let mut state = CC_STATE.lock().unwrap();
+            state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+            let exp = state.consecutive_failures.saturating_sub(1).min(4);
+            let base = CC_QUOTA_BACKOFF_BASE_S * 2_u64.pow(exp);
+            let backoff = base.max(retry_after_hdr);
+            state.backoff_until = Some(Instant::now() + Duration::from_secs(backoff));
+            state.last_fetch_mode = "rate_limited".into();
+            tracing::warn!(
+                backoff_s = backoff,
+                consecutive = state.consecutive_failures,
+                "quota_cc_rate_limited"
+            );
+            elapsed_since(state.last_success_ts)
+        };
+        if last_success_age <= Duration::from_secs(CC_QUOTA_STALE_MAX_S) {
+            return CC_STATE
+                .lock()
+                .unwrap()
+                .last_success
+                .clone()
+                .unwrap_or(Value::Null);
+        }
+        // No in-process state — fall back to last value Python or earlier
+        // Rust runs left in Redis. Fresh `agent-metrics:quota:cc_raw` survives
+        // restarts and is the closest analog to the Python `_persist_cc_quota`
+        // disk fallback.
+        return read_cc_raw_redis().await;
     }
 
-    let mut state = CC_STATE.lock().unwrap();
-    state.last_success = Some(data.clone());
-    state.last_success_ts = Some(Instant::now());
-    state.backoff_until = None;
-    state.consecutive_failures = 0;
-    state.last_fetch_mode = "live".into();
-    data
+    if !resp.status().is_success() {
+        let mut state = CC_STATE.lock().unwrap();
+        state.last_fetch_mode = format!("http_status_{}", resp.status().as_u16());
+        if elapsed_since(state.last_success_ts) <= Duration::from_secs(CC_QUOTA_STALE_MAX_S) {
+            return state.last_success.clone().unwrap_or(Value::Null);
+        }
+        return Value::Null;
+    }
+
+    match resp.json::<Value>().await {
+        Ok(data) => {
+            let mut state = CC_STATE.lock().unwrap();
+            state.last_success = Some(data.clone());
+            state.last_success_ts = Some(Instant::now());
+            state.backoff_until = None;
+            state.consecutive_failures = 0;
+            state.last_fetch_mode = "live".into();
+            data
+        }
+        Err(_) => {
+            let state = CC_STATE.lock().unwrap();
+            state.last_success.clone().unwrap_or(Value::Null)
+        }
+    }
 }
 
 // ── Codex / ChatGPT ─────────────────────────────────────────────
 
-async fn fetch_cx(_client: &reqwest::Client) -> Value {
+async fn fetch_cx(client: &reqwest::Client) -> Value {
     let path = std::env::var("HOME")
         .map(|h| format!("{h}/.codex/auth.json"))
         .unwrap_or_default();
@@ -229,12 +261,23 @@ async fn fetch_cx(_client: &reqwest::Client) -> Value {
     if token.is_empty() || acct.is_empty() {
         return Value::Null;
     }
-    let bearer = format!("Bearer {token}");
-    curl_get(
-        "https://chatgpt.com/backend-api/wham/usage",
-        &[("Authorization", &bearer), ("ChatGPT-Account-Id", &acct)],
-    )
-    .await
+    let resp = client
+        .get("https://chatgpt.com/backend-api/wham/usage")
+        .header("Authorization", format!("Bearer {token}"))
+        .header("ChatGPT-Account-Id", acct)
+        .send()
+        .await;
+    match resp {
+        Ok(r) if r.status().is_success() => r.json().await.unwrap_or(Value::Null),
+        Ok(r) => {
+            tracing::warn!(status = %r.status(), "cx_quota_http_non_success");
+            Value::Null
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "cx_quota_send_failed");
+            Value::Null
+        }
+    }
 }
 
 // ── Gemini / Google ─────────────────────────────────────────────
@@ -260,25 +303,23 @@ async fn ensure_gm_token() -> Option<String> {
     let client_secret = std::env::var("AGENT_METRICS_GM_CLIENT_SECRET")
         .unwrap_or_else(|_| "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".into());
 
-    // Shell out to curl with form-encoded body — same LuLu story as fetch_cx.
-    let body = format!(
-        "grant_type=refresh_token&refresh_token={}&client_id={}&client_secret={}",
-        urlencoding(&refresh),
-        urlencoding(&client_id),
-        urlencoding(&client_secret),
-    );
-    let out = match Command::new("curl")
-        .args(["-sSf", "--max-time", "10", "-X", "POST"])
-        .arg("-H").arg("Content-Type: application/x-www-form-urlencoded")
-        .arg("-d").arg(&body)
-        .arg("https://oauth2.googleapis.com/token")
-        .output()
+    let client = http_client().ok()?;
+    let params = [
+        ("grant_type", "refresh_token"),
+        ("refresh_token", refresh.as_str()),
+        ("client_id", client_id.as_str()),
+        ("client_secret", client_secret.as_str()),
+    ];
+    let resp = client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&params)
+        .send()
         .await
-    {
-        Ok(o) if o.status.success() => o,
-        _ => return if token.is_empty() { None } else { Some(token) },
-    };
-    let new: Value = serde_json::from_slice(&out.stdout).ok()?;
+        .ok()?;
+    if !resp.status().is_success() {
+        return if token.is_empty() { None } else { Some(token) };
+    }
+    let new: Value = resp.json().await.ok()?;
     let new_token = new.get("access_token").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if !new_token.is_empty() {
         creds["access_token"] = Value::String(new_token.clone());
@@ -294,7 +335,7 @@ async fn ensure_gm_token() -> Option<String> {
     }
 }
 
-async fn get_gm_project(_client: &reqwest::Client, token: &str) -> String {
+async fn get_gm_project(client: &reqwest::Client, token: &str) -> String {
     {
         let state = GM_STATE.lock().unwrap();
         if let Some(p) = &state.project {
@@ -303,18 +344,23 @@ async fn get_gm_project(_client: &reqwest::Client, token: &str) -> String {
             }
         }
     }
-    let bearer = format!("Bearer {token}");
-    let data = curl_post_json(
-        "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
-        &[("Authorization", &bearer)],
-        &json!({}),
-    )
-    .await;
-    if let Some(pid) = data.get("cloudaicompanionProject").and_then(|v| v.as_str()) {
-        let mut state = GM_STATE.lock().unwrap();
-        state.project = Some(pid.into());
-        state.project_ts = Some(Instant::now());
-        return pid.to_string();
+    let resp = client
+        .post("https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist")
+        .bearer_auth(token)
+        .json(&json!({}))
+        .send()
+        .await;
+    if let Ok(r) = resp {
+        if r.status().is_success() {
+            if let Ok(data) = r.json::<Value>().await {
+                if let Some(pid) = data.get("cloudaicompanionProject").and_then(|v| v.as_str()) {
+                    let mut state = GM_STATE.lock().unwrap();
+                    state.project = Some(pid.into());
+                    state.project_ts = Some(Instant::now());
+                    return pid.to_string();
+                }
+            }
+        }
     }
     GM_STATE.lock().unwrap().project.clone().unwrap_or_default()
 }
@@ -328,24 +374,23 @@ async fn fetch_gm(client: &reqwest::Client) -> Value {
     if project.is_empty() {
         return Value::Null;
     }
-    let bearer = format!("Bearer {token}");
-    curl_post_json(
-        "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota",
-        &[("Authorization", &bearer)],
-        &json!({"project": format!("projects/{project}")}),
-    )
-    .await
-}
-
-fn urlencoding(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
-            _ => out.push_str(&format!("%{:02X}", b)),
+    let resp = client
+        .post("https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota")
+        .bearer_auth(&token)
+        .json(&json!({"project": format!("projects/{project}")}))
+        .send()
+        .await;
+    match resp {
+        Ok(r) if r.status().is_success() => r.json().await.unwrap_or(Value::Null),
+        Ok(r) => {
+            tracing::warn!(status = %r.status(), "gm_quota_http_non_success");
+            Value::Null
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "gm_quota_send_failed");
+            Value::Null
         }
     }
-    out
 }
 
 // ── format_quota — ports Python `format_quota` byte-for-byte ────
