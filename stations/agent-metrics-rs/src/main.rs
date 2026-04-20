@@ -48,6 +48,12 @@ enum Cmd {
     /// One-shot scrape of LLM provider billing pages (camoufox-cli).
     /// Cronicle invokes this — replaces ws_provider_balance_sync.py.
     ProviderBalanceSync,
+    /// One-shot scrape of DashScope (Qwen) free-quota dashboard.
+    /// Cronicle invokes this — replaces ws_dashscope_quota_sync.py.
+    DashscopeQuotaSync,
+    /// Weekly model-catalog sync — scrapes 4 leaderboards via camoufox-cli,
+    /// merges by Borda count, writes Redis. Replaces ws_model_catalog_sync.py.
+    ModelCatalogSync,
     /// Run the API server (Phase 4 — not implemented yet).
     Serve,
 }
@@ -84,7 +90,11 @@ async fn main() -> Result<()> {
         Cmd::SysmonLoop => {
             let pool = agent_metrics_rs::db::init_pool(&cfg.sqlite_path).await?;
             agent_metrics_rs::db::run_migrations(&pool).await?;
-            let state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size);
+            // No SSE subscribers in standalone mode — pass a bus anyway so the
+            // tick code path is exercised identically to `serve`.
+            let bus = agent_metrics_rs::web::sse::EventBus::new(64);
+            let state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size)
+                .with_event_bus(bus);
             agent_metrics_rs::loops::run_sysmon_loop(state, cfg, pool).await
         }
         Cmd::LitellmStatus => {
@@ -126,6 +136,22 @@ async fn main() -> Result<()> {
             }
             Ok(())
         }
+        Cmd::DashscopeQuotaSync => {
+            let ok =
+                agent_metrics_rs::collectors::dashscope_quota::run_once(&cfg.redis_url).await?;
+            if !ok {
+                anyhow::bail!("dashscope-quota-sync: scrape or parse failed");
+            }
+            Ok(())
+        }
+        Cmd::ModelCatalogSync => {
+            let ok =
+                agent_metrics_rs::collectors::model_catalog::run_once(&cfg.redis_url).await?;
+            if !ok {
+                anyhow::bail!("model-catalog-sync: scrape, merge, or store failed");
+            }
+            Ok(())
+        }
         Cmd::QuotaRefresh => {
             let (raw_cc, raw_cx, raw_gm) =
                 agent_metrics_rs::collectors::quota_writer::raw_dump(&cfg).await;
@@ -139,7 +165,12 @@ async fn main() -> Result<()> {
         Cmd::Serve => {
             let pool = agent_metrics_rs::db::init_pool(&cfg.sqlite_path).await?;
             agent_metrics_rs::db::run_migrations(&pool).await?;
-            let loop_state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size);
+            // Single shared broadcast bus — sysmon_loop, aggregator, and
+            // maestro all emit into it; /events/stream subscribers receive
+            // every event without polling.
+            let event_bus = agent_metrics_rs::web::sse::EventBus::new(64);
+            let loop_state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size)
+                .with_event_bus(event_bus.clone());
             let session_store = agent_metrics_rs::session::SessionStore::default();
 
             // Track background tasks so we can flush + abort cleanly on Ctrl+C.
@@ -157,8 +188,16 @@ async fn main() -> Result<()> {
                 let store = session_store.clone();
                 let p = pool.clone();
                 let c = cfg.clone();
+                let bus = event_bus.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = agent_metrics_rs::aggregator::run_aggregator(store, p, c).await {
+                    if let Err(e) = agent_metrics_rs::aggregator::run_aggregator(
+                        store,
+                        p,
+                        c,
+                        Some(bus),
+                    )
+                    .await
+                    {
                         tracing::error!(error = %e, "aggregator_exited");
                     }
                 })
@@ -180,6 +219,7 @@ async fn main() -> Result<()> {
                 pool: pool.clone(),
                 loop_state,
                 session_store: session_store.clone(),
+                event_bus: event_bus.clone(),
             };
             let app = agent_metrics_rs::web::build_router(app_state);
 

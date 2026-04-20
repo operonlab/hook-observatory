@@ -161,6 +161,16 @@ pub async fn run_dispatch(
     if let Some(obj) = report.as_object_mut() {
         obj.insert("tier".into(), Value::String(tier));
     }
+    state.event_bus.emit(
+        "operations",
+        serde_json::json!({
+            "name": run.name,
+            "pattern": run.pattern,
+            "status": run.status,
+            "duration_s": run.duration_s,
+            "completed_at": run.completed_at,
+        }),
+    );
     Json(report)
 }
 
