@@ -141,6 +141,9 @@ pub async fn operations(AxumState(s): AxumState<AppState>) -> Result<Json<Value>
 
 #[derive(Deserialize, Default)]
 pub struct IncidentsQuery {
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
+    // legacy aliases (keep working for non-UI consumers)
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub service: Option<String>,
@@ -151,28 +154,47 @@ pub async fn incidents_list(
     AxumState(s): AxumState<AppState>,
     Query(q): Query<IncidentsQuery>,
 ) -> Result<Json<Value>, SentinelError> {
-    let limit = q.limit.unwrap_or(50).min(500);
-    let offset = q.offset.unwrap_or(0).max(0);
+    let page_size = q
+        .page_size
+        .or(q.limit)
+        .unwrap_or(20)
+        .clamp(1, 500);
+    let page = q.page.unwrap_or(1).max(1);
+    let offset = q.offset.unwrap_or((page - 1) * page_size).max(0);
 
-    let mut sql = String::from("SELECT id, service, status, severity, title, created_at, resolved_at FROM incidents WHERE 1=1");
+    let mut where_sql = String::from(" WHERE 1=1");
     if q.service.is_some() {
-        sql.push_str(" AND service = ?");
+        where_sql.push_str(" AND service = ?");
     }
     if q.status.is_some() {
-        sql.push_str(" AND status = ?");
+        where_sql.push_str(" AND status = ?");
     }
-    sql.push_str(" ORDER BY created_at DESC LIMIT ? OFFSET ?");
 
-    let mut query = sqlx::query(&sql);
+    let count_sql = format!("SELECT COUNT(*) as n FROM incidents{}", where_sql);
+    let mut count_q = sqlx::query(&count_sql);
     if let Some(svc) = &q.service {
-        query = query.bind(svc);
+        count_q = count_q.bind(svc);
     }
     if let Some(st) = &q.status {
-        query = query.bind(st);
+        count_q = count_q.bind(st);
     }
-    query = query.bind(limit).bind(offset);
+    let total: i64 = count_q.fetch_one(&s.pool).await?.get("n");
 
-    let rows = query.fetch_all(&s.pool).await?;
+    let list_sql = format!(
+        "SELECT id, service, status, severity, title, created_at, resolved_at FROM incidents{} \
+         ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        where_sql
+    );
+    let mut list_q = sqlx::query(&list_sql);
+    if let Some(svc) = &q.service {
+        list_q = list_q.bind(svc);
+    }
+    if let Some(st) = &q.status {
+        list_q = list_q.bind(st);
+    }
+    list_q = list_q.bind(page_size).bind(offset);
+
+    let rows = list_q.fetch_all(&s.pool).await?;
     let items: Vec<Value> = rows
         .iter()
         .map(|r| {
@@ -188,7 +210,22 @@ pub async fn incidents_list(
         })
         .collect();
 
-    Ok(Json(json!({"incidents": items, "count": items.len(), "limit": limit, "offset": offset})))
+    let total_pages = if page_size > 0 {
+        (total + page_size - 1) / page_size
+    } else {
+        0
+    };
+
+    Ok(Json(json!({
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        // legacy aliases
+        "incidents": items.clone(),
+        "count": items.len(),
+    })))
 }
 
 pub async fn incident_detail(

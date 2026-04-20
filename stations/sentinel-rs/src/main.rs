@@ -114,7 +114,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/sentinel/subscribe", post(routes::subscribe))
         .route("/api/sentinel/events", get(routes::sse_events))
         .route(
-            "/api/sysmon/*subpath",
+            "/api/sentinel/sysmon/*subpath",
             get(routes::sysmon_proxy).post(routes::sysmon_proxy),
         )
         .route_service("/", ServeFile::new(&index_path))
