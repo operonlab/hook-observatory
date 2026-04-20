@@ -354,7 +354,7 @@ pub async fn subscribe(
 
 pub async fn sse_events(
     AxumState(s): AxumState<AppState>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+) -> impl IntoResponse {
     let rx = s.sse.subscribe();
     let stream = async_stream::stream! {
         yield Ok(Event::default().event("connected").data("{}"));
@@ -366,12 +366,22 @@ pub async fn sse_events(
                 }
                 Ok(Err(_)) => break,
                 Err(_) => {
-                    yield Ok(Event::default().comment("keepalive"));
+                    yield Ok::<_, Infallible>(Event::default().comment("keepalive"));
                 }
             }
         }
     };
-    Sse::new(stream).keep_alive(KeepAlive::new())
+    let sse = Sse::new(stream).keep_alive(KeepAlive::new());
+    // Hint upstream proxies (nginx, CloudFlare) not to buffer or transform
+    // the event stream — buffering is the usual cause of QUIC RTO accumulation
+    // on long-lived idle SSE connections.
+    (
+        [
+            (axum::http::header::CACHE_CONTROL, "no-cache, no-transform"),
+            (axum::http::HeaderName::from_static("x-accel-buffering"), "no"),
+        ],
+        sse,
+    )
 }
 
 // ─── Sysmon proxy ─────────────────────────────────────────
