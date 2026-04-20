@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import subprocess
+import time
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +12,39 @@ from .config import settings
 from .models import Question, Survey
 
 log = logging.getLogger("auto_survey")
+
+# Transient errors eligible for retry. Captured as a string tuple so the import
+# layer stays lazy — openai/httpx are optional deps pulled in on first call.
+_TRANSIENT_ERROR_NAMES = (
+    "BrokenPipeError",
+    "ConnectionResetError",
+    "ConnectionError",
+    "APIConnectionError",
+    "APITimeoutError",
+    "InternalServerError",
+    "RemoteProtocolError",
+    "ReadError",
+    "WriteError",
+    "PoolTimeout",
+    "ConnectTimeout",
+    "ReadTimeout",
+)
+
+
+def is_transient_error(exc: BaseException) -> bool:
+    """True when the error looks like a connection blip the proxy can recover from."""
+    # Walk the cause/context chain — openai wraps httpx which wraps BrokenPipeError.
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if type(cur).__name__ in _TRANSIENT_ERROR_NAMES:
+            return True
+        # OSError errno 32 is BrokenPipe even when class is generic OSError.
+        if isinstance(cur, OSError) and getattr(cur, "errno", None) == 32:
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
 
 
 def _build_prompt(questions: list[Question]) -> str:
@@ -60,23 +94,53 @@ def _call_llm(prompt: str) -> str:
 
 
 def _call_litellm(prompt: str) -> str:
-    """Call LLM via LiteLLM proxy (OpenAI-compatible API)."""
+    """Call LLM via LiteLLM proxy (OpenAI-compatible API).
+
+    Wraps the OpenAI client with manual retry on transient connection errors
+    (BrokenPipeError, APIConnectionError, etc.) because the SDK's built-in
+    retries do not always cover httpx transport-level write errors. Fresh
+    client per attempt so stale keepalive connections are discarded.
+    """
     from openai import OpenAI
 
-    client = OpenAI(
-        base_url=settings.litellm_base_url,
-        api_key=settings.litellm_api_key,
-    )
     model = settings.llm_model or "grok-4-fast"
-    log.info("[analyze] Calling LiteLLM model=%s", model)
+    max_attempts = 5
+    last_exc: BaseException | None = None
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.1,
-        timeout=60,
-    )
-    return response.choices[0].message.content
+    for attempt in range(1, max_attempts + 1):
+        try:
+            client = OpenAI(
+                base_url=settings.litellm_base_url,
+                api_key=settings.litellm_api_key,
+            )
+            log.info(
+                "[analyze] Calling LiteLLM model=%s attempt=%d/%d",
+                model,
+                attempt,
+                max_attempts,
+            )
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                timeout=60,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:  # noqa: BLE001 — classified via is_transient_error
+            last_exc = exc
+            if not is_transient_error(exc) or attempt == max_attempts:
+                raise
+            backoff = min(2 ** (attempt - 1), 16)  # 1s, 2s, 4s, 8s
+            log.warning(
+                "[analyze] Transient LLM error (%s): %s — retry in %ds",
+                type(exc).__name__,
+                str(exc)[:200],
+                backoff,
+            )
+            time.sleep(backoff)
+
+    # Unreachable — the loop either returns or raises — but keeps type checkers happy.
+    raise RuntimeError(f"LiteLLM call exhausted retries: {last_exc}")
 
 
 def _strip_letter_prefix(text: str) -> str:

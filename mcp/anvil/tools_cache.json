@@ -1,0 +1,323 @@
+[
+  {
+    "name": "anvil_stats",
+    "description": "Get skill usage statistics. Leave skill_name empty for global stats.",
+    "inputSchema": {
+      "properties": {
+        "skill_name": {
+          "default": "",
+          "title": "Skill Name",
+          "type": "string"
+        },
+        "period": {
+          "default": "7d",
+          "title": "Period",
+          "type": "string"
+        }
+      },
+      "title": "anvil_statsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_statsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_catalog",
+    "description": "List registered skills with metadata. Use limit to control result size.",
+    "inputSchema": {
+      "properties": {
+        "status": {
+          "default": "active",
+          "title": "Status",
+          "type": "string"
+        },
+        "limit": {
+          "default": 50,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "anvil_catalogArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_catalogOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_test_skill",
+    "description": "Run T1-T5 structural validation tests (file existence, YAML frontmatter, schema) on a registered skill.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "anvil_test_skillArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_test_skillOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_scan_skill",
+    "description": "Run security scan (S1-S3) on a skill.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "anvil_scan_skillArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_scan_skillOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_eval_skill",
+    "description": "Trigger skill evaluation. Modes: grader, regression, full.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "mode": {
+          "default": "grader",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "anvil_eval_skillArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_eval_skillOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_skill_detail",
+    "description": "Get detailed skill metadata: version, health score, invocation count, success rate, I/O schema, and tags.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "anvil_skill_detailArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_skill_detailOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_register_skill",
+    "description": "Register or update a skill in the Anvil registry.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "title": "Version",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "tags": {
+          "default": "",
+          "title": "Tags",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "anvil_register_skillArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_register_skillOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_sync_skills",
+    "description": "Scan ~/.claude/skills/ and register all skills in the Anvil registry.",
+    "inputSchema": {
+      "properties": {},
+      "title": "anvil_sync_skillsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_sync_skillsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_lifecycle_runs",
+    "description": "List recent skill lifecycle pipeline runs.\n\n    Args:\n        status: Filter by status (running, completed, failed, partial). Empty = all.\n        limit: Max results (default 10).\n    ",
+    "inputSchema": {
+      "properties": {
+        "status": {
+          "default": "",
+          "title": "Status",
+          "type": "string"
+        },
+        "limit": {
+          "default": 10,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "anvil_lifecycle_runsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_lifecycle_runsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "anvil_lifecycle_detail",
+    "description": "Get detailed results of a specific lifecycle run.\n\n    Args:\n        run_id: The lifecycle run ID (e.g. lifecycle-20260309-011152).\n    ",
+    "inputSchema": {
+      "properties": {
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "title": "anvil_lifecycle_detailArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "anvil_lifecycle_detailOutput",
+      "type": "object"
+    }
+  }
+]

@@ -12,6 +12,7 @@ services:
     image: mongo:7
     container_name: komodo-mongo
     restart: unless-stopped
+    mem_limit: 384m
     volumes:
       - komodo-mongo-data:/data/db
     ports:
@@ -26,6 +27,7 @@ services:
     image: ghcr.io/moghtech/komodo-core:latest
     container_name: komodo-core
     restart: unless-stopped
+    mem_limit: 256m
     depends_on:
       komodo-mongo:
         condition: service_healthy

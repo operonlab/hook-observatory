@@ -15,6 +15,7 @@ from src.shared.deps import get_db, require_permission
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from text_ops.merge import merge_content
+from text_ops.noise import check_noise
 
 from .dedup import DedupDecision, check_duplicate
 from .embedding import get_embedding
@@ -125,7 +126,27 @@ async def create_block(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
-    # G1: Pre-creation dedup check (requires embedding, best-effort)
+    # --- Write gates: Noise → Injection Guard → Dedup (sequential) ---
+    # Noise and Injection Guard MUST run before Dedup to prevent noisy/unsafe
+    # content from polluting existing blocks via MERGE decisions.
+    is_quarantined = False
+
+    # Gate 1: Noise check — noisy content skips dedup entirely
+    noise_verdict = check_noise(body.content or "")
+    if noise_verdict.is_noise:
+        is_quarantined = True
+        logger.info("Write gate: noise quarantine (%s), skipping dedup", noise_verdict.reason)
+
+    # Gate 2: Injection guard — unsafe content skips dedup entirely
+    if not is_quarantined:
+        unsafe, inject_reason = is_unsafe_for_injection(body.content or "")
+        if unsafe:
+            is_quarantined = True
+            logger.warning(
+                "Write gate: injection quarantine (%s), skipping dedup", inject_reason
+            )
+
+    # Gate 3: Dedup check — only clean content reaches similarity comparison
     try:
         embedding = await get_embedding(body.content, task_type="search_document")
     except Exception:
@@ -133,7 +154,7 @@ async def create_block(
         embedding = None
 
     superseded_block_id = None
-    if embedding and not skip_dedup:
+    if embedding and not skip_dedup and not is_quarantined:
         dedup_result = await check_duplicate(
             db, space_id, body.content, embedding, block_type=body.block_type
         )

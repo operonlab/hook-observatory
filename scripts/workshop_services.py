@@ -116,14 +116,14 @@ SERVICES = [
     },
     {
         "name": "sentinel",
-        "type": "uvicorn",
+        "type": "binary",
         "cmd": (
-            "/Users/joneshong/workshop/stations/sentinel/.venv/bin/python3"
-            f" -m uvicorn main:app --host 127.0.0.1 --port {get_port('sentinel')}"
+            "/Users/joneshong/workshop/stations/sentinel-rs/target/release/sentinel-rs"
+            " --config /Users/joneshong/workshop/stations/sentinel-rs/config.yaml"
         ),
         "port": get_port("sentinel"),
         "health": get("sentinel").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/sentinel",
+        "workdir": "/Users/joneshong/workshop/stations/sentinel-rs",
     },
     {
         "name": "system-monitor",
@@ -148,17 +148,34 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
         "env": {"AGENT_METRICS_PORT": str(get_port("agent-metrics"))},
     },
+    # Python auto-survey retired 2026-04-19 — replaced by auto-survey-rs (below).
+    # Kept commented as rollback reference for 30 days, remove after 2026-05-19.
+    # {
+    #     "name": "auto-survey",
+    #     "type": "uvicorn",
+    #     "cmd": (
+    #         "/opt/homebrew/bin/uv run --project"
+    #         " /Users/joneshong/workshop/stations/auto-survey"
+    #         f" auto-survey serve --host 127.0.0.1 --port {get_port('auto-survey')}"
+    #     ),
+    #     "port": get_port("auto-survey"),
+    #     "health": get("auto-survey").health_url,
+    #     "workdir": "/Users/joneshong/workshop/stations/auto-survey",
+    # },
+    # auto-survey-rs: Rust replacement for auto-survey (on-demand, Wed/Fri 10:00-18:00)
+    # Lifecycle managed by Cronicle (ws-auto-survey-rs-start/stop-wed/fri jobs)
+    # NOT managed by workshop-launcher daemon — schedule="on-demand"
     {
-        "name": "auto-survey",
-        "type": "uvicorn",
+        "name": "auto-survey-rs",
+        "type": "binary",
+        "schedule": "on-demand",
         "cmd": (
-            "/opt/homebrew/bin/uv run --project"
-            " /Users/joneshong/workshop/stations/auto-survey"
-            f" auto-survey serve --host 127.0.0.1 --port {get_port('auto-survey')}"
+            "/Users/joneshong/workshop/stations/auto-survey-rs/target/release/auto-survey-rs"
+            f" serve --host 127.0.0.1 --port {get_port('auto-survey')}"
         ),
         "port": get_port("auto-survey"),
         "health": get("auto-survey").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/auto-survey",
+        "workdir": "/Users/joneshong/workshop/stations/auto-survey-rs",
     },
     {
         "name": "anvil",

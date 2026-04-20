@@ -418,7 +418,7 @@ class ScoringPipeline:
         self._pipeline = self._build_pipeline()
 
     def _build_pipeline(self) -> Pipeline:
-        """Build the reactive Pipeline with all 10 scoring operators."""
+        """Build the reactive Pipeline with all 11 scoring operators."""
         return Pipeline().pipe(
             RecencyOp("recency", self.config),
             ImportanceOp("importance", self.config),

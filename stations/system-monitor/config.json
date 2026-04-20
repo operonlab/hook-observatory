@@ -54,19 +54,39 @@
       "warn_threshold_gb": 5.0,
       "crit_threshold_gb": 8.0,
       "purge_on_warn": true,
-      "safari_tab_warn_gb": 2.0,
+      "browser_tab_warn_gb": 2.0,
       "notify_cooldown_minutes": 15
     },
+    "orbstack": {
+      "watch_threshold_gb": 3.5,
+      "warn_threshold_gb": 5.0,
+      "crit_threshold_gb": 7.0,
+      "notify_cooldown_minutes": 120
+    },
     "expendables": [
-      { "pattern": "Google Chrome Helper (Renderer)", "label": "Chrome 分頁" },
-      { "pattern": "/Applications/Google Chrome.app", "label": "Google Chrome" },
-      { "pattern": "plugin-container", "label": "Zen 分頁" },
-      { "pattern": "/Applications/Zen Browser.app", "label": "Zen Browser" },
+      { "pattern": "Google Chrome Helper (Renderer)", "label": "Chrome 分頁", "browser": true },
+      { "pattern": "Google Chrome Helper (GPU)", "label": "Chrome GPU", "browser": true },
+      { "pattern": "LINE", "label": "LINE" },
+      { "pattern": "LineCall", "label": "LINE Call" },
       { "pattern": "Visual Studio Code", "label": "VS Code" },
       { "pattern": "Antigravity", "label": "Antigravity" },
       { "pattern": "openclaw-gateway", "label": "OpenClaw" },
       { "pattern": "AltServer", "label": "AltServer" }
-    ]
+    ],
+    "browser": {
+      "type": "chrome",
+      "tab_warn_gb": 2.0,
+      "try_applescript_first": false,
+      "max_tabs_to_close": 0,
+      "never_kill_main": true,
+      "never_close_tabs": true
+    },
+    "presence": {
+      "present_idle_sec": 300,
+      "away_idle_sec": 900,
+      "present_notify_cooldown_min": 30,
+      "away_notify_cooldown_min": 5
+    }
   },
   "disk_management": {
     "scan_cache_ttl": 300,

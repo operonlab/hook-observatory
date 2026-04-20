@@ -170,14 +170,16 @@ class MemoryBlockService(
                 f"Invalid block_type: {d['block_type']}",
                 code="memvault.invalid_block_type",
             )
-        # Phase A1: Noise quarantine — tag noisy content instead of rejecting
+        # Defense-in-depth: Noise + Injection Guard run here as safety net.
+        # Primary gate is in routes.py (runs BEFORE dedup to prevent pollution).
+        # These are idempotent — adding an existing tag is a no-op.
         verdict = check_noise(d.get("content", ""))
         if verdict.is_noise:
             tags = d.get("tags") or []
             if QUARANTINE_TAG not in tags:
                 tags = [*tags, QUARANTINE_TAG]
             d["tags"] = tags
-        # Phase H1: Write-side injection guard — quarantine, don't reject
+        # Injection guard (defense-in-depth, primary gate in routes.py)
         unsafe, reason = is_unsafe_for_injection(d.get("content", ""))
         if unsafe:
             tags = d.get("tags") or []

@@ -1,0 +1,76 @@
+[
+  {
+    "name": "vision_analyze",
+    "description": "Analyze image. Tasks: describe, detect, classify, qa, barcode, face.",
+    "inputSchema": {
+      "properties": {
+        "file_path": {
+          "title": "File Path",
+          "type": "string"
+        },
+        "task": {
+          "default": "describe",
+          "title": "Task",
+          "type": "string"
+        },
+        "engine": {
+          "default": "apple",
+          "title": "Engine",
+          "type": "string"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        }
+      },
+      "required": [
+        "file_path"
+      ],
+      "title": "vision_analyzeArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "vision_analyzeOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "vision_engines",
+    "description": "List available computer vision engines with supported analysis tasks and capabilities.",
+    "inputSchema": {
+      "properties": {},
+      "title": "vision_enginesArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "vision_enginesOutput",
+      "type": "object"
+    }
+  }
+]

@@ -1,0 +1,20 @@
+port: 4101
+host: "127.0.0.1"
+
+database_path: "/opt/homebrew/var/lib/workshop/sentinel.db"
+
+redis_url: "redis://127.0.0.1:6379"
+redis_push_channel: "workshop:push"
+
+lock_dir: "/opt/homebrew/var/run/workshop/sentinel"
+log_dir: "/opt/homebrew/var/log/workshop/sentinel"
+
+check_light_interval_sec: 30
+check_intervention_delay_sec: 300
+check_repair_timeout_sec: 600
+repair_monitor_interval_sec: 15
+purge_interval_sec: 21600
+purge_retention_days: 30
+notification_cooldown_sec: 1800
+
+sysmon_url: "http://127.0.0.1:10102"

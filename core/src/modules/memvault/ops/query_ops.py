@@ -30,9 +30,9 @@ class QueryRouteOp(MemvaultOp):
         return ("intent", "layer_plan", "routing_confidence")
 
     async def execute(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        from ..query_router import classify_query
+        from ..query_router import classify_query_full
 
-        layer_plan = classify_query(ctx["query"])
+        layer_plan = await classify_query_full(ctx["query"])
         ctx["intent"] = layer_plan.intent
         ctx["layer_plan"] = layer_plan
         ctx["routing_confidence"] = layer_plan.confidence
