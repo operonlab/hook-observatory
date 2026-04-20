@@ -158,7 +158,7 @@ pub fn activate_line_and_go_to_community(name: &str) -> bool {
 // Get LINE's CGWindowID
 // ---------------------------------------------------------------------------
 
-/// Path to the Swift-compiled helper that prints LINE's kCGWindowNumber.
+/// Path to the Swift-compiled helper that prints LINE's window info.
 /// Source: `stations/auto-survey-rs/bin/src/get_cg_wid.swift`
 /// Build:  `stations/auto-survey-rs/bin/build.sh`
 fn get_cg_wid_binary() -> std::path::PathBuf {
@@ -167,32 +167,69 @@ fn get_cg_wid_binary() -> std::path::PathBuf {
         .join("get_cg_wid")
 }
 
-/// Get LINE's CGWindowID using a small Swift helper that calls
-/// `CGWindowListCopyWindowInfo` → `kCGWindowNumber`. This is the correct
-/// Quartz CGWindowID required by `screencapture -l <wid>`.
+/// LINE's on-screen window info, queried from `CGWindowListCopyWindowInfo`.
 ///
-/// Mirrors Python `line_reader.py:_get_line_window_id()` but uses a compiled
-/// Swift binary (no Python/pyobjc dependency, ~10ms cold start).
-pub fn get_line_window_id() -> Option<u32> {
+/// `(x, y, w, h)` are global logical points, matching what `cliclick` expects.
+/// Using CGWindowBounds directly (rather than AppleScript `position of front
+/// window`) is essential for multi-monitor stability: AppleScript's values go
+/// stale after cross-screen drags, Space switches, and window resize events,
+/// and can leak Space-local coords on external displays. CGWindowBounds is
+/// snapshot-atomic and always in the global coordinate space.
+#[derive(Debug, Clone, Copy)]
+pub struct LineWindowInfo {
+    pub wid: u32,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+/// Get LINE's window info (wid + bounds) from the Swift helper.
+///
+/// Output format: `"<wid> <x> <y> <w> <h>"` — five whitespace-separated tokens.
+pub fn get_line_window_info() -> Option<LineWindowInfo> {
     let binary = get_cg_wid_binary();
     let out = Command::new(&binary).arg("LINE").output().ok()?;
 
-    if out.status.success() {
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let wid = stdout.trim().parse::<u32>().ok().filter(|&id| id > 0);
-        if let Some(w) = wid {
-            tracing::debug!("CGWindowID via Swift/Quartz: {}", w);
-            return Some(w);
-        }
+    if !out.status.success() {
+        tracing::debug!(
+            "get_cg_wid {:?} failed: status={} stderr={}",
+            binary,
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+        return None;
     }
 
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let tokens: Vec<&str> = stdout.split_whitespace().collect();
+    if tokens.len() != 5 {
+        tracing::debug!("get_cg_wid output unexpected: {:?}", stdout);
+        return None;
+    }
+
+    let wid: u32 = tokens[0].parse().ok().filter(|&id| id > 0)?;
+    let x: f64 = tokens[1].parse().ok()?;
+    let y: f64 = tokens[2].parse().ok()?;
+    let w: f64 = tokens[3].parse().ok()?;
+    let h: f64 = tokens[4].parse().ok()?;
+
+    if w <= 0.0 || h <= 0.0 {
+        tracing::debug!("get_cg_wid returned zero-sized bounds: w={} h={}", w, h);
+        return None;
+    }
+
+    let info = LineWindowInfo { wid, x, y, w, h };
     tracing::debug!(
-        "get_cg_wid {:?} failed: status={} stderr={}",
-        binary,
-        out.status,
-        String::from_utf8_lossy(&out.stderr).trim()
+        "LINE window info: wid={} bounds=({}, {}, {}, {})",
+        info.wid, info.x, info.y, info.w, info.h
     );
-    None
+    Some(info)
+}
+
+/// Get LINE's CGWindowID only. Compatibility wrapper over [`get_line_window_info`].
+pub fn get_line_window_id() -> Option<u32> {
+    get_line_window_info().map(|i| i.wid)
 }
 
 // ---------------------------------------------------------------------------
@@ -331,25 +368,74 @@ fn strip_ocr_line_artifacts(line: &str) -> String {
 /// a plausible slug). Trailing `|` artifacts are stripped before matching
 /// because Apple Vision misreads the letter `l` as pipe.
 pub fn extract_surveycake_urls(ocr_text: &str) -> Vec<String> {
-    let url_continuation =
-        Regex::new(r"^(w{2,3}\.|surveycake|[A-Za-z0-9]{3,8}$)").expect("regex");
+    // PaddleOCR returns blocks in *spatial* order (top-to-bottom, left-to-right).
+    // A single URL that wraps across two lines in a chat bubble therefore appears
+    // as multiple blocks with unrelated chat-list / timestamp blocks interleaved
+    // between them — e.g.
+    //   [23] "簽到連結：https://"
+    //   [24] "你大膽假設小心求證，並..."    ← chat list noise
+    //   [25] "www.surveycake.com/s/"
+    //   [26] "上午11:09"                    ← timestamp noise
+    //   [27] "8ZKzl"
+    //
+    // The old reassembly only consulted the previous line, so a single noise
+    // line broke the join. New strategy: drop anything that doesn't look like
+    // part of a SurveyCake URL, then concatenate in order.
+    let domain_re = Regex::new(r"^w{2,3}\.surveycake\.com/s/?$").expect("regex");
+    let slug_re = Regex::new(r"^[A-Za-z0-9]{4,12}$").expect("regex");
 
-    let mut merged: Vec<String> = Vec::new();
+    // Phase 1: keep only URL-shaped fragments, preserving input order.
+    let mut frags: Vec<String> = Vec::new();
     for line in ocr_text.lines() {
-        let stripped = strip_ocr_line_artifacts(line);
-        if merged
-            .last()
-            .map(|last| last.contains("surveycake.com/s/") || last.ends_with("https:/")
-                || last.ends_with("https:") || last.ends_with("https://"))
-            .unwrap_or(false)
-            && url_continuation.is_match(&stripped)
-        {
-            merged.last_mut().unwrap().push_str(&stripped);
-        } else {
-            merged.push(stripped);
+        let s = strip_ocr_line_artifacts(line);
+        if s.is_empty() {
+            continue;
+        }
+        let keep = s.contains("surveycake.com/s/")
+            || s.ends_with("https://")
+            || s.ends_with("htps://") // common PaddleOCR typo
+            || s.ends_with("https:/")
+            || s.ends_with("htps:/")
+            || s.ends_with("https:")
+            || s.ends_with("htps:")
+            || domain_re.is_match(&s)
+            || slug_re.is_match(&s);
+        if keep {
+            frags.push(s);
         }
     }
-    let reassembled = merged.join("\n");
+
+    // Phase 2: concatenate when the tail of the previous fragment expects more.
+    let mut merged: Vec<String> = Vec::new();
+    for f in frags {
+        let wants_more = merged
+            .last()
+            .map(|last| {
+                last.ends_with("https://")
+                    || last.ends_with("htps://")
+                    || last.ends_with("https:/")
+                    || last.ends_with("htps:/")
+                    || last.ends_with("https:")
+                    || last.ends_with("htps:")
+                    || last.ends_with("surveycake.com/s/")
+                    || last.ends_with('/')
+            })
+            .unwrap_or(false);
+        if wants_more {
+            merged.last_mut().unwrap().push_str(&f);
+        } else {
+            merged.push(f);
+        }
+    }
+
+    // Normalize the common OCR typo `htps://` → `https://` so the final regex
+    // (which requires the full `https?://` prefix) still matches.
+    let reassembled = merged
+        .join("\n")
+        .replace("htps://", "https://")
+        .replace("htps:/", "https://")
+        .replace("htps:", "https:");
+
     surveycake_re()
         .find_iter(&reassembled)
         .map(|m| m.as_str().to_string())
@@ -459,24 +545,39 @@ pub async fn fetch_latest_survey_urls(
     client: &reqwest::Client,
     _scroll_pages_unused: u32,
 ) -> Vec<String> {
-    // --- Step 1: activate LINE + get window ID ---
-    if Command::new("osascript")
-        .args(["-e", r#"tell application "LINE" to activate"#])
-        .output()
-        .is_err()
-    {
-        tracing::warn!("Failed to activate LINE");
-    }
-    sleep(Duration::from_millis(400)).await;
-
-    let wid = match get_line_window_id() {
-        Some(id) => id,
+    // --- Step 1: locate LINE window (background-friendly — no focus stealing) ---
+    //
+    // Intentionally no `tell application "LINE" to activate` here. The rest of
+    // the flow works entirely with LINE in the background because:
+    //   • screencapture -l <CGWindowID> reads the window server buffer directly
+    //   • AXValue writes (Step 4) mutate the text field without needing focus
+    //   • clipboard restore uses pbcopy stdin (no UI contact)
+    // Effect: the user can keep typing in another app while the scheduled job
+    // runs — verified on 2026-04-20 with LINE parked on a secondary display.
+    let info = match get_line_window_info() {
+        Some(i) => i,
         None => {
-            tracing::warn!("Cannot get LINE window ID — is LINE running?");
-            return vec![];
+            // LINE isn't running or has no visible window. Use `launch`, not
+            // `activate`, so we don't steal focus even in the cold-start case.
+            tracing::info!("LINE not running, launching in background...");
+            let _ = Command::new("osascript")
+                .args(["-e", r#"tell application "LINE" to launch"#])
+                .output();
+            sleep(Duration::from_secs(3)).await;
+            match get_line_window_info() {
+                Some(i) => i,
+                None => {
+                    tracing::warn!("LINE launch failed — no visible window");
+                    return vec![];
+                }
+            }
         }
     };
-    tracing::info!("LINE CGWindowID = {}", wid);
+    let wid = info.wid;
+    tracing::info!(
+        "LINE window: wid={} bounds=({}, {}, {}, {})",
+        info.wid, info.x, info.y, info.w, info.h
+    );
 
     // --- Step 2: save current clipboard (restore at end) ---
     let saved_clip = Command::new("pbpaste")
@@ -492,15 +593,17 @@ pub async fn fetch_latest_survey_urls(
             return vec![];
         }
     };
-    let search_coord = find_search_box_coord(client, &cfg.ocr_url, &initial_shot, wid).await;
-    let _ = std::fs::remove_file(&initial_shot);
+    let search_coord = find_search_box_coord(client, &cfg.ocr_url, &initial_shot, info).await;
     let (sx, sy) = match search_coord {
         Some(c) => c,
         None => {
             tracing::warn!("Cannot find search box coord — aborting");
+            save_debug_artifact("search-box-not-found", Some(&initial_shot), "");
+            let _ = std::fs::remove_file(&initial_shot);
             return vec![];
         }
     };
+    let _ = std::fs::remove_file(&initial_shot);
     tracing::info!("search box at ({}, {})", sx, sy);
 
     // --- Step 4: directly set search field value via AXValue ---
@@ -548,26 +651,50 @@ pub async fn fetch_latest_survey_urls(
         }
     };
     let ocr_langs = &["zh-Hant", "zh-Hans", "en"];
-    let ocr_text = match ocr_client::extract_text(client, &cfg.ocr_url, &screenshot, ocr_langs).await {
+
+    // Primary engine: PaddleOCR. It reads LINE message bubbles far more
+    // accurately than Apple Vision — the latter truncates or misreads
+    // slug characters when URLs wrap at bubble boundaries (verified vs.
+    // live 4/17 ground-truth: apple → 8ZKz/cMBo, paddle → 8ZKzl/dvMBo).
+    // Slower (~22 s for one LINE window screenshot) but the flow has
+    // budget: cronicle fires at 13:00 and survey submission window ends
+    // at 14:00.
+    let primary_engine = "paddle";
+    let ocr_text = match ocr_client::extract_text_with_engine(
+        client,
+        &cfg.ocr_url,
+        &screenshot,
+        ocr_langs,
+        primary_engine,
+    )
+    .await
+    {
         Ok(t) => t,
         Err(e) => {
-            tracing::warn!("OCR failed (apple): {}", e);
+            tracing::warn!("primary OCR failed ({}): {}", primary_engine, e);
             String::new()
         }
     };
-    let apple_urls = extract_surveycake_urls(&ocr_text);
-    tracing::info!("apple OCR URLs: {:?}", apple_urls);
+    let primary_urls = extract_surveycake_urls(&ocr_text);
+    tracing::info!("{} OCR URLs: {:?}", primary_engine, primary_urls);
 
     // --- Step 5b: HEAD-validate each URL; if any invalid, retry with Claude Vision ---
-    let valid_set = validate_surveycake_urls(client, &apple_urls).await;
-    let all_invalid_count = apple_urls.len() - valid_set.len();
-    let needs_fallback = !apple_urls.is_empty() && all_invalid_count > 0;
+    //
+    // WARNING: `validate_surveycake_urls` only rules out slugs under 5 chars —
+    // any `>=5 char` slug (including OCR misreads) gets HTTP 200 from SurveyCake.
+    // Content-based validation is a separate follow-up (see save_debug_artifact
+    // diagnostics). Brute-force suffix repair was prototyped and removed because
+    // /s/8ZKz + any single char all return 200, so repairs land on random surveys.
+    let valid_set = validate_surveycake_urls(client, &primary_urls).await;
+    let all_invalid_count = primary_urls.len() - valid_set.len();
+    let needs_fallback = !primary_urls.is_empty() && all_invalid_count > 0;
 
     let final_urls: Vec<String> = if needs_fallback {
         tracing::info!(
-            "{}/{} apple URLs failed HEAD — falling back to claude engine",
+            "{}/{} {} URLs failed HEAD — falling back to claude engine",
             all_invalid_count,
-            apple_urls.len()
+            primary_urls.len(),
+            primary_engine,
         );
         let claude_text = match ocr_client::extract_text_with_engine(
             client,
@@ -586,28 +713,28 @@ pub async fn fetch_latest_survey_urls(
         };
         let claude_urls = extract_surveycake_urls(&claude_text);
         tracing::info!("claude OCR URLs: {:?}", claude_urls);
-        // Prefer claude URLs that HEAD-validate; fill in with valid apple ones
+        // Prefer claude URLs that HEAD-validate; fill in with valid primary ones
         let claude_valid = validate_surveycake_urls(client, &claude_urls).await;
         let mut merged: Vec<String> = claude_urls
             .iter()
             .filter(|u| claude_valid.contains(*u))
             .cloned()
             .collect();
-        for u in &apple_urls {
+        for u in &primary_urls {
             if valid_set.contains(u) && !merged.contains(u) {
                 merged.push(u.clone());
             }
         }
-        // If nothing validated, return the raw claude list (better OCR than apple)
-        if merged.is_empty() && !claude_urls.is_empty() {
-            claude_urls
+        // If nothing validated, prefer the primary list (paddle > claude on LINE)
+        if merged.is_empty() && !primary_urls.is_empty() {
+            primary_urls
         } else if merged.is_empty() {
-            apple_urls
+            claude_urls
         } else {
             merged
         }
     } else {
-        apple_urls
+        primary_urls
     };
     let _ = std::fs::remove_file(&screenshot);
 
@@ -665,36 +792,13 @@ async fn find_search_box_coord(
     client: &reqwest::Client,
     ocr_base_url: &str,
     screenshot: &Path,
-    wid: u32,
+    info: LineWindowInfo,
 ) -> Option<(i32, i32)> {
-    // Query LINE window position + size (absolute screen coords)
-    let pos_script = r#"tell application "System Events"
-    tell process "LINE"
-        tell front window
-            set p to position
-            set s to size
-            return (item 1 of p as text) & "," & (item 2 of p as text) & "," & (item 1 of s as text) & "," & (item 2 of s as text)
-        end tell
-    end tell
-end tell"#;
-    let pos_out = Command::new("osascript")
-        .args(["-e", pos_script])
-        .output()
-        .ok()?;
-    let pos_str = String::from_utf8_lossy(&pos_out.stdout);
-    let nums: Vec<i32> = pos_str
-        .trim()
-        .split(',')
-        .filter_map(|s| s.trim().parse().ok())
-        .collect();
-    if nums.len() != 4 {
-        tracing::debug!("window pos parse failed: {:?}", pos_str);
-        let _ = wid; // silence unused
-        return None;
-    }
-    let (win_x, win_y, win_w, win_h) = (nums[0], nums[1], nums[2], nums[3]);
-
-    // Get screenshot pixel dims (Retina may 2x; but sips reports actual pixels)
+    // Screenshot pixel dims come from sips → backing pixels.
+    // The per-window scale is derived directly from CGWindowBounds width/height
+    // (logical points) divided by the backing pixel width/height: that gives
+    // points-per-pixel for *this* window on *this* display, which is correct
+    // even after cross-screen drags or resize (when AppleScript bounds lag).
     let (img_w, img_h) = sips_dimensions(screenshot)?;
 
     // POST OCR
@@ -731,14 +835,18 @@ end tell"#;
     }
     let (_, x, y, w, h) = best?;
 
-    // Apple Vision Y: 0 = bottom, 1 = top. Convert to screen-relative.
+    // Apple Vision Y: 0 = bottom, 1 = top. Convert to backing-pixel space first.
     let sx_img = x * img_w as f64 + w * img_w as f64 / 2.0;
     let sy_img = (1.0 - y - h) * img_h as f64 + h * img_h as f64 / 2.0;
-    // Scale image px → window px (Retina could double; sips reports logical dims)
-    let scale_x = win_w as f64 / img_w as f64;
-    let scale_y = win_h as f64 / img_h as f64;
-    let sx = (win_x as f64 + sx_img * scale_x) as i32;
-    let sy = (win_y as f64 + sy_img * scale_y) as i32;
+    // Backing pixels → logical points: one scalar per axis, always ≤ 1.0.
+    let scale_x = info.w / img_w as f64;
+    let scale_y = info.h / img_h as f64;
+    let sx = (info.x + sx_img * scale_x) as i32;
+    let sy = (info.y + sy_img * scale_y) as i32;
+    tracing::debug!(
+        "search-box target: bbox=({:.3},{:.3},{:.3},{:.3}) img=({},{}) scale=({:.3},{:.3}) → screen=({},{})",
+        x, y, w, h, img_w, img_h, scale_x, scale_y, sx, sy
+    );
     Some((sx, sy))
 }
 
@@ -814,21 +922,70 @@ end tell"#;
     None
 }
 
-/// Clean up LINE after a search: clear search box (cmd+A, delete) + restore
-/// clipboard. Does NOT press Escape (that can cause LINE to close the
-/// current window in some states).
-async fn cleanup_line_search(saved_clip: Option<Vec<u8>>) {
-    // Clear search box via cmd+A then delete (safer than ESC)
-    let _ = Command::new("osascript")
-        .args(["-e", r#"tell application "System Events" to keystroke "a" using {command down}"#])
-        .output();
-    sleep(Duration::from_millis(100)).await;
-    let _ = Command::new("osascript")
-        .args(["-e", r#"tell application "System Events" to key code 51"#])
-        .output();
-    sleep(Duration::from_millis(100)).await;
+/// Persist a screenshot + diagnostic text when a stage fails.
+///
+/// Copies the screenshot (if present) and writes the associated text into
+/// `~/workshop/outputs/auto-survey/line-debug/<timestamp>-<stage>.{png,txt}`.
+/// Always no-op-safe: errors are logged at debug level and swallowed.
+///
+/// Honours env `AUTO_SURVEY_DEBUG=1` for forced dumps on success too; the
+/// caller decides whether to always dump or only on failure.
+pub fn save_debug_artifact(stage: &str, screenshot: Option<&Path>, text: &str) {
+    let dir = match std::env::var("HOME") {
+        Ok(home) => std::path::PathBuf::from(home)
+            .join("workshop")
+            .join("outputs")
+            .join("auto-survey")
+            .join("line-debug"),
+        Err(_) => return,
+    };
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::debug!("debug artifact mkdir failed: {}", e);
+        return;
+    }
+    let ts = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+    let slug = format!("{}-{}", ts, stage);
+    if let Some(src) = screenshot {
+        if src.exists() {
+            let dst = dir.join(format!("{}.png", slug));
+            if let Err(e) = std::fs::copy(src, &dst) {
+                tracing::debug!("debug artifact copy failed: {}", e);
+            }
+        }
+    }
+    if !text.is_empty() {
+        let dst = dir.join(format!("{}.txt", slug));
+        if let Err(e) = std::fs::write(&dst, text) {
+            tracing::debug!("debug artifact write failed: {}", e);
+        }
+    }
+}
 
-    // Restore clipboard
+/// Clean up LINE after a search: clear the search box via AXValue, then
+/// restore the user's clipboard.
+///
+/// The previous implementation used `keystroke "a" using {command down}` +
+/// `key code 51` (delete), which only works when LINE is the frontmost app —
+/// and could destructively type into whatever window the user was actually
+/// focused on. AXValue mutation targets the LINE text field directly, so
+/// it's safe even when LINE sits in the background.
+async fn cleanup_line_search(saved_clip: Option<Vec<u8>>) {
+    let _ = Command::new("osascript")
+        .args([
+            "-e", r#"tell application "System Events""#,
+            "-e", r#"tell process "LINE""#,
+            "-e", r#"tell front window"#,
+            "-e", r#"tell splitter group 1"#,
+            "-e", r#"set value of text field 1 to """#,
+            "-e", r#"end tell"#,
+            "-e", r#"end tell"#,
+            "-e", r#"end tell"#,
+            "-e", r#"end tell"#,
+        ])
+        .output();
+    sleep(Duration::from_millis(200)).await;
+
+    // Restore clipboard (pbcopy stdin — no UI contact, no focus steal)
     if let Some(content) = saved_clip {
         if let Ok(mut child) = Command::new("pbcopy")
             .stdin(std::process::Stdio::piped())
