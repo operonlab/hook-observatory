@@ -28,6 +28,21 @@ enum Cmd {
     SysmonOnce,
     /// Run the sysmon background loop (sysmon + guardian + sweep) until cancelled.
     SysmonLoop,
+    /// Probe LiteLLM proxy /health + /model/info; print JSON.
+    LitellmStatus,
+    /// Print get_litellm_manual_summary as JSON (provider quotas + dashscope).
+    LitellmSummary,
+    /// Print month-to-date usage (Claude + LiteLLM) as JSON.
+    UsageMtd,
+    /// Print model breakdown (claude_models + litellm_models) as JSON.
+    UsageByModel {
+        #[arg(long, default_value_t = 30)]
+        days: i64,
+    },
+    /// Print today's Claude cost as JSON.
+    UsageToday,
+    /// Print quota formatted snapshot read from Redis.
+    QuotaCurrent,
     /// Run the API server (Phase 4 — not implemented yet).
     Serve,
 }
@@ -66,6 +81,36 @@ async fn main() -> Result<()> {
             agent_metrics_rs::db::run_migrations(&pool).await?;
             let state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size);
             agent_metrics_rs::loops::run_sysmon_loop(state, cfg, pool).await
+        }
+        Cmd::LitellmStatus => {
+            let r = agent_metrics_rs::collectors::litellm::get_litellm_status(&cfg).await;
+            println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
+        Cmd::LitellmSummary => {
+            let r = agent_metrics_rs::collectors::litellm::get_litellm_manual_summary(&cfg).await;
+            println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
+        Cmd::UsageMtd => {
+            let r = agent_metrics_rs::collectors::usage::get_month_to_date(&cfg).await;
+            println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
+        Cmd::UsageByModel { days } => {
+            let r = agent_metrics_rs::collectors::usage::get_model_breakdown(&cfg, days).await;
+            println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
+        Cmd::UsageToday => {
+            let r = agent_metrics_rs::collectors::usage::get_today_cost(&cfg).await;
+            println!("{}", serde_json::to_string(&r)?);
+            Ok(())
+        }
+        Cmd::QuotaCurrent => {
+            let r = agent_metrics_rs::collectors::quota::get_quota(&cfg).await;
+            println!("{}", serde_json::to_string(&r)?);
+            Ok(())
         }
         Cmd::Serve => {
             anyhow::bail!("serve command lands in Phase 4; current build is Phase 2");
