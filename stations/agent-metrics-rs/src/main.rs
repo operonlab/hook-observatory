@@ -48,6 +48,12 @@ enum Cmd {
     /// One-shot scrape of LLM provider billing pages (camoufox-cli).
     /// Cronicle invokes this — replaces ws_provider_balance_sync.py.
     ProviderBalanceSync,
+    /// One-shot scrape of DashScope (Qwen) free-quota dashboard.
+    /// Cronicle invokes this — replaces ws_dashscope_quota_sync.py.
+    DashscopeQuotaSync,
+    /// Weekly model-catalog sync — scrapes 4 leaderboards via camoufox-cli,
+    /// merges by Borda count, writes Redis. Replaces ws_model_catalog_sync.py.
+    ModelCatalogSync,
     /// Run the API server (Phase 4 — not implemented yet).
     Serve,
 }
@@ -123,6 +129,22 @@ async fn main() -> Result<()> {
             // Exit non-zero if nothing succeeded (matches Python behavior).
             if n == 0 {
                 anyhow::bail!("provider-balance-sync: 0 providers ok");
+            }
+            Ok(())
+        }
+        Cmd::DashscopeQuotaSync => {
+            let ok =
+                agent_metrics_rs::collectors::dashscope_quota::run_once(&cfg.redis_url).await?;
+            if !ok {
+                anyhow::bail!("dashscope-quota-sync: scrape or parse failed");
+            }
+            Ok(())
+        }
+        Cmd::ModelCatalogSync => {
+            let ok =
+                agent_metrics_rs::collectors::model_catalog::run_once(&cfg.redis_url).await?;
+            if !ok {
+                anyhow::bail!("model-catalog-sync: scrape, merge, or store failed");
             }
             Ok(())
         }

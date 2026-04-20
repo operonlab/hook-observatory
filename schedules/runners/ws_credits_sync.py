@@ -2,6 +2,17 @@
 """
 ws_credits_sync.py — Unified LLM credits & quota sync
 
+[DEPRECATED 2026-04-20] Orphaned draft — never registered with launchd/Cronicle.
+Superseded by Rust implementations:
+  - agent-metrics-rs provider-balance-sync   (replaces Section 1)
+  - agent-metrics-rs dashscope-quota-sync    (replaces Section 2)
+  - Section 3 (Google Developer credits) was experimental and not ported;
+    if needed, add a new Rust collector under
+    stations/agent-metrics-rs/src/collectors/.
+
+This file may be deleted after 2026-05-20 if no consumer surfaces.
+
+──── Original docstring ────────────────────────────────────────
 Runs three sections in sequence, sharing a single camoufox browser session
 across all provider scrapes:
 

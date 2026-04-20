@@ -2,6 +2,18 @@
 """
 ws_model_catalog_sync.py — Weekly model catalog sync from LLM leaderboards
 
+[DEPRECATED 2026-04-20] Replaced by Rust implementation.
+  Active runner: stations/agent-metrics-rs/src/collectors/model_catalog.rs
+  Cronicle command: agent-metrics-rs model-catalog-sync (Mon 19:00)
+
+This Python module is kept for 30-day rollback only. To re-enable:
+  1. Edit schedules/manifest.json → restore command:
+     "~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_catalog_sync.py"
+  2. Run: ~/.local/bin/python3 ~/workshop/schedules/scheduler.py remove ws-model-catalog-sync
+          ~/.local/bin/python3 ~/workshop/schedules/sync.py
+After 2026-05-20 with no rollback this file may be deleted.
+
+──── Original docstring ────────────────────────────────────────
 Scrapes LMSYS Chatbot Arena → cross-references with LiteLLM config → generates:
   1. highlights_benchmark: 6 categories (overall, coding, reasoning, chinese, speed, cost)
   2. scenarios: 7 task-based recommendations

@@ -277,9 +277,9 @@
     {
       "name": "ws-dashscope-quota-sync",
       "label": "com.joneshong.scheduler.ws-dashscope-quota-sync",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_dashscope_quota_sync.py",
+      "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs dashscope-quota-sync",
       "schedule": { "calendar": { "Hour": 18, "Minute": 30 } },
-      "description": "每日 18:30: DashScope (Qwen) 免費額度爬取同步 → Redis（錯開 Playwright jobs 防 GPU 競爭）",
+      "description": "每日 18:30: DashScope (Qwen) 免費額度爬取同步 → Redis. 2026-04-20 cutover: Python ws_dashscope_quota_sync.py → agent-metrics-rs dashscope-quota-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_dashscope_quota_sync.py",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
@@ -297,9 +297,9 @@
     {
       "name": "ws-model-catalog-sync",
       "label": "com.joneshong.scheduler.ws-model-catalog-sync",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_catalog_sync.py",
+      "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs model-catalog-sync",
       "schedule": { "calendar": { "DayOfWeek": 1, "Hour": 19, "Minute": 0 } },
-      "description": "每週一 19:00: 爬 Arena 排行榜，推薦未設定的高排名模型（排除御三家+已設定）→ Redis",
+      "description": "每週一 19:00: 爬 4 大 leaderboard (Arena/LiveBench/AA/OpenRouter) → Borda 共識 → Redis. 2026-04-20 cutover: Python ws_model_catalog_sync.py → agent-metrics-rs model-catalog-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_catalog_sync.py",
       "category": "workshop",
       "type": "periodic",
       "enabled": true

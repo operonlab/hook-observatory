@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 """
+[DEPRECATED 2026-04-20] Replaced by `agent-metrics-rs dashscope-quota-sync`
+(stations/agent-metrics-rs/src/collectors/dashscope_quota.rs).
+
+Cronicle registry repointed to the Rust binary. Retained as 30-day rollback
+reference; safe to delete after 2026-05-20.
+
+Rollback:
+  cd ~/workshop
+  python3 schedules/scheduler.py remove ws-dashscope-quota-sync
+  python3 schedules/scheduler.py add ws-dashscope-quota-sync \\
+      "~/.local/bin/python3 ~/workshop/schedules/runners/ws_dashscope_quota_sync.py" \\
+      '{"calendar": {"Hour": 18, "Minute": 30}}' "rollback to Python"
+
+================================================================================
 ws_dashscope_quota_sync.py — Sync DashScope (Qwen) free quota via camoufox-cli
 
 Scrapes https://modelstudio.console.alibabacloud.com free-quota dashboard,
