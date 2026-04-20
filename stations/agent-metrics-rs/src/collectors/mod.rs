@@ -1,0 +1,7 @@
+//! Phase 3 collectors — replace Python `litellm_collector` + `usage_collector`
+//! and Redis-read shim for `quota_collector` (Python keeps writing during
+//! the migration; full quota Rust port is a separate phase).
+
+pub mod litellm;
+pub mod quota;
+pub mod usage;
