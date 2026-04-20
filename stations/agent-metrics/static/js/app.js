@@ -367,41 +367,6 @@ async function refreshCatalog() {
       </div>`;
     }).join("");
   }
-
-  // ── Big-3 之外排行（撇除 Claude / OpenAI / Gemini 系列） ──
-  const nbEl = document.getElementById("catalog-non-big3");
-  const nb = data.non_big3_ranking || {};
-  const nbModels = nb.models || nb;
-  const nbTimeEl = document.getElementById("catalog-non-big3-time");
-  if (nbTimeEl && nb.synced_at) {
-    nbTimeEl.textContent = "更新：" + fmtTime(nb.synced_at);
-  }
-  if (nbEl) {
-    if (Array.isArray(nbModels) && nbModels.length) {
-      nbEl.innerHTML = nbModels.map(m => {
-        // Top-3 用金/銀/銅，4-10 用 lavender，11+ 用 overlay
-        let rankColor = "var(--overlay0)";
-        if (m.rank === 1) rankColor = "var(--yellow)";
-        else if (m.rank === 2) rankColor = "var(--subtext1)";
-        else if (m.rank === 3) rankColor = "var(--peach)";
-        else if (m.rank <= 10) rankColor = "var(--lavender)";
-        return `<div class="highlight-card" style="border-left-color:${rankColor};display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem">
-          <div style="font-family:var(--font-mono);font-weight:700;font-size:1.05rem;color:${rankColor};min-width:1.6rem;text-align:right">#${m.rank}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:0.7rem;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${m.name}">${m.name}</div>
-            <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.1rem">
-              <span style="font-size:0.55rem;color:var(--subtext0)">${m.provider}</span>
-              <span style="font-size:0.5rem;color:var(--overlay0)">·</span>
-              <span style="font-size:0.55rem;color:var(--lavender);font-family:var(--font-mono)">${m.consensus_score}</span>
-              <span style="font-size:0.5rem;color:var(--overlay0)">${m.source_count}src</span>
-            </div>
-          </div>
-        </div>`;
-      }).join("");
-    } else {
-      nbEl.innerHTML = '<div class="empty">無資料</div>';
-    }
-  }
 }
 
 /* ═══════════════════════════════════════════
