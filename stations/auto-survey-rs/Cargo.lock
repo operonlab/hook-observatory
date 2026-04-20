@@ -148,6 +148,7 @@ dependencies = [
  "urlencoding",
  "uuid",
  "wiremock",
+ "workshop-sqlite-pool",
 ]
 
 [[package]]
@@ -3195,6 +3196,15 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
+]
+
+[[package]]
+name = "workshop-sqlite-pool"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "sqlx",
+ "tracing",
 ]
 
 [[package]]
