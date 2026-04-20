@@ -248,7 +248,11 @@ struct ScoreEntry {
 
 /// Extract (name, numeric score) pairs from leaderboard innerText.
 ///
-/// Recognises 4-digit Elo scores (1100-1600) or `XX.X%` percentages (30-100).
+/// Three patterns (in priority order):
+///   1. TAB-separated row (LiveBench style):
+///        "Name\tProvider\tScore\t..."  where Score is 30.0-100.0
+///   2. Elo score in the line (LMSYS Arena style): 4-digit 1100-1600
+///   3. Percentage suffix (legacy): "XX.X%" 30-100
 fn parse_scores_from_text(text: &str) -> Vec<ScoreEntry> {
     if text.is_empty() {
         return Vec::new();
@@ -261,6 +265,41 @@ fn parse_scores_from_text(text: &str) -> Vec<ScoreEntry> {
         if line.is_empty() {
             continue;
         }
+
+        // Pass 1: TAB-separated leaderboard row.
+        // Modern leaderboards (LiveBench, future revamps) ship rows like
+        //   "Model Name\tOrg\t80.28\t88.12\t..."
+        // Score = first numeric field in [30, 100] *after* the name column.
+        // Header row "Model\tOrganization\tGlobal Average\t..." is skipped
+        // because no field parses as a 30-100 float.
+        if line.contains('\t') {
+            let parts: Vec<&str> = line.split('\t').map(str::trim).collect();
+            if parts.len() >= 3 {
+                let mut found = false;
+                for p in parts.iter().skip(1) {
+                    if let Ok(v) = p.parse::<f64>() {
+                        if (30.0..=100.0).contains(&v) {
+                            let name = parts[0].to_string();
+                            let chars = name.chars().count();
+                            // Skip footnote-only "names" (e.g. "*5th rank ...").
+                            let starts_ok = name.chars().next().map_or(false, |c| {
+                                c.is_alphanumeric() || c == '(' || c == '['
+                            });
+                            if (3..=60).contains(&chars) && starts_ok {
+                                out.push(ScoreEntry { name, score: v });
+                                found = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if found {
+                    continue;
+                }
+            }
+        }
+
+        // Pass 2: Elo-prefixed (Arena).
         let mut elo_hit = false;
         if let Some(m) = elo_re.find(line) {
             if let Ok(score) = m.as_str().parse::<i64>() {
@@ -283,8 +322,9 @@ fn parse_scores_from_text(text: &str) -> Vec<ScoreEntry> {
         if elo_hit {
             continue;
         }
+
+        // Pass 3: percentage suffix (legacy).
         if let Some(m) = pct_re.find(line) {
-            // Drop the trailing '%' before parsing.
             let s = m.as_str().trim_end_matches('%');
             if let Ok(score) = s.parse::<f64>() {
                 if (30.0..=100.0).contains(&score) {
@@ -827,6 +867,27 @@ TinyPct 12%\n\
         assert!(names.contains(&"SomeBench"));
         assert!(!names.contains(&"Bad"));
         assert!(!names.contains(&"TinyPct"));
+    }
+
+    #[test]
+    fn parse_scores_handles_livebench_tabs() {
+        // Real-world LiveBench rows: header + 3 data rows + 1 footnote row.
+        let text = "Model\tOrganization\tGlobal Average\tReasoning Average\n\
+GPT-5.4 Thinking xHigh Effort\tOpenAI\t80.28\t88.12\n\
+Claude 4.7 Opus Thinking xHigh Effort\tAnthropic\t76.91\t87.69\n\
+Kimi K2.5 Thinking\tMoonshot AI\t69.07\t75.96\n\
+*5th rank in unseen questions across all categories\tGoogle\t79.93\t84.00\n";
+        let scores = parse_scores_from_text(text);
+        let by_name: std::collections::HashMap<_, _> =
+            scores.iter().map(|s| (s.name.as_str(), s.score)).collect();
+        // Header row has no 30-100 float in any column → skipped.
+        assert!(!by_name.contains_key("Model"));
+        // Three real rows → parsed.
+        assert_eq!(by_name.get("GPT-5.4 Thinking xHigh Effort"), Some(&80.28));
+        assert_eq!(by_name.get("Claude 4.7 Opus Thinking xHigh Effort"), Some(&76.91));
+        assert_eq!(by_name.get("Kimi K2.5 Thinking"), Some(&69.07));
+        // Footnote row starts with '*' → rejected.
+        assert!(!by_name.keys().any(|k| k.starts_with('*')));
     }
 
     #[test]
