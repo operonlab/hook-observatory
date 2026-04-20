@@ -136,17 +136,37 @@ SERVICES = [
         "health": get("system-monitor").health_url,
         "workdir": "/Users/joneshong/workshop/stations/system-monitor",
     },
+    # Python agent-metrics retired 2026-04-20 — replaced by agent-metrics-rs (below).
+    # Kept commented as rollback reference for 30 days, remove after 2026-05-20.
+    # NOTE: maestro/task_manager engines (routes /maestro/*, /projects/*) are
+    # the Phase 5b deferred scope. The Rust binary returns 404 for those paths
+    # for now; if you need them, reinstate this block on a different port.
+    # {
+    #     "name": "agent-metrics",
+    #     "type": "uvicorn",
+    #     "cmd": (
+    #         "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
+    #         " -m agent_metrics serve"
+    #     ),
+    #     "port": get_port("agent-metrics"),
+    #     "health": get("agent-metrics").health_url,
+    #     "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
+    #     "env": {"AGENT_METRICS_PORT": str(get_port("agent-metrics"))},
+    # },
     {
         "name": "agent-metrics",
-        "type": "uvicorn",
+        "type": "binary",
         "cmd": (
-            "/Users/joneshong/workshop/stations/agent-metrics/.venv/bin/python3"
-            " -m agent_metrics serve"
+            "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs"
+            " serve"
         ),
         "port": get_port("agent-metrics"),
         "health": get("agent-metrics").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
-        "env": {"AGENT_METRICS_PORT": str(get_port("agent-metrics"))},
+        "workdir": "/Users/joneshong/workshop/stations/agent-metrics-rs",
+        "env": {
+            "AGENT_METRICS_PORT": str(get_port("agent-metrics")),
+            "AGENT_METRICS_SQLITE_PATH": "/Users/joneshong/workshop/stations/agent-metrics-rs/data/agent_metrics.sqlite",
+        },
     },
     # Python auto-survey retired 2026-04-19 — replaced by auto-survey-rs (below).
     # Kept commented as rollback reference for 30 days, remove after 2026-05-19.
