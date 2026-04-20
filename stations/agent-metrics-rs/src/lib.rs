@@ -18,3 +18,5 @@ pub mod sweep;
 pub mod loops;
 
 pub mod collectors;
+
+pub mod web;

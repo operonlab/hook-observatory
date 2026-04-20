@@ -25,12 +25,21 @@ pub struct Settings {
     pub sysmon_collect_interval: u64,
     pub sysmon_history_size: usize,
     pub sysmon_output_path: String,
+
+    pub static_dir: String,
+    pub templates_dir: String,
 }
 
 impl Settings {
     pub fn from_env() -> Self {
-        let station_dir = station_dir();
-        let default_sqlite = station_dir.join("data").join("agent_metrics.sqlite");
+        let cargo_dir = station_dir();
+        let parent = cargo_dir
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or(cargo_dir.clone());
+        let default_sqlite = cargo_dir.join("data").join("agent_metrics.sqlite");
+        let default_static = parent.join("agent-metrics").join("static");
+        let default_templates = parent.join("agent-metrics").join("templates");
 
         Self {
             service_name: env_or("SERVICE_NAME", "agent-metrics-rs"),
@@ -38,10 +47,7 @@ impl Settings {
             port: env_or("PORT", "10103").parse().unwrap_or(10103),
             debug: env_bool("DEBUG", false),
 
-            sqlite_path: env_or(
-                "SQLITE_PATH",
-                default_sqlite.to_string_lossy().as_ref(),
-            ),
+            sqlite_path: env_or("SQLITE_PATH", default_sqlite.to_string_lossy().as_ref()),
             redis_url: env_or("REDIS_URL", "redis://localhost:6379/0"),
 
             litellm_base_url: env_or("LITELLM_BASE_URL", "http://127.0.0.1:4000"),
@@ -57,8 +63,18 @@ impl Settings {
                 .parse()
                 .unwrap_or(720),
             sysmon_output_path: env_or("SYSMON_OUTPUT_PATH", "/tmp/agent-metrics-sysmon.json"),
+
+            static_dir: env_or("STATIC_DIR", default_static.to_string_lossy().as_ref()),
+            templates_dir: env_or(
+                "TEMPLATES_DIR",
+                default_templates.to_string_lossy().as_ref(),
+            ),
         }
     }
+}
+
+pub fn station_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -74,8 +90,3 @@ fn env_bool(key: &str, default: bool) -> bool {
     }
 }
 
-fn station_dir() -> PathBuf {
-    // Resolved as the CARGO_MANIFEST_DIR at compile time, which points to
-    // `stations/agent-metrics-rs`. At runtime we fall back to CWD.
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
