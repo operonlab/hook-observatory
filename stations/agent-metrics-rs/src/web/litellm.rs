@@ -42,7 +42,13 @@ pub async fn model_catalog(State(state): State<AppState>) -> Json<Value> {
             "highlights_benchmark": d.get("highlights_benchmark").cloned().unwrap_or(fallback["highlights_benchmark"].clone()),
             "notable_unconfigured": {
                 "models": d.get("notable_unconfigured").cloned().unwrap_or(fallback["notable_unconfigured"].clone()),
-                "synced_at": synced_at,
+                "synced_at": synced_at.clone(),
+            },
+            // Non-Big3 排行（撇除 Claude/OpenAI/Gemini）— 用 wrapper object
+            // 維持與 notable_unconfigured 對稱，方便前端統一渲染。
+            "non_big3_ranking": {
+                "models": d.get("non_big3_ranking").cloned().unwrap_or(json!([])),
+                "synced_at": synced_at.clone(),
             },
             "scenarios": d.get("scenarios").cloned().unwrap_or(fallback["scenarios"].clone()),
             "synced_at": d.get("synced_at").cloned().unwrap_or(Value::Null),
