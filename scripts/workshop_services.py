@@ -283,14 +283,14 @@ SERVICES = [
     },
     {
         "name": "remote-node",
-        "type": "uvicorn",
+        "type": "binary",
         "cmd": (
-            "/Users/joneshong/workshop/stations/remote-node/.venv/bin/python3"
-            " /Users/joneshong/workshop/stations/remote-node/main.py"
+            "/Users/joneshong/workshop/stations/remote-node-rs/target/release/remote-node-rs"
+            " --config /Users/joneshong/workshop/stations/remote-node-rs/config.yaml"
         ),
         "port": get_port("remote-node"),
         "health": get("remote-node").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/remote-node",
+        "workdir": "/Users/joneshong/workshop/stations/remote-node-rs",
     },
     {
         "name": "tmux-webui",
