@@ -22,32 +22,28 @@ type QueueEntry struct {
 	Vol   string `json:"vol"`
 }
 
-// Play synthesises and plays a single TTS entry. Three-layer fallback:
-//  1. Workshop stations/tts HTTP POST /synthesize (query params → audio_path,
-//     then afplay locally)
-//  2. edge-tts CLI → afplay
-//  3. macOS say → afplay
+// Play synthesises and plays a single TTS entry.
 //
-// Layer 1 is the intended path — stations/tts is the single entry point that
-// multiplexes across engines (apple / qwen3-tts / kokoro / f5-tts / ...).
-// Layers 2 and 3 only kick in when the station is unreachable.
+// Default order mirrors the Python voice_notify.py effective behaviour
+// (edge-tts → afplay is what actually runs in practice):
+//
+//  1. edge-tts CLI → afplay                  (Layer 1, default)
+//  2. Workshop stations/tts /synthesize      (Layer 2, opt-in)
+//  3. macOS `say` → afplay                   (Layer 3, last resort)
+//
+// To promote the station to Layer 1 (engine switch centralisation), set
+// `CLAUDE_TTS_PRIMARY=station`. The station is still available — we just
+// don't lead with it because:
+//   * stations/tts has no edge-tts engine; apple engine emits TOO_QUIET wavs
+//     on some voice IDs.
+//   * Python voice_notify.py used `/api/tts/speak` which never existed, so
+//     every prod invocation silently fell through to edge-tts. Matching that
+//     observed behaviour is less surprising than switching engines.
 func Play(e QueueEntry) {
-	// Python consumer defaults to "0.3" when the queue entry omits vol,
-	// so match that fallback here even though EnqueueTTS always populates
-	// Vol from PlaybackVol ("0.4" by default).
 	vol := e.Vol
 	if vol == "" {
 		vol = "0.3"
 	}
-
-	// 1) Workshop TTS station — returns a server-side audio_path we afplay.
-	if audioPath, ok := playViaService(e.Text); ok && audioPath != "" {
-		runCmd(30*time.Second, "afplay", "-v", vol, audioPath)
-		pushToWebui(audioPath, e.Text)
-		return
-	}
-
-	// 2) edge-tts → afplay (uses edge-tts voice + rate strings from env)
 	voice := e.Voice
 	if voice == "" {
 		voice = Voice
@@ -56,21 +52,65 @@ func Play(e QueueEntry) {
 	if rate == "" {
 		rate = Rate
 	}
-	if which("edge-tts") {
-		tmp := "/tmp/claude-tts-play.mp3"
-		runCmd(15*time.Second, "edge-tts", "--voice", voice, "--rate", rate, "--text", e.Text, "--write-media", tmp)
-		runCmd(30*time.Second, "afplay", "-v", vol, tmp)
-		pushToWebui(tmp, e.Text)
+
+	stationFirst := os.Getenv("CLAUDE_TTS_PRIMARY") == "station"
+
+	if stationFirst && playStation(e.Text, vol) {
 		return
 	}
-
-	// 3) macOS say → afplay
-	if which("say") {
-		tmp := "/tmp/claude-tts-play.aiff"
-		runCmd(15*time.Second, "say", "-v", "Meijia", "-r", "320", "-o", tmp, e.Text)
-		runCmd(30*time.Second, "afplay", "-v", vol, tmp)
-		pushToWebui(tmp, e.Text)
+	if playEdgeTTS(e.Text, voice, rate, vol) {
+		return
 	}
+	if !stationFirst && playStation(e.Text, vol) {
+		return
+	}
+	playSay(e.Text, vol)
+}
+
+// playEdgeTTS runs `edge-tts --voice ... --rate ... --text ... --write-media
+// /tmp/claude-tts-play.mp3` then afplay. Returns true on success.
+func playEdgeTTS(text, voice, rate, vol string) bool {
+	if !which("edge-tts") {
+		return false
+	}
+	tmp := "/tmp/claude-tts-play.mp3"
+	_ = os.Remove(tmp)
+	runCmd(15*time.Second, "edge-tts", "--voice", voice, "--rate", rate, "--text", text, "--write-media", tmp)
+	info, err := os.Stat(tmp)
+	if err != nil || info.Size() == 0 {
+		return false
+	}
+	runCmd(30*time.Second, "afplay", "-v", vol, tmp)
+	pushToWebui(tmp, text)
+	return true
+}
+
+// playStation calls stations/tts `/synthesize` and afplay the returned
+// audio_path. Honours CLAUDE_TTS_ENGINE / CLAUDE_TTS_VOICE env vars.
+func playStation(text, vol string) bool {
+	audioPath, ok := playViaService(text)
+	if !ok || audioPath == "" {
+		return false
+	}
+	runCmd(30*time.Second, "afplay", "-v", vol, audioPath)
+	pushToWebui(audioPath, text)
+	return true
+}
+
+// playSay is the last-resort `say -v Meijia` → afplay path. macOS-only.
+func playSay(text, vol string) {
+	if !which("say") {
+		return
+	}
+	tmp := "/tmp/claude-tts-play.aiff"
+	_ = os.Remove(tmp)
+	runCmd(15*time.Second, "say", "-v", "Meijia", "-r", "320", "-o", tmp, text)
+	info, err := os.Stat(tmp)
+	if err != nil || info.Size() == 0 {
+		return
+	}
+	runCmd(30*time.Second, "afplay", "-v", vol, tmp)
+	pushToWebui(tmp, text)
 }
 
 // playViaService POSTs /synthesize?text=...&voice=...&speed=...&engine=...
