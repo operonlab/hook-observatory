@@ -29,8 +29,8 @@ import (
 // operators can swap engines centrally (apple / qwen3-tts / kokoro / ...).
 var (
 	TTSURL       = envOr("CLAUDE_TTS_URL", "http://localhost:10201/synthesize")
-	TTSEngine    = envOr("CLAUDE_TTS_ENGINE", "apple")
-	TTSVoice     = envOr("CLAUDE_TTS_VOICE", "Meijia")
+	TTSEngine    = envOr("CLAUDE_TTS_ENGINE", "edge")
+	TTSVoice     = envOr("CLAUDE_TTS_VOICE", "zh-CN-YunjianNeural")
 	Voice        = envOr("CLAUDE_VOICE_ID", "zh-CN-YunjianNeural") // edge-tts fallback
 	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")              // edge-tts fallback
 	PlaybackVol  = envOr("CLAUDE_VOICE_VOLUME", "0.4")

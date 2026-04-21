@@ -70,7 +70,7 @@ def synthesize(
     text: str = Query(..., description="Text to synthesize"),
     voice: str = Query("default", description="Voice ID"),
     speed: float = Query(1.0, description="Speech speed multiplier"),
-    engine: str = Query("apple", description="Engine name"),
+    engine: str = Query("edge", description="Engine name (default: edge-tts)"),
     format: str = Query("wav", description="Output format: wav, mp3, m4a"),
 ):
     """Synthesize speech from text (batch mode — returns complete file)."""
@@ -192,7 +192,7 @@ async def synthesize_stream(
 
 
 @app.get("/voices")
-async def list_voices(engine: str = Query("apple", description="Engine name")):
+async def list_voices(engine: str = Query("edge", description="Engine name")):
     """List available voices for an engine."""
     try:
         eng = get_engine(engine)
@@ -205,9 +205,9 @@ async def list_voices(engine: str = Query("apple", description="Engine name")):
 @app.get("/engines")
 async def list_engines():
     """List available TTS engines."""
-    from engines import ENGINES
+    from engines import DEFAULT_ENGINE, ENGINES
 
-    return {"engines": list(ENGINES.keys()), "default": "apple"}
+    return {"engines": list(ENGINES.keys()), "default": DEFAULT_ENGINE}
 
 
 if __name__ == "__main__":

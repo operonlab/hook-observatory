@@ -109,8 +109,11 @@ def register(name: str):
     return decorator
 
 
-def get_engine(name: str = "apple") -> TTSEngine:
-    """Get engine by name. Defaults to apple."""
+DEFAULT_ENGINE = "edge"
+
+
+def get_engine(name: str = DEFAULT_ENGINE) -> TTSEngine:
+    """Get engine by name. Defaults to edge-tts (cloud, zero local compute)."""
     if name not in ENGINES:
         available = list(ENGINES.keys())
         raise ValueError(f"Unknown TTS engine: {name}. Available: {available}")
@@ -145,6 +148,7 @@ def _post_synthesize_analyze(result: dict, engine_name: str) -> dict:
 
 # ── Always-available engines ──
 from . import apple as _apple  # noqa: F401, E402
+from . import edge as _edge  # noqa: F401, E402
 from . import elevenlabs_api as _elevenlabs  # noqa: F401, E402
 
 # ── MLX engines (Apple Silicon only) ──
