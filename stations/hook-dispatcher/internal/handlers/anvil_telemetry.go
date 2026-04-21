@@ -366,20 +366,113 @@ func anvilSyncPending() core.HookResult {
 	if _, err := os.Stat(spoolFile); os.IsNotExist(err) {
 		return core.Allow()
 	}
-	// Check if file has content
-	f, err := os.Open(spoolFile)
-	if err != nil {
-		return core.Allow()
-	}
-	defer f.Close()
-	buf := make([]byte, 1)
-	n, _ := f.Read(buf)
-	if n == 0 {
-		return core.Allow()
-	}
-	home, _ := os.UserHomeDir()
-	syncScript := filepath.Join(home, "workshop", "stations", "anvil", "scripts", "anvil_telemetry_sync.py")
-	python := filepath.Join(home, ".local", "bin", "python3")
-	_ = core.RunBackground([]string{python, syncScript}, "")
+	// Run sync in background goroutine — same pattern as externalSkillTracker
+	go anvilSyncPendingInProc()
 	return core.Allow()
+}
+
+// anvilSyncPendingInProc is the Go in-process port of anvil_telemetry_sync.py.
+// Reads pending.jsonl, POSTs unsent entries to Anvil API, moves synced entries
+// to synced.jsonl, and rewrites pending.jsonl with only failed entries.
+func anvilSyncPendingInProc() {
+	spoolFile := anvilSpoolFile()
+	raw, err := os.ReadFile(spoolFile)
+	if err != nil {
+		return
+	}
+
+	type spoolEntry = map[string]any
+
+	var allEntries []spoolEntry
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry spoolEntry
+		if json.Unmarshal([]byte(line), &entry) == nil {
+			allEntries = append(allEntries, entry)
+		}
+	}
+
+	if len(allEntries) == 0 {
+		return
+	}
+
+	base := anvilAPIURL()
+	dir := anvilSpoolDir()
+	syncedFile := filepath.Join(dir, "synced.jsonl")
+
+	var stillPending []spoolEntry
+	var newlySynced []spoolEntry
+
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	for _, entry := range allEntries {
+		if synced, _ := entry["synced"].(bool); synced {
+			// Already marked synced — move to archive
+			newlySynced = append(newlySynced, entry)
+			continue
+		}
+
+		sent := false
+		if base != "" && (strings.HasPrefix(base, "http://") || strings.HasPrefix(base, "https://")) {
+			// Build payload matching Python's post_to_anvil()
+			payload := map[string]any{
+				"skill_name":       entry["skill_name"],
+				"session_id":       entry["session_id"],
+				"agent_model":      entry["agent_model"],
+				"success":          entry["success"],
+				"error_message":    entry["error_message"],
+				"tool_calls_count": entry["tool_calls_count"],
+				"payload":          entry["payload"],
+			}
+			data, err := json.Marshal(payload)
+			if err == nil {
+				resp, err := client.Post(base+"/api/anvil/invocations", "application/json", strings.NewReader(string(data)))
+				if err == nil {
+					io.Copy(io.Discard, resp.Body)
+					resp.Body.Close()
+					// Match Python _post_to_api: accept both 200 and 201 as success.
+					// Otherwise a 200 response would leave entries spooled forever.
+					if resp.StatusCode == 200 || resp.StatusCode == 201 {
+						sent = true
+					}
+				}
+			}
+		}
+
+		if sent {
+			entry["synced"] = true
+			newlySynced = append(newlySynced, entry)
+		} else {
+			stillPending = append(stillPending, entry)
+		}
+	}
+
+	// Append synced entries to archive file
+	if len(newlySynced) > 0 {
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			sf, err := os.OpenFile(syncedFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			if err == nil {
+				for _, e := range newlySynced {
+					b, _ := json.Marshal(e)
+					fmt.Fprintf(sf, "%s\n", b)
+				}
+				sf.Close()
+			}
+		}
+	}
+
+	// Rewrite pending.jsonl with only unsynced entries
+	var pendingLines []string
+	for _, e := range stillPending {
+		b, _ := json.Marshal(e)
+		pendingLines = append(pendingLines, string(b))
+	}
+	content := ""
+	if len(pendingLines) > 0 {
+		content = strings.Join(pendingLines, "\n") + "\n"
+	}
+	_ = os.WriteFile(spoolFile, []byte(content), 0o644)
 }
