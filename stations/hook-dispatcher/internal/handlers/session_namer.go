@@ -1,24 +1,28 @@
 // Package handlers — session_namer.go
 // Stop + UserPromptSubmit handler — session auto-namer + color hint.
 //
-// On the first Stop event of a session, spawns a background Python process that:
+// On the first Stop event of a session, runs a background goroutine (Go in-process) that:
 //  1. Reads the session transcript to get the first user message
 //  2. Calls Haiku via claude CLI to generate a 2-4 word kebab-case title + color
-//  3. Stores in ~/.claude/data/session-titles.json (external registry)
+//  3. Stores in ~/.claude/data/session-titles.json (external registry, file-locked)
 //
 // On UserPromptSubmit, if a color has been assigned but not yet applied,
 // injects a one-time hint so the model can suggest /color <name>.
 //
-// Non-blocking: spawns background process, returns Allow immediately.
+// Non-blocking: spawns goroutine, returns Allow immediately.
 // Fail-open: any error -> silently skip, never block Claude Code.
 package handlers
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
 )
@@ -68,11 +72,8 @@ func sessionNamerHandle(_, _ string, _ map[string]any, rawInput string) core.Hoo
 	}
 
 	home, _ := os.UserHomeDir()
-	python := filepath.Join(home, ".local", "bin", "python3")
-
-	// Build background Python code — mirrors session_namer.py background worker
-	code := sessionNamerBuildCode(sessionID, home)
-	_ = core.RunBackground([]string{python, "-c", code}, "")
+	// Go in-process — no Python middleman, no fork overhead.
+	go sessionNamerRunInProc(sessionID, home)
 
 	return core.Allow()
 }
@@ -134,106 +135,223 @@ func sessionNamerLoadRegistry() map[string]any {
 	return registry
 }
 
-// sessionNamerBuildCode builds the Python background worker code.
-// This mirrors the Python implementation exactly — spawning claude CLI to generate the title.
-func sessionNamerBuildCode(sessionID, home string) string {
+// sessionNamerRunInProc is the Go in-process replacement for sessionNamerBuildCode.
+// Previously this logic was inlined as Python and executed via `python3 -c <code>`.
+// Now it runs directly in a goroutine — no Python fork overhead.
+//
+// Steps (mirrors the Python inline worker exactly):
+//  1. glob ~/.claude/projects/**/{sessionID}.jsonl → find transcript
+//  2. read transcript → extract first user message text
+//  3. build prompt → exec claude CLI (haiku) → parse JSON response
+//  4. write title+color to ~/.claude/data/session-titles.json with syscall.Flock
+func sessionNamerRunInProc(sessionID, home string) {
 	registryPath := filepath.Join(home, ".claude", "data", "session-titles.json")
 
-	return `import os, sys, json, glob, fcntl
-from datetime import datetime, timezone
+	// 1. Find transcript via glob
+	pattern := filepath.Join(home, ".claude", "projects", "**", sessionID+".jsonl")
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		// filepath.Glob doesn't support ** — use Walk instead
+		transcriptPath := sessionNamerFindTranscript(home, sessionID)
+		if transcriptPath == "" {
+			return
+		}
+		matches = []string{transcriptPath}
+	}
 
-HOME = os.path.expanduser('~')
-REGISTRY = ` + fmt.Sprintf("%q", registryPath) + `
-session_id = ` + fmt.Sprintf("%q", sessionID) + `
+	// 2. Extract first user message from transcript
+	firstMessage := sessionNamerExtractFirstUserMessage(matches[0])
+	if strings.TrimSpace(firstMessage) == "" {
+		return
+	}
+	if len(firstMessage) > 500 {
+		firstMessage = firstMessage[:500]
+	}
 
-# Find transcript
-pattern = os.path.join(HOME, '.claude', 'projects', '**', f'{session_id}.jsonl')
-matches = glob.glob(pattern, recursive=True)
-if not matches:
-    sys.exit(0)
+	// 3. Call Haiku via claude CLI
+	prompt := "Generate a session title and pick a prompt-bar color.\n" +
+		"Title: 2-4 word kebab-case, verb-first, max 30 chars.\n" +
+		"Color: pick ONE from [red,blue,green,yellow,purple,orange,pink,cyan] " +
+		"that matches the task mood/domain.\n" +
+		"Return ONLY JSON: {\"title\":\"...\",\"color\":\"...\"}\n\n" +
+		"User message: " + firstMessage
 
-# Extract first user message
-first_message = ''
-try:
-    with open(matches[0]) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            entry = json.loads(line)
-            msg_obj = entry.get('message', {}) or {}
-            role = entry.get('type', '') or msg_obj.get('role', '')
-            if role == 'user':
-                msg = msg_obj
-                content = msg.get('content', '')
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get('type') == 'text':
-                            first_message = block.get('text', '')
-                            break
-                elif isinstance(content, str):
-                    first_message = content
-                if first_message:
-                    break
-except Exception:
-    sys.exit(0)
+	env := os.Environ()
+	// Suppress recursion + context supervisor overhead
+	env = sessionNamerReplaceEnv(env, "CTX_SUPERVISOR_LEVEL", "off")
+	env = sessionNamerReplaceEnv(env, "CLAUDE_SESSION_NAMER", "0")
 
-if not first_message.strip():
-    sys.exit(0)
+	r := core.RunCmdWithEnv(
+		[]string{"claude", "-p", prompt, "--model", "haiku", "--output-format", "text", "--no-session-persistence"},
+		"", 120*time.Second, "", env,
+	)
+	if r == nil || r.ExitCode != 0 {
+		return
+	}
 
-# Call Haiku via claude CLI (inherits OAuth auth)
-import subprocess as _sp
-try:
-    prompt = ('Generate a session title and pick a prompt-bar color.\n'
-              'Title: 2-4 word kebab-case, verb-first, max 30 chars.\n'
-              'Color: pick ONE from [red,blue,green,yellow,purple,orange,pink,cyan] '
-              'that matches the task mood/domain.\n'
-              'Return ONLY JSON: {"title":"...","color":"..."}\n\n'
-              f'User message: {first_message[:500]}')
-    r = _sp.run(
-        ['claude', '-p', prompt, '--model', 'haiku', '--output-format', 'text',
-         '--no-session-persistence'],
-        capture_output=True, text=True, timeout=120,
-        env={**os.environ, 'CTX_SUPERVISOR_LEVEL': 'off',
-             'CLAUDE_SESSION_NAMER': '0'},
-    )
-    raw = r.stdout.strip()
-    import re as _re
-    m = _re.search(r'\{[^}]*"title"[^}]*\}', raw)
-    if m:
-        raw = m.group()
-    try:
-        parsed = json.loads(raw)
-        title = parsed.get('title', '').strip()
-        color = parsed.get('color', '').strip().lower()
-    except Exception:
-        title = raw.strip()
-        color = ''
-    valid = {'red','blue','green','yellow','purple','orange','pink','cyan'}
-    if color not in valid:
-        color = ''
-except Exception:
-    sys.exit(0)
+	raw := strings.TrimSpace(r.Stdout)
+	if raw == "" {
+		return
+	}
 
-if not title:
-    sys.exit(0)
+	// Extract JSON object from response (may have preamble text)
+	jsonPat := regexp.MustCompile(`\{[^}]*"title"[^}]*\}`)
+	if m := jsonPat.FindString(raw); m != "" {
+		raw = m
+	}
 
-# Write to registry with file lock
-os.makedirs(os.path.dirname(REGISTRY), exist_ok=True)
-try:
-    with open(REGISTRY, 'a+') as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        f.seek(0)
-        content = f.read().strip()
-        registry = json.loads(content) if content else {}
-        created = datetime.now(timezone.utc).isoformat()
-        registry[session_id] = {
-            'title': title, 'color': color, 'created_at': created}
-        f.seek(0)
-        f.truncate()
-        json.dump(registry, f, indent=2)
-        fcntl.flock(f, fcntl.LOCK_UN)
-except Exception:
-    pass
-`
+	var parsed struct {
+		Title string `json:"title"`
+		Color string `json:"color"`
+	}
+	title := ""
+	color := ""
+	if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+		title = strings.TrimSpace(parsed.Title)
+		color = strings.ToLower(strings.TrimSpace(parsed.Color))
+	} else {
+		title = strings.TrimSpace(raw)
+	}
+	if _, valid := sessionNamerValidColors[color]; !valid {
+		color = ""
+	}
+	if title == "" {
+		return
+	}
+
+	// 4. Write to registry with file lock (mirrors fcntl.flock in Python)
+	if err := os.MkdirAll(filepath.Dir(registryPath), 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(registryPath, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	// Exclusive lock — mirrors fcntl.LOCK_EX
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:errcheck
+
+	// Read existing registry
+	registry := map[string]any{}
+	info, _ := f.Stat()
+	if info != nil && info.Size() > 0 {
+		data, _ := os.ReadFile(registryPath)
+		if len(data) > 0 {
+			_ = json.Unmarshal(data, &registry)
+		}
+	}
+
+	// Python datetime.now(UTC).isoformat() emits "+00:00"; match that
+	// instead of Go's default "Z" so string comparisons match registry
+	// entries written by legacy Python code paths.
+	createdAt := time.Now().UTC().Format("2006-01-02T15:04:05-07:00")
+	registry[sessionID] = map[string]any{
+		"title":      title,
+		"color":      color,
+		"created_at": createdAt,
+	}
+
+	out, err := json.MarshalIndent(registry, "", "  ")
+	if err != nil {
+		return
+	}
+
+	if err := f.Truncate(0); err != nil {
+		return
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		return
+	}
+	_, _ = f.Write(out)
+}
+
+// sessionNamerFindTranscript walks ~/.claude/projects/ to find {sessionID}.jsonl.
+// filepath.Glob does not support **, so we use filepath.WalkDir.
+func sessionNamerFindTranscript(home, sessionID string) string {
+	projectsDir := filepath.Join(home, ".claude", "projects")
+	target := sessionID + ".jsonl"
+	found := ""
+	errStop := fmt.Errorf("stop")
+	_ = filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.Name() == target {
+			found = path
+			return errStop // short-circuit
+		}
+		return nil
+	})
+	return found
+}
+
+// sessionNamerExtractFirstUserMessage reads the JSONL transcript and returns
+// the text content of the first user message.
+func sessionNamerExtractFirstUserMessage(transcriptPath string) string {
+	f, err := os.Open(transcriptPath)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		// Determine role: entry.type == "user" or message.role == "user"
+		msgObj, _ := entry["message"].(map[string]any)
+		role, _ := entry["type"].(string)
+		if role == "" && msgObj != nil {
+			role, _ = msgObj["role"].(string)
+		}
+		if role != "user" {
+			continue
+		}
+		if msgObj == nil {
+			continue
+		}
+		content := msgObj["content"]
+		switch c := content.(type) {
+		case string:
+			if strings.TrimSpace(c) != "" {
+				return c
+			}
+		case []any:
+			for _, block := range c {
+				bMap, ok := block.(map[string]any)
+				if !ok {
+					continue
+				}
+				if bMap["type"] == "text" {
+					if text, ok := bMap["text"].(string); ok && strings.TrimSpace(text) != "" {
+						return text
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// sessionNamerReplaceEnv replaces or appends a key=value in an os.Environ() slice.
+func sessionNamerReplaceEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
 }
