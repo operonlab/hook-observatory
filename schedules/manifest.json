@@ -73,6 +73,16 @@
       "enabled": true
     },
     {
+      "name": "ws-cli-auto-update",
+      "label": "com.joneshong.scheduler.ws-cli-auto-update",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_cli_auto_update.py",
+      "schedule": { "calendar": { "Hour": 5, "Minute": 12 } },
+      "description": "每日 5:12AM: 自動更新 codex、gemini、qwen、copilot、opencode 與 hermes CLI",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "disk-report",
       "label": "com.joneshong.disk-report",
       "command": "~/.claude/data/disk-report/scripts/generate-report.sh",
