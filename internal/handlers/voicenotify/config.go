@@ -18,11 +18,21 @@ import (
 	"strconv"
 )
 
-// Env-overridable configuration. All defaults match voice_notify.py.
+// Env-overridable configuration.
+//
+// Defaults target the Workshop TTS station (stations/tts — FastAPI at :10201)
+// using its real `/synthesize` endpoint, which accepts query parameters and
+// returns `{audio_path, ...}`. The previous default URL (`/api/tts/speak`)
+// never existed on this station — it was inherited verbatim from
+// voice_notify.py, where every request silently 404'd and fell through to the
+// edge-tts branch. The Go port now actually exercises the station so
+// operators can swap engines centrally (apple / qwen3-tts / kokoro / ...).
 var (
-	TTSURL       = envOr("CLAUDE_TTS_URL", "http://localhost:10201/api/tts/speak")
-	Voice        = envOr("CLAUDE_VOICE_ID", "zh-CN-YunjianNeural")
-	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")
+	TTSURL       = envOr("CLAUDE_TTS_URL", "http://localhost:10201/synthesize")
+	TTSEngine    = envOr("CLAUDE_TTS_ENGINE", "apple")
+	TTSVoice     = envOr("CLAUDE_TTS_VOICE", "Meijia")
+	Voice        = envOr("CLAUDE_VOICE_ID", "zh-CN-YunjianNeural") // edge-tts fallback
+	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")              // edge-tts fallback
 	PlaybackVol  = envOr("CLAUDE_VOICE_VOLUME", "0.4")
 	WebuiURL     = envOr("TMUX_WEBUI_URL", "http://127.0.0.1:10105")
 	DebounceTTL  = envOrInt("CLAUDE_VOICE_DEBOUNCE", 10)
