@@ -1,0 +1,6 @@
+port: 10208
+host: "127.0.0.1"
+remote_url: "http://win-gpu:7860"
+health_interval: 30
+timeout: 120
+output_dir: "~/workshop/outputs/remote-node"
