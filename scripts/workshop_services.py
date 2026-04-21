@@ -285,7 +285,7 @@ SERVICES = [
         "name": "remote-node",
         "type": "uvicorn",
         "cmd": (
-            "/Users/joneshong/.local/bin/python3"
+            "/Users/joneshong/workshop/stations/remote-node/.venv/bin/python3"
             " /Users/joneshong/workshop/stations/remote-node/main.py"
         ),
         "port": get_port("remote-node"),
@@ -945,14 +945,73 @@ def _check_bind_addresses() -> None:
                 pass
 
 
+# Crash-loop guard: stop restarting a service that fails _CRASH_LOOP_MAX times
+# within _CRASH_LOOP_WINDOW, cool down for _CRASH_LOOP_COOLDOWN, then try again.
+# Marker file lets Sentinel surface the alert.
+_CRASH_LOOP_WINDOW = 300  # 5 minutes
+_CRASH_LOOP_MAX = 3
+_CRASH_LOOP_COOLDOWN = 600  # 10 minutes
+_CRASH_LOOP_STATE: dict[str, dict] = {}
+_CRASH_LOOP_MARKER_DIR = PID_DIR.parent / "workshop-crash-loop"
+
+
+def _record_restart_attempt(name: str) -> bool:
+    """Return False when the service is in crash-loop cooldown and should be skipped."""
+    now = time.time()
+    state = _CRASH_LOOP_STATE.setdefault(name, {"restarts": [], "cooldown_until": 0.0})
+    if now < state["cooldown_until"]:
+        return False
+    state["restarts"] = [t for t in state["restarts"] if now - t < _CRASH_LOOP_WINDOW]
+    state["restarts"].append(now)
+    if len(state["restarts"]) >= _CRASH_LOOP_MAX:
+        state["cooldown_until"] = now + _CRASH_LOOP_COOLDOWN
+        state["restarts"] = []
+        _write_crash_loop_marker(name)
+        return False
+    return True
+
+
+def _write_crash_loop_marker(name: str) -> None:
+    try:
+        _CRASH_LOOP_MARKER_DIR.mkdir(parents=True, exist_ok=True)
+        marker = _CRASH_LOOP_MARKER_DIR / f"{name}.marker"
+        marker.write_text(
+            f"{datetime.now().isoformat()} {name} crash-loop "
+            f"(>={_CRASH_LOOP_MAX} failures in {_CRASH_LOOP_WINDOW}s) — "
+            f"cooldown {_CRASH_LOOP_COOLDOWN}s\n"
+        )
+    except OSError:
+        pass
+
+
+def _clear_crash_loop_marker(name: str) -> None:
+    marker = _CRASH_LOOP_MARKER_DIR / f"{name}.marker"
+    marker.unlink(missing_ok=True)
+    _CRASH_LOOP_STATE.pop(name, None)
+
+
 def health_check_all() -> None:
     for svc in SERVICES:
         if svc.get("schedule") == "on-demand":
             continue
         name = svc["name"]
         if is_running(name, svc["port"]) is None:
+            if not _record_restart_attempt(name):
+                # Log once per cooldown entry (when marker was just written)
+                marker = _CRASH_LOOP_MARKER_DIR / f"{name}.marker"
+                if marker.exists():
+                    mtime = marker.stat().st_mtime
+                    if time.time() - mtime < 60:
+                        err(
+                            f"CRASH-LOOP: {name} failed {_CRASH_LOOP_MAX}× in "
+                            f"{_CRASH_LOOP_WINDOW}s — cooling down {_CRASH_LOOP_COOLDOWN}s "
+                            f"(marker: {marker})"
+                        )
+                continue
             log(f"ALERT: {name} is down — restarting...")
             start_service(svc)
+        else:
+            _clear_crash_loop_marker(name)
 
 
 # ── Daemon Mode ────────────────────────────────────────────────
