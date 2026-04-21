@@ -63,6 +63,16 @@ class EdgeTTSEngine:
         if voice in (None, "", "default"):
             voice = DEFAULT_VOICE
 
+        # Mainland zh-CN voices pronounce Traditional Chinese characters with
+        # PRC readings but stumble on Taiwan-specific vocabulary (e.g. 資訊 →
+        # 信息). Convert to Simplified so the pronunciation model and the
+        # written form agree. zh-TW voices are trained on Traditional and
+        # stay as-is.
+        if voice.startswith("zh-CN-"):
+            from . import to_simplified
+
+            text = to_simplified(text)
+
         if output_path is None:
             output_path = tempfile.mktemp(prefix="tts_edge_", suffix=".mp3")
 
