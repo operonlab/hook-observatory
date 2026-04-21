@@ -64,6 +64,56 @@ func RunCmd(args []string, stdin string, timeout time.Duration, cwd string) *Cmd
 	return res
 }
 
+// RunCmdWithEnv is like RunCmd but with a custom environment slice.
+// If env is nil, the current process environment is inherited.
+func RunCmdWithEnv(args []string, stdin string, timeout time.Duration, cwd string, env []string) *CmdResult {
+	if len(args) == 0 {
+		return nil
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
+	if env != nil {
+		cmd.Env = env
+	}
+	if stdin != "" {
+		cmd.Stdin = readerFromString(stdin)
+	}
+
+	stdoutBuf := newBoundedBuffer(4 * 1024 * 1024)
+	stderrBuf := newBoundedBuffer(4 * 1024 * 1024)
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
+
+	err := cmd.Run()
+	res := &CmdResult{
+		Stdout:   stdoutBuf.String(),
+		Stderr:   stderrBuf.String(),
+		ExitCode: 0,
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		res.TimedOut = true
+		res.ExitCode = -1
+		return res
+	}
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			res.ExitCode = exitErr.ExitCode()
+			return res
+		}
+		return nil
+	}
+	return res
+}
+
 // RunBackground starts a fire-and-forget subprocess, detached from the parent.
 // Returns an error if the process could not be started.
 func RunBackground(args []string, cwd string) error {

@@ -20,6 +20,9 @@ import (
 
 	// Handler packages self-register via init().
 	_ "github.com/joneshong/hook-dispatcher/internal/handlers"
+
+	"github.com/joneshong/hook-dispatcher/internal/handlers/sessionpipeline"
+	"github.com/joneshong/hook-dispatcher/internal/handlers/voicenotify"
 )
 
 // gitSHA is injected at build time via -ldflags.
@@ -29,6 +32,29 @@ var gitSHA = "dev"
 const pythonFallbackDisableEnv = "HOOK_DISPATCHER_NO_FALLBACK"
 
 func main() {
+	// Sub-modes: self-exec for detached background workers.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--tts-consumer":
+			voicenotify.ConsumerMain()
+			return
+		case "--tts-checker":
+			ident := ""
+			if len(os.Args) > 2 {
+				ident = os.Args[2]
+			}
+			voicenotify.CheckerMain(ident)
+			return
+		case "--session-pipeline-runner":
+			payload := ""
+			if len(os.Args) > 2 {
+				payload = os.Args[2]
+			}
+			sessionpipeline.RunnerMain(payload)
+			return
+		}
+	}
+
 	// Buffer raw stdin so we can replay it to Python on fallback.
 	raw, readErr := io.ReadAll(os.Stdin)
 	if readErr != nil {
