@@ -78,6 +78,17 @@ LIGHT_CHECKS: list[LightCheck] = [
         group="system",
         command="docker info --format '{{.ServerVersion}}' 2>/dev/null",
     ),
+    LightCheck(
+        name="workshop-crash-loop",
+        group="system",
+        command=(
+            "dir=/opt/homebrew/var/run/workshop-crash-loop; "
+            'if ls "$dir"/*.marker >/dev/null 2>&1; then '
+            'names=$(ls "$dir" | sed "s/\\.marker$//" | tr "\\n" " "); '
+            'echo "CRASH-LOOP: $names"; exit 1; '
+            "else echo no-crashloop; fi"
+        ),
+    ),
     # ── infra ──
     LightCheck(
         name="postgres",
@@ -606,9 +617,11 @@ async def run_light_check(check: LightCheck) -> CheckResult:
             elapsed = (time.monotonic() - start) * 1000
 
             if proc.returncode != 0:
-                return CheckResult(
-                    check.name, "light", "unhealthy", elapsed, f"exit={proc.returncode}"
-                )
+                output = stdout.decode(errors="replace").strip()
+                detail = f"exit={proc.returncode}"
+                if output:
+                    detail += f": {output[:200]}"
+                return CheckResult(check.name, "light", "unhealthy", elapsed, detail)
 
             if check.expect_contains:
                 output = stdout.decode()
@@ -681,7 +694,11 @@ async def _run_deep_cfx(check: DeepCheck, session_id: str) -> CheckResult | None
     start = time.monotonic()
     try:
         open_proc = await asyncio.create_subprocess_exec(
-            "camoufox-cli", "--session", session_id, "open", check.url,
+            "camoufox-cli",
+            "--session",
+            session_id,
+            "open",
+            check.url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -693,7 +710,11 @@ async def _run_deep_cfx(check: DeepCheck, session_id: str) -> CheckResult | None
 
         # Wait for SPA render
         wait_proc = await asyncio.create_subprocess_exec(
-            "camoufox-cli", "--session", session_id, "wait", "5000",
+            "camoufox-cli",
+            "--session",
+            session_id,
+            "wait",
+            "5000",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -701,7 +722,11 @@ async def _run_deep_cfx(check: DeepCheck, session_id: str) -> CheckResult | None
 
         # Eval browser JS check
         eval_proc = await asyncio.create_subprocess_exec(
-            "camoufox-cli", "--session", session_id, "eval", check.eval_code,
+            "camoufox-cli",
+            "--session",
+            session_id,
+            "eval",
+            check.eval_code,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -714,9 +739,7 @@ async def _run_deep_cfx(check: DeepCheck, session_id: str) -> CheckResult | None
         output = stdout.decode().strip()
         if "ok" in output.lower():
             return CheckResult(check.name, "deep", "healthy", elapsed)
-        return CheckResult(
-            check.name, "deep", "unhealthy", elapsed, f"Unexpected: {output[:100]}"
-        )
+        return CheckResult(check.name, "deep", "unhealthy", elapsed, f"Unexpected: {output[:100]}")
 
     except FileNotFoundError:
         return None  # Signal caller to try playwright fallback
@@ -731,7 +754,10 @@ async def _run_deep_cfx(check: DeepCheck, session_id: str) -> CheckResult | None
     finally:
         try:
             close_proc = await asyncio.create_subprocess_exec(
-                "camoufox-cli", "--session", session_id, "close",
+                "camoufox-cli",
+                "--session",
+                session_id,
+                "close",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -775,9 +801,7 @@ async def _run_deep_pw(check: DeepCheck, session_id: str) -> CheckResult:
         output = stdout.decode().strip()
         if "ok" in output.lower():
             return CheckResult(check.name, "deep", "healthy", elapsed)
-        return CheckResult(
-            check.name, "deep", "unhealthy", elapsed, f"Unexpected: {output[:100]}"
-        )
+        return CheckResult(check.name, "deep", "unhealthy", elapsed, f"Unexpected: {output[:100]}")
 
     except TimeoutError:
         return CheckResult(

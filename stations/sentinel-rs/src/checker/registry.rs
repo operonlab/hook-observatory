@@ -21,6 +21,7 @@ pub const CHECKS: &[Check] = &[
     // ── System ─────────────────────────────────────────────
     Check { name: "nginx", kind: CheckKind::Http, target: "http://127.0.0.1:8080/health", expect_contains: None, expect_json: None, timeout_sec: 10, group: "system", optional: false },
     Check { name: "orbstack", kind: CheckKind::Shell, target: "docker info --format '{{.ServerVersion}}'", expect_contains: None, expect_json: None, timeout_sec: 10, group: "system", optional: false },
+    Check { name: "workshop-crash-loop", kind: CheckKind::Shell, target: r#"dir=/opt/homebrew/var/run/workshop-crash-loop; if ls "$dir"/*.marker >/dev/null 2>&1; then names=$(ls "$dir" | sed 's/\.marker$//' | tr '\n' ' '); echo "CRASH-LOOP: $names"; exit 1; else echo no-crashloop; fi"#, expect_contains: Some("no-crashloop"), expect_json: None, timeout_sec: 5, group: "system", optional: false },
     Check { name: "port-security", kind: CheckKind::Shell, target: "/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/port_audit.py --check", expect_contains: Some("PASS"), expect_json: None, timeout_sec: 15, group: "system", optional: true },
     Check { name: "process-audit", kind: CheckKind::Shell, target: "/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/workshop_orphan_reaper.py --json", expect_contains: Some("\"count\": 0"), expect_json: None, timeout_sec: 15, group: "system", optional: true },
 
