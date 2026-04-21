@@ -3,11 +3,14 @@
 Prefix: /api/memvault (mounted in main.py)
 """
 
+import asyncio
 import logging
 import math
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +24,7 @@ from .dedup import DedupDecision, check_duplicate
 from .embedding import get_embedding
 from .injection_guard import is_unsafe_for_injection, sanitize_for_injection
 from .query_runtime import build_injection_payload, build_inspect_payload, run_memory_query
+from .recall_text import build_recall_text
 from .schemas import (
     EnhancedSearchResult,
     KnowledgeDomainCreate,
@@ -142,9 +146,7 @@ async def create_block(
         unsafe, inject_reason = is_unsafe_for_injection(body.content or "")
         if unsafe:
             is_quarantined = True
-            logger.warning(
-                "Write gate: injection quarantine (%s), skipping dedup", inject_reason
-            )
+            logger.warning("Write gate: injection quarantine (%s), skipping dedup", inject_reason)
 
     # Gate 3: Dedup check — only clean content reaches similarity comparison
     try:
@@ -565,6 +567,32 @@ async def inspect_memory(
     request = body.model_copy(update={"thinking_mode": "slow", "consumer": "human"})
     response = await run_memory_query(db, space_id, request)
     return build_inspect_payload(response)
+
+
+# ======================== Recall Text (hook entry) ========================
+
+
+class RecallTextRequest(BaseModel):
+    prompt: str
+    session_id: str | None = None
+    cwd: str | None = None
+
+
+@router.post("/recall/text", response_class=PlainTextResponse)
+async def recall_text(body: RecallTextRequest = Body(...)) -> PlainTextResponse:
+    """Build the markdown recall block for a Claude Code prompt.
+
+    Replaces the `recall.py` subprocess that the UserPromptSubmit hook used
+    to fork. Body matches the original stdin JSON; response is plain text
+    (may be empty).
+    """
+    text = await asyncio.to_thread(
+        build_recall_text,
+        body.prompt,
+        body.session_id or "",
+        body.cwd or "",
+    )
+    return PlainTextResponse(content=text or "")
 
 
 @router.get("/prefetch/metrics")
