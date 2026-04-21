@@ -24,26 +24,29 @@ type QueueEntry struct {
 
 // Play synthesises and plays a single TTS entry.
 //
-// Default order mirrors the Python voice_notify.py effective behaviour
-// (edge-tts → afplay is what actually runs in practice):
+// Three-layer fallback with stations/tts as the primary entry point:
 //
-//  1. edge-tts CLI → afplay                  (Layer 1, default)
-//  2. Workshop stations/tts /synthesize      (Layer 2, opt-in)
-//  3. macOS `say` → afplay                   (Layer 3, last resort)
+//  1. stations/tts `/synthesize`     — default engine=edge (zh-CN-YunjianNeural)
+//  2. edge-tts CLI (local fallback)  — used only if the station is down
+//  3. macOS `say` → afplay           — last resort if edge-tts CLI missing
 //
-// To promote the station to Layer 1 (engine switch centralisation), set
-// `CLAUDE_TTS_PRIMARY=station`. The station is still available — we just
-// don't lead with it because:
-//   * stations/tts has no edge-tts engine; apple engine emits TOO_QUIET wavs
-//     on some voice IDs.
-//   * Python voice_notify.py used `/api/tts/speak` which never existed, so
-//     every prod invocation silently fell through to edge-tts. Matching that
-//     observed behaviour is less surprising than switching engines.
+// The station wraps edge-tts internally (stations/tts/engines/edge.py), so
+// Go stays thin: one HTTP call, parse `{audio_path}`, afplay locally.
+// Operators switch engines centrally via CLAUDE_TTS_ENGINE (default "edge")
+// or CLAUDE_TTS_VOICE — the Go binary doesn't need to know anything about
+// the engine catalogue.
 func Play(e QueueEntry) {
 	vol := e.Vol
 	if vol == "" {
 		vol = "0.3"
 	}
+
+	// 1) Workshop stations/tts (default: edge engine)
+	if playStation(e.Text, vol) {
+		return
+	}
+
+	// 2) Local edge-tts CLI fallback (used when the station is unreachable)
 	voice := e.Voice
 	if voice == "" {
 		voice = Voice
@@ -52,18 +55,11 @@ func Play(e QueueEntry) {
 	if rate == "" {
 		rate = Rate
 	}
-
-	stationFirst := os.Getenv("CLAUDE_TTS_PRIMARY") == "station"
-
-	if stationFirst && playStation(e.Text, vol) {
-		return
-	}
 	if playEdgeTTS(e.Text, voice, rate, vol) {
 		return
 	}
-	if !stationFirst && playStation(e.Text, vol) {
-		return
-	}
+
+	// 3) macOS `say` — truly offline fallback
 	playSay(e.Text, vol)
 }
 
