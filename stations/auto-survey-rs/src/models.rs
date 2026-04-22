@@ -31,10 +31,20 @@ pub struct Survey {
     pub created_at: DateTime<Utc>,
 }
 
+/// Question row.
+///
+/// `id` / `survey_id` are `String` (not `Uuid`) because sqlx's runtime
+/// `FromRow` derive defaults to decoding `Uuid` as a 16-byte SQLite BLOB,
+/// but the schema stores UUIDs as 36-char TEXT. The compile-time `query_as!`
+/// macro sees the schema and picks the right decoder, but
+/// `query_as::<_, Question>` (runtime) doesn't — so it failed at runtime
+/// with "invalid length: expected 16 bytes, found 36". Keeping the id
+/// fields on `String` is simpler than carrying a custom decoder
+/// everywhere — callers that need a `Uuid` can `.parse()` on demand.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Question {
-    pub id: Uuid,
-    pub survey_id: Uuid,
+    pub id: String,
+    pub survey_id: String,
     pub subject_id: String,
     pub question_text: String,
     pub options: serde_json::Value, // JSON array

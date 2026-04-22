@@ -420,7 +420,7 @@ pub async fn analyze_quiz(
     // Persist to DB
     for q in &questions {
         if let Some(ans) = answers.get(&q.subject_id) {
-            update_correct_answer(pool, &q.id.to_string(), ans).await?;
+            update_correct_answer(pool, &q.id, ans).await?;
         }
     }
 
@@ -532,7 +532,7 @@ pub async fn analyze_quiz_rlm(
     // Persist
     for q in &questions {
         if let Some(ans) = answers.get(&q.subject_id) {
-            update_correct_answer(pool, &q.id.to_string(), ans).await?;
+            update_correct_answer(pool, &q.id, ans).await?;
         }
     }
 
@@ -585,7 +585,7 @@ pub async fn reanalyze_wrong(
 
     for q in &questions {
         if let Some(ans) = answers.get(&q.subject_id) {
-            update_reanalyzed_answer(pool, &q.id.to_string(), ans).await?;
+            update_reanalyzed_answer(pool, &q.id, ans).await?;
         }
     }
 
