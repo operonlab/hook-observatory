@@ -118,7 +118,7 @@ SERVICES = [
         "name": "sentinel",
         "type": "binary",
         "cmd": (
-            "/Users/joneshong/workshop/stations/sentinel-rs/target/release/sentinel-rs"
+            "/Users/joneshong/.cargo/shared-target/release/sentinel-rs"
             " --config /Users/joneshong/workshop/stations/sentinel-rs/config.yaml"
         ),
         "port": get_port("sentinel"),
@@ -157,7 +157,7 @@ SERVICES = [
         "name": "agent-metrics",
         "type": "binary",
         "cmd": (
-            "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs"
+            "/Users/joneshong/.cargo/shared-target/release/agent-metrics-rs"
             " serve"
         ),
         "port": get_port("agent-metrics"),
@@ -209,7 +209,7 @@ SERVICES = [
         "type": "binary",
         "schedule": "on-demand",
         "cmd": (
-            "/Users/joneshong/workshop/stations/auto-survey-rs/target/release/auto-survey-rs"
+            "/Users/joneshong/.cargo/shared-target/release/auto-survey-rs"
             f" serve --host 127.0.0.1 --port {get_port('auto-survey')}"
         ),
         "port": get_port("auto-survey"),
@@ -285,7 +285,7 @@ SERVICES = [
         "name": "remote-node",
         "type": "binary",
         "cmd": (
-            "/Users/joneshong/workshop/stations/remote-node-rs/target/release/remote-node-rs"
+            "/Users/joneshong/.cargo/shared-target/release/remote-node-rs"
             " --config /Users/joneshong/workshop/stations/remote-node-rs/config.yaml"
         ),
         "port": get_port("remote-node"),
