@@ -121,7 +121,10 @@ enum PeopleCmd {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Route logs to stderr so CLI subcommands (today-status, history, etc.)
+    // can emit parseable key:value lines on stdout without tracing noise.
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 

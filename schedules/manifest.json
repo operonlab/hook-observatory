@@ -175,7 +175,7 @@
     {
       "name": "ws-auto-survey-wed",
       "label": "com.joneshong.scheduler.ws-auto-survey-wed",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_auto_survey.py",
+      "command": "/bin/bash ~/workshop/schedules/runners/ws_auto_survey.sh",
       "schedule": { "calendar": { "Weekday": 3, "Hour": 13, "Minute": 0 } },
       "description": "每週三 13:00: LINE OCR 自動抓連結 → auto-survey pipeline → Bark fallback",
       "category": "workshop",
@@ -185,7 +185,7 @@
     {
       "name": "ws-auto-survey-fri",
       "label": "com.joneshong.scheduler.ws-auto-survey-fri",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_auto_survey.py",
+      "command": "/bin/bash ~/workshop/schedules/runners/ws_auto_survey.sh",
       "schedule": { "calendar": { "Weekday": 5, "Hour": 13, "Minute": 0 } },
       "description": "每週五 13:00: LINE OCR 自動抓連結 → auto-survey pipeline → Bark fallback",
       "category": "workshop",
