@@ -558,25 +558,28 @@ async fn execute_pipeline_bg(
     attend_url: Option<String>,
     quiz_url: Option<String>,
 ) {
+    // Format mirrors Python `auto_survey/web.py::_execute_pipeline_bg`:
+    //   success → "attendance: OK" / "quiz: OK"
+    //   failure → "attendance: FAILED (<err>)" / "quiz: FAILED (<err>)"
     let mut results: Vec<String> = Vec::new();
     let mut any_failed = false;
 
     if let Some(url) = &attend_url {
         match crate::orchestrator::run_attendance(&pool, &cfg, url, false).await {
-            Ok(()) => results.push("attendance: ok".to_string()),
+            Ok(()) => results.push("attendance: OK".to_string()),
             Err(e) => {
                 tracing::error!("run_attendance failed: {e:?}");
-                results.push(format!("attendance: failed ({})", e));
+                results.push(format!("attendance: FAILED ({})", e));
                 any_failed = true;
             }
         }
     }
     if let Some(url) = &quiz_url {
         match crate::orchestrator::run_quiz(&pool, &cfg, url, false).await {
-            Ok(()) => results.push("quiz: ok".to_string()),
+            Ok(()) => results.push("quiz: OK".to_string()),
             Err(e) => {
                 tracing::error!("run_quiz failed: {e:?}");
-                results.push(format!("quiz: failed ({})", e));
+                results.push(format!("quiz: FAILED ({})", e));
                 any_failed = true;
             }
         }
@@ -595,9 +598,12 @@ async fn execute_pipeline_bg(
     .execute(&pool)
     .await;
 
+    // Bark body mirrors Python: `"{marker} {summary}"` with marker = "!" on
+    // any failure, "OK" on full success. Title is plain "Auto Survey".
     let client = reqwest::Client::new();
-    let title = if any_failed { "Auto Survey ⚠️" } else { "Auto Survey ✓" };
-    let _ = crate::notify::send_bark(&client, &cfg, title, &summary).await;
+    let status_marker = if any_failed { "!" } else { "OK" };
+    let body = format!("{status_marker} {summary}");
+    let _ = crate::notify::send_bark(&client, &cfg, "Auto Survey", &body).await;
 }
 
 // ── SSE stream ────────────────────────────────────────────
