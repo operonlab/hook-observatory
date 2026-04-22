@@ -7,7 +7,9 @@
 
 use crate::config::Settings;
 use anyhow::{bail, Result};
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Mutex;
 use tokio::process::Command;
 use uuid::Uuid;
 
@@ -35,13 +37,21 @@ pub trait BrowserSession: Send + Sync {
 pub struct CamoufoxSession {
     pub sid: String,
     pub cfg: Settings,
+    /// Cloned profile directory for this session. Populated lazily on first
+    /// `open()` and removed on `close()` so parallel / back-to-back survey
+    /// runs never compete for the shared master profile lock.
+    cloned_profile: Mutex<Option<PathBuf>>,
 }
 
 impl CamoufoxSession {
     /// Create a new session with a random 8-hex SID.
     pub fn new(cfg: Settings) -> Self {
         let sid = Uuid::new_v4().simple().to_string()[..8].to_string();
-        Self { sid, cfg }
+        Self {
+            sid,
+            cfg,
+            cloned_profile: Mutex::new(None),
+        }
     }
 
     /// Create with explicit session id (for tests / resumption).
@@ -49,6 +59,75 @@ impl CamoufoxSession {
         Self {
             sid: sid.into(),
             cfg,
+            cloned_profile: Mutex::new(None),
+        }
+    }
+
+    fn expand_home(raw: &str) -> PathBuf {
+        if let Some(stripped) = raw.strip_prefix("~/") {
+            let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/"));
+            PathBuf::from(home).join(stripped)
+        } else if raw == "~" {
+            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| String::from("/")))
+        } else {
+            PathBuf::from(raw)
+        }
+    }
+
+    /// Clone the master profile into a fresh tmpdir (idempotent). Returns the
+    /// clone path. Uses `cp -Rp` so symlinks/permissions are preserved and
+    /// removes any stale Firefox lock files inside the clone.
+    async fn ensure_cloned_profile(&self) -> Result<PathBuf> {
+        if let Some(p) = self.cloned_profile.lock().unwrap().clone() {
+            if p.exists() {
+                return Ok(p);
+            }
+        }
+
+        let source = Self::expand_home(&self.cfg.camoufox_profile);
+        if !source.exists() {
+            bail!("camoufox profile not found: {}", source.display());
+        }
+
+        let target = std::env::temp_dir().join(format!("camoufox-{}", self.sid));
+        // If a previous run left something behind, wipe it before cloning.
+        if target.exists() {
+            let _ = tokio::fs::remove_dir_all(&target).await;
+        }
+
+        let status = Command::new("cp")
+            .arg("-Rp")
+            .arg(&source)
+            .arg(&target)
+            .status()
+            .await?;
+        if !status.success() {
+            bail!("cp -Rp failed cloning {} -> {}", source.display(), target.display());
+        }
+
+        // Strip Firefox lock files so the clone starts unlocked even if the
+        // source was in use at clone time.
+        for name in [".parentlock", "lock", "parent.lock"] {
+            let _ = tokio::fs::remove_file(target.join(name)).await;
+        }
+
+        *self.cloned_profile.lock().unwrap() = Some(target.clone());
+        tracing::debug!(sid = %self.sid, clone = %target.display(), "camoufox profile cloned");
+        Ok(target)
+    }
+
+    /// Remove the cloned profile directory. Safe to call multiple times.
+    async fn discard_cloned_profile(&self) {
+        let maybe = self.cloned_profile.lock().unwrap().take();
+        if let Some(path) = maybe {
+            if let Err(e) = tokio::fs::remove_dir_all(&path).await {
+                tracing::debug!(
+                    sid = %self.sid,
+                    path = %path.display(),
+                    error = %e,
+                    "cleanup of cloned profile failed"
+                );
+            }
         }
     }
 
@@ -79,6 +158,17 @@ impl CamoufoxSession {
     }
 }
 
+impl Drop for CamoufoxSession {
+    fn drop(&mut self) {
+        // Safety net for paths that never reach close() (e.g. `?` early-exit
+        // in the orchestrator). std::fs is sync but acceptable in Drop.
+        let path: Option<PathBuf> = self.cloned_profile.lock().unwrap().take();
+        if let Some(p) = path {
+            let _ = std::fs::remove_dir_all(&p);
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl BrowserSession for CamoufoxSession {
     fn backend(&self) -> &str {
@@ -86,17 +176,15 @@ impl BrowserSession for CamoufoxSession {
     }
 
     /// Open URL with persistent profile. Mirrors `open()` in Python (with 2s sleep).
+    ///
+    /// The master profile is cloned into `/tmp/camoufox-<sid>/` on first open
+    /// so concurrent or back-to-back runs never collide on the Firefox
+    /// parent-lock. The clone is discarded in `close()`.
     async fn open(&self, url: &str) -> Result<String> {
-        // Expand ~ in profile path
-        let profile_raw = &self.cfg.camoufox_profile;
-        let profile = if profile_raw.starts_with('~') {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-            profile_raw.replacen('~', &home, 1)
-        } else {
-            profile_raw.clone()
-        };
+        let profile = self.ensure_cloned_profile().await?;
+        let profile_str = profile.to_string_lossy().into_owned();
         let result = self
-            .run_cmd(&["--persistent", &profile, "open", url], 30)
+            .run_cmd(&["--persistent", &profile_str, "open", url], 30)
             .await?;
         // Python does time.sleep(2) here; we use tokio::time::sleep
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -152,10 +240,12 @@ impl BrowserSession for CamoufoxSession {
 
     /// Close the session — mirrors Python `close()` (swallows errors).
     async fn close(&self) -> Result<String> {
-        match self.run_cmd(&["close"], 10).await {
-            Ok(out) => Ok(out),
-            Err(_) => Ok(String::new()), // Python: except Exception: return ""
-        }
+        let out = match self.run_cmd(&["close"], 10).await {
+            Ok(out) => out,
+            Err(_) => String::new(), // Python: except Exception: return ""
+        };
+        self.discard_cloned_profile().await;
+        Ok(out)
     }
 }
 
