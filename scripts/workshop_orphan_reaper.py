@@ -38,6 +38,9 @@ PROTECTED_PATTERNS = {
     "uvicorn src.main:app",  # workshop core (managed by workshop_services)
     "workshop_services.py",  # the service manager itself
     "sentinel",  # health checker
+    # launchd-managed Rust stations (PPID=1 is expected, launchd owns lifecycle)
+    "auto-survey-rs/target/release/auto-survey-rs",
+    "remote-node-rs/target/release/remote-node-rs",
 }
 
 
