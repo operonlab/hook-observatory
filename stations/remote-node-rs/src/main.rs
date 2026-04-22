@@ -21,7 +21,9 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Route logs to stderr so stdout is reserved for any future CLI output.
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 
@@ -42,6 +44,21 @@ async fn main() -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{}:{}", cfg.host, cfg.port).parse()?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "listening");
-    axum::serve(listener, app).await?;
+    // Graceful SIGTERM/SIGINT handling so process-manager kills produce a
+    // clean exit(0) instead of an abrupt abnormal exit — matches
+    // auto-survey-rs policy and avoids half-done proxy forwards in-flight.
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
     Ok(())
+}
+
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+    let mut intr = signal(SignalKind::interrupt()).expect("install SIGINT handler");
+    tokio::select! {
+        _ = term.recv() => tracing::info!("received SIGTERM, shutting down"),
+        _ = intr.recv() => tracing::info!("received SIGINT, shutting down"),
+    }
 }

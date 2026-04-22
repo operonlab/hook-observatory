@@ -60,7 +60,11 @@ enum Cmd {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Route logs to stderr so CLI subcommands that `println!` JSON/formatted
+    // output (UsageToday, LitellmStatus, QuotaCurrent, etc.) keep stdout
+    // clean for downstream pipes / jq consumers.
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 
