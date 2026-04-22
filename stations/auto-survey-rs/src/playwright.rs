@@ -428,6 +428,20 @@ fn apply_pw_to_camoufox_transforms(inner: &str) -> String {
     // page.url() → window.location.href
     s = s.replace("page.url()", "window.location.href");
 
+    // Multi-line `await page.evaluate(() => { ...body... })` → `(() => {body})()`
+    // We're already inside a page context in camoufox-cli, so the wrapping
+    // promise indirection just has to disappear. Handle multi-line first so
+    // the single-line rule below doesn't accidentally match on `}` char.
+    let re_eval_multi =
+        Regex::new(r"await\s+page\.evaluate\(\(\)\s*=>\s*\{([\s\S]*?)\}\s*\)").unwrap();
+    s = re_eval_multi
+        .replace_all(&s, "(() => {$1})()")
+        .into_owned();
+    // Single-line `await page.evaluate(() => expr)` → `expr`
+    let re_eval_single =
+        Regex::new(r"await\s+page\.evaluate\(\(\)\s*=>\s*([^;\n]+)\)").unwrap();
+    s = re_eval_single.replace_all(&s, "$1").into_owned();
+
     // page.locator(sel).first().click() → clickEl(sel)
     let re = Regex::new(r"await\s+page\.locator\(([^)]+)\)\.first\(\)\.click\(\)").unwrap();
     s = re.replace_all(&s, "await clickEl($1)").into_owned();
