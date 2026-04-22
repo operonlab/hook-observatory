@@ -28,13 +28,17 @@ SURVEYCAKE_RE = re.compile(r"https?://w{2,3}\.surveycake\.com/s/\w+")
 
 _SCRIPT_ACTIVATE = """\
 tell application "LINE" to activate
+delay 1.0
+tell application "LINE" to reopen
 delay 1.5
 
 tell application "System Events"
     tell process "LINE"
         if (count of windows) = 0 then
-            click menu item "聊天" of menu "顯示" of menu bar 1
-            delay 1.5
+            try
+                click menu item "聊天" of menu "顯示" of menu bar 1
+                delay 1.5
+            end try
         end if
     end tell
 end tell
@@ -102,7 +106,13 @@ def _scroll_up_and_capture(wid: int, pages: int = 1) -> str:
 
 
 def _get_line_window_id() -> int | None:
-    """Get LINE's CGWindowID using Quartz."""
+    """Get LINE's CGWindowID using Quartz.
+
+    Prefer a LINE window with a non-empty title (the main chat window when
+    focused). If LINE was reopened from the menu bar and macOS hasn't populated
+    the title yet, fall back to the largest on-screen LINE window so
+    screencapture still targets something visible instead of returning None.
+    """
     try:
         import Quartz
 
@@ -110,9 +120,28 @@ def _get_line_window_id() -> int | None:
             Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
             Quartz.kCGNullWindowID,
         )
+        named: int | None = None
+        largest_area = 0
+        largest_wid: int | None = None
         for w in windows:
-            if w.get("kCGWindowOwnerName") == "LINE" and w.get("kCGWindowName"):
-                return int(w["kCGWindowNumber"])
+            if w.get("kCGWindowOwnerName") != "LINE":
+                continue
+            bounds = w.get("kCGWindowBounds") or {}
+            width = int(bounds.get("Width", 0) or 0)
+            height = int(bounds.get("Height", 0) or 0)
+            if width < 300 or height < 300:
+                continue  # skip tooltips, badges, menu-bar helpers
+            if named is None and w.get("kCGWindowName"):
+                named = int(w["kCGWindowNumber"])
+            area = width * height
+            if area > largest_area:
+                largest_area = area
+                largest_wid = int(w["kCGWindowNumber"])
+        if named is not None:
+            return named
+        if largest_wid is not None:
+            log.debug("LINE window has no title; falling back to largest (%dpx²)", largest_area)
+            return largest_wid
     except Exception:
         log.debug("Quartz unavailable, cannot get LINE window ID")
     return None
