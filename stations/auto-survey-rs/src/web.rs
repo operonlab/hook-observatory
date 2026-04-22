@@ -497,8 +497,10 @@ async fn create_run(
 
     let run_id: String = if let Some(ref ex) = existing {
         let id: String = ex.get("id");
+        // Wipe prior result_summary so the frontend never shows a stale
+        // error from a previous failed attempt while the new run is pending.
         sqlx::query(
-            "UPDATE daily_runs SET attend_url=?, quiz_url=?, status=?, updated_at=? WHERE id=?",
+            "UPDATE daily_runs SET attend_url=?, quiz_url=?, status=?, result_summary=NULL, updated_at=? WHERE id=?",
         )
         .bind(&data.attend_url)
         .bind(&data.quiz_url)
