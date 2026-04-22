@@ -43,9 +43,25 @@ async fn main() -> Result<()> {
     let addr: SocketAddr = format!("127.0.0.1:{}", cfg.web_port).parse()?;
     tracing::info!("listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
+}
+
+/// Wait for SIGTERM or SIGINT so the server exits with code 0 on a clean
+/// stop (e.g. Cronicle's `launchctl kill TERM`). Paired with launchd's
+/// KeepAlive { SuccessfulExit = false } so only crashes auto-restart while
+/// scheduled stops are respected.
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+    let mut intr = signal(SignalKind::interrupt()).expect("install SIGINT handler");
+    tokio::select! {
+        _ = term.recv() => tracing::info!("received SIGTERM, shutting down"),
+        _ = intr.recv() => tracing::info!("received SIGINT, shutting down"),
+    }
 }
 
 async fn status() -> Json<serde_json::Value> {
