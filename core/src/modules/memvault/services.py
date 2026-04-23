@@ -559,13 +559,13 @@ class MemoryBlockService(
         score_map = {r.entity_id: r.score for r in qdrant_results}
 
         # Build embedding map from Qdrant results (returned when with_vectors=True).
-        # Used by SemanticBoostOp and MMROp in the scoring pipeline.
+        # Used by SemanticBoostOp and PairwiseDedupOp in the scoring pipeline.
         emb_map: dict[str, list[float]] = {
             r.entity_id: r.embedding for r in qdrant_results if r.embedding is not None
         }
         if not emb_map:
             logger.warning(
-                "qdrant_search: no embeddings returned — SemanticBoostOp and MMROp will be"
+                "qdrant_search: no embeddings returned — SemanticBoostOp and PairwiseDedupOp will be"
                 " skipped. Ensure Qdrant collection stores dense vectors."
             )
 

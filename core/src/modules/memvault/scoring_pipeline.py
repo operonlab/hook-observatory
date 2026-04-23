@@ -371,8 +371,8 @@ class NoiseFilterOp(ScoringOp):
         return clean
 
 
-class MMROp(ScoringOp):
-    """Stage 7: MMR Diversity — reduce redundant results."""
+class PairwiseDedupOp(ScoringOp):
+    """Stage 11: Pairwise Dedup — remove near-duplicates via cosine similarity."""
 
     _count_key = "mmr_deduped"
 
@@ -430,7 +430,7 @@ class ScoringPipeline:
             SemanticBoostOp("semantic_boost", self.config),
             MinScoreOp("min_score", self.config),
             NoiseFilterOp("noise_filter", self.config),
-            MMROp("mmr", self.config),
+            PairwiseDedupOp("pairwise_dedup", self.config),
         )
 
     async def apply(
