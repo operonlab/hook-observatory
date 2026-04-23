@@ -1,18 +1,21 @@
-"""Memvault Knowledge Graph ORM models — Triples, Communities, Summaries.
+"""Memvault Knowledge Graph ORM models — Triples, Communities, Summaries, Edges.
 
 Knowledge Graph layers (GraphRAG / HiRAG inspired):
   L0 — Triple           : raw subject-predicate-object facts (graph edges)
   L0 — EntityCanonical  : deduplicated entity nodes (graph vertices)
+  L0 — EntityEdge       : multi-signal weighted edges between canonical entities
   L1 — Community        : Leiden graph communities at multiple resolution levels
   L2 — CommunitySummary : pre-generated LLM summaries per community
 
-References: GraphRAG (2404.16130), HiRAG (2503.10150), LeanRAG (2508.10391)
+References: GraphRAG (2404.16130), HiRAG (2503.10150), LeanRAG (2508.10391),
+            nashsu/llm_wiki (four-signal association model)
 All tables live in the `memvault` PostgreSQL schema.
 """
 
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -57,6 +60,50 @@ class EntityCanonical(SpaceScopedModel):
         String(50), server_default=text("'concept'")
     )  # concept | tool | person | org | language
     merge_count: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+
+
+class EntityEdge(SpaceScopedModel):
+    """Multi-signal weighted edge between two canonical entities.
+
+    Five association signals compose into a single composite_weight:
+      S1 cooccurrence_count  — how many triples link entity_a to entity_b
+      S2 session_overlap     — Jaccard(sessions mentioning A, sessions mentioning B)
+      S3 adamic_adar         — graph-theoretic common-neighbor importance
+      S4 type_affinity       — bonus when both entities share the same entity_type
+      S5 semantic_similarity — embedding cosine similarity between entity names
+
+    Constraint: entity_a_id < entity_b_id (normalized undirected edge).
+    """
+
+    __tablename__ = "entity_edges"
+    __table_args__ = (
+        Index("idx_ee_weight", "composite_weight"),
+        Index("idx_ee_entities", "entity_a_id", "entity_b_id"),
+        Index("idx_ee_space", "space_id"),
+        UniqueConstraint(
+            "space_id", "entity_a_id", "entity_b_id", name="uq_entity_edge_pair"
+        ),
+        CheckConstraint("entity_a_id < entity_b_id", name="chk_edge_order"),
+        {"schema": SCHEMA},
+    )
+
+    entity_a_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.entity_canonicals.id"), nullable=False
+    )
+    entity_b_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.entity_canonicals.id"), nullable=False
+    )
+    # Five signals
+    cooccurrence_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    session_overlap: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
+    adamic_adar: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
+    type_affinity: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
+    semantic_similarity: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
+    # Composite
+    composite_weight: Mapped[float] = mapped_column(Float, server_default=text("0.0"))
+    last_computed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Triple(SpaceScopedModel):

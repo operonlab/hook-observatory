@@ -1171,7 +1171,10 @@ class CascadeRecallService:
                 from .crag_evaluator import CRAGEvaluator
 
                 evaluator = CRAGEvaluator()
-                evaluation = await evaluator.evaluate(query, result, evaluate=evaluate)
+                evaluation = await evaluator.evaluate(
+                    query, result, evaluate=evaluate,
+                    intent=result.routing_intent or "unknown",
+                )
                 result.confidence_score = evaluation.confidence_score
                 result.evaluation_verdict = evaluation.verdict.value
                 result.evaluation_metadata = evaluation.metadata
@@ -1188,7 +1191,11 @@ class CascadeRecallService:
             _kg_bg_tasks.add(_t)
             _t.add_done_callback(_kg_bg_tasks.discard)
 
-        # --- Closed-Loop: Rerank by access count ---
+        # --- Scoring: Apply time-decay to KG triple results ---
+        if result.triples:
+            result.triples = await self._score_triples(result.triples)
+
+        # --- Rerank by access count (secondary sort for all layers) ---
         result.triples = self._rerank_by_access(result.triples)
         result.communities = self._rerank_by_access(result.communities)
 
@@ -1587,6 +1594,37 @@ class CascadeRecallService:
         except Exception:
             logger.debug("Failed to load attention profile", exc_info=True)
             return None
+
+    async def _score_triples(self, triples: list) -> list:
+        """Apply lightweight time-decay scoring to triple results.
+
+        Uses created_at as a time signal. Older triples get decayed scores.
+        Filters out triples below a min-score threshold.
+        """
+        import math
+        from datetime import UTC, datetime
+
+        now = datetime.now(UTC)
+
+        scored = []
+        for t in triples:
+            score = 1.0
+            try:
+                raw = t.created_at
+                created = (
+                    datetime.fromisoformat(raw) if isinstance(raw, str) else raw
+                )
+                if created:
+                    tz = created.tzinfo or UTC
+                    age_s = (now - created.replace(tzinfo=tz)).total_seconds()
+                    age_days = max(0, age_s / 86400)
+                    score *= math.exp(-0.693 * age_days / 30.0)
+            except Exception:  # noqa: S110
+                pass  # graceful: unknown timestamp → full score
+            scored.append((score, t))
+
+        scored.sort(key=lambda pair: -pair[0])
+        return [t for score, t in scored if score >= 0.05]
 
     @staticmethod
     def _rerank_by_access(items: list) -> list:

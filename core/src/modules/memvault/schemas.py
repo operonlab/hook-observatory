@@ -161,6 +161,7 @@ class MemoryQueryRequest(BaseModel):
     consumer: str = Field(default="human", description="agent | human | ui")
     top_k: int = Field(default=6, ge=1, le=20)
     retrieval_mode: str = Field(default="auto", description="auto | local | global | hybrid")
+    evaluate: str = Field(default="default", description="default | deep | rlm | none")
 
 
 class MemoryEvidenceRef(BaseModel):
@@ -197,8 +198,8 @@ class MemoryQueryStrategy(BaseModel):
 class MemoryQueryResponse(BaseModel):
     query: str
     strategy: MemoryQueryStrategy
-    cards: list[MemoryCard] = []              # main results (was fast_cards + working_cards)
-    cascade_cards: list[MemoryCard] = []      # KG enrichment from Cascade Recall (was deep_cards)
+    cards: list[MemoryCard] = []  # main results (was fast_cards + working_cards)
+    cascade_cards: list[MemoryCard] = []  # KG enrichment from Cascade Recall (was deep_cards)
     highlights: list[str] = []
     metadata: dict | None = None
 

@@ -21,12 +21,15 @@ from .kg_schemas import (
     CommunityResponse,
     CommunitySummaryRegenerateRequest,
     CommunitySummaryResponse,
+    EdgeRecomputeRequest,
     EntityCanonicalResponse,
+    EntityEdgeResponse,
     EntityMergeRequest,
     EntityMergeResult,
     EntityResolutionStats,
     GraphTraversalResult,
     LintReportResponse,
+    SurpriseConnection,
     TripleBatchCreate,
     TripleCreate,
     TripleInvalidateRequest,
@@ -720,7 +723,7 @@ async def lint_knowledge_graph(
                 code="memvault.forbidden",
             )
     check_list = None if checks == "all" else [c.strip() for c in checks.split(",")]
-    report = await run_lint(db, space_id, checks=check_list)
+    report = await run_lint(db, space_id, checks=check_list, use_pipeline=True)
 
     remediations = 0
     if fix:
@@ -761,3 +764,124 @@ async def lint_knowledge_graph(
         run_at=report.run_at.isoformat(),
         remediations_applied=remediations,
     )
+
+
+# ======================== Entity Edges (Multi-Signal) ========================
+
+
+@router.get("/entity-edges", response_model=list[EntityEdgeResponse])
+async def list_entity_edges(
+    space_id: str = Query(default="default"),
+    min_weight: float = Query(default=0.1),
+    limit: int = Query(default=500, ge=1, le=5000),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """List entity edges with composite_weight >= min_weight."""
+    from sqlalchemy import select
+
+    from .kg_models import EntityCanonical, EntityEdge
+
+    ea = select(EntityCanonical.id, EntityCanonical.canonical_name).subquery("ea")
+    eb = select(EntityCanonical.id, EntityCanonical.canonical_name).subquery("eb")
+
+    stmt = (
+        select(
+            EntityEdge,
+            ea.c.canonical_name.label("name_a"),
+            eb.c.canonical_name.label("name_b"),
+        )
+        .join(ea, EntityEdge.entity_a_id == ea.c.id)
+        .join(eb, EntityEdge.entity_b_id == eb.c.id)
+        .where(
+            EntityEdge.space_id == space_id,
+            EntityEdge.deleted_at.is_(None),
+            EntityEdge.composite_weight >= min_weight,
+        )
+        .order_by(EntityEdge.composite_weight.desc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+
+    return [
+        EntityEdgeResponse(
+            id=row[0].id,
+            space_id=row[0].space_id,
+            created_at=row[0].created_at,
+            updated_at=row[0].updated_at,
+            entity_a_id=row[0].entity_a_id,
+            entity_b_id=row[0].entity_b_id,
+            entity_a_name=row.name_a or "",
+            entity_b_name=row.name_b or "",
+            cooccurrence_count=row[0].cooccurrence_count,
+            session_overlap=row[0].session_overlap,
+            adamic_adar=row[0].adamic_adar,
+            type_affinity=row[0].type_affinity,
+            semantic_similarity=row[0].semantic_similarity,
+            composite_weight=row[0].composite_weight,
+            last_computed_at=row[0].last_computed_at,
+        )
+        for row in result
+    ]
+
+
+@router.post("/entity-edges/recompute", status_code=202)
+async def recompute_edge_weights(
+    space_id: str = Query(default="default"),
+    body: EdgeRecomputeRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Trigger full edge weight recomputation via the Edge Pipeline."""
+
+    from .pipeline_config import MemvaultPipelineConfig
+    from .pipelines.edge_pipeline import build_edge_pipeline
+
+    config = MemvaultPipelineConfig.from_env()
+    pipeline = build_edge_pipeline(config)
+
+    ctx = {"db": db, "space_id": space_id}
+    ctx = await pipeline.execute(ctx)
+
+    return {
+        "edges_upserted": ctx.get("edges_upserted", 0),
+        "meta": {
+            "stages_applied": ctx.get("_pipeline_meta", {}).stages_applied
+            if hasattr(ctx.get("_pipeline_meta"), "stages_applied")
+            else [],
+            "stage_timings": ctx.get("_pipeline_meta", {}).stage_timings
+            if hasattr(ctx.get("_pipeline_meta"), "stage_timings")
+            else {},
+        },
+    }
+
+
+# ======================== Surprise Connections ========================
+
+
+@router.get("/entity-edges/surprises", response_model=list[SurpriseConnection])
+async def get_surprise_connections(
+    space_id: str = Query(default="default"),
+    strategy: str | None = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Discover unexpected knowledge connections via multi-signal analysis."""
+    from .pipeline_config import MemvaultPipelineConfig
+    from .pipelines.surprise_pipeline import build_surprise_pipeline
+
+    config = MemvaultPipelineConfig.from_env()
+    config.surprise_limit = limit
+    pipeline = build_surprise_pipeline(config)
+
+    ctx = {"db": db, "space_id": space_id}
+    ctx = await pipeline.execute(ctx)
+
+    surprises = ctx.get("surprises", [])
+
+    # Filter by strategy if specified
+    if strategy:
+        surprises = [s for s in surprises if s.get("strategy") == strategy]
+
+    return [SurpriseConnection(**s) for s in surprises]

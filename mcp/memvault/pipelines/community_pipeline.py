@@ -152,8 +152,79 @@ def ensure_igraph() -> None:
         print("[Phase 2] igraph + leidenalg installed.")
 
 
-def build_entity_graph(rows: list[dict]):
-    """Build undirected graph: entities as vertices, co-occurrence in triples as edges."""
+def _fetch_entity_edges(space_id: str) -> list[dict] | None:
+    """Try to fetch precomputed multi-signal entity edges from Core API.
+
+    Returns list of edge dicts with entity_a_name, entity_b_name, composite_weight,
+    or None if unavailable (API down, no edges yet, etc.).
+    """
+    url = f"{CORE_API}/api/memvault/kg/entity-edges"
+    try:
+        edges = http_get(url, params={"space_id": space_id, "min_weight": 0.01, "limit": 5000})
+        if isinstance(edges, list) and len(edges) > 0:
+            print(f"[Phase 2] Fetched {len(edges)} precomputed entity edges from API")
+            return edges
+        return None
+    except SystemExit:
+        # http_get calls sys.exit on error — catch and fall through
+        return None
+    except Exception:
+        return None
+
+
+def build_entity_graph(rows: list[dict], space_id: str = "default"):
+    """Build undirected graph: entities as vertices, weighted edges.
+
+    Strategy:
+    1. Try precomputed multi-signal edges (composite_weight from entity_edges API)
+    2. Fallback to co-occurrence counts from raw triples
+    """
+    import igraph as ig
+
+    # Try multi-signal edges first
+    api_edges = _fetch_entity_edges(space_id)
+    if api_edges:
+        return _build_graph_from_edges(api_edges)
+
+    # Fallback: co-occurrence from triples
+    print("[Phase 2] No precomputed edges — falling back to co-occurrence counts")
+    return _build_graph_from_cooccurrence(rows)
+
+
+def _build_graph_from_edges(api_edges: list[dict]):
+    """Build graph from precomputed multi-signal entity edges."""
+    import igraph as ig
+
+    entities: set[str] = set()
+    for e in api_edges:
+        entities.add(e["entity_a_name"])
+        entities.add(e["entity_b_name"])
+
+    entity_list = sorted(entities)
+    entity_to_idx = {name: i for i, name in enumerate(entity_list)}
+
+    edges = []
+    weights = []
+    for e in api_edges:
+        a_idx = entity_to_idx.get(e["entity_a_name"])
+        b_idx = entity_to_idx.get(e["entity_b_name"])
+        if a_idx is not None and b_idx is not None and a_idx != b_idx:
+            edges.append((min(a_idx, b_idx), max(a_idx, b_idx)))
+            weights.append(e.get("composite_weight", 1.0))
+
+    g = ig.Graph(n=len(entity_list), edges=edges, directed=False)
+    g.vs["name"] = entity_list
+    g.es["weight"] = weights
+
+    print(
+        f"[Phase 2] Graph built from multi-signal edges: "
+        f"{len(entity_list)} entities, {len(edges)} edges"
+    )
+    return g, entity_to_idx
+
+
+def _build_graph_from_cooccurrence(rows: list[dict]):
+    """Build graph from raw triple co-occurrence counts (original logic)."""
     import igraph as ig
 
     entities: set[str] = set()
@@ -180,7 +251,7 @@ def build_entity_graph(rows: list[dict]):
     g.vs["name"] = entity_list
     g.es["weight"] = weights
 
-    print(f"[Phase 2] Graph built: {len(entity_list)} entities, {len(edges)} edges")
+    print(f"[Phase 2] Graph built from co-occurrence: {len(entity_list)} entities, {len(edges)} edges")
     return g, entity_to_idx
 
 
@@ -502,8 +573,8 @@ def main() -> None:
         sys.exit(0)
 
     # Phase 2
-    print("\n[Phase 2] Building entity co-occurrence graph ...")
-    g, entity_to_idx = build_entity_graph(rows)
+    print("\n[Phase 2] Building entity graph (multi-signal preferred) ...")
+    g, entity_to_idx = build_entity_graph(rows, space_id=args.space_id)
 
     if g.ecount() == 0:
         print("[skip] Graph has no edges — cannot run community detection.")
