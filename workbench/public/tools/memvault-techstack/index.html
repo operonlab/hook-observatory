@@ -77,6 +77,8 @@ nav{position:sticky;top:0;z-index:100;background:rgba(24,24,37,.92);backdrop-fil
 [data-accent="red"] .card-name{color:var(--red)}
 [data-accent="teal"] .card:hover{border-color:var(--teal);box-shadow:0 0 16px rgba(148,226,213,.15)}
 [data-accent="teal"] .card-name{color:var(--teal)}
+[data-accent="flamingo"] .card:hover{border-color:var(--flamingo);box-shadow:0 0 16px rgba(242,205,205,.15)}
+[data-accent="flamingo"] .card-name{color:var(--flamingo)}
 
 /* ── DIVIDER ── */
 .divider{height:1px;background:var(--surface0);max-width:1400px;margin:0 auto}
@@ -127,6 +129,7 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
     <a class="nav-link" href="#reranking">Reranking</a>
     <a class="nav-link" href="#scoring">Scoring</a>
     <a class="nav-link" href="#kg">Knowledge Graph</a>
+    <a class="nav-link" href="#discovery">Knowledge Discovery</a>
     <a class="nav-link" href="#query">Query Intelligence</a>
     <a class="nav-link" href="#profiling">Interest Profiling</a>
     <a class="nav-link" href="#security">Security</a>
@@ -867,8 +870,8 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
       <div class="card-impl">score × (0.7 + 0.3 × confidence) · unset 預設 0.5</div>
     </div>
     <div class="card">
-      <div class="card-name">3 Trust Penalty</div>
-      <div class="card-desc">「來源不可靠的記憶扣分——路人說的比老師教的打折」</div>
+      <div class="card-name">3 Trust Boost</div>
+      <div class="card-desc">「來源可靠的記憶加分——老師教的比路人說的更可信」</div>
       <div class="card-impl">score × (1 - 0.3 × (1 - trust)) · MemoryProvenance 來源追蹤</div>
     </div>
     <div class="card">
@@ -929,7 +932,7 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
       <line x1="15" y1="26" x2="25" y2="26" stroke="#cba6f7" stroke-width="1.2" opacity=".5"/>
     </svg>
     <h2 class="section-title" style="color:var(--mauve)">Knowledge Graph</h2>
-    <span class="section-count">12 components</span>
+    <span class="section-count">13 components</span>
   </div>
   <div class="cards">
     <div class="card">
@@ -973,9 +976,14 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
       <div class="card-impl">HippoRAG 啟發 · igraph PPR · damping 0.85 · entity seed walk</div>
     </div>
     <div class="card">
+      <div class="card-name">Multi-Signal Edges</div>
+      <div class="card-desc">「五個訊號綜合判斷兩個概念多緊密——不是只靠同時出現，還看共同朋友、類型相容、語意相近」</div>
+      <div class="card-impl">edge_ops.py · 5 signals: co-occurrence · session overlap · Adamic-Adar · type affinity · semantic similarity → composite_weight → Leiden</div>
+    </div>
+    <div class="card">
       <div class="card-name">Temporal Validity</div>
       <div class="card-desc">「知識會過期——去年的地址今年可能搬家了，新事實取代舊事實」</div>
-      <div class="card-impl">valid_at/invalid_at · SUPERSEDE · Weibull summary decay</div>
+      <div class="card-impl">valid_at/invalid_at on blocks + triples · SUPERSEDE · Weibull summary decay</div>
     </div>
     <div class="card">
       <div class="card-name">Retrieval Mode</div>
@@ -997,6 +1005,36 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
 
 <div class="divider"></div>
 
+<!-- S4b: KNOWLEDGE DISCOVERY -->
+<section id="discovery" class="section" data-accent="flamingo">
+  <div class="section-header">
+    <svg class="section-icon" viewBox="0 0 40 40" fill="none">
+      <circle cx="20" cy="20" r="18" stroke="#f2cdcd" stroke-width="1.5" fill="rgba(242,205,205,.08)"/>
+      <circle cx="14" cy="22" r="4" stroke="#f2cdcd" stroke-width="1.4" fill="none" opacity=".7"/>
+      <circle cx="26" cy="22" r="4" stroke="#f2cdcd" stroke-width="1.4" fill="none" opacity=".7"/>
+      <line x1="18" y1="22" x2="22" y2="22" stroke="#f2cdcd" stroke-width="1.2" opacity=".5"/>
+      <path d="M20 10 L20 14" stroke="#f2cdcd" stroke-width="1.4" stroke-linecap="round" opacity=".6"/>
+      <circle cx="20" cy="10" r="2" fill="#f2cdcd" opacity=".5"/>
+    </svg>
+    <h2 class="section-title" style="color:var(--flamingo)">Knowledge Discovery</h2>
+    <span class="section-count">2 components</span>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-name">Surprise Discovery</div>
+      <div class="card-desc">「主動找出表面不相關但實際相連的知識——像發現兩個系統其實共用同一個 bug」</div>
+      <div class="card-impl">surprise_ops.py · 3 types: cross-community · indirect-strong · knowledge-gap · Leiden weighted triggers</div>
+    </div>
+    <div class="card">
+      <div class="card-name">Review Queue</div>
+      <div class="card-desc">「低信心或衝突的抽取先進候補區，符合規則自動通過，不符合等人工審」</div>
+      <div class="card-impl">review_ops.py · auto-approve rules · human-in-loop fallback · review endpoint</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
 <!-- S5: QUERY -->
 <section id="query" class="section" data-accent="sapphire">
   <div class="section-header">
@@ -1007,7 +1045,7 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
       <circle cx="15" cy="16" r="2" fill="#74c7ec" opacity=".4"/>
     </svg>
     <h2 class="section-title" style="color:var(--sapphire)">Query Intelligence</h2>
-    <span class="section-count">6 components</span>
+    <span class="section-count">7 components</span>
   </div>
   <div class="cards">
     <div class="card">
@@ -1034,6 +1072,11 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
       <div class="card-name">Intent-Based Pipeline</div>
       <div class="card-desc">查詢意圖決定整條 pipeline 的行為——從層路由到 scoring 權重全部自動調整</div>
       <div class="card-impl">QueryClassifyOp → intent → LayerPlan + ScoringConfig + RetrievalMode · 入口無關</div>
+    </div>
+    <div class="card">
+      <div class="card-name">CRAG Layer Verification</div>
+      <div class="card-desc">「回答前先自我檢查夠不夠格——像學生交卷前再掃一次題目」</div>
+      <div class="card-impl">crag_evaluator.py · evaluate=default/deep/rlm/none · intent-tuned weights · RLM 升級機制</div>
     </div>
     <div class="card">
       <div class="card-name">Scale-Graded Strategy</div>
@@ -1138,9 +1181,9 @@ footer span{color:var(--lavender);font-family:var(--fira-code)}
       <div class="card-impl">Operator · Pipeline · Observable · Subject</div>
     </div>
     <div class="card">
-      <div class="card-name">3 Event Flows</div>
-      <div class="card-desc">「新記憶自動生成知識圖譜、外部捕捉自動歸檔、情報自動存入記憶」</div>
-      <div class="card-impl">Memory→KG · Capture→KG · Intelligence→Block</div>
+      <div class="card-name">4 Event Flows</div>
+      <div class="card-desc">「新記憶自動生成知識圖譜、外部捕捉自動歸檔、情報自動存入記憶、查詢結果觸發預取」</div>
+      <div class="card-impl">Memory→KG · Capture→KG · Intelligence→Block · Query→SlowThinker</div>
     </div>
     <div class="card">
       <div class="card-name">Slow Thinker</div>
