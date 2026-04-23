@@ -129,7 +129,21 @@ def main() -> None:
 
     log("========== Daily synthesis started ==========")
 
-    # Step 0: Dream Consolidation — moved to dedicated ws_memvault_dream.py runner (4AM daily)
+    # Step 0: Edge weight recomputation (multi-signal: co-occurrence, session overlap,
+    # Adamic-Adar, type affinity, semantic similarity → composite_weight)
+    # Must run BEFORE Leiden so communities use weighted edges.
+    log("Step 0/5: Edge weight recompute (multi-signal)")
+    try:
+        req = urllib.request.Request(
+            f"{CORE_API}/kg/entity-edges/recompute?space_id=default",
+            data=b"",
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            edge_result = json.loads(resp.read().decode())
+        log(f"  Edges recomputed: {edge_result.get('edges_upserted', '?')} edges")
+    except Exception as e:
+        log(f"  Edge recompute failed ({e}) — Leiden will use co-occurrence fallback")
 
     # Step 1: Leiden community detection + LLM summaries (synthesis_runner.py)
     # This also triggers Qdrant auto-indexing for L1 communities and L2 summaries
