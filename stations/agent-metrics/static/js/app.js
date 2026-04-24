@@ -170,7 +170,15 @@ function _buildQuotaItems(keyMap, sourceObj) {
     const pctMatch = String(val).match(/([\d.]+)%/);
     const pct = pctMatch ? parseFloat(pctMatch[1]) : null;
     const ringLabel = val.length > 5 && pctMatch ? pctMatch[0] : val;
-    items.push(buildGaugeCard(label, pct, ringLabel, String(val)));
+    // Derive matching resets_at key: strip "llm_" prefix if present, append suffix
+    const bareKey = key.replace(/^llm_/, "");
+    let resetIso = sourceObj[`${key}_resets_at`] || sourceObj[`${bareKey}_resets_at`];
+    // Gemini uses shared daily reset for both pro and flash
+    if (!resetIso && (bareKey === "gm_pro" || bareKey === "gm_flash")) {
+      resetIso = sourceObj["gm_daily_resets_at"] || sourceObj["llm_gm_daily_resets_at"];
+    }
+    const resetCaption = typeof formatResetCaption === "function" ? formatResetCaption(resetIso) : "";
+    items.push(buildGaugeCard(label, pct, ringLabel, String(val), resetCaption));
   }
   return items;
 }

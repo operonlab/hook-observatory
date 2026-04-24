@@ -744,13 +744,31 @@ def get_quota_health() -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _unix_to_iso(ts: int | float | None) -> str | None:
+    """Convert unix timestamp to ISO8601 UTC string."""
+    if not ts:
+        return None
+    try:
+        from datetime import datetime, timezone
+
+        return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+    except (ValueError, OSError, TypeError):
+        return None
+
+
 def _parse_cc(data: dict) -> dict:
     """Parse Claude Code API response."""
     result: dict = {}
     if "five_hour" in data:
-        result["5h"] = f"{round(data['five_hour'].get('utilization') or 0)}%"
+        fh = data["five_hour"] or {}
+        result["5h"] = f"{round(fh.get('utilization') or 0)}%"
+        if fh.get("resets_at"):
+            result["5h_resets_at"] = fh["resets_at"]
     if "seven_day" in data:
-        result["7d"] = f"{round(data['seven_day'].get('utilization') or 0)}%"
+        sd = data["seven_day"] or {}
+        result["7d"] = f"{round(sd.get('utilization') or 0)}%"
+        if sd.get("resets_at"):
+            result["7d_resets_at"] = sd["resets_at"]
     if "extra_usage" in data:
         ex = data["extra_usage"]
         if ex.get("is_enabled"):
@@ -775,25 +793,37 @@ def _parse_cx(data: dict) -> dict:
     sw = rl.get("secondary_window", {})
     if pw:
         result["5h"] = f"{pw.get('used_percent', 0)}%"
+        iso = _unix_to_iso(pw.get("reset_at"))
+        if iso:
+            result["5h_resets_at"] = iso
     if sw:
         result["7d"] = f"{sw.get('used_percent', 0)}%"
+        iso = _unix_to_iso(sw.get("reset_at"))
+        if iso:
+            result["7d_resets_at"] = iso
     return result
 
 
 def _parse_gm(data: dict) -> dict:
     """Parse Gemini API response."""
     result: dict = {}
+    earliest_reset: str | None = None
     for bucket in data.get("buckets", []):
         if bucket.get("tokenType") != "REQUESTS":
             continue
         model = bucket.get("modelId", "")
         frac = bucket.get("remainingFraction", 1.0)
         used_pct = round((1 - frac) * 100)
+        reset_time = bucket.get("resetTime")
+        if reset_time and (earliest_reset is None or reset_time < earliest_reset):
+            earliest_reset = reset_time
         if "pro" in model and not model.endswith("_vertex"):
             result["pro"] = f"{used_pct}%"
         if "flash" in model and "lite" not in model and not model.endswith("_vertex"):
             if "flash" not in result or used_pct > int(result["flash"].rstrip("%")):
                 result["flash"] = f"{used_pct}%"
+    if earliest_reset:
+        result["daily_resets_at"] = earliest_reset
     return result
 
 
@@ -819,6 +849,11 @@ def format_quota(cc_raw: dict, cx_raw: dict, gm_raw: dict) -> dict:
         "llm_cx_7d": cx.get("7d", "?"),
         "llm_gm_pro": gm.get("pro", "?"),
         "llm_gm_flash": gm.get("flash", "?"),
+        "llm_cc_5h_resets_at": cc.get("5h_resets_at"),
+        "llm_cc_7d_resets_at": cc.get("7d_resets_at"),
+        "llm_cx_5h_resets_at": cx.get("5h_resets_at"),
+        "llm_cx_7d_resets_at": cx.get("7d_resets_at"),
+        "llm_gm_daily_resets_at": gm.get("daily_resets_at"),
         "llm_display": " ".join(parts) if parts else "?",
         # Parsed percentages for API consumers
         "cc_parsed": cc,

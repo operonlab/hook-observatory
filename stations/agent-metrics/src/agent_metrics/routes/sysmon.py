@@ -64,6 +64,11 @@ async def quota_current():
             "cx_7d": quota.get("llm_cx_7d", "?"),
             "gm_pro": quota.get("llm_gm_pro", "?"),
             "gm_flash": quota.get("llm_gm_flash", "?"),
+            "cc_5h_resets_at": quota.get("llm_cc_5h_resets_at"),
+            "cc_7d_resets_at": quota.get("llm_cc_7d_resets_at"),
+            "cx_5h_resets_at": quota.get("llm_cx_5h_resets_at"),
+            "cx_7d_resets_at": quota.get("llm_cx_7d_resets_at"),
+            "gm_daily_resets_at": quota.get("llm_gm_daily_resets_at"),
         },
     }
 

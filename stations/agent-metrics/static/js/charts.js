@@ -124,7 +124,7 @@ function progressBar(pct, leftText, rightText) {
  * @param {string} fullVal - Full tooltip value
  * @returns {string} HTML string
  */
-function buildGaugeCard(label, pct, displayVal, fullVal) {
+function buildGaugeCard(label, pct, displayVal, fullVal, resetCaption) {
   let colorVar = 'var(--green)';
   let threshClass = 'gauge-ok';
   if (pct !== null) {
@@ -132,6 +132,10 @@ function buildGaugeCard(label, pct, displayVal, fullVal) {
     else if (pct >= 60) { colorVar = 'var(--yellow)'; threshClass = 'gauge-warn'; }
   }
   const dashArray = pct !== null ? pct : 0;
+
+  const resetHtml = resetCaption
+    ? `<div class="quota-reset">${resetCaption}</div>`
+    : '';
 
   return `<div class="quota-card" title="${fullVal}">
     <div class="quota-label">${label}</div>
@@ -146,5 +150,35 @@ function buildGaugeCard(label, pct, displayVal, fullVal) {
         <div class="gauge-value">${displayVal}</div>
       </div>
     </div>
+    ${resetHtml}
   </div>`;
+}
+
+/**
+ * Format an ISO-8601 resets_at timestamp into a compact local string +
+ * relative countdown suitable for the quota card caption.
+ * Returns "" when the input is falsy / invalid.
+ */
+function formatResetCaption(iso) {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return '';
+  const now = new Date();
+  const diffMs = dt.getTime() - now.getTime();
+  const absH = Math.abs(diffMs) / 3_600_000;
+  let rel;
+  if (absH < 1) {
+    const m = Math.round(absH * 60);
+    rel = diffMs >= 0 ? `in ${m}m` : `${m}m ago`;
+  } else if (absH < 48) {
+    rel = diffMs >= 0 ? `in ${absH.toFixed(1)}h` : `${absH.toFixed(1)}h ago`;
+  } else {
+    const d = absH / 24;
+    rel = diffMs >= 0 ? `in ${d.toFixed(1)}d` : `${d.toFixed(1)}d ago`;
+  }
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mi = String(dt.getMinutes()).padStart(2, '0');
+  return `reset ${mm}-${dd} ${hh}:${mi} · ${rel}`;
 }
