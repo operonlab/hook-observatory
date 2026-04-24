@@ -56,6 +56,8 @@ pub struct SysmonSnapshot {
     #[serde(default = "qmark")]
     pub llm_gm_pro: String,
     #[serde(default = "qmark")]
+    pub llm_gm_flash: String,
+    #[serde(default = "qmark")]
     pub llm_display: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub llm_cc_5h_resets_at: Option<String>,
@@ -101,6 +103,7 @@ impl Default for SysmonSnapshot {
             llm_cx_5h: qmark(),
             llm_cx_7d: qmark(),
             llm_gm_pro: qmark(),
+            llm_gm_flash: qmark(),
             llm_display: qmark(),
             llm_cc_5h_resets_at: None,
             llm_cc_7d_resets_at: None,

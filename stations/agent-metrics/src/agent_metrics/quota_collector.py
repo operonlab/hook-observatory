@@ -775,9 +775,13 @@ def _parse_cc(data: dict) -> dict:
             used = (ex.get("used_credits") or 0) / 100
             limit = (ex.get("monthly_limit") or 0) / 100
             pct = round(ex.get("utilization") or 0)
-            balance = (ex.get("balance_cents") or 0) / 100
+            # API omits balance_cents when it can be derived; fall back to limit - used.
+            if ex.get("balance_cents") is not None:
+                balance = ex["balance_cents"] / 100
+            else:
+                balance = max(0.0, limit - used)
             if balance <= 0:
-                result["ex"] = "off"
+                result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余$0"
             else:
                 result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余${balance:.2f}"
         else:

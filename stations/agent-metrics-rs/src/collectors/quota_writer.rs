@@ -416,9 +416,13 @@ fn parse_cc(data: &Value) -> serde_json::Map<String, Value> {
             let used = ex.get("used_credits").and_then(|v| v.as_f64()).unwrap_or(0.0) / 100.0;
             let limit = ex.get("monthly_limit").and_then(|v| v.as_f64()).unwrap_or(0.0) / 100.0;
             let pct = round_pct(ex.get("utilization").and_then(|v| v.as_f64()).unwrap_or(0.0));
-            let balance = ex.get("balance_cents").and_then(|v| v.as_f64()).unwrap_or(0.0) / 100.0;
+            // API omits balance_cents when it can be derived; fall back to limit - used.
+            let balance = match ex.get("balance_cents").and_then(|v| v.as_f64()) {
+                Some(v) => v / 100.0,
+                None => (limit - used).max(0.0),
+            };
             let s = if balance <= 0.0 {
-                "off".to_string()
+                format!("${:.2}/${:.0} {}% 余$0", used, limit, pct)
             } else {
                 format!("${:.2}/${:.0} {}% 余${:.2}", used, limit, pct, balance)
             };
