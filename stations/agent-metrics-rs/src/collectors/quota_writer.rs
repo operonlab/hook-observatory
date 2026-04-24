@@ -412,10 +412,13 @@ fn parse_cc(data: &Value) -> serde_json::Map<String, Value> {
         }
     }
     if let Some(ex) = data.get("extra_usage") {
-        if ex.get("is_enabled").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let enabled = ex.get("is_enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+        out.insert("ex_enabled".into(), Value::Bool(enabled));
+        if enabled {
             let used = ex.get("used_credits").and_then(|v| v.as_f64()).unwrap_or(0.0) / 100.0;
             let limit = ex.get("monthly_limit").and_then(|v| v.as_f64()).unwrap_or(0.0) / 100.0;
-            let pct = round_pct(ex.get("utilization").and_then(|v| v.as_f64()).unwrap_or(0.0));
+            let util = ex.get("utilization").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let pct = round_pct(util);
             // API omits balance_cents when it can be derived; fall back to limit - used.
             let balance = match ex.get("balance_cents").and_then(|v| v.as_f64()) {
                 Some(v) => v / 100.0,
@@ -427,6 +430,10 @@ fn parse_cc(data: &Value) -> serde_json::Map<String, Value> {
                 format!("${:.2}/${:.0} {}% 余${:.2}", used, limit, pct, balance)
             };
             out.insert("ex".into(), Value::String(s));
+            if let Some(n) = serde_json::Number::from_f64(used) { out.insert("ex_used_usd".into(), Value::Number(n)); }
+            if let Some(n) = serde_json::Number::from_f64(limit) { out.insert("ex_limit_usd".into(), Value::Number(n)); }
+            if let Some(n) = serde_json::Number::from_f64(balance) { out.insert("ex_balance_usd".into(), Value::Number(n)); }
+            if let Some(n) = serde_json::Number::from_f64(util) { out.insert("ex_utilization".into(), Value::Number(n)); }
         } else {
             out.insert("ex".into(), Value::String("off".into()));
         }
@@ -529,6 +536,11 @@ fn format_quota(cc: &Value, cx: &Value, gm: &Value) -> Value {
         "llm_cx_5h_resets_at": cx_p.get("5h_resets_at").cloned().unwrap_or(Value::Null),
         "llm_cx_7d_resets_at": cx_p.get("7d_resets_at").cloned().unwrap_or(Value::Null),
         "llm_gm_daily_resets_at": gm_p.get("daily_resets_at").cloned().unwrap_or(Value::Null),
+        "llm_cc_ex_enabled": cc_p.get("ex_enabled").cloned().unwrap_or(Value::Null),
+        "llm_cc_ex_used_usd": cc_p.get("ex_used_usd").cloned().unwrap_or(Value::Null),
+        "llm_cc_ex_limit_usd": cc_p.get("ex_limit_usd").cloned().unwrap_or(Value::Null),
+        "llm_cc_ex_balance_usd": cc_p.get("ex_balance_usd").cloned().unwrap_or(Value::Null),
+        "llm_cc_ex_utilization": cc_p.get("ex_utilization").cloned().unwrap_or(Value::Null),
         "cc_parsed": cc_p,
         "cx_parsed": cx_p,
         "gm_parsed": gm_p,

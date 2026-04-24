@@ -337,6 +337,35 @@ body {
   margin-top: -0.15rem;
 }
 
+.quota-details {
+  width: 100%;
+  margin-top: 0.3rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--surface0);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.quota-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.quota-detail-row .qd-k {
+  color: var(--overlay1);
+  letter-spacing: 0.02em;
+}
+
+.quota-detail-row .qd-v {
+  color: var(--subtext0);
+  font-weight: 600;
+  text-align: right;
+}
+
 /* ── Gauge Ring ── */
 .gauge-container {
   display: flex;

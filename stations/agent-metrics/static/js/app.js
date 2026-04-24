@@ -165,6 +165,7 @@ async function refreshUsage() {
    ═══════════════════════════════════════════ */
 function _buildQuotaItems(keyMap, sourceObj) {
   const items = [];
+  const fmtUsd = (n) => (n == null || isNaN(n)) ? '—' : `$${Number(n).toFixed(2)}`;
   for (const [key, label] of Object.entries(keyMap)) {
     const val = sourceObj[key] || "?";
     const pctMatch = String(val).match(/([\d.]+)%/);
@@ -178,7 +179,25 @@ function _buildQuotaItems(keyMap, sourceObj) {
       resetIso = sourceObj["gm_daily_resets_at"] || sourceObj["llm_gm_daily_resets_at"];
     }
     const resetCaption = typeof formatResetCaption === "function" ? formatResetCaption(resetIso) : "";
-    items.push(buildGaugeCard(label, pct, ringLabel, String(val), resetCaption));
+    // Detail lines — currently only Claude Extra has absolute $ numbers worth breaking out.
+    let detailLines;
+    if (bareKey === "cc_ex") {
+      const enabled = sourceObj["llm_cc_ex_enabled"] ?? sourceObj["cc_ex_enabled"];
+      if (enabled) {
+        const used = sourceObj["llm_cc_ex_used_usd"]    ?? sourceObj["cc_ex_used_usd"];
+        const limit = sourceObj["llm_cc_ex_limit_usd"]  ?? sourceObj["cc_ex_limit_usd"];
+        const bal   = sourceObj["llm_cc_ex_balance_usd"]?? sourceObj["cc_ex_balance_usd"];
+        const util  = sourceObj["llm_cc_ex_utilization"]?? sourceObj["cc_ex_utilization"];
+        if (used != null && limit != null) {
+          detailLines = [
+            { k: "月上限", v: fmtUsd(limit) },
+            { k: "已用",   v: `${fmtUsd(used)}${util != null ? ` (${Number(util).toFixed(2)}%)` : ''}` },
+            { k: "剩餘",   v: fmtUsd(bal) },
+          ];
+        }
+      }
+    }
+    items.push(buildGaugeCard(label, pct, ringLabel, String(val), resetCaption, detailLines));
   }
   return items;
 }

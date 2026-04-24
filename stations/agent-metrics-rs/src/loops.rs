@@ -72,6 +72,11 @@ pub async fn sysmon_tick(
     snap.llm_cx_5h_resets_at = q.llm_cx_5h_resets_at;
     snap.llm_cx_7d_resets_at = q.llm_cx_7d_resets_at;
     snap.llm_gm_daily_resets_at = q.llm_gm_daily_resets_at;
+    snap.llm_cc_ex_used_usd = q.llm_cc_ex_used_usd;
+    snap.llm_cc_ex_limit_usd = q.llm_cc_ex_limit_usd;
+    snap.llm_cc_ex_balance_usd = q.llm_cc_ex_balance_usd;
+    snap.llm_cc_ex_utilization = q.llm_cc_ex_utilization;
+    snap.llm_cc_ex_enabled = q.llm_cc_ex_enabled;
 
     {
         let mut latest = state.latest.write().await;
@@ -110,6 +115,11 @@ pub async fn sysmon_tick(
             "llm_cx_5h_resets_at": snap.llm_cx_5h_resets_at,
             "llm_cx_7d_resets_at": snap.llm_cx_7d_resets_at,
             "llm_gm_daily_resets_at": snap.llm_gm_daily_resets_at,
+            "llm_cc_ex_used_usd": snap.llm_cc_ex_used_usd,
+            "llm_cc_ex_limit_usd": snap.llm_cc_ex_limit_usd,
+            "llm_cc_ex_balance_usd": snap.llm_cc_ex_balance_usd,
+            "llm_cc_ex_utilization": snap.llm_cc_ex_utilization,
+            "llm_cc_ex_enabled": snap.llm_cc_ex_enabled,
         });
         bus.emit("quota", q);
     }

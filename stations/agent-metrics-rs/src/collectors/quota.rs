@@ -45,6 +45,17 @@ pub struct QuotaFormatted {
     pub llm_cx_7d_resets_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub llm_gm_daily_resets_at: Option<String>,
+    // Claude Code Extra Usage (overage buffer) — absolute numbers for UI detail
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_cc_ex_used_usd: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_cc_ex_limit_usd: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_cc_ex_balance_usd: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_cc_ex_utilization: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_cc_ex_enabled: Option<bool>,
 }
 
 impl Default for QuotaFormatted {
@@ -63,6 +74,11 @@ impl Default for QuotaFormatted {
             llm_cx_5h_resets_at: None,
             llm_cx_7d_resets_at: None,
             llm_gm_daily_resets_at: None,
+            llm_cc_ex_used_usd: None,
+            llm_cc_ex_limit_usd: None,
+            llm_cc_ex_balance_usd: None,
+            llm_cc_ex_utilization: None,
+            llm_cc_ex_enabled: None,
         }
     }
 }

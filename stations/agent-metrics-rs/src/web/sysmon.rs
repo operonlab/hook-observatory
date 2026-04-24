@@ -62,6 +62,11 @@ pub async fn quota_current(State(state): State<AppState>) -> Json<Value> {
             "cx_5h_resets_at": formatted.llm_cx_5h_resets_at,
             "cx_7d_resets_at": formatted.llm_cx_7d_resets_at,
             "gm_daily_resets_at": formatted.llm_gm_daily_resets_at,
+            "cc_ex_used_usd": formatted.llm_cc_ex_used_usd,
+            "cc_ex_limit_usd": formatted.llm_cc_ex_limit_usd,
+            "cc_ex_balance_usd": formatted.llm_cc_ex_balance_usd,
+            "cc_ex_utilization": formatted.llm_cc_ex_utilization,
+            "cc_ex_enabled": formatted.llm_cc_ex_enabled,
         }
     }))
 }

@@ -124,7 +124,7 @@ function progressBar(pct, leftText, rightText) {
  * @param {string} fullVal - Full tooltip value
  * @returns {string} HTML string
  */
-function buildGaugeCard(label, pct, displayVal, fullVal, resetCaption) {
+function buildGaugeCard(label, pct, displayVal, fullVal, resetCaption, detailLines) {
   let colorVar = 'var(--green)';
   let threshClass = 'gauge-ok';
   if (pct !== null) {
@@ -135,6 +135,10 @@ function buildGaugeCard(label, pct, displayVal, fullVal, resetCaption) {
 
   const resetHtml = resetCaption
     ? `<div class="quota-reset">${resetCaption}</div>`
+    : '';
+
+  const detailHtml = Array.isArray(detailLines) && detailLines.length
+    ? `<div class="quota-details">${detailLines.map(l => `<div class="quota-detail-row"><span class="qd-k">${l.k}</span><span class="qd-v">${l.v}</span></div>`).join('')}</div>`
     : '';
 
   return `<div class="quota-card" title="${fullVal}">
@@ -151,6 +155,7 @@ function buildGaugeCard(label, pct, displayVal, fullVal, resetCaption) {
       </div>
     </div>
     ${resetHtml}
+    ${detailHtml}
   </div>`;
 }
 

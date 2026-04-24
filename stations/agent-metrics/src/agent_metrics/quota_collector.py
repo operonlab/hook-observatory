@@ -771,10 +771,13 @@ def _parse_cc(data: dict) -> dict:
             result["7d_resets_at"] = sd["resets_at"]
     if "extra_usage" in data:
         ex = data["extra_usage"]
-        if ex.get("is_enabled"):
+        enabled = bool(ex.get("is_enabled"))
+        result["ex_enabled"] = enabled
+        if enabled:
             used = (ex.get("used_credits") or 0) / 100
             limit = (ex.get("monthly_limit") or 0) / 100
-            pct = round(ex.get("utilization") or 0)
+            util = ex.get("utilization") or 0
+            pct = round(util)
             # API omits balance_cents when it can be derived; fall back to limit - used.
             if ex.get("balance_cents") is not None:
                 balance = ex["balance_cents"] / 100
@@ -784,6 +787,10 @@ def _parse_cc(data: dict) -> dict:
                 result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余$0"
             else:
                 result["ex"] = f"${used:.2f}/${limit:.0f} {pct}% 余${balance:.2f}"
+            result["ex_used_usd"] = used
+            result["ex_limit_usd"] = limit
+            result["ex_balance_usd"] = balance
+            result["ex_utilization"] = util
         else:
             result["ex"] = "off"
     return result
@@ -858,6 +865,11 @@ def format_quota(cc_raw: dict, cx_raw: dict, gm_raw: dict) -> dict:
         "llm_cx_5h_resets_at": cx.get("5h_resets_at"),
         "llm_cx_7d_resets_at": cx.get("7d_resets_at"),
         "llm_gm_daily_resets_at": gm.get("daily_resets_at"),
+        "llm_cc_ex_enabled": cc.get("ex_enabled"),
+        "llm_cc_ex_used_usd": cc.get("ex_used_usd"),
+        "llm_cc_ex_limit_usd": cc.get("ex_limit_usd"),
+        "llm_cc_ex_balance_usd": cc.get("ex_balance_usd"),
+        "llm_cc_ex_utilization": cc.get("ex_utilization"),
         "llm_display": " ".join(parts) if parts else "?",
         # Parsed percentages for API consumers
         "cc_parsed": cc,
