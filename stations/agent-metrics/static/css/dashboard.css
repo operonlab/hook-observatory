@@ -328,6 +328,15 @@ body {
   text-align: center;
 }
 
+.quota-reset {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--overlay1);
+  letter-spacing: 0.02em;
+  text-align: center;
+  margin-top: -0.15rem;
+}
+
 /* ── Gauge Ring ── */
 .gauge-container {
   display: flex;

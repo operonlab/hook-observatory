@@ -26,6 +26,7 @@ from threading import Thread
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/src")
 
 from agent_metrics.quota_collector import get_quota  # noqa: E402
+from agent_metrics.reset_drift_monitor import check_all_windows  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -89,6 +90,13 @@ async def main():
                 result.get("llm_cc_5h", "?"),
                 result.get("llm_cc_7d", "?"),
             )
+            try:
+                drift_reports = check_all_windows(result)
+                notified = [r for r in drift_reports if r.get("notified")]
+                if notified:
+                    log.warning("drift_notified count=%d reports=%s", len(notified), notified)
+            except Exception as e:
+                log.debug("drift_check_failed: %s", e)
         except Exception as e:
             log.warning("quota_fetch_failed: %s", e)
         slept = 0.0

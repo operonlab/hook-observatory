@@ -80,6 +80,16 @@ class Settings(BaseSettings):
     # Redis (for push notifications)
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # --- Bark (iPhone push) ---
+    BARK_SERVER_URL: str = "http://localhost:8090"
+    BARK_DEVICE_KEY: str = "gx7KnK5f8iAKuqNLWzy5hP"
+
+    # --- Reset drift monitor ---
+    DRIFT_THRESHOLD_HOURS: float = 6.0
+    DRIFT_COOLDOWN_HOURS: int = 24
+    DRIFT_BARK_COUNT: int = 5
+    DRIFT_STATION_URL: str = "http://workshop.joneshong.com/agent-metrics/"
+
     # --- Sysmon Collector ---
     SYSMON_COLLECT_INTERVAL: int = 5
     SYSMON_DISK_CACHE_TTL: int = 60
