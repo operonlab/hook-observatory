@@ -400,10 +400,16 @@ fn parse_cc(data: &Value) -> serde_json::Map<String, Value> {
     if let Some(fh) = data.get("five_hour") {
         let pct = fh.get("utilization").and_then(|v| v.as_f64()).unwrap_or(0.0);
         out.insert("5h".into(), Value::String(format!("{}%", round_pct(pct))));
+        if let Some(ra) = fh.get("resets_at").and_then(|v| v.as_str()) {
+            out.insert("5h_resets_at".into(), Value::String(ra.to_string()));
+        }
     }
     if let Some(sd) = data.get("seven_day") {
         let pct = sd.get("utilization").and_then(|v| v.as_f64()).unwrap_or(0.0);
         out.insert("7d".into(), Value::String(format!("{}%", round_pct(pct))));
+        if let Some(ra) = sd.get("resets_at").and_then(|v| v.as_str()) {
+            out.insert("7d_resets_at".into(), Value::String(ra.to_string()));
+        }
     }
     if let Some(ex) = data.get("extra_usage") {
         if ex.get("is_enabled").and_then(|v| v.as_bool()).unwrap_or(false) {
@@ -430,17 +436,30 @@ fn parse_cx(data: &Value) -> serde_json::Map<String, Value> {
     if let Some(pw) = rl.get("primary_window") {
         let v = pw.get("used_percent").and_then(|x| x.as_i64()).unwrap_or(0);
         out.insert("5h".into(), Value::String(format!("{}%", v)));
+        if let Some(iso) = unix_reset_to_iso(pw.get("reset_at")) {
+            out.insert("5h_resets_at".into(), Value::String(iso));
+        }
     }
     if let Some(sw) = rl.get("secondary_window") {
         let v = sw.get("used_percent").and_then(|x| x.as_i64()).unwrap_or(0);
         out.insert("7d".into(), Value::String(format!("{}%", v)));
+        if let Some(iso) = unix_reset_to_iso(sw.get("reset_at")) {
+            out.insert("7d_resets_at".into(), Value::String(iso));
+        }
     }
     out
+}
+
+fn unix_reset_to_iso(v: Option<&Value>) -> Option<String> {
+    let ts = v.and_then(|x| x.as_i64()).or_else(|| v.and_then(|x| x.as_f64()).map(|f| f as i64))?;
+    if ts <= 0 { return None; }
+    chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.to_rfc3339())
 }
 
 fn parse_gm(data: &Value) -> serde_json::Map<String, Value> {
     let mut out = serde_json::Map::new();
     let buckets = data.get("buckets").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let mut earliest_reset: Option<String> = None;
     for bucket in buckets {
         if bucket.get("tokenType").and_then(|v| v.as_str()) != Some("REQUESTS") {
             continue;
@@ -449,6 +468,11 @@ fn parse_gm(data: &Value) -> serde_json::Map<String, Value> {
         let frac = bucket.get("remainingFraction").and_then(|v| v.as_f64()).unwrap_or(1.0);
         let used_pct = round_pct((1.0 - frac) * 100.0);
         let val = format!("{}%", used_pct);
+        if let Some(rt) = bucket.get("resetTime").and_then(|v| v.as_str()) {
+            if earliest_reset.as_ref().map_or(true, |e| rt < e.as_str()) {
+                earliest_reset = Some(rt.to_string());
+            }
+        }
         if model.contains("pro") && !model.ends_with("_vertex") {
             out.insert("pro".into(), Value::String(val.clone()));
         }
@@ -460,6 +484,9 @@ fn parse_gm(data: &Value) -> serde_json::Map<String, Value> {
                 out.insert("flash".into(), Value::String(val));
             }
         }
+    }
+    if let Some(rt) = earliest_reset {
+        out.insert("daily_resets_at".into(), Value::String(rt));
     }
     out
 }
@@ -493,6 +520,11 @@ fn format_quota(cc: &Value, cx: &Value, gm: &Value) -> Value {
         "llm_gm_pro": gm_p.get("pro").cloned().unwrap_or(Value::String("?".into())),
         "llm_gm_flash": gm_p.get("flash").cloned().unwrap_or(Value::String("?".into())),
         "llm_display": display,
+        "llm_cc_5h_resets_at": cc_p.get("5h_resets_at").cloned().unwrap_or(Value::Null),
+        "llm_cc_7d_resets_at": cc_p.get("7d_resets_at").cloned().unwrap_or(Value::Null),
+        "llm_cx_5h_resets_at": cx_p.get("5h_resets_at").cloned().unwrap_or(Value::Null),
+        "llm_cx_7d_resets_at": cx_p.get("7d_resets_at").cloned().unwrap_or(Value::Null),
+        "llm_gm_daily_resets_at": gm_p.get("daily_resets_at").cloned().unwrap_or(Value::Null),
         "cc_parsed": cc_p,
         "cx_parsed": cx_p,
         "gm_parsed": gm_p,

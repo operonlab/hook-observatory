@@ -66,6 +66,11 @@ pub async fn sysmon_tick(
     snap.llm_cx_7d = q.llm_cx_7d;
     snap.llm_gm_pro = q.llm_gm_pro;
     snap.llm_display = q.llm_display;
+    snap.llm_cc_5h_resets_at = q.llm_cc_5h_resets_at;
+    snap.llm_cc_7d_resets_at = q.llm_cc_7d_resets_at;
+    snap.llm_cx_5h_resets_at = q.llm_cx_5h_resets_at;
+    snap.llm_cx_7d_resets_at = q.llm_cx_7d_resets_at;
+    snap.llm_gm_daily_resets_at = q.llm_gm_daily_resets_at;
 
     {
         let mut latest = state.latest.write().await;
@@ -98,6 +103,11 @@ pub async fn sysmon_tick(
             "llm_cx_7d": snap.llm_cx_7d,
             "llm_gm_pro": snap.llm_gm_pro,
             "llm_display": snap.llm_display,
+            "llm_cc_5h_resets_at": snap.llm_cc_5h_resets_at,
+            "llm_cc_7d_resets_at": snap.llm_cc_7d_resets_at,
+            "llm_cx_5h_resets_at": snap.llm_cx_5h_resets_at,
+            "llm_cx_7d_resets_at": snap.llm_cx_7d_resets_at,
+            "llm_gm_daily_resets_at": snap.llm_gm_daily_resets_at,
         });
         bus.emit("quota", q);
     }
