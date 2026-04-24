@@ -188,6 +188,7 @@ async function refreshQuota() {
   if (!data) return;
 
   const f = data.formatted || {};
+  const raw = data.raw || {};
 
   // Remap keys: API uses dash or underscore variants
   const normalize = (obj) => {
@@ -198,6 +199,28 @@ async function refreshQuota() {
     return out;
   };
   const norm = normalize(f);
+
+  // Hydrate resets_at from raw payload (agent-metrics-rs `formatted` omits them).
+  // CC: {five_hour,seven_day}.resets_at. CX: rate_limit.{primary,secondary}_window.reset_at (unix).
+  // GM: earliest bucket.resetTime (daily).
+  const unixToIso = (ts) => {
+    if (!ts) return undefined;
+    const n = typeof ts === "number" ? ts : parseFloat(ts);
+    if (!isFinite(n)) return undefined;
+    return new Date(n * 1000).toISOString();
+  };
+  const cc = raw.cc || {};
+  const cx = raw.cx || {};
+  const gm = raw.gm || {};
+  if (cc.five_hour && cc.five_hour.resets_at) norm.cc_5h_resets_at = cc.five_hour.resets_at;
+  if (cc.seven_day && cc.seven_day.resets_at) norm.cc_7d_resets_at = cc.seven_day.resets_at;
+  const cxRl = cx.rate_limit || {};
+  if (cxRl.primary_window)   norm.cx_5h_resets_at = unixToIso(cxRl.primary_window.reset_at);
+  if (cxRl.secondary_window) norm.cx_7d_resets_at = unixToIso(cxRl.secondary_window.reset_at);
+  if (Array.isArray(gm.buckets) && gm.buckets.length) {
+    const times = gm.buckets.map(b => b && b.resetTime).filter(Boolean).sort();
+    if (times.length) norm.gm_daily_resets_at = times[0];
+  }
 
   const claudeKeys = {
     "cc_5h": "Claude 5h", "cc_7d": "Claude 7d", "cc_ex": "Claude Ex"
