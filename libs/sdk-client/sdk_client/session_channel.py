@@ -228,12 +228,21 @@ class SessionChannelClient:
 
     # ======================== Board ========================
 
-    def publish_board(self, board_id: str, tasks: list[TaskPublish | dict]) -> dict:
+    def publish_board(
+        self,
+        board_id: str,
+        tasks: list[TaskPublish | dict],
+        sender: str | None = None,
+    ) -> dict:
         """POST /api/board/{id}/publish — declare tasks on a board.
 
-        Accepts TaskPublish models or raw dicts.
+        Accepts TaskPublish models or raw dicts. ``sender`` is required by
+        the server (W2-A); defaults to ``self._default_sender()`` when omitted.
         """
-        body = {"tasks": [_to_dict(t) for t in tasks]}
+        body = {
+            "sender": sender or self._default_sender(),
+            "tasks": [_to_dict(t) for t in tasks],
+        }
         return self._request("POST", f"/api/board/{board_id}/publish", json_body=body) or {}
 
     def claim_task(self, board_id: str, pane: str, count: int = 1) -> list[dict]:

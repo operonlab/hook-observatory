@@ -179,8 +179,9 @@ class TmuxRelayClient:
         send_enter(pane)
 
     # Session-channel fire-and-forget notification (team coordination)
-    _CHANNEL_URL = "http://localhost:10101"
-    _CHANNEL_KEY = "change-me-in-production"
+    # Read env at class load so SESSION_CHANNEL_URL/KEY override default port.
+    _CHANNEL_URL = os.environ.get("SESSION_CHANNEL_URL", "http://localhost:10101")
+    _CHANNEL_KEY = os.environ.get("SESSION_CHANNEL_KEY", "change-me-in-production")
 
     def _notify_channel(
         self, topic: str, text: str, tag: str = "", priority: str = "normal"
@@ -646,6 +647,15 @@ class TmuxRelayClient:
                     pass
             # Register tmux hooks
             self._ensure_hooks_registered(session)
+            # Advertise pane to capability registry so cross-CLI board
+            # dispatch can route tasks by mcps/skills. Best-effort.
+            if pane_id:
+                self.advertise_pane(
+                    pane_id=pane_id,
+                    cli_type="claude-code",
+                    mcps=self._read_mcp_servers(),
+                    skills=self._read_skill_names(),
+                )
             return target
 
         self._notify_channel(
@@ -1888,6 +1898,103 @@ class TmuxRelayClient:
                 return json.loads(resp.read())
         except Exception:
             return None
+
+    # ------------------------------------------------------------------ #
+    # Cross-CLI board integration (Step 7)                                #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _read_mcp_servers() -> list[str]:
+        """Read MCP server names from ~/.mcpproxy/mcp_config.json (best-effort)."""
+        try:
+            import os
+
+            path = os.path.expanduser("~/.mcpproxy/mcp_config.json")
+            with open(path) as f:
+                data = json.load(f)
+            return list((data.get("mcpServers") or {}).keys())
+        except Exception:
+            return []
+
+    @staticmethod
+    def _read_skill_names() -> list[str]:
+        """Scan ~/.claude/skills/ for first-level directory names (best-effort, capped)."""
+        try:
+            import os
+
+            root = os.path.expanduser("~/.claude/skills")
+            if not os.path.isdir(root):
+                return []
+            return sorted(
+                d
+                for d in os.listdir(root)
+                if os.path.isdir(os.path.join(root, d)) and not d.startswith(".")
+            )[:200]
+        except Exception:
+            return []
+
+    def advertise_pane(
+        self,
+        pane_id: str,
+        cli_type: str = "claude-code",
+        mcps: list[str] | None = None,
+        skills: list[str] | None = None,
+    ) -> dict | None:
+        """Register a spawned pane in the session-channel capability registry.
+
+        Called after `spawn()` so cross-CLI dispatch can route tasks by
+        capability. Returns the advertise response or None on failure.
+        Best-effort — any error is swallowed to avoid blocking spawn.
+        """
+        import time as _time
+
+        try:
+            from sdk_client.session_channel import PaneAdvertise
+
+            client = self._get_session_channel_client()
+            now = int(_time.time())
+            advertise = PaneAdvertise(
+                pane_id=pane_id,
+                cli_type=cli_type,
+                mcps=list(mcps or []),
+                skills=list(skills or []),
+                started_at=now,
+                last_seen=now,
+            )
+            return client.advertise(advertise)
+        except Exception:
+            return None
+
+    def release_pane(self, pane_id: str) -> dict | None:
+        """Tell the registry this pane is gone. Server-side reaper handles
+        any lingering board PEL via lease expiry; this just clears the
+        capability hash so future cap-routing skips it."""
+        try:
+            return self._get_session_channel_client().delete_pane(pane_id)
+        except Exception:
+            return None
+
+    def dispatch_via_board(
+        self,
+        board_id: str,
+        tasks: list[dict | str],
+        sender: str | None = None,
+    ) -> dict:
+        """Publish tasks to a board instead of send-keys-ing them directly.
+
+        Caller (relay supervisor) hands the work to whichever cross-CLI pane
+        is best-suited (capability-aware claim). Pane workers — whether CC
+        with /board-claim skill or Codex/Gemini with board-worker.sh —
+        independently claim, heartbeat, and complete.
+
+        Falls back to direct dispatch if board API is unreachable.
+        """
+        sender = sender or "tmux-relay"
+        try:
+            client = self._get_session_channel_client()
+            return client.publish_board(board_id, tasks, sender=sender)
+        except Exception as e:
+            return {"ok": False, "reason": "board_unreachable", "error": str(e)}
 
     def __repr__(self) -> str:
         return f"TmuxRelayClient(claude_bin={self.claude_bin!r})"
