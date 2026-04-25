@@ -16,6 +16,7 @@ Stations (standalone):
     from sdk_client.tmux_webui import TmuxWebuiClient
     from sdk_client.agent_metrics import AgentMetricsClient
     from sdk_client.hook_observatory import HookObservatoryClient
+    from sdk_client.session_channel import SessionChannelClient
     from sdk_client.sandbox import SandboxClient
     from sdk_client.remote_node import RemoteNodeClient
 

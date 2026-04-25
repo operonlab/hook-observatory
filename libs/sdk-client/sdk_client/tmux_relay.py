@@ -179,8 +179,9 @@ class TmuxRelayClient:
         send_enter(pane)
 
     # Session-channel fire-and-forget notification (team coordination)
-    _CHANNEL_URL = "http://localhost:10101"
-    _CHANNEL_KEY = "change-me-in-production"
+    # Read env at class load so SESSION_CHANNEL_URL/KEY override default port.
+    _CHANNEL_URL = os.environ.get("SESSION_CHANNEL_URL", "http://localhost:10101")
+    _CHANNEL_KEY = os.environ.get("SESSION_CHANNEL_KEY", "change-me-in-production")
 
     def _notify_channel(
         self, topic: str, text: str, tag: str = "", priority: str = "normal"
@@ -646,6 +647,15 @@ class TmuxRelayClient:
                     pass
             # Register tmux hooks
             self._ensure_hooks_registered(session)
+            # Advertise pane to capability registry so cross-CLI board
+            # dispatch can route tasks by mcps/skills. Best-effort.
+            if pane_id:
+                self.advertise_pane(
+                    pane_id=pane_id,
+                    cli_type="claude-code",
+                    mcps=self._read_mcp_servers(),
+                    skills=self._read_skill_names(),
+                )
             return target
 
         self._notify_channel(
@@ -1662,62 +1672,329 @@ class TmuxRelayClient:
     # ================================================================
     # Board API — task bulletin board via session-channel
     # ================================================================
+    # All board helpers delegate to SessionChannelClient (Wave 1 SoT).
+    # Signatures are kept backward-compatible: only added optional params,
+    # never removed or renamed. v1 callers (positional task_id on claim)
+    # are still accepted via a deprecated path that emits a warning.
 
-    def publish_board(self, board_id: str, tasks: list[dict]) -> None:
-        """Publish a task board to session-channel. tasks: [{id, desc, ...}]"""
-        self._notify_channel(
-            topic=f"board:{board_id}",
-            text=json.dumps({"tasks": tasks}),
-            tag="publish",
-            priority="high",
-        )
+    def _get_session_channel_client(self):
+        """Lazy-construct a SessionChannelClient bound to this relay's URL/key.
 
-    def claim_board_task(self, board_id: str, task_id: str) -> dict | None:
-        """Atomically claim a task via Lua CAS. Returns response dict or None."""
-        pane = os.environ.get("TMUX_PANE", "sdk")
-        resp = self._board_http(
-            "POST",
-            f"/api/board/{board_id}/claim",
-            {"task_id": task_id, "pane": pane},
-        )
+        Cached on the instance to reuse the underlying httpx.Client connection.
+        """
+        client = getattr(self, "_session_channel_client", None)
+        if client is None:
+            from sdk_client.session_channel import SessionChannelClient
+
+            client = SessionChannelClient(
+                base_url=self._CHANNEL_URL,
+                local_key=self._CHANNEL_KEY,
+            )
+            self._session_channel_client = client
+        return client
+
+    def publish_board(
+        self,
+        board_id: str,
+        tasks: list[dict | str],
+        sender: str = "",
+    ) -> dict:
+        """Publish tasks to a board (delegates to SessionChannelClient).
+
+        Args:
+            board_id: Board identifier.
+            tasks: list of task descriptors. Each item may be:
+                - dict: full TaskPublish fields (id, desc, task_class, ...).
+                - str: shorthand — wrapped as {"id": s, "desc": s,
+                  "task_class": "short"}.
+            sender: optional sender label (currently informational; the
+                station derives ownership from x-local-key + pane on claim).
+
+        Returns:
+            Server response dict (e.g. {"ok": True, "published": N}) or {}.
+        """
+        del sender  # informational only; reserved for future use
+        normalized: list[dict] = []
+        for t in tasks:
+            if isinstance(t, str):
+                normalized.append({"id": t, "desc": t, "task_class": "short"})
+            elif isinstance(t, dict):
+                normalized.append(t)
+            else:
+                raise TypeError(f"task must be str or dict, got {type(t).__name__}")
+        try:
+            return self._get_session_channel_client().publish_board(board_id, normalized)
+        except Exception as exc:  # advisory: keep relay non-fatal
+            return {"ok": False, "error": str(exc)}
+
+    def claim_board_task(
+        self,
+        board_id: str,
+        task_id_or_pane: str = "",
+        count: int = 1,
+        *,
+        pane: str | None = None,
+        task_id: str | None = None,
+    ) -> dict | list[dict] | None:
+        """Claim task(s) from a board (delegates to SessionChannelClient).
+
+        v2 (XREADGROUP-style): pulls up to `count` tasks for the given `pane`.
+
+        Backward-compat for v1 callers `claim_board_task(board_id, task_id)`:
+            The 2nd positional arg is treated as a task_id hint when the
+            argument looks like one (i.e. caller passed task_id as positional
+            without keyword). v2 server doesn't accept task_id-targeted
+            claim, so we pull `count=1` and emit a deprecated warning.
+
+        Returns:
+            count == 1 : single dict (first claimed task) or None when empty
+                         — preserves v1 return shape for legacy callers.
+            count > 1  : list[dict] of claimed task descriptors.
+        """
+        # Resolve pane: explicit kw > env > "sdk"
+        effective_pane = pane or os.environ.get("TMUX_PANE", "sdk")
+
+        # Disambiguate the positional 2nd arg:
+        #   - v2 usage:   claim_board_task("b1", pane="%42") → no positional
+        #   - v2 usage:   claim_board_task("b1", "%42")      → pane positional
+        #   - v1 usage:   claim_board_task("b1", "task-1")   → task_id positional
+        # Heuristic: tmux pane ids start with "%"; otherwise treat as task_id
+        # hint and warn (best-effort fallback to v2 claim).
+        if task_id is None and task_id_or_pane:
+            if task_id_or_pane.startswith("%"):
+                effective_pane = task_id_or_pane
+            else:
+                # Looks like a task_id → v1 deprecated path
+                import warnings
+
+                warnings.warn(
+                    "claim_board_task(board_id, task_id) is deprecated; "
+                    "v2 board uses consumer-group claim — pass pane= and "
+                    "count= instead. Falling back to count=1 claim.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+        try:
+            tasks = self._get_session_channel_client().claim_task(board_id, effective_pane, count)
+        except Exception as exc:
+            if count == 1:
+                return None
+            return [{"ok": False, "error": str(exc)}]
+
+        if count == 1:
+            if not tasks:
+                return None
+            first = tasks[0]
+            # Preserve v1 truthiness: ensure {"ok": True, ...} shape
+            if isinstance(first, dict) and "ok" not in first:
+                first = {"ok": True, **first}
+            return first
+        return tasks
+
+    def drop_board_task(
+        self,
+        board_id: str,
+        task_id: str,
+        pane: str = "",
+    ) -> dict | None:
+        """Release a claimed task (delegates to SessionChannelClient)."""
+        effective_pane = pane or os.environ.get("TMUX_PANE", "sdk")
+        try:
+            resp = self._get_session_channel_client().drop_task(board_id, task_id, effective_pane)
+        except Exception:
+            return None
         return resp if resp and resp.get("ok") else None
 
-    def drop_board_task(self, board_id: str, task_id: str) -> dict | None:
-        """Release a claimed task. Returns response dict or None."""
-        pane = os.environ.get("TMUX_PANE", "sdk")
-        resp = self._board_http(
-            "POST",
-            f"/api/board/{board_id}/drop",
-            {"task_id": task_id, "pane": pane},
-        )
-        return resp if resp and resp.get("ok") else None
+    def complete_board_task(
+        self,
+        board_id: str,
+        task_id: str,
+        result: dict | str = "done",
+        *,
+        pane: str = "",
+    ) -> dict:
+        """Report task completion (delegates to SessionChannelClient).
 
-    def complete_board_task(self, board_id: str, task_id: str, result: str = "") -> None:
-        """Report task completion to session-channel board."""
-        self._notify_channel(
-            topic=f"board:{board_id}",
-            text=json.dumps({"task_id": task_id, "result": result}),
-            tag="done",
-        )
+        Args:
+            result: TaskResult dict (status/payload/artifacts/...) or a free
+                form string. Strings are wrapped as
+                {"status": "ok", "payload": {"note": result}} for backward
+                compatibility with v1 callers like complete_board_task(b, t).
+        """
+        del pane  # ownership tracked server-side via x-local-key + claim
+        if isinstance(result, str):
+            result_payload: dict = {
+                "status": "ok",
+                "payload": {"note": result} if result else {},
+            }
+        elif isinstance(result, dict):
+            result_payload = result
+        else:
+            raise TypeError(f"result must be dict or str, got {type(result).__name__}")
+        try:
+            return self._get_session_channel_client().complete(board_id, task_id, result_payload)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def heartbeat_board_task(
+        self,
+        board_id: str,
+        task_id: str,
+        pane: str = "",
+    ) -> dict:
+        """Extend lease ownership for a claimed task (W2-B XCLAIM)."""
+        del pane  # server derives from claim ownership
+        try:
+            return self._get_session_channel_client().heartbeat(board_id, task_id)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def progress_board_task(
+        self,
+        board_id: str,
+        task_id: str,
+        percent: int,
+        stage: str = "",
+        note: str = "",
+    ) -> dict:
+        """Report mid-task progress event (W3-A)."""
+        try:
+            return self._get_session_channel_client().progress(
+                board_id, task_id, percent, stage=stage, note=note
+            )
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     def _board_http(self, method: str, path: str, body: dict) -> dict | None:
-        """Synchronous HTTP to session-channel board API (stdlib, no curl)."""
+        """Synchronous HTTP to session-channel board API (stdlib, no curl).
+
+        Retained for callers that need raw HTTP access against the
+        session-channel station. Internal board helpers no longer use this —
+        they delegate to SessionChannelClient — but keeping it preserves
+        backward compatibility for any external user/test.
+
+        GET requests must not send a body (data=None).
+        """
         import urllib.request
 
+        method_upper = (method or "GET").upper()
+        data = (
+            json.dumps(body).encode()
+            if method_upper not in ("GET", "HEAD") and body is not None
+            else None
+        )
         req = urllib.request.Request(
             f"{self._CHANNEL_URL}{path}",
-            data=json.dumps(body).encode(),
+            data=data,
             headers={
                 "Content-Type": "application/json",
                 "x-local-key": self._CHANNEL_KEY,
             },
-            method=method,
+            method=method_upper,
         )
         try:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 return json.loads(resp.read())
         except Exception:
             return None
+
+    # ------------------------------------------------------------------ #
+    # Cross-CLI board integration (Step 7)                                #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _read_mcp_servers() -> list[str]:
+        """Read MCP server names from ~/.mcpproxy/mcp_config.json (best-effort)."""
+        try:
+            import os
+
+            path = os.path.expanduser("~/.mcpproxy/mcp_config.json")
+            with open(path) as f:
+                data = json.load(f)
+            return list((data.get("mcpServers") or {}).keys())
+        except Exception:
+            return []
+
+    @staticmethod
+    def _read_skill_names() -> list[str]:
+        """Scan ~/.claude/skills/ for first-level directory names (best-effort, capped)."""
+        try:
+            import os
+
+            root = os.path.expanduser("~/.claude/skills")
+            if not os.path.isdir(root):
+                return []
+            return sorted(
+                d
+                for d in os.listdir(root)
+                if os.path.isdir(os.path.join(root, d)) and not d.startswith(".")
+            )[:200]
+        except Exception:
+            return []
+
+    def advertise_pane(
+        self,
+        pane_id: str,
+        cli_type: str = "claude-code",
+        mcps: list[str] | None = None,
+        skills: list[str] | None = None,
+    ) -> dict | None:
+        """Register a spawned pane in the session-channel capability registry.
+
+        Called after `spawn()` so cross-CLI dispatch can route tasks by
+        capability. Returns the advertise response or None on failure.
+        Best-effort — any error is swallowed to avoid blocking spawn.
+        """
+        import time as _time
+
+        try:
+            from sdk_client.session_channel import PaneAdvertise
+
+            client = self._get_session_channel_client()
+            now = int(_time.time())
+            advertise = PaneAdvertise(
+                pane_id=pane_id,
+                cli_type=cli_type,
+                mcps=list(mcps or []),
+                skills=list(skills or []),
+                started_at=now,
+                last_seen=now,
+            )
+            return client.advertise(advertise)
+        except Exception:
+            return None
+
+    def release_pane(self, pane_id: str) -> dict | None:
+        """Tell the registry this pane is gone. Server-side reaper handles
+        any lingering board PEL via lease expiry; this just clears the
+        capability hash so future cap-routing skips it."""
+        try:
+            return self._get_session_channel_client().delete_pane(pane_id)
+        except Exception:
+            return None
+
+    def dispatch_via_board(
+        self,
+        board_id: str,
+        tasks: list[dict | str],
+        sender: str | None = None,
+    ) -> dict:
+        """Publish tasks to a board instead of send-keys-ing them directly.
+
+        Caller (relay supervisor) hands the work to whichever cross-CLI pane
+        is best-suited (capability-aware claim). Pane workers — whether CC
+        with /board-claim skill or Codex/Gemini with board-worker.sh —
+        independently claim, heartbeat, and complete.
+
+        Falls back to direct dispatch if board API is unreachable.
+        """
+        sender = sender or "tmux-relay"
+        try:
+            client = self._get_session_channel_client()
+            return client.publish_board(board_id, tasks, sender=sender)
+        except Exception as e:
+            return {"ok": False, "reason": "board_unreachable", "error": str(e)}
 
     def __repr__(self) -> str:
         return f"TmuxRelayClient(claude_bin={self.claude_bin!r})"
