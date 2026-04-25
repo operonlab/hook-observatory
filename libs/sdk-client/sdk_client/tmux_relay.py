@@ -1933,6 +1933,16 @@ class TmuxRelayClient:
         except Exception:
             return []
 
+    @staticmethod
+    def _normalize_pane_id(pane_id: str) -> str:
+        """Match the convention used by the hook handler so a single pane
+        is keyed identically whether it advertised via SessionStart hook
+        or via TmuxRelayClient.spawn(). tmux native ids look like ``%5``;
+        ``%`` is replaced with ``pane-`` to keep keys path-friendly."""
+        if not pane_id:
+            return pane_id
+        return pane_id.replace("%", "pane-")
+
     def advertise_pane(
         self,
         pane_id: str,
@@ -1943,18 +1953,20 @@ class TmuxRelayClient:
         """Register a spawned pane in the session-channel capability registry.
 
         Called after `spawn()` so cross-CLI dispatch can route tasks by
-        capability. Returns the advertise response or None on failure.
-        Best-effort — any error is swallowed to avoid blocking spawn.
+        capability. Returns the advertise response or None on failure
+        (failure is logged at WARNING level so silent breakage surfaces).
         """
+        import logging
         import time as _time
 
+        logger = logging.getLogger("tmux-relay.advertise")
         try:
             from sdk_client.session_channel import PaneAdvertise
 
             client = self._get_session_channel_client()
             now = int(_time.time())
             advertise = PaneAdvertise(
-                pane_id=pane_id,
+                pane_id=self._normalize_pane_id(pane_id),
                 cli_type=cli_type,
                 mcps=list(mcps or []),
                 skills=list(skills or []),
@@ -1962,16 +1974,21 @@ class TmuxRelayClient:
                 last_seen=now,
             )
             return client.advertise(advertise)
-        except Exception:
+        except Exception as exc:
+            logger.warning("advertise_pane failed for %s: %s", pane_id, exc)
             return None
 
     def release_pane(self, pane_id: str) -> dict | None:
         """Tell the registry this pane is gone. Server-side reaper handles
         any lingering board PEL via lease expiry; this just clears the
         capability hash so future cap-routing skips it."""
+        import logging
+
+        logger = logging.getLogger("tmux-relay.release")
         try:
-            return self._get_session_channel_client().delete_pane(pane_id)
-        except Exception:
+            return self._get_session_channel_client().delete_pane(self._normalize_pane_id(pane_id))
+        except Exception as exc:
+            logger.warning("release_pane failed for %s: %s", pane_id, exc)
             return None
 
     def dispatch_via_board(

@@ -302,8 +302,8 @@ class SessionChannelClient:
     # ======================== Panes ========================
 
     def advertise(self, pane: PaneAdvertise | dict) -> dict:
-        """POST /api/panes — advertise pane capabilities."""
-        return self._request("POST", "/api/panes", json_body=_to_dict(pane)) or {}
+        """POST /api/panes/advertise — advertise pane capabilities."""
+        return self._request("POST", "/api/panes/advertise", json_body=_to_dict(pane)) or {}
 
     def delete_pane(self, pane_id: str) -> dict:
         """DELETE /api/panes/{pane_id}"""
