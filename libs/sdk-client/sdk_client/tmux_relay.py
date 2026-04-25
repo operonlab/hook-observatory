@@ -2013,5 +2013,119 @@ class TmuxRelayClient:
         except Exception as e:
             return {"ok": False, "reason": "board_unreachable", "error": str(e)}
 
+    def list_capable_panes(
+        self,
+        required_caps: list[str] | None = None,
+        cli_type: str | None = None,
+    ) -> list[dict]:
+        """Query capability registry, return panes that satisfy filters.
+
+        cap_set per pane = mcps ∪ skills. A pane qualifies when it covers
+        every required_cap AND (if specified) matches cli_type.
+        """
+        try:
+            all_panes = self._get_session_channel_client().list_panes()
+        except Exception:
+            return []
+
+        required = list(required_caps or [])
+        out: list[dict] = []
+        for p in all_panes:
+            if cli_type and p.get("cli_type") != cli_type:
+                continue
+            cap_set = set(p.get("mcps") or []) | set(p.get("skills") or [])
+            if any(c not in cap_set for c in required):
+                continue
+            out.append(p)
+        return out
+
+    def route_to_capable_pane(
+        self,
+        prompt: str,
+        required_caps: list[str] | None = None,
+        cli_type: str | None = None,
+        publish_to_board: str | None = None,
+        prefer_pane: str | None = None,
+    ) -> dict:
+        """Pick a capability-matching live pane and send-keys ``prompt`` to it.
+
+        This is the **interactive** dispatch path — pane stays open across
+        tasks so the resident CLI keeps its session, skills, MCP state.
+        Cross-CLI by design (we read the registry, not any CC-specific hook).
+
+        Selection:
+          1. ``list_capable_panes(required_caps, cli_type)`` → candidates
+          2. If ``prefer_pane`` provided and matches a candidate → pick it
+          3. Otherwise random pick (round-robin / least-busy: future)
+          4. ``send-keys`` the prompt to the chosen pane
+          5. Optional: append a routing audit event to ``publish_to_board``
+
+        Returns ``{ok, pane_id, cli_type, ...}`` or ``{ok: False, reason: ...}``.
+        """
+        import logging
+        import random
+
+        logger = logging.getLogger("tmux-relay.route")
+        candidates = self.list_capable_panes(required_caps, cli_type)
+        if not candidates:
+            return {
+                "ok": False,
+                "reason": "no_matching_pane",
+                "required_caps": list(required_caps or []),
+                "cli_type": cli_type,
+            }
+
+        chosen: dict | None = None
+        if prefer_pane:
+            chosen = next((p for p in candidates if p.get("pane_id") == prefer_pane), None)
+        if chosen is None:
+            chosen = random.choice(candidates)
+
+        pane_id = chosen.get("pane_id", "")
+        # Convert normalized id (pane-5) back to native tmux id (%5) so
+        # send_text / send_enter can target it.
+        tmux_pane = pane_id.replace("pane-", "%") if pane_id.startswith("pane-") else pane_id
+
+        try:
+            send_text(tmux_pane, prompt, buf_name="_relay_route")
+            send_enter(tmux_pane)
+        except Exception as exc:
+            logger.warning("route send-keys failed: %s", exc)
+            return {
+                "ok": False,
+                "reason": "send_keys_failed",
+                "target": tmux_pane,
+                "error": str(exc),
+            }
+
+        audit_id: str | None = None
+        if publish_to_board:
+            try:
+                resp = self.dispatch_via_board(
+                    publish_to_board,
+                    [
+                        {
+                            "id": f"route-{int(time.time() * 1000)}",
+                            "desc": prompt[:200],
+                            "task_class": "short",
+                            "assigned_to": pane_id,
+                        }
+                    ],
+                    sender=f"router:{pane_id}",
+                )
+                ids = resp.get("ids") or []
+                audit_id = ids[0] if ids else None
+            except Exception:
+                pass  # audit is best-effort
+
+        return {
+            "ok": True,
+            "pane_id": pane_id,
+            "tmux_pane": tmux_pane,
+            "cli_type": chosen.get("cli_type"),
+            "candidates": len(candidates),
+            "audit_msg_id": audit_id,
+        }
+
     def __repr__(self) -> str:
         return f"TmuxRelayClient(claude_bin={self.claude_bin!r})"
