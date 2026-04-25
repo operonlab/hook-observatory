@@ -14,6 +14,7 @@ import importlib.util
 import sys
 import types
 import unittest
+from pathlib import Path
 
 # ── Stub heavy dependencies ────────────────────────────────────────────────
 _STUBS = [
@@ -101,7 +102,9 @@ _sct.dynamic_timeout = lambda **kw: 10  # type: ignore[attr-defined]
 sys.modules["sdk_client.timeout"] = _sct
 
 # ── Path setup ─────────────────────────────────────────────────────────────
-BASE = "/Users/joneshong/workshop/.worktrees/feature/attnres-scoring"
+# Resolve repo root from this file: core/src/modules/memvault/tests/<this>
+# parents[5] walks up tests → memvault → modules → src → core → <repo root>
+BASE = str(Path(__file__).resolve().parents[5])
 sys.path.insert(0, f"{BASE}/core")
 sys.path.insert(0, f"{BASE}/libs/text-ops")
 
