@@ -142,6 +142,64 @@ def _release_pane() -> None:
     run_background(cmd)
 
 
+def _release_pane_pending() -> None:
+    """Release all pending board tasks claimed by this pane.
+
+    For every entry returned by ``GET /api/panes/{pane_id}/pending`` (which
+    scans all active boards via ``XPENDING``), POST ``/api/board/<id>/drop``
+    so the entry is force-claimed for ``__reaper`` and re-published by the
+    W2-B reaper loop. Avoids zombie claims that would otherwise wait out the
+    full lease window before being recycled.
+
+    Independent of the 60s SessionStop debounce — task release MUST run on
+    every Stop, even when message announcements are throttled.
+
+    Discovery uses a short blocking ``urllib.request`` GET (2s timeout); the
+    drop calls are dispatched fire-and-forget via ``curl`` so the hook never
+    blocks pane teardown. All errors are swallowed — if the station is down,
+    the reaper's lease-based fallback (~90s) still recovers the tasks.
+    """
+    pane_id = _pane_id()
+    try:
+        url = f"{_BASE_URL}/api/panes/{pane_id}/pending"
+        req = urllib.request.Request(url, headers={"x-local-key": _LOCAL_KEY})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return  # station down or network error — reaper lease-based fallback handles it
+
+    for item in data.get("pending") or []:
+        board_id = item.get("board_id")
+        task_id = item.get("task_id")
+        if not board_id or not task_id:
+            continue
+        body = json.dumps({"task_id": task_id, "pane": pane_id})
+        try:
+            subprocess.Popen(
+                [
+                    "curl",
+                    "-s",
+                    "-o",
+                    "/dev/null",
+                    "-m",
+                    "2",
+                    "-X",
+                    "POST",
+                    f"{_BASE_URL}/api/board/{board_id}/drop",
+                    "-H",
+                    "Content-Type: application/json",
+                    "-H",
+                    f"x-local-key: {_LOCAL_KEY}",
+                    "-d",
+                    body,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            continue  # one bad task shouldn't stop the rest
+
+
 def _read_task_state() -> str:
     """Read the current task description from the voice state file."""
     pane = os.environ.get("TMUX_PANE", "")
@@ -192,7 +250,11 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
         return ALLOW
 
     if event_type == "Stop":
-        # Capability release runs on every Stop, independent of message debounce
+        # W2-C: release any board tasks this pane still has pending FIRST,
+        # so they can be re-dispatched while capability is still advertised.
+        # Independent of the 60s message debounce.
+        _release_pane_pending()
+        # Then drop the capability advertisement itself.
         _release_pane()
 
         if _stop_debounced():
