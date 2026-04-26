@@ -309,6 +309,10 @@ class SessionChannelClient:
         """DELETE /api/panes/{pane_id}"""
         return self._request("DELETE", f"/api/panes/{pane_id}") or {}
 
+    def mark_routed(self, pane_id: str) -> dict:
+        """POST /api/panes/{pane_id}/mark-routed — bump last_routed_at for LRR."""
+        return self._request("POST", f"/api/panes/{pane_id}/mark-routed") or {}
+
     def list_panes(self) -> list[dict]:
         """GET /api/panes"""
         data = self._request("GET", "/api/panes")

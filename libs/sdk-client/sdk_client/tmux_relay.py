@@ -2079,7 +2079,12 @@ class TmuxRelayClient:
         if prefer_pane:
             chosen = next((p for p in candidates if p.get("pane_id") == prefer_pane), None)
         if chosen is None:
-            chosen = random.choice(candidates)
+            # LRR fairness: pick the candidate with the smallest
+            # last_routed_at; ties (e.g. cold pool where all are 0) broken
+            # randomly so the first few prompts spread evenly.
+            min_routed = min((c.get("last_routed_at") or 0) for c in candidates)
+            cold = [c for c in candidates if (c.get("last_routed_at") or 0) == min_routed]
+            chosen = random.choice(cold)
 
         pane_id = chosen.get("pane_id", "")
         # Convert normalized id (pane-5) back to native tmux id (%5) so
@@ -2097,6 +2102,14 @@ class TmuxRelayClient:
                 "target": tmux_pane,
                 "error": str(exc),
             }
+
+        # LRR fairness: bump last_routed_at on the chosen pane so the next
+        # call picks someone else. Best-effort — registry hiccup just makes
+        # the next selection slightly less fair, never crashes routing.
+        try:
+            self._get_session_channel_client().mark_routed(pane_id)
+        except Exception as exc:
+            logger.warning("mark_routed failed for %s: %s", pane_id, exc)
 
         audit_id: str | None = None
         if publish_to_board:
