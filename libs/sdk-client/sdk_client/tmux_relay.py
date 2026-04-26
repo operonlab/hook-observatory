@@ -2091,8 +2091,25 @@ class TmuxRelayClient:
         # send_text / send_enter can target it.
         tmux_pane = pane_id.replace("pane-", "%") if pane_id.startswith("pane-") else pane_id
 
+        # Race-prevention for back-to-back routing to the SAME pane:
+        # Codex/Gemini TUIs buffer paste content; if a second prompt arrives
+        # before the previous Enter has committed, the two prompts concatenate
+        # in the input area. We wait at least MIN_INTER_ROUTE_GAP_S since the
+        # pane's last_routed_at before sending again.
+        MIN_INTER_ROUTE_GAP_S = 3
+        last_routed = int(chosen.get("last_routed_at") or 0)
+        if last_routed > 0:
+            elapsed = int(time.time()) - last_routed
+            if elapsed < MIN_INTER_ROUTE_GAP_S:
+                time.sleep(MIN_INTER_ROUTE_GAP_S - elapsed + 0.5)
+
         try:
             send_text(tmux_pane, prompt, buf_name="_relay_route")
+            # Settle delay before Enter: Codex/Gemini TUIs need ~1.5s to
+            # reflow the input area after a paste before they accept Enter
+            # as a commit (Claude Code is more forgiving but the wait is
+            # cheap so we apply it uniformly for cross-CLI consistency).
+            time.sleep(1.5)
             send_enter(tmux_pane)
         except Exception as exc:
             logger.warning("route send-keys failed: %s", exc)
