@@ -285,3 +285,28 @@ class FeedbackAggregateResponse(BaseModel):
     positive_count: int
     negative_count: int
     net_signal: int
+
+
+# ======================== Frontier (Worker 1) ========================
+
+
+class FrontierNodeResponse(BaseModel):
+    """Single frontier candidate — what the agent might think about next."""
+
+    entity_id: str
+    entity_name: str
+    score: float = Field(..., description="Composite frontier score (higher = stronger pull)")
+    ppr: float = Field(..., description="PPR centrality proxy (sum of incident composite_weight)")
+    out_degree: int = Field(..., description="Triple count where entity is canonical subject")
+    days_since_updated: float = Field(..., description="Recency in fractional days")
+    knowledge_gap_bonus: float = Field(
+        ..., description="1.5 if entity is in latest InterestSnapshot.knowledge_gaps else 1.0"
+    )
+
+
+class FrontierTopResponse(BaseModel):
+    """Top-N frontier candidates for a space."""
+
+    space_id: str
+    n: int
+    items: list[FrontierNodeResponse]
