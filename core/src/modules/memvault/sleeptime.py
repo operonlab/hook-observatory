@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
+from src.events.types import CaptureEvents
 from src.shared.database import async_session_factory
 
 from .models import MemoryBlock, MemoryBlockSnapshot
@@ -272,16 +273,16 @@ async def _emit_sleeptime_completed(
 
 
 async def _on_capture_entry_created(event) -> None:
-    """Subscriber wired to `capture.entry.created`.
+    """Subscriber wired to `capture.created` (CaptureEvents.CREATED).
 
     Increments a per-space Redis counter and triggers sleeptime when aligned.
     Falls back to in-process counter if Redis is unavailable.
 
-    NOTE: assumed event name is `capture.entry.created` with payload containing
-    at least `space_id`. If actual capture event differs, adjust here pre-merge.
+    Payload shape (from capture.services._create): includes `space_id`,
+    `capture_id`, `module`, `entity_type`, `raw_input`, `completeness`.
     """
     data = getattr(event, "data", None) or {}
-    space_id = data.get("space_id")
+    space_id = data.get("space_id") or getattr(event, "space_id", None)
     if not space_id:
         return
 
@@ -311,7 +312,7 @@ async def _incr_capture_count(space_id: str) -> int:
 
 
 def _wire_capture_subscription() -> None:
-    """Subscribe to capture.entry.created if event_bus is available.
+    """Subscribe to CaptureEvents.CREATED ("capture.created") if event_bus is available.
 
     Idempotent — safe to call multiple times during module import (events.py).
     Best-effort — never raises (test envs may stub event_bus).
@@ -321,7 +322,7 @@ def _wire_capture_subscription() -> None:
 
         channel_fn = getattr(event_bus, "channel", None)
         if channel_fn is not None:
-            ch = channel_fn("capture.entry.created")
+            ch = channel_fn(CaptureEvents.CREATED)
             sub = getattr(ch, "subscribe_handler", None) or getattr(
                 ch, "subscribe", None
             )
@@ -332,7 +333,7 @@ def _wire_capture_subscription() -> None:
         # Fallback shapes
         sub_fn = getattr(event_bus, "subscribe", None)
         if sub_fn is not None:
-            sub_fn("capture.entry.created", _on_capture_entry_created)
+            sub_fn(CaptureEvents.CREATED, _on_capture_entry_created)
     except Exception:
         logger.debug(
             "memvault.sleeptime: capture subscription wiring skipped", exc_info=True

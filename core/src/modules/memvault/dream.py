@@ -28,10 +28,6 @@ if TYPE_CHECKING:
 from .llm_config import make_litellm_model
 from .llm_models import DreamReflectionOutput
 
-# Worker 4 (sleeptime): import-only hook so dream.py can later interleave a
-# sleeptime trigger if needed. Do NOT call from _consolidate (Worker 2 領地).
-from .sleeptime import maybe_trigger_sleeptime  # noqa: F401
-
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
