@@ -4,6 +4,7 @@ Prefix: /api/memvault/kg (mounted via __init__.py)
 """
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
@@ -43,10 +44,12 @@ from .kg_services import (
     triple_service,
 )
 from .lint import (
+    format_health_report_markdown,
     remediate_knowledge_conflicts,
     remediate_orphans,
     remediate_semantic,
     remediate_stale,
+    run_health_check,
     run_lint,
 )
 
@@ -764,6 +767,62 @@ async def lint_knowledge_graph(
         run_at=report.run_at.isoformat(),
         remediations_applied=remediations,
     )
+
+
+# ======================== Knowledge Lint v2 — Wiki-Lint Health Report ========================
+
+
+@router.get("/lint/report", response_model=LintReportResponse)
+async def lint_health_report(
+    checks: str = Query(
+        "all",
+        description=(
+            "Comma-separated subset of: orphan_blocks,dead_triples,stale_claims,"
+            "missing_entities,missing_cross_refs,metadata_gaps,empty_content,"
+            "stale_index_entries,stable_id_validity,semantic_tiling_dedup. "
+            "Use 'all' to run every wiki-lint check."
+        ),
+    ),
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Run the 10 wiki-lint inspired health checks (report only — no remediation)."""
+    only = None if checks == "all" else [c.strip() for c in checks.split(",") if c.strip()]
+    report = await run_health_check(db, space_id, only=only)
+    return LintReportResponse(
+        space_id=report.space_id,
+        checks_run=report.checks_run,
+        findings=[
+            {
+                "check": f.check,
+                "severity": f.severity,
+                "entity_id": f.entity_id,
+                "entity_type": f.entity_type,
+                "message": f.message,
+                "suggested_action": f.suggested_action,
+                "metadata": f.metadata,
+            }
+            for f in report.findings
+        ],
+        summary=report.summary,
+        run_duration_ms=report.run_duration_ms,
+        run_at=report.run_at.isoformat(),
+        remediations_applied=0,
+    )
+
+
+@router.get("/lint/report.md", response_class=PlainTextResponse)
+async def lint_health_report_markdown(
+    checks: str = Query("all"),
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Same as `/kg/lint/report` but returns wiki-lint markdown for humans/CLI."""
+    only = None if checks == "all" else [c.strip() for c in checks.split(",") if c.strip()]
+    report = await run_health_check(db, space_id, only=only)
+    return format_health_report_markdown(report)
 
 
 # ======================== Entity Edges (Multi-Signal) ========================
