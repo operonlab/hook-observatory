@@ -27,6 +27,8 @@ from .query_runtime import build_injection_payload, build_inspect_payload, run_m
 from .recall_text import build_recall_text
 from .schemas import (
     EnhancedSearchResult,
+    FrontierNodeResponse,
+    FrontierTopResponse,
     KnowledgeDomainCreate,
     KnowledgeDomainResponse,
     KnowledgeDomainUpdate,
@@ -1173,3 +1175,50 @@ async def defer_review(
         raise NotFoundError("Review item not found or already resolved")
     await db.commit()
     return {"status": "deferred", "id": item_id}
+
+
+# ======================== Frontier (Worker 1) ========================
+
+
+@router.get(
+    "/frontier/top",
+    response_model=FrontierTopResponse,
+    summary="Top-N frontier candidates — what to think about next",
+)
+async def frontier_top(
+    space_id: str = Query("default"),
+    n: int = Query(5, ge=1, le=50, description="Number of candidates to return"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.read"),
+):
+    """Aggregate PPR proxy + out_degree + recency + knowledge_gap_bonus
+    into a single per-entity score and return the top N.
+
+    Empty graph → empty list (not an error).
+    """
+    from .frontier import frontier_service
+
+    try:
+        ranked = await frontier_service.compute_top(db, space_id, n=n)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("frontier.top failed")
+        raise BadRequestError(
+            f"Failed to compute frontier: {exc}", code="memvault.frontier.compute_failed"
+        ) from exc
+
+    return FrontierTopResponse(
+        space_id=space_id,
+        n=n,
+        items=[
+            FrontierNodeResponse(
+                entity_id=r.entity_id,
+                entity_name=r.entity_name,
+                score=r.score,
+                ppr=r.ppr,
+                out_degree=r.out_degree,
+                days_since_updated=r.days_since_updated,
+                knowledge_gap_bonus=r.knowledge_gap_bonus,
+            )
+            for r in ranked
+        ],
+    )

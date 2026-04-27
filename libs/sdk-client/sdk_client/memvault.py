@@ -625,6 +625,18 @@ class MemvaultClient(BaseClient):
         """Defer a review item."""
         return self._post(f"/review-queue/{item_id}/defer")
 
+    # ======================== Frontier (Worker 1) ========================
+
+    def frontier_top(self, n: int = 5, space_id: str | None = None) -> dict:
+        """Get top-N frontier candidates. GET /frontier/top
+
+        Returns a FrontierTopResponse: {space_id, n, items: [...]}
+        """
+        params: dict = {"n": n}
+        if space_id:
+            params["space_id"] = space_id
+        return self._get("/frontier/top", params)
+
     # ======================== Health ========================
 
     def health(self) -> bool:
