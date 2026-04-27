@@ -7,7 +7,8 @@ Cannibalized organising principle from claude-obsidian wiki-lint:
    report-only, never auto-fix.
 
 Checks:
-    1. orphan_blocks            — block has no triple pointing in
+    1. orphan_blocks            — block.source_session ∉ referenced sessions
+                                  (proxy for "no incoming triple")
     2. dead_triples             — triple references missing entity rows
     3. stale_claims             — wraps existing check_contradictions
     4. missing_entities         — name mentioned by ≥2 blocks but no entity row

@@ -4,11 +4,33 @@ but no Triple links the block's session to that entity.
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..kg_models import EntityCanonical, Triple
 from ..models import MemoryBlock
+
+# Latin char range — used to decide whether word-boundary matching applies.
+# CJK names (e.g. 「李四」) have no whitespace boundary in source text, so we
+# keep simple substring matching for them.
+_LATIN_RE = re.compile(r"[A-Za-z]")
+
+
+def _name_in_text(name_lc: str, content_lc: str) -> bool:
+    """Whole-word match for Latin names; substring match for CJK / mixed.
+
+    Protects against 'Lisp' inside 'Lispy' or 'Art' inside 'artisan' false
+    positives. CJK names fall through to substring (no word boundaries in
+    Chinese/Japanese text).
+    """
+    if not name_lc or not content_lc:
+        return False
+    if _LATIN_RE.search(name_lc):
+        pattern = r"\b" + re.escape(name_lc) + r"\b"
+        return re.search(pattern, content_lc) is not None
+    return name_lc in content_lc
 
 
 async def check_missing_cross_refs(
@@ -85,7 +107,7 @@ async def check_missing_cross_refs(
         linked_eids = triples_by_session.get(sess, set()) if sess else set()
         mentioned: list[tuple[str, str]] = []
         for name_lc, eid in name_to_eid.items():
-            if name_lc in content_lc and eid not in linked_eids:
+            if _name_in_text(name_lc, content_lc) and eid not in linked_eids:
                 mentioned.append((name_lc, eid))
                 if len(mentioned) >= 5:
                     break

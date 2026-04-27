@@ -16,9 +16,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..kg_models import EntityCanonical
 from ..models import MemoryBlock
 
-# Match: CamelCase identifiers (length >=4) OR Capitalised Phrases (2-4 words)
+# Match either:
+#   - Latin Capitalised Phrases (2-4 words, each word ≥3 chars): "Alice Cooper"
+#   - Latin CamelCase identifiers (≥2 capitalised segments): "PostgreSQL", "AlpineLinux"
+#   - CJK personal/proper names (2-4 Han chars): 「李四」「王曉明」「司馬光」
+# CJK alternative is intentionally word-boundary-free (Han characters have no
+# whitespace boundary in Chinese/Japanese text).
 _NAME_PATTERN = re.compile(
-    r"\b(?:[A-Z][a-z]+(?:[A-Z][a-z]+)+|[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){0,3})\b"
+    r"(?:"
+    r"\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){1,3}\b"  # "Alice Cooper", up to 4 words
+    r"|\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b"               # "PostgreSQL"
+    r"|[一-鿿]{2,4}"                          # CJK 2-4 chars
+    r")"
 )
 
 _STOPWORDS = {
@@ -80,17 +89,30 @@ async def check_missing_entities(
         for name in _extract_names(content or ""):
             name_to_blocks.setdefault(name.lower(), set()).add(bid)
 
-    # Existing canonical names + aliases
-    eq = select(EntityCanonical.canonical_name, EntityCanonical.aliases).where(
+    # Existing canonical names (single column → use .scalars().all() so we never
+    # fall over a 1-tuple/2-tuple unpack mismatch). Aliases are loaded in a
+    # separate best-effort query below; missing aliases must never crash lint.
+    eq = select(EntityCanonical.canonical_name).where(
         EntityCanonical.space_id == space_id,
         EntityCanonical.deleted_at.is_(None),
     )
     known: set[str] = set()
-    for cname, aliases in (await db.execute(eq)).all():
+    for cname in (await db.execute(eq)).scalars().all():
         if cname:
             known.add(cname.lower())
-        for a in aliases or []:
-            known.add(a.lower())
+
+    aq = select(EntityCanonical.aliases).where(
+        EntityCanonical.space_id == space_id,
+        EntityCanonical.deleted_at.is_(None),
+    )
+    try:
+        for aliases in (await db.execute(aq)).scalars().all():
+            for a in aliases or []:
+                if a:
+                    known.add(a.lower())
+    except Exception:
+        # Best-effort enrichment; never crash the lint check on aliases.
+        ...
 
     findings: list = []
     for name_lc, block_ids in name_to_blocks.items():

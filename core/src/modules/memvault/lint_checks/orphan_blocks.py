@@ -1,9 +1,15 @@
-"""Check 1: orphan_blocks — blocks with no triple pointing at them.
+"""Check 1: orphan_blocks — blocks whose session is not referenced by any triple.
 
-A block is "orphan" if no Triple has source_session matching the block's
-source_session AND no entity referenced by the block name is the canonical
-subject/object of any active triple. This is a heuristic — wiki-lint defines
-orphan as "no incoming wiki-link".
+A block is "orphan" when ``block.source_session`` is NOT in the distinct set
+of ``Triple.source_session`` values for the space, OR when the block has a
+NULL ``source_session`` (by definition no inbound triple).
+
+This is a session-level proxy for the wiki-lint "no incoming wiki-link" idea.
+The Triple model does not carry a ``source_block_id`` back-reference, so a
+true per-block inbound check is not possible without a schema change.
+
+TODO(memvault): once Triple carries ``source_block_id``, replace the
+session-set proxy with a real per-block inbound predicate.
 """
 
 from __future__ import annotations
