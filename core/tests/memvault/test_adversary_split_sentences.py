@@ -7,6 +7,7 @@ Mutation thinking targets:
 - author splits on '...' as 3 boundaries -> ellipsis becomes 4 fragments
 - author keeps trailing whitespace -> set/dict keys mismatch
 """
+# ruff: noqa: RUF001, RUF002
 
 from src.modules.memvault.fold_verifier import split_sentences
 

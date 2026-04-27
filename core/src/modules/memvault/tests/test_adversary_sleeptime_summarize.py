@@ -6,25 +6,21 @@ Mutation thinking:
   - Empty content blocks → skipped (don't pollute output).
   - Most-recent-first ordering (created_at DESC).
 """
+# ruff: noqa: S110
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import pytest
-
-from src.modules.memvault import sleeptime as sleeptime_mod
+from src.modules.memvault.models import MemoryBlock
 from src.modules.memvault.sleeptime import (
-    SLEEPTIME_INTERVAL,
-    PROJECT_SUMMARY_RECENT_N,
     PROJECT_SUMMARY_PER_BLOCK_CHARS,
-    maybe_trigger_sleeptime,
-    _run_sleeptime,
+    PROJECT_SUMMARY_RECENT_N,
     _summarize_recent,
-    _ensure_block,
-    _wire_capture_subscription,
 )
-from src.modules.memvault.models import MemoryBlock, MemoryBlockSnapshot
+
+
 @dataclass
 class _FakeBlock:
     space_id: str

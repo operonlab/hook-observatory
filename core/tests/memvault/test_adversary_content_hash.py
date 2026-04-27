@@ -7,7 +7,6 @@ Mutation thinking targets:
 - author crashes on None instead of empty-string fallback (docstring implies fallback)
 """
 
-import pytest
 
 from src.modules.memvault.fold_verifier import compute_content_hash
 

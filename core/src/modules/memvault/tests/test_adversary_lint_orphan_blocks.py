@@ -22,7 +22,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.modules.memvault.lint_checks.orphan_blocks import check_orphan_blocks
 
-
 _VALID_SEVERITIES = {"info", "warning", "error"}
 
 

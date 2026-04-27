@@ -7,25 +7,20 @@ Mutation-thinking surface:
     sleeptime._background_tasks (without mocking ensure_future itself).
   - Invariant: maybe_trigger_sleeptime must NEVER raise (fire-and-forget gate).
 """
+# ruff: noqa: F841
 
 from __future__ import annotations
 
 import asyncio
 
 import pytest
-
 from src.modules.memvault import sleeptime as sleeptime_mod
 from src.modules.memvault.sleeptime import (
     SLEEPTIME_INTERVAL,
-    PROJECT_SUMMARY_RECENT_N,
-    PROJECT_SUMMARY_PER_BLOCK_CHARS,
     maybe_trigger_sleeptime,
-    _run_sleeptime,
-    _summarize_recent,
-    _ensure_block,
-    _wire_capture_subscription,
 )
-from src.modules.memvault.models import MemoryBlock, MemoryBlockSnapshot
+
+
 @pytest.fixture(autouse=True)
 def _quiet_run_sleeptime(monkeypatch):
     """Replace _run_sleeptime with a non-DB-touching async stub. Tests that need

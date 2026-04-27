@@ -14,28 +14,20 @@ Integration case (real PG, requires memvault.memory_block schema):
 
 Cleanup: every adversary_space row is hard-deleted via DELETE WHERE space_id LIKE.
 """
+# ruff: noqa: S110
 
 from __future__ import annotations
 
-import os
 import sys
 import uuid
-from dataclasses import dataclass
 
 import pytest
-
-from src.modules.memvault import sleeptime as sleeptime_mod
+from src.modules.memvault.models import MemoryBlockSnapshot
 from src.modules.memvault.sleeptime import (
-    SLEEPTIME_INTERVAL,
-    PROJECT_SUMMARY_RECENT_N,
-    PROJECT_SUMMARY_PER_BLOCK_CHARS,
-    maybe_trigger_sleeptime,
-    _run_sleeptime,
-    _summarize_recent,
     _ensure_block,
-    _wire_capture_subscription,
 )
-from src.modules.memvault.models import MemoryBlock, MemoryBlockSnapshot
+
+
 class _Scalars:
     def __init__(self, items):
         self._items = items
@@ -212,10 +204,10 @@ try:
     # .env loading: core/.env is loaded by config.py via pydantic-settings if
     # CWD is core/. We don't os.chdir to avoid disturbing pytest collection;
     # instead we rely on default fields. settings.db_url has a default literal.
-    from src.config import settings  # type: ignore  # noqa: E402
+    from src.config import settings  # type: ignore
 
     _DB_URL = settings.db_url
-    import psycopg  # type: ignore  # noqa: E402
+    import psycopg  # type: ignore
 
     # Probe connection (fast)
     with psycopg.connect(_DB_URL, connect_timeout=3) as _c:

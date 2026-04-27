@@ -7,11 +7,11 @@ Mutation thinking targets:
 - short-circuit: author skips substring path -> bypassable via embedding mock
 - author treats use_embedding=False as 'always accept' rather than 'no embedding fallback'
 """
+# ruff: noqa: RUF002
 
 import asyncio
 
 import pytest
-
 from src.modules.memvault.fold_verifier import (
     VerifierResult,
     split_sentences,

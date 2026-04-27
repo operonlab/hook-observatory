@@ -11,7 +11,6 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.modules.memvault.fold_verifier import (
     ConflictCheckResult,
     pre_write_conflict_check,

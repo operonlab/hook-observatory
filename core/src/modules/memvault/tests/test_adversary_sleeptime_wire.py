@@ -14,19 +14,11 @@ from __future__ import annotations
 import sys
 
 import pytest
-
-from src.modules.memvault import sleeptime as sleeptime_mod
 from src.modules.memvault.sleeptime import (
-    SLEEPTIME_INTERVAL,
-    PROJECT_SUMMARY_RECENT_N,
-    PROJECT_SUMMARY_PER_BLOCK_CHARS,
-    maybe_trigger_sleeptime,
-    _run_sleeptime,
-    _summarize_recent,
-    _ensure_block,
     _wire_capture_subscription,
 )
-from src.modules.memvault.models import MemoryBlock, MemoryBlockSnapshot
+
+
 def _patch_bus(monkeypatch, bus):
     """Replace event_bus in src.events.bus stub with a custom object."""
     bus_mod = sys.modules["src.events.bus"]

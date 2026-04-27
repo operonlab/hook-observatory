@@ -5,26 +5,20 @@ Mutation thinking:
   - Invariant: _run_sleeptime always returns a dict; never raises.
   - Happy path: 3 block_types all materialised (persona/human/project).
 """
+# ruff: noqa: S110
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 
 import pytest
-
 from src.modules.memvault import sleeptime as sleeptime_mod
-from src.modules.memvault.sleeptime import (
-    SLEEPTIME_INTERVAL,
-    PROJECT_SUMMARY_RECENT_N,
-    PROJECT_SUMMARY_PER_BLOCK_CHARS,
-    maybe_trigger_sleeptime,
-    _run_sleeptime,
-    _summarize_recent,
-    _ensure_block,
-    _wire_capture_subscription,
-)
 from src.modules.memvault.models import MemoryBlock, MemoryBlockSnapshot
+from src.modules.memvault.sleeptime import (
+    _run_sleeptime,
+)
+
+
 @dataclass
 class _FakeBlock:
     space_id: str
