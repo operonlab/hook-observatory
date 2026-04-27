@@ -42,6 +42,15 @@ class MemoryBlock(SpaceScopedModel):
     last_accessed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Worker 2 (cannibalize Phase 1): Verifier-Backed Extractive Fold dual-key idempotency.
+    # fold_id      = sha256(sorted(children_block_ids))[:16] — children-set stability
+    # content_hash = sha256(consolidate_output_text)[:16]    — content stability
+    # status       = active | conflict_pending — pre-write KG contradiction detected
+    fold_id: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    content_hash: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32), server_default=text("'active'"), nullable=False
+    )
 
 
 class BlockArchive(Base):
