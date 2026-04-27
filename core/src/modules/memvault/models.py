@@ -213,6 +213,36 @@ class InterestSnapshot(SpaceScopedModel):
     avg_result_quality: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+# ======================== Hot Snapshot Memory Block (Worker 4) ========================
+
+
+class MemoryBlockSnapshot(SpaceScopedModel):
+    """Hot snapshot memory block — multi-block (persona | human | project) per space.
+
+    Maintained by sleeptime.py reflection agent. Each (space_id, block_type) has
+    at most one active row (deleted_at IS NULL). Worker 4 only fills `project`;
+    persona / human are placeholder rows for Worker 5 to populate.
+    """
+
+    __tablename__ = "memory_block"
+    __table_args__ = (
+        Index(
+            "uq_memory_block_space_type_active",
+            "space_id",
+            "block_type",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index("idx_memory_block_type", "block_type"),
+        {"schema": SCHEMA},
+    )
+
+    block_type: Mapped[str] = mapped_column(String(32))  # persona | human | project
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    word_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    block_version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+
+
 # ======================== Frozen Tables ========================
 
 
