@@ -46,4 +46,9 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src/modules"]
+# pythonpath intentionally NOT set — `_core.pth` already exposes `core/` at
+# .venv site-packages level, making `src.modules.X` the canonical import path.
+# Setting `pythonpath = ["src/modules"]` (an earlier hotfix) created a SECOND
+# import root that let SQLAlchemy register `memvault.blocks` twice via
+# `memvault.models` AND `src.modules.memvault.models`. Don't reintroduce it.
+asyncio_mode = "auto"

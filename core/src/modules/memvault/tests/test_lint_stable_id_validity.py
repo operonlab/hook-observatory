@@ -11,7 +11,7 @@ pytest.importorskip("sqlalchemy")
 
 from unittest.mock import AsyncMock, MagicMock
 
-from memvault.lint_checks.stable_id_validity import check_stable_id_validity
+from src.modules.memvault.lint_checks.stable_id_validity import check_stable_id_validity
 
 
 def _make_db(block_ids: list[str], sql_count: int | None = None):

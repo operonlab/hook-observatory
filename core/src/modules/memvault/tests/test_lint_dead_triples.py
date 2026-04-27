@@ -12,7 +12,7 @@ pytest.importorskip("sqlalchemy")
 
 from unittest.mock import AsyncMock, MagicMock
 
-from memvault.lint_checks.dead_triples import check_dead_triples
+from src.modules.memvault.lint_checks.dead_triples import check_dead_triples
 
 
 def _make_triple(tid: str, subj_id: str | None, obj_id: str | None):
