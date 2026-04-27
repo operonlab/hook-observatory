@@ -1487,6 +1487,126 @@ async def _run_lint_pipeline(
     )
 
 
+# ======================== Knowledge Lint v2 (Task 9) — Wiki-Lint 10 Checks ========================
+
+
+async def run_health_check(
+    db: AsyncSession,
+    space_id: str = "default",
+    *,
+    only: list[str] | None = None,
+) -> LintReport:
+    """Run the 10 wiki-lint inspired checks (orphan blocks, dead triples, …).
+
+    Distinct from `run_lint` (which dispatches the L0..L4 graph pipeline). Each
+    check is read-only and returns a list of LintFinding. Soft-deleted blocks /
+    invalid triples are excluded by every individual check.
+    """
+    from .lint_checks import WIKI_LINT_CHECKS
+
+    selected = [
+        (name, fn, default_sev)
+        for name, fn, default_sev in WIKI_LINT_CHECKS
+        if only is None or name in only
+    ]
+    findings: list[LintFinding] = []
+    start = time.monotonic()
+
+    for name, fn, _default_sev in selected:
+        try:
+            results = await fn(db, space_id)
+            findings.extend(results)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("run_health_check: %s failed: %s", name, exc)
+            findings.append(
+                LintFinding(
+                    check=name,
+                    severity="error",
+                    entity_id="",
+                    entity_type="system",
+                    message=f"Check {name} failed: {exc}",
+                    suggested_action="Investigate; this is a lint runner bug.",
+                    metadata={"error": str(exc)},
+                )
+            )
+
+    elapsed = (time.monotonic() - start) * 1000
+    summary: dict[str, int] = {}
+    for f in findings:
+        summary[f.check] = summary.get(f.check, 0) + 1
+
+    return LintReport(
+        space_id=space_id,
+        checks_run=[name for name, _, _ in selected],
+        findings=findings,
+        summary=summary,
+        run_duration_ms=elapsed,
+        run_at=datetime.now(UTC),
+    )
+
+
+# Map LintFinding.severity (info|warning|error) → wiki-lint bucket
+_SEVERITY_BUCKETS: dict[str, str] = {
+    "error": "critical",
+    "warning": "warning",
+    "info": "suggestion",
+}
+
+
+def format_health_report_markdown(report: LintReport) -> str:
+    """Render a LintReport as the wiki-lint markdown layout.
+
+    Sections: Summary / Critical / Warnings / Suggestions.
+    """
+    buckets: dict[str, list[LintFinding]] = {
+        "critical": [],
+        "warning": [],
+        "suggestion": [],
+    }
+    for f in report.findings:
+        bucket = _SEVERITY_BUCKETS.get(f.severity, "suggestion")
+        buckets[bucket].append(f)
+
+    date_str = report.run_at.strftime("%Y-%m-%d")
+    issues_total = sum(len(v) for v in buckets.values())
+
+    lines: list[str] = [
+        f"# Memvault Lint Report — {date_str}",
+        "",
+        "## Summary",
+        f"- Space: `{report.space_id}`",
+        f"- Checks run: {', '.join(report.checks_run) or '(none)'}",
+        f"- Duration: {report.run_duration_ms:.0f}ms",
+        (
+            f"- Issues: {issues_total} "
+            f"({len(buckets['critical'])} critical / "
+            f"{len(buckets['warning'])} warning / "
+            f"{len(buckets['suggestion'])} suggestion)"
+        ),
+        "",
+    ]
+
+    for key, title in [
+        ("critical", "## Critical"),
+        ("warning", "## Warnings"),
+        ("suggestion", "## Suggestions"),
+    ]:
+        items = buckets[key]
+        lines.append(title)
+        if not items:
+            lines.append("_None_")
+            lines.append("")
+            continue
+        for f in items:
+            ref = f.entity_id or "-"
+            lines.append(f"- [{f.check}] {f.message} — `{ref}`")
+            if f.suggested_action and f.suggested_action != "none":
+                lines.append(f"    - suggestion: {f.suggested_action}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 async def run_lint(
     db: AsyncSession,
     space_id: str = "default",
