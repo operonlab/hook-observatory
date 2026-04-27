@@ -38,7 +38,7 @@ def _vec_from_cosine(cosine: float) -> list[float]:
 @pytest.mark.asyncio
 async def test_semantic_dedup_high_cosine_flagged():
     """(a) Two near-identical blocks (cosine 0.95) → finding."""
-    from memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
+    from src.modules.memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
 
     rows = [
         ("a" * 32, "Postgres is a relational database engine.", "knowledge"),
@@ -54,9 +54,9 @@ async def test_semantic_dedup_high_cosine_flagged():
         # Return one vector per input text in order
         return [fake_vec_a, fake_vec_b][: len(texts)]
 
-    fake_embedding_mod = types.ModuleType("memvault.embedding")
+    fake_embedding_mod = types.ModuleType("src.modules.memvault.embedding")
     fake_embedding_mod.get_embeddings_batch = fake_embed_batch
-    with patch.dict(sys.modules, {"memvault.embedding": fake_embedding_mod}):
+    with patch.dict(sys.modules, {"src.modules.memvault.embedding": fake_embedding_mod}):
         findings = await check_semantic_tiling_dedup(db, space_id="space-1")
 
     dedup_findings = [
@@ -74,7 +74,7 @@ async def test_semantic_dedup_below_threshold_silent():
 
     Mutation guard: if author wrote `>=` against threshold or used a lower
     threshold like 0.9, this triggers a false-positive."""
-    from memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
+    from src.modules.memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
 
     rows = [
         ("a" * 32, "Distinct content one about gardens.", "knowledge"),
@@ -88,9 +88,9 @@ async def test_semantic_dedup_below_threshold_silent():
     async def fake_embed_batch(texts):
         return [fake_vec_a, fake_vec_b][: len(texts)]
 
-    fake_embedding_mod = types.ModuleType("memvault.embedding")
+    fake_embedding_mod = types.ModuleType("src.modules.memvault.embedding")
     fake_embedding_mod.get_embeddings_batch = fake_embed_batch
-    with patch.dict(sys.modules, {"memvault.embedding": fake_embedding_mod}):
+    with patch.dict(sys.modules, {"src.modules.memvault.embedding": fake_embedding_mod}):
         findings = await check_semantic_tiling_dedup(db, space_id="space-1")
 
     dedup_findings = [
@@ -106,7 +106,7 @@ async def test_semantic_dedup_below_threshold_silent():
 async def test_semantic_dedup_embedding_unavailable_graceful():
     """(c) Embedding module raises on import → return single finding with
     metadata.skipped=True, no crash."""
-    from memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
+    from src.modules.memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
 
     rows = [
         ("a" * 32, "any content here.", "knowledge"),
@@ -115,7 +115,7 @@ async def test_semantic_dedup_embedding_unavailable_graceful():
     db = _make_db(rows)
 
     # Make `from ..embedding import get_embeddings_batch` raise.
-    broken_mod = types.ModuleType("memvault.embedding")
+    broken_mod = types.ModuleType("src.modules.memvault.embedding")
 
     def _raise(*a, **kw):
         raise RuntimeError("MLX worker not wired")
@@ -123,7 +123,7 @@ async def test_semantic_dedup_embedding_unavailable_graceful():
     # Accessing the attribute via `from x import y` triggers __getattr__.
     broken_mod.__getattr__ = lambda name: _raise()  # type: ignore[attr-defined]
 
-    with patch.dict(sys.modules, {"memvault.embedding": broken_mod}):
+    with patch.dict(sys.modules, {"src.modules.memvault.embedding": broken_mod}):
         # Must NOT raise
         findings = await check_semantic_tiling_dedup(db, space_id="space-1")
 
@@ -143,18 +143,18 @@ async def test_semantic_dedup_embedding_unavailable_graceful():
 @pytest.mark.asyncio
 async def test_semantic_dedup_single_block_returns_empty():
     """Edge: only 1 block in space → no pairs to compare → empty list."""
-    from memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
+    from src.modules.memvault.lint_checks.semantic_tiling_dedup import check_semantic_tiling_dedup
 
     rows = [("a" * 32, "lone content.", "knowledge")]
     db = _make_db(rows)
 
-    fake_embedding_mod = types.ModuleType("memvault.embedding")
+    fake_embedding_mod = types.ModuleType("src.modules.memvault.embedding")
 
     async def fake_embed_batch(texts):
         return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
 
     fake_embedding_mod.get_embeddings_batch = fake_embed_batch
-    with patch.dict(sys.modules, {"memvault.embedding": fake_embedding_mod}):
+    with patch.dict(sys.modules, {"src.modules.memvault.embedding": fake_embedding_mod}):
         findings = await check_semantic_tiling_dedup(db, space_id="space-1")
 
     dedup_findings = [

@@ -55,8 +55,11 @@ async def check_missing_cross_refs(
     if not entities:
         return []
 
-    # Build name → entity_id index (lowercased)
+    # Build name → entity_id index (lowercased) AND a parallel original-case
+    # map so findings surface the human-readable name (e.g. "PostgreSQL")
+    # rather than the lowercased lookup key.
     name_to_eid: dict[str, str] = {n.lower(): eid for eid, n in entities}
+    name_original: dict[str, str] = {n.lower(): n for eid, n in entities}
 
     # Sample blocks
     bq = (
@@ -105,10 +108,10 @@ async def check_missing_cross_refs(
             continue
         sess = b.source_session
         linked_eids = triples_by_session.get(sess, set()) if sess else set()
-        mentioned: list[tuple[str, str]] = []
+        mentioned: list[tuple[str, str, str]] = []  # (name_lc, eid, original)
         for name_lc, eid in name_to_eid.items():
             if _name_in_text(name_lc, content_lc) and eid not in linked_eids:
-                mentioned.append((name_lc, eid))
+                mentioned.append((name_lc, eid, name_original[name_lc]))
                 if len(mentioned) >= 5:
                     break
         if not mentioned:
@@ -122,7 +125,7 @@ async def check_missing_cross_refs(
                 entity_type="block",
                 message=(
                     f"Block {b.id[:8]} mentions {len(mentioned)} entity names "
-                    f"with no triple link (e.g. {mentioned[0][0]!r})"
+                    f"with no triple link (e.g. {mentioned[0][2]!r})"
                 ),
                 suggested_action=(
                     "Re-run triple extraction over this block, or add manual "
@@ -131,7 +134,7 @@ async def check_missing_cross_refs(
                 metadata={
                     "block_id": b.id,
                     "missing_links": [
-                        {"name": n, "entity_id": eid} for n, eid in mentioned
+                        {"name": orig, "entity_id": eid} for _lc, eid, orig in mentioned
                     ],
                 },
             )

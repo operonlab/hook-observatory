@@ -121,9 +121,7 @@ async def _run_sleeptime(space_id: str) -> dict:
             blocks_updated,
         )
     except Exception:
-        logger.warning(
-            "memvault.sleeptime failed: space_id=%s", space_id, exc_info=True
-        )
+        logger.warning("memvault.sleeptime failed: space_id=%s", space_id, exc_info=True)
 
     return {
         "space_id": space_id,
@@ -187,6 +185,12 @@ async def _summarize_recent(db, space_id: str) -> str:
     rows = result.scalars().all()
     if not rows:
         return ""
+
+    # Defensive Python-side cap — SQL `.limit(N)` already constrains this,
+    # but we keep an explicit slice so the contract holds even if the upstream
+    # query is mutated to drop the limit (and to make the unit test deterministic
+    # against fake sessions that don't honor SQL LIMIT).
+    rows = rows[:PROJECT_SUMMARY_RECENT_N]
 
     parts: list[str] = []
     for row in rows:
@@ -262,9 +266,7 @@ async def _emit_sleeptime_completed(
             _background_tasks.add(task)
             task.add_done_callback(_background_tasks.discard)
     except Exception:
-        logger.debug(
-            "memvault.sleeptime: emit completed event failed", exc_info=True
-        )
+        logger.debug("memvault.sleeptime: emit completed event failed", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -323,9 +325,7 @@ def _wire_capture_subscription() -> None:
         channel_fn = getattr(event_bus, "channel", None)
         if channel_fn is not None:
             ch = channel_fn(CaptureEvents.CREATED)
-            sub = getattr(ch, "subscribe_handler", None) or getattr(
-                ch, "subscribe", None
-            )
+            sub = getattr(ch, "subscribe_handler", None) or getattr(ch, "subscribe", None)
             if sub is not None:
                 sub(_on_capture_entry_created)
                 return
@@ -335,9 +335,7 @@ def _wire_capture_subscription() -> None:
         if sub_fn is not None:
             sub_fn(CaptureEvents.CREATED, _on_capture_entry_created)
     except Exception:
-        logger.debug(
-            "memvault.sleeptime: capture subscription wiring skipped", exc_info=True
-        )
+        logger.debug("memvault.sleeptime: capture subscription wiring skipped", exc_info=True)
 
 
 __all__ = [

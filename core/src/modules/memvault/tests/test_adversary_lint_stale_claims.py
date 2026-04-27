@@ -52,11 +52,11 @@ async def test_stale_claims_old_vs_new_contradiction_flagged():
 
     fake_contradictions = [_contradiction_finding(old_id, new_id)]
     with patch(
-        "memvault.lint_checks.stale_claims.__import__", create=True
+        "src.modules.memvault.lint_checks.stale_claims.__import__", create=True
     ):
         # Patch via memvault.lint.check_contradictions (imported lazily)
         with patch(
-            "memvault.lint.check_contradictions",
+            "src.modules.memvault.lint.check_contradictions",
             new=AsyncMock(return_value=fake_contradictions),
         ):
             findings = await check_stale_claims(db, space_id="space-1")
@@ -77,7 +77,7 @@ async def test_stale_claims_self_conflict_not_double_reported():
 
     fake = [_contradiction_finding(same_id, same_id)]
     with patch(
-        "memvault.lint.check_contradictions",
+        "src.modules.memvault.lint.check_contradictions",
         new=AsyncMock(return_value=fake),
     ):
         findings = await check_stale_claims(db, space_id="space-1")
@@ -95,7 +95,7 @@ async def test_stale_claims_no_contradictions_returns_empty():
     """(c) When upstream check_contradictions returns [] → must return [] cleanly."""
     db = _make_db({})
     with patch(
-        "memvault.lint.check_contradictions", new=AsyncMock(return_value=[])
+        "src.modules.memvault.lint.check_contradictions", new=AsyncMock(return_value=[])
     ):
         findings = await check_stale_claims(db, space_id="space-1")
     assert findings == []
@@ -109,7 +109,7 @@ async def test_stale_claims_severity_invariant():
     db = _make_db({a: now - timedelta(days=60), b: now - timedelta(days=2)})
     fake = [_contradiction_finding(a, b)]
     with patch(
-        "memvault.lint.check_contradictions", new=AsyncMock(return_value=fake)
+        "src.modules.memvault.lint.check_contradictions", new=AsyncMock(return_value=fake)
     ):
         findings = await check_stale_claims(db, space_id="space-1")
 

@@ -19,17 +19,97 @@ from ..models import MemoryBlock
 # Match either:
 #   - Latin Capitalised Phrases (2-4 words, each word ≥3 chars): "Alice Cooper"
 #   - Latin CamelCase identifiers (≥2 capitalised segments): "PostgreSQL", "AlpineLinux"
-#   - CJK personal/proper names (2-4 Han chars): 「李四」「王曉明」「司馬光」
-# CJK alternative is intentionally word-boundary-free (Han characters have no
-# whitespace boundary in Chinese/Japanese text).
+#   - CJK personal names: exactly 2 Han chars (most common; 3-char names handled by
+#     a separate strict pattern that only matches when bounded by non-Han context).
+# We intentionally do NOT match arbitrary runs of Han chars — bare regex
+# `[一-鿿]{2,4}` greedily eats prose like 「李四約王」when the actual name
+# is just 「李四」.
 _NAME_PATTERN = re.compile(
     r"(?:"
     r"\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){1,3}\b"  # "Alice Cooper", up to 4 words
-    r"|\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b"               # "PostgreSQL"
-    r"|[一-鿿]{2,4}"                          # CJK 2-4 chars
+    r"|\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b"  # "PostgreSQL"
     r")"
 )
 
+
+# CJK candidates are extracted via a sliding 2-char window over Han runs (not
+# regex). Lookbehind-anchored regex misses inner names because common particles
+# (e.g. 的, 在, 了, 和) are all Han characters; any name preceded by another
+# Han char (e.g. "今天和李四") would be dropped. The over-generation noise is
+# filtered downstream by mention-count threshold (>= 2).
+_HAN_RANGE = ("一", "鿿")
+
+
+def _extract_cjk_pairs(text: str) -> list[str]:
+    """Return all 2-char Han pairs as candidates (overlapping, sliding window)."""
+    if not text:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for i in range(len(text) - 1):
+        c1, c2 = text[i], text[i + 1]
+        if _HAN_RANGE[0] <= c1 <= _HAN_RANGE[1] and _HAN_RANGE[0] <= c2 <= _HAN_RANGE[1]:
+            pair = c1 + c2
+            if pair in _CJK_STOPWORDS or pair in seen:
+                continue
+            seen.add(pair)
+            out.append(pair)
+    return out
+
+
+# Common 2-char Han particles / temporals / verbs that should never count as names.
+# Not exhaustive — false positives are filtered downstream by mention-count threshold.
+_CJK_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "今天",
+        "明天",
+        "昨天",
+        "前天",
+        "後天",
+        "週一",
+        "週二",
+        "週三",
+        "週四",
+        "週五",
+        "週六",
+        "週日",
+        "週末",
+        "禮拜",
+        "星期",
+        "上午",
+        "下午",
+        "中午",
+        "凌晨",
+        "今年",
+        "明年",
+        "去年",
+        "今晚",
+        "今早",
+        "我們",
+        "他們",
+        "你們",
+        "她們",
+        "它們",
+        "因為",
+        "所以",
+        "但是",
+        "如果",
+        "雖然",
+        "然後",
+        "或者",
+        "討論",
+        "設計",
+        "完成",
+        "開始",
+        "結束",
+        "交付",
+        "處理",
+    }
+)
+
+# Words that are syntactically capitalised (sentence start, days, months, etc.)
+# but should NEVER count as standalone proper names. These are stripped from the
+# *front* of an extracted phrase so "Yesterday Alice Cooper" → "Alice Cooper".
 _STOPWORDS = {
     "The",
     "This",
@@ -41,6 +121,28 @@ _STOPWORDS = {
     "What",
     "Why",
     "How",
+    "Yesterday",
+    "Today",
+    "Tomorrow",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 }
 
 
@@ -51,6 +153,17 @@ def _extract_names(text: str) -> list[str]:
     seen: set[str] = set()
     for match in _NAME_PATTERN.finditer(text):
         name = match.group(0).strip()
+        # Strip leading stopwords (e.g. "Yesterday Alice Cooper" → "Alice Cooper").
+        # Loop because more than one stopword can stack in front.
+        if " " in name:
+            words = name.split()
+            while words and words[0] in _STOPWORDS:
+                words.pop(0)
+            # Require ≥2 words after stripping — single-word leftovers like just
+            # "Alice" are too noisy without surname context.
+            name = " ".join(words) if len(words) >= 2 else ""
+            if not name:
+                continue
         if not name or name in _STOPWORDS:
             continue
         # Skip very long matches — likely not names
@@ -60,6 +173,15 @@ def _extract_names(text: str) -> list[str]:
             continue
         seen.add(name)
         out.append(name)
+    # Append CJK 2-char candidates (sliding window). These are intentionally
+    # over-generated; downstream min_block_mentions=2 filters out the prose
+    # bigrams (「在週」「四討」) while real names that recur across blocks
+    # (「李四」、「王五」) cross the threshold.
+    for cjk in _extract_cjk_pairs(text):
+        if cjk in seen:
+            continue
+        seen.add(cjk)
+        out.append(cjk)
     return out
 
 
@@ -85,9 +207,17 @@ async def check_missing_entities(
     blocks = (await db.execute(bq)).all()
 
     name_to_blocks: dict[str, set[str]] = {}
+    # Preserve a representative original-case form for each lowercased key so
+    # findings can surface the human-readable name (e.g. "Alice Cooper" /
+    # "李四") in metadata. Without this, downstream consumers only see the
+    # lower-cased Latin form and CJK names round-trip unchanged but are
+    # opaque in logs.
+    name_original: dict[str, str] = {}
     for bid, content in blocks:
         for name in _extract_names(content or ""):
-            name_to_blocks.setdefault(name.lower(), set()).add(bid)
+            key = name.lower()
+            name_to_blocks.setdefault(key, set()).add(bid)
+            name_original.setdefault(key, name)
 
     # Existing canonical names (single column → use .scalars().all() so we never
     # fall over a 1-tuple/2-tuple unpack mismatch). Aliases are loaded in a
@@ -122,6 +252,7 @@ async def check_missing_entities(
             continue
         # Sample up to 5 block IDs for the metadata
         sample_ids = sorted(block_ids)[:5]
+        original = name_original.get(name_lc, name_lc)
         findings.append(
             LintFinding(
                 check="missing_entities",
@@ -129,7 +260,7 @@ async def check_missing_entities(
                 entity_id="",
                 entity_type="entity",
                 message=(
-                    f"Name '{name_lc}' appears in {len(block_ids)} blocks "
+                    f"Name '{original}' appears in {len(block_ids)} blocks "
                     f"but has no EntityCanonical row"
                 ),
                 suggested_action=(
@@ -137,6 +268,7 @@ async def check_missing_entities(
                     "an alias to an existing entity."
                 ),
                 metadata={
+                    "name": original,
                     "name_lower": name_lc,
                     "mention_count": len(block_ids),
                     "sample_block_ids": sample_ids,
