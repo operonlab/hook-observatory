@@ -49,6 +49,35 @@ _SENT_SPLIT_RE = re.compile(
 _SHORT_SENT_LEN = 8
 _DEFAULT_EMBEDDING_THRESHOLD = 0.85
 
+# Common abbreviations that look like sentence terminators but aren't.
+# When split_sentences splits on ". " after one of these, glue the
+# fragments back together so "Mr. Smith said hi." stays one sentence.
+_ABBREVIATIONS = frozenset(
+    {
+        "Mr.",
+        "Mrs.",
+        "Ms.",
+        "Dr.",
+        "Prof.",
+        "Sr.",
+        "Jr.",
+        "St.",
+        "Mt.",
+        "Inc.",
+        "Ltd.",
+        "Co.",
+        "Corp.",
+        "vs.",
+        "etc.",
+        "e.g.",
+        "i.e.",
+        "Ph.D.",
+        "M.D.",
+        "B.A.",
+        "U.S.",
+    }
+)
+
 
 # ============================================================================
 # Hash helpers (dual-key)
@@ -89,11 +118,38 @@ class VerifierResult:
 
 
 def split_sentences(text: str) -> list[str]:
-    """Best-effort bilingual sentence split. Empty input → []. Strips whitespace."""
+    """Best-effort bilingual sentence split. Empty input → []. Strips whitespace.
+
+    Post-split merge: if a fragment ends in a known abbreviation (e.g. "Mr.",
+    "Ph.D.", "etc."), glue it to the following fragment. The regex splits on
+    ". " after any "." which over-cuts on titles and Latin abbreviations —
+    this pass repairs those without complicating the regex itself.
+    """
     if not text:
         return []
     parts = _SENT_SPLIT_RE.split(text)
-    return [p.strip() for p in parts if p and p.strip()]
+    raw = [p.strip() for p in parts if p and p.strip()]
+    if not raw:
+        return []
+
+    merged: list[str] = []
+    i = 0
+    while i < len(raw):
+        cur = raw[i]
+        # Keep gluing forward while the current fragment ends in an
+        # abbreviation. Handles chains like "We use e.g. Python and i.e. uv."
+        # where the first merge still leaves an abbrev at the tail.
+        while i + 1 < len(raw):
+            tokens = cur.split()
+            last_token = tokens[-1] if tokens else ""
+            if last_token in _ABBREVIATIONS:
+                cur = cur + " " + raw[i + 1]
+                i += 1
+            else:
+                break
+        merged.append(cur)
+        i += 1
+    return merged
 
 
 def _normalize(s: str) -> str:
