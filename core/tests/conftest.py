@@ -1,7 +1,7 @@
-"""Shared test fixtures for core module tests."""
+"""Shared test fixtures for core module tests.
 
-import sys
-from pathlib import Path
-
-# Ensure core/src is importable
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+pythonpath is configured in pyproject.toml ([tool.pytest.ini_options]).
+Inserting core/ here used to expose `memvault` via two roots
+(src/modules/memvault and src.modules.memvault), causing SQLAlchemy
+`Table 'memvault.blocks' is already defined` collisions.
+"""
