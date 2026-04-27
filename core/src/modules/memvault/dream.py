@@ -366,10 +366,23 @@ async def _consolidate(
     }
 
     # Worker 2: Pre-write KG contradiction check (Mem0-style, fail-open).
-    # On conflict, new folds are written with status='conflict_pending' for human review
-    # and downstream KG/entity updates are skipped — matches the write-side guard pattern.
+    # We still run a once-per-run global check here purely for observability /
+    # fail-open logging — the per-fold ``fold_status`` decision happens inside
+    # the merge loop below, scoped to that fold's children. Reviewer caught the
+    # earlier bug where this run-level value was reused for every fold (one
+    # space-level contradiction quarantined the whole batch).
     pre_check = await pre_write_conflict_check(db, space_id)
-    fold_status = "conflict_pending" if pre_check.has_conflict else "active"
+    if pre_check.has_conflict:
+        logger.info(
+            "dream.consolidate.pre_check space=%s has space-level contradictions "
+            "(%d finding(s)) — per-fold check still gates each fold",
+            space_id,
+            len(pre_check.findings),
+        )
+    if pre_check.error:
+        logger.warning(
+            "dream.consolidate.pre_check failed (fail-open): %s", pre_check.error
+        )
 
     # --- 3a. Retroactive contradiction resolution ---
     findings = signal.get("_findings", [])
@@ -542,6 +555,27 @@ async def _consolidate(
                             block.deleted_at = datetime.now(UTC)
                             await db.flush()
                             continue
+
+                        # Per-fold conflict check (children differ across folds,
+                        # so the scope MUST be per-fold — not the run-level
+                        # ``pre_check`` above). On conflict, write the fold
+                        # with status='conflict_pending' for human review.
+                        try:
+                            fold_pre_check = await pre_write_conflict_check(
+                                db, space_id, children_ids=children_ids
+                            )
+                            fold_status = (
+                                "conflict_pending"
+                                if fold_pre_check.has_conflict
+                                else "active"
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "dream.consolidate.fold_pre_check failed "
+                                "(fail-open): %s",
+                                exc,
+                            )
+                            fold_status = "active"
 
                         overwriting = existing.fold_id == new_fold_id
                         existing.content = verified_text

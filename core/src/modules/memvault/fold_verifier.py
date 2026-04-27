@@ -247,11 +247,18 @@ class ConflictCheckResult:
 
     ``has_conflict`` drives the consumer's status assignment:
     True → write fold with status='conflict_pending' + skip downstream KG/entity updates.
+
+    ``scoped_to_children`` records whether the caller asked for a per-fold scope
+    (children_ids was provided). The current implementation still runs a global
+    contradiction check — narrowing the scope to triples sourced from the given
+    children blocks is a TODO (requires Triple↔block back-reference, which is
+    not stored on the Triple model today; only ``source_session`` is available).
     """
 
     has_conflict: bool
     findings: list = field(default_factory=list)
     error: str | None = None
+    scoped_to_children: bool = False
 
 
 async def pre_write_conflict_check(
@@ -260,12 +267,20 @@ async def pre_write_conflict_check(
     *,
     sample_size: int = 100,
     similarity_threshold: float = 0.80,
+    children_ids: list[str] | None = None,
 ) -> ConflictCheckResult:
     """Run a contradiction check before consolidate writes.
 
     Delegates to ``lint.check_contradictions`` (Worker 3's territory — already
     exists at module load time). On any error we return ``has_conflict=False``
     with an error message: degrade-gracefully, never block the dream loop.
+
+    When ``children_ids`` is provided the caller wants a per-fold scope (only
+    contradictions touching those children should gate this fold). Today the
+    Triple model has no block_id back-reference, so we still run the global
+    check and just flag ``scoped_to_children=True`` on the result for
+    observability — narrowing the actual filter is a TODO once the schema
+    grows that link.
     """
     try:
         from .lint import check_contradictions
@@ -283,10 +298,19 @@ async def pre_write_conflict_check(
             if getattr(f, "severity", None) in {"warning", "critical"}
             and getattr(f, "entity_type", None) == "triple"
         ]
-        return ConflictCheckResult(has_conflict=bool(active), findings=active)
+        return ConflictCheckResult(
+            has_conflict=bool(active),
+            findings=active,
+            scoped_to_children=bool(children_ids),
+        )
     except Exception as exc:
         logger.warning("fold_verifier.pre_write_conflict_check failed: %s", exc)
-        return ConflictCheckResult(has_conflict=False, findings=[], error=str(exc))
+        return ConflictCheckResult(
+            has_conflict=False,
+            findings=[],
+            error=str(exc),
+            scoped_to_children=bool(children_ids),
+        )
 
 
 __all__ = [
