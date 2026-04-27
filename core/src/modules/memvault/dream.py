@@ -342,6 +342,12 @@ async def _consolidate(
 
     from .conflict_resolver import ConflictDecision, resolve_conflict
     from .dedup import check_duplicate
+    from .fold_verifier import (
+        compute_content_hash,
+        compute_fold_id,
+        pre_write_conflict_check,
+        verify_fold_extractiveness,
+    )
     from .kg_models import Triple
     from .models import MemoryBlock
 
@@ -352,7 +358,18 @@ async def _consolidate(
         "blocks_skipped": 0,
         "content_normalized": 0,
         "norm_changes": {},  # per-op change counts
+        # Worker 2: Verifier-Backed Extractive Fold + Dual-Key Idempotency
+        "folds_skipped_idempotent": 0,   # fold_id + content_hash both match → no-op
+        "folds_overwritten": 0,          # fold_id same, content drift → updated
+        "folds_quarantined": 0,          # pre-write KG conflict → status=conflict_pending
+        "fold_sentences_rejected": 0,    # verifier dropped non-extractive sentences
     }
+
+    # Worker 2: Pre-write KG contradiction check (Mem0-style, fail-open).
+    # On conflict, new folds are written with status='conflict_pending' for human review
+    # and downstream KG/entity updates are skipped — matches the write-side guard pattern.
+    pre_check = await pre_write_conflict_check(db, space_id)
+    fold_status = "conflict_pending" if pre_check.has_conflict else "active"
 
     # --- 3a. Retroactive contradiction resolution ---
     findings = signal.get("_findings", [])
@@ -475,11 +492,70 @@ async def _consolidate(
                     eq = select(MemoryBlock).where(MemoryBlock.id == dedup_result.existing_block_id)
                     existing = (await db.execute(eq)).scalar_one_or_none()
                     if existing:
-                        existing.content = merge_content(
+                        # ----- Worker 2: dual-key idempotency + post-hoc verifier -----
+                        # Fold = (existing) ← merge ← (block). Children = both ids.
+                        children_ids = [str(existing.id), str(block.id)]
+                        children_texts = [existing.content or "", block.content or ""]
+
+                        merged_text = merge_content(
                             existing.content or "", block.content or ""
                         )
+
+                        # Post-hoc verifier: drop sentences with no grounding in children.
+                        try:
+                            v = await verify_fold_extractiveness(
+                                merged_text, children_texts
+                            )
+                            if v.rejected:
+                                result["fold_sentences_rejected"] += len(v.rejected)
+                                logger.info(
+                                    "dream.consolidate.fold_verifier rejected %d sentence(s) "
+                                    "for fold over %s",
+                                    len(v.rejected),
+                                    children_ids,
+                                )
+                            # If verifier zeroed out the text, fall back to the
+                            # raw merged text — better to keep something than to
+                            # silently destroy content.
+                            verified_text = v.filtered_text or merged_text
+                        except Exception as exc:
+                            logger.warning(
+                                "dream.consolidate.fold_verifier failed: %s — using raw merge",
+                                exc,
+                            )
+                            verified_text = merged_text
+
+                        new_fold_id = compute_fold_id(children_ids)
+                        new_content_hash = compute_content_hash(verified_text)
+
+                        # Dual-key decision tree:
+                        # - same fold_id + same content_hash → idempotent skip
+                        # - same fold_id + diff content_hash → overwrite (child drift)
+                        # - new fold_id                       → fresh fold (default path)
+                        if (
+                            existing.fold_id == new_fold_id
+                            and existing.content_hash == new_content_hash
+                        ):
+                            result["folds_skipped_idempotent"] += 1
+                            # Children already absorbed in a prior dream — soft-delete the
+                            # duplicate child anyway so it does not re-trigger every loop.
+                            block.deleted_at = datetime.now(UTC)
+                            await db.flush()
+                            continue
+
+                        overwriting = existing.fold_id == new_fold_id
+                        existing.content = verified_text
+                        existing.fold_id = new_fold_id
+                        existing.content_hash = new_content_hash
+                        existing.status = fold_status
                         block.deleted_at = datetime.now(UTC)
                         merge_count += 1
+
+                        if overwriting:
+                            result["folds_overwritten"] += 1
+                        if fold_status == "conflict_pending":
+                            result["folds_quarantined"] += 1
+
                         await db.flush()
 
                 elif dedup_result.decision.value == "skip":
