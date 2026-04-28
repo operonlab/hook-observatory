@@ -516,3 +516,43 @@ class TestFestival:
     def test_festival(self, expr: str, expected: str) -> None:
         result = normalize_temporal_range(expr, REF_2026_04_28)
         assert expected in result, f"{expr!r}: expected {expected!r} in {result!r}"
+
+
+# Regression tests for festival-keyword right-boundary (added 2026-04-29)
+
+
+class TestFestivalBoundary:
+    """Festival short-form keywords must not match inside non-festival words.
+
+    Found by adversarial-test-temporal agent: 「重陽光普照」「清明上河圖」used to
+    expand 重陽/清明 partially, leaving a dangling tail.
+    """
+
+    @pytest.mark.parametrize(
+        "expr",
+        [
+            "重陽光普照",      # 重陽 → 重陽光 (light)
+            "清明上河圖",      # 清明 → famous painting
+            "光明正大",        # 明 not festival anyway, regression
+        ],
+    )
+    def test_no_false_positive(self, expr: str) -> None:
+        """The keyword must NOT be expanded when inside a longer non-festival word."""
+        result = normalize_temporal_range(expr, REF_2026_04_28)
+        assert "到 " not in result, f"{expr!r} unexpectedly expanded: {result!r}"
+
+    @pytest.mark.parametrize(
+        "expr, expected",
+        [
+            ("清明前後", "2026-04-04 到 2026-04-05"),
+            ("中秋過後", "2026-09-25 到 2026-09-25"),
+            ("元宵那天", "2026-03-03 到 2026-03-03"),
+            ("重陽假期", "2026-10-18 到 2026-10-18"),
+            ("過年期間", "2026-02-16 到 2026-02-21"),
+            ("中秋節月圓", "2026-09-25 到 2026-09-25"),  # full form bypasses boundary check
+        ],
+    )
+    def test_legitimate_followups(self, expr: str, expected: str) -> None:
+        """Legitimate transition particles (前/後/期/那/假/節) still expand."""
+        result = normalize_temporal_range(expr, REF_2026_04_28)
+        assert expected in result, f"{expr!r}: expected {expected!r} in {result!r}"

@@ -64,6 +64,7 @@ def _apply_pass06_zhou(text: str) -> str:
         text = pat.sub(repl, text)
     return text
 
+
 # ======================== Core lookup tables ========================
 
 WEEKDAY_MAP: dict[str, int] = {
@@ -1015,9 +1016,20 @@ def _pad_iso_dates(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 _CJK_NUM_TO_INT = {
-    "一": 1, "二": 2, "兩": 2, "两": 2,
-    "三": 3, "四": 4, "五": 5, "六": 6, "七": 7,
-    "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12,
+    "一": 1,
+    "二": 2,
+    "兩": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+    "十一": 11,
+    "十二": 12,
 }
 
 _CJK_MONTH_ALT = "(?:十一|十二|十|一|二|兩|两|三|四|五|六|七|八|九)"
@@ -1095,23 +1107,43 @@ def _festival_prepass(text: str, ref: datetime) -> str:
         ("重阳", "chongyang"),
     ]
 
+    # Transition chars that are OK to follow a festival keyword (particles +
+    # period/range words). Anything else CJK after the keyword indicates a
+    # different word starting (e.g. 「重陽光」「清明上河圖」), so we skip.
+    _ALLOW_AFTER_FESTIVAL = set(
+        "節节假連连前後后過过期那這这的啊呢嗎吗是了完之與与和及到至跟、，。"
+        "！？!?；;：:之內内外左右左右那时時時候候有沒没"
+    )
+
     out = text
     for keyword, kind in festival_keywords:
         if keyword not in out:
             continue
         # Resolve year from a small left context (last 6 chars before keyword).
         idx = out.find(keyword)
-        ctx_left = out[max(0, idx - 6): idx]
+        ctx_left = out[max(0, idx - 6) : idx]
         # Skip if already contains an ISO date directly to the left
         # (means this festival was already part of a normalized range).
         if re.search(r"\d{4}-\d{2}-\d{2}\s*$", ctx_left):
             continue
+        # Right-boundary check: if next char is CJK but NOT a known transition
+        # particle, the keyword is a substring of a longer non-festival word
+        # (e.g. 「重陽光」「清明上河圖」). Skip in that case.
+        # Full forms (ending with 節/节) are unambiguous; only short forms
+        # need right-boundary check.
+        is_full_form = keyword.endswith("節") or keyword.endswith("节")
+        if not is_full_form:
+            end_pos = idx + len(keyword)
+            if end_pos < len(out):
+                next_char = out[end_pos]
+                if "一" <= next_char <= "鿿" and next_char not in _ALLOW_AFTER_FESTIVAL:
+                    continue
         year = _pick_year_from_prefix(ctx_left, ref)
         try:
             if kind == "spring":
                 ny = ZhDate(year, 1, 1).to_datetime().date()
-                start = ny - timedelta(days=1)         # 除夕
-                end = ny + timedelta(days=4)           # 大年初五
+                start = ny - timedelta(days=1)  # 除夕
+                end = ny + timedelta(days=4)  # 大年初五
             elif kind == "eve":
                 ny = ZhDate(year, 1, 1).to_datetime().date()
                 start = end = ny - timedelta(days=1)
@@ -1121,6 +1153,7 @@ def _festival_prepass(text: str, ref: datetime) -> str:
             elif kind == "qingming":
                 # Solar term, usually 4/4-4/5 (covers both common dates).
                 from datetime import date as _date
+
                 start = _date(year, 4, 4)
                 end = _date(year, 4, 5)
             elif kind == "duanwu":
@@ -1157,14 +1190,12 @@ def _quarter_prepass(text: str, ref: datetime) -> str:
       - Q1 / q1 ... Q4 / q4
     Year prefix optional (今年/去年/前年/明年/20YY).
     """
-    qmap = {"一": 1, "二": 2, "三": 3, "四": 4,
-            "1": 1, "2": 2, "3": 3, "4": 4}
+    qmap = {"一": 1, "二": 2, "三": 3, "四": 4, "1": 1, "2": 2, "3": 3, "4": 4}
 
     out = text
     # CJK form: 第X季 (with optional year prefix)
-    cjk_pat = re.compile(
-        r"(?:(今年|去年|前年|明年)|(20\d{2})\s*年?)?\s*第\s*([一二三四1-4])\s*季"
-    )
+    cjk_pat = re.compile(r"(?:(今年|去年|前年|明年)|(20\d{2})\s*年?)?\s*第\s*([一二三四1-4])\s*季")
+
     def _cjk_repl(m: re.Match) -> str:
         ctx = m.group(0)
         year = _pick_year_from_prefix(ctx, ref)
@@ -1172,12 +1203,12 @@ def _quarter_prepass(text: str, ref: datetime) -> str:
         s, _ = _month_range(datetime(year, (q - 1) * 3 + 1, 1), 0)
         _, e = _month_range(datetime(year, q * 3, 1), 0)
         return f"{s.strftime('%Y-%m-%d')} 到 {e.strftime('%Y-%m-%d')}"
+
     out = cjk_pat.sub(_cjk_repl, out)
 
     # Q1/q1 form (separate pass to avoid eating too much)
-    q_pat = re.compile(
-        r"(?:(今年|去年|前年|明年)|(20\d{2})\s*年?)?\s*[Qq]\s*([1-4])(?![0-9])"
-    )
+    q_pat = re.compile(r"(?:(今年|去年|前年|明年)|(20\d{2})\s*年?)?\s*[Qq]\s*([1-4])(?![0-9])")
+
     def _q_repl(m: re.Match) -> str:
         ctx = m.group(0)
         year = _pick_year_from_prefix(ctx, ref)
@@ -1185,6 +1216,7 @@ def _quarter_prepass(text: str, ref: datetime) -> str:
         s, _ = _month_range(datetime(year, (q - 1) * 3 + 1, 1), 0)
         _, e = _month_range(datetime(year, q * 3, 1), 0)
         return f"{s.strftime('%Y-%m-%d')} 到 {e.strftime('%Y-%m-%d')}"
+
     out = q_pat.sub(_q_repl, out)
 
     return out
@@ -1215,38 +1247,44 @@ def _cross_month_prepass(text: str, ref: datetime) -> str:
         rf"(?:(今年|去年|前年|明年)|(20\d{{2}})\s*年?)?\s*"
         rf"(?<!\d)(\d{{1,2}})\s*月\s*{connectors}\s*(\d{{1,2}})\s*月"
     )
+
     def _arabic_conn_repl(m: re.Match) -> str:
         m1, m2 = int(m.group(3)), int(m.group(4))
         if not (1 <= m1 <= m2 <= 12):
             return m.group(0)
         year = _pick_year_from_prefix(m.group(0), ref)
         return _emit(m1, m2, year)
+
     out = arabic_conn.sub(_arabic_conn_repl, out)
 
     # 1b) Arabic short form: X-Y月 / X~Y月 (no first 月)
     arabic_short = re.compile(
-        rf"(?:(今年|去年|前年|明年)|(20\d{{2}})\s*年?)?\s*"
-        rf"(?<!\d)(\d{{1,2}})\s*[-~至到]\s*(\d{{1,2}})\s*月"
+        r"(?:(今年|去年|前年|明年)|(20\d{2})\s*年?)?\s*"
+        r"(?<!\d)(\d{1,2})\s*[-~至到]\s*(\d{1,2})\s*月"
     )
+
     def _arabic_short_repl(m: re.Match) -> str:
         m1, m2 = int(m.group(3)), int(m.group(4))
         if not (1 <= m1 <= m2 <= 12):
             return m.group(0)
         year = _pick_year_from_prefix(m.group(0), ref)
         return _emit(m1, m2, year)
+
     out = arabic_short.sub(_arabic_short_repl, out)
 
     # 1c) Arabic adjacent: 1月2月 (no connector)
     arabic_adj = re.compile(
-        rf"(?:(今年|去年|前年|明年)|(20\d{{2}})\s*年?)?\s*"
-        rf"(?<!\d)(\d{{1,2}})\s*月\s*(\d{{1,2}})\s*月"
+        r"(?:(今年|去年|前年|明年)|(20\d{2})\s*年?)?\s*"
+        r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*月"
     )
+
     def _arabic_adj_repl(m: re.Match) -> str:
         m1, m2 = int(m.group(3)), int(m.group(4))
         if not (1 <= m1 <= m2 <= 12):
             return m.group(0)
         year = _pick_year_from_prefix(m.group(0), ref)
         return _emit(m1, m2, year)
+
     out = arabic_adj.sub(_arabic_adj_repl, out)
 
     # 2) CJK: X月 <connector> Y月
@@ -1254,9 +1292,7 @@ def _cross_month_prepass(text: str, ref: datetime) -> str:
         rf"(?:(今年|去年|前年|明年)|(20\d{{2}})\s*年?)?\s*"
         rf"{_CJK_MONTH_ALT}\s*月\s*{connectors}\s*{_CJK_MONTH_ALT}\s*月"
     )
-    cjk_pair = re.compile(
-        rf"({_CJK_MONTH_ALT})\s*月\s*{connectors}\s*({_CJK_MONTH_ALT})\s*月"
-    )
+    cjk_pair = re.compile(rf"({_CJK_MONTH_ALT})\s*月\s*{connectors}\s*({_CJK_MONTH_ALT})\s*月")
 
     def _cjk_conn_repl(m: re.Match) -> str:
         inner = cjk_pair.search(m.group(0))
@@ -1268,6 +1304,7 @@ def _cross_month_prepass(text: str, ref: datetime) -> str:
             return m.group(0)
         year = _pick_year_from_prefix(m.group(0), ref)
         return _emit(m1, m2, year)
+
     out = cjk_conn.sub(_cjk_conn_repl, out)
 
     # 2b) CJK adjacent: 一月二月
@@ -1276,6 +1313,7 @@ def _cross_month_prepass(text: str, ref: datetime) -> str:
         rf"{_CJK_MONTH_ALT}\s*月\s*{_CJK_MONTH_ALT}\s*月"
     )
     cjk_adj_inner = re.compile(rf"({_CJK_MONTH_ALT})\s*月\s*({_CJK_MONTH_ALT})\s*月")
+
     def _cjk_adj_repl(m: re.Match) -> str:
         inner = cjk_adj_inner.search(m.group(0))
         if not inner:
@@ -1286,6 +1324,7 @@ def _cross_month_prepass(text: str, ref: datetime) -> str:
             return m.group(0)
         year = _pick_year_from_prefix(m.group(0), ref)
         return _emit(m1, m2, year)
+
     out = cjk_adj_outer.sub(_cjk_adj_repl, out)
 
     return out
