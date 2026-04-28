@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic_ai import Agent
 
-from ..llm_config import get_model
+from ..llm_config import cache_settings, get_model
 from ..llm_models import GroundednessResult, SynthResult
 
 logger = logging.getLogger(__name__)
@@ -119,14 +119,15 @@ async def verify_claims(
         chunk_text_parts.append(f"[{i}]: {content}")
     chunks_str = "\n\n".join(chunk_text_parts)
 
-    user_msg = f"ANSWER:\n{answer}\n\nEVIDENCE CHUNKS:\n{chunks_str}"
+    # Cache-friendly order: stable evidence prefix first, volatile answer last.
+    user_msg = f"EVIDENCE CHUNKS:\n{chunks_str}\n\nANSWER:\n{answer}"
 
     try:
         model = await get_model()
         result = await _groundedness_agent.run(
             user_msg,
             model=model,
-            model_settings={"temperature": 0.0},
+            model_settings=cache_settings(chunks, temperature=0.0),
         )
         return result.output
     except Exception:
@@ -166,6 +167,7 @@ async def self_consistency_check(
         return primary_result
 
     model = await get_model()
+    sc_settings = cache_settings(chunks, temperature=0.4)
 
     # Generate N additional answers in parallel with higher temperature for diversity
     async def _generate_one() -> SynthResult | None:
@@ -173,7 +175,7 @@ async def self_consistency_check(
             result = await synth_agent.run(
                 user_msg,
                 model=model,
-                model_settings={"temperature": 0.4},
+                model_settings=sc_settings,
             )
             return result.output
         except Exception:
