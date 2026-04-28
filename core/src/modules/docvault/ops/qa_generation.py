@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic_ai import Agent
 
-from ..llm_config import get_model
+from ..llm_config import cache_settings, get_model, safe_cache_token
 from ..llm_models import QAGenerationResult
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ _gen_agent: Agent[None, QAGenerationResult] | None = None
 def _get_agent() -> Agent[None, QAGenerationResult]:
     global _gen_agent
     if _gen_agent is None:
+        # Model is supplied per-call via agent.run(model=...); no constructor model needed.
         _gen_agent = Agent(
-            "openai:placeholder",
             output_type=QAGenerationResult,
             system_prompt=_QA_GEN_PROMPT,
             retries=2,
@@ -208,9 +208,16 @@ class QAGenerationOp:
                 break
 
             try:
+                # Per-document cache key: same document → same backend across groups.
+                gen_settings = cache_settings(
+                    None,
+                    temperature=0.3,
+                    cache_key=safe_cache_token("docvault-qagen", document_id),
+                )
                 result = await agent.run(
                     f"Generate {pairs_needed} QA pairs from these chunks:\n\n{chunk_text}",
                     model=model,
+                    model_settings=gen_settings,
                 )
                 all_pairs.extend(result.output.pairs)
             except Exception:

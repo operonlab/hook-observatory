@@ -21,7 +21,7 @@ from typing import Any
 
 from pydantic_ai import Agent
 
-from ..llm_config import get_model
+from ..llm_config import cache_settings, get_model, safe_cache_token
 from ..llm_models import ConversationRewriteResult
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,8 @@ _rewrite_agent: Agent[None, ConversationRewriteResult] | None = None
 def _get_agent() -> Agent[None, ConversationRewriteResult]:
     global _rewrite_agent
     if _rewrite_agent is None:
+        # Model is supplied per-call via agent.run(model=...); no constructor model needed.
         _rewrite_agent = Agent(
-            "openai:placeholder",
             output_type=ConversationRewriteResult,
             system_prompt=_REWRITE_PROMPT,
             retries=2,
@@ -206,6 +206,11 @@ class ConversationContextOp:
                 f"Conversation history:\n{history_text}\n\n"
                 f"Current question: {current_query}",
                 model=model,
+                model_settings=cache_settings(
+                    None,
+                    temperature=0.0,
+                    cache_key=safe_cache_token("docvault-rewrite", session_id),
+                ),
             )
             rewritten = result.output.rewritten_query
             ctx["rewritten_query"] = rewritten

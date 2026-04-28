@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic_ai import Agent
 
-from ..llm_config import get_model
+from ..llm_config import cache_settings, get_model
 from ..llm_models import SynthResult, VerifyResult
 from .groundedness import self_consistency_check, validate_spans, verify_claims
 
@@ -112,6 +112,10 @@ def _build_user_message(
     chunks: list[dict[str, Any]],
     conversation_history: list[dict] | None = None,
 ) -> str:
+    # Cache-friendly prefix order: stable parts first, volatile question last.
+    # [history] → [evidence chunks] → [question]
+    # Same chunks across self-consistency / verify pass / multi-turn QA on the
+    # same document hit the same prefix-cache prefix.
     parts = []
     if conversation_history:
         parts.append("Conversation context (for reference only, do NOT cite these):\n")
@@ -121,7 +125,7 @@ def _build_user_message(
                 f"Assistant: {h.get('answer', '')[:200]}\n"
             )
         parts.append("\n")
-    parts.append(f"Question: {question}\n\nEvidence chunks:\n")
+    parts.append("Evidence chunks:\n")
     for i, chunk in enumerate(chunks, 1):
         section = chunk.get("section_path", "")
         page = chunk.get("page_range", "")
@@ -133,6 +137,7 @@ def _build_user_message(
         meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
         content = chunk.get("content", "")[:3000]
         parts.append(f"[{i}]{meta}:\n{content}\n")
+    parts.append(f"\nQuestion: {question}")
     return "\n".join(parts)
 
 
@@ -148,6 +153,8 @@ async def _llm_synthesize(
     """
     user_msg = _build_user_message(question, chunks, conversation_history)
     model = await get_model()
+    synth_settings = cache_settings(chunks, temperature=0.2)
+    verify_settings = cache_settings(chunks, temperature=0.1)
 
     # ── Phase A: Parallel synthesis + verify ──
     async def _verify_and_extract() -> VerifyResult:
@@ -155,7 +162,7 @@ async def _llm_synthesize(
             result = await _verify_agent.run(
                 user_msg,
                 model=model,
-                model_settings={"temperature": 0.1},
+                model_settings=verify_settings,
             )
             return result.output
         except Exception:
@@ -166,7 +173,7 @@ async def _llm_synthesize(
         result = await _synth_agent.run(
             user_msg,
             model=model,
-            model_settings={"temperature": 0.2},
+            model_settings=synth_settings,
         )
         return result.output
 

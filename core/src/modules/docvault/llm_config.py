@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import re
 import time
+from typing import Any
 
 import httpx
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -76,3 +79,64 @@ async def get_model() -> OpenAIChatModel:
     """Resolve best available model + create OpenAIChatModel in one call."""
     name = await resolve_model()
     return make_model(name)
+
+
+# ── Prompt-cache routing ──
+#
+# OpenAI's prompt_cache_key parameter (and LiteLLM's pass-through for
+# OpenAI-compatible upstreams) routes requests with the same key to the same
+# backend, raising automatic prefix-cache hit rate. We hash the document set
+# so multi-turn QA on the same document(s) routes consistently.
+#
+# Provider compatibility relies on LiteLLM's drop_params=true (configured at
+# proxy level in ~/.config/litellm/config.yaml: litellm_settings.drop_params).
+# That guarantees prompt_cache_key is silently stripped for upstreams that
+# don't accept it (e.g. xAI/Grok, Gemini), so callers don't need per-request
+# guarding.
+
+_CACHE_KEY_PREFIX = "docvault"
+_DEFAULT_CACHE_KEY = f"{_CACHE_KEY_PREFIX}-default"
+_CACHE_KEY_SANITIZE = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def safe_cache_token(prefix: str, value: Any, *, max_len: int = 32) -> str:
+    """Build a cache-key-safe token (alnum + dash/underscore) under length cap."""
+    safe = _CACHE_KEY_SANITIZE.sub("-", str(value))[:max_len].strip("-")
+    return f"{prefix}-{safe or 'default'}"
+
+
+def cache_key_for_chunks(chunks: list[dict[str, Any]] | None) -> str:
+    """Build a stable prompt_cache_key from chunk document IDs.
+
+    Same set of documents → same key → same backend → higher prefix-cache hit.
+    Defends against non-dict entries and non-string document_id values.
+    """
+    if not chunks:
+        return _DEFAULT_CACHE_KEY
+    doc_ids = sorted(
+        {
+            str(c.get("document_id", ""))
+            for c in chunks
+            if isinstance(c, dict) and c.get("document_id")
+        }
+    )
+    if not doc_ids:
+        return _DEFAULT_CACHE_KEY
+    digest = hashlib.sha256(";".join(doc_ids).encode()).hexdigest()[:32]
+    return f"{_CACHE_KEY_PREFIX}-{digest}"
+
+
+def cache_settings(
+    chunks: list[dict[str, Any]] | None = None,
+    *,
+    temperature: float = 0.2,
+    cache_key: str | None = None,
+) -> dict[str, Any]:
+    """PydanticAI model_settings with prompt-caching hints.
+
+    `cache_key` overrides `chunks`-derived key when provided.
+    """
+    return {
+        "temperature": temperature,
+        "openai_prompt_cache_key": cache_key or cache_key_for_chunks(chunks),
+    }
