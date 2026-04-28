@@ -75,7 +75,7 @@ func TestRedactLineAPIKeys(t *testing.T) {
 	cases := map[string]string{
 		"curl -H x-ant sk-ant-abcdefghijklmnopqrstuvwxyz1234": "[REDACTED:anthropic_key]",
 		"opening sk-0123456789abcdefghij0123456789abcd for":   "[REDACTED:openai_key]",
-		"commit with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 rights": "[REDACTED:github_token]",
+		"commit with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 rights": "[REDACTED:github_token]", // # nosec G101 - test fixture for redaction
 		"call with Bearer AbcDefGhiJklMnoPqrStuVwxYz12345":    "Bearer [REDACTED:token]",
 	}
 	for input, want := range cases {
