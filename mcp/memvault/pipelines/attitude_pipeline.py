@@ -39,6 +39,9 @@ DEFAULT_CORRECTIONS_DIR = Path.home() / "Claude" / "memvault" / "corrections"
 
 
 # ── HTTP helper ────────────────────────────────────────────────────────────────
+_INTERNAL_KEY = os.environ.get("CORE_INTERNAL_API_KEY", "")
+
+
 def http_post(url: str, body: dict, params: dict | None = None) -> tuple[int, dict]:
     """Returns (http_status_code, response_body)."""
     if params:
@@ -46,10 +49,13 @@ def http_post(url: str, body: dict, params: dict | None = None) -> tuple[int, di
 
         url = f"{url}?{urlencode(params)}"
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if _INTERNAL_KEY:
+        headers["x-internal-key"] = _INTERNAL_KEY
     req = urllib.request.Request(
         url,
         data=payload,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:

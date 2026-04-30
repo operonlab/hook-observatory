@@ -53,15 +53,21 @@ def log(level: str, message: str) -> None:
 
 
 # ── HTTP helper (stdlib only) ───────────────────────────────────────────────────
+_INTERNAL_KEY = os.environ.get("CORE_INTERNAL_API_KEY", "")
+
+
 def http_post(url: str, params: dict | None = None) -> dict:
     """POST with optional query-string params; returns parsed JSON."""
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
+    headers = {"Accept": "application/json", "Content-Length": "0"}
+    if _INTERNAL_KEY:
+        headers["x-internal-key"] = _INTERNAL_KEY
     req = urllib.request.Request(
         url,
         data=b"",  # empty body — all params are in query string
         method="POST",
-        headers={"Accept": "application/json", "Content-Length": "0"},
+        headers=headers,
     )
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode("utf-8"))

@@ -39,10 +39,22 @@ CONTEXT_PREDICATES = {"causes", "requires", "depends_on", "uses"}
 
 
 # ── HTTP helpers (stdlib only, no external deps) ──────────────────────────────
+_INTERNAL_KEY = os.environ.get("CORE_INTERNAL_API_KEY", "")
+
+
+def _internal_headers(extra: dict | None = None) -> dict:
+    h = {"Accept": "application/json"}
+    if _INTERNAL_KEY:
+        h["x-internal-key"] = _INTERNAL_KEY
+    if extra:
+        h.update(extra)
+    return h
+
+
 def http_get(url: str, params: dict | None = None) -> dict:
     if params:
         url = f"{url}?{urlencode(params)}"
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    req = urllib.request.Request(url, headers=_internal_headers())
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -62,7 +74,7 @@ def http_post(url: str, body: dict, params: dict | None = None) -> dict:
     req = urllib.request.Request(
         url,
         data=payload,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers=_internal_headers({"Content-Type": "application/json"}),
         method="POST",
     )
     try:
@@ -179,7 +191,6 @@ def build_entity_graph(rows: list[dict], space_id: str = "default"):
     1. Try precomputed multi-signal edges (composite_weight from entity_edges API)
     2. Fallback to co-occurrence counts from raw triples
     """
-    import igraph as ig
 
     # Try multi-signal edges first
     api_edges = _fetch_entity_edges(space_id)
@@ -251,7 +262,9 @@ def _build_graph_from_cooccurrence(rows: list[dict]):
     g.vs["name"] = entity_list
     g.es["weight"] = weights
 
-    print(f"[Phase 2] Graph built from co-occurrence: {len(entity_list)} entities, {len(edges)} edges")
+    print(
+        f"[Phase 2] Graph built from co-occurrence: {len(entity_list)} entities, {len(edges)} edges"
+    )
     return g, entity_to_idx
 
 

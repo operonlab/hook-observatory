@@ -64,6 +64,15 @@ CORRECTIONS_DIR = HOME / "workshop/outputs/memvault/corrections"
 COUNTER_FILE = HOME / ".memvault-triple-counter"
 CORE_API = "http://localhost:10000/api/memvault"
 DOMAIN_THRESHOLD = 10
+INTERNAL_KEY = os.environ.get("CORE_INTERNAL_API_KEY", "")
+
+
+def _internal_headers(extra: dict | None = None) -> dict:
+    h = dict(extra) if extra else {}
+    if INTERNAL_KEY:
+        h["x-internal-key"] = INTERNAL_KEY
+    return h
+
 
 # Extend PATH
 os.environ["PATH"] = (
@@ -93,7 +102,8 @@ def run_pipeline(script_name: str, extra_args: list[str] | None = None) -> bool:
 def api_get(url: str) -> dict | list | None:
     """Perform a GET request and return parsed JSON, or None on error."""
     try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        req = urllib.request.Request(url, headers=_internal_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
     except Exception:
         return None
@@ -106,7 +116,7 @@ def api_post(url: str, data: dict) -> int | None:
         req = urllib.request.Request(
             url,
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=_internal_headers({"Content-Type": "application/json"}),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -137,6 +147,7 @@ def main() -> None:
         req = urllib.request.Request(
             f"{CORE_API}/kg/entity-edges/recompute?space_id=default",
             data=b"",
+            headers=_internal_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=120) as resp:
@@ -197,6 +208,7 @@ def main() -> None:
         req = urllib.request.Request(
             f"{CORE_API}/tags/sync?space_id=default",
             data=b"",
+            headers=_internal_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:

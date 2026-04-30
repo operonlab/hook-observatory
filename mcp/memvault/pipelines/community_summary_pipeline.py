@@ -48,10 +48,22 @@ SUMMARY_PROMPT = (
 
 
 # ── HTTP helpers (stdlib only) ─────────────────────────────────────────────────
+_INTERNAL_KEY = os.environ.get("CORE_INTERNAL_API_KEY", "")
+
+
+def _internal_headers(extra: dict | None = None) -> dict:
+    h = {"Accept": "application/json"}
+    if _INTERNAL_KEY:
+        h["x-internal-key"] = _INTERNAL_KEY
+    if extra:
+        h.update(extra)
+    return h
+
+
 def http_get(url: str, params: dict | None = None) -> dict:
     if params:
         url = f"{url}?{urlencode(params)}"
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    req = urllib.request.Request(url, headers=_internal_headers())
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -71,7 +83,7 @@ def http_post(url: str, body: dict, params: dict | None = None) -> dict:
     req = urllib.request.Request(
         url,
         data=payload,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers=_internal_headers({"Content-Type": "application/json"}),
         method="POST",
     )
     try:

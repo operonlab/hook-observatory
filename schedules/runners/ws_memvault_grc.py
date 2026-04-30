@@ -9,6 +9,7 @@ Logs: ~/workshop/outputs/memvault/logs/grc.log
 """
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -22,6 +23,7 @@ LOG_FILE = LOG_DIR / "grc.log"
 CORE_API = "http://localhost:10000/api/memvault"
 SPACE_ID = "default"
 DRY_RUN = False
+INTERNAL_KEY = os.environ.get("CORE_INTERNAL_API_KEY", "")
 
 
 def log(msg: str) -> None:
@@ -35,10 +37,13 @@ def log(msg: str) -> None:
 def api_post(url: str) -> tuple[int | None, dict | None]:
     """POST with empty body; returns (status_code, response_json)."""
     try:
+        headers = {"Content-Type": "application/json"}
+        if INTERNAL_KEY:
+            headers["x-internal-key"] = INTERNAL_KEY
         req = urllib.request.Request(  # noqa: S310
             url,
             data=b"",
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
