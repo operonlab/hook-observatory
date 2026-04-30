@@ -170,10 +170,12 @@ def main() -> None:
         import urllib.request
 
         core_api = os.environ.get("CORE_API_URL", "http://localhost:10000")
+        internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
         t0 = time.monotonic()
         try:
             url = f"{core_api}/api/memvault/kg/interest/generate?space_id={args.space_id}"
-            req = urllib.request.Request(url, method="POST")  # noqa: S310
+            headers = {"x-internal-key": internal_key} if internal_key else {}
+            req = urllib.request.Request(url, method="POST", headers=headers)  # noqa: S310
             with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
                 data = json.loads(resp.read())
             elapsed = time.monotonic() - t0
