@@ -84,7 +84,7 @@ try:
         _projects = Path.home() / ".claude" / "projects"
         _found = None
         if _projects.exists():
-            for _candidate in _projects.rglob(f"{{_session_id}}.jsonl"):
+            for _candidate in _projects.rglob(_session_id + ".jsonl"):
                 _found = str(_candidate)
                 break
         if _found:
