@@ -33,6 +33,10 @@ class MemoryBlockCreate(BaseModel):
     created_at: datetime | None = Field(
         default=None, description="Override creation time (e.g. session actual time)"
     )
+    valid_at: datetime | None = Field(
+        default=None,
+        description="When the fact started being true (extracted from content if omitted)",
+    )
 
 
 class MemoryBlockUpdate(BaseModel):
@@ -48,6 +52,7 @@ class MemoryBlockResponse(SpaceScopedResponse):
     tags: list[str] = []
     source_session: str | None = None
     confidence: float = 0.0
+    valid_at: datetime | None = None
     invalid_at: datetime | None = None
     superseded_by: str | None = None
     invalidation_reason: str | None = None

@@ -33,7 +33,11 @@ class MemoryBlock(SpaceScopedModel):
     )  # knowledge | skill | attitude | general
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Temporal validity — mirrors Triple's Graphiti-inspired pattern
+    # Bitemporal validity — Graphiti-inspired
+    # valid_at:   when the fact STARTED being true (extracted from content; defaults to created_at)
+    # invalid_at: when the fact STOPPED being true (set by SUPERSEDE flow)
+    # System time is implicit via created_at/updated_at on SpaceScopedModel.
+    valid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     superseded_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
     invalidation_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -48,9 +52,7 @@ class MemoryBlock(SpaceScopedModel):
     # status       = active | conflict_pending — pre-write KG contradiction detected
     fold_id: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     content_hash: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(32), server_default=text("'active'"), nullable=False
-    )
+    status: Mapped[str] = mapped_column(String(32), server_default=text("'active'"), nullable=False)
 
 
 class BlockArchive(Base):

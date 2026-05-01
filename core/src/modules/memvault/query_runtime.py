@@ -283,6 +283,7 @@ async def _search_blocks(
     top_k: int,
     scoring_config: ScoringConfig | None = None,
     intent: str = "unknown",
+    as_of: datetime | None = None,
 ) -> tuple[list, dict]:
     embedding = await get_embedding(query, task_type="search_query")
     if embedding:
@@ -313,16 +314,30 @@ async def _search_blocks(
             "input_count": meta.input_count,
         }
 
-    results = await memory_block_service.text_search(db, space_id, query, top_k=top_k)
+    results = await memory_block_service.text_search(db, space_id, query, top_k=top_k, as_of=as_of)
     if results:
         return results, {"backend": "text", "input_count": len(results)}
 
-    # Final fallback: recent memory blocks from DB when all search backends return empty
+    # Final fallback: recent memory blocks from DB when all search backends return empty.
+    # Bitemporal: as_of=None → current view; as_of=T → time travel.
+    if as_of is None:
+        temporal_filters = [
+            MemoryBlock.deleted_at.is_(None),
+            MemoryBlock.invalid_at.is_(None),
+        ]
+    else:
+        from sqlalchemy import func, or_
+
+        temporal_filters = [
+            MemoryBlock.deleted_at.is_(None),
+            func.coalesce(MemoryBlock.valid_at, MemoryBlock.created_at) <= as_of,
+            or_(MemoryBlock.invalid_at.is_(None), MemoryBlock.invalid_at > as_of),
+        ]
     q = (
         select(MemoryBlock)
         .where(
             MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at.is_(None),
+            *temporal_filters,
         )
         .order_by(MemoryBlock.created_at.desc())
         .limit(top_k)

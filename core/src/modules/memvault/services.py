@@ -11,7 +11,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Integer, delete, func, select, text, update
+from sqlalchemy import Integer, delete, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.types import MemvaultEvents
@@ -210,6 +210,7 @@ class MemoryBlockService(
             tags=instance.tags or [],
             source_session=instance.source_session,
             confidence=instance.confidence or 0.0,
+            valid_at=instance.valid_at,
             invalid_at=instance.invalid_at,
             superseded_by=instance.superseded_by,
             invalidation_reason=instance.invalidation_reason,
@@ -544,6 +545,7 @@ class MemoryBlockService(
         q = select(MemoryBlock).where(
             MemoryBlock.id.in_(entity_ids),
             MemoryBlock.deleted_at == None,  # noqa: E711
+            MemoryBlock.invalid_at.is_(None),
         )
         if date_from:
             q = q.where(MemoryBlock.created_at >= date_from)
@@ -681,6 +683,7 @@ class MemoryBlockService(
                     MemoryBlock.space_id == space_id,
                     *conditions,
                     MemoryBlock.deleted_at == None,  # noqa: E711
+                    MemoryBlock.invalid_at.is_(None),
                 )
                 .order_by(MemoryBlock.updated_at.desc())
                 .limit(top_k)
@@ -703,6 +706,7 @@ class MemoryBlockService(
                     MemoryBlock.space_id == space_id,
                     ts_vector.op("@@")(ts_query),
                     MemoryBlock.deleted_at == None,  # noqa: E711
+                    MemoryBlock.invalid_at.is_(None),
                 )
                 .order_by(rank.desc())
                 .limit(top_k)
@@ -835,6 +839,7 @@ class MemoryBlockService(
         scope: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        as_of: datetime | None = None,
     ) -> list[SemanticSearchResult]:
         """Fallback text search — CJK-aware jieba multi-term + BM25-lite scoring.
 
@@ -842,6 +847,12 @@ class MemoryBlockService(
           Hot  (age <= hot_days): BM25-lite score
           Warm (hot_days < age <= warm_days): BM25-lite * warm_decay
           Cold (archive table, include_archived): BM25-lite * cold_decay
+
+        Bitemporal:
+          as_of=None → "current view": only blocks that are still valid (invalid_at IS NULL)
+          as_of=T    → "time travel":  blocks valid at instant T
+                       (COALESCE(valid_at, created_at) <= T)
+                       AND (invalid_at IS NULL OR invalid_at > T)
         """
         tier = get_threshold("memvault")
         now = datetime.now(UTC)
@@ -856,6 +867,19 @@ class MemoryBlockService(
         if date_to:
             extra_filters.append(MemoryBlock.created_at <= date_to)
 
+        # Bitemporal filters — current view vs as-of time travel.
+        if as_of is None:
+            temporal_filters = [
+                MemoryBlock.deleted_at.is_(None),
+                MemoryBlock.invalid_at.is_(None),
+            ]
+        else:
+            temporal_filters = [
+                MemoryBlock.deleted_at.is_(None),
+                func.coalesce(MemoryBlock.valid_at, MemoryBlock.created_at) <= as_of,
+                or_(MemoryBlock.invalid_at.is_(None), MemoryBlock.invalid_at > as_of),
+            ]
+
         # CJK-aware conditions (jieba multi-term instead of single ILIKE)
         conditions = build_ilike_conditions(query, MemoryBlock.content)
 
@@ -866,6 +890,7 @@ class MemoryBlockService(
                 MemoryBlock.space_id == space_id,
                 *conditions,
                 MemoryBlock.created_at >= hot_cutoff,
+                *temporal_filters,
             )
             .order_by(MemoryBlock.updated_at.desc())
             .limit(top_k)
@@ -891,6 +916,7 @@ class MemoryBlockService(
                     *conditions,
                     MemoryBlock.created_at < hot_cutoff,
                     MemoryBlock.created_at >= warm_cutoff,
+                    *temporal_filters,
                 )
                 .order_by(MemoryBlock.updated_at.desc())
                 .limit(remaining)
@@ -973,6 +999,7 @@ class MemoryBlockService(
                 MemoryBlock.space_id == space_id,
                 MemoryBlock.source_session == source_session,
                 MemoryBlock.deleted_at == None,  # noqa: E711
+                MemoryBlock.invalid_at.is_(None),
             )
             .limit(1)
         )

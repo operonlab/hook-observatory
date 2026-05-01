@@ -54,6 +54,7 @@ from .services import (
     should_search,
     tag_service,
 )
+from .temporal_extract import extract_valid_at
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +226,13 @@ async def create_block(
     # Override created_at if caller provided actual event time (e.g. session timestamp)
     if body.created_at:
         instance.created_at = body.created_at
+    # Bitemporal: populate valid_at — explicit body.valid_at wins, else extract from content.
+    if body.valid_at is not None:
+        instance.valid_at = body.valid_at
+    else:
+        extracted = extract_valid_at(body.content)
+        if extracted is not None:
+            instance.valid_at = extracted
     try:
         if embedding:
             await memory_block_service.update_embedding(db, instance.id, embedding)
