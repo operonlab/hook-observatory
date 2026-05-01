@@ -1,14 +1,21 @@
-"""LLM summary generation — claude --model haiku integration.
+"""LLM summary generation — LiteLLM (grok-4.1-fast) integration.
 
 Generates one-line session summaries by extracting the first and last user messages
-from the JSONL and sending them to Claude Haiku.
+from the JSONL and sending them to a fast non-reasoning model via LiteLLM proxy.
+
+Migration note: previously used `claude --model haiku -p`, which timed out
+reproducibly at 30s/attempt × 3 retries because the prompt grew unbounded
+(transcripts contained nested past-summarize prompts). LiteLLM HTTP returns
+in <1s for a typical session.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
+import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import structlog
@@ -16,6 +23,11 @@ import structlog
 sys.path.insert(0, "/Users/joneshong/workshop/core")
 
 logger = structlog.get_logger(__name__)
+
+# ── LiteLLM proxy config ──────────────────────────────────────────────────────
+LITELLM_URL = os.environ.get("LITELLM_BASE_URL", "http://127.0.0.1:4000") + "/chat/completions"
+LITELLM_KEY = os.environ.get("LITELLM_MASTER_KEY", "sk-litellm-local-dev")
+SUMMARY_MODEL = os.environ.get("SESSION_SUMMARY_MODEL", "grok-4.1-fast")
 
 
 def _extract_user_messages(jsonl_path: Path, max_chars: int = 2000) -> tuple[str, str]:
@@ -79,14 +91,14 @@ def _extract_text(event: dict) -> str:
 
 
 def generate_summary(jsonl_path: Path, timeout: int | None = None) -> str | None:
-    """Generate a one-line session summary using Claude Haiku.
+    """Generate a one-line session summary via LiteLLM proxy (grok-4.1-fast).
 
     Returns the summary string, or None on failure (graceful degradation).
-    Timeout scales with file size: base 30s + 2s/MB, capped at 180s.
+    Timeout: 30s default — fast non-reasoning model returns in <1s typically.
     """
     file_size_mb = jsonl_path.stat().st_size / (1024 * 1024) if jsonl_path.exists() else 0
     if timeout is None:
-        timeout = min(180, max(30, 30 + int(file_size_mb * 2)))
+        timeout = 30
 
     first_msg, last_msg = _extract_user_messages(jsonl_path)
 
@@ -101,62 +113,58 @@ def generate_summary(jsonl_path: Path, timeout: int | None = None) -> str | None
         f"Last user message:\n{last_msg}"
     )
 
-    # Clean env: remove CLAUDECODE to avoid interfering with nested claude CLI calls
-    import os
-    import time
+    body = json.dumps(
+        {
+            "model": SUMMARY_MODEL,
+            "messages": [{"role": "user", "content": prompt_text}],
+            "max_tokens": 200,
+            "temperature": 0.3,
+        }
+    ).encode("utf-8")
 
-    env = os.environ.copy()
-    env.pop("CLAUDECODE", None)
+    req = urllib.request.Request(
+        LITELLM_URL,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {LITELLM_KEY}",
+        },
+        method="POST",
+    )
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            result = subprocess.run(
-                ["claude", "--model", "haiku", "-p", prompt_text],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=env,
-            )
-            if result.returncode != 0:
-                logger.warning(
-                    "claude_haiku_failed",
-                    returncode=result.returncode,
-                    stderr=result.stderr[:200],
-                    attempt=attempt + 1,
-                )
-                if attempt < max_retries - 1:
-                    backoff = 2**attempt  # 1s, 2s, 4s
-                    time.sleep(backoff)
-                    continue
-                return None
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body_txt = e.read().decode("utf-8", errors="replace")[:300]
+        logger.warning(
+            "litellm_http_error",
+            status=e.code,
+            body=body_txt,
+            file_size_mb=round(file_size_mb, 1),
+        )
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        logger.warning(
+            "litellm_request_failed",
+            error=str(e),
+            file_size_mb=round(file_size_mb, 1),
+        )
+        return None
+    except json.JSONDecodeError as e:
+        logger.warning("litellm_invalid_response", error=str(e))
+        return None
 
-            summary = result.stdout.strip()
-            if not summary:
-                return None
+    try:
+        summary = data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError):
+        logger.warning("litellm_unexpected_shape", keys=list(data.keys())[:8])
+        return None
 
-            # Truncate to reasonable length
-            return summary[:500]
+    if not summary:
+        return None
 
-        except subprocess.TimeoutExpired:
-            logger.warning(
-                "claude_haiku_timeout",
-                timeout=timeout,
-                file_size_mb=round(file_size_mb, 1),
-                attempt=attempt + 1,
-            )
-            if attempt < max_retries - 1:
-                backoff = 2**attempt
-                time.sleep(backoff)
-                continue
-            return None
-        except FileNotFoundError:
-            logger.warning("claude_cli_not_found")
-            return None
-        except OSError as e:
-            logger.warning("summary_generation_failed", error=str(e))
-            return None
-    return None
+    return summary[:500]
 
 
 def generate_summary_rlm(jsonl_path: Path, timeout: int = 45) -> dict | None:
