@@ -855,7 +855,6 @@ async def check_temporal_staleness(
     return findings
 
 
-
 async def check_entity_alias_collision(
     db: AsyncSession,
     space_id: str,
@@ -1183,6 +1182,7 @@ async def _cross_validate(
             MemoryBlock.space_id == space_id,
             MemoryBlock.source_session.in_(all_sessions),
             MemoryBlock.deleted_at.is_(None),
+            MemoryBlock.invalid_at.is_(None),
         )
         for bid, sess in (await db.execute(bq)).all():
             session_block_ids.setdefault(sess, set()).add(bid)
@@ -1873,5 +1873,3 @@ async def remediate_knowledge_conflicts(
     if count > 0:
         await db.commit()
     return count
-
-

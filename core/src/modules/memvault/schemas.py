@@ -167,6 +167,13 @@ class MemoryQueryRequest(BaseModel):
     top_k: int = Field(default=6, ge=1, le=20)
     retrieval_mode: str = Field(default="auto", description="auto | local | global | hybrid")
     evaluate: str = Field(default="default", description="default | deep | rlm | none")
+    as_of: datetime | None = Field(
+        default=None,
+        description=(
+            "Bitemporal time-travel: return only blocks valid at this instant. "
+            "Default (None) = current view."
+        ),
+    )
 
 
 class MemoryEvidenceRef(BaseModel):

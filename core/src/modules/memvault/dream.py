@@ -97,14 +97,15 @@ async def _orient(
     """
     from sqlalchemy import func, select
 
+    from .bitemporal_filters import active_block_filters
     from .models import MemoryBlock
 
-    # Block stats by type
+    # Block stats by type — M2: count only currently-valid blocks.
     q = (
         select(MemoryBlock.block_type, func.count())
         .where(
             MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at.is_(None),
+            *active_block_filters(),
         )
         .group_by(MemoryBlock.block_type)
     )
@@ -124,12 +125,12 @@ async def _orient(
     except Exception:
         logger.debug("dream.orient: Redis unavailable, treating as first run")
 
-    # Sessions since last dream
+    # Sessions since last dream — count only currently-valid blocks.
     sessions_since = 0
     if last_dream_at:
         sq = select(func.count(func.distinct(MemoryBlock.source_session))).where(
             MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at.is_(None),
+            *active_block_filters(),
             MemoryBlock.source_session.isnot(None),
             MemoryBlock.created_at > last_dream_at,
         )
@@ -199,12 +200,14 @@ async def _gather_signal(
         else datetime.now(UTC) - timedelta(days=7)
     )
 
-    # Count new blocks since last dream
+    # Count new blocks since last dream — exclude superseded.
+    from .bitemporal_filters import active_block_filters
+
     q = (
         select(MemoryBlock.block_type, func.count())
         .where(
             MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at.is_(None),
+            *active_block_filters(),
             MemoryBlock.created_at > since,
         )
         .group_by(MemoryBlock.block_type)
@@ -270,6 +273,7 @@ async def _reflect(
     """
     from sqlalchemy import select
 
+    from .bitemporal_filters import active_block_filters
     from .models import MemoryBlock
 
     # Gather recent blocks
@@ -277,7 +281,7 @@ async def _reflect(
         select(MemoryBlock)
         .where(
             MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at.is_(None),
+            *active_block_filters(),
         )
         .order_by(MemoryBlock.created_at.desc())
         .limit(_REFLECT_MAX_BLOCKS)
@@ -359,10 +363,10 @@ async def _consolidate(
         "content_normalized": 0,
         "norm_changes": {},  # per-op change counts
         # Worker 2: Verifier-Backed Extractive Fold + Dual-Key Idempotency
-        "folds_skipped_idempotent": 0,   # fold_id + content_hash both match → no-op
-        "folds_overwritten": 0,          # fold_id same, content drift → updated
-        "folds_quarantined": 0,          # pre-write KG conflict → status=conflict_pending
-        "fold_sentences_rejected": 0,    # verifier dropped non-extractive sentences
+        "folds_skipped_idempotent": 0,  # fold_id + content_hash both match → no-op
+        "folds_overwritten": 0,  # fold_id same, content drift → updated
+        "folds_quarantined": 0,  # pre-write KG conflict → status=conflict_pending
+        "fold_sentences_rejected": 0,  # verifier dropped non-extractive sentences
     }
 
     # Worker 2: Pre-write KG contradiction check (Mem0-style, fail-open).
@@ -380,9 +384,7 @@ async def _consolidate(
             len(pre_check.findings),
         )
     if pre_check.error:
-        logger.warning(
-            "dream.consolidate.pre_check failed (fail-open): %s", pre_check.error
-        )
+        logger.warning("dream.consolidate.pre_check failed (fail-open): %s", pre_check.error)
 
     # --- 3a. Retroactive contradiction resolution ---
     findings = signal.get("_findings", [])
@@ -460,12 +462,14 @@ async def _consolidate(
     merge_count = 0
     offset = 0
     try:
+        from .bitemporal_filters import active_block_filters
+
         while merge_count < MAX_MERGES_PER_RUN:
             bq = (
                 select(MemoryBlock)
                 .where(
                     MemoryBlock.space_id == space_id,
-                    MemoryBlock.deleted_at.is_(None),
+                    *active_block_filters(),
                     MemoryBlock.block_type != "skill",  # skip APPEND_ONLY
                 )
                 .order_by(MemoryBlock.created_at.asc())
@@ -510,15 +514,11 @@ async def _consolidate(
                         children_ids = [str(existing.id), str(block.id)]
                         children_texts = [existing.content or "", block.content or ""]
 
-                        merged_text = merge_content(
-                            existing.content or "", block.content or ""
-                        )
+                        merged_text = merge_content(existing.content or "", block.content or "")
 
                         # Post-hoc verifier: drop sentences with no grounding in children.
                         try:
-                            v = await verify_fold_extractiveness(
-                                merged_text, children_texts
-                            )
+                            v = await verify_fold_extractiveness(merged_text, children_texts)
                             if v.rejected:
                                 result["fold_sentences_rejected"] += len(v.rejected)
                                 logger.info(
@@ -565,14 +565,11 @@ async def _consolidate(
                                 db, space_id, children_ids=children_ids
                             )
                             fold_status = (
-                                "conflict_pending"
-                                if fold_pre_check.has_conflict
-                                else "active"
+                                "conflict_pending" if fold_pre_check.has_conflict else "active"
                             )
                         except Exception as exc:
                             logger.warning(
-                                "dream.consolidate.fold_pre_check failed "
-                                "(fail-open): %s",
+                                "dream.consolidate.fold_pre_check failed (fail-open): %s",
                                 exc,
                             )
                             fold_status = "active"
@@ -609,11 +606,13 @@ async def _consolidate(
         pipeline = ContentNormalizerPipeline(llm_refinement=False)
         norm_change_counts: dict[str, int] = {}
 
+        from .bitemporal_filters import active_block_filters
+
         dq = (
             select(MemoryBlock)
             .where(
                 MemoryBlock.space_id == space_id,
-                MemoryBlock.deleted_at.is_(None),
+                *active_block_filters(),
                 MemoryBlock.content.isnot(None),
             )
             .limit(500)
@@ -700,19 +699,25 @@ async def _prune_and_report(
         # Find summaries where > 50% of member triples were updated after the summary
         stale_ids: list[str] = []
         summaries = (
-            await db.execute(
-                select(CommunitySummary).where(
-                    CommunitySummary.space_id == space_id,
-                    CommunitySummary.updated_at < stale_cutoff,
+            (
+                await db.execute(
+                    select(CommunitySummary).where(
+                        CommunitySummary.space_id == space_id,
+                        CommunitySummary.updated_at < stale_cutoff,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for summary in summaries:
             # Count member triples updated after this summary
             member_count = (
                 await db.execute(
-                    select(func.count()).select_from(CommunityTriple).where(
+                    select(func.count())
+                    .select_from(CommunityTriple)
+                    .where(
                         CommunityTriple.community_id == summary.community_id,
                     )
                 )
@@ -765,12 +770,14 @@ async def _run_dream_pipeline(
     config = MemvaultPipelineConfig.from_env()
     pipeline = build_dream_pipeline(config)
 
-    ctx = await pipeline.execute({
-        "db": db,
-        "space_id": space_id,
-        "dry_run": dry_run,
-        "force": force,
-    })
+    ctx = await pipeline.execute(
+        {
+            "db": db,
+            "space_id": space_id,
+            "dry_run": dry_run,
+            "force": force,
+        }
+    )
 
     meta = ctx.get("_pipeline_meta")
     report = DreamReport(dry_run=dry_run)

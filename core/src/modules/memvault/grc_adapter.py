@@ -52,6 +52,7 @@ class MemvaultGRCAdapter:
         Called by grc_routes reflect/curate endpoints before gather_items().
         Returns dicts with fields needed by gather_items() and identify_candidates().
         """
+        from .bitemporal_filters import active_block_filters
         from .models import MemoryBlock
 
         cutoff = datetime.now(UTC) - timedelta(days=_FETCH_BLOCKS_DAYS)
@@ -59,7 +60,7 @@ class MemvaultGRCAdapter:
             select(MemoryBlock)
             .where(
                 MemoryBlock.space_id == scope_id,
-                MemoryBlock.deleted_at.is_(None),
+                *active_block_filters(),
                 MemoryBlock.created_at >= cutoff,
             )
             .order_by(MemoryBlock.created_at.desc())

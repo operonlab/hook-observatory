@@ -536,16 +536,17 @@ async def get_session_context(
     """
     from sqlalchemy import select
 
+    # Blocks for this session — M2: only currently-valid (recall context).
+    from .bitemporal_filters import active_block_filters
     from .kg_models import EntityCanonical, Triple
     from .models import MemoryBlock
 
-    # Blocks for this session
     block_q = (
         select(MemoryBlock)
         .where(
             MemoryBlock.space_id == space_id,
             MemoryBlock.source_session == source_session,
-            MemoryBlock.deleted_at.is_(None),
+            *active_block_filters(),
         )
         .order_by(MemoryBlock.created_at)
     )
@@ -703,6 +704,7 @@ async def get_knowledge_gaps(
     Returns queries with INCORRECT verdict that appeared 2+ times in the period.
     """
     return await interest_profile_service.get_knowledge_gaps(db, space_id, days=days, limit=limit)
+
 
 # ======================== KG Lint ========================
 

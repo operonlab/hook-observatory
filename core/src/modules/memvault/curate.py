@@ -71,6 +71,7 @@ async def curate_space(
             .where(
                 MemoryBlock.space_id == space_id,
                 MemoryBlock.deleted_at.is_(None),
+                MemoryBlock.invalid_at.is_(None),  # M3: skip already-superseded
                 MemoryBlock.confidence.isnot(None),
                 MemoryBlock.confidence < confidence_threshold,
                 MemoryBlock.access_count < MIN_ACCESS_FOR_PROTECTION,

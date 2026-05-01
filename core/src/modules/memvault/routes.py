@@ -227,10 +227,14 @@ async def create_block(
     if body.created_at:
         instance.created_at = body.created_at
     # Bitemporal: populate valid_at — explicit body.valid_at wins, else extract from content.
+    # M5: anchor relative phrases on the row's intended time (body.created_at if set,
+    # else the instance's actual created_at), NOT ingestion wall-clock — otherwise
+    # an old session being replayed would resolve "上週" to today.
     if body.valid_at is not None:
         instance.valid_at = body.valid_at
     else:
-        extracted = extract_valid_at(body.content)
+        ref = body.created_at or instance.created_at
+        extracted = extract_valid_at(body.content, ref=ref)
         if extracted is not None:
             instance.valid_at = extracted
     try:
@@ -308,6 +312,7 @@ async def list_sessions(
             MemoryBlock.space_id == space_id,
             MemoryBlock.source_session.isnot(None),
             MemoryBlock.deleted_at.is_(None),
+            MemoryBlock.invalid_at.is_(None),
         )
         .group_by(MemoryBlock.source_session)
     )
@@ -359,6 +364,13 @@ async def search(
     ),
     date_from: datetime | None = Query(None, description="Filter: created_at >= date_from"),
     date_to: datetime | None = Query(None, description="Filter: created_at <= date_to"),
+    as_of: datetime | None = Query(
+        None,
+        description=(
+            "Bitemporal time-travel: return only blocks valid at this instant. "
+            "Default (None) = current view."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.read"),
 ):
@@ -434,6 +446,7 @@ async def search(
             scope=scope,
             date_from=date_from,
             date_to=date_to,
+            as_of=as_of,
         )
         meta = SearchMetadata(
             vector_used=False,
@@ -459,6 +472,7 @@ async def search(
         date_from=date_from,
         date_to=date_to,
         tags=routing_tags,
+        as_of=as_of,
     )
 
     # Routing fallback: if tag pre-filter produced sparse results, retry without tags
@@ -478,6 +492,7 @@ async def search(
             scope=scope,
             date_from=date_from,
             date_to=date_to,
+            as_of=as_of,
         )
 
     if qdrant_result is not None:
@@ -530,6 +545,7 @@ async def search(
         date_from=date_from,
         date_to=date_to,
         keywords=hyde_keywords,
+        as_of=as_of,
     )
     meta.routing_tags = inferred_tags if inferred_tags else None
 
