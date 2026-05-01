@@ -6,7 +6,14 @@
       "name": "ws-observation-gate-dream",
       "label": "com.joneshong.scheduler.ws-observation-gate-dream",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_observation_gate.py dream-consolidation",
-      "schedule": { "calendar": { "Month": 4, "DayOfMonth": 15, "Hour": 18, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Month": 4,
+          "DayOfMonth": 15,
+          "Hour": 18,
+          "Minute": 0
+        }
+      },
       "description": "一次性: 2026-04-15 18:00 — Dream consolidation 觀察期結束，Bark 通知檢查結果",
       "category": "workshop",
       "type": "periodic",
@@ -16,7 +23,12 @@
       "name": "ws-memvault-synthesis",
       "label": "com.joneshong.scheduler.ws-memvault-synthesis",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_synthesis.py",
-      "schedule": { "calendar": { "Hour": 17, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 17,
+          "Minute": 30
+        }
+      },
       "description": "每日 17:30: Leiden communities → LLM summaries → Qdrant indexing → decay → attitude（晚餐時段執行）",
       "category": "workshop",
       "type": "periodic",
@@ -26,7 +38,12 @@
       "name": "ws-session-archive",
       "label": "com.joneshong.scheduler.ws-session-archive",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_session_archive.py",
-      "schedule": { "calendar": { "Hour": 5, "Minute": 45 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 5,
+          "Minute": 45
+        }
+      },
       "description": "每日 5:45AM: session lifecycle pipeline — redact sweep → scan → archive (hook 失效備援，錯峰執行)",
       "category": "workshop",
       "type": "periodic",
@@ -36,7 +53,13 @@
       "name": "ws-session-cleanup",
       "label": "com.joneshong.scheduler.ws-session-cleanup",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_session_cleanup.py",
-      "schedule": { "calendar": { "DayOfWeek": 0, "Hour": 4, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "DayOfWeek": 0,
+          "Hour": 4,
+          "Minute": 0
+        }
+      },
       "description": "每週日 4AM: 清除 trivial sessions (age > 7d, size < 3KB or quality_score < 0.15)",
       "category": "workshop",
       "type": "periodic",
@@ -46,7 +69,12 @@
       "name": "daily-briefing",
       "label": "com.joneshong.scheduler.daily-briefing",
       "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py daily-briefing && ~/.local/bin/python3 ~/workshop/core/cli/briefing/run.py",
-      "schedule": { "calendar": { "Hour": 7, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 7,
+          "Minute": 0
+        }
+      },
       "description": "每日情報簡報：金融、AI、科技、地緣政治（7:00 AM）⚡quota-gate",
       "category": "jonathan",
       "type": "periodic",
@@ -56,7 +84,9 @@
       "name": "dotfiles-sync",
       "label": "com.joneshong.scheduler.dotfiles-sync",
       "command": "~/dotfiles/scripts/sync-detect.sh",
-      "schedule": { "interval": 259200 },
+      "schedule": {
+        "interval": 259200
+      },
       "description": "[已停用] 舊版 dotfiles 同步 — 已被 ws-envkit-snapshot 取代",
       "category": "jonathan",
       "type": "periodic",
@@ -66,7 +96,13 @@
       "name": "ws-envkit-snapshot",
       "label": "com.joneshong.scheduler.ws-envkit-snapshot",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_envkit_snapshot.py",
-      "schedule": { "calendar": { "Weekday": 1, "Hour": 5, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 1,
+          "Hour": 5,
+          "Minute": 30
+        }
+      },
       "description": "每週一 5:30AM: 環境快照 + config 備份 + drift 偵測",
       "category": "workshop",
       "type": "periodic",
@@ -76,7 +112,12 @@
       "name": "ws-cli-auto-update",
       "label": "com.joneshong.scheduler.ws-cli-auto-update",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_cli_auto_update.py",
-      "schedule": { "calendar": { "Hour": 5, "Minute": 12 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 5,
+          "Minute": 12
+        }
+      },
       "description": "每日 5:12AM: 自動更新 codex、gemini、qwen、copilot、opencode 與 hermes CLI",
       "category": "workshop",
       "type": "periodic",
@@ -86,7 +127,12 @@
       "name": "disk-report",
       "label": "com.joneshong.disk-report",
       "command": "~/.claude/data/disk-report/scripts/generate-report.sh",
-      "schedule": { "calendar": { "Hour": 5, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 5,
+          "Minute": 0
+        }
+      },
       "description": "[已停用] 舊版每日磁碟報告 — 已合併至 system-monitor",
       "category": "jonathan",
       "type": "periodic",
@@ -96,7 +142,13 @@
       "name": "ws-sysmon-weekly",
       "label": "com.joneshong.scheduler.ws-sysmon-weekly",
       "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py ws-sysmon-weekly && ~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=weekly",
-      "schedule": { "calendar": { "Weekday": 1, "Hour": 17, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 1,
+          "Hour": 17,
+          "Minute": 30
+        }
+      },
       "description": "每週一 17:30: 系統監控週報（磁碟+硬體+AI 建議）⚡quota-gate（晚餐時段執行）",
       "category": "workshop",
       "type": "periodic",
@@ -106,7 +158,13 @@
       "name": "ws-sysmon-monthly",
       "label": "com.joneshong.scheduler.ws-sysmon-monthly",
       "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py ws-sysmon-monthly && ~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=monthly",
-      "schedule": { "calendar": { "Day": 1, "Hour": 17, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Day": 1,
+          "Hour": 17,
+          "Minute": 30
+        }
+      },
       "description": "每月 1 日 17:30: 系統監控月報（深度分析+容量規劃）⚡quota-gate（晚餐時段執行）",
       "category": "workshop",
       "type": "periodic",
@@ -116,7 +174,9 @@
       "name": "blink-reinstall",
       "label": "com.joneshong.blink-reinstall",
       "command": "~/Blink-Shell-GPL-Builder/reinstall-blink-auto.sh",
-      "schedule": { "interval": 259200 },
+      "schedule": {
+        "interval": 259200
+      },
       "description": "每 3 天自動重裝 Blink Shell（GPL build）",
       "category": "jonathan",
       "type": "periodic",
@@ -126,7 +186,9 @@
       "name": "auth-service",
       "label": "com.joneshong.auth-service",
       "command": "~/.openclaw/workspace/openclaw_avator/backend/scripts/run-auth-service.sh",
-      "schedule": { "run_at_load": true },
+      "schedule": {
+        "run_at_load": true
+      },
       "description": "OpenClaw Auth Service（KeepAlive daemon）",
       "category": "jonathan",
       "type": "daemon",
@@ -136,7 +198,9 @@
       "name": "orchestrator",
       "label": "com.joneshong.orchestrator",
       "command": "~/.local/bin/python3 ~/workshop/scripts/workshop_services.py start agent-metrics",
-      "schedule": { "run_at_load": true },
+      "schedule": {
+        "run_at_load": true
+      },
       "description": "[已停用] 已遷移至 stations/agent-metrics（由 workshop-services.sh 管理）",
       "category": "jonathan",
       "type": "daemon",
@@ -146,7 +210,9 @@
       "name": "tmux-webui",
       "label": "com.joneshong.tmux-webui",
       "command": "/opt/homebrew/bin/uv run ~/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",
-      "schedule": { "run_at_load": true },
+      "schedule": {
+        "run_at_load": true
+      },
       "description": "tmux Web UI — WebSocket bridge（KeepAlive daemon, port 8765）",
       "category": "jonathan",
       "type": "daemon",
@@ -156,7 +222,9 @@
       "name": "workshop-launcher",
       "label": "com.workshop.launcher",
       "command": "~/.local/bin/python3 ~/workshop/scripts/workshop_services.py daemon",
-      "schedule": { "run_at_load": true },
+      "schedule": {
+        "run_at_load": true
+      },
       "description": "Workshop 服務啟動器（KeepAlive daemon, Core API + Redis）",
       "category": "workshop",
       "type": "daemon",
@@ -166,7 +234,13 @@
       "name": "ws-drift-check",
       "label": "com.joneshong.scheduler.ws-drift-check",
       "command": "~/.local/bin/python3 ~/.claude/skills/system-map/scripts/check_drift.py",
-      "schedule": { "calendar": { "Weekday": 1, "Hour": 6, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 1,
+          "Hour": 6,
+          "Minute": 0
+        }
+      },
       "description": "每週一 6AM: 系統狀態漂移偵測（baseline diff → stdout log）",
       "category": "workshop",
       "type": "periodic",
@@ -176,7 +250,13 @@
       "name": "ws-auto-survey-wed",
       "label": "com.joneshong.scheduler.ws-auto-survey-wed",
       "command": "/bin/bash ~/workshop/schedules/runners/ws_auto_survey.sh",
-      "schedule": { "calendar": { "Weekday": 3, "Hour": 13, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 3,
+          "Hour": 13,
+          "Minute": 0
+        }
+      },
       "description": "每週三 13:00: LINE OCR 自動抓連結 → auto-survey pipeline → Bark fallback",
       "category": "workshop",
       "type": "periodic",
@@ -186,7 +266,13 @@
       "name": "ws-auto-survey-fri",
       "label": "com.joneshong.scheduler.ws-auto-survey-fri",
       "command": "/bin/bash ~/workshop/schedules/runners/ws_auto_survey.sh",
-      "schedule": { "calendar": { "Weekday": 5, "Hour": 13, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 5,
+          "Hour": 13,
+          "Minute": 0
+        }
+      },
       "description": "每週五 13:00: LINE OCR 自動抓連結 → auto-survey pipeline → Bark fallback",
       "category": "workshop",
       "type": "periodic",
@@ -196,7 +282,13 @@
       "name": "ws-auto-survey-rs-start-wed",
       "label": "com.joneshong.scheduler.ws-auto-survey-rs-start-wed",
       "command": "/bin/launchctl kickstart -k gui/$(id -u)/com.workshop.auto-survey-rs",
-      "schedule": { "calendar": { "Weekday": 3, "Hour": 10, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 3,
+          "Hour": 10,
+          "Minute": 0
+        }
+      },
       "description": "週三 10:00 啟動 auto-survey-rs（按需服務，Rust 版）",
       "category": "workshop",
       "type": "periodic",
@@ -206,7 +298,13 @@
       "name": "ws-auto-survey-rs-start-fri",
       "label": "com.joneshong.scheduler.ws-auto-survey-rs-start-fri",
       "command": "/bin/launchctl kickstart -k gui/$(id -u)/com.workshop.auto-survey-rs",
-      "schedule": { "calendar": { "Weekday": 5, "Hour": 10, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 5,
+          "Hour": 10,
+          "Minute": 0
+        }
+      },
       "description": "週五 10:00 啟動 auto-survey-rs（按需服務，Rust 版）",
       "category": "workshop",
       "type": "periodic",
@@ -216,7 +314,13 @@
       "name": "ws-auto-survey-rs-stop-wed",
       "label": "com.joneshong.scheduler.ws-auto-survey-rs-stop-wed",
       "command": "/bin/launchctl kill TERM gui/$(id -u)/com.workshop.auto-survey-rs",
-      "schedule": { "calendar": { "Weekday": 3, "Hour": 18, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 3,
+          "Hour": 18,
+          "Minute": 0
+        }
+      },
       "description": "週三 18:00 關閉 auto-survey-rs",
       "category": "workshop",
       "type": "periodic",
@@ -226,7 +330,13 @@
       "name": "ws-auto-survey-rs-stop-fri",
       "label": "com.joneshong.scheduler.ws-auto-survey-rs-stop-fri",
       "command": "/bin/launchctl kill TERM gui/$(id -u)/com.workshop.auto-survey-rs",
-      "schedule": { "calendar": { "Weekday": 5, "Hour": 18, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 5,
+          "Hour": 18,
+          "Minute": 0
+        }
+      },
       "description": "週五 18:00 關閉 auto-survey-rs",
       "category": "workshop",
       "type": "periodic",
@@ -236,7 +346,12 @@
       "name": "ws-finance-billing",
       "label": "com.joneshong.scheduler.ws-finance-billing",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_finance_billing.py",
-      "schedule": { "calendar": { "Hour": 6, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 6,
+          "Minute": 0
+        }
+      },
       "description": "每日 6AM: 訂閱帳單 + 分期到期自動生成交易紀錄",
       "category": "workshop",
       "type": "periodic",
@@ -246,7 +361,13 @@
       "name": "ws-finance-monthly-snapshot",
       "label": "com.joneshong.scheduler.ws-finance-monthly-snapshot",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_finance_snapshot.py",
-      "schedule": { "calendar": { "Day": 1, "Hour": 0, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Day": 1,
+          "Hour": 0,
+          "Minute": 30
+        }
+      },
       "description": "每月 1 日 00:30: 全域錢包快照存檔（RPG 式資產備份）",
       "category": "workshop",
       "type": "periodic",
@@ -256,7 +377,12 @@
       "name": "ws-capture-expire",
       "label": "com.joneshong.scheduler.ws-capture-expire",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_capture_expire.py",
-      "schedule": { "calendar": { "Hour": 3, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 3,
+          "Minute": 0
+        }
+      },
       "description": "每日 3AM: 過期 stale captures（超過 expires_at 的待處理項目）",
       "category": "workshop",
       "type": "periodic",
@@ -266,7 +392,13 @@
       "name": "ws-skill-lifecycle",
       "label": "com.joneshong.scheduler.ws-skill-lifecycle",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_skill_lifecycle.py --trigger cron",
-      "schedule": { "calendar": { "Weekday": 0, "Hour": 17, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 0,
+          "Hour": 17,
+          "Minute": 0
+        }
+      },
       "description": "每週日 17:00: skill lifecycle — test + security + catalog → Anvil DB（晚餐時段執行）",
       "category": "workshop",
       "type": "periodic",
@@ -278,7 +410,13 @@
       "name": "ws-cannibalization-drift",
       "label": "com.joneshong.scheduler.ws-cannibalization-drift",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_cannibalization_drift.py",
-      "schedule": { "calendar": { "Weekday": 1, "Hour": 6, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 1,
+          "Hour": 6,
+          "Minute": 30
+        }
+      },
       "description": "每週一 6:30AM: 蠶食來源上游漂移偵測（GitHub API diff → Bark 通知）",
       "category": "workshop",
       "type": "periodic",
@@ -288,7 +426,12 @@
       "name": "ws-dashscope-quota-sync",
       "label": "com.joneshong.scheduler.ws-dashscope-quota-sync",
       "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs dashscope-quota-sync",
-      "schedule": { "calendar": { "Hour": 18, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 18,
+          "Minute": 30
+        }
+      },
       "description": "每日 18:30: DashScope (Qwen) 免費額度爬取同步 → Redis. 2026-04-20 cutover: Python ws_dashscope_quota_sync.py → agent-metrics-rs dashscope-quota-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_dashscope_quota_sync.py",
       "category": "workshop",
       "type": "periodic",
@@ -298,7 +441,12 @@
       "name": "ws-provider-balance-sync",
       "label": "com.joneshong.scheduler.ws-provider-balance-sync",
       "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs provider-balance-sync",
-      "schedule": { "calendar": { "Hour": 18, "Minute": 15 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 18,
+          "Minute": 15
+        }
+      },
       "description": "每日 18:15: LLM 供應商餘額爬取同步 → Redis。2026-04-20 cutover: Python ws_provider_balance_sync.py → agent-metrics-rs provider-balance-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_provider_balance_sync.py",
       "category": "workshop",
       "type": "periodic",
@@ -308,7 +456,13 @@
       "name": "ws-model-catalog-sync",
       "label": "com.joneshong.scheduler.ws-model-catalog-sync",
       "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs model-catalog-sync",
-      "schedule": { "calendar": { "DayOfWeek": 1, "Hour": 19, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "DayOfWeek": 1,
+          "Hour": 19,
+          "Minute": 0
+        }
+      },
       "description": "每週一 19:00: 爬 4 大 leaderboard (Arena/LiveBench/AA/OpenRouter) → Borda 共識 → Redis. 2026-04-20 cutover: Python ws_model_catalog_sync.py → agent-metrics-rs model-catalog-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_catalog_sync.py",
       "category": "workshop",
       "type": "periodic",
@@ -318,7 +472,13 @@
       "name": "ws-model-freshness-scan",
       "label": "com.joneshong.scheduler.ws-model-freshness-scan",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_freshness_scan.py",
-      "schedule": { "calendar": { "Weekday": 0, "Hour": 16, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 0,
+          "Hour": 16,
+          "Minute": 30
+        }
+      },
       "description": "每週日 16:30: LLM provider model freshness scan — API 查 7 家供應商 → 比對 config.yaml → Bark 通知",
       "category": "workshop",
       "type": "periodic",
@@ -328,7 +488,9 @@
       "name": "ws-relay-auto-standby",
       "label": "com.joneshong.scheduler.ws-relay-auto-standby",
       "command": "~/.local/bin/relay standby",
-      "schedule": { "interval": 120 },
+      "schedule": {
+        "interval": 120
+      },
       "description": "每 2 分鐘: idle relay pane auto-standby（主窗口保留 shell，副窗口直接 kill）",
       "category": "workshop",
       "type": "periodic",
@@ -338,7 +500,9 @@
       "name": "ws-relay-reaper",
       "label": "com.joneshong.scheduler.ws-relay-reaper",
       "command": "~/.local/bin/relay reaper",
-      "schedule": { "interval": 300 },
+      "schedule": {
+        "interval": 300
+      },
       "description": "每 5 分鐘: relay reaper — 清理 bare shell panes + 空窗口（不碰主窗口）",
       "category": "workshop",
       "type": "periodic",
@@ -348,7 +512,9 @@
       "name": "ws-memory-guardian",
       "label": "com.joneshong.scheduler.ws-memory-guardian",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memory_guardian.py",
-      "schedule": { "interval": 60 },
+      "schedule": {
+        "interval": 60
+      },
       "description": "每 60 秒: 記憶體壓力防護 — P1 殺可犧牲 app, P2/P3 殺 Claude Code",
       "category": "workshop",
       "type": "periodic",
@@ -358,7 +524,9 @@
       "name": "ws-capture-watchdog",
       "label": "com.joneshong.scheduler.ws-capture-watchdog",
       "command": "~/.local/bin/python3 ~/workshop/scripts/capture_watchdog.py",
-      "schedule": { "interval": 300 },
+      "schedule": {
+        "interval": 300
+      },
       "description": "每 5 分鐘: Capture Haiku 常駐 watchdog — idle >30min 自動 recycle",
       "category": "workshop",
       "type": "periodic",
@@ -368,7 +536,13 @@
       "name": "ws-memvault-lint",
       "label": "com.joneshong.scheduler.ws-memvault-lint",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_lint.py",
-      "schedule": { "calendar": { "Weekday": 0, "Hour": 3, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 0,
+          "Hour": 3,
+          "Minute": 30
+        }
+      },
       "description": "每週日 3:30AM: Knowledge Lint — contradictions, stale, orphans, anomalies, gaps",
       "category": "workshop",
       "type": "periodic",
@@ -378,7 +552,12 @@
       "name": "ws-memvault-dream",
       "label": "com.joneshong.scheduler.ws-memvault-dream",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_dream.py",
-      "schedule": { "calendar": { "Hour": 4, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 4,
+          "Minute": 0
+        }
+      },
       "description": "每日 4AM: Dream Loop — 矛盾解決 + batch dedup + 日期正規化 + prune（雙閘門自動跳過）",
       "category": "workshop",
       "type": "periodic",
@@ -388,7 +567,12 @@
       "name": "ws-paper-digest",
       "label": "com.joneshong.scheduler.ws-paper-digest",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_paper_digest.py",
-      "schedule": { "calendar": { "Hour": 6, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 6,
+          "Minute": 30
+        }
+      },
       "description": "每日 6:30AM: arXiv 論文抓取 → 去重 → 相關度評分 → Haiku digest → 蠶食候選標記；週一加跑 weekly rollup",
       "category": "workshop",
       "type": "periodic",
@@ -398,7 +582,12 @@
       "name": "ws-drift-detection",
       "label": "com.joneshong.scheduler.ws-drift-detection",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_drift_detection.py",
-      "schedule": { "calendar": { "Hour": 17, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 17,
+          "Minute": 0
+        }
+      },
       "description": "每日 17:00: DailyOS goal drift 偵測 + 通知",
       "category": "workshop",
       "type": "periodic",
@@ -408,7 +597,12 @@
       "name": "ws-memvault-extract-batch",
       "label": "com.joneshong.scheduler.ws-memvault-extract-batch",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_extract.py",
-      "schedule": { "calendar": { "Hour": 3, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 3,
+          "Minute": 0
+        }
+      },
       "description": "每日 3AM: Memvault batch extraction + re-embedding",
       "category": "workshop",
       "type": "periodic",
@@ -418,7 +612,13 @@
       "name": "ws-intelligence-digest",
       "label": "com.joneshong.scheduler.ws-intelligence-digest",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_intelligence_digest.py",
-      "schedule": { "calendar": { "Weekday": 1, "Hour": 9, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 1,
+          "Hour": 9,
+          "Minute": 0
+        }
+      },
       "description": "每週一 9AM: 情報彙整 + memvault flywheel",
       "category": "workshop",
       "type": "periodic",
@@ -428,7 +628,13 @@
       "name": "ws-intelflow-grc",
       "label": "com.joneshong.scheduler.ws-intelflow-grc",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_intelflow_grc.py",
-      "schedule": { "calendar": { "Weekday": 0, "Hour": 5, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 0,
+          "Hour": 5,
+          "Minute": 0
+        }
+      },
       "description": "每週日 5AM: Intelflow G-R-C reflect + curate",
       "category": "workshop",
       "type": "periodic",
@@ -438,7 +644,13 @@
       "name": "ws-memvault-grc",
       "label": "com.joneshong.scheduler.ws-memvault-grc",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_grc.py",
-      "schedule": { "calendar": { "Weekday": 0, "Hour": 5, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Weekday": 0,
+          "Hour": 5,
+          "Minute": 30
+        }
+      },
       "description": "每週日 5:30AM: Memvault G-R-C reflect + curate（錯開 intelflow 5AM、anvil 6AM）",
       "category": "workshop",
       "type": "periodic",
@@ -448,7 +660,12 @@
       "name": "ws-anvil-grc",
       "label": "com.joneshong.scheduler.ws-anvil-grc",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_anvil_grc.py",
-      "schedule": { "calendar": { "Hour": 6, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 6,
+          "Minute": 0
+        }
+      },
       "description": "每日 6AM: Anvil skill success rate reflection",
       "category": "workshop",
       "type": "periodic",
@@ -467,7 +684,9 @@
       "name": "ws-nginx-autoban",
       "label": "com.joneshong.scheduler.ws-nginx-autoban",
       "command": "~/.local/bin/python3 ~/workshop/scripts/nginx_autoban.py",
-      "schedule": { "interval": 300 },
+      "schedule": {
+        "interval": 300
+      },
       "description": "每 5 分鐘: Nginx 429 auto-ban — 超過閾值 IP 加入 blocklist + reload",
       "category": "workshop",
       "type": "periodic",
@@ -477,7 +696,9 @@
       "name": "ws-sentinel-check",
       "label": "com.joneshong.scheduler.ws-sentinel-check",
       "command": "~/workshop/stations/sentinel/.venv/bin/python3 ~/workshop/schedules/runners/ws_sentinel_check.py",
-      "schedule": { "interval": 300 },
+      "schedule": {
+        "interval": 300
+      },
       "description": "每 5 分鐘: light health check — HTTP probe all services → sentinel DB + Bark on failure",
       "category": "workshop",
       "type": "periodic",
@@ -487,7 +708,12 @@
       "name": "ws-db-backup-gdrive",
       "label": "com.joneshong.scheduler.ws-db-backup-gdrive",
       "command": "/Users/joneshong/workshop/scripts/ws-db-backup-gdrive.sh",
-      "schedule": { "calendar": { "Hour": 4, "Minute": 30 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 4,
+          "Minute": 30
+        }
+      },
       "description": "每日 4:30AM: PostgreSQL full backup → gzip → Google Drive (keep 4 versions)",
       "category": "workshop",
       "type": "periodic",
@@ -497,8 +723,25 @@
       "name": "ws-blog-translate",
       "label": "com.joneshong.scheduler.ws-blog-translate",
       "command": "/Users/joneshong/workshop/scripts/ws-blog-translate.sh",
-      "schedule": { "calendar": { "Hour": 18, "Minute": 0 } },
+      "schedule": {
+        "calendar": {
+          "Hour": 18,
+          "Minute": 0
+        }
+      },
       "description": "每日 18:00: 檢查穩定 2 天以上的 zh 文章，自動翻譯成 en",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-cronicle-fail-alert",
+      "label": "com.joneshong.scheduler.ws-cronicle-fail-alert",
+      "command": "~/.local/bin/python3 ~/workshop/scripts/cronicle_fail_alert.py",
+      "schedule": {
+        "interval": 300
+      },
+      "description": "每 5 分鐘 scan Cronicle Transaction.log 偵測 last_exit_code != 0 的 silent failure → Bark",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
