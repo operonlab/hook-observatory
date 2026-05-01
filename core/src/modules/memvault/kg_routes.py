@@ -16,6 +16,9 @@ from .embedding import get_embedding, get_embeddings_batch
 from .entity_resolution import entity_resolution_service, normalize_entity_text
 from .interest_profile import interest_profile_service
 from .kg_schemas import (
+    AttitudeCorrectionRequest,
+    AttitudeDecayResponse,
+    AttitudeEvolveResponse,
     CascadeRecallResult,
     CommunityDetail,
     CommunityRegenerateRequest,
@@ -704,6 +707,7 @@ async def get_knowledge_gaps(
     """
     return await interest_profile_service.get_knowledge_gaps(db, space_id, days=days, limit=limit)
 
+
 # ======================== KG Lint ========================
 
 
@@ -944,3 +948,92 @@ async def get_surprise_connections(
         surprises = [s for s in surprises if s.get("strategy") == strategy]
 
     return [SurpriseConnection(**s) for s in surprises]
+
+
+# ======================== Attitude Decay & Evolve ========================
+# Periodic confidence decay over attitude blocks + per-correction audit log.
+# Background pipelines (confidence_decay_pipeline.py, attitude_pipeline.py)
+# poll these endpoints; previously 404 → entire synthesis chain skipped them.
+
+
+@router.post("/decay", response_model=AttitudeDecayResponse)
+async def apply_attitude_decay(
+    space_id: str = Query(default="default"),
+    half_life_days: int = Query(default=180, ge=1, le=36500),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Apply exponential decay to attitude blocks: confidence *= 0.5^(age_days/half_life)."""
+    import math
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from .models import MemoryBlock
+
+    now = datetime.now(UTC)
+    stmt = select(MemoryBlock).where(
+        MemoryBlock.space_id == space_id,
+        MemoryBlock.block_type == "attitude",
+        MemoryBlock.deleted_at.is_(None),
+        MemoryBlock.confidence.is_not(None),
+    )
+    result = await db.execute(stmt)
+    blocks = result.scalars().all()
+
+    updated = 0
+    for b in blocks:
+        days = (now - b.created_at).total_seconds() / 86400.0
+        decay_factor = math.pow(0.5, days / half_life_days)
+        new_conf = max(0.0, min(1.0, b.confidence * decay_factor))
+        if abs(new_conf - b.confidence) > 0.001:
+            b.confidence = new_conf
+            updated += 1
+    await db.commit()
+
+    return AttitudeDecayResponse(
+        space_id=space_id,
+        attitudes_checked=len(blocks),
+        attitudes_updated=updated,
+        half_life_days=half_life_days,
+    )
+
+
+@router.post("/attitudes/evolve", response_model=AttitudeEvolveResponse)
+async def evolve_attitude(
+    payload: AttitudeCorrectionRequest,
+    space_id: str = Query(default="default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Append correction to audit log for later integration by dream loop."""
+    import json as _json
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    if not payload.fact:
+        from src.shared.errors import BadRequestError
+
+        raise BadRequestError("fact is required", code="memvault.empty_fact")
+
+    audit_dir = Path.home() / "Claude" / "memvault" / "corrections-audit"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    today = datetime.now(UTC).date().isoformat()
+    audit_file = audit_dir / f"{today}.jsonl"
+
+    record = {
+        "fact": payload.fact,
+        "category": payload.category,
+        "session_id": payload.session_id,
+        "timestamp": payload.timestamp,
+        "space_id": space_id,
+        "received_at": datetime.now(UTC).isoformat(),
+    }
+    with audit_file.open("a", encoding="utf-8") as f:
+        f.write(_json.dumps(record, ensure_ascii=False) + "\n")
+
+    return AttitudeEvolveResponse(
+        success=True,
+        action="logged",
+        audit_file=str(audit_file),
+    )

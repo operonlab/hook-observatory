@@ -7,7 +7,6 @@ from pydantic import AliasChoices, BaseModel, Field
 
 from src.shared.schemas import SpaceScopedResponse
 
-
 # ======================== Retrieval Mode (LightRAG-inspired) ========================
 
 
@@ -18,6 +17,7 @@ class RetrievalMode(StrEnum):
     GLOBAL = "global"  # Community-level: L2 summaries + L1 communities
     HYBRID = "hybrid"  # Both (current default)
     AUTO = "auto"  # Router decides based on intent
+
 
 # ======================== Triple ========================
 
@@ -116,7 +116,6 @@ class CommunitySummaryResponse(SpaceScopedResponse):
         if not self.updated_at:
             return False
         return (datetime.now(UTC) - self.updated_at) > timedelta(days=30)
-
 
 
 # ======================== Pipeline Regenerate ========================
@@ -324,3 +323,33 @@ class LintReportResponse(BaseModel):
     run_duration_ms: float
     run_at: str
     remediations_applied: int = 0
+
+
+# ======================== Attitude Decay & Evolve ========================
+
+
+class AttitudeDecayResponse(BaseModel):
+    """Stats from periodic confidence decay over attitude blocks."""
+
+    space_id: str
+    attitudes_checked: int
+    attitudes_updated: int
+    half_life_days: int
+
+
+class AttitudeCorrectionRequest(BaseModel):
+    """Single user correction for evolve endpoint."""
+
+    fact: str
+    category: str = ""
+    session_id: str = ""
+    timestamp: str = ""
+
+
+class AttitudeEvolveResponse(BaseModel):
+    """Result of processing a single attitude correction."""
+
+    success: bool
+    action: str  # logged | matched | new
+    audit_file: str | None = None
+    matched_block_id: str | None = None
