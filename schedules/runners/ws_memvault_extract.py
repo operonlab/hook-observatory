@@ -26,7 +26,8 @@ request_clearance("ws-memvault-extract")
 HOME = Path.home()
 EXTRACT_SCRIPT = HOME / "workshop/mcp/memvault/scripts/re_extract_batch.py"
 EMBED_SCRIPT = HOME / "workshop/core/scripts/memvault_re_embed.py"
-PYTHON = HOME / ".local/bin/python3"
+# Workshop venv has sqlalchemy + asyncpg required by these scripts
+PYTHON = HOME / "workshop/.venv/bin/python3"
 LOG_DIR = HOME / "workshop/outputs/memvault/logs"
 LOG_FILE = LOG_DIR / "extract-batch.log"
 

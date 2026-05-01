@@ -437,8 +437,11 @@ def three_guard_filter(
     candidates = []
 
     for item in items:
-        confidence = item.metadata.get("confidence", 1.0)
-        access_count = item.metadata.get("access_count", 0)
+        # NULL confidence → treat as fully confident (protect from curate)
+        confidence = item.metadata.get("confidence")
+        if confidence is None:
+            confidence = 1.0
+        access_count = item.metadata.get("access_count") or 0
         created_at = item.metadata.get("created_at")
 
         if created_at is None:

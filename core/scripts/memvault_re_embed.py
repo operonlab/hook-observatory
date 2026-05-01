@@ -140,9 +140,26 @@ def main():
     )
     args = parser.parse_args()
 
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
 
     engine = create_engine(DB_URL)
+
+    # Schema check: if blocks.embedding column was removed (vectors moved to Qdrant),
+    # this script has nothing to do. Exit cleanly so ws_memvault_extract Step 2 succeeds.
+    with engine.connect() as conn:
+        has_embed = conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema='memvault' AND table_name='blocks' "
+                "AND column_name='embedding' LIMIT 1"
+            )
+        ).fetchone()
+    if not has_embed:
+        logger.warning(
+            "memvault.blocks.embedding column not present — "
+            "embeddings stored externally (Qdrant). re_embed has nothing to do."
+        )
+        return
 
     worker = OmlxWorker()
     if not args.dry_run:

@@ -236,9 +236,7 @@ class Scheduler(Protocol):
         """調度單一工作單元。"""
         ...
 
-    async def schedule_batch(
-        self, items: list, processor: Callable
-    ) -> list:
+    async def schedule_batch(self, items: list, processor: Callable) -> list:
         """調度批量工作。結果保持輸入順序。"""
         ...
 
@@ -372,6 +370,18 @@ class ConditionalOp:
         return ctx
 
 
+def _safe_copy_ctx(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Deepcopy ctx values; share unpicklable objects (db sessions, file handles)
+    by reference so ParallelOp doesn't crash on AsyncSession etc."""
+    new_ctx: dict[str, Any] = {}
+    for k, v in ctx.items():
+        try:
+            new_ctx[k] = copy.deepcopy(v)
+        except (TypeError, copy.Error):
+            new_ctx[k] = v
+    return new_ctx
+
+
 class ParallelOp:
     """並行：多個 op 同時處理同一 ctx 的副本，結果 merge。"""
 
@@ -398,7 +408,7 @@ class ParallelOp:
         return tuple(sorted(keys))
 
     async def __call__(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        tasks = [op(copy.deepcopy(ctx)) for op in self._ops]
+        tasks = [op(_safe_copy_ctx(ctx)) for op in self._ops]
         results = await asyncio.gather(*tasks)
         merged = dict(ctx)
         for result in results:
