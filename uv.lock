@@ -3745,8 +3745,14 @@ provides-extras = ["audio"]
 
 [[package]]
 name = "workshop-text-ops"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "libs/text-ops" }
+dependencies = [
+    { name = "zhdate" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "zhdate", specifier = ">=0.1" }]
 
 [[package]]
 name = "workshop-tmux-lib"
@@ -3934,6 +3940,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/19/3774d162f6732d1cfb0b47b4140a942a35ca82bb19b6db1f80e9e7bdc8f8/yarl-1.23.0-cp314-cp314t-win_amd64.whl", hash = "sha256:4503053d296bc6e4cbd1fad61cf3b6e33b939886c4f249ba7c78b602214fabe2", size = 97610, upload-time = "2026-03-01T22:07:45.773Z" },
     { url = "https://files.pythonhosted.org/packages/51/47/3fa2286c3cb162c71cdb34c4224d5745a1ceceb391b2bd9b19b668a8d724/yarl-1.23.0-cp314-cp314t-win_arm64.whl", hash = "sha256:44bb7bef4ea409384e3f8bc36c063d77ea1b8d4a5b2706956c0d6695f07dcc25", size = 86041, upload-time = "2026-03-01T22:07:49.026Z" },
     { url = "https://files.pythonhosted.org/packages/69/68/c8739671f5699c7dc470580a4f821ef37c32c4cb0b047ce223a7f115757f/yarl-1.23.0-py3-none-any.whl", hash = "sha256:a2df6afe50dea8ae15fa34c9f824a3ee958d785fd5d089063d960bae1daa0a3f", size = 48288, upload-time = "2026-03-01T22:07:51.388Z" },
+]
+
+[[package]]
+name = "zhdate"
+version = "0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/64/7ba359eab7f61a4852a5125da723544a99d27d37d89b0e3608177195a1cb/zhdate-0.1.tar.gz", hash = "sha256:cf54c07a9a9a027db3a970f7477b7eb7962a0fc0d5f5d5d284a76e953e68993c", size = 6598, upload-time = "2019-02-18T22:48:39.672Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/5e/5ddf769b1ca31d1e997b94a390279da6892c99702593c1feedb93a70f508/zhdate-0.1-py3-none-any.whl", hash = "sha256:d003657bf49d6722c4c3adcb9a91722f6de1077bf3be0e54c0f4492b5e028fa4", size = 19442, upload-time = "2019-02-18T22:48:37.629Z" },
 ]
 
 [[package]]
