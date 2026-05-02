@@ -282,9 +282,26 @@ pub fn parse_answers(raw: &str, questions: &[Question]) -> Result<HashMap<String
         .ok_or_else(|| anyhow!("No JSON found in LLM response: {}", &raw[..raw.len().min(300)]))?
         .as_str();
 
-    // Fix invalid JSON escapes (LaTeX like \log, \Sigma)
-    let re_invalid_escape = Regex::new(r#"\\(?!["\\/bfnrtu])"#).unwrap();
-    let json_str = re_invalid_escape.replace_all(json_str, "\\\\");
+    // Fix invalid JSON escapes (LaTeX like \log, \Sigma).
+    // Manual scan instead of regex: rust `regex` crate has no lookahead, and
+    // `\\(?!["\\/bfnrtu])` panics at Regex::new. Equivalent semantics: every
+    // backslash whose successor is NOT a valid JSON escape char gets doubled.
+    let json_str: std::borrow::Cow<str> = std::borrow::Cow::Owned({
+        let valid = ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'];
+        let chars: Vec<char> = json_str.chars().collect();
+        let mut out = String::with_capacity(json_str.len() + 8);
+        let mut i = 0;
+        while i < chars.len() {
+            let c = chars[i];
+            if c == '\\' && (i + 1 >= chars.len() || !valid.contains(&chars[i + 1])) {
+                out.push_str("\\\\");
+            } else {
+                out.push(c);
+            }
+            i += 1;
+        }
+        out
+    });
 
     let data: serde_json::Value =
         serde_json::from_str(&json_str).context("parse LLM JSON response")?;

@@ -1,10 +1,43 @@
 package handlers
 
 import (
+	"os"
+	"regexp"
 	"strings"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
 )
+
+// anIsLiteLLMProxy detects the cc-llm scenario where ANTHROPIC_BASE_URL points
+// at the local LiteLLM proxy (port 4000). Third-party models routed through
+// LiteLLM (minimax, glm, kimi, ...) cannot follow the kebab-case `name`
+// convention; blocking them produces an empty tool_use_id that crashes strict
+// adapters with "tool result's tool id() not found". Auto-fill instead.
+func anIsLiteLLMProxy() bool {
+	base := os.Getenv("ANTHROPIC_BASE_URL")
+	return strings.Contains(base, "127.0.0.1:4000") || strings.Contains(base, "localhost:4000")
+}
+
+var anWordRe = regexp.MustCompile(`[a-z]+`)
+
+func anDeriveName(prompt, subagentType string) string {
+	words := anWordRe.FindAllString(strings.ToLower(prompt), -1)
+	if len(words) > 3 {
+		words = words[:3]
+	}
+	if len(words) == 0 {
+		words = []string{"run", "task"}
+	}
+	suffix := subagentType
+	if suffix == "" {
+		suffix = "agent"
+	}
+	name := strings.Join(words, "-") + "-" + suffix
+	if len(name) > 60 {
+		name = name[:60]
+	}
+	return name
+}
 
 func init() {
 	core.Register("PreToolUse", core.Entry{
@@ -31,6 +64,18 @@ func agentNamingHandle(_, toolName string, toolInput map[string]any, _ string) c
 
 	// Rule 1: name is mandatory
 	if name == "" {
+		// cc-llm / LiteLLM scenario: third-party model can't follow our
+		// kebab-case convention. Auto-fill a derived name instead of blocking,
+		// because blocking produces an empty tool_use_id that crashes strict
+		// models like minimax-m2.7 with "tool result's tool id() not found".
+		if anIsLiteLLMProxy() {
+			patched := make(map[string]any, len(toolInput)+1)
+			for k, v := range toolInput {
+				patched[k] = v
+			}
+			patched["name"] = anDeriveName(prompt, subagentType)
+			return core.HookResult{UpdatedInput: patched}
+		}
 		return core.Block(
 			`Agent must have a ` + "`name`" + ` parameter (kebab-case verb-noun, ` +
 				`e.g. name: "scan-auth-routes"). Add a descriptive name and retry.`,

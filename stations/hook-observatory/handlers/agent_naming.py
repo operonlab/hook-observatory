@@ -8,7 +8,32 @@ PreToolUse hook for the Agent tool:
 
 from __future__ import annotations
 
+import os
+import re
+
 from .base import ALLOW, HookResult, block, message
+
+
+def _is_litellm_proxy() -> bool:
+    """Detect cc-llm/LiteLLM scenario where the underlying model is not Claude.
+
+    Third-party models (minimax, glm, kimi, ...) routed through LiteLLM cannot
+    be expected to follow the kebab-case `name` convention — enforcing it
+    breaks the tool_use/tool_result pairing and crashes the session.
+    """
+    base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
+    return "127.0.0.1:4000" in base_url or "localhost:4000" in base_url
+
+
+def _derive_name(prompt: str, subagent_type: str) -> str:
+    """Build a safe kebab-case fallback name from prompt + subagent_type."""
+    words = re.findall(r"[a-z]+", (prompt or "").lower())[:3]
+    if not words:
+        words = ["run", "task"]
+    base = "-".join(words)
+    suffix = subagent_type or "agent"
+    return f"{base}-{suffix}"[:60]
+
 
 # Ordered by specificity: dispatchers first, then specific, then general.
 # First match wins — keep specific keywords above broad ones.
@@ -64,6 +89,14 @@ def handle(event_type: str, tool_name: str, tool_input: dict, raw_input: str) ->
 
     # Rule 1: name is mandatory
     if not name:
+        # cc-llm / LiteLLM scenario: third-party model can't follow our
+        # kebab-case convention. Auto-fill a derived name instead of blocking,
+        # because blocking produces an empty tool_use_id that crashes strict
+        # models like minimax-m2.7 with "tool result's tool id() not found".
+        if _is_litellm_proxy():
+            patched = dict(tool_input)
+            patched["name"] = _derive_name(prompt, subagent_type)
+            return HookResult(updated_input=patched)
         return block(
             "Agent must have a `name` parameter (kebab-case verb-noun, "
             'e.g. name: "scan-auth-routes"). Add a descriptive name and retry.'
