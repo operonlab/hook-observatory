@@ -1,0 +1,85 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅴ 並行 / 通訊</span>
+    <h3 class="detail-title">CSP <span class="detail-full">Communicating Sequential Processes</span></h3>
+    <p class="detail-tagline">Tony Hoare 1978 提出 — Go 的 channel 受它啟發</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">並行 = 多個順序 process 透過同步 channel 通訊。Hoare 的名言精確地說明了這個哲學：「Don't communicate by sharing memory; share memory by communicating」。Channel 是進程間唯一合法的通訊路徑，記憶體不共享，race condition 根本不存在。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>順序進程 + 同步 channel 通訊，記憶體完全不共享</td></tr>
+      <tr><th>基本單位</th><td>Processes + Channels（synchronous by default）+ Events + Choice operators + Parallel composition</td></tr>
+      <tr><th>狀態位置</th><td>每個 process 的局部狀態 + channel 中的 pending events</td></tr>
+      <tr><th>並行單位</th><td>Parallel composition（P ‖ Q）</td></tr>
+      <tr><th>同步機制</th><td>Synchronous rendezvous（送收必須同時就緒）</td></tr>
+      <tr><th>形式化</th><td>★★★★★ 極強（traces / failures / divergences 語義，FDR 可自動驗證）</td></tr>
+      <tr><th>適合場景</th><td>並行系統設計、協議驗證、Go 程式架構、嵌入式系統</td></tr>
+      <tr><th>典型代表</th><td>Go（goroutine + channel）、Occam、FDR4、Clojure core.async</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：Go 的 CSP 對應</h5>
+      <pre class="detail-code">// CSP 的 Process 對應 goroutine
+// CSP 的 Channel 對應 Go channel（預設同步）
+func producer(ch chan&lt;- int) {
+    for i := 0; i &lt; 5; i++ {
+        ch &lt;- i   // CSP: c!i  (send on c)
+    }
+    close(ch)
+}
+
+func consumer(ch &lt;-chan int) {
+    for v := range ch {
+        fmt.Println(v)  // CSP: c?v (receive from c)
+    }
+}</pre>
+      <p class="detail-p">Go 加入 buffered channel 緩和了 synchronous rendezvous 的嚴格性，但核心模型直接來自 CSP。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：FDR 驗證 deadlock</h5>
+      <p class="detail-p">用 CSP 描述兩個哲學家問題，FDR4 自動搜尋 traces 語義下的 deadlock。找到死鎖後回傳反例路徑，讓工程師修正 choice 順序。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>實務最廣用（Go 的設計直接受 CSP 啟發）</li>
+          <li>理論 + 工程兼備：FDR 可驗證，Go 可執行</li>
+          <li>Deadlock 和 livelock 可用 FDR 自動偵測</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>Synchronous channel 有時太嚴（Go 加 buffered 緩和）</li>
+          <li>Traces / failures 語義學習曲線不低</li>
+          <li>FDR 驗證需要學習 CSP 形式語法</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Go</strong>：goroutine + channel，CSP 最廣泛的工程實作</li>
+      <li><strong>FDR4</strong>：CSP 模型檢查器，可驗證 deadlock / livelock / refinement</li>
+      <li><strong>Occam / Occam-π</strong>：直接基於 CSP 設計的語言，用於 transputer 處理器</li>
+      <li><strong>Erlang</strong>：async 訊息傳遞（CSP 精神相似但 channel 不具名）</li>
+      <li><strong>Clojure core.async</strong>：CSP channel 模型移植到 Clojure / ClojureScript</li>
+    </ul>
+  </section>
+</article>

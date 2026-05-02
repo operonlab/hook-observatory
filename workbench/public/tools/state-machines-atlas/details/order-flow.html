@@ -1,0 +1,95 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅷ 實務混用場景</span>
+    <h3 class="detail-title">📦 分散式訂單系統</h3>
+    <p class="detail-tagline">Petri Net (workflow) → Actor Model (服務) → FSM (lifecycle) — workflow + 微服務</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">一張訂單牽涉三個性質不同的問題：多服務如何同步並行（workflow）、每個服務如何獨立容錯（隔離）、每個服務內部狀態如何流轉（lifecycle）。三個問題需要三種工具。</p>
+    <p class="detail-p">Petri Net 建模 workflow——能靜態證明 deadlock-free，payment 和 inventory 可並行，shipping 等兩者都完成才觸發。Actor 隔離服務——每張訂單是獨立的 OrderActor，崩潰不傳播，supervisor 自動重啟。FSM 管 Actor 內部——PaymentActor 只在 pending→paid 時執行扣款，狀態決定行為。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">分層架構</h4>
+    <table class="detail-attrs">
+      <tr><th>Layer 1 (外層)</th><td><strong>Petri Net</strong> / Workflow 建模 / 下單→付款→出貨→完成並行同步，靜態可證 deadlock-free</td></tr>
+      <tr><th>Layer 2 (中層)</th><td><strong>Actor Model</strong> / 每訂單一 Actor 群 / OrderActor / PaymentActor / ShippingActor 互相傳訊</td></tr>
+      <tr><th>Layer 3 (葉層)</th><td><strong>FSM</strong> / Actor 內部 lifecycle / PaymentActor: pending → paid → refunded</td></tr>
+      <tr><th>資料流</th><td>User 下單 → Petri token 觸發 → OrderActor 生成 → 並行派 PaymentActor / InventoryActor → 兩者完成 → ShippingActor 激活</td></tr>
+      <tr><th>核心優勢</th><td>Workflow 可視化可驗證（Petri）+ 天然並發容錯（Actor supervisor）+ 細節狀態剛性（FSM）</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">架構示意</h4>
+    <pre class="detail-code">// Layer 1: Petri Net (BPMN 表示)
+[PlaceOrder] ──token──▶ (Pay ∥ CheckInventory) ──both done──▶ [Ship] ──▶ [Done]
+
+// Layer 2: Actor (Akka / Temporal workflow)
+OrderActor.receive(PlaceOrder):
+  spawn PaymentActor(orderId)     // 並行
+  spawn InventoryActor(orderId)   // 並行
+  awaitAll → spawn ShippingActor(orderId)
+
+// Layer 3: FSM (PaymentActor 內部)
+pending ──chargeSuccess──▶ paid ──refundRequest──▶ refunded
+pending ──chargeFail──▶ failed</pre>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：Shopify / Stripe 訂單引擎</h5>
+      <p class="detail-p">Stripe Checkout 用 Petri-like workflow 管支付流程各節點；每筆支付是獨立 Actor；PaymentIntent 內部走 created → processing → succeeded / failed 的 FSM。失敗後 supervisor 決定重試或死信佇列。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：電商中台（美團外賣）</h5>
+      <p class="detail-p">Petri Net 定義「門店確認 ∥ 配送媒合」必須並行完成才進入「出餐」；每筆訂單是 Actor，故障自動重啟；配送員 Actor 內部走 waiting → picked → delivering → done。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：Camunda BPMN + Akka</h5>
+      <p class="detail-p">Camunda 以 BPMN（Petri Net 超集）視覺化 workflow，業務人員可直接讀圖；每個 service task 對應一個 Akka Actor；Actor 內部用 Akka FSM API 管狀態。三層工具鏈完全對齊，是最完整的教學參考。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">何時採用</h4>
+    <p class="detail-p">訂單流程涉及 3 個以上服務並行、需要事前驗證不會死鎖、且各服務需要獨立容錯重試時，這個三層組合最適合。若只有 2 個服務且串行，直接用 Saga FSM 更簡單。若需要人工審批步驟，Petri Net 的 place 可以直接建模「等待人工」的狀態。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>Petri Net 可靜態分析 deadlock / liveness，事前消滅設計缺陷</li>
+          <li>Actor supervisor tree 天然容錯，局部故障不影響其他訂單</li>
+          <li>可演進——加服務不需改動 Petri 主體，只加新 place / transition</li>
+          <li>FSM 讓「非法狀態轉移」在 compile time 或 runtime 立即失敗</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>工具鏈複雜——Petri 建模工具 + Actor 框架 + FSM 三套並行</li>
+          <li>分散式 debug 困難，訊息追蹤需要 distributed tracing（Jaeger/Zipkin）</li>
+          <li>訂單一致性需要額外設計（saga pattern / 2PC），三層本身不解決</li>
+          <li>Petri Net 學習門檻高，team 少有人熟悉</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Camunda + Akka</strong>：BPMN workflow + Actor 容錯，Java 生態最成熟組合</li>
+      <li><strong>Temporal</strong>：workflow orchestration as code，隱含 Petri-like DAG + Actor 執行引擎</li>
+      <li><strong>Apache Airflow</strong>：DAG（Petri Net 超集）+ task Actor，用於資料 pipeline</li>
+      <li><strong>Shopify Flow</strong>：視覺化商務 workflow + condition / action FSM，低代碼版本</li>
+    </ul>
+  </section>
+</article>

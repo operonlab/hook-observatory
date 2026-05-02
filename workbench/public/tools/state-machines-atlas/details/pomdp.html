@@ -1,0 +1,79 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅳ 機率 / 時間</span>
+    <h3 class="detail-title">POMDP <span class="detail-full">Partially Observable Markov Decision Process</span></h3>
+    <p class="detail-tagline">MDP + 部分可觀察 — agent 看不到真實 state，只能從 observation 推斷</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">現實中 agent 幾乎永遠無法完全觀察環境狀態。POMDP 把這個限制納入模型：agent 維護一個 belief state（對當前真實狀態的機率分布），每次行動後根據 observation 更新 belief，再據此決策。這是最接近現實的序列決策框架，也是計算最困難的版本。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>在不完全資訊下維護 belief state，最大化期望獎勵</td></tr>
+      <tr><th>基本單位</th><td>States S + Actions A + Observations O + Transition P(s'|s,a) + Observation model O(o|s',a) + Reward R</td></tr>
+      <tr><th>狀態位置</th><td>Belief state b(s)：對隱藏真實狀態的機率分布（連續空間）</td></tr>
+      <tr><th>並行單位</th><td>無（序列決策，但 belief 更新在每步後執行）</td></tr>
+      <tr><th>同步機制</th><td>Bayesian belief update：b'(s') ∝ O(o|s',a) Σ P(s'|s,a) b(s)</td></tr>
+      <tr><th>形式化</th><td>★★★★☆ 強（PWLC 值函數、Point-Based methods 有嚴格保證，但一般情況不可判定）</td></tr>
+      <tr><th>適合場景</th><td>機器人導航（感測器噪音）、多輪對話系統、醫療診斷決策、軍事模擬</td></tr>
+      <tr><th>典型代表</th><td>POMDPs.jl、DESPOT、SARSOP、Monte Carlo POMDP solver</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：機器人走廊導航</h5>
+      <pre class="detail-code">真實狀態：機器人位置（格子）
+觀察值：雷射感測器讀數（有高斯噪音）
+Belief：位置機率分布（粒子濾波器維護）
+行動：前進/左轉/右轉
+目標：在噪音環境下安全到達目標格</pre>
+      <p class="detail-p">感測器無法精確定位時，agent 用粒子濾波器維護位置信念，再用 POMDP policy 決定下一步行動。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：多輪對話系統（任務型）</h5>
+      <p class="detail-p">使用者意圖是隱藏狀態（如「訂機票」、「查天氣」），對話歷史是 observation，系統動作是提問或確認，reward 是任務完成率。POMDP 決策讓系統在意圖不明時主動詢問。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：醫療診斷決策</h5>
+      <p class="detail-p">疾病狀態不可直接觀察，症狀與檢測結果是觀察值（有假陽性/假陰性），治療動作影響狀態轉移，患者健康是獎勵。POMDP 最佳化測試順序以最小化成本與誤診率。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>最接近現實：顯式建模感測器噪音與資訊不完整性</li>
+          <li>Belief state 轉換：POMDP 可化為 belief-MDP，使用連續空間 RL</li>
+          <li>Point-Based solvers（SARSOP、DESPOT）在中等規模問題實用</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>計算複雜度指數級：一般 POMDP 最優求解是 PSPACE-hard</li>
+          <li>Belief state 是連續空間：精確表示與更新計算昂貴</li>
+          <li>工具生態遠不如 MDP：Julia POMDPs.jl 最完整，Python 選擇少</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Julia</strong>：<code>POMDPs.jl</code>（最完整的 POMDP 生態，含多種 solver）</li>
+      <li><strong>C++</strong>：<code>DESPOT</code>（Deterministic Sparse Tree，實時 POMDP 規劃）</li>
+      <li><strong>MATLAB / Python</strong>：<code>SARSOP</code>（Point-Based Value Iteration，近似最優）</li>
+      <li><strong>Python</strong>：<code>pomdp_py</code>（輕量 POMDP 框架，含 POMCP solver）</li>
+    </ul>
+  </section>
+</article>

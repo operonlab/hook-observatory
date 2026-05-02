@@ -1,0 +1,98 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅰ Chomsky 階梯</span>
+    <h3 class="detail-title">Turing Machine <span class="detail-full">Turing Machine</span></h3>
+    <p class="detail-tagline">FSM + 無限 tape — 理論計算上限，等價於所有可計算模型</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">Church-Turing thesis：一切可計算的，都等價於 Turing Machine 能計算的。DFA 加堆疊得到 PDA，PDA 加無限 tape 得到 TM。Tape 可以左右移動、讀寫，這讓它等價於任意隨機存取記憶體。</p>
+    <p class="detail-p">TM 是理論宇宙的終點，不是工程工具。它的價值在於劃定邊界：停機問題不可判定，意味著某些問題天生無法被任何程式解決。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>FSM + 無限讀寫 tape，等價於所有可計算模型，劃定計算邊界</td></tr>
+      <tr><th>基本單位</th><td>δ: Q × Γ → Q × Γ × {L, R}，無限 tape，讀寫 head，tape alphabet Γ</td></tr>
+      <tr><th>狀態位置</th><td>當前狀態 + tape 內容 + head 位置（合稱「格局」）</td></tr>
+      <tr><th>並行單位</th><td>無（單一確定性版本）；多 tape TM 等價但加速</td></tr>
+      <tr><th>同步機制</th><td>無</td></tr>
+      <tr><th>形式化</th><td>★★★★★ 理論完備（Church-Turing thesis，可判定性，計算複雜度 P/NP）</td></tr>
+      <tr><th>適合場景</th><td>理論分析、可計算性證明、算法複雜度下界推導</td></tr>
+      <tr><th>典型代表</th><td>Brainfuck、Lambda Calculus、Conway's Game of Life</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：Unary 加法 Turing Machine</h5>
+      <pre class="detail-code">輸入 tape: 111 + 1111  (3 + 4，unary 表示)
+目標輸出:  1111111     (7)
+
+步驟：
+1. 找到 '+'，將它改為 '1'
+2. 移動到 tape 最右端的 '1'，改為 blank
+3. 輸出: 1111111 blank
+
+δ(q0, 1)  = (q0, 1, R)   # 跳過左邊的 1
+δ(q0, +)  = (q1, 1, R)   # 把 + 換成 1
+δ(q1, 1)  = (q1, 1, R)   # 跳過右邊的 1
+δ(q1, B)  = (q2, B, L)   # 到達末端
+δ(q2, 1)  = (qf, B, R)   # 刪掉最後一個 1</pre>
+      <p class="detail-p">即使是最簡單的加法，Turing Machine 的描述也需要逐格推進。這說明它是理論模型，不是工程工具。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：停機問題（Halting Problem）不可判定</h5>
+      <pre class="detail-code">假設存在 Halts(P, I)，能判斷程式 P 對輸入 I 是否停機。
+
+構造程式 D：
+  D(x):
+    if Halts(x, x): loop forever
+    else:           halt
+
+問：D(D) 會停機嗎？
+  若停機  → Halts(D,D) = true → D 應該 loop → 矛盾
+  若不停機 → Halts(D,D) = false → D 應該 halt → 矛盾</pre>
+      <p class="detail-p">對角線論證。TM 的最重要貢獻之一：不是「能計算什麼」，而是「不能計算什麼」。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：通用圖靈機（Universal Turing Machine）</h5>
+      <p class="detail-p">UTM 接受 (⟨M⟩, w) 作為輸入，其中 ⟨M⟩ 是任意 TM 的編碼，w 是輸入字串。UTM 模擬 M 在 w 上的執行。這是「程式即資料」的理論根源，也是現代計算機（stored-program computer）的數學原型。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>能計算任何可計算函數（Church-Turing thesis）</li>
+          <li>理論完備，是計算複雜度（P/NP）的參照模型</li>
+          <li>劃定邊界：停機問題確立了「不可計算」的存在</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>實務無用（速度極慢，逐格推進）</li>
+          <li>停機問題不可判定，無法靜態驗證任意程式終止性</li>
+          <li>對工程設計幾乎無直接指導意義</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>理論等價</strong>：Lambda Calculus（Alonzo Church，與 TM 同年提出，函數式語言根基）</li>
+      <li><strong>極小語言</strong>：Brainfuck（8 個指令，Turing-complete，常用於演示 TM 下界）</li>
+      <li><strong>細胞自動機</strong>：Conway's Game of Life（Turing-complete，但極度低效）</li>
+      <li><strong>教學模擬器</strong>：Turing Machine Simulator（Web 版圖形化 TM 執行，適合驗證轉移函數）</li>
+    </ul>
+  </section>
+</article>

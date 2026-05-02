@@ -1,0 +1,100 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅷ 實務混用場景</span>
+    <h3 class="detail-title">🎙️ 語音助手 Pipeline</h3>
+    <p class="detail-tagline">HMM (ASR) → Statechart (對話) → BT (意圖) — AI 語音 pipeline 經典組合</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">語音助手的挑戰分三層：信號層（音訊如何轉成文字）、對話層（多輪上下文如何管理）、決策層（用戶意圖如何路由到技能）。三層性質截然不同。</p>
+    <p class="detail-p">HMM 擅長序列概率推理——音素之間的隱狀態轉移，天生是統計序列問題。Statechart 管對話的複雜狀態——有嵌套（Listening 內有 WakeWord / Content 子狀態）、有並行（auth region ∥ context region ∥ UI region）。BT 管意圖路由——天氣優先、鬧鐘次之、fallback 保底，帶優先級的選擇邏輯。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">分層架構</h4>
+    <table class="detail-attrs">
+      <tr><th>Layer 1 (輸入層)</th><td><strong>HMM</strong> / 語音識別 / MFCC 特徵 → 音素隱狀態序列 → 單詞</td></tr>
+      <tr><th>Layer 2 (對話層)</th><td><strong>Statechart</strong> / 多輪對話 lifecycle / Idle / Listening / Thinking / Speaking + orthogonal regions (auth ∥ context ∥ UI)</td></tr>
+      <tr><th>Layer 3 (決策層)</th><td><strong>Behavior Tree</strong> / 意圖路由 / Selector(查天氣 / 設鬧鐘 / 播音樂 / 閒聊 / fallback)</td></tr>
+      <tr><th>資料流</th><td>音訊 → HMM 解碼 → NLU 抽意圖 → Statechart 更新對話狀態 → BT 選對應技能 → 回應</td></tr>
+      <tr><th>核心優勢</th><td>序列概率推理（HMM）+ 對話狀態完整建模（Statechart）+ 技能可無限擴展（BT）</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">架構示意</h4>
+    <pre class="detail-code">// Layer 1: HMM (Kaldi / Whisper)
+audio → MFCC features → Viterbi decode → ["what", "is", "the", "weather"]
+
+// Layer 2: Statechart (Rasa / Dialogflow CX)
+state: Idle
+event: WakeWord → Listening
+event: Transcript("what is the weather") → Thinking
+  [orthogonal] context.update(intent="weather", slot.city="Taipei")
+event: ResponseReady → Speaking → Idle
+
+// Layer 3: BT (intent router)
+Selector
+  ├─ Sequence [intent=="weather"] → WeatherSkill.run(city)
+  ├─ Sequence [intent=="alarm"]   → AlarmSkill.run(time)
+  ├─ Sequence [intent=="music"]   → MusicSkill.run(query)
+  └─ Action → ChitchatFallback</pre>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：Siri 早期架構（Apple Intelligence 前）</h5>
+      <p class="detail-p">Nuance HMM-based ASR → 對話管理器（Statechart，管 follow-up 問題的狀態）→ domain router（意圖 BT，決定啟動 Maps / Calendar / Weather domain）。domain 擴展只需在 BT 加葉節點，不動 Statechart。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：Alexa Skills Kit</h5>
+      <p class="detail-p">Lex ASR → Alexa 對話狀態機（session attributes 構成隱式 Statechart）→ intent handler 樹（優先級 BT，InvokeSkill → FallbackIntent）。第三方 Skill 只需實作 BT 葉節點，是 BT 擴展性的最佳示範。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：現代 LLM-based 語音助手</h5>
+      <p class="detail-p">HMM 已被 Whisper / Conformer（end-to-end DL）取代，ASR 準確率大幅提升；但 Statechart 管 session 狀態（streaming 中 / function calling 等待）+ BT 路由工具調用（search vs code vs browse）的架構仍保留，因為這兩層的問題性質沒有變。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">何時採用</h4>
+    <p class="detail-p">語音助手需要支援 5 個以上意圖、且有多輪對話（slot filling、澄清問題、context carry-over）時，這個三層組合最合適。若只有單輪 command，直接用 intent classifier + FSM 即可；若完全由 LLM 管對話，Statechart 可退化成簡單的 session state dict。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>模組化——每層可獨立升級（HMM 換 Whisper，不動 Statechart）</li>
+          <li>可解釋性強——Statechart 視覺化，BT tick log 可追</li>
+          <li>成熟工具鏈——Kaldi / Rasa / Dialogflow 都按此分層設計</li>
+          <li>技能擴展容易——加新意圖只需在 BT 加葉節點</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>HMM 在噪音環境表現被 end-to-end DL 全面超越</li>
+          <li>Statechart 設計複雜——orthogonal regions 的 history states 容易出錯</li>
+          <li>跨層通訊介面需要標準化（NLU 輸出格式 → Statechart event）</li>
+          <li>多語言支援需要每層分別處理，難以統一</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Kaldi</strong>：HMM-based ASR 工具包，學術與工業界標準，完整文件</li>
+      <li><strong>Rasa</strong>：開源對話 Statechart（Stories / Rules）+ intent BT（policies）</li>
+      <li><strong>Dialogflow CX</strong>：Google 的對話 Statechart + intent BT，完整商業實作</li>
+      <li><strong>Alexa ASK</strong>：AWS 官方，完整三層架構文件，最佳教學參考</li>
+      <li><strong>Mycroft AI</strong>：開源語音助手，HMM + Adapt intent（BT-like），完全本地部署</li>
+    </ul>
+  </section>
+</article>

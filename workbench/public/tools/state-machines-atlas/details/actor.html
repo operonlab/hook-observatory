@@ -1,0 +1,122 @@
+<!-- FRAGMENT: Actor Model — Ⅵ 替代模型 -->
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅵ 替代模型</span>
+    <h3 class="detail-title">Actor <span class="detail-full">Actor Model</span></h3>
+    <p class="detail-tagline">每個 actor 狀態私有 — 只透過訊息互動。Carl Hewitt 1973。</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">「Don't share memory, share messages」— actor 是最小的計算單位，狀態完全私有，外界無法直接讀寫。收到 message 後，actor 決定三件事：改變自身狀態、產生新 actor、對其他 actor 發送訊息。沒有共享記憶體，就沒有 race condition，也不需要 lock。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>狀態私有 + 訊息傳遞 = 無共享記憶體並發</td></tr>
+      <tr><th>基本單位</th><td>Actors + Mailboxes（async 佇列）+ Messages（immutable）+ Supervision Trees</td></tr>
+      <tr><th>狀態位置</th><td>各 actor 內部（完全私有，外部不可訪問）</td></tr>
+      <tr><th>並行單位</th><td>Actor 本身（每個 actor 獨立執行，天然並發）</td></tr>
+      <tr><th>同步機制</th><td>ask pattern（request-response）；預設 fire-and-forget（tell）</td></tr>
+      <tr><th>形式化</th><td>★★★☆☆ 有嚴格定義（Hewitt 1973），實作語意因框架而異</td></tr>
+      <tr><th>適合場景</th><td>高並發後端服務、分散式系統、即時通訊、遊戲 server、IoT 設備管理</td></tr>
+      <tr><th>典型代表</th><td>Erlang/OTP、Elixir、Akka（JVM）、Microsoft Orleans、Ray（Python ML）</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：WhatsApp 的百億訊息（Erlang Actor）</h5>
+      <pre class="detail-code">%% 每個用戶連線對應一個 actor process
+{ok, Pid} = user_session:start_link(UserId),
+
+%% 發訊息 = 送 message，不需要 lock
+Pid ! {send_message, RecipientId, Content},
+
+%% supervisor 監控，crash 自動重啟
+supervisor:start_child(session_sup, [UserId])</pre>
+      <p class="detail-p">WhatsApp 用 50 名工程師撐起 9 億用戶，核心是 Erlang 的 lightweight process（每個 ~300 bytes，可開數百萬個）。Actor crash 由 supervisor 自動重啟，整個系統容錯。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：Akka 訂單處理（Supervision Tree）</h5>
+      <pre class="detail-code">// 訂單 actor — 狀態完全私有
+class OrderActor extends AbstractBehavior&lt;OrderCommand&gt; {
+  private OrderState state = OrderState.PENDING;
+
+  @Override
+  public Receive&lt;OrderCommand&gt; createReceive() {
+    return newReceiveBuilder()
+      .onMessage(Pay.class, msg -&gt; {
+        state = OrderState.PAID;
+        context().self().tell(new Fulfill());  // 發訊息給自己
+        return this;
+      })
+      .onMessage(Fulfill.class, msg -&gt; {
+        warehouseActor.tell(new PickItems(orderId));  // 通知其他 actor
+        return this;
+      })
+      .build();
+  }
+}</pre>
+      <p class="detail-p">訂單 actor 不直接呼叫倉庫 API，而是發訊息給倉庫 actor。兩者解耦，倉庫 actor crash 不影響訂單 actor。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：Ray 分散式 ML（Python Actor）</h5>
+      <pre class="detail-code">import ray
+
+@ray.remote
+class ModelServer:
+    def __init__(self):
+        self.model = load_model()  # 模型在 actor 內部，私有
+
+    def predict(self, data):
+        return self.model.predict(data)
+
+# 創建 actor，分配到任意節點
+server = ModelServer.remote()
+
+# 非同步呼叫，fire-and-forget
+future = server.predict.remote(batch_data)
+result = ray.get(future)  # 等待結果</pre>
+      <p class="detail-p">Ray 把 Python class 變成分散式 actor，模型權重只載入一次，多個 worker 可非同步呼叫同一個 actor。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>天然並發：無 lock、無 race condition，高並發場景直接適用</li>
+          <li>容錯強：Supervision Tree 讓 crash 自動隔離並重啟，不影響其他 actor</li>
+          <li>位置透明：actor 可在同一機器或跨節點，呼叫方不需要知道</li>
+          <li>符合 OOP 直覺：actor = 有行為的物件，但狀態真的私有</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>訊息順序難保證：兩個 actor 互發訊息，順序取決於執行緒排程</li>
+          <li>debug 困難：log 分散在各 actor，需要分散式 tracing 工具</li>
+          <li>back-pressure 需手動處理：mailbox 塞滿時需有策略（drop / block / expand）</li>
+          <li>learning curve：ask pattern、supervisor 策略、location transparency 概念需要時間</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Erlang / OTP</strong>：gen_server、gen_statem（最純粹的 Actor 實作，telco / messaging 產業標準）</li>
+      <li><strong>Elixir</strong>：GenServer（Erlang VM，語法現代化；Discord、Phoenix LiveView）</li>
+      <li><strong>Scala / Java</strong>：Akka（JVM 上最成熟的 Actor 框架；Akka Typed 強制類型安全）</li>
+      <li><strong>.NET</strong>：Microsoft Orleans（Virtual Actor，actor 自動激活/休眠；雲原生場景）</li>
+      <li><strong>Python</strong>：Ray（分散式 ML 首選；Pykka 嵌入式輕量選擇）</li>
+      <li><strong>語言設計</strong>：Pony（語言層級保證 actor 安全，零 lock 型別系統）</li>
+    </ul>
+  </section>
+</article>

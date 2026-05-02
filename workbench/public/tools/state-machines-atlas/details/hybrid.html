@@ -1,0 +1,85 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅳ 機率 / 時間</span>
+    <h3 class="detail-title">Hybrid Automaton <span class="detail-full">Hybrid Automaton / Hybrid System</span></h3>
+    <p class="detail-tagline">離散狀態 + 連續動態 — 控制系統的標準建模語言</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">物理世界是離散與連續的混合體：汽車有整數擋位（離散），但轉速是連續微分方程。Hybrid Automaton 在每個離散模式（mode）中掛載連續動態（ODE），guard 條件觸發模式切換，reset 重設連續變數。這是控制工程師建模嵌入式控制器的標準方式。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>每個離散模式掛載 ODE，guard/reset 觸發模式切換，精確建模物理系統</td></tr>
+      <tr><th>基本單位</th><td>Modes（離散狀態）+ Variables（連續）+ ODE per mode + Guards + Resets + Invariants</td></tr>
+      <tr><th>狀態位置</th><td>（當前 mode，連續變數向量 x）的組合</td></tr>
+      <tr><th>並行單位</th><td>多個 Hybrid Automaton 可並行組合（物理子系統組合）</td></tr>
+      <tr><th>同步機制</th><td>共享連續變數 + 離散事件廣播（Stateflow 的 send/receive）</td></tr>
+      <tr><th>形式化</th><td>★★★☆☆ 中強（線性 HA 可達性可判定；非線性一般不可判定）</td></tr>
+      <tr><th>適合場景</th><td>嵌入式控制器、汽車電控、電力系統、生物神經模型、機器人運動規劃</td></tr>
+      <tr><th>典型代表</th><td>Matlab Stateflow、HyTech、SpaceEx、Flow*、dReal</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：汽車自動變速箱</h5>
+      <pre class="detail-code">模式：{Gear1, Gear2, Gear3, Gear4}
+連續變數：v（車速）, ω（引擎轉速）
+
+Gear1 ODE：dω/dt = f₁(throttle, v)
+Gear2 ODE：dω/dt = f₂(throttle, v)
+
+Guard Gear1→Gear2：ω ≥ 3500 RPM
+Reset：ω := ω × gear_ratio
+
+Invariant Gear1：ω ≤ 4000 RPM</pre>
+      <p class="detail-p">每個擋位有不同的動力方程。SpaceEx 可驗證轉速不會超過引擎紅線。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：恆溫器 On/Off 控制</h5>
+      <p class="detail-p">模式 {Heating, Cooling}：Heating 時溫度 ODE 為 dT/dt = α(T_set - T)，Cooling 時為 dT/dt = -β(T - T_env)。Guard 為 T ≥ 25°C 切 Cooling，T ≤ 18°C 切 Heating。HyTech 驗證溫度永遠在安全範圍內。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：彈跳球</h5>
+      <p class="detail-p">模式 {Falling, Bouncing}：Falling 時 dy/dt = v, dv/dt = -g；碰地（y ≤ 0 ∧ v < 0）觸發 reset v := -c·v（彈性係數）。Flow* 可計算最多彈幾次才停止的 reachable set。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>精確建模物理系統：離散切換 + 連續動態無縫整合</li>
+          <li>可做 reachability 分析：線性 HA 有完整工具鏈（HyTech、SpaceEx）</li>
+          <li>Matlab Stateflow 是工業主流：汽車電子、航空電子廣泛採用</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>非線性 HA 不可判定：reachability 一般無法精確求解</li>
+          <li>數值計算誤差積累：ODE 積分器誤差可能掩蓋真實行為</li>
+          <li>驗證工具門檻高：SpaceEx / Flow* 設定複雜，非線性支援有限</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>MATLAB</strong>：<code>Stateflow</code>（工業主流，與 Simulink ODE 引擎整合）</li>
+      <li><strong>C++</strong>：<code>SpaceEx</code>（線性 HA reachability，支援大規模系統）</li>
+      <li><strong>C++</strong>：<code>Flow*</code>（非線性 HA Taylor 模型 reachability）</li>
+      <li><strong>C / SMT</strong>：<code>HyTech</code>（早期線性 HA 驗證器，學術參考）</li>
+      <li><strong>SMT</strong>：<code>dReal</code>（δ-decidable 非線性算術，處理混合系統近似驗證）</li>
+    </ul>
+  </section>
+</article>

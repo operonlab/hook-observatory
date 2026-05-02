@@ -1,0 +1,76 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅴ 並行 / 通訊</span>
+    <h3 class="detail-title">CFSM <span class="detail-full">Communicating Finite State Machine</span></h3>
+    <p class="detail-tagline">多個 FSM 透過 channel 傳訊息 — 最簡單的並行 FSM 延伸</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">多個獨立 FSM 各自運行，透過 FIFO channel 交換事件。每個 FSM 保持自己的狀態；channel 是唯一的通訊路徑，狀態不共享。模組化是核心價值：每個 FSM 可以獨立設計、獨立驗證，組合成系統後仍保持可讀性。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>多 FSM 模組化組合，channel 是唯一耦合點</td></tr>
+      <tr><th>基本單位</th><td>Multiple FSMs + Channels（FIFO queues）+ Send / Receive events</td></tr>
+      <tr><th>狀態位置</th><td>每個 FSM 持有獨立當前狀態</td></tr>
+      <tr><th>並行單位</th><td>FSM 間非同步並行（各自推進）</td></tr>
+      <tr><th>同步機制</th><td>FIFO channel（可選 bounded / unbounded）</td></tr>
+      <tr><th>形式化</th><td>★★★★☆ 強（ITU-T SDL 標準、SPIN model checker）</td></tr>
+      <tr><th>適合場景</th><td>通訊協議設計、producer-consumer、分散式 handshake</td></tr>
+      <tr><th>典型代表</th><td>SDL（ITU-T Z.100）、Promela/SPIN、Go goroutine + channel</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：TCP 三次握手（簡化）</h5>
+      <pre class="detail-code">Client FSM              Channel           Server FSM
+CLOSED ──SYN──────────▶ [ch]
+                        [ch] ──SYN──▶ LISTEN → SYN_RCVD
+SYN_SENT ◀──SYN-ACK──── [ch] ◀──── SYN_RCVD
+ESTABLISHED ──ACK──────▶ [ch]
+                        [ch] ──ACK──▶ ESTABLISHED</pre>
+      <p class="detail-p">兩個 FSM 各自維護 TCP 狀態，透過 channel 傳遞封包事件。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：Producer-Consumer</h5>
+      <p class="detail-p">Producer FSM 在 READY 狀態產生訊息送入 buffer channel；Consumer FSM 從 channel 取訊息後進入 PROCESSING，完成後回 IDLE。channel bound 決定背壓策略。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>建模直觀，可表達大部分通訊協議</li>
+          <li>ITU-T SDL 工業標準，電信業廣泛採用</li>
+          <li>每個 FSM 可獨立測試後再組合</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>狀態空間 = 所有 FSM 的笛卡兒積（組合爆炸）</li>
+          <li>channel 有無 bound 影響可判定性</li>
+          <li>大型系統難以完整驗證</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>SDL / ITU-T Z.100</strong>：電信協議設計標準語言，原生支援 CFSM</li>
+      <li><strong>Promela / SPIN</strong>：模型檢查工具，可驗證 CFSM 的 deadlock / liveness</li>
+      <li><strong>Go</strong>：goroutine + channel 直接對應 CFSM 概念</li>
+      <li><strong>RoboChart</strong>：機器人系統的 CSP / CFSM 建模工具</li>
+    </ul>
+  </section>
+</article>

@@ -1,0 +1,124 @@
+<!-- FRAGMENT: Dataflow / Reactive — Ⅵ 替代模型 -->
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅵ 替代模型</span>
+    <h3 class="detail-title">Dataflow <span class="detail-full">Dataflow / Reactive</span></h3>
+    <p class="detail-tagline">Signal 變化自動傳播 — spreadsheet、React、RxJS 都是這類</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">程式 = 資料相依圖。source 變化，下游 derived 自動重算，不需要手動通知。這是 Excel 試算表的本質：你不需要寫「當 A1 改變，重算 B1」，相依關係本身就是程式。核心問題只有一個：追蹤哪些 derived 依賴哪些 source，在 source 變化時最小化重算範圍。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>資料相依圖驅動計算，source 變化自動傳播至所有 derived</td></tr>
+      <tr><th>基本單位</th><td>Signals / Observables（source）+ Derived（衍生值）+ Effects（副作用）+ Dependency Graph</td></tr>
+      <tr><th>狀態位置</th><td>Signal 節點（細粒度，可追蹤每個值的訂閱關係）</td></tr>
+      <tr><th>並行單位</th><td>RxJS operator pipeline（異步流）；同步 signal 通常單執行緒</td></tr>
+      <tr><th>同步機制</th><td>Push（Observable）vs Pull（Signal lazy eval）；glitch-free 需額外設計</td></tr>
+      <tr><th>形式化</th><td>★★★☆☆ FRP 有理論基礎（Conal Elliott 1997），實作語意因框架差異大</td></tr>
+      <tr><th>適合場景</th><td>UI 框架、試算表、事件流處理、real-time dashboard、表單驗證</td></tr>
+      <tr><th>典型代表</th><td>SolidJS Signals、Vue 3 ref/computed、Svelte 5 runes、RxJS、MobX</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：SolidJS Fine-Grained Reactivity（Signal 傳播）</h5>
+      <pre class="detail-code">import { createSignal, createMemo, createEffect } from "solid-js";
+
+const [price, setPrice] = createSignal(100);
+const [qty, setQty] = createSignal(3);
+
+// Derived：自動追蹤 price + qty 的依賴
+const total = createMemo(() =&gt; price() * qty());
+
+// Effect：total 變化時自動執行
+createEffect(() =&gt; {
+  console.log(`總金額：${total()}`);
+  updateCartUI(total());
+});
+
+// 只需改 signal，下游自動更新
+setPrice(120);  // total 自動變 360，effect 自動執行</pre>
+      <p class="detail-p">SolidJS 的 fine-grained reactivity 不需要 Virtual DOM diff。price 改變，只有依賴 price 的 memo 重算，只有訂閱 total 的 DOM 節點更新。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：RxJS 事件流（Observable pipeline）</h5>
+      <pre class="detail-code">import { fromEvent, debounceTime, distinctUntilChanged,
+         switchMap, map } from "rxjs";
+import { ajax } from "rxjs/ajax";
+
+const search$ = fromEvent(inputEl, "input").pipe(
+  map(e =&gt; e.target.value),
+  debounceTime(300),          // 停止輸入 300ms 才觸發
+  distinctUntilChanged(),     // 值沒變不重複搜尋
+  switchMap(query =&gt;          // 取消前一次未完成的請求
+    ajax.getJSON(`/api/search?q=${query}`)
+  )
+);
+
+search$.subscribe(results =&gt; renderResults(results));</pre>
+      <p class="detail-p">每個 operator 是一個轉換步驟，組合成管線。debounce、取消前次請求、去重，這些複雜的非同步邏輯用宣告式寫法三行搞定。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：Vue 3 Composition API（ref + computed）</h5>
+      <pre class="detail-code">import { ref, computed, watchEffect } from "vue";
+
+const firstName = ref("John");
+const lastName = ref("Doe");
+
+// computed 自動追蹤依賴，只在相依值變化時重算
+const fullName = computed(() =&gt; `${firstName.value} ${lastName.value}`);
+
+// watchEffect 等同 createEffect，依賴自動收集
+watchEffect(() =&gt; {
+  document.title = fullName.value;  // title 隨 fullName 自動更新
+});
+
+firstName.value = "Jane";  // fullName + document.title 自動更新</pre>
+      <p class="detail-p">Vue 3 的 Proxy-based 響應系統在賦值時攔截，建立依賴關係圖。computed 有快取：若依賴未變，多次讀取只計算一次。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>宣告式：寫 what（值的關係），不寫 how（通知流程）</li>
+          <li>自動最小化重算：依賴圖精準追蹤，只更新受影響的節點</li>
+          <li>UI 思維直覺：試算表、表單這類資料相依場景天然吻合</li>
+          <li>Signals 比 Virtual DOM 效能更好：fine-grained 直接更新 DOM，省去 diff</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>debug 困難：相依圖在 runtime 動態建立，傳播路徑難以靜態分析</li>
+          <li>memory leak 風險：Observable subscription 忘記 unsubscribe 會持續持有引用</li>
+          <li>glitch 問題：push 模型中，derived 可能在一個 tick 內收到中間狀態（需 batching 解決）</li>
+          <li>push vs pull 概念差異：Observable（push）與 Signal（pull）混用時語意容易混淆</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>JavaScript / Fine-Grained</strong>：SolidJS（最純粹的 Signal 實作，無 VDOM）</li>
+      <li><strong>JavaScript / Fine-Grained</strong>：Preact Signals（可嵌入 React 生態，3KB）</li>
+      <li><strong>Vue 3</strong>：Composition API ref / computed / watchEffect（Proxy-based，全家桶）</li>
+      <li><strong>Svelte 5</strong>：Runes（<code>$state</code> / <code>$derived</code>，編譯期 signal，零 runtime overhead）</li>
+      <li><strong>JavaScript / Stream</strong>：RxJS（push Observable，事件流管線；Angular 官方採用）</li>
+      <li><strong>JavaScript / State</strong>：MobX（OOP 風格 observable，自動追蹤，與 React/Vue 均可整合）</li>
+      <li><strong>理論起源</strong>：Haskell FRP（Conal Elliott 1997，Functional Reactive Programming 學術根源）</li>
+    </ul>
+  </section>
+</article>

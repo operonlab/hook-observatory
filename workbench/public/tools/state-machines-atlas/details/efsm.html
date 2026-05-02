@@ -1,0 +1,80 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅲ 擴展特性</span>
+    <h3 class="detail-title">EFSM <span class="detail-full">Extended Finite State Machine</span></h3>
+    <p class="detail-tagline">FSM + Guards + Variables — transition 不只看事件，還看變數值</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">FSM 的最大痛點是狀態爆炸：每個細微差異都要拆成獨立 state。EFSM 把「重複的差異」吸收進變數，用 guard 條件守住 transition 入口。結果是：狀態圖保持精簡，業務邏輯透過變數和條件表達，而不是靠無數個幾乎相同的 state。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>FSM + 變數 + guard 條件，避免狀態爆炸</td></tr>
+      <tr><th>基本單位</th><td>State + Transition + Guards（布林條件）+ Variables（整數、計數器等）</td></tr>
+      <tr><th>狀態位置</th><td>單一當前狀態 + 一組變數值</td></tr>
+      <tr><th>並行單位</th><td>無（純序列）</td></tr>
+      <tr><th>同步機制</th><td>無（單執行緒邏輯）</td></tr>
+      <tr><th>形式化</th><td>★★★☆☆ 中（形式化工具較少，狀態×變數空間難完備驗證）</td></tr>
+      <tr><th>適合場景</th><td>登入流程、計數器、電梯、通訊協議 session 管理</td></tr>
+      <tr><th>典型代表</th><td>python-statemachine（Guards）、XState guards + actions、SDL 建模語言</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：登入重試限制</h5>
+      <pre class="detail-code">State: IDLE, LOCKED
+Variable: retry_count = 0
+
+IDLE ──login_fail [retry_count &lt; 3] / retry_count++──▶ IDLE
+IDLE ──login_fail [retry_count >= 3]──▶ LOCKED
+IDLE ──login_ok──▶ AUTHENTICATED</pre>
+      <p class="detail-p">沒有 EFSM 的話，需要 IDLE_1 / IDLE_2 / IDLE_3 / LOCKED 四個狀態。有了 guard，一個 IDLE 加一個 retry_count 變數搞定。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：電梯</h5>
+      <p class="detail-p">State 只有 IDLE / MOVING_UP / MOVING_DOWN / DOOR_OPEN。floor 變數記錄樓層，guard <code>[floor == target]</code> 決定是否停靠，省下為每一層建 state 的麻煩。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：TCP 協議</h5>
+      <p class="detail-p">sequence number、window size 都是變數；guard 條件篩選哪些 segment 才觸發 ACK transition。純 FSM 無法表達這層語義。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>狀態數大幅下降：差異用變數吸收，不用拆 state</li>
+          <li>Guard 讓條件聲明式：transition 本身清楚說明「何時觸發」</li>
+          <li>靈活：variables 可以是計數器、enum、字串等任意型態</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>形式化工具支援少：狀態×變數空間太大，難自動驗證</li>
+          <li>測試案例難完備：變數值域造成無限多組合</li>
+          <li>guard 衝突難發現：多個 guard 可能同時為真，行為不確定</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Python</strong>：<code>python-statemachine</code>（條件函數當 guard）</li>
+      <li><strong>JavaScript</strong>：XState <code>guards</code> + <code>actions</code>（v5 完整支援）</li>
+      <li><strong>通訊建模</strong>：SDL（Specification and Description Language，ITU-T 標準）</li>
+      <li><strong>測試</strong>：GraphWalker（基於 EFSM 模型自動生成測試路徑）</li>
+    </ul>
+  </section>
+</article>

@@ -1,0 +1,79 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅳ 機率 / 時間</span>
+    <h3 class="detail-title">HMM <span class="detail-full">Hidden Markov Model</span></h3>
+    <p class="detail-tagline">狀態不可見 — 只能從 emission 觀察推隱藏狀態</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">真實世界的狀態往往無法直接觀察。HMM 將 Markov Chain 一分為二：隱藏層（如音素、詞性、基因區段）按 Markov 性質轉移，可觀察層（如聲學特徵、單詞、鹼基）由隱狀態生成。三大問題各有對應算法：Evaluation（Forward）、Decoding（Viterbi）、Learning（Baum-Welch）。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>隱藏 Markov 鏈 + 可觀察 emission — 從觀察逆推隱狀態</td></tr>
+      <tr><th>基本單位</th><td>Hidden states Q + Observations O + Transition A + Emission B + Initial π</td></tr>
+      <tr><th>狀態位置</th><td>隱狀態序列（不可直接觀察，以機率分布表示）</td></tr>
+      <tr><th>並行單位</th><td>無（單鏈，時間步序列推進）</td></tr>
+      <tr><th>同步機制</th><td>無（Forward-Backward 算法在訓練時做全局推斷）</td></tr>
+      <tr><th>形式化</th><td>★★★★☆ 強（三大問題均有精確算法，但假設強）</td></tr>
+      <tr><th>適合場景</th><td>語音識別（ASR）、詞性標註（POS）、基因序列分析、手勢辨識</td></tr>
+      <tr><th>典型代表</th><td>Kaldi（ASR）、hmmlearn、Pomegranate、HTK</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：語音識別（音素 HMM）</h5>
+      <pre class="detail-code">隱狀態：音素序列（/s/, /p/, /iː/, /tʃ/…）
+觀察值：MFCC 聲學特徵向量（每幀 13-39 維）
+Viterbi：給定聲學特徵序列，找最可能音素路徑
+訓練：Baum-Welch EM 算法，反覆更新 A, B 矩陣</pre>
+      <p class="detail-p">Kaldi 的傳統 GMM-HMM pipeline 在 Transformer 普及前是 ASR 工業標準。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：詞性標註（POS Tagging）</h5>
+      <p class="detail-p">隱狀態為詞性（NOUN/VERB/ADJ），觀察值為單詞序列。Viterbi 算法找最可能詞性序列，時間複雜度 O(N·T²)。NLTK 的 HMM tagger 即此實作。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：CpG Island 偵測（基因組）</h5>
+      <p class="detail-p">隱狀態為 {CpG island, non-island}，觀察值為 {A, C, G, T}。HMM 掃描基因組序列，定位甲基化區域，用於癌症標誌物研究。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>可從觀察序列推隱藏狀態：三大算法成熟，有精確解</li>
+          <li>無監督學習：Baum-Welch 不需標記資料即可訓練</li>
+          <li>在 Transformer 出現前主宰 NLP 與 ASR 十餘年</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>Markov 假設限制長距依賴：無法捕捉跨段落文脈</li>
+          <li>Transformer 已全面超越：Attention 機制無記憶限制</li>
+          <li>連續 emission 需要 GMM 近似：增加參數量與訓練難度</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Python</strong>：<code>hmmlearn</code>（Gaussian HMM / Multinomial HMM）</li>
+      <li><strong>Python</strong>：<code>pomegranate</code>（支援 GPU 加速的 HMM）</li>
+      <li><strong>C++</strong>：Kaldi（工業級 ASR，GMM-HMM + DNN-HMM hybrid）</li>
+      <li><strong>C</strong>：HTK（Cambridge 語音工具組，ASR 研究標配）</li>
+      <li><strong>Stan / PyMC</strong>：<code>hidden_markov_model</code> 函數（貝葉斯 HMM）</li>
+    </ul>
+  </section>
+</article>

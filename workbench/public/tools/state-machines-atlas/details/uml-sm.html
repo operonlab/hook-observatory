@@ -1,0 +1,81 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅲ 擴展特性</span>
+    <h3 class="detail-title">UML State Machine <span class="detail-full">UML 2.x Behavioral / Protocol State Machine</span></h3>
+    <p class="detail-tagline">工業標準化的 Statechart — 加 Protocol SM 與豐富 pseudostates</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">把 Harel Statechart 標準化進 UML 2.x 規範，並加入 Protocol State Machine 這個實用擴展——用來限制對物件的合法呼叫順序，而非只描述內部行為。豐富的 pseudostate（Junction、Choice、Fork、Join、History）讓複雜分支和並行都有標準畫法。代價是規範本身龐大，工具鏈昂貴。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>標準化 Statechart + Protocol SM（合法呼叫順序約束）</td></tr>
+      <tr><th>基本單位</th><td>State / Transition / Entry·Exit·Do / Junction / Choice / Fork / Join / Shallow History / Deep History / Final</td></tr>
+      <tr><th>狀態位置</th><td>層次路徑 + 並行 region（同 Statechart）</td></tr>
+      <tr><th>並行單位</th><td>Orthogonal regions（Fork/Join pseudostate 控制並行）</td></tr>
+      <tr><th>同步機制</th><td>Entry/Exit/Do actions、Completion transitions、Deferred events</td></tr>
+      <tr><th>形式化</th><td>★★★★★ 極強（ISO/IEC 19505，OMG UML 2.x spec）</td></tr>
+      <tr><th>適合場景</th><td>醫療設備 lifecycle、銀行帳戶 API 順序約束、FDA/CE 認證系統建模</td></tr>
+      <tr><th>典型代表</th><td>IBM Rational Rhapsody、Enterprise Architect、PlantUML、Papyrus、Qt State Machine</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：銀行帳戶 Protocol State Machine</h5>
+      <pre class="detail-code">Protocol SM — 合法呼叫順序：
+  PENDING ──open()──▶ ACTIVE
+  ACTIVE  ──freeze()──▶ FROZEN
+  FROZEN  ──unfreeze()──▶ ACTIVE
+  ACTIVE  ──close()──▶ CLOSED
+
+非法：CLOSED 狀態呼叫 deposit() → 編譯期或執行期報錯</pre>
+      <p class="detail-p">Protocol SM 不描述內部實作，只規定哪些操作在哪個狀態下合法。用於 API 設計的契約驗證。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：線上購物訂單（Junction 分支）</h5>
+      <p class="detail-p">PAID 狀態後，透過 Junction pseudostate 依 stock_available 條件分支：庫存充足走 SHIPPED，缺貨走 BACKORDERED。Junction 是靜態分支（transition 前計算），Choice 是動態分支（transition 後計算）。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：醫療設備嚴格 lifecycle</h5>
+      <p class="detail-p">ISO 13485 認證要求設備狀態圖符合 UML SM 規範。審核者直接看 UML SM 圖確認 lifecycle 合規，工具自動生成文件和程式碼，確保實作與規格一致。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>工業標準：FDA/CE/ISO 認證常要求 UML SM 建模文件</li>
+          <li>豐富 pseudostate：Junction、Choice、Fork、Join 應對各種分支並行場景</li>
+          <li>工具鏈成熟：code gen、simulation、model checking 一條龍</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>UML 被批「overengineered」：spec 500+ 頁，大多數場景用不到</li>
+          <li>工具昂貴：Rational Rhapsody、Enterprise Architect 授權費高</li>
+          <li>手繪耗時：pseudostate 多，圖形複雜，維護成本高</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>商業工具</strong>：IBM Rational Rhapsody（C++/Java codegen）、Enterprise Architect（Sparx）</li>
+      <li><strong>開源</strong>：Papyrus（Eclipse EMF based）、PlantUML（<code>@startuml</code> 文字定義）</li>
+      <li><strong>C++/Qt</strong>：Qt State Machine Framework（<code>QStateMachine</code>）</li>
+      <li><strong>標準參考</strong>：OMG UML 2.5.1 spec（<code>www.omg.org/spec/UML</code>）</li>
+    </ul>
+  </section>
+</article>

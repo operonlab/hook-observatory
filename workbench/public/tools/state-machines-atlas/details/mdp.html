@@ -1,0 +1,79 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅳ 機率 / 時間</span>
+    <h3 class="detail-title">MDP <span class="detail-full">Markov Decision Process</span></h3>
+    <p class="detail-tagline">Markov Chain + action + reward — 強化學習的理論基礎</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">在 Markov Chain 上加入 agent、決策與獎勵信號。MDP 回答一個問題：哪條行動序列能最大化期望累積獎勵？Bellman 最優方程把這個問題轉成遞迴形式，Value Iteration 與 Policy Gradient 都從這裡出發。MDP 是強化學習的理論骨架。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>Agent 在機率環境中決策，最大化折扣累積獎勵 E[Σ γᵗ rₜ]</td></tr>
+      <tr><th>基本單位</th><td>States S + Actions A + Transition P(s'|s,a) + Reward R(s,a,s') + Discount γ</td></tr>
+      <tr><th>狀態位置</th><td>單一當前狀態（agent 完全可觀察）</td></tr>
+      <tr><th>並行單位</th><td>無（序列決策，每步一個 action）</td></tr>
+      <tr><th>同步機制</th><td>無（Bellman backup 在求解期間迭代傳播價值）</td></tr>
+      <tr><th>形式化</th><td>★★★★★ 極強（Bellman 最優方程、Policy Gradient 定理均有嚴格推導）</td></tr>
+      <tr><th>適合場景</th><td>遊戲 AI、機器人導航、庫存管理、推薦系統排序、自動駕駛規劃</td></tr>
+      <tr><th>典型代表</th><td>OpenAI Gym、Stable-Baselines3、RLlib、DeepMind Acme</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：Grid World Navigation</h5>
+      <pre class="detail-code">狀態：格子座標 (x, y)
+動作：{上, 下, 左, 右}
+轉移：80% 成功移動，20% 隨機滑動
+獎勵：寶藏格 +10，陷阱格 -5，其餘 -0.1
+目標：Value Iteration 求最優 policy π*(s)</pre>
+      <p class="detail-p">Bellman 方程迭代收斂後，每格都有最優行動。策略清晰可視覺化，是 RL 教學的經典起點。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：AlphaGo 的 MDP 結構</h5>
+      <p class="detail-p">棋局是 MDP：狀態為棋盤局面，動作為落子位置，轉移確定性（圍棋無隨機），獎勵為終局勝負（+1/-1）。AlphaGo 用 MCTS + Policy/Value Network 近似求解此高維 MDP。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：庫存補貨決策</h5>
+      <p class="detail-p">狀態為當前庫存量，動作為訂貨數量，需求量隨機（transition 有機率性），獎勵為銷售利潤減庫存成本。用 Value Iteration 或 DQN 求出最優補貨策略。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>RL 核心框架：DQN、PPO、SAC 全都建立在 MDP 形式上</li>
+          <li>Bellman 方程可遞迴求解：小狀態空間有精確解（Value/Policy Iteration）</li>
+          <li>可結合函數近似：DQN 用神經網路逼近 Q(s,a)，突破 tabular 限制</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>狀態空間大時 tabular 方法失效：需要函數近似（帶來訓練不穩定）</li>
+          <li>Markov property 不總成立：部分場景需要 POMDP 或 Recurrent 策略</li>
+          <li>Reward shaping 有陷阱：設計不當的獎勵函數會導致 agent 鑽漏洞</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Python</strong>：<code>OpenAI Gym / Gymnasium</code>（MDP 環境標準介面）</li>
+      <li><strong>Python</strong>：<code>Stable-Baselines3</code>（PPO/DQN/SAC 算法庫）</li>
+      <li><strong>Python</strong>：<code>Ray RLlib</code>（分散式 RL，支援多 agent）</li>
+      <li><strong>Python</strong>：<code>DeepMind Acme</code>（研究級分散式 RL 框架）</li>
+    </ul>
+  </section>
+</article>

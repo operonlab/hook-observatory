@@ -1,0 +1,78 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅲ 擴展特性</span>
+    <h3 class="detail-title">Statechart <span class="detail-full">Harel Statechart</span></h3>
+    <p class="detail-tagline">HSM + orthogonal regions + history + entry/exit — 工程 FSM 的終極型態</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">David Harel 在 1987 年提出，用三個法寶解決 FSM 的所有痛點：階層（HSM）消除重複 transition、並行 region（orthogonal）讓多個維度同時活躍、history pseudostate 讓系統記住上次離開時的位置。三者合一，Statechart 能以接近線性的狀態數表達指數級的系統複雜度。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>HSM + 並行 region + history：階層、並行、記憶三位一體</td></tr>
+      <tr><th>基本單位</th><td>Hierarchical states + Orthogonal regions（∥）+ History pseudostates + Actions</td></tr>
+      <tr><th>狀態位置</th><td>每個 region 各自有當前狀態（多個活躍狀態同時存在）</td></tr>
+      <tr><th>並行單位</th><td>Orthogonal regions（同一 superstate 內多個獨立 region）</td></tr>
+      <tr><th>同步機制</th><td>Entry/Exit actions、internal transitions、broadcast events</td></tr>
+      <tr><th>形式化</th><td>★★★★★ 極強（UML State Machine 的理論基礎，有 SCXML W3C 標準）</td></tr>
+      <tr><th>適合場景</th><td>音訊播放器、手機 OS、UI 框架、任何有多個獨立維度的複雜系統</td></tr>
+      <tr><th>典型代表</th><td>XState（JS）、SCXML（W3C）、python-statemachine、Yakindu</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：音訊播放器（三個並行 region）</h5>
+      <pre class="detail-code">Superstate: PLAYER_ACTIVE
+  ∥ Region PLAYBACK:  STOPPED | PLAYING | PAUSED
+  ∥ Region VOLUME:    NORMAL  | MUTED
+  ∥ Region NETWORK:   ONLINE  | BUFFERING | OFFLINE</pre>
+      <p class="detail-p">三個維度完全獨立：可以同時「PLAYING + MUTED + BUFFERING」。純 FSM 需要 3×2×3 = 18 個 state，Statechart 只需 3+2+3 = 8 個。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：手機並行運作</h5>
+      <p class="detail-p">通話 region、音樂 region、WiFi region 各自獨立運作。接到電話時通話 region 進入 RINGING，不影響 WiFi region 的 CONNECTED 狀態。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：History Pseudostate</h5>
+      <p class="detail-p">使用者在 SETTINGS 的深層子頁面（SETTINGS_ACCOUNT_SECURITY），按 Home 鍵暫離。下次進 SETTINGS 時，Deep History pseudostate 直接恢復到 SETTINGS_ACCOUNT_SECURITY，而非 SETTINGS 的初始 substate。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>表達力接近 UML SM：一張圖搞定複雜 lifecycle</li>
+          <li>Orthogonal region 解決「同時多狀態」的本質問題</li>
+          <li>History 讓 UX 流程更自然（記住上次位置）</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>學習曲線陡：region、history、pseudostate 概念多</li>
+          <li>需要專門函式庫支援，自己實作很容易出錯</li>
+          <li>debug 工具不如簡單 FSM 普及，視覺化難</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>JavaScript</strong>：XState v5（最成熟的 Statechart 實作，有 Stately Studio 視覺化）</li>
+      <li><strong>標準</strong>：SCXML（W3C State Chart XML，XML 描述 Statechart）</li>
+      <li><strong>Python</strong>：<code>python-statemachine</code>（支援 HSM，partial Statechart）</li>
+      <li><strong>IDE 工具</strong>：Yakindu Statechart Tools（Eclipse，含 codegen）</li>
+    </ul>
+  </section>
+</article>

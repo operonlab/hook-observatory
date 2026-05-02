@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Behavior Trees Masterclass — 根據 Colledanchise &amp; Ögren 教科書</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#1e1e2e;--mantle:#181825;--crust:#11111b;
+  --surface:#313244;--surface2:#45475a;--surface3:#585b70;
+  --text:#cdd6f4;--subtext:#a6adc8;--overlay:#6c7086;
+  --lavender:#b4befe;--blue:#89b4fa;--sapphire:#74c7ec;--sky:#89dceb;
+  --green:#a6e3a1;--yellow:#f9e2af;--peach:#fab387;
+  --mauve:#cba6f7;--pink:#f5c2e7;--teal:#94e2d5;
+  --red:#f38ba8;--maroon:#eba0ac;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,"PingFang TC","Noto Sans TC",sans-serif;
+  --serif:'Iowan Old Style','Palatino','Georgia',serif;
+  --mono:'JetBrains Mono','Fira Code','Menlo',monospace;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.75;font-size:16px}
+
+/* Layout */
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.hero{text-align:center;padding:80px 24px 56px;border-bottom:1px solid var(--surface2);background:linear-gradient(180deg,var(--crust),var(--mantle),var(--bg))}
+.hero .badge{display:inline-block;font-family:var(--mono);font-size:.7rem;padding:4px 12px;border-radius:99px;background:var(--surface);color:var(--sapphire);margin-bottom:16px;letter-spacing:2px}
+.hero h1{font-family:var(--serif);font-size:clamp(1.8rem,4.5vw,2.8rem);color:var(--lavender);margin-bottom:12px;letter-spacing:-.5px;font-weight:600;line-height:1.2}
+.hero h1 em{color:var(--peach);font-style:italic;font-weight:400}
+.hero .subtitle{color:var(--subtext);font-size:1.05rem;max-width:680px;margin:0 auto 20px}
+.hero .cite{color:var(--overlay);font-size:.8rem;font-family:var(--mono);margin-top:20px;padding-top:20px;border-top:1px solid var(--surface2);max-width:560px;margin-left:auto;margin-right:auto}
+.hero .cite strong{color:var(--teal)}
+
+/* TOC */
+.toc{position:sticky;top:0;z-index:10;background:rgba(24,24,37,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--surface2);padding:10px 0}
+.toc-inner{max-width:960px;margin:0 auto;padding:0 24px;display:flex;gap:6px;flex-wrap:wrap;overflow-x:auto}
+.toc a{color:var(--subtext);text-decoration:none;font-size:.78rem;font-family:var(--mono);padding:5px 9px;border-radius:5px;white-space:nowrap;transition:all .15s}
+.toc a:hover{color:var(--lavender);background:var(--surface)}
+.toc a.part{color:var(--peach);font-weight:600;pointer-events:none}
+
+/* Parts */
+.part-divider{padding:56px 24px 24px;text-align:center;border-top:1px solid var(--surface2);background:var(--mantle)}
+.part-divider .label{font-family:var(--mono);color:var(--peach);font-size:.8rem;letter-spacing:3px}
+.part-divider h2{font-family:var(--serif);font-size:clamp(1.4rem,3vw,2rem);color:var(--lavender);margin-top:8px;font-weight:500}
+
+/* Sections */
+section{padding:48px 0}
+section + section{border-top:1px dashed var(--surface2)}
+.ch-num{font-family:var(--mono);color:var(--teal);font-size:.78rem;letter-spacing:2px;margin-bottom:6px}
+h2.ch-title{font-family:var(--serif);font-size:clamp(1.4rem,3vw,2rem);color:var(--blue);margin-bottom:8px;letter-spacing:-.2px;font-weight:600}
+.ch-ref{font-family:var(--mono);color:var(--overlay);font-size:.78rem;margin-bottom:24px;font-style:italic}
+h3{font-size:1.15rem;color:var(--teal);margin:32px 0 14px;font-weight:600;padding-left:10px;border-left:3px solid var(--teal)}
+h4{font-size:1rem;color:var(--yellow);margin:20px 0 8px;font-weight:600;font-family:var(--mono)}
+p{margin-bottom:14px}
+p.lead{font-size:1.05rem;color:var(--subtext);font-style:italic;border-left:3px solid var(--mauve);padding-left:16px;margin-bottom:24px}
+
+/* Academic elements */
+.def,.thm,.ex{background:var(--surface);border-radius:8px;padding:18px 22px;margin:20px 0;border-left:4px solid var(--blue)}
+.def{border-left-color:var(--blue)}
+.thm{border-left-color:var(--mauve)}
+.ex{border-left-color:var(--peach)}
+.def .label,.thm .label,.ex .label{display:inline-block;font-family:var(--mono);font-size:.72rem;padding:2px 8px;border-radius:4px;margin-bottom:8px;letter-spacing:1.5px}
+.def .label{background:rgba(137,180,250,.15);color:var(--blue)}
+.thm .label{background:rgba(203,166,247,.15);color:var(--mauve)}
+.ex .label{background:rgba(250,179,135,.15);color:var(--peach)}
+
+.callout{background:var(--surface);border-left:4px solid var(--mauve);padding:18px 22px;margin:20px 0;border-radius:0 8px 8px 0}
+.callout.info{border-left-color:var(--blue)}
+.callout.warn{border-left-color:var(--peach)}
+.callout.danger{border-left-color:var(--red)}
+.callout.success{border-left-color:var(--green)}
+.callout strong.title{color:var(--lavender);display:block;margin-bottom:6px;font-family:var(--mono);font-size:.88rem;letter-spacing:.5px}
+
+blockquote{background:var(--mantle);border-left:4px solid var(--yellow);padding:16px 20px;margin:20px 0;border-radius:0 8px 8px 0;font-family:var(--serif);font-style:italic;color:var(--subtext)}
+blockquote cite{display:block;margin-top:10px;font-size:.82rem;color:var(--overlay);font-style:normal;font-family:var(--mono)}
+blockquote cite::before{content:"— "}
+
+ul,ol{margin-left:24px;margin-bottom:16px}
+li{margin-bottom:6px}
+code{background:var(--surface);color:var(--peach);padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:.88em}
+pre{background:var(--mantle);color:var(--text);padding:18px 20px;border-radius:10px;overflow-x:auto;margin:16px 0;border:1px solid var(--surface2);font-family:var(--mono);font-size:.85rem;line-height:1.65}
+pre code{background:transparent;color:inherit;padding:0;border-radius:0;font-size:inherit}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;margin:20px 0;background:var(--surface);border-radius:8px;overflow:hidden;font-size:.9rem}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--surface2);vertical-align:top}
+th{background:var(--mantle);color:var(--lavender);font-family:var(--mono);font-size:.78rem;text-transform:uppercase;letter-spacing:1px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+td:first-child{font-weight:600;color:var(--teal)}
+
+/* Mermaid */
+.mermaid-wrap{background:#fff;padding:24px;border-radius:12px;margin:20px 0;overflow-x:auto;border:1px solid var(--surface2)}
+.mermaid-wrap .label{color:var(--subtext);font-size:.82rem;font-family:var(--mono);margin-bottom:12px;text-align:center;background:var(--surface);padding:6px 12px;border-radius:6px;display:inline-block}
+.mermaid{display:flex;justify-content:center}
+
+/* Symbols */
+.sym{display:inline-block;font-family:var(--mono);font-weight:700;padding:2px 10px;border-radius:6px;margin:0 2px;font-size:.9em}
+.sym.sel{background:rgba(137,180,250,.15);color:var(--blue)}
+.sym.seq{background:rgba(166,227,161,.15);color:var(--green)}
+.sym.par{background:rgba(249,226,175,.2);color:var(--yellow)}
+.sym.dec{background:rgba(203,166,247,.15);color:var(--mauve)}
+
+.return-chip{display:inline-block;font-family:var(--mono);font-weight:700;padding:3px 10px;border-radius:99px;margin:0 4px;font-size:.8rem}
+.return-chip.s{background:rgba(166,227,161,.15);color:var(--green)}
+.return-chip.f{background:rgba(243,139,168,.15);color:var(--red)}
+.return-chip.r{background:rgba(249,226,175,.2);color:var(--yellow)}
+
+/* Two-col */
+.two-col{display:grid;grid-template-columns:1fr;gap:16px;margin:24px 0}
+@media(min-width:768px){.two-col{grid-template-columns:1fr 1fr}}
+.col-card{background:var(--surface);padding:20px;border-radius:10px;border:1px solid var(--surface2)}
+.col-card.pro{border-top:3px solid var(--green)}
+.col-card.con{border-top:3px solid var(--red)}
+
+.footer{text-align:center;padding:56px 24px;color:var(--overlay);font-size:.82rem;font-family:var(--mono);background:var(--mantle);border-top:1px solid var(--surface2)}
+.footer a{color:var(--mauve);text-decoration:none}
+.footer h4{color:var(--text);margin-bottom:12px;font-family:var(--serif);font-size:1.1rem}
+
+.back-link{display:inline-block;color:var(--subtext);text-decoration:none;font-family:var(--mono);font-size:.85rem;margin-bottom:20px;padding:6px 10px;border-radius:6px;transition:all .15s}
+.back-link:hover{color:var(--lavender);background:var(--surface)}
+
+/* Glossary */
+dl{background:var(--surface);padding:16px 20px;border-radius:8px;margin:16px 0}
+dt{font-family:var(--mono);color:var(--teal);font-weight:600;margin-top:10px}
+dt:first-child{margin-top:0}
+dd{margin-left:0;color:var(--subtext);padding-left:16px;border-left:2px solid var(--surface2);margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <a class="back-link" href="/tools/">← 返回工具集</a>
+    <div class="badge">MASTERCLASS · 2026 EDITION</div>
+    <h1>Behavior Trees <em>in Robotics &amp; AI</em><br>完整學習教材</h1>
+    <p class="subtitle">系統化整理自 Michele Colledanchise &amp; Petter Ögren 的 BT 權威教科書<br>從 Tick 機制到 PPA 設計模式，13 章 × 約 25 個範例 × 全中文講解</p>
+    <div class="cite">
+      <strong>Colledanchise, M. &amp; Ögren, P. (2018).</strong><br>
+      <em>Behavior Trees in Robotics and AI: An Introduction.</em><br>
+      CRC Press. ISBN 978-1138593732
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a class="part" href="#part1">Part I · 基礎</a>
+    <a href="#ch1">1. Tick</a>
+    <a href="#ch2">2. 節點族譜</a>
+    <a href="#ch3">3. 返回值</a>
+
+    <a class="part" href="#part2">Part II · Composite</a>
+    <a href="#ch4">4. Sequence</a>
+    <a href="#ch5">5. Fallback</a>
+    <a href="#ch6">6. Parallel</a>
+    <a href="#ch7">7. Memory 陷阱</a>
+
+    <a class="part" href="#part3">Part III · Decorator &amp; Data</a>
+    <a href="#ch8">8. Decorator</a>
+    <a href="#ch9">9. Blackboard</a>
+
+    <a class="part" href="#part4">Part IV · 設計與比較</a>
+    <a href="#ch10">10. 四哲學</a>
+    <a href="#ch11">11. vs FSM/DT</a>
+    <a href="#ch12">12. PPA 模式</a>
+    <a href="#ch13">13. 常見陷阱</a>
+
+    <a class="part" href="#appendix">附錄</a>
+    <a href="#glossary">術語</a>
+    <a href="#reading">書單</a>
+  </div>
+</nav>
+
+<!-- PART I ================================================== -->
+<div class="part-divider" id="part1">
+  <div class="label">PART I</div>
+  <h2>基礎：Tick 怎麼跑、節點怎麼分</h2>
+</div>
+
+<section id="ch1">
+  <div class="container">
+    <div class="ch-num">CHAPTER 01</div>
+    <h2 class="ch-title">Tick — 行為樹的心跳</h2>
+    <div class="ch-ref">對應教科書 §2.1 — The Tick-Generation Mechanism</div>
+
+    <p class="lead">行為樹不是一次執行完的決策，而是一個<strong>每週期從根重跑一次</strong>的反應式系統。這個週期脈衝叫做 tick。</p>
+
+    <div class="def">
+      <span class="label">DEFINITION 1.1</span>
+      <p><strong>Tick</strong> 是由 root 節點向子樹遞迴發出的執行訊號。每個節點收到 tick 後執行一次其邏輯，並回傳 <span class="return-chip s">Success</span> / <span class="return-chip f">Failure</span> / <span class="return-chip r">Running</span> 之一。下個週期 root 會再次發出 tick，樹從根重新評估。</p>
+    </div>
+
+    <h3>Tick 的傳遞</h3>
+    <p>Tick 從 root 開始，依照 composite 節點的語義決定要把 tick 傳給哪些子節點。例如 Sequence 會從左到右依序 tick 子節點，遇到 <code>Failure</code> 或 <code>Running</code> 就停止並上報。</p>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 1.1 生活比喻</span>
+      <p>想像一台心律調節器每秒對身體發送一次「檢查你現在該做什麼」的訊號。訊號從大腦（root）沿著神經（edges）傳到四肢（leaves），每個部位回報「我做好了」「我做不到」「我還在做」— 這就是 tick。</p>
+    </div>
+
+    <div class="callout info">
+      <strong class="title">為什麼要每秒重跑？</strong>
+      <p>因為環境會變。上一秒還沒看到敵人，這一秒看到了 — 如果樹只執行一次，小精靈就會繼續吃豆子直到被抓。**重新從 root 評估**讓 BT 能對環境變化做出即時反應（reactivity）。</p>
+    </div>
+  </div>
+</section>
+
+<section id="ch2">
+  <div class="container">
+    <div class="ch-num">CHAPTER 02</div>
+    <h2 class="ch-title">節點族譜 — 四大家族</h2>
+    <div class="ch-ref">對應教科書 §1.3, §2.2 — Classification of Nodes</div>
+
+    <p class="lead">BT 的節點分成四類：<strong>Composite</strong>（控制流程）、<strong>Decorator</strong>（修飾單一子節點）、<strong>Condition</strong>（回答問題）、<strong>Action</strong>（執行動作）。前兩類可以有子節點，後兩類是葉子。</p>
+
+    <div class="mermaid-wrap">
+      <div class="label">節點族譜</div>
+      <div class="mermaid">
+flowchart TD
+    N["BT Node"]
+    Inner["可有子節點"]
+    Leaf["葉子節點"]
+
+    Comp["Composite<br>多個子節點"]
+    Dec["Decorator<br>只一個子節點"]
+    Cond["Condition<br>問問題"]
+    Act["Action<br>執行動作"]
+
+    Seq["Sequence ->"]
+    Sel["Fallback ?"]
+    Par["Parallel ||"]
+
+    Inv["Inverter"]
+    Rep["Repeat / Retry"]
+    Tim["Timer / Cooldown"]
+    FS["Force Success/Failure"]
+
+    N --> Inner
+    N --> Leaf
+    Inner --> Comp
+    Inner --> Dec
+    Leaf --> Cond
+    Leaf --> Act
+    Comp --> Seq
+    Comp --> Sel
+    Comp --> Par
+    Dec --> Inv
+    Dec --> Rep
+    Dec --> Tim
+    Dec --> FS
+
+    classDef n fill:#e5dbff,stroke:#5f3dc4,color:#000
+    classDef comp fill:#dae8fc,stroke:#6c8ebf,color:#000
+    classDef dec fill:#fff4e6,stroke:#e67700,color:#000
+    classDef cond fill:#fff2cc,stroke:#d6b656,color:#000
+    classDef act fill:#d3f9d8,stroke:#2f9e44,color:#000
+
+    class N,Inner,Leaf n
+    class Comp,Seq,Sel,Par comp
+    class Dec,Inv,Rep,Tim,FS dec
+    class Cond cond
+    class Act act
+      </div>
+    </div>
+
+    <table>
+      <tr><th>家族</th><th>符號</th><th>子節點數</th><th>作用</th></tr>
+      <tr><td>Sequence</td><td><span class="sym seq">-&gt;</span></td><td>多個</td><td>全部成功才算成功（AND）</td></tr>
+      <tr><td>Fallback (Selector)</td><td><span class="sym sel">?</span></td><td>多個</td><td>一個成功就算成功（OR）</td></tr>
+      <tr><td>Parallel</td><td><span class="sym par">⇉</span></td><td>多個</td><td>同時 tick，依 policy 判定</td></tr>
+      <tr><td>Decorator</td><td><span class="sym dec">◇</span></td><td>一個</td><td>修飾/轉換子節點返回值</td></tr>
+      <tr><td>Condition</td><td>🟡</td><td>0</td><td>問問題，立即回 S/F</td></tr>
+      <tr><td>Action</td><td>🟢</td><td>0</td><td>執行動作，可能回 Running</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="ch3">
+  <div class="container">
+    <div class="ch-num">CHAPTER 03</div>
+    <h2 class="ch-title">三種返回值 — S / F / R</h2>
+    <div class="ch-ref">對應教科書 §2.1.1 — Return Statuses</div>
+
+    <div class="def">
+      <span class="label">DEFINITION 3.1</span>
+      <p>BT 節點被 tick 後必須回傳以下之一：</p>
+      <ul>
+        <li><span class="return-chip s">Success</span> — 任務完成或條件成立</li>
+        <li><span class="return-chip f">Failure</span> — 任務失敗或條件不成立</li>
+        <li><span class="return-chip r">Running</span> — 任務還在進行中，下個 tick 會繼續</li>
+      </ul>
+    </div>
+
+    <h3>為什麼 Running 很重要？</h3>
+    <p>這是 BT 與 Decision Tree 最大的差別。DT 的葉子動作是「瞬間」的，BT 的動作可以<strong>跨多個 tick</strong>執行。</p>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 3.1 走路到門口</span>
+      <p>Action「走到門口」不會在 1 tick 內完成。它會：</p>
+      <ul>
+        <li>第 1 tick：開始走 → 回傳 <span class="return-chip r">Running</span></li>
+        <li>第 2 tick：還在走 → <span class="return-chip r">Running</span></li>
+        <li>...</li>
+        <li>第 N tick：到了 → <span class="return-chip s">Success</span></li>
+      </ul>
+      <p>父 Sequence 收到 Running 就會保持狀態，<strong>不會往下 tick 其他子節點</strong>，也不會宣告整體成功，等下個週期繼續。</p>
+    </div>
+  </div>
+</section>
+
+<!-- PART II ================================================== -->
+<div class="part-divider" id="part2">
+  <div class="label">PART II</div>
+  <h2>Composite 節點深入</h2>
+</div>
+
+<section id="ch4">
+  <div class="container">
+    <div class="ch-num">CHAPTER 04</div>
+    <h2 class="ch-title">Sequence <span class="sym seq">-&gt;</span> — AND 邏輯</h2>
+    <div class="ch-ref">對應教科書 §1.3.1 — Sequence Node</div>
+
+    <div class="def">
+      <span class="label">DEFINITION 4.1</span>
+      <p><strong>Sequence</strong> 按順序 tick 子節點：</p>
+      <ul>
+        <li>子節點回 <span class="return-chip s">S</span> → 繼續 tick 下一個</li>
+        <li>子節點回 <span class="return-chip f">F</span> → 立即回傳 <span class="return-chip f">F</span>（短路，不 tick 剩下的）</li>
+        <li>子節點回 <span class="return-chip r">R</span> → 立即回傳 <span class="return-chip r">R</span></li>
+        <li>全部子節點都 <span class="return-chip s">S</span> → 回傳 <span class="return-chip s">S</span></li>
+      </ul>
+    </div>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 4.1 開門動作</span>
+      <div class="mermaid-wrap">
+        <div class="label">開門三步驟：前置條件 + 動作</div>
+        <div class="mermaid">
+flowchart TD
+    S["-&gt; Open Door"]
+    C1["Door Exists?"]
+    C2["Not Locked?"]
+    A1["Turn Handle"]
+    A2["Push"]
+
+    S --> C1
+    S --> C2
+    S --> A1
+    S --> A2
+
+    classDef cond fill:#fff2cc,stroke:#d6b656,color:#000
+    classDef act fill:#d3f9d8,stroke:#2f9e44,color:#000
+    classDef ctrl fill:#f8f9fa,stroke:#868e96,color:#000
+    class C1,C2 cond
+    class A1,A2 act
+    class S ctrl
+        </div>
+      </div>
+      <p>任何一步失敗（門被鎖、把手卡住）都會讓整體 Sequence 失敗。這是**前置條件鏈**的標準模式。</p>
+    </div>
+  </div>
+</section>
+
+<section id="ch5">
+  <div class="container">
+    <div class="ch-num">CHAPTER 05</div>
+    <h2 class="ch-title">Fallback <span class="sym sel">?</span> — OR 邏輯（也叫 Selector）</h2>
+    <div class="ch-ref">對應教科書 §1.3.2 — Fallback Node</div>
+
+    <div class="def">
+      <span class="label">DEFINITION 5.1</span>
+      <p><strong>Fallback</strong> 按順序 tick 子節點：</p>
+      <ul>
+        <li>子節點回 <span class="return-chip s">S</span> → 立即回傳 <span class="return-chip s">S</span>（找到一個能做的就停）</li>
+        <li>子節點回 <span class="return-chip f">F</span> → 繼續試下一個</li>
+        <li>子節點回 <span class="return-chip r">R</span> → 立即回傳 <span class="return-chip r">R</span></li>
+        <li>全部子節點都 <span class="return-chip f">F</span> → 回傳 <span class="return-chip f">F</span></li>
+      </ul>
+    </div>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 5.1 下雨時的應對</span>
+      <div class="mermaid-wrap">
+        <div class="label">優先級救援：最好的方案排最上</div>
+        <div class="mermaid">
+flowchart TD
+    F["? Handle Rain"]
+    S1["-&gt; [Has Umbrella?, Open Umbrella]"]
+    S2["-&gt; [Near Shelter?, Run to Shelter]"]
+    S3["-&gt; [Has Hood?, Put Hood On]"]
+    Wet["Get Wet (預設)"]
+
+    F --> S1
+    F --> S2
+    F --> S3
+    F --> Wet
+
+    classDef act fill:#d3f9d8,stroke:#2f9e44,color:#000
+    classDef ctrl fill:#f8f9fa,stroke:#868e96,color:#000
+    class S1,S2,S3,Wet act
+    class F ctrl
+        </div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <strong class="title">命名注意</strong>
+      <p>Ögren 教科書用 <strong>Fallback</strong>，Unreal/Unity 業界用 <strong>Selector</strong>。兩者是同一個東西，本網頁兩種稱呼並用。</p>
+    </div>
+  </div>
+</section>
+
+<section id="ch6">
+  <div class="container">
+    <div class="ch-num">CHAPTER 06</div>
+    <h2 class="ch-title">Parallel <span class="sym par">⇉</span> — 同時做多件事</h2>
+    <div class="ch-ref">對應教科書 §1.3.3 — Parallel Node</div>
+
+    <div class="def">
+      <span class="label">DEFINITION 6.1</span>
+      <p><strong>Parallel (M-of-N)</strong> 每個 tick 同時 tick <em>所有</em>子節點，依照策略判定整體結果：</p>
+      <ul>
+        <li><strong>Success-on-all</strong>：全部子節點 S 才算 S</li>
+        <li><strong>Success-on-one</strong>：任一子節點 S 就算 S</li>
+        <li><strong>M-of-N</strong>：至少 M 個 S 就算 S</li>
+      </ul>
+      <p>與 Sequence/Fallback 的「依序 tick」最大差別：Parallel <strong>每個 tick 都 tick 所有子節點</strong>。</p>
+    </div>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 6.1 巡邏機器人</span>
+      <div class="mermaid-wrap">
+        <div class="label">邊走邊監視：Parallel + Success-on-one</div>
+        <div class="mermaid">
+flowchart TD
+    P["|| Parallel (success-on-one)"]
+    A1["Patrol Route"]
+    A2["Monitor Enemy"]
+    A3["Check Battery"]
+
+    P --> A1
+    P --> A2
+    P --> A3
+
+    classDef act fill:#d3f9d8,stroke:#2f9e44,color:#000
+    classDef ctrl fill:#fff4e6,stroke:#e67700,color:#000
+    class A1,A2,A3 act
+    class P ctrl
+        </div>
+      </div>
+      <p>三個子節點同時運行：巡邏路線、監視敵人、檢查電量。任一發現問題（例如敵人出現 → Monitor 回 S）就中止整個 Parallel，讓上層決定下一步。</p>
+    </div>
+
+    <div class="callout warn">
+      <strong class="title">⚠ Parallel 的陷阱</strong>
+      <p>Parallel 會同時執行所有子節點的 action — 如果兩個 action 操作同一資源（例如兩個都控制馬達）會衝突。Ögren 教科書強調 Parallel 的子節點最好是<strong>互相獨立的感知/動作</strong>，而非同時爭搶同一硬體。</p>
+    </div>
+  </div>
+</section>
+
+<section id="ch7">
+  <div class="container">
+    <div class="ch-num">CHAPTER 07</div>
+    <h2 class="ch-title">Memory 節點的陷阱</h2>
+    <div class="ch-ref">對應教科書 §2.2 — Memory vs Memoryless Nodes</div>
+
+    <p class="lead">很多 BT 函式庫（如 BehaviorTree.CPP、py_trees）提供 <strong>Sequence with Memory</strong> / <strong>Fallback with Memory</strong> — 又稱 sticky 版本。Ögren 教科書<strong>強烈建議避免使用</strong>，本章解釋原因。</p>
+
+    <div class="def">
+      <span class="label">DEFINITION 7.1</span>
+      <p><strong>Memory Sequence</strong>：記住上次 tick 到哪個子節點，下個 tick 從那裡繼續，而不是從頭。例如第 1 tick 跑到第 2 個子節點回 R，第 2 tick 會<strong>直接從第 2 個子節點</strong>繼續。</p>
+    </div>
+
+    <h3>為什麼誘人？</h3>
+    <p>乍看省事：不用每次從頭評估所有子節點，看似更有效率。</p>
+
+    <h3>為什麼 Ögren 反對？</h3>
+    <div class="callout danger">
+      <strong class="title">🚨 Memory 破壞 Reactivity</strong>
+      <p>假設你有一個 Sequence：<code>-&gt; [Enemy Far?, Walk to Target, Place Bomb]</code>。</p>
+      <ul>
+        <li>第 1 tick：Enemy Far? ✓ → 開始走 → 走到一半（Running）</li>
+        <li>第 2 tick：<strong>如果用 Memory Sequence</strong>，直接從 Walk 繼續走，<strong>不再檢查 Enemy Far</strong></li>
+        <li>結果：敵人已經跑到面前，機器人還在傻傻地走去放炸彈</li>
+      </ul>
+      <p>這完全違背了 BT「每 tick 重新評估環境」的 reactivity 原則。</p>
+    </div>
+
+    <div class="thm">
+      <span class="label">GUIDELINE 7.1</span>
+      <p>除非你<strong>非常確定</strong>條件不會在執行中改變（如「檔案讀取」這類與外界無關的內部動作），否則<strong>永遠使用 memoryless Sequence/Fallback</strong>。需要記住進度的話，把狀態寫到 Blackboard 顯式管理。</p>
+    </div>
+  </div>
+</section>
+
+<!-- PART III ================================================== -->
+<div class="part-divider" id="part3">
+  <div class="label">PART III</div>
+  <h2>Decorator 與共享資料</h2>
+</div>
+
+<section id="ch8">
+  <div class="container">
+    <div class="ch-num">CHAPTER 08</div>
+    <h2 class="ch-title">Decorator — 修飾單一子節點</h2>
+    <div class="ch-ref">對應教科書 §2.2.3 — Decorator Nodes</div>
+
+    <p class="lead">Decorator 只有一個子節點，任務是<strong>轉換或限制</strong>子節點的返回值或 tick 頻率。想像它是包在子節點外面的濾鏡。</p>
+
+    <table>
+      <tr><th>Decorator</th><th>行為</th><th>典型用途</th></tr>
+      <tr><td>Inverter</td><td>S ↔ F 交換，R 不變</td><td>把「門開著?」反成「門關著?」</td></tr>
+      <tr><td>Force Success</td><td>永遠回 S（不管子節點）</td><td>讓非關鍵動作失敗也不影響 Sequence</td></tr>
+      <tr><td>Force Failure</td><td>永遠回 F</td><td>Debug 或強制跳過分支</td></tr>
+      <tr><td>Repeat(N)</td><td>重複 N 次</td><td>巡邏 5 圈</td></tr>
+      <tr><td>Retry(N)</td><td>失敗時重試最多 N 次</td><td>網路請求重試</td></tr>
+      <tr><td>Timeout(T)</td><td>T 秒後強制回 F</td><td>防止 action 卡死</td></tr>
+      <tr><td>Cooldown(T)</td><td>T 秒內回 F（鎖定）</td><td>技能冷卻</td></tr>
+      <tr><td>Limiter(N)</td><td>最多執行 N 次</td><td>一次性動作（如開箱子）</td></tr>
+    </table>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 8.1 Inverter 的用途</span>
+      <p>BT 標準寫法只有「條件成立 → S」，想表達「條件<strong>不</strong>成立 → S」就得用 Inverter。</p>
+<pre><code>// 原條件節點
+Enemy Nearby?           回 S 表示附近有敵人
+
+// 加 Inverter
+◇ Inverter
+└── Enemy Nearby?       回 S 表示附近「沒有」敵人</code></pre>
+    </div>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 8.2 Cooldown 技能系統</span>
+      <div class="mermaid-wrap">
+        <div class="label">Ult 技能 10 秒冷卻：Decorator 幫忙擋門</div>
+        <div class="mermaid">
+flowchart TD
+    Root["? Attack Selector"]
+    Cool["◇ Cooldown(10s)"]
+    UltSeq["-&gt; [Enemy Visible?, Cast Ult]"]
+    Normal["Normal Attack"]
+
+    Root --> Cool
+    Root --> Normal
+    Cool --> UltSeq
+
+    classDef act fill:#d3f9d8,stroke:#2f9e44,color:#000
+    classDef dec fill:#fff4e6,stroke:#e67700,color:#000
+    classDef ctrl fill:#f8f9fa,stroke:#868e96,color:#000
+    class UltSeq,Normal act
+    class Cool dec
+    class Root ctrl
+        </div>
+      </div>
+      <p>冷卻期間 Cooldown 直接回 F，上層 Fallback 就會跳到 Normal Attack；冷卻結束才讓 Ult Sequence 有機會 tick。</p>
+    </div>
+  </div>
+</section>
+
+<section id="ch9">
+  <div class="container">
+    <div class="ch-num">CHAPTER 09</div>
+    <h2 class="ch-title">Blackboard — 節點之間怎麼傳訊息</h2>
+    <div class="ch-ref">對應教科書 §2.4 — Blackboard Architecture</div>
+
+    <div class="def">
+      <span class="label">DEFINITION 9.1</span>
+      <p><strong>Blackboard</strong> 是一個 BT 全域可見的 key-value store，節點透過它讀寫共享資料。BT 節點本身無狀態、無返回值資料 — 所有需要跨節點共享的資訊都放 Blackboard。</p>
+    </div>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 9.1 追擊目標</span>
+      <ul>
+        <li>Condition 節點 <code>Find Target</code>：掃描敵人 → 最近者寫到 BB 的 <code>target_id</code></li>
+        <li>Action 節點 <code>Move to Target</code>：讀 BB 的 <code>target_id</code> → 前往該位置</li>
+        <li>Action 節點 <code>Attack Target</code>：讀 <code>target_id</code> → 攻擊</li>
+      </ul>
+      <p>三個節點完全解耦，但透過 Blackboard 協作完成一個追擊循環。</p>
+    </div>
+
+    <div class="callout warn">
+      <strong class="title">⚠ Blackboard 的濫用</strong>
+      <p>Blackboard 方便但容易變成「全域變數大垃圾場」。Ögren 建議：</p>
+      <ul>
+        <li>Blackboard key 應該有<strong>命名前綴</strong>（如 <code>perception/target_id</code>）</li>
+        <li><strong>寫入處應該少</strong>，讀取處可以多 — 方便追蹤資料來源</li>
+        <li>子樹最好有自己的區域 blackboard，避免全域污染</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- PART IV ================================================== -->
+<div class="part-divider" id="part4">
+  <div class="label">PART IV</div>
+  <h2>設計哲學、比較與模式</h2>
+</div>
+
+<section id="ch10">
+  <div class="container">
+    <div class="ch-num">CHAPTER 10</div>
+    <h2 class="ch-title">BT 的四大設計哲學</h2>
+    <div class="ch-ref">對應教科書 §3.1 — Advantages of BTs</div>
+
+    <div class="two-col">
+      <div class="col-card pro">
+        <h4>1. Reactivity（反應性）</h4>
+        <p>每 tick 從 root 重新評估，對環境變化立即反應。不會被「上次做到哪」綁死。</p>
+      </div>
+      <div class="col-card pro">
+        <h4>2. Modularity（模組性）</h4>
+        <p>任何子樹都可以獨立測試、獨立移植。子樹的輸入是 tick、輸出是 S/F/R — 接口極小。</p>
+      </div>
+      <div class="col-card pro">
+        <h4>3. Readability（可讀性）</h4>
+        <p>樹狀結構視覺直觀，控制節點少、符號統一。相比 FSM 的箭頭大麻團更易讀。</p>
+      </div>
+      <div class="col-card pro">
+        <h4>4. Debuggability（可除錯）</h4>
+        <p>每個節點的返回值可追蹤 — 工具可以即時上色顯示「哪個分支正在 Running」，比 FSM 好除錯太多。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="ch11">
+  <div class="container">
+    <div class="ch-num">CHAPTER 11</div>
+    <h2 class="ch-title">BT vs FSM / HFSM / DT / Subsumption</h2>
+    <div class="ch-ref">對應教科書 §4 — Generalization of Earlier Ideas</div>
+
+    <p class="lead">教科書 Chapter 4 用一整章證明 BT 可以<strong>表達</strong>其他主流控制架構能表達的所有行為，且更模組化。</p>
+
+    <h3>與 FSM 的比較</h3>
+
+    <div class="two-col">
+      <div class="col-card con">
+        <h4>FSM 的痛點</h4>
+        <ul>
+          <li>狀態之間的轉換邊會爆炸（O(n²)）</li>
+          <li>加一個狀態要改多個轉換邊</li>
+          <li>重用子狀態機困難</li>
+          <li>視覺上一團亂（「spaghetti transitions」）</li>
+        </ul>
+      </div>
+      <div class="col-card pro">
+        <h4>BT 的改善</h4>
+        <ul>
+          <li>樹狀結構，控制邊線性成長</li>
+          <li>加一個行為 = 多掛一個子樹</li>
+          <li>子樹可直接複製到另一棵樹重用</li>
+          <li>視覺清爽，符號少且統一</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>五大架構對照</h3>
+
+    <table>
+      <tr><th>架構</th><th>核心概念</th><th>痛點</th><th>BT 如何改善</th></tr>
+      <tr><td>FSM</td><td>狀態 + 轉換邊</td><td>轉換邊 O(n²) 爆炸</td><td>樹狀，邊線性成長</td></tr>
+      <tr><td>HFSM</td><td>FSM 巢狀</td><td>父子狀態耦合</td><td>子樹完全模組化</td></tr>
+      <tr><td>Decision Tree</td><td>問題分叉</td><td>無 Running、無反應性</td><td>Tick + 三返回值</td></tr>
+      <tr><td>Subsumption</td><td>行為層疊優先</td><td>難擴充、難 debug</td><td>Fallback 取代層疊</td></tr>
+      <tr><td>Teleo-reactive</td><td>條件-動作規則</td><td>只支援單層</td><td>可合成為 BT</td></tr>
+    </table>
+
+    <blockquote>
+      A BT can be designed to act equivalent to any given FSM, HFSM, DT, subsumption architecture, or teleo-reactive program, while providing superior modularity.
+      <cite>Colledanchise &amp; Ögren, 2018, §4 summary</cite>
+    </blockquote>
+  </div>
+</section>
+
+<section id="ch12">
+  <div class="container">
+    <div class="ch-num">CHAPTER 12</div>
+    <h2 class="ch-title">PPA Design Pattern — 書中最強設計方法</h2>
+    <div class="ch-ref">對應教科書 §3.2 — Postcondition-Precondition-Action Pattern</div>
+
+    <p class="lead">PPA 是 Ögren 教科書第 3 章提出的<strong>目標導向 BT 合成方法</strong>。有了 PPA，設計 BT 就不再是憑直覺畫，而是從目標倒推。</p>
+
+    <div class="def">
+      <span class="label">DEFINITION 12.1 PPA Template</span>
+<pre><code>目標 G 的 PPA 子樹：
+
+? Goal G
+├── Postcondition: G 已達成?   ← 已經達到就不用動
+└── -&gt; 達成路徑
+    ├── Precondition 1: P₁
+    ├── Precondition 2: P₂
+    ├── ...
+    └── Action A: 執行動作</code></pre>
+    </div>
+
+    <h3>為什麼 PPA 這麼強？</h3>
+    <ol>
+      <li><strong>目標導向</strong>：每個子樹都指向一個明確目標</li>
+      <li><strong>自我修正</strong>：如果目標已達成（postcondition ✓）就不重複動作</li>
+      <li><strong>可組合</strong>：要達成 Goal G 需要先達成 P₁，P₁ 本身又可展開成 PPA 子樹，遞迴合成</li>
+      <li><strong>可驗證</strong>：形式化驗證（書中第 9 章）可檢查 Precondition 是否足以保證 Postcondition</li>
+    </ol>
+
+    <div class="ex">
+      <span class="label">EXAMPLE 12.1 機器人拿物品</span>
+      <div class="mermaid-wrap">
+        <div class="label">PPA 三層遞迴：拿起物品 = 在附近 + 伸手抓</div>
+        <div class="mermaid">
+flowchart TD
+    G["? Goal: Object in Hand"]
+    Post["Object in Hand? (postcondition)"]
+    Path["-&gt; Grab Path"]
+    Near["Object Reachable?"]
+    Grab["Grab Object"]
+
+    Near2["? Sub-Goal: Object Reachable"]
+    Post2["Object Reachable?"]
+    Path2["-&gt; Navigate Path"]
+    Know["Object Position Known?"]
+    Nav["Move to Object"]
+
+    G --> Post
+    G --> Path
+    Path --> Near
+    Path --> Grab
+    Near --> Near2
+    Near2 --> Post2
+    Near2 --> Path2
+    Path2 --> Know
+    Path2 --> Nav
+
+    classDef cond fill:#fff2cc,stroke:#d6b656,color:#000
+    classDef act fill:#d3f9d8,stroke:#2f9e44,color:#000
+    classDef ctrl fill:#f8f9fa,stroke:#868e96,color:#000
+    class Post,Near,Know,Post2 cond
+    class Grab,Nav act
+    class G,Path,Near2,Path2 ctrl
+        </div>
+      </div>
+      <p>每一層都是 PPA 結構：先檢查目標是否達成，沒達成就沿著前置條件 → 動作走。第二層目標（Object Reachable）本身又是一個 PPA，遞迴下去。</p>
+    </div>
+  </div>
+</section>
+
+<section id="ch13">
+  <div class="container">
+    <div class="ch-num">CHAPTER 13</div>
+    <h2 class="ch-title">常見設計陷阱 Top 7</h2>
+    <div class="ch-ref">對應教科書 §3.4 — Common Pitfalls</div>
+
+    <table>
+      <tr><th>#</th><th>陷阱</th><th>症狀</th><th>修正</th></tr>
+      <tr><td>1</td><td>DT-style 巢狀</td><td>5+ 層 <code>?</code>/<code>-&gt;</code></td><td>扁平化到同一 Fallback</td></tr>
+      <tr><td>2</td><td>隱含條件</td><td>Action 裸掛在 Fallback</td><td>每個 Action 前配明確 Condition</td></tr>
+      <tr><td>3</td><td>缺預設動作</td><td>所有條件不符時樹 return F</td><td>Root Fallback 尾端加兜底 action</td></tr>
+      <tr><td>4</td><td>誤用 Memory Sequence</td><td>環境變了機器人不反應</td><td>改用 memoryless，狀態放 Blackboard</td></tr>
+      <tr><td>5</td><td>Blackboard 污染</td><td>全域 key 撞名</td><td>加命名前綴、子樹用局部 BB</td></tr>
+      <tr><td>6</td><td>Parallel 資源爭搶</td><td>兩個 action 同時控制同一硬體</td><td>Parallel 子節點只放獨立感知/動作</td></tr>
+      <tr><td>7</td><td>Action 無法回 Running</td><td>Sequence 跑到一半被中斷</td><td>長時 action 必須實作 R 狀態</td></tr>
+    </table>
+
+    <div class="callout danger">
+      <strong class="title">🚨 頭號殺手：DT-style 巢狀</strong>
+      <p>這是新手最常犯的錯 — 把 if-else 決策樹直接套上 BT 符號，產生 5-6 層巢狀結構。KTH 課程第三部分的 "Warrior DT design of BT" 就是<strong>作者故意示範的反例</strong>，但經常被轉述者誤當成範例教。</p>
+      <p>判別訣竅：看到超過 3 層的 <code>?</code> 或 <code>-&gt;</code>，先問自己「這層拿掉語義會變嗎？」— 不變就是冗餘。</p>
+    </div>
+  </div>
+</section>
+
+<!-- APPENDIX ================================================== -->
+<div class="part-divider" id="appendix">
+  <div class="label">APPENDIX</div>
+  <h2>附錄：術語與延伸閱讀</h2>
+</div>
+
+<section id="glossary">
+  <div class="container">
+    <div class="ch-num">APPENDIX A</div>
+    <h2 class="ch-title">術語表</h2>
+
+    <dl>
+      <dt>Tick</dt>
+      <dd>由 root 發出的執行訊號，每個週期觸發一次樹的評估。</dd>
+
+      <dt>Composite Node</dt>
+      <dd>有多個子節點的控制流節點，如 Sequence、Fallback、Parallel。</dd>
+
+      <dt>Decorator Node</dt>
+      <dd>只有一個子節點的修飾節點，轉換返回值或限制執行。</dd>
+
+      <dt>Condition Node</dt>
+      <dd>葉子節點，檢查條件並立即回 S 或 F，永不回 Running。</dd>
+
+      <dt>Action Node</dt>
+      <dd>葉子節點，執行動作，可能回 Running 表示跨 tick 執行中。</dd>
+
+      <dt>Reactivity</dt>
+      <dd>BT 每 tick 從 root 重新評估、對環境變化即時反應的特性。</dd>
+
+      <dt>Modularity</dt>
+      <dd>子樹可獨立開發、測試、移植的特性。</dd>
+
+      <dt>Memoryless (standard)</dt>
+      <dd>預設的 Sequence/Fallback，每 tick 從第一個子節點開始評估。</dd>
+
+      <dt>Memory (sticky)</dt>
+      <dd>記住上次 tick 位置的變體，Ögren 建議避免使用。</dd>
+
+      <dt>Blackboard</dt>
+      <dd>BT 全域 key-value 儲存，用於節點間共享資料。</dd>
+
+      <dt>PPA Pattern</dt>
+      <dd>Postcondition-Precondition-Action，目標導向的 BT 合成模板。</dd>
+    </dl>
+  </div>
+</section>
+
+<section id="reading">
+  <div class="container">
+    <div class="ch-num">APPENDIX B</div>
+    <h2 class="ch-title">延伸閱讀</h2>
+
+    <h3>必讀</h3>
+    <ul>
+      <li><strong>Colledanchise, M. &amp; Ögren, P. (2018).</strong> <em>Behavior Trees in Robotics and AI: An Introduction.</em> CRC Press. — 本教材的主要參考</li>
+      <li><strong>Isla, D. (2005).</strong> <em>Handling Complexity in the Halo 2 AI.</em> GDC 2005. — BT 在遊戲 AI 的開山作</li>
+    </ul>
+
+    <h3>進階論文</h3>
+    <ul>
+      <li>Colledanchise, M., Marzinotto, A., &amp; Ögren, P. (2014). <em>Performance analysis of stochastic behavior trees.</em> ICRA.</li>
+      <li>Ögren, P. (2012). <em>Increasing modularity of UAV control systems using computer game behavior trees.</em> AIAA Guidance, Navigation, and Control Conference.</li>
+    </ul>
+
+    <h3>實作函式庫</h3>
+    <ul>
+      <li><strong>BehaviorTree.CPP</strong> — C++ 業界標準，ROS 2 推薦</li>
+      <li><strong>py_trees</strong> — Python，ROS 生態常用</li>
+      <li><strong>Unreal Behavior Trees</strong> — 遊戲產業標準</li>
+      <li><strong>Groot</strong> — 視覺化編輯器，搭配 BehaviorTree.CPP</li>
+    </ul>
+
+    <h3>本站相關工具</h3>
+    <ul>
+      <li><a href="/tools/behavior-tree-guide/" style="color:var(--lavender)">入門版：從小精靈到約會決策</a> — 較輕鬆的入門教材</li>
+    </ul>
+  </div>
+</section>
+
+<div class="footer">
+  <h4>Behavior Trees Masterclass</h4>
+  <p>workshop.joneshong.com/tools/bt-masterclass/</p>
+  <p style="margin-top:12px">基於 Colledanchise &amp; Ögren (2018) 教科書整理 · 本教材非官方，僅供學習參考</p>
+  <p style="margin-top:8px">返回 <a href="/tools/">工具集首頁</a></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'default',
+  themeVariables: {
+    fontFamily: 'JetBrains Mono, Fira Code, Menlo, monospace',
+    fontSize: '14px'
+  },
+  flowchart: { curve: 'basis', padding: 14 }
+});
+</script>
+
+</body>
+</html>

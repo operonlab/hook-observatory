@@ -1,0 +1,79 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅴ 並行 / 通訊</span>
+    <h3 class="detail-title">I/O Automaton <span class="detail-full">Input/Output Automaton</span></h3>
+    <p class="detail-tagline">輸入 / 輸出明確分離 — 便於組合證明</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">Nancy Lynch 在《Distributed Algorithms》中提出。核心規則只有兩條：input actions 不可拒絕（環境主導），output actions 自主發生（automaton 主導）。這個非對稱設計讓多個 I/O Automaton 組合後仍是 I/O Automaton，可組合性嚴格成立，適合分散式算法的形式化證明。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>input / output 不對稱，可組合性嚴格保證</td></tr>
+      <tr><th>基本單位</th><td>States + Input actions + Output actions + Internal actions + Transition relation</td></tr>
+      <tr><th>狀態位置</th><td>單一 automaton 的局部狀態</td></tr>
+      <tr><th>並行單位</th><td>多 automaton 合成（product automaton）</td></tr>
+      <tr><th>同步機制</th><td>Action matching（output of A = input of B）</td></tr>
+      <tr><th>形式化</th><td>★★★★★ 極強（Lynch-Tuttle 理論，分散式算法標準工具）</td></tr>
+      <tr><th>適合場景</th><td>共識算法形式化、分散式互斥、Byzantine agreement 證明</td></tr>
+      <tr><th>典型代表</th><td>IOA Language（MIT）、Nancy Lynch《Distributed Algorithms》、TLA+（相關思想）</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：Paxos 形式化</h5>
+      <pre class="detail-code">Proposer Automaton
+  input:  client_request(v)       -- 不可拒絕
+  output: prepare(n)              -- 自主發出
+  output: accept(n, v)            -- 自主發出
+  internal: choose_value          -- 內部決策
+
+Acceptor Automaton
+  input:  prepare(n), accept(n,v) -- 不可拒絕
+  output: promise(n), accepted(n,v)</pre>
+      <p class="detail-p">兩個 automaton 的 output/input 對接後，合成 automaton 保留 I/O Automaton 結構，可直接證明 safety / liveness。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：分散式互斥</h5>
+      <p class="detail-p">每個節點是一個 I/O Automaton，輸入是其他節點的 release 訊號，輸出是 request 進入 CS。合成後可證明「任意時刻至多一個節點在 CS」。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>可組合性強：多 automata 合成仍是 I/O Automaton</li>
+          <li>形式化證明嚴謹，Safety / Liveness 分析有完整理論</li>
+          <li>適合分散式系統的不變式推導</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>實務工程很少直接使用，學術味重</li>
+          <li>工具鏈小眾（IOA Language 維護度低）</li>
+          <li>學習曲線陡：需要紮實的形式化方法背景</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>IOA Language（MIT）</strong>：Lynch 團隊開發，直接對應 I/O Automaton 語義</li>
+      <li><strong>Nancy Lynch《Distributed Algorithms》</strong>：權威教材，所有主流分散式算法的形式化基礎</li>
+      <li><strong>TLA+（Lamport）</strong>：相近思想，更廣泛的工業採用（Amazon、Microsoft）</li>
+      <li><strong>TIOA Toolkit</strong>：Timed I/O Automaton 的分析工具</li>
+    </ul>
+  </section>
+</article>

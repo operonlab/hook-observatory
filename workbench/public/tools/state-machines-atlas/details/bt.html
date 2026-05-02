@@ -1,0 +1,97 @@
+<!-- FRAGMENT: Behavior Tree — Ⅵ 替代模型 -->
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅵ 替代模型</span>
+    <h3 class="detail-title">BT <span class="detail-full">Behavior Tree</span></h3>
+    <p class="detail-tagline">優先級決策樹 — tick-based pull 模型</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">BT 不追蹤「我在哪個狀態」，而是每 tick 從 root 重新決策「現在該做什麼」。這是 push（事件驅動）的對立面：pull 模型主動掃描全樹，依優先級回傳 SUCCESS / FAILURE / RUNNING。加行為 = 插 subtree，不動其他節點。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>每 tick pull 決策，優先級由樹結構隱性表達</td></tr>
+      <tr><th>基本單位</th><td>Composite（Sequence / Selector / Parallel）+ Decorator + Leaf（Action / Condition）+ Blackboard</td></tr>
+      <tr><th>狀態位置</th><td>Blackboard（共享記憶體）+ 節點內部 RUNNING 狀態</td></tr>
+      <tr><th>並行單位</th><td>Parallel 節點（邏輯並行，不一定執行緒並行）</td></tr>
+      <tr><th>同步機制</th><td>Blackboard 讀寫（無鎖，單執行緒 tick）</td></tr>
+      <tr><th>形式化</th><td>★★★☆☆ 有語意定義，實作差異大，無統一形式規範</td></tr>
+      <tr><th>適合場景</th><td>遊戲 AI、機器人控制、無人機任務規劃、NPC 行為設計</td></tr>
+      <tr><th>典型代表</th><td>BehaviorTree.CPP、py_trees、Unreal Engine BT、NodeCanvas（Unity）</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：遊戲 NPC 行為（Selector 優先級）</h5>
+      <pre class="detail-code">Selector（有一個 SUCCESS 就停）
+├─ Sequence「逃跑」
+│   ├─ Condition: HP &lt; 20%
+│   └─ Action: FleeToBase
+├─ Sequence「戰鬥」
+│   ├─ Condition: EnemyInRange
+│   └─ Action: Attack
+└─ Action: Patrol（預設行為）</pre>
+      <p class="detail-p">優先級直接體現在樹結構中：先嘗試逃跑，再考慮戰鬥，最後巡邏。不需要任何 if/else 或 transition 定義。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：機器人取物任務（Sequence 串行）</h5>
+      <pre class="detail-code">Sequence（任一 FAILURE 即中止）
+├─ Action: MoveToTarget
+├─ Action: PickUpObject
+└─ Action: ReturnToBase</pre>
+      <p class="detail-p">Sequence 像程式的 AND：前一步成功才執行下一步。任何 Action 回傳 FAILURE，整條 Sequence 立即中止。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：無人機任務（Parallel 同時監控）</h5>
+      <pre class="detail-code">Parallel（兩個子樹同時 tick）
+├─ Sequence「電量監控」
+│   ├─ Condition: Battery &lt; 15%
+│   └─ Action: ReturnToCharge
+└─ Sequence「任務執行」
+    ├─ Action: ScanArea
+    └─ Action: TransmitData</pre>
+      <p class="detail-p">Parallel 讓電量監控和任務執行同步運作。電量不足時，監控分支觸發返航，任務分支被中斷。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>模組化強：subtree 可重用、跨角色共享</li>
+          <li>優先級表達直覺：樹的左到右、上到下即優先序</li>
+          <li>加行為不改現有節點：插 subtree，其他分支不受影響</li>
+          <li>tick 模型天生容錯：每幀重新決策，避免卡死在錯誤狀態</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>每 tick 掃全樹：100+ 節點需手動優化（event-driven BT 或 lazy eval）</li>
+          <li>RUNNING 狀態管理複雜：中斷與恢復的語意因框架而異</li>
+          <li>debug 工具相對少：沒有 FSM 那種可視化轉移歷史</li>
+          <li>全域狀態需 Blackboard 協調：設計不當容易產生隱性耦合</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>C++</strong>：BehaviorTree.CPP（最主流，ROS 2 官方採用，支援 Groot 視覺化）</li>
+      <li><strong>Python / ROS</strong>：py_trees（Python 原生，ROS 2 整合良好）</li>
+      <li><strong>Unreal Engine</strong>：內建 Behavior Tree（UE AI Controller 官方方案）</li>
+      <li><strong>Unity</strong>：NodeCanvas、Behavior Designer（Asset Store 主流框架）</li>
+      <li><strong>Rust</strong>：bonsai-bt（輕量型 Rust 實作）</li>
+    </ul>
+  </section>
+</article>

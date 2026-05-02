@@ -1,0 +1,2666 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>狀態機家族圖鑑 — State Machine Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --base:#1e1e2e;--mantle:#181825;--crust:#11111b;
+  --surface0:#313244;--surface1:#45475a;--surface2:#585b70;
+  --text:#cdd6f4;--subtext0:#a6adc8;--subtext1:#bac2de;
+  --blue:#89b4fa;--sapphire:#74c7ec;--teal:#94e2d5;--green:#a6e3a1;
+  --yellow:#f9e2af;--peach:#fab387;--red:#f38ba8;--mauve:#cba6f7;
+  --lavender:#b4befe;--flamingo:#f2cdcd;--rosewater:#f5e0dc;
+  --nav-h:56px;
+  --radius:10px;
+  --fira-code:'Fira Code',monospace;
+  --fira-sans:'Fira Sans',sans-serif;
+}
+html{scroll-behavior:smooth;font-size:16px}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{transition:none!important;animation:none!important}
+  canvas{display:none!important}
+}
+body{background:var(--base);color:var(--text);font-family:var(--fira-sans);line-height:1.6;min-height:100vh}
+
+/* ── NAV ── */
+nav{position:sticky;top:0;z-index:100;background:rgba(24,24,37,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--surface0);height:var(--nav-h)}
+.nav-inner{display:flex;align-items:center;gap:4px;max-width:1400px;margin:0 auto;padding:0 16px;height:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.nav-inner::-webkit-scrollbar{display:none}
+.nav-logo{font-family:var(--fira-code);font-weight:600;font-size:.85rem;color:var(--mauve);white-space:nowrap;margin-right:12px;flex-shrink:0}
+.nav-link{font-family:var(--fira-sans);font-size:.78rem;color:var(--subtext1);text-decoration:none;padding:6px 10px;border-radius:6px;white-space:nowrap;flex-shrink:0;transition:background .15s,color .15s}
+.nav-link:hover,.nav-link:focus{background:var(--surface0);color:var(--text)}
+
+/* ── HERO ── */
+.hero{position:relative;text-align:center;padding:72px 24px 56px;background:linear-gradient(160deg,var(--mantle) 0%,var(--base) 100%);overflow:hidden}
+.hero-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.hero-content{position:relative;z-index:1}
+.hero-title{font-family:var(--fira-code);font-size:clamp(1.5rem,4vw,2.6rem);font-weight:600;color:var(--lavender);margin-bottom:14px;letter-spacing:-.5px}
+.hero-sub{font-size:clamp(.85rem,2vw,1.05rem);color:var(--subtext0);max-width:680px;margin:0 auto 8px}
+.hero-sub span{font-family:var(--fira-code);font-size:.82rem;color:var(--teal)}
+.hero-tagline{font-family:var(--fira-code);font-size:clamp(.78rem,1.8vw,.95rem);color:var(--peach);margin-top:16px;opacity:.9}
+
+/* ── SECTION WRAPPER ── */
+.section-wrap{border-top:1px solid var(--surface0)}
+.section{padding:56px 24px;max-width:1400px;margin:0 auto}
+
+/* ── SECTION HEADER ── */
+.section-header{margin-bottom:36px}
+.section-numeral{font-family:var(--fira-code);font-size:clamp(1rem,3vw,1.5rem);font-weight:600;opacity:.35;margin-right:12px}
+.section-title-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.section-title{font-family:var(--fira-code);font-size:clamp(1.1rem,2.5vw,1.4rem);font-weight:600}
+.section-subtitle{font-size:.88rem;color:var(--subtext0);font-family:var(--fira-code)}
+.section-tier{font-size:.75rem;color:var(--subtext0);background:var(--surface0);border-radius:20px;padding:3px 12px;border:1px solid var(--surface1);white-space:nowrap;margin-left:auto}
+.section-tagline{font-family:var(--fira-code);font-size:.9rem;margin-bottom:8px;opacity:.85}
+.section-philosophy{font-size:.88rem;color:var(--subtext1);line-height:1.7;max-width:860px}
+
+/* ── CANVAS STRIP ── */
+.canvas-strip{width:100%;height:240px;border-radius:var(--radius);border:1px solid var(--surface0);overflow:hidden;margin:32px 0;background:var(--mantle);position:relative}
+.canvas-strip canvas{width:100%;height:100%;display:block}
+.canvas-label{position:absolute;top:8px;left:12px;font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;pointer-events:none}
+
+/* ── GRID ── */
+.cards{display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:600px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:900px){.cards{grid-template-columns:repeat(3,1fr)}}
+
+/* ── CARD ── */
+.card{background:var(--mantle);border:1px solid var(--surface0);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;gap:8px;transition:border-color .2s,box-shadow .2s,transform .15s;cursor:default}
+.card:hover{transform:translateY(-2px)}
+.card-name{font-family:var(--fira-code);font-size:.95rem;font-weight:600}
+.card-full{font-size:.75rem;color:var(--subtext0);font-family:var(--fira-code);opacity:.7}
+.card-desc{font-size:.85rem;color:var(--subtext1);line-height:1.55}
+
+/* ── SECTION ACCENT HOVERS ── */
+[data-accent="blue"] .card:hover{border-color:var(--blue);box-shadow:0 0 16px rgba(137,180,250,.15)}
+[data-accent="blue"] .card-name{color:var(--blue)}
+[data-accent="blue"] .section-numeral,[data-accent="blue"] .section-tagline{color:var(--blue)}
+[data-accent="teal"] .card:hover{border-color:var(--teal);box-shadow:0 0 16px rgba(148,226,213,.15)}
+[data-accent="teal"] .card-name{color:var(--teal)}
+[data-accent="teal"] .section-numeral,[data-accent="teal"] .section-tagline{color:var(--teal)}
+[data-accent="mauve"] .card:hover{border-color:var(--mauve);box-shadow:0 0 16px rgba(203,166,247,.15)}
+[data-accent="mauve"] .card-name{color:var(--mauve)}
+[data-accent="mauve"] .section-numeral,[data-accent="mauve"] .section-tagline{color:var(--mauve)}
+[data-accent="peach"] .card:hover{border-color:var(--peach);box-shadow:0 0 16px rgba(250,179,135,.15)}
+[data-accent="peach"] .card-name{color:var(--peach)}
+[data-accent="peach"] .section-numeral,[data-accent="peach"] .section-tagline{color:var(--peach)}
+[data-accent="sapphire"] .card:hover{border-color:var(--sapphire);box-shadow:0 0 16px rgba(116,199,236,.15)}
+[data-accent="sapphire"] .card-name{color:var(--sapphire)}
+[data-accent="sapphire"] .section-numeral,[data-accent="sapphire"] .section-tagline{color:var(--sapphire)}
+[data-accent="green"] .card:hover{border-color:var(--green);box-shadow:0 0 16px rgba(166,227,161,.15)}
+[data-accent="green"] .card-name{color:var(--green)}
+[data-accent="green"] .section-numeral,[data-accent="green"] .section-tagline{color:var(--green)}
+[data-accent="yellow"] .card:hover{border-color:var(--yellow);box-shadow:0 0 16px rgba(249,226,175,.15)}
+[data-accent="yellow"] .card-name{color:var(--yellow)}
+[data-accent="yellow"] .section-numeral,[data-accent="yellow"] .section-tagline{color:var(--yellow)}
+
+/* ── ATTRIBUTES TABLE ── */
+.attrs-title{font-family:var(--fira-code);font-size:.82rem;font-weight:600;color:var(--subtext0);margin:28px 0 10px;text-transform:uppercase;letter-spacing:.05em}
+.attrs-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--surface0);border:1px solid var(--surface0);border-radius:var(--radius);overflow:hidden}
+@media(max-width:600px){.attrs-grid{grid-template-columns:1fr}}
+.attr-row{display:contents}
+.attr-key{background:var(--mantle);padding:10px 14px;font-family:var(--fira-code);font-size:.75rem;color:var(--subtext0);font-weight:600}
+.attr-val{background:var(--crust);padding:10px 14px;font-size:.82rem;color:var(--subtext1);line-height:1.5}
+
+/* ── PROS CONS ── */
+.proscons-title{font-family:var(--fira-code);font-size:.82rem;font-weight:600;color:var(--subtext0);margin:28px 0 10px;text-transform:uppercase;letter-spacing:.05em}
+.proscons{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:600px){.proscons{grid-template-columns:1fr}}
+.pros-box,.cons-box{background:var(--mantle);border-radius:var(--radius);padding:14px 16px;border:1px solid var(--surface0)}
+.pros-box{border-left:3px solid var(--green)}
+.cons-box{border-left:3px solid var(--red)}
+.proscons-head{font-family:var(--fira-code);font-size:.78rem;font-weight:600;margin-bottom:8px}
+.pros-box .proscons-head{color:var(--green)}
+.cons-box .proscons-head{color:var(--red)}
+.proscons ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+.proscons li{font-size:.82rem;color:var(--subtext1);display:flex;gap:8px;align-items:flex-start}
+.proscons li::before{flex-shrink:0;font-weight:600}
+.pros-box li::before{content:"✓";color:var(--green)}
+.cons-box li::before{content:"✗";color:var(--red)}
+
+/* ── EXAMPLES ── */
+.examples-title{font-family:var(--fira-code);font-size:.82rem;font-weight:600;color:var(--subtext0);margin:28px 0 10px;text-transform:uppercase;letter-spacing:.05em}
+.examples-grid{display:flex;flex-direction:column;gap:12px}
+.example-card{background:var(--surface0);border-radius:8px;padding:14px 16px;border-left:3px solid var(--surface2)}
+.example-title{font-family:var(--fira-code);font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:6px}
+.example-body{font-family:var(--fira-code);font-size:.78rem;color:var(--subtext1);line-height:1.6;background:var(--crust);padding:8px 12px;border-radius:6px;white-space:pre-wrap;word-break:break-word}
+
+/* ── DECISION TABLE (VII) ── */
+.decision-table-wrap{overflow-x:auto;margin:24px 0;border-radius:var(--radius);border:1px solid var(--surface0)}
+.decision-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.decision-table th{background:var(--crust);padding:12px 16px;font-family:var(--fira-code);font-size:.78rem;font-weight:600;color:var(--subtext0);text-align:left;white-space:nowrap;border-bottom:1px solid var(--surface0)}
+.decision-table td{padding:12px 16px;border-bottom:1px solid var(--surface0);vertical-align:top;color:var(--subtext1)}
+.decision-table tr:last-child td{border-bottom:none}
+.decision-table tr:hover td{background:rgba(49,50,68,.5)}
+.dt-need{color:var(--text);font-size:.82rem}
+.dt-pick{font-family:var(--fira-code);font-size:.8rem;font-weight:600}
+.dt-why{font-size:.8rem;color:var(--subtext0)}
+.heuristic-box{background:var(--mantle);border:1px solid var(--surface0);border-left:3px solid var(--yellow);border-radius:var(--radius);padding:16px 20px;margin-top:20px;font-family:var(--fira-code);font-size:.82rem;color:var(--subtext1);line-height:1.7}
+.heuristic-box strong{color:var(--yellow);font-weight:600}
+
+/* ── FOOTER ── */
+footer{text-align:center;padding:32px 24px;color:var(--subtext0);font-size:.8rem;background:var(--crust);font-family:var(--fira-sans)}
+footer span{color:var(--lavender);font-family:var(--fira-code)}
+footer a{color:var(--sapphire);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+/* ── SUB-SECTION LABEL ── */
+.members-title{font-family:var(--fira-code);font-size:.82rem;font-weight:600;color:var(--subtext0);margin:0 0 14px;text-transform:uppercase;letter-spacing:.05em}
+
+/* ── ACCORDION DETAIL PANEL ── */
+.card-expand{margin-top:10px;background:none;border:1px solid var(--surface1);color:var(--subtext1);padding:5px 12px;border-radius:6px;font-family:var(--fira-code);font-size:.74rem;cursor:pointer;transition:all .15s;width:100%;text-align:left}
+.card-expand:hover{background:var(--surface0);color:var(--text);border-color:var(--surface2)}
+.card-expand[aria-expanded="true"]{background:var(--surface0);color:var(--text)}
+.detail-panel{max-height:0;overflow:hidden;transition:max-height .5s ease,margin-top .3s}
+.detail-panel.open{max-height:4000px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--surface1)}
+
+.detail{padding:8px 2px;color:var(--text);line-height:1.65;font-size:.86rem}
+.detail-head{margin-bottom:18px}
+.detail-cat{font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);background:var(--surface0);padding:3px 10px;border-radius:12px;display:inline-block;margin-bottom:10px}
+.detail-title{font-family:var(--fira-code);font-size:1.1rem;color:var(--lavender);margin-bottom:6px;font-weight:600}
+.detail-full{font-size:.78rem;color:var(--subtext0);font-weight:400;margin-left:8px}
+.detail-tagline{color:var(--subtext1);font-style:italic;font-size:.85rem}
+.detail-section{margin-bottom:22px}
+.detail-h4{font-family:var(--fira-code);font-size:.82rem;color:var(--mauve);margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid var(--surface0);font-weight:600}
+.detail-p{color:var(--subtext1);margin-bottom:8px}
+.detail-attrs{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:4px}
+.detail-attrs th{text-align:left;width:110px;padding:7px 10px;color:var(--teal);font-family:var(--fira-code);font-weight:500;vertical-align:top;background:var(--surface0);border-top:1px solid var(--base)}
+.detail-attrs td{padding:7px 12px;color:var(--subtext1);border-top:1px solid var(--base);background:var(--mantle)}
+.detail-ex{margin-bottom:14px;padding:12px 14px;background:var(--surface0);border-left:3px solid var(--peach);border-radius:0 6px 6px 0}
+.detail-ex-title{font-family:var(--fira-code);font-size:.8rem;color:var(--peach);margin-bottom:8px;font-weight:600}
+.detail-code{font-family:var(--fira-code);font-size:.74rem;background:var(--crust);padding:9px 11px;border-radius:4px;color:var(--text);overflow-x:auto;margin-bottom:6px;white-space:pre-wrap;line-height:1.5}
+.detail-procon{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+@media(max-width:600px){.detail-procon{grid-template-columns:1fr}}
+.detail-pros,.detail-cons{padding:12px 14px;border-radius:6px}
+.detail-pros{background:rgba(166,227,161,.08);border-left:3px solid var(--green)}
+.detail-cons{background:rgba(243,139,168,.08);border-left:3px solid var(--red)}
+.detail-pros h5{color:var(--green);font-family:var(--fira-code);font-size:.78rem;margin-bottom:8px;font-weight:600}
+.detail-cons h5{color:var(--red);font-family:var(--fira-code);font-size:.78rem;margin-bottom:8px;font-weight:600}
+.detail-pros ul,.detail-cons ul{list-style:none;padding:0;margin:0}
+.detail-pros li,.detail-cons li{font-size:.8rem;color:var(--subtext1);padding:3px 0 3px 14px;position:relative;line-height:1.55}
+.detail-pros li::before{content:"·";color:var(--green);position:absolute;left:3px;font-weight:700;font-size:1.2rem;line-height:1}
+.detail-cons li::before{content:"·";color:var(--red);position:absolute;left:3px;font-weight:700;font-size:1.2rem;line-height:1}
+.detail-reps{list-style:none;padding:0;margin:0}
+.detail-reps li{padding:6px 0;font-size:.8rem;color:var(--subtext1);border-bottom:1px solid var(--surface0)}
+.detail-reps li:last-child{border-bottom:none}
+.detail-reps strong{color:var(--blue);font-family:var(--fira-code);margin-right:8px;font-size:.78rem}
+.detail-reps code{font-family:var(--fira-code);font-size:.78rem;color:var(--mauve);background:var(--surface0);padding:1px 5px;border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav aria-label="章節導覽">
+  <div class="nav-inner">
+    <span class="nav-logo">State Machine Atlas</span>
+    <a class="nav-link" href="#theory">Ⅰ 理論階梯</a>
+    <a class="nav-link" href="#output">Ⅱ 輸出位置</a>
+    <a class="nav-link" href="#extended">Ⅲ 擴展特性</a>
+    <a class="nav-link" href="#probabilistic">Ⅳ 機率/時間</a>
+    <a class="nav-link" href="#concurrent">Ⅴ 並行通訊</a>
+    <a class="nav-link" href="#alternative">Ⅵ 替代模型</a>
+    <a class="nav-link" href="#decision-table">Ⅶ 速查表</a>
+    <a class="nav-link" href="#hybrid">Ⅷ 混用</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <canvas class="hero-canvas" id="heroCanvas" aria-hidden="true"></canvas>
+  <div class="hero-content">
+    <h1 class="hero-title">狀態機家族圖鑑</h1>
+    <p class="hero-sub">State Machine Atlas — 八大類別，從理論到混用實戰</p>
+    <p class="hero-sub"><span>Chomsky · Moore/Mealy · Statechart · HMM · Petri Net · Actor · BT · Hybrid</span></p>
+    <p class="hero-tagline">FSM 只是入門款，家族很大。選對工具解對問題。</p>
+  </div>
+</header>
+
+<!-- ═══════════════════════ Ⅰ 理論表達能力 ═══════════════════════ -->
+<div class="section-wrap" id="theory" data-accent="blue">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅰ</span>
+        <h2 class="section-title">理論表達能力</h2>
+        <span class="section-subtitle">Chomsky 階梯</span>
+        <span class="section-tier">★★☆☆☆ 理論基礎</span>
+      </div>
+      <p class="section-tagline">按計算能力排序：能辨識什麼語言？</p>
+      <p class="section-philosophy">以形式語言理論為基礎，根據「能記多少、能算多少」排列四種自動機。從正則語言到可計算理論上限。</p>
+    </header>
+
+    <!-- Canvas Strip I -->
+    <div class="canvas-strip">
+      <canvas id="canvas-theory" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">粒子沿台階邊緣往上爬 — 下層無法突破上層邊界</p>
+
+    <p class="members-title">成員</p>
+    <div class="cards">
+      <div class="card" data-detail="dfa">
+        <div class="card-name">DFA</div>
+        <div class="card-full">Deterministic Finite Automaton</div>
+        <div class="card-desc">確定性 FSM，每個 (state, input) 只有一個 next state</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="nfa">
+        <div class="card-name">NFA</div>
+        <div class="card-full">Non-deterministic FA</div>
+        <div class="card-desc">非確定性，可多個 next、可有 ε 轉移（等價於 DFA 但狀態數可能指數級）</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="pda">
+        <div class="card-name">PDA</div>
+        <div class="card-full">Pushdown Automaton</div>
+        <div class="card-desc">FSM + 堆疊，能辨識 context-free 語言（如平衡括號）</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="turing">
+        <div class="card-name">Turing Machine</div>
+        <div class="card-full"></div>
+        <div class="card-desc">FSM + 無限 tape，理論計算上限，等價於所有可計算模型</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="attrs-title">九維屬性</p>
+    <div class="attrs-grid">
+      <div class="attr-row"><div class="attr-key">哲學</div><div class="attr-val">計算能力階層</div></div>
+      <div class="attr-row"><div class="attr-key">基本單位</div><div class="attr-val">State + Transition (+ Stack / Tape)</div></div>
+      <div class="attr-row"><div class="attr-key">狀態位置</div><div class="attr-val">單一當前狀態（可能伴隨無限記憶體）</div></div>
+      <div class="attr-row"><div class="attr-key">並行單位</div><div class="attr-val">無（純序列）</div></div>
+      <div class="attr-row"><div class="attr-key">同步機制</div><div class="attr-val">無</div></div>
+      <div class="attr-row"><div class="attr-key">形式化</div><div class="attr-val">★★★★★ 極強（Chomsky Hierarchy）</div></div>
+      <div class="attr-row"><div class="attr-key">適合場景</div><div class="attr-val">正則表達式、編譯器 parser、理論計算研究</div></div>
+      <div class="attr-row"><div class="attr-key">典型代表</div><div class="attr-val">regex 引擎、lex/flex、yacc/bison、ANTLR</div></div>
+    </div>
+
+    <p class="proscons-title">優缺點</p>
+    <div class="proscons">
+      <div class="pros-box">
+        <p class="proscons-head">優點</p>
+        <ul>
+          <li>數學嚴謹，可判定性清楚</li>
+          <li>能力階層明確</li>
+          <li>理論研究基礎</li>
+        </ul>
+      </div>
+      <div class="cons-box">
+        <p class="proscons-head">缺點</p>
+        <ul>
+          <li>實務太底層</li>
+          <li>PDA 以上實作複雜</li>
+          <li>無並行、無模組化</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="examples-title">範例</p>
+    <div class="examples-grid">
+      <div class="example-card">
+        <div class="example-title">平衡括號</div>
+        <div class="example-body">DFA 辦不到無限深度 '(((...)))'，需要 PDA 的堆疊</div>
+      </div>
+      <div class="example-card">
+        <div class="example-title">規則語言</div>
+        <div class="example-body">`^a*b$` 是 regex（DFA），`a^n b^n` 要 PDA，`a^n b^n c^n` 要 Turing</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Ⅱ 輸出位置 ═══════════════════════ -->
+<div class="section-wrap" id="output" data-accent="teal">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅱ</span>
+        <h2 class="section-title">輸出位置</h2>
+        <span class="section-subtitle">Moore vs Mealy</span>
+        <span class="section-tier">★★☆☆☆ 經典分類</span>
+      </div>
+      <p class="section-tagline">輸出綁在狀態上？還是綁在轉移上？</p>
+      <p class="section-philosophy">FSM 經典兩變體：Moore 的輸出只看狀態；Mealy 的輸出看狀態+輸入。兩者表達能力等價，但建模風格完全不同。</p>
+    </header>
+
+    <div class="canvas-strip">
+      <canvas id="canvas-output" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">左半 Moore：output 印在圓圈裡；右半 Mealy：output 印在箭頭上</p>
+
+    <p class="members-title">成員</p>
+    <div class="cards">
+      <div class="card" data-detail="moore">
+        <div class="card-name">Moore Machine</div>
+        <div class="card-full"></div>
+        <div class="card-desc">output = f(state)，輸出綁在狀態上。直觀易 debug，狀態數通常較多</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="mealy">
+        <div class="card-name">Mealy Machine</div>
+        <div class="card-full"></div>
+        <div class="card-desc">output = f(state, input)，輸出綁在 transition 上。狀態數較少，反應快</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="attrs-title">九維屬性</p>
+    <div class="attrs-grid">
+      <div class="attr-row"><div class="attr-key">哲學</div><div class="attr-val">輸出=狀態函數 vs 輸出=狀態×輸入函數</div></div>
+      <div class="attr-row"><div class="attr-key">基本單位</div><div class="attr-val">State + Transition + Output labels</div></div>
+      <div class="attr-row"><div class="attr-key">狀態位置</div><div class="attr-val">單一當前狀態</div></div>
+      <div class="attr-row"><div class="attr-key">並行單位</div><div class="attr-val">無</div></div>
+      <div class="attr-row"><div class="attr-key">同步機制</div><div class="attr-val">時鐘邊緣（硬體）或事件循環（軟體）</div></div>
+      <div class="attr-row"><div class="attr-key">形式化</div><div class="attr-val">強（可證明表達能力等價）</div></div>
+      <div class="attr-row"><div class="attr-key">適合場景</div><div class="attr-val">硬體電路設計、Lexer tokenizer、協議狀態機</div></div>
+      <div class="attr-row"><div class="attr-key">典型代表</div><div class="attr-val">Verilog/VHDL FSM、Digital circuit synthesis、Lexer generators</div></div>
+    </div>
+
+    <p class="proscons-title">優缺點</p>
+    <div class="proscons">
+      <div class="pros-box">
+        <p class="proscons-head">優點</p>
+        <ul>
+          <li>Moore：易 debug、易視覺化</li>
+          <li>Mealy：狀態數少、反應快一個時鐘週期</li>
+        </ul>
+      </div>
+      <div class="cons-box">
+        <p class="proscons-head">缺點</p>
+        <ul>
+          <li>Moore：狀態可能膨脹</li>
+          <li>Mealy：輸出分布在 transition 上追蹤難</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="examples-title">範例</p>
+    <div class="examples-grid">
+      <div class="example-card">
+        <div class="example-title">紅綠燈 (Moore)</div>
+        <div class="example-body">燈色只跟狀態有關 — 紅就是紅，不管輸入</div>
+      </div>
+      <div class="example-card">
+        <div class="example-title">販賣機 (Mealy)</div>
+        <div class="example-body">按飲料鈕時出什麼，同時取決於「當前金額+按鈕」</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Ⅲ 擴展特性 ═══════════════════════ -->
+<div class="section-wrap" id="extended" data-accent="mauve">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅲ</span>
+        <h2 class="section-title">擴展特性</h2>
+        <span class="section-subtitle">EFSM / HSM / Statechart / UML</span>
+        <span class="section-tier">★★★★★ 工程最實用</span>
+      </div>
+      <p class="section-tagline">解決 FSM 狀態爆炸 — 加條件、加階層、加並行</p>
+      <p class="section-philosophy">工程實務最該懂的一層。純 FSM 面對複雜系統會狀態爆炸。三法寶：Guard（條件）、Hierarchy（階層）、Orthogonal regions（並行區域）。</p>
+    </header>
+
+    <div class="canvas-strip">
+      <canvas id="canvas-extended" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">巢狀矩形 — EFSM 內虛線切割兩個並行 Region，同步發亮</p>
+
+    <p class="members-title">成員</p>
+    <div class="cards">
+      <div class="card" data-detail="efsm">
+        <div class="card-name">EFSM</div>
+        <div class="card-full">Extended FSM</div>
+        <div class="card-desc">加 Guards（條件守門員）+ variables。Transition 不只看事件，還看變數。沒 Guard 的 FSM 幾乎是玩具</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="hsm">
+        <div class="card-name">HSM</div>
+        <div class="card-full">Hierarchical State Machine</div>
+        <div class="card-desc">狀態可巢狀。Superstate 的 transition 自動繼承給所有 substate（global transition 寫一次）</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="statechart">
+        <div class="card-name">Statechart</div>
+        <div class="card-full">Harel Statechart, 1987</div>
+        <div class="card-desc">HSM + orthogonal regions（並行狀態）+ history + entry/exit actions。工程 FSM 的終極型態</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="uml-sm">
+        <div class="card-name">UML State Machine</div>
+        <div class="card-full"></div>
+        <div class="card-desc">UML 把 Harel Statechart 標準化，加 Protocol SM、Junction/Choice pseudostates</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="attrs-title">九維屬性</p>
+    <div class="attrs-grid">
+      <div class="attr-row"><div class="attr-key">哲學</div><div class="attr-val">在 FSM 上堆疊條件 / 階層 / 並行三層能力</div></div>
+      <div class="attr-row"><div class="attr-key">基本單位</div><div class="attr-val">Superstate + Substate + Region + Guard</div></div>
+      <div class="attr-row"><div class="attr-key">狀態位置</div><div class="attr-val">階層樹 + 多 region 同時 active</div></div>
+      <div class="attr-row"><div class="attr-key">並行單位</div><div class="attr-val">Orthogonal region（同時處於多個狀態）</div></div>
+      <div class="attr-row"><div class="attr-key">同步機制</div><div class="attr-val">事件廣播到所有 active region</div></div>
+      <div class="attr-row"><div class="attr-key">形式化</div><div class="attr-val">中強（比 FSM 複雜但仍可驗證）</div></div>
+      <div class="attr-row"><div class="attr-key">適合場景</div><div class="attr-val">UI 框架、複雜 lifecycle、嵌入式系統、醫療設備</div></div>
+      <div class="attr-row"><div class="attr-key">典型代表</div><div class="attr-val">XState (JS)、SCXML、python-statemachine、QP framework (C)、Stateflow (MATLAB)</div></div>
+    </div>
+
+    <p class="proscons-title">優缺點</p>
+    <div class="proscons">
+      <div class="pros-box">
+        <p class="proscons-head">優點</p>
+        <ul>
+          <li>解決狀態爆炸（-90% 狀態數）</li>
+          <li>模組化 subtree 可重用</li>
+          <li>並行 region 表達多維狀態</li>
+        </ul>
+      </div>
+      <div class="cons-box">
+        <p class="proscons-head">缺點</p>
+        <ul>
+          <li>學習曲線陡（特別是 Statechart）</li>
+          <li>工具支援不如 FSM 普及</li>
+          <li>對簡單問題 overkill</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="examples-title">範例</p>
+    <div class="examples-grid">
+      <div class="example-card">
+        <div class="example-title">App 全域按 ESC 回主選單</div>
+        <div class="example-body">純 FSM 要對每個子狀態寫 transition（10 狀態寫 10 條）。HSM 寫在 superstate 一次搞定</div>
+      </div>
+      <div class="example-card">
+        <div class="example-title">音訊播放器 orthogonal</div>
+        <div class="example-body">同時有「播放 (Playing/Paused)」+「音量 (Muted/Unmuted)」+「網路 (Online/Offline)」— 三個 region 獨立</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Ⅳ 機率/時間 ═══════════════════════ -->
+<div class="section-wrap" id="probabilistic" data-accent="peach">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅳ</span>
+        <h2 class="section-title">機率 / 時間</h2>
+        <span class="section-subtitle">Markov, HMM, Timed Automaton</span>
+        <span class="section-tier">★★★★☆ ML / 實時系統</span>
+      </div>
+      <p class="section-tagline">狀態不確定、看不見、或受時間約束</p>
+      <p class="section-philosophy">當系統非確定性、或要處理時間，FSM 無法表達。機率狀態機用分布取代確定轉移；HMM 從觀察推隱狀態；Timed Automaton 加時鐘處理實時約束。</p>
+    </header>
+
+    <div class="canvas-strip">
+      <canvas id="canvas-probabilistic" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">左半 Markov：機率路徑擴散（粗路徑=高機率）；右半 Timed：時鐘 + 時間軸刻度</p>
+
+    <p class="members-title">成員</p>
+    <div class="cards">
+      <div class="card" data-detail="markov">
+        <div class="card-name">Markov Chain</div>
+        <div class="card-full"></div>
+        <div class="card-desc">Transition 是機率分布 P(s'|s)。無記憶性（Markov property）</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="hmm">
+        <div class="card-name">HMM</div>
+        <div class="card-full">Hidden Markov Model</div>
+        <div class="card-desc">狀態不可見，只能從 emission 觀察推理。Viterbi/Forward-Backward 算法</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="mdp">
+        <div class="card-name">MDP</div>
+        <div class="card-full">Markov Decision Process</div>
+        <div class="card-desc">加 action + reward。強化學習理論基礎</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="pomdp">
+        <div class="card-name">POMDP</div>
+        <div class="card-full">Partially Observable MDP</div>
+        <div class="card-desc">MDP + 部分可觀察。機器人決策、對話系統</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="timed">
+        <div class="card-name">Timed Automaton</div>
+        <div class="card-full"></div>
+        <div class="card-desc">FSM + clock 變數，transition 帶時間約束（如 'x &lt; 5s'）</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="hybrid">
+        <div class="card-name">Hybrid Automaton</div>
+        <div class="card-full"></div>
+        <div class="card-desc">離散狀態 + 連續動態（微分方程），用於控制系統</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="attrs-title">九維屬性</p>
+    <div class="attrs-grid">
+      <div class="attr-row"><div class="attr-key">哲學</div><div class="attr-val">不確定性、隱藏性、時間性是一等公民</div></div>
+      <div class="attr-row"><div class="attr-key">基本單位</div><div class="attr-val">State + Transition(機率/時間) + Observation</div></div>
+      <div class="attr-row"><div class="attr-key">狀態位置</div><div class="attr-val">機率分布 over states，或 state + clock variables</div></div>
+      <div class="attr-row"><div class="attr-key">並行單位</div><div class="attr-val">無（多為單執行緒推理）</div></div>
+      <div class="attr-row"><div class="attr-key">同步機制</div><div class="attr-val">時間步驟（離散 tick）或連續時間</div></div>
+      <div class="attr-row"><div class="attr-key">形式化</div><div class="attr-val">★★★★★ 強（Viterbi、model checking）</div></div>
+      <div class="attr-row"><div class="attr-key">適合場景</div><div class="attr-val">語音識別、NLP、PageRank、RL、實時控制、生物序列</div></div>
+      <div class="attr-row"><div class="attr-key">典型代表</div><div class="attr-val">hmmlearn, Kaldi, Stan, UPPAAL (Timed Automaton verifier)</div></div>
+    </div>
+
+    <p class="proscons-title">優缺點</p>
+    <div class="proscons">
+      <div class="pros-box">
+        <p class="proscons-head">優點</p>
+        <ul>
+          <li>表達不確定性</li>
+          <li>可從觀察推隱狀態</li>
+          <li>時間模型精確</li>
+        </ul>
+      </div>
+      <div class="cons-box">
+        <p class="proscons-head">缺點</p>
+        <ul>
+          <li>Markov 假設限制（無長距依賴）</li>
+          <li>HMM 被 Transformer 超越</li>
+          <li>實作成本高</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="examples-title">範例</p>
+    <div class="examples-grid">
+      <div class="example-card">
+        <div class="example-title">語音識別 (HMM)</div>
+        <div class="example-body">音訊 → 音素序列。音素是隱狀態，MFCC 特徵是 observation</div>
+      </div>
+      <div class="example-card">
+        <div class="example-title">紅綠燈倒數 (Timed)</div>
+        <div class="example-body">綠燈→黃燈條件：「x ≥ 30 秒」。clock 變數 x 在進入狀態時重置</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Ⅴ 並行/通訊 ═══════════════════════ -->
+<div class="section-wrap" id="concurrent" data-accent="sapphire">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅴ</span>
+        <h2 class="section-title">並行 / 通訊</h2>
+        <span class="section-subtitle">Petri Net, CSP, I/O Automaton</span>
+        <span class="section-tier">★★★★☆ 分散式核心</span>
+      </div>
+      <p class="section-tagline">多件事並行 + 有同步點</p>
+      <p class="section-philosophy">FSM 是單執行緒模型，無法表達「多事同時做且要同步」。這層原生支援並行、同步、通訊。</p>
+    </header>
+
+    <div class="canvas-strip">
+      <canvas id="canvas-concurrent" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">Petri Net — token 從 Place 流向 Transition，湊齊才 fire，爆出 barrier 光效</p>
+
+    <p class="members-title">成員</p>
+    <div class="cards">
+      <div class="card" data-detail="cfsm">
+        <div class="card-name">CFSM</div>
+        <div class="card-full">Communicating FSM</div>
+        <div class="card-desc">多個 FSM 透過 channel 傳訊息。最簡單的並行 FSM 延伸</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="io-automaton">
+        <div class="card-name">I/O Automaton</div>
+        <div class="card-full"></div>
+        <div class="card-desc">輸入/輸出明確分離，便於組合證明</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="petri">
+        <div class="card-name">Petri Net</div>
+        <div class="card-full"></div>
+        <div class="card-desc">Tokens 在 Places 間流動，Transition 消耗/產生 tokens。原生並行 + 同步 barrier + 可證 deadlock-free</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="pi-calculus">
+        <div class="card-name">π-calculus</div>
+        <div class="card-full"></div>
+        <div class="card-desc">進程代數，channel 名是一等公民，可動態傳遞</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="csp">
+        <div class="card-name">CSP</div>
+        <div class="card-full">Communicating Sequential Processes</div>
+        <div class="card-desc">Tony Hoare 提出。Go 的 channel 受它啟發</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="ccs">
+        <div class="card-name">CCS</div>
+        <div class="card-full">Calculus of Communicating Systems</div>
+        <div class="card-desc">Milner 提出，π-calculus 前身</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="attrs-title">九維屬性</p>
+    <div class="attrs-grid">
+      <div class="attr-row"><div class="attr-key">哲學</div><div class="attr-val">並行是一等公民，同步點可精確建模</div></div>
+      <div class="attr-row"><div class="attr-key">基本單位</div><div class="attr-val">Petri: Places+Transitions+Tokens / 代數: Process+Channel</div></div>
+      <div class="attr-row"><div class="attr-key">狀態位置</div><div class="attr-val">全域 token 分布 / 多進程組合狀態</div></div>
+      <div class="attr-row"><div class="attr-key">並行單位</div><div class="attr-val">Transition 層級（多個可同時 fire）</div></div>
+      <div class="attr-row"><div class="attr-key">同步機制</div><div class="attr-val">多輸入 transition 天然是 barrier（等所有 token 到才 fire）</div></div>
+      <div class="attr-row"><div class="attr-key">形式化</div><div class="attr-val">★★★★★ 極強（可證 deadlock-free, liveness, boundedness）</div></div>
+      <div class="attr-row"><div class="attr-key">適合場景</div><div class="attr-val">Workflow、BPMN、製造排程、通訊協議驗證、半導體製程</div></div>
+      <div class="attr-row"><div class="attr-key">典型代表</div><div class="attr-val">YAWL, CPN Tools, UPPAAL, Camunda/Activiti, FDR (CSP)</div></div>
+    </div>
+
+    <p class="proscons-title">優缺點</p>
+    <div class="proscons">
+      <div class="pros-box">
+        <p class="proscons-head">優點</p>
+        <ul>
+          <li>原生並行 + 同步</li>
+          <li>數學可證 deadlock-free</li>
+          <li>workflow 建模直觀</li>
+        </ul>
+      </div>
+      <div class="cons-box">
+        <p class="proscons-head">缺點</p>
+        <ul>
+          <li>學習曲線陡</li>
+          <li>狀態空間爆炸在大型系統</li>
+          <li>工具偏學術</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="examples-title">範例</p>
+    <div class="examples-grid">
+      <div class="example-card">
+        <div class="example-title">訂單流程 (Petri)</div>
+        <div class="example-body">「扣庫存」+「扣款」並行產生 tokens；「發貨」transition 需要兩個 token 都到才 fire（天然 barrier）</div>
+      </div>
+      <div class="example-card">
+        <div class="example-title">生產線 (Petri)</div>
+        <div class="example-body">原料→機台→產品，token 計數表達有限資源</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Ⅵ 替代模型 ═══════════════════════ -->
+<div class="section-wrap" id="alternative" data-accent="green">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅵ</span>
+        <h2 class="section-title">替代模型</h2>
+        <span class="section-subtitle">BT / Rules / Actor / Dataflow</span>
+        <span class="section-tier">★★★★★ 實務主力</span>
+      </div>
+      <p class="section-tagline">不是狀態機，但解類似問題</p>
+      <p class="section-philosophy">當狀態思維不是最佳抽象時，用其他範式：樹狀決策、規則匹配、訊息傳遞、資料流推動。每種在特定場景都勝過 FSM。</p>
+    </header>
+
+    <div class="canvas-strip">
+      <canvas id="canvas-alternative" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">四象限：BT 樹狀 tick / Rules Engine 規則閃光 / Actor 訊息傳遞 / Dataflow 鏈式傳播</p>
+
+    <p class="members-title">成員</p>
+    <div class="cards">
+      <div class="card" data-detail="bt">
+        <div class="card-name">Behavior Tree</div>
+        <div class="card-full"></div>
+        <div class="card-desc">優先級決策樹。tick-based pull 模型。Composite (Sequence/Selector/Parallel) + Decorator + Leaf。遊戲 AI 主流</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="rules">
+        <div class="card-name">Rules Engine</div>
+        <div class="card-full"></div>
+        <div class="card-desc">條件匹配觸發（if-then），無狀態概念，Rete 算法。適合合規/業務規則</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="actor">
+        <div class="card-name">Actor Model</div>
+        <div class="card-full">Hewitt 1973</div>
+        <div class="card-desc">每個 actor 狀態私有，只透過訊息互動。Erlang 發揚光大，分散式系統基石</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+      <div class="card" data-detail="dataflow">
+        <div class="card-name">Dataflow / Reactive</div>
+        <div class="card-full"></div>
+        <div class="card-desc">Signal 變化自動傳播。spreadsheet、React、RxJS、Svelte runes 都是這類</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="attrs-title">九維屬性</p>
+    <div class="attrs-grid">
+      <div class="attr-row"><div class="attr-key">哲學</div><div class="attr-val">不用狀態，用「樹/規則/訊息/資料流」作為主要抽象</div></div>
+      <div class="attr-row"><div class="attr-key">基本單位</div><div class="attr-val">BT: Tree Node / Rules: if-then / Actor: Mailbox+Message / Dataflow: Signal+Derivation</div></div>
+      <div class="attr-row"><div class="attr-key">狀態位置</div><div class="attr-val">BT: Blackboard / Actor: 每 actor 私有 / Dataflow: Signal 圖</div></div>
+      <div class="attr-row"><div class="attr-key">並行單位</div><div class="attr-val">BT: Parallel node / Actor: 每 actor 獨立 / Dataflow: 自動並行</div></div>
+      <div class="attr-row"><div class="attr-key">同步機制</div><div class="attr-val">BT: tick / Actor: message ack / Dataflow: subscribe/push</div></div>
+      <div class="attr-row"><div class="attr-key">形式化</div><div class="attr-val">弱到中（Actor 少、Dataflow 有 FRP）</div></div>
+      <div class="attr-row"><div class="attr-key">適合場景</div><div class="attr-val">BT: 遊戲 AI、機器人 / Rules: 合規 / Actor: 電信、高並發 / Dataflow: UI、spreadsheet</div></div>
+      <div class="attr-row"><div class="attr-key">典型代表</div><div class="attr-val">BehaviorTree.CPP, py_trees, Unreal / Erlang, Akka, Orleans, Ray / Drools, CLIPS / React, RxJS, Svelte</div></div>
+    </div>
+
+    <p class="proscons-title">優缺點</p>
+    <div class="proscons">
+      <div class="pros-box">
+        <p class="proscons-head">優點</p>
+        <ul>
+          <li>各自在主場完勝 FSM</li>
+          <li>模組化、可重用</li>
+          <li>更符合該領域直覺</li>
+        </ul>
+      </div>
+      <div class="cons-box">
+        <p class="proscons-head">缺點</p>
+        <ul>
+          <li>跨範式學習成本</li>
+          <li>混用時介面複雜</li>
+          <li>形式化不如 FSM 強</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="examples-title">範例</p>
+    <div class="examples-grid">
+      <div class="example-card">
+        <div class="example-title">遊戲 AI (BT)</div>
+        <div class="example-body">Selector(逃跑/戰鬥/巡邏)，優先級由樹結構天然表達，加新行為不動其他節點</div>
+      </div>
+      <div class="example-card">
+        <div class="example-title">WhatsApp 50 工程師撐 9 億用戶 (Actor)</div>
+        <div class="example-body">Erlang Actor Model + Supervisor 樹 + Let It Crash 哲學</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Ⅶ 速查決策表 ═══════════════════════ -->
+<div class="section-wrap" id="decision-table" data-accent="yellow">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅶ</span>
+        <h2 class="section-title">速查決策表</h2>
+        <span class="section-subtitle">What to Pick When</span>
+        <span class="section-tier">★★★★★ 實用速查</span>
+      </div>
+      <p class="section-tagline">需求對照模型 — 面對新問題先查這張表</p>
+      <p class="section-philosophy">把前六類濃縮成一張查找表。面對新問題先看需求特徵，對照正確模型。</p>
+    </header>
+
+    <div class="canvas-strip">
+      <canvas id="canvas-decision" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">羅盤 — 11 條光束指向各模型，hover 決策表列時對應光束發亮</p>
+
+    <div class="decision-table-wrap">
+      <table class="decision-table" aria-label="狀態機選型決策表">
+        <thead>
+          <tr>
+            <th>需求特徵</th>
+            <th>選用模型</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="dt-need">簡單協定、UI flow</td>
+            <td class="dt-pick" style="color:var(--blue)">FSM</td>
+            <td class="dt-why">狀態少、transition 清楚</td>
+          </tr>
+          <tr>
+            <td class="dt-need">需要條件判斷</td>
+            <td class="dt-pick" style="color:var(--mauve)">EFSM (with Guards)</td>
+            <td class="dt-why">Guard 讓 transition 看變數，避免狀態膨脹</td>
+          </tr>
+          <tr>
+            <td class="dt-need">狀態多 + 很多 global transition</td>
+            <td class="dt-pick" style="color:var(--mauve)">HSM</td>
+            <td class="dt-why">Superstate 繼承，一次寫全繼承</td>
+          </tr>
+          <tr>
+            <td class="dt-need">多維度同時狀態（播放+音量+網路）</td>
+            <td class="dt-pick" style="color:var(--mauve)">Statechart</td>
+            <td class="dt-why">Orthogonal regions 原生支援</td>
+          </tr>
+          <tr>
+            <td class="dt-need">狀態不可直接觀察、要推理</td>
+            <td class="dt-pick" style="color:var(--peach)">HMM</td>
+            <td class="dt-why">Viterbi 從 observation 推 hidden state</td>
+          </tr>
+          <tr>
+            <td class="dt-need">有時間約束（ms 級）</td>
+            <td class="dt-pick" style="color:var(--peach)">Timed Automaton</td>
+            <td class="dt-why">Clock 變數 + time guard</td>
+          </tr>
+          <tr>
+            <td class="dt-need">多方並行 + 同步點</td>
+            <td class="dt-pick" style="color:var(--sapphire)">Petri Net</td>
+            <td class="dt-why">Transition 天然 barrier，可證 deadlock-free</td>
+          </tr>
+          <tr>
+            <td class="dt-need">優先級決策、可重用 subtree</td>
+            <td class="dt-pick" style="color:var(--green)">Behavior Tree</td>
+            <td class="dt-why">Selector 優先級 + subtree 模組化</td>
+          </tr>
+          <tr>
+            <td class="dt-need">高並發 + 狀態隔離</td>
+            <td class="dt-pick" style="color:var(--green)">Actor Model</td>
+            <td class="dt-why">Mailbox 無 race、Let it crash 容錯</td>
+          </tr>
+          <tr>
+            <td class="dt-need">規則驅動、業務合規</td>
+            <td class="dt-pick" style="color:var(--green)">Rules Engine</td>
+            <td class="dt-why">if-then 聲明式，Rete 高效匹配</td>
+          </tr>
+          <tr>
+            <td class="dt-need">UI 響應式、資料綁定</td>
+            <td class="dt-pick" style="color:var(--green)">Dataflow / Reactive</td>
+            <td class="dt-why">Signal 變化自動傳播</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="heuristic-box">
+      <strong>啟發式原則：</strong>問自己「我在描述什麼？」— 離散狀態切換→FSM 家族；資源流動→Petri；訊息傳遞→Actor；優先級選擇→BT；隱狀態推理→HMM。
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ Ⅷ 實務混用場景 ═══════════════════════ -->
+<div class="section-wrap" id="hybrid" data-accent="lavender">
+  <div class="section">
+    <header class="section-header">
+      <div class="section-title-row">
+        <span class="section-numeral">Ⅷ</span>
+        <h2 class="section-title">實務混用場景</h2>
+        <span class="section-subtitle">Hybrid Architectures — 五種經典組合</span>
+        <span class="section-tier">★★★★★ 架構實戰</span>
+      </div>
+      <p class="section-tagline">真實系統從不是單一模型 — 分層混用才強</p>
+      <p class="section-philosophy">實務中幾乎沒有純 FSM / 純 Actor 的系統。複雜系統按「外層管 WHAT、中層管 HOW、葉層管 WHEN」分層，每層用最適合的模型。</p>
+    </header>
+
+    <div class="canvas-strip">
+      <canvas id="canvas-hybrid" aria-hidden="true"></canvas>
+    </div>
+    <p style="font-family:var(--fira-code);font-size:.7rem;color:var(--subtext0);opacity:.6;margin:-20px 0 16px 4px">WHAT / HOW / WHEN 三層抽象 — 粒子逐層穿透後回傳</p>
+
+    <p class="members-title">五種經典混用架構</p>
+    <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
+
+      <!-- 1 遊戲 Boss -->
+      <div class="card" data-detail="boss-bt" style="border-left:3px solid var(--blue)">
+        <div class="card-name">🎮 遊戲 Boss 戰三層架構</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px">
+          <span style="background:rgba(137,180,250,.18);color:var(--blue);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(137,180,250,.3)">FSM</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(166,227,161,.18);color:var(--green);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(166,227,161,.3)">Behavior Tree</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(137,180,250,.18);color:var(--blue);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(137,180,250,.3)">FSM</span>
+        </div>
+        <div class="card-desc" style="font-size:.8rem;line-height:1.65">
+          <strong style="color:var(--subtext1)">Layer 1 外層 FSM：</strong>Boss 階段切換 — Phase1 → Phase2 → Phase3 由血量觸發<br>
+          <strong style="color:var(--subtext1)">Layer 2 中層 BT：</strong>每階段內 AI 決策 — Selector(補血/召喚/範圍技/普攻)<br>
+          <strong style="color:var(--subtext1)">Layer 3 葉 FSM：</strong>技能協議 — 蓄力 → 施法 → 冷卻的剛性流程
+        </div>
+        <div style="margin-top:6px;font-size:.75rem;color:var(--subtext0)"><span style="color:var(--lavender)">why：</span>階段切換是離散單向→FSM；階段內選做啥→BT 優先級；技能是剛性協議→FSM</div>
+        <div style="font-size:.72rem;color:var(--surface2);font-family:var(--fira-code)">reps：Dark Souls boss、AAA 遊戲 AI</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+
+      <!-- 2 訂單系統 -->
+      <div class="card" data-detail="order-flow" style="border-left:3px solid var(--sapphire)">
+        <div class="card-name">📦 分散式訂單系統</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px">
+          <span style="background:rgba(116,199,236,.18);color:var(--sapphire);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(116,199,236,.3)">Petri Net</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(166,227,161,.18);color:var(--green);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(166,227,161,.3)">Actor Model</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(137,180,250,.18);color:var(--blue);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(137,180,250,.3)">FSM</span>
+        </div>
+        <div class="card-desc" style="font-size:.8rem;line-height:1.65">
+          <strong style="color:var(--subtext1)">Layer 1 外層 Petri：</strong>整體 workflow 建模 — 下單/付款/出貨/完成的並行同步<br>
+          <strong style="color:var(--subtext1)">Layer 2 中層 Actor：</strong>每張訂單一個 Actor，Payment/Shipping Actor 各司其職<br>
+          <strong style="color:var(--subtext1)">Layer 3 葉 FSM：</strong>PaymentActor 內部 pending/paid/refunded 生命週期
+        </div>
+        <div style="margin-top:6px;font-size:.75rem;color:var(--subtext0)"><span style="color:var(--lavender)">why：</span>Petri 建模可證 deadlock-free；Actor 天然並發容錯；FSM 管細節</div>
+        <div style="font-size:.72rem;color:var(--surface2);font-family:var(--fira-code)">reps：電商訂單中台、Shopify、Stripe 後端</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+
+      <!-- 3 語音助手 -->
+      <div class="card" data-detail="voice-pipe" style="border-left:3px solid var(--peach)">
+        <div class="card-name">🎙️ 語音助手 Pipeline</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px">
+          <span style="background:rgba(250,179,135,.18);color:var(--peach);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(250,179,135,.3)">HMM</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(203,166,247,.18);color:var(--mauve);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(203,166,247,.3)">Statechart</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(166,227,161,.18);color:var(--green);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(166,227,161,.3)">BT</span>
+        </div>
+        <div class="card-desc" style="font-size:.8rem;line-height:1.65">
+          <strong style="color:var(--subtext1)">Layer 1 輸入層 HMM：</strong>語音識別 — MFCC 特徵推音素隱狀態<br>
+          <strong style="color:var(--subtext1)">Layer 2 對話層 Statechart：</strong>多輪對話 lifecycle — Idle/Listening/Thinking/Speaking + orthogonal regions<br>
+          <strong style="color:var(--subtext1)">Layer 3 決策層 BT：</strong>意圖路由 — Selector(查天氣/設鬧鐘/閒聊/fallback)
+        </div>
+        <div style="margin-top:6px;font-size:.75rem;color:var(--subtext0)"><span style="color:var(--lavender)">why：</span>HMM 序列推理；Statechart 管對話狀態；BT 決定呼叫哪個技能</div>
+        <div style="font-size:.72rem;color:var(--surface2);font-family:var(--fira-code)">reps：Siri（早期）、Alexa、Kaldi 系統</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+
+      <!-- 4 自駕車 -->
+      <div class="card" data-detail="self-driving" style="border-left:3px solid var(--teal)">
+        <div class="card-name">🚗 自駕車即時系統</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px">
+          <span style="background:rgba(116,199,236,.18);color:var(--sapphire);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(116,199,236,.3)">Petri Net</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(250,179,135,.18);color:var(--peach);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(250,179,135,.3)">Timed Automaton</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(166,227,161,.18);color:var(--green);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(166,227,161,.3)">BT</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(166,227,161,.18);color:var(--green);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(166,227,161,.3)">Actor</span>
+        </div>
+        <div class="card-desc" style="font-size:.8rem;line-height:1.65">
+          <strong style="color:var(--subtext1)">Layer 1 管線層 Petri：</strong>感知→預測→規劃→控制 pipeline 的並行同步<br>
+          <strong style="color:var(--subtext1)">Layer 2 安全層 Timed：</strong>ms 級實時約束 — 「剎車訊號 &lt; 100ms 到位」可驗證<br>
+          <strong style="color:var(--subtext1)">Layer 3 決策層 BT：</strong>駕駛行為 — Selector(緊急停車/變道/巡航/跟車)<br>
+          <strong style="color:var(--subtext1)">Layer 4 通訊層 Actor：</strong>模組間訊息傳遞 — Sensor/Planner/Controller Actor
+        </div>
+        <div style="margin-top:6px;font-size:.75rem;color:var(--subtext0)"><span style="color:var(--lavender)">why：</span>Petri 證 pipeline 無 deadlock；Timed 證實時上限；BT 決定動作；Actor 隔離故障</div>
+        <div style="font-size:.72rem;color:var(--surface2);font-family:var(--fira-code)">reps：Waymo、Tesla Autopilot、Apollo</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+
+      <!-- 5 前端 Web App -->
+      <div class="card" data-detail="web-app" style="border-left:3px solid var(--mauve)">
+        <div class="card-name">⚡ 現代前端 Web App</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px">
+          <span style="background:rgba(203,166,247,.18);color:var(--mauve);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(203,166,247,.3)">Statechart</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(148,226,213,.18);color:var(--teal);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(148,226,213,.3)">Dataflow</span>
+          <span style="font-size:.7rem;color:var(--subtext0);align-self:center">→</span>
+          <span style="background:rgba(166,227,161,.18);color:var(--green);font-family:var(--fira-code);font-size:.7rem;padding:2px 8px;border-radius:10px;border:1px solid rgba(166,227,161,.3)">Actor</span>
+        </div>
+        <div class="card-desc" style="font-size:.8rem;line-height:1.65">
+          <strong style="color:var(--subtext1)">Layer 1 畫面層 Statechart：</strong>複雜 UI state — 表單多步驟、modal stack、auth flow<br>
+          <strong style="color:var(--subtext1)">Layer 2 資料層 Dataflow：</strong>React/Svelte signal 自動傳播 derived state<br>
+          <strong style="color:var(--subtext1)">Layer 3 背景層 Actor：</strong>Web Worker / Service Worker 做 offline sync、heavy compute
+        </div>
+        <div style="margin-top:6px;font-size:.75rem;color:var(--subtext0)"><span style="color:var(--lavender)">why：</span>Statechart 管 UI 複雜度；Dataflow 管資料響應；Actor 管背景計算隔離</div>
+        <div style="font-size:.72rem;color:var(--surface2);font-family:var(--fira-code)">reps：XState + React、Linear、Figma</div>
+      
+        <button class="card-expand" aria-expanded="false">▼ 詳細內容</button>
+        <div class="detail-panel" aria-hidden="true"></div>
+      </div>
+
+      <!-- 6 心法卡 -->
+      <div class="card" style="background:var(--surface0);border-left:4px solid var(--lavender)">
+        <div class="card-name" style="color:var(--lavender)">分層心法</div>
+        <div class="card-desc" style="font-size:.88rem;line-height:1.85">
+          <div style="margin-bottom:10px">
+            <span style="color:var(--blue);font-family:var(--fira-code);font-weight:600">外層</span> 管 <strong>WHAT</strong>（做什麼）
+          </div>
+          <div style="margin-bottom:10px">
+            <span style="color:var(--green);font-family:var(--fira-code);font-weight:600">中層</span> 管 <strong>HOW</strong>（怎麼選）
+          </div>
+          <div style="margin-bottom:14px">
+            <span style="color:var(--peach);font-family:var(--fira-code);font-weight:600">葉層</span> 管 <strong>WHEN</strong>（如何執行）
+          </div>
+          <div style="font-size:.8rem;color:var(--subtext0);border-top:1px solid var(--surface1);padding-top:10px">
+            每層選最適合的模型，組合比單選強十倍。
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p>
+    <span>維恩</span> for 少爺 · 2026-04
+    &nbsp;·&nbsp;
+    <a href="https://en.wikipedia.org/wiki/Finite-state_machine" target="_blank" rel="noopener">FSM — Wikipedia</a>
+    &nbsp;·&nbsp;
+    <a href="https://en.wikipedia.org/wiki/Harel_statechart" target="_blank" rel="noopener">Harel Statechart</a>
+    &nbsp;·&nbsp;
+    <a href="https://en.wikipedia.org/wiki/Petri_net" target="_blank" rel="noopener">Petri Net</a>
+    &nbsp;·&nbsp;
+    <a href="https://en.wikipedia.org/wiki/Hidden_Markov_model" target="_blank" rel="noopener">HMM</a>
+    &nbsp;·&nbsp;
+    <a href="https://en.wikipedia.org/wiki/Actor_model" target="_blank" rel="noopener">Actor Model</a>
+  </p>
+</footer>
+
+<script>
+// ───────────────────────────────────────────────────────────────
+// Canvas Particle System — State Machine Atlas
+// All animations use requestAnimationFrame + IntersectionObserver
+// ───────────────────────────────────────────────────────────────
+
+const COLORS = {
+  blue:'#89b4fa', teal:'#94e2d5', mauve:'#cba6f7', peach:'#fab387',
+  sapphire:'#74c7ec', green:'#a6e3a1', yellow:'#f9e2af', red:'#f38ba8',
+  lavender:'#b4befe', subtext0:'#a6adc8', surface0:'#313244', surface1:'#45475a'
+};
+
+// Helper: resize canvas to its CSS display size
+function fitCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  if (canvas.width !== rect.width || canvas.height !== rect.height) {
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+}
+
+// Helper: create glow
+function glowCtx(ctx, color, blur) {
+  ctx.shadowColor = color;
+  ctx.shadowBlur = blur;
+}
+function clearGlow(ctx) {
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+}
+
+// ── HERO CANVAS: 七色粒子群緩慢游動 ──────────────────────────
+(function heroCanvas() {
+  const canvas = document.getElementById('heroCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const palette = [COLORS.blue, COLORS.teal, COLORS.mauve, COLORS.peach,
+                   COLORS.sapphire, COLORS.green, COLORS.yellow];
+  let particles = [];
+  let raf;
+  let running = false;
+
+  function initParticles() {
+    const W = canvas.width, H = canvas.height;
+    particles = [];
+    const count = Math.min(55, Math.floor(W * H / 8000));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: 1.5 + Math.random() * 3,
+        vx: (Math.random() - 0.5) * 0.2,
+        vy: (Math.random() - 0.5) * 0.2,
+        color: palette[i % palette.length],
+        alpha: 0.35 + Math.random() * 0.4,
+        pulse: Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  function draw() {
+    if (!running) return;
+    fitCanvas(canvas);
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    particles.forEach(p => {
+      p.pulse += 0.02;
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < -10) p.x = W + 10;
+      if (p.x > W + 10) p.x = -10;
+      if (p.y < -10) p.y = H + 10;
+      if (p.y > H + 10) p.y = -10;
+      const alpha = p.alpha + Math.sin(p.pulse) * 0.15;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.round(alpha * 255).toString(16).padStart(2,'0');
+      glowCtx(ctx, p.color, 8);
+      ctx.fill();
+      clearGlow(ctx);
+    });
+    // Draw connections between nearby particles
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 90) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = particles[i].color + Math.round((1 - dist/90) * 40).toString(16).padStart(2,'0');
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() {
+    if (running) return;
+    running = true;
+    fitCanvas(canvas);
+    initParticles();
+    draw();
+  }
+  function stop() {
+    running = false;
+    cancelAnimationFrame(raf);
+  }
+
+  const obs = new IntersectionObserver(entries => {
+    entries[0].isIntersecting ? start() : stop();
+  }, { threshold: 0.01 });
+  obs.observe(canvas);
+  // Also resize on window resize
+  window.addEventListener('resize', () => {
+    fitCanvas(canvas);
+    initParticles();
+  });
+})();
+
+
+// ── Ⅰ THEORY: Chomsky 階梯幾何 ──────────────────────────────────
+(function theoryCanvas() {
+  const canvas = document.getElementById('canvas-theory');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  // 4 步 Chomsky 階層
+  const STEPS = [
+    { model: 'DFA / NFA',       cap: 'Regular',               color: COLORS.blue,     colorDim: COLORS.blue    + '55' },
+    { model: 'PDA',             cap: 'Context-Free',          color: COLORS.sapphire, colorDim: COLORS.sapphire+ '55' },
+    { model: 'LBA',             cap: 'Context-Sensitive',     color: COLORS.mauve,    colorDim: COLORS.mauve   + '55' },
+    { model: 'Turing Machine',  cap: 'Recursively Enumerable',color: COLORS.lavender, colorDim: COLORS.lavender+ '55' }
+  ];
+
+  let particles = [];
+  let upgradeTimer = 0;
+  let raf, running = false;
+
+  function getStepRects(W, H) {
+    // Bottom-left stacking stairs: each step w=W/4, h=(H-40)/4
+    const pad = 8;
+    const stepW = (W - pad * 2) / 4;
+    const stepH = (H - 40 - pad * 2) / 4;  // leave 40px bottom for caption
+    return STEPS.map((s, i) => ({
+      x: pad + i * stepW,
+      y: pad + (3 - i) * stepH,
+      w: stepW,
+      h: (i + 1) * stepH,   // cumulative height so stairs stack
+      ...s
+    }));
+  }
+
+  function initParticles(rects) {
+    particles = [];
+    // ~4 per step
+    rects.forEach((r, si) => {
+      const count = 4 + si;
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          step: si,
+          x: r.x + 4 + Math.random() * (r.w - 8),
+          y: r.y + 4 + Math.random() * (r.h - 8),
+          vx: (0.075 + Math.random() * 0.1) * (Math.random() < 0.5 ? 1 : -1),
+          vy: (Math.random() - 0.5) * 0.05,
+          r: 2.5 + si * 0.4,
+          color: r.color,
+          alpha: 0.55 + si * 0.08,
+          upgrading: false,
+          upgradeY: 0,
+          upgradeTargetY: 0
+        });
+      }
+    });
+  }
+
+  let rects = null;
+
+  function draw() {
+    if (!running) return;
+    fitCanvas(canvas);
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    if (!rects || rects[0].w !== (W - 16) / 4) {
+      rects = getStepRects(W, H);
+      initParticles(rects);
+    }
+
+    upgradeTimer++;
+    // Every ~3s (180 frames) pick a random non-top particle and upgrade it
+    if (upgradeTimer % 180 === 0) {
+      const eligible = particles.filter(p => p.step < 3 && !p.upgrading);
+      if (eligible.length > 0) {
+        const p = eligible[Math.floor(Math.random() * eligible.length)];
+        p.upgrading = true;
+        p.upgradeVY = -1.2;
+        const nextRect = rects[p.step + 1];
+        p.upgradeTargetY = nextRect.y + 8 + Math.random() * (nextRect.h - 16);
+        p.upgradeTargetX = nextRect.x + 4 + Math.random() * (nextRect.w - 8);
+      }
+    }
+
+    // Draw stair steps (back to front so higher step draws on top)
+    rects.forEach((r, i) => {
+      // fill
+      ctx.fillStyle = r.colorDim;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      // border
+      ctx.strokeStyle = r.color + 'aa';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+
+      // Model name (large)
+      ctx.font = 'bold 12px Fira Code, monospace';
+      ctx.fillStyle = r.color + 'ee';
+      ctx.textAlign = 'center';
+      ctx.fillText(r.model, r.x + r.w / 2, r.y + 20);
+
+      // Capacity class (small, below model name)
+      ctx.font = '9px Fira Code, monospace';
+      ctx.fillStyle = r.color + '88';
+      const capWords = r.cap.split(' ');
+      capWords.forEach((word, wi) => {
+        ctx.fillText(word, r.x + r.w / 2, r.y + 32 + wi * 11);
+      });
+
+      ctx.textAlign = 'left';
+    });
+
+    // Bottom caption
+    ctx.font = '10px Fira Code, monospace';
+    ctx.fillStyle = COLORS.subtext0 + '66';
+    ctx.fillText('能力由下往上遞增 — 下層粒子無法突破上層邊界', 8, H - 10);
+
+    // Draw + update particles
+    particles.forEach(p => {
+      const r = rects[p.step];
+      if (p.upgrading) {
+        // Move toward target step
+        const dx = p.upgradeTargetX - p.x;
+        const dy = p.upgradeTargetY - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 3) {
+          // Arrived
+          p.step = Math.min(p.step + 1, 3);
+          p.color = rects[p.step].color;
+          p.upgrading = false;
+          p.x = p.upgradeTargetX;
+          p.y = p.upgradeTargetY;
+        } else {
+          p.x += dx * 0.04;
+          p.y += dy * 0.04;
+        }
+      } else {
+        p.x += p.vx;
+        p.y += p.vy;
+        // Clamp inside current step rect
+        if (p.x < r.x + 2) { p.x = r.x + 2; p.vx = Math.abs(p.vx); }
+        if (p.x > r.x + r.w - 2) { p.x = r.x + r.w - 2; p.vx = -Math.abs(p.vx); }
+        if (p.y < r.y + 2) { p.y = r.y + 2; p.vy = Math.abs(p.vy); }
+        if (p.y > r.y + r.h - 2) { p.y = r.y + r.h - 2; p.vy = -Math.abs(p.vy); }
+      }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.round(p.alpha * 255).toString(16).padStart(2, '0');
+      glowCtx(ctx, p.color, p.upgrading ? 16 : 8);
+      ctx.fill();
+      clearGlow(ctx);
+    });
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() {
+    if (running) return;
+    running = true;
+    fitCanvas(canvas);
+    rects = getStepRects(canvas.width, canvas.height);
+    initParticles(rects);
+    draw();
+  }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), { threshold: 0.1 });
+  obs.observe(canvas.parentElement);
+})();
+
+
+// ── Ⅱ OUTPUT: Moore vs Mealy 左右分割 FSM 圖 ──────────────────
+(function outputCanvas() {
+  const canvas = document.getElementById('canvas-output');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let raf, running = false;
+  let t = 0;
+
+  // Ticker state
+  const INPUT_STREAM = [0,1,1,0,1,1,0,0,1,0];
+  let streamOffset = 0;
+  let streamTimer = 0;
+
+  // Active dot state: which state (0=A,1=B,2=C) and transition progress
+  let mooreDot = { state: 0, nextState: 1, progress: 0, transitioning: false, transTimer: 0 };
+  let mealyDot = { state: 0, nextState: 1, progress: 0, transitioning: false, transTimer: 0 };
+  // Outbit particles (Mealy): {x,y,alpha,val}
+  let outBits = [];
+
+  const MOORE_OUTPUTS = [0, 1, 0]; // output per state A, B, C
+  // Mealy: transition (from->to) → output; simplified 3-state cycle
+  const MEALY_OUTPUTS = [[0,0,1],[1,0,1],[0,1,0]]; // [from][to]
+  const STATE_LABELS = ['A', 'B', 'C'];
+  // Moore transitions: A->B->C->A on input 1, self on input 0
+  // For animation: cycle A→B→C→A every ~120 frames each
+
+  const DOT_INTERVAL = 120; // frames between state advances
+
+  function getLayout(W, H) {
+    const half = W / 2 - 1;
+    // Moore: left half, 3 nodes in triangle/horizontal
+    const mR = Math.min(half * 0.22, H * 0.22); // node radius for layout
+    const mooreCenter = { x: half * 0.5, y: H * 0.52 };
+    const mooreNodes = [
+      { x: mooreCenter.x - mR * 1.5, y: mooreCenter.y + mR * 0.5, label: 'A', out: 0 },
+      { x: mooreCenter.x,            y: mooreCenter.y - mR * 1.0, label: 'B', out: 1 },
+      { x: mooreCenter.x + mR * 1.5, y: mooreCenter.y + mR * 0.5, label: 'C', out: 0 }
+    ];
+    const mooreEdges = [
+      { from: 0, to: 1, label: '1', cx: mooreCenter.x - mR * 0.75, cy: mooreCenter.y - mR * 1.2 },
+      { from: 1, to: 2, label: '1', cx: mooreCenter.x + mR * 0.75, cy: mooreCenter.y - mR * 1.2 },
+      { from: 2, to: 0, label: '1', cx: mooreCenter.x,             cy: mooreCenter.y + mR * 1.6 },
+      { from: 0, to: 0, label: '0', self: true },
+      { from: 1, to: 1, label: '0', self: true },
+      { from: 2, to: 2, label: '0', self: true }
+    ];
+
+    // Mealy: right half
+    const mx0 = W / 2 + 1;
+    const mealyCenter = { x: mx0 + half * 0.5, y: H * 0.52 };
+    const mealyNodes = [
+      { x: mealyCenter.x - mR * 1.5, y: mealyCenter.y + mR * 0.5, label: 'A' },
+      { x: mealyCenter.x,            y: mealyCenter.y - mR * 1.0, label: 'B' },
+      { x: mealyCenter.x + mR * 1.5, y: mealyCenter.y + mR * 0.5, label: 'C' }
+    ];
+    const mealyEdges = [
+      { from: 0, to: 1, label: '1/0', cx: mealyCenter.x - mR * 0.75, cy: mealyCenter.y - mR * 1.2 },
+      { from: 1, to: 2, label: '1/1', cx: mealyCenter.x + mR * 0.75, cy: mealyCenter.y - mR * 1.2 },
+      { from: 2, to: 0, label: '1/0', cx: mealyCenter.x,             cy: mealyCenter.y + mR * 1.6 },
+      { from: 0, to: 0, label: '0/1', self: true },
+      { from: 1, to: 1, label: '0/0', self: true },
+      { from: 2, to: 2, label: '0/1', self: true }
+    ];
+
+    return { mooreNodes, mooreEdges, mealyNodes, mealyEdges, mR };
+  }
+
+  let layout = null;
+
+  function drawArrow(ctx, x1, y1, x2, y2, color, label, isFlash, cx, cy, isSelf, nodeX, nodeY) {
+    ctx.strokeStyle = color + (isFlash ? 'ff' : '55');
+    ctx.lineWidth = isFlash ? 2 : 1.2;
+    if (isFlash) glowCtx(ctx, color, 12);
+
+    if (isSelf) {
+      // Self-loop above the node
+      ctx.beginPath();
+      ctx.arc(nodeX, nodeY - 24, 10, 0.3, Math.PI - 0.3);
+      ctx.stroke();
+      // Arrowhead
+      ctx.beginPath();
+      ctx.moveTo(nodeX + 8, nodeY - 15);
+      ctx.lineTo(nodeX + 3, nodeY - 12);
+      ctx.lineTo(nodeX + 11, nodeY - 12);
+      ctx.fillStyle = color + (isFlash ? 'ff' : '55');
+      ctx.fill();
+      // Label
+      ctx.font = '9px Fira Code, monospace';
+      ctx.fillStyle = color + (isFlash ? 'ff' : '88');
+      ctx.textAlign = 'center';
+      ctx.fillText(label, nodeX, nodeY - 38);
+    } else {
+      // Curved arrow through control point
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(cx, cy, x2, y2);
+      ctx.stroke();
+      // Arrowhead at end
+      const dx = x2 - cx, dy = y2 - cy;
+      const len = Math.sqrt(dx*dx+dy*dy);
+      const ux = dx/len, uy = dy/len;
+      const ax = x2 - ux*14 - uy*5;
+      const ay = y2 - uy*14 + ux*5;
+      const bx = x2 - ux*14 + uy*5;
+      const by = y2 - uy*14 - ux*5;
+      ctx.beginPath();
+      ctx.moveTo(x2, y2); ctx.lineTo(ax, ay); ctx.lineTo(bx, by);
+      ctx.closePath();
+      ctx.fillStyle = color + (isFlash ? 'ff' : '55');
+      ctx.fill();
+      // Label at midpoint of curve
+      const lx = 0.25*x1+0.5*cx+0.25*x2;
+      const ly = 0.25*y1+0.5*cy+0.25*y2 - 7;
+      ctx.font = '9px Fira Code, monospace';
+      ctx.fillStyle = color + (isFlash ? 'ff' : '88');
+      ctx.textAlign = 'center';
+      ctx.fillText(label, lx, ly);
+    }
+    clearGlow(ctx);
+    ctx.textAlign = 'left';
+  }
+
+  function drawNode(ctx, x, y, label, color, isActive, mooreOut) {
+    const NR = 18;
+    // Glow ring when active
+    if (isActive) {
+      glowCtx(ctx, color, 20);
+      ctx.beginPath();
+      ctx.arc(x, y, NR + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = color + 'cc';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      clearGlow(ctx);
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, NR, 0, Math.PI * 2);
+    ctx.fillStyle = isActive ? color + '33' : '#1e1e2e';
+    ctx.fill();
+    ctx.strokeStyle = color + (isActive ? 'ff' : '99');
+    ctx.lineWidth = isActive ? 2 : 1.5;
+    ctx.stroke();
+
+    // State label
+    ctx.font = 'bold 13px Fira Code, monospace';
+    ctx.fillStyle = color + (isActive ? 'ff' : 'cc');
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y - 2);
+
+    // Moore output label inside node
+    if (mooreOut !== undefined) {
+      ctx.font = '9px Fira Code, monospace';
+      ctx.fillStyle = isActive ? color + 'ff' : color + '88';
+      ctx.fillText('O=' + mooreOut, x, y + 12);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  function draw() {
+    if (!running) return;
+    fitCanvas(canvas);
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    t++;
+
+    if (!layout || Math.abs(layout.mooreNodes[0].x - (W/2 - 1) * 0.5 + layout.mR * 1.5) > 5) {
+      layout = getLayout(W, H);
+    }
+    const { mooreNodes, mooreEdges, mealyNodes, mealyEdges, mR } = layout;
+
+    // ── Scrolling input stream ticker ──────────────────────────
+    streamTimer++;
+    if (streamTimer % 120 === 0) {
+      streamOffset = (streamOffset + 1) % INPUT_STREAM.length;
+    }
+    const tickerY = 16;
+    ctx.font = 'bold 10px Fira Code, monospace';
+    ctx.fillStyle = COLORS.subtext0 + '88';
+    ctx.fillText('input stream:', 4, tickerY);
+    let tx = 90;
+    for (let i = 0; i < 7; i++) {
+      const bit = INPUT_STREAM[(streamOffset + i) % INPUT_STREAM.length];
+      const alpha = i === 0 ? 'ff' : i < 5 ? 'cc' : '55';
+      ctx.fillStyle = (bit ? COLORS.yellow : COLORS.blue) + alpha;
+      ctx.fillText(bit + ' ', tx, tickerY);
+      tx += 14;
+    }
+
+    // ── Center divider ──────────────────────────────────────────
+    ctx.beginPath();
+    ctx.setLineDash([5, 4]);
+    ctx.moveTo(W / 2, 26);
+    ctx.lineTo(W / 2, H - 22);
+    ctx.strokeStyle = COLORS.surface0;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Section headers
+    ctx.font = '10px Fira Code, monospace';
+    ctx.fillStyle = COLORS.teal + '99';
+    ctx.textAlign = 'center';
+    ctx.fillText('Moore：output 印在圓圈內', W / 4, 30);
+    ctx.fillStyle = COLORS.sapphire + '99';
+    ctx.fillText('Mealy：output 印在箭頭上', W * 3 / 4, 30);
+    ctx.textAlign = 'left';
+
+    // ── Advance dot state ───────────────────────────────────────
+    mooreDot.transTimer++;
+    if (mooreDot.transTimer >= DOT_INTERVAL) {
+      mooreDot.transTimer = 0;
+      mooreDot.state = (mooreDot.state + 1) % 3;
+    }
+    mealyDot.transTimer++;
+    if (mealyDot.transTimer >= DOT_INTERVAL) {
+      mealyDot.transTimer = 0;
+      // Mealy: when advancing, emit an out bit
+      const outVal = MEALY_OUTPUTS[mealyDot.state][(mealyDot.state + 1) % 3];
+      const curNode = mealyNodes[mealyDot.state];
+      const nextNode = mealyNodes[(mealyDot.state + 1) % 3];
+      outBits.push({
+        x: (curNode.x + nextNode.x) / 2,
+        y: (curNode.y + nextNode.y) / 2 - 6,
+        val: outVal,
+        alpha: 1,
+        vy: -0.7
+      });
+      mealyDot.state = (mealyDot.state + 1) % 3;
+    }
+
+    const mFlash = t % DOT_INTERVAL < 20; // brief flash near state change
+
+    // ── Draw Moore half ─────────────────────────────────────────
+    const mooreColor = COLORS.teal;
+    // Edges
+    mooreEdges.forEach(e => {
+      if (e.self) return; // skip self-loops for clarity
+      const fn = mooreNodes[e.from], tn = mooreNodes[e.to];
+      const isFlash = e.from === mooreDot.state && mFlash;
+      drawArrow(ctx, fn.x, fn.y, tn.x, tn.y, mooreColor, e.label, isFlash, e.cx, e.cy, false);
+    });
+    // Nodes
+    mooreNodes.forEach((n, i) => {
+      const isActive = i === mooreDot.state;
+      drawNode(ctx, n.x, n.y, n.label, mooreColor, isActive, n.out);
+    });
+
+    // ── Draw Mealy half ─────────────────────────────────────────
+    const mealyColor = COLORS.sapphire;
+    mealyEdges.forEach(e => {
+      if (e.self) return;
+      const fn = mealyNodes[e.from], tn = mealyNodes[e.to];
+      const isFlash = e.from === mealyDot.state && mFlash;
+      drawArrow(ctx, fn.x, fn.y, tn.x, tn.y, mealyColor, e.label, isFlash, e.cx, e.cy, false);
+    });
+    mealyNodes.forEach((n, i) => {
+      const isActive = i === mealyDot.state;
+      drawNode(ctx, n.x, n.y, n.label, mealyColor, isActive, undefined);
+    });
+
+    // Out bit particles (Mealy)
+    outBits = outBits.filter(b => b.alpha > 0.05);
+    outBits.forEach(b => {
+      b.y += b.vy;
+      b.alpha -= 0.012;
+      ctx.font = 'bold 12px Fira Code, monospace';
+      ctx.fillStyle = COLORS.yellow + Math.round(b.alpha * 255).toString(16).padStart(2, '0');
+      glowCtx(ctx, COLORS.yellow, 10);
+      ctx.textAlign = 'center';
+      ctx.fillText(b.val, b.x, b.y);
+      clearGlow(ctx);
+    });
+    ctx.textAlign = 'left';
+
+    // Bottom caption
+    ctx.font = '9px Fira Code, monospace';
+    ctx.fillStyle = COLORS.subtext0 + '66';
+    ctx.fillText('Moore 輸出穩定綁在狀態 / Mealy 輸出只在轉移瞬間', 4, H - 6);
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() {
+    if (running) return;
+    running = true;
+    fitCanvas(canvas);
+    layout = getLayout(canvas.width, canvas.height);
+    draw();
+  }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), { threshold: 0.1 });
+  obs.observe(canvas.parentElement);
+})();
+
+
+// ── Ⅲ EXTENDED: 巢狀盒子流 ────────────────────────────────────
+(function extendedCanvas() {
+  const canvas = document.getElementById('canvas-extended');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let raf, running = false;
+  let particles = [];
+
+  function initParticles() {
+    const W = canvas.width, H = canvas.height;
+    particles = [];
+    const cx = W / 2, cy = H / 2;
+    const regions = [
+      {color: COLORS.mauve, rx: cx - W*0.42, ry: cy - H*0.42, rw: W*0.84, rh: H*0.84, label: 'UML SM'},
+      {color: COLORS.blue,   rx: cx - W*0.30, ry: cy - H*0.30, rw: W*0.60, rh: H*0.60, label: 'Statechart'},
+      {color: COLORS.teal,   rx: cx - W*0.18, ry: cy - H*0.18, rw: W*0.36, rh: H*0.36, label: 'HSM'},
+      {color: COLORS.sapphire,rx: cx - W*0.08, ry: cy - H*0.09, rw: W*0.16, rh: H*0.18, label: 'EFSM'},
+    ];
+    // Particles orbit in each layer
+    regions.forEach((reg, ri) => {
+      const count = 6 + ri * 2;
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2;
+        const rx = reg.rw / 2 * 0.85;
+        const ry = reg.rh / 2 * 0.85;
+        particles.push({
+          angle,
+          speed: (0.008 + ri * 0.004) * (ri % 2 === 0 ? 1 : -1),
+          rx,
+          ry,
+          cx: reg.rx + reg.rw/2,
+          cy: reg.ry + reg.rh/2,
+          color: reg.color,
+          r: 3,
+          alpha: 0.7,
+          region: ri
+        });
+      }
+    });
+    return regions;
+  }
+
+  let rdata;
+
+  function draw() {
+    if (!running) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!rdata) rdata = initParticles();
+
+    // Draw nested boxes
+    rdata.forEach((reg, ri) => {
+      ctx.strokeStyle = reg.color + (ri === 0 ? '50' : ri === 1 ? '60' : ri === 2 ? '70' : '90');
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(ri === 0 ? [8, 4] : ri === 1 ? [6, 3] : []);
+      ctx.strokeRect(reg.rx, reg.ry, reg.rw, reg.rh);
+      ctx.setLineDash([]);
+      ctx.font = '10px Fira Code, monospace';
+      ctx.fillStyle = reg.color + '80';
+      ctx.fillText(reg.label, reg.rx + 6, reg.ry + 14);
+    });
+
+    // Orthogonal region divider in innermost
+    const inner = rdata[rdata.length - 2];
+    const mx = inner.rx + inner.rw / 2;
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.moveTo(mx, inner.ry + 4);
+    ctx.lineTo(mx, inner.ry + inner.rh - 4);
+    ctx.strokeStyle = COLORS.teal + '60';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw particles
+    particles.forEach(p => {
+      p.angle += p.speed;
+      const x = p.cx + Math.cos(p.angle) * p.rx;
+      const y = p.cy + Math.sin(p.angle) * p.ry;
+      ctx.beginPath();
+      ctx.arc(x, y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      glowCtx(ctx, p.color, 10);
+      ctx.fill();
+      clearGlow(ctx);
+    });
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() { if(running) return; running=true; fitCanvas(canvas); rdata=initParticles(); draw(); }
+  function stop() { running=false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), {threshold:0.1});
+  obs.observe(canvas.parentElement);
+})();
+
+
+// ── Ⅳ PROBABILISTIC: 機率雲 + clock ──────────────────────────
+(function probabilisticCanvas() {
+  const canvas = document.getElementById('canvas-probabilistic');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let raf, running = false;
+  let particles = [], t = 0;
+
+  function initParticles() {
+    const W = canvas.width, H = canvas.height;
+    particles = [];
+    // Left half: probability cloud (Markov/HMM)
+    const states = [
+      {x: W*0.12, y: H*0.5}, {x: W*0.28, y: H*0.28}, {x: W*0.28, y: H*0.72},
+      {x: W*0.44, y: H*0.18}, {x: W*0.44, y: H*0.5}
+    ];
+    for (let i = 0; i < 28; i++) {
+      const fromState = states[Math.floor(Math.random() * states.length)];
+      const toState = states[Math.floor(Math.random() * states.length)];
+      particles.push({
+        type: 'markov',
+        x: fromState.x, y: fromState.y,
+        tx: toState.x, ty: toState.y,
+        px: fromState.x, py: fromState.y,
+        progress: Math.random(),
+        speed: 0.005 + Math.random() * 0.008,
+        color: COLORS.peach,
+        r: 2.5,
+        spread: (Math.random() - 0.5) * H * 0.15
+      });
+    }
+    // Right half: clock particles
+    const clockCX = W * 0.78, clockCY = H * 0.5, clockR = H * 0.35;
+    for (let i = 0; i < 20; i++) {
+      particles.push({
+        type: 'clock',
+        angle: (i / 20) * Math.PI * 2,
+        radius: clockR * (0.4 + Math.random() * 0.5),
+        cx: clockCX, cy: clockCY,
+        speed: 0.01 + Math.random() * 0.015,
+        color: COLORS.sapphire,
+        r: 2.5,
+        alpha: 0.5 + Math.random() * 0.4
+      });
+    }
+    return states;
+  }
+
+  let stateData;
+
+  function draw() {
+    if (!running) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    t++;
+    if (!stateData) stateData = initParticles();
+
+    // Draw clock (right half)
+    const clockCX = W * 0.78, clockCY = H * 0.5, clockR = H * 0.35;
+    ctx.beginPath();
+    ctx.arc(clockCX, clockCY, clockR, 0, Math.PI * 2);
+    ctx.strokeStyle = COLORS.sapphire + '30';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Clock hand
+    const handAngle = (t * 0.03) - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(clockCX, clockCY);
+    ctx.lineTo(clockCX + Math.cos(handAngle) * clockR * 0.7, clockCY + Math.sin(handAngle) * clockR * 0.7);
+    ctx.strokeStyle = COLORS.sapphire + '80';
+    ctx.lineWidth = 2;
+    glowCtx(ctx, COLORS.sapphire, 6);
+    ctx.stroke();
+    clearGlow(ctx);
+    ctx.font = '11px Fira Code, monospace';
+    ctx.fillStyle = COLORS.sapphire + '70';
+    ctx.fillText('Timed Automaton', clockCX - clockR + 4, clockCY - clockR - 8);
+
+    // Draw Markov states (left half)
+    stateData.forEach((s, i) => {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#1e1e2e';
+      ctx.strokeStyle = COLORS.peach + '80';
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.font = '11px Fira Code, monospace';
+    ctx.fillStyle = COLORS.peach + '70';
+    ctx.fillText('Markov / HMM', 6, 18);
+
+    // Draw divider
+    ctx.beginPath();
+    ctx.setLineDash([6, 4]);
+    ctx.moveTo(W * 0.55, 10);
+    ctx.lineTo(W * 0.55, H - 10);
+    ctx.strokeStyle = COLORS.surface0;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Update particles
+    particles.forEach(p => {
+      if (p.type === 'markov') {
+        p.progress += p.speed;
+        if (p.progress >= 1) {
+          p.px = p.tx; p.py = p.ty;
+          const fromState = stateData[Math.floor(Math.random() * stateData.length)];
+          const toState = stateData[Math.floor(Math.random() * stateData.length)];
+          p.px = fromState.x; p.py = fromState.y;
+          p.tx = toState.x; p.ty = toState.y;
+          p.progress = 0;
+          p.spread = (Math.random() - 0.5) * H * 0.15;
+        }
+        const midX = (p.px + p.tx) / 2 + p.spread;
+        const midY = (p.py + p.ty) / 2;
+        const t1 = p.progress, t2 = 1 - p.progress;
+        const x = t2*t2*p.px + 2*t2*t1*midX + t1*t1*p.tx;
+        const y = t2*t2*p.py + 2*t2*t1*midY + t1*t1*p.ty;
+        ctx.beginPath();
+        ctx.arc(x, y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + 'cc';
+        glowCtx(ctx, p.color, 8);
+        ctx.fill();
+        clearGlow(ctx);
+      } else if (p.type === 'clock') {
+        p.angle += p.speed;
+        const x = p.cx + Math.cos(p.angle) * p.radius;
+        const y = p.cy + Math.sin(p.angle) * p.radius;
+        ctx.beginPath();
+        ctx.arc(x, y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + Math.round(p.alpha * 220).toString(16).padStart(2,'0');
+        glowCtx(ctx, p.color, 6);
+        ctx.fill();
+        clearGlow(ctx);
+      }
+    });
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() { if(running) return; running=true; fitCanvas(canvas); stateData=initParticles(); draw(); }
+  function stop() { running=false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), {threshold:0.1});
+  obs.observe(canvas.parentElement);
+})();
+
+
+// ── Ⅴ CONCURRENT: Petri Net 同步 fire ─────────────────────────
+(function concurrentCanvas() {
+  const canvas = document.getElementById('canvas-concurrent');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let raf, running = false;
+  let particles = [], t = 0, fireEffect = 0;
+
+  function getLayout() {
+    const W = canvas.width, H = canvas.height;
+    const places = [
+      {x: W*0.08, y: H*0.35, label: 'P1'},
+      {x: W*0.08, y: H*0.65, label: 'P2'},
+      {x: W*0.58, y: H*0.5,  label: 'P3'},
+      {x: W*0.82, y: H*0.3,  label: 'P4'},
+      {x: W*0.82, y: H*0.7,  label: 'P5'},
+    ];
+    const transitions = [
+      {x: W*0.35, y: H*0.5, label: 'T1'},
+      {x: W*0.70, y: H*0.5, label: 'T2'},
+    ];
+    return {places, transitions};
+  }
+
+  let layout;
+
+  function initParticles() {
+    particles = [];
+    if (!layout) layout = getLayout();
+    const {places, transitions} = layout;
+    // Streams from P1 and P2 to T1
+    for (let i = 0; i < 10; i++) {
+      particles.push({type:'stream', from: places[0], to: transitions[0], t: Math.random(), speed: 0.006, color: COLORS.sapphire, r: 3, id: 'p1t1_'+i});
+    }
+    for (let i = 0; i < 10; i++) {
+      particles.push({type:'stream', from: places[1], to: transitions[0], t: Math.random(), speed: 0.007, color: COLORS.teal, r: 3, id: 'p2t1_'+i});
+    }
+    // From T1 to P3
+    for (let i = 0; i < 8; i++) {
+      particles.push({type:'stream', from: transitions[0], to: places[2], t: Math.random(), speed: 0.008, color: COLORS.lavender, r: 3, id: 't1p3_'+i});
+    }
+    // From P3 to T2
+    for (let i = 0; i < 8; i++) {
+      particles.push({type:'stream', from: places[2], to: transitions[1], t: Math.random(), speed: 0.009, color: COLORS.lavender, r: 3, id: 'p3t2_'+i});
+    }
+    // From T2 to P4 and P5
+    for (let i = 0; i < 6; i++) {
+      particles.push({type:'stream', from: transitions[1], to: places[3], t: Math.random(), speed: 0.008, color: COLORS.mauve, r: 3, id: 't2p4_'+i});
+      particles.push({type:'stream', from: transitions[1], to: places[4], t: Math.random(), speed: 0.008, color: COLORS.mauve, r: 3, id: 't2p5_'+i});
+    }
+  }
+
+  function draw() {
+    if (!running) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    t++;
+    if (!layout) { layout = getLayout(); initParticles(); }
+    const {places, transitions} = layout;
+
+    // Periodic fire effect
+    if (t % 180 === 0) fireEffect = 30;
+    if (fireEffect > 0) fireEffect--;
+
+    // Draw arcs
+    const arcs = [
+      [places[0], transitions[0], COLORS.sapphire],
+      [places[1], transitions[0], COLORS.teal],
+      [transitions[0], places[2], COLORS.lavender],
+      [places[2], transitions[1], COLORS.lavender],
+      [transitions[1], places[3], COLORS.mauve],
+      [transitions[1], places[4], COLORS.mauve],
+    ];
+    arcs.forEach(([from, to, color]) => {
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = color + '40';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    // Draw transitions (rectangles)
+    transitions.forEach((tr, ti) => {
+      const fw = fireEffect > 0 && ti === 0 ? fireEffect / 30 : 0;
+      ctx.fillStyle = '#1e1e2e';
+      ctx.strokeStyle = COLORS.sapphire;
+      glowCtx(ctx, COLORS.sapphire, 4 + fw * 20);
+      ctx.lineWidth = 1.5 + fw * 2;
+      ctx.fillRect(tr.x - 8, tr.y - 20, 16, 40);
+      ctx.strokeRect(tr.x - 8, tr.y - 20, 16, 40);
+      clearGlow(ctx);
+      ctx.font = '10px Fira Code, monospace';
+      ctx.fillStyle = COLORS.sapphire + 'aa';
+      ctx.textAlign = 'center';
+      ctx.fillText(tr.label, tr.x, tr.y + 30);
+      ctx.textAlign = 'left';
+    });
+
+    // Draw places (circles)
+    places.forEach(pl => {
+      ctx.beginPath();
+      ctx.arc(pl.x, pl.y, 16, 0, Math.PI * 2);
+      ctx.fillStyle = '#181825';
+      ctx.strokeStyle = COLORS.teal + '80';
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '10px Fira Code, monospace';
+      ctx.fillStyle = COLORS.teal + 'aa';
+      ctx.textAlign = 'center';
+      ctx.fillText(pl.label, pl.x, pl.y + 4);
+      ctx.textAlign = 'left';
+    });
+
+    // Fire burst
+    if (fireEffect > 0) {
+      const tr = transitions[0];
+      const alpha = fireEffect / 30;
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y, 30 * (1 - alpha/2), 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.yellow + Math.round(alpha * 120).toString(16).padStart(2,'0');
+      glowCtx(ctx, COLORS.yellow, 20);
+      ctx.fill();
+      clearGlow(ctx);
+    }
+
+    // Update + draw particles
+    particles.forEach(p => {
+      p.t += p.speed;
+      if (p.t > 1) p.t -= 1;
+      const x = p.from.x + (p.to.x - p.from.x) * p.t;
+      const y = p.from.y + (p.to.y - p.from.y) * p.t;
+      ctx.beginPath();
+      ctx.arc(x, y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + 'dd';
+      glowCtx(ctx, p.color, 8);
+      ctx.fill();
+      clearGlow(ctx);
+    });
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() { if(running) return; running=true; fitCanvas(canvas); layout=getLayout(); initParticles(); draw(); }
+  function stop() { running=false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), {threshold:0.1});
+  obs.observe(canvas.parentElement);
+})();
+
+
+// ── Ⅵ ALTERNATIVE: 四象限骨架 + 動畫 ────────────────────────────
+(function alternativeCanvas() {
+  const canvas = document.getElementById('canvas-alternative');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let raf, running = false;
+  let t = 0;
+
+  // BT state
+  let btWave = 0;        // 0=root firing, 1=mid1, 2=mid2, 3=leaf1 glow, 4=leaf2 glow
+  let btTimer = 0;
+  // Rules state
+  let rulesFlash = -1;   // which rule is flashing
+  let rulesTimer = 0;
+  let rulesAlpha = 0;
+  // Actor state
+  let actMsg = { phase: 0, from: 0, to: 1, progress: 0 };
+  let actTimer = 0;
+  // Dataflow state
+  let dfPulse = 0;       // which node is currently lit
+  let dfTimer = 0;
+  let dfDelay = [0, 0, 0, 0];  // glow alpha per node
+
+  function getLayout(W, H) {
+    const hw = W / 2, hh = H / 2;
+    const pad = 10;
+
+    // Q1 top-left: BT tree (green)
+    const btRoot  = { x: hw * 0.5, y: hh * 0.22 };
+    const btMid1  = { x: hw * 0.28, y: hh * 0.55 };
+    const btMid2  = { x: hw * 0.72, y: hh * 0.55 };
+    const btLeaf1 = { x: hw * 0.15, y: hh * 0.85 };
+    const btLeaf2 = { x: hw * 0.42, y: hh * 0.85 };
+    const btLeaf3 = { x: hw * 0.60, y: hh * 0.85 };
+    const btLeaf4 = { x: hw * 0.86, y: hh * 0.85 };
+    const btNodes = [btRoot, btMid1, btMid2, btLeaf1, btLeaf2, btLeaf3, btLeaf4];
+    const btEdges = [[0,1],[0,2],[1,3],[1,4],[2,5],[2,6]];
+
+    // Q2 top-right: Rules Engine (yellow)
+    const rx = hw + pad + 4;
+    const ruleRects = [
+      { x: rx + hw*0.08, y: hh*0.18, w: hw*0.78, h: hh*0.16, label: 'if A → B' },
+      { x: rx + hw*0.08, y: hh*0.40, w: hw*0.78, h: hh*0.16, label: 'if C → D' },
+      { x: rx + hw*0.08, y: hh*0.62, w: hw*0.78, h: hh*0.16, label: 'if E → F' }
+    ];
+
+    // Q3 bottom-left: Actor Model (mauve)
+    const actorNodes = [
+      { x: hw*0.25, y: hh*1.30, label:'A1' },
+      { x: hw*0.75, y: hh*1.30, label:'A2' },
+      { x: hw*0.50, y: hh*1.78, label:'A3' }
+    ];
+
+    // Q4 bottom-right: Dataflow (sapphire)
+    const dfY = hh * 1.52;
+    const dfNodes = [
+      { x: hw + hw*0.10, y: dfY, label: 'src' },
+      { x: hw + hw*0.38, y: dfY, label: 'd1' },
+      { x: hw + hw*0.65, y: dfY, label: 'd2' },
+      { x: hw + hw*0.92, y: dfY, label: 'd3' }
+    ];
+
+    return { btNodes, btEdges, ruleRects, actorNodes, dfNodes, hw, hh };
+  }
+
+  let layout = null;
+
+  function draw() {
+    if (!running) return;
+    fitCanvas(canvas);
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    t++;
+
+    if (!layout || Math.abs(layout.hw - W/2) > 2) {
+      layout = getLayout(W, H);
+    }
+    const { btNodes, btEdges, ruleRects, actorNodes, dfNodes, hw, hh } = layout;
+
+    // Quadrant dividers
+    ctx.strokeStyle = COLORS.surface0;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Quadrant labels
+    const qlabels = ['BT tick', 'Rules Engine', 'Actor Model', 'Dataflow'];
+    const qcolors = [COLORS.green, COLORS.yellow, COLORS.mauve, COLORS.sapphire];
+    const qpos = [{x:4,y:14},{x:W/2+4,y:14},{x:4,y:H/2+14},{x:W/2+4,y:H/2+14}];
+    qlabels.forEach((lb, i) => {
+      ctx.font = '11px Fira Code, monospace';
+      ctx.fillStyle = qcolors[i] + '80';
+      ctx.fillText(lb, qpos[i].x, qpos[i].y);
+    });
+
+    // ═══════════════ Q1: BT Tree ════════════════════════
+    btTimer++;
+    if (btTimer >= 60) { btTimer = 0; btWave = (btWave + 1) % 5; }
+    const btGlow = [0,1,2,3,4].map(i => i === btWave ? 1 : 0);
+
+    // Draw edges
+    btEdges.forEach(([a,b]) => {
+      ctx.beginPath();
+      ctx.moveTo(btNodes[a].x, btNodes[a].y);
+      ctx.lineTo(btNodes[b].x, btNodes[b].y);
+      ctx.strokeStyle = COLORS.green + '44';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // Draw nodes
+    btNodes.forEach((n, i) => {
+      const isRoot = i === 0;
+      const isMid = i === 1 || i === 2;
+      const isLeaf = i >= 3;
+      const glowOn = (btWave === 0 && isRoot) ||
+                     (btWave === 1 && isMid) ||
+                     (btWave === 2 && isLeaf);
+      const r = isRoot ? 9 : isMid ? 7 : 5;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = glowOn ? COLORS.green + 'cc' : COLORS.green + '33';
+      ctx.strokeStyle = COLORS.green + (glowOn ? 'ff' : '66');
+      ctx.lineWidth = 1.5;
+      if (glowOn) glowCtx(ctx, COLORS.green, 14);
+      ctx.fill(); ctx.stroke(); clearGlow(ctx);
+    });
+
+    // Particle wave: single dot flowing root→mid→leaf
+    const btPathNodes = [btNodes[0], btNodes[1], btNodes[3]];
+    const btProgress = (t % 180) / 180;
+    const btSeg = Math.floor(btProgress * (btPathNodes.length - 1));
+    const btFrac = (btProgress * (btPathNodes.length - 1)) % 1;
+    if (btSeg < btPathNodes.length - 1) {
+      const bn1 = btPathNodes[btSeg], bn2 = btPathNodes[btSeg + 1];
+      const bpx = bn1.x + (bn2.x - bn1.x) * btFrac;
+      const bpy = bn1.y + (bn2.y - bn1.y) * btFrac;
+      ctx.beginPath(); ctx.arc(bpx, bpy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.green + 'ee';
+      glowCtx(ctx, COLORS.green, 10); ctx.fill(); clearGlow(ctx);
+    }
+
+    // ═══════════════ Q2: Rules Engine ════════════════════
+    rulesTimer++;
+    if (rulesTimer >= 90) { rulesTimer = 0; rulesFlash = Math.floor(Math.random() * 3); rulesAlpha = 1; }
+    if (rulesAlpha > 0) rulesAlpha -= 0.015;
+
+    ruleRects.forEach((r, i) => {
+      const isFlash = i === rulesFlash && rulesAlpha > 0;
+      ctx.fillStyle = isFlash ? COLORS.yellow + Math.round(rulesAlpha * 40).toString(16).padStart(2,'0') : '#181825';
+      ctx.strokeStyle = isFlash ? COLORS.yellow + Math.round(rulesAlpha * 255).toString(16).padStart(2,'0') : COLORS.surface1;
+      ctx.lineWidth = isFlash ? 2 : 1;
+      if (isFlash) glowCtx(ctx, COLORS.yellow, 12);
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      clearGlow(ctx);
+      ctx.font = '10px Fira Code, monospace';
+      ctx.fillStyle = isFlash ? COLORS.yellow + 'ff' : COLORS.subtext0 + 'cc';
+      ctx.textAlign = 'center';
+      ctx.fillText(r.label, r.x + r.w / 2, r.y + r.h / 2 + 4);
+      ctx.textAlign = 'left';
+    });
+
+    // ═══════════════ Q3: Actor Model ═════════════════════
+    actTimer++;
+    if (actTimer >= 90) {
+      actTimer = 0;
+      actMsg.from = actMsg.to;
+      actMsg.to = (actMsg.to + 1) % 3;
+      actMsg.progress = 0;
+    }
+    actMsg.progress = Math.min(1, actMsg.progress + 0.011);
+
+    // Draw actor edges (triangle)
+    [[0,1],[1,2],[2,0]].forEach(([a,b]) => {
+      ctx.beginPath();
+      ctx.moveTo(actorNodes[a].x, actorNodes[a].y);
+      ctx.lineTo(actorNodes[b].x, actorNodes[b].y);
+      ctx.strokeStyle = COLORS.mauve + '33';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // Draw actor nodes (squares)
+    actorNodes.forEach((n, i) => {
+      const sz = 20;
+      ctx.fillStyle = '#1e1e2e';
+      ctx.strokeStyle = COLORS.mauve + 'aa';
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(n.x - sz/2, n.y - sz/2, sz, sz);
+      ctx.strokeRect(n.x - sz/2, n.y - sz/2, sz, sz);
+      ctx.font = '9px Fira Code, monospace';
+      ctx.fillStyle = COLORS.mauve + 'dd';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, n.y + 4);
+      ctx.textAlign = 'left';
+    });
+
+    // Draw message particle
+    const afn = actorNodes[actMsg.from], atn = actorNodes[actMsg.to];
+    const ampx = afn.x + (atn.x - afn.x) * actMsg.progress;
+    const ampy = afn.y + (atn.y - afn.y) * actMsg.progress;
+    // Arrow trail
+    ctx.beginPath();
+    ctx.moveTo(afn.x, afn.y);
+    ctx.lineTo(ampx, ampy);
+    ctx.strokeStyle = COLORS.mauve + '66';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(ampx, ampy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = COLORS.mauve + 'ee';
+    glowCtx(ctx, COLORS.mauve, 10); ctx.fill(); clearGlow(ctx);
+
+    // ═══════════════ Q4: Dataflow ════════════════════════
+    dfTimer++;
+    if (dfTimer >= 60) {
+      dfTimer = 0;
+      dfDelay[0] = 1;
+    }
+    // Cascade with 0.3s (~18 frame) delay per node
+    for (let i = 1; i < 4; i++) {
+      if (dfDelay[i-1] > 0.65 && dfDelay[i] === 0) dfDelay[i] = 0.01;
+    }
+    dfDelay = dfDelay.map(a => a > 0 ? (a >= 1 ? Math.max(0, a - 0.018) : Math.min(1, a + 0.04)) : 0);
+
+    // Draw dataflow edges
+    for (let i = 0; i < dfNodes.length - 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(dfNodes[i].x + 14, dfNodes[i].y);
+      ctx.lineTo(dfNodes[i+1].x - 14, dfNodes[i+1].y);
+      ctx.strokeStyle = COLORS.sapphire + '55';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Arrowhead
+      const ax = dfNodes[i+1].x - 14, ay = dfNodes[i+1].y;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax-7, ay-4); ctx.lineTo(ax-7, ay+4);
+      ctx.fillStyle = COLORS.sapphire + '55'; ctx.fill();
+    }
+
+    // Draw dataflow nodes
+    dfNodes.forEach((n, i) => {
+      const g = dfDelay[i];
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 13, 0, Math.PI * 2);
+      ctx.fillStyle = g > 0.1 ? COLORS.sapphire + Math.round(g * 60).toString(16).padStart(2,'0') : '#1e1e2e';
+      ctx.strokeStyle = COLORS.sapphire + (g > 0.1 ? Math.round(g * 255).toString(16).padStart(2,'0') : '66');
+      ctx.lineWidth = g > 0.1 ? 2 : 1;
+      if (g > 0.1) glowCtx(ctx, COLORS.sapphire, g * 14);
+      ctx.fill(); ctx.stroke(); clearGlow(ctx);
+      ctx.font = '9px Fira Code, monospace';
+      ctx.fillStyle = COLORS.sapphire + (g > 0.1 ? 'ff' : '99');
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, n.y + 4);
+      ctx.textAlign = 'left';
+    });
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() { if(running) return; running=true; fitCanvas(canvas); layout=getLayout(canvas.width, canvas.height); draw(); }
+  function stop() { running=false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), {threshold:0.1});
+  obs.observe(canvas.parentElement);
+})();
+
+
+// ── Ⅶ DECISION: 羅盤光束 ──────────────────────────────────────
+(function decisionCanvas() {
+  const canvas = document.getElementById('canvas-decision');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let raf, running = false;
+  let t = 0, hoveredBeam = -1;
+
+  const models = [
+    {name:'FSM',         color:COLORS.blue},
+    {name:'EFSM',        color:COLORS.mauve},
+    {name:'HSM',         color:COLORS.mauve},
+    {name:'Statechart',  color:COLORS.mauve},
+    {name:'HMM',         color:COLORS.peach},
+    {name:'Timed Auto',  color:COLORS.peach},
+    {name:'Petri Net',   color:COLORS.sapphire},
+    {name:'BT',          color:COLORS.green},
+    {name:'Actor',       color:COLORS.green},
+    {name:'Rules Engine',color:COLORS.yellow},
+    {name:'Dataflow',    color:COLORS.teal},
+  ];
+
+  function draw() {
+    if (!running) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    t++;
+
+    const cx = W / 2, cy = H / 2;
+    const outerR = Math.min(W, H) * 0.42;
+    const innerR = Math.min(W, H) * 0.06;
+    const n = models.length;
+
+    // Draw outer ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+    ctx.strokeStyle = COLORS.surface0;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Draw beams
+    models.forEach((m, i) => {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const isHovered = i === hoveredBeam;
+      const pulse = Math.sin(t * 0.04 + i * 0.6) * 0.3 + 0.7;
+
+      const x1 = cx + Math.cos(angle) * innerR;
+      const y1 = cy + Math.sin(angle) * innerR;
+      const x2 = cx + Math.cos(angle) * outerR;
+      const y2 = cy + Math.sin(angle) * outerR;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = m.color + Math.round((isHovered ? 0.9 : pulse * 0.4) * 255).toString(16).padStart(2,'0');
+      ctx.lineWidth = isHovered ? 3 : 1.5;
+      if (isHovered) glowCtx(ctx, m.color, 16);
+      ctx.stroke();
+      clearGlow(ctx);
+
+      // Label
+      const labelR = outerR + 18;
+      const lx = cx + Math.cos(angle) * labelR;
+      const ly = cy + Math.sin(angle) * labelR;
+      ctx.font = (isHovered ? 'bold ' : '') + '10px Fira Code, monospace';
+      ctx.fillStyle = m.color + (isHovered ? 'ff' : 'aa');
+      ctx.textAlign = lx > cx ? 'left' : 'right';
+      ctx.fillText(m.name, lx, ly + 4);
+    });
+    ctx.textAlign = 'left';
+
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+    ctx.fillStyle = '#1e1e2e';
+    ctx.strokeStyle = COLORS.lavender + '60';
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = '9px Fira Code, monospace';
+    ctx.fillStyle = COLORS.lavender + '80';
+    ctx.textAlign = 'center';
+    ctx.fillText('PICK', cx, cy + 3);
+    ctx.textAlign = 'left';
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  // Hover effect on decision table rows
+  const tableRows = document.querySelectorAll('.decision-table tbody tr');
+  tableRows.forEach((row, i) => {
+    row.addEventListener('mouseenter', () => { hoveredBeam = i; });
+    row.addEventListener('mouseleave', () => { hoveredBeam = -1; });
+  });
+
+  function start() { if(running) return; running=true; fitCanvas(canvas); draw(); }
+  function stop() { running=false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), {threshold:0.1});
+  obs.observe(canvas.parentElement);
+})();
+
+// ── Ⅷ HYBRID: 五層光帶 粒子逐層穿透循環 ────────────────────────
+(function hybridCanvas() {
+  const canvas = document.getElementById('canvas-hybrid');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let raf, running = false;
+
+  // Five layers
+  const BAND_COLORS = [COLORS.blue, COLORS.mauve, COLORS.sapphire, COLORS.green, COLORS.yellow];
+  const BAND_LABELS = ['WHAT  (Statechart)', 'HOW   (Petri / BT)', 'HOW   (Actor)', 'WHEN  (Timed)', 'WHEN  (FSM leaf)'];
+  const NUM_PARTICLES = 10;
+
+  let particles = [];
+
+  function initParticles(W, H) {
+    const bandH = H / BAND_COLORS.length;
+    particles = [];
+    for (let i = 0; i < NUM_PARTICLES; i++) {
+      // Stagger: each particle starts at a different horizontal position and band
+      const band = Math.floor(i / NUM_PARTICLES * BAND_COLORS.length);
+      particles.push({
+        band: band,
+        x: Math.random() * W,
+        phase: 'right',    // 'right' | 'down' | 'up_return'
+        descY: 0,          // progress during vertical descent
+        color: BAND_COLORS[band],
+        r: 3,
+        speed: 0.4 + Math.random() * 0.3,  // already * 0.5 baked in
+        offset: Math.random() * W           // stagger start
+      });
+    }
+  }
+
+  function draw() {
+    if (!running) return;
+    fitCanvas(canvas);
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const bandH = H / BAND_COLORS.length;
+
+    // Draw bands
+    BAND_COLORS.forEach((col, i) => {
+      // Gradient fill per band
+      const gy = i * bandH;
+      const grad = ctx.createLinearGradient(0, gy, W, gy);
+      grad.addColorStop(0, col + '18');
+      grad.addColorStop(0.5, col + '28');
+      grad.addColorStop(1, col + '18');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, gy, W, bandH);
+
+      // Band border
+      ctx.strokeStyle = col + '33';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, gy, W, bandH);
+
+      // Label
+      ctx.font = '10px Fira Code, monospace';
+      ctx.fillStyle = col + '99';
+      ctx.fillText(BAND_LABELS[i], 8, gy + 15);
+    });
+
+    // Update + draw particles
+    particles.forEach(p => {
+      p.color = BAND_COLORS[p.band];
+      const bandTop = p.band * bandH;
+      const bandBot = bandTop + bandH;
+      const bandMidY = bandTop + bandH / 2;
+
+      if (p.phase === 'right') {
+        // Move rightward in current band
+        p.x += p.speed;
+        const y = bandMidY;
+
+        if (p.x >= W) {
+          // Reached right end
+          if (p.band < BAND_COLORS.length - 1) {
+            // Descend to next band
+            p.phase = 'down';
+            p.x = W - 4;
+            p.descY = 0;
+            p.fromBandY = bandMidY;
+            p.toBandY = (p.band + 1) * bandH + bandH / 2;
+          } else {
+            // Bottom band: return to top-left
+            p.phase = 'return';
+            p.x = 0;
+            p.band = 0;
+            p.descY = 0;
+          }
+        }
+
+        // Draw particle
+        ctx.beginPath();
+        ctx.arc(p.x, y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + 'dd';
+        glowCtx(ctx, p.color, 10); ctx.fill(); clearGlow(ctx);
+
+        // Trail
+        ctx.beginPath();
+        ctx.moveTo(Math.max(0, p.x - 18), y);
+        ctx.lineTo(p.x, y);
+        ctx.strokeStyle = p.color + '55';
+        ctx.lineWidth = p.r * 0.8;
+        ctx.stroke();
+
+      } else if (p.phase === 'down') {
+        // Vertical descent between bands
+        p.descY += p.speed * 0.7;
+        const progress = Math.min(1, p.descY / (bandH));
+        const y = p.fromBandY + (p.toBandY - p.fromBandY) * progress;
+
+        ctx.beginPath();
+        ctx.arc(p.x, y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + 'cc';
+        glowCtx(ctx, p.color, 8); ctx.fill(); clearGlow(ctx);
+
+        if (progress >= 1) {
+          p.band = p.band + 1;
+          p.x = W - 4;
+          p.phase = 'right';
+          p.speed = -Math.abs(p.speed); // now go left in new band... wait — spec says left-to-right always
+          // Actually spec: left→right, then descend, then left→right again
+          // So at right edge after descent, we need to go left next band? No — "同方向流動"
+          // Re-read: 每層從左往右→到層尾→下降→下層繼續從右往左？
+          // Spec: "在當前層從左往右流動 → 到達層尾(右側)後垂直下降到下一層"
+          // Implies: at right → descend → next layer LEFT side → flow right
+          p.x = 0;  // restart from left in new band
+          p.speed = Math.abs(p.speed);
+        }
+
+      } else if (p.phase === 'return') {
+        // Instant return to top-left (or animate fast)
+        p.band = 0;
+        p.x = Math.random() * W * 0.1;
+        p.phase = 'right';
+        p.speed = Math.abs(p.speed);
+      }
+    });
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  function start() {
+    if (running) return;
+    running = true;
+    fitCanvas(canvas);
+    initParticles(canvas.width, canvas.height);
+    draw();
+  }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+  const obs = new IntersectionObserver(e => e[0].isIntersecting ? start() : stop(), { threshold: 0.1 });
+  obs.observe(canvas.parentElement);
+})();
+
+// Resize all canvases on window resize
+window.addEventListener('resize', () => {
+  ['canvas-theory','canvas-output','canvas-extended','canvas-probabilistic',
+   'canvas-concurrent','canvas-alternative','canvas-decision','canvas-hybrid'].forEach(id => {
+    const c = document.getElementById(id);
+    if (c) { c.width = 0; c.height = 0; }
+  });
+});
+
+// ── ACCORDION DETAIL FETCH ──────────────────────────────────────────────────
+const __detailCache = new Map();
+document.querySelectorAll('[data-detail]').forEach(card => {
+  const btn = card.querySelector('.card-expand');
+  const panel = card.querySelector('.detail-panel');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', async () => {
+    const id = card.dataset.detail;
+    if (panel.classList.contains('open')) {
+      panel.classList.remove('open');
+      panel.setAttribute('aria-hidden', 'true');
+      btn.setAttribute('aria-expanded', 'false');
+      btn.textContent = '▼ 詳細內容';
+      return;
+    }
+    if (!__detailCache.has(id)) {
+      btn.textContent = '⏳ 載入中...';
+      try {
+        const res = await fetch(`./details/${id}.html`);
+        if (!res.ok) throw new Error(res.status);
+        __detailCache.set(id, await res.text());
+      } catch (e) {
+        btn.textContent = '✗ 載入失敗（' + e.message + '）';
+        return;
+      }
+    }
+    panel.innerHTML = __detailCache.get(id);
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+    btn.setAttribute('aria-expanded', 'true');
+    btn.textContent = '▲ 收起詳情';
+  });
+});
+</script>
+</body>
+</html>

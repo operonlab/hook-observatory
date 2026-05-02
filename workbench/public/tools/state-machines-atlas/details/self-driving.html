@@ -1,0 +1,104 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅷ 實務混用場景</span>
+    <h3 class="detail-title">🚗 自駕車即時系統</h3>
+    <p class="detail-tagline">Petri Net + Timed Automaton + BT + Actor — 四層混用的實時安全關鍵系統</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">自駕是「可證實時性 + 並行處理 + 動作決策 + 隔離故障」四個挑戰同時存在的系統。沒有單一模型能同時解決。</p>
+    <p class="detail-p">Petri Net 建模感知→預測→規劃→控制的並行管線，可靜態證明無 deadlock。Timed Automaton 為每個步驟加上時間約束，剎車訊號必須在 100ms 內送達，這個性質需要形式驗證工具保證。BT 管駕駛行為選擇，帶優先級的 Selector 讓緊急停車永遠優先。Actor 隔離各模組，某顆 LiDAR actor 崩潰不影響攝影機 actor 繼續運行。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">分層架構</h4>
+    <table class="detail-attrs">
+      <tr><th>Layer 1 (管線層)</th><td><strong>Petri Net</strong> / 感知→預測→規劃→控制並行同步 / 多模態 sensor 融合，靜態可證 deadlock-free</td></tr>
+      <tr><th>Layer 2 (安全層)</th><td><strong>Timed Automaton</strong> / 實時約束驗證 / 剎車訊號 &lt; 100ms、物體偵測延遲 &lt; 50ms，UPPAAL 形式驗證</td></tr>
+      <tr><th>Layer 3 (決策層)</th><td><strong>Behavior Tree</strong> / 駕駛行為選擇 / Selector(緊急停車 / 避障 / 變道 / 巡航 / 跟車)</td></tr>
+      <tr><th>Layer 4 (通訊層)</th><td><strong>Actor Model</strong> / 模組間訊息傳遞 / Sensor Actor / Planner Actor / Controller Actor 各自獨立</td></tr>
+      <tr><th>資料流</th><td>Sensor actors → Petri 並行管線 → Timed 驗證實時約束 → BT 選駕駛行為 → Controller actor 輸出</td></tr>
+      <tr><th>核心優勢</th><td>pipeline 無 deadlock（Petri 靜態證）+ 實時上限可證（Timed 形式驗證）+ 動作可擴展（BT）+ 故障隔離（Actor）</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">架構示意</h4>
+    <pre class="detail-code">// Layer 1: Petri Net (sensor pipeline)
+[Camera] ──▶ (Perception) ──▶ [Fused Perception]
+[LiDAR]  ──▶ (Perception) ──▶ (Prediction) ──▶ (Planning) ──▶ (Control)
+
+// Layer 2: Timed Automaton (safety watchdog)
+state: NORMAL ──obstacle_detected (within 50ms)──▶ ALERT
+state: ALERT  ──brake_signal (within 100ms)──▶ BRAKING
+state: ALERT  ──timeout (100ms elapsed)──▶ SAFETY_STOP  // hard constraint
+
+// Layer 3: BT (driving decisions, ticks at 10Hz)
+Selector
+  ├─ Sequence [collision_imminent] → EmergencyStop
+  ├─ Sequence [obstacle_in_path]   → Avoidance
+  ├─ Sequence [lane_change_safe]   → LaneChange
+  └─ Action → AdaptiveCruise
+
+// Layer 4: Actor (ROS 2 nodes)
+SensorActor  ──topic: /perception──▶  PlannerActor
+PlannerActor ──topic: /trajectory──▶  ControllerActor</pre>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：Waymo</h5>
+      <p class="detail-p">多模型融合 + ROS 2 topic / node（Actor 模型）管模組通訊；行為規劃層用 BT 管不同駕駛場景的優先級；安全層獨立 watchdog process 確保實時約束，符合 ASIL-D 要求。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：Baidu Apollo</h5>
+      <p class="detail-p">開源自駕平台，完整採用 Cyber RT（Actor 訊息總線）+ Behavior Tree（planning 模組）+ DAG（Petri-like 管線）架構。代碼庫公開，是學習四層混用最完整的真實參考。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 3：Tesla Autopilot</h5>
+      <p class="detail-p">FSD v12 前以 BT 管駕駛行為決策；神經網路輸出作為 BT 葉節點的 condition 值；Actor 管感知 / 規劃 / 控制各模組隔離。FSD v12 後把 BT 部分替換為端到端 DL，但 Actor 隔離層保留。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">何時採用</h4>
+    <p class="detail-p">系統需要通過 ISO 26262 ASIL-B 以上認證、且有嚴格實時約束（毫秒級）、且有多個可能失效的硬體模組時，四層組合是必要的。若只是機器人原型，Petri + BT 兩層就夠；若是工廠 AGV，去掉 Timed Automaton 也可行。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>每層可獨立形式化驗證，滿足 ISO 26262 功能安全認證要求</li>
+          <li>Actor 隔離讓某感測器故障不影響其他模組繼續運行</li>
+          <li>BT 決策行為可由測試工程師獨立測試，不依賴硬體</li>
+          <li>Petri Net 管線設計讓加新 sensor 不影響既有並行邏輯</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>極度工程複雜——四種模型、四套工具鏈同時整合</li>
+          <li>需要多領域專家（形式方法、即時系統、AI 規劃）</li>
+          <li>Timed Automaton 形式驗證的 state space explosion 問題</li>
+          <li>四層之間的 latency budget 分配需要細緻的系統設計</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>Apollo（百度開源）</strong>：Cyber RT Actor + BT + DAG，完整四層，代碼完全公開</li>
+      <li><strong>Autoware（Tier IV）</strong>：ROS 2 + BehaviorTree.CPP，開源自駕業界標準平台</li>
+      <li><strong>BehaviorTree.CPP v4</strong>：自駕 BT 事實標準，支援 reactive BT 和 subtree hot-reload</li>
+      <li><strong>UPPAAL</strong>：Timed Automaton 形式驗證工具，自駕安全層驗證主流學術工具</li>
+      <li><strong>Matlab Stateflow</strong>：Timed Automaton 建模 + C 代碼生成，OEM 主流選擇</li>
+    </ul>
+  </section>
+</article>

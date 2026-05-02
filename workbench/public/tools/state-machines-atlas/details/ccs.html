@@ -1,0 +1,82 @@
+<article class="detail">
+  <header class="detail-head">
+    <span class="detail-cat">Ⅴ 並行 / 通訊</span>
+    <h3 class="detail-title">CCS <span class="detail-full">Calculus of Communicating Systems</span></h3>
+    <p class="detail-tagline">Robin Milner 1980 提出 — π-calculus 的前身</p>
+  </header>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">哲學</h4>
+    <p class="detail-p">極簡進程代數：只有 send / receive 同步 action + non-determinism，沒有其他原語。Milner 的目標是找到並行系統的最小代數基礎，讓 bisimulation 等價性成為可計算的語義判斷標準。理論純粹到幾乎可以當作並行計算的「λ calculus」。</p>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">九維屬性</h4>
+    <table class="detail-attrs">
+      <tr><th>哲學</th><td>極簡代數，bisimulation 等價是核心語義工具</td></tr>
+      <tr><th>基本單位</th><td>Processes + Actions（a, ā 對）+ Prefix + Choice（+）+ Parallel（|）+ Restriction（\）+ Recursion</td></tr>
+      <tr><th>狀態位置</th><td>進程結構（LTS，Labelled Transition System）</td></tr>
+      <tr><th>並行單位</th><td>Parallel composition（P | Q）</td></tr>
+      <tr><th>同步機制</th><td>Complementary action rendezvous（a 與 ā 配對，產生 τ）</td></tr>
+      <tr><th>形式化</th><td>★★★★★ 極強（bisimulation 理論完整，Milner 因此獲 Turing Award）</td></tr>
+      <tr><th>適合場景</th><td>協議正確性教學、bisimulation 分析、並行理論研究</td></tr>
+      <tr><th>典型代表</th><td>CWB-NC、mCRL2、TAPAs、Milner《Communicating and Mobile Systems》</td></tr>
+    </table>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">具體例子</h4>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 1：簡單握手協議</h5>
+      <pre class="detail-code">-- Client 送 request，收 response
+Client = req.resp̄.Client
+
+-- Server 收 request，送 response
+Server = req̄.resp.Server
+
+-- 系統並行組合
+System = (Client | Server) \ {req, resp}
+
+-- req 與 req̄ 配對 → τ（內部動作）
+-- resp 與 resp̄ 配對 → τ
+-- \ 限制兩個 action 只在內部使用</pre>
+      <p class="detail-p">限制算子（\）讓 req / resp 成為內部通訊，外部觀察者看不到；bisimulation 分析確認兩端行為等價。</p>
+    </div>
+    <div class="detail-ex">
+      <h5 class="detail-ex-title">例 2：Bisimulation 等價性判斷</h5>
+      <p class="detail-p">兩個進程 P = a.(b.0 + c.0)、Q = a.b.0 + a.c.0 在 trace 語義下等價，但 bisimulation 語義下不等價：P 在執行 a 後才能選擇；Q 在 a 之前就已決定分支。CCS 的語義精確區分兩者。</p>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">優缺點</h4>
+    <div class="detail-procon">
+      <div class="detail-pros">
+        <h5>✓ 優點</h5>
+        <ul>
+          <li>理論最純粹：bisimulation 語義漂亮且完整</li>
+          <li>是 π-calculus 的前身，理解 CCS 等於理解整個進程代數族</li>
+          <li>教學效果好：極小語法讓核心概念清晰</li>
+        </ul>
+      </div>
+      <div class="detail-cons">
+        <h5>✗ 缺點</h5>
+        <ul>
+          <li>完全學術，主流工程幾乎不直接使用</li>
+          <li>工具小眾，工業支援接近於零</li>
+          <li>無 data types、無 mobility，表達實務系統需要大量擴展</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section">
+    <h4 class="detail-h4">代表實作</h4>
+    <ul class="detail-reps">
+      <li><strong>CWB-NC（Concurrency Workbench）</strong>：CCS 互動分析環境，bisimulation 自動判定</li>
+      <li><strong>mCRL2</strong>：CCS / μCRL 的後繼工具，工業規模的進程代數分析</li>
+      <li><strong>TAPAs</strong>：教學用 CCS 工具，視覺化 LTS 展示</li>
+      <li><strong>Robin Milner《Communicating and Mobile Systems》</strong>：CCS + π-calculus 原著</li>
+    </ul>
+  </section>
+</article>
