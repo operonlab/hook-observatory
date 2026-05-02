@@ -152,6 +152,12 @@ def main() -> None:
                 args.space_id,
                 "--level",
                 str(level),
+                # Cap per-run batch: 4000+ communities × LLM = OOM at 2GB
+                # cronicle limit. Drain backlog over multiple days.
+                "--limit",
+                os.environ.get("SUMMARY_LIMIT_PER_LEVEL", "300"),
+                "--max-runtime",
+                os.environ.get("SUMMARY_MAX_RUNTIME", "600"),
             ]
             if args.dry_run:
                 summary_cmd.append("--dry-run")

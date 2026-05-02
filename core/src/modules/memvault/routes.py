@@ -1052,9 +1052,17 @@ async def run_dream_consolidation(
     """
     from .dream import run_dream
 
-    report = await run_dream(db, space_id, dry_run=dry_run, force=force, use_pipeline=use_pipeline)
-    if not dry_run and not report.skipped:
-        await db.commit()
+    try:
+        report = await run_dream(
+            db, space_id, dry_run=dry_run, force=force, use_pipeline=use_pipeline
+        )
+        if not dry_run and not report.skipped:
+            await db.commit()
+    finally:
+        # Explicit rollback prevents idle-in-transaction leak when dry_run
+        # path leaves uncommitted SELECT transactions, or when client cancels.
+        if db.in_transaction():
+            await db.rollback()
     return report.to_dict()
 
 

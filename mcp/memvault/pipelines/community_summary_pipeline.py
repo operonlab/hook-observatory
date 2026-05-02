@@ -122,7 +122,15 @@ def http_post_auth(url: str, body: dict, api_key: str) -> dict:
 
 
 # ── Phase 1: Fetch Communities from Core API ──────────────────────────────────
-def fetch_communities(space_id: str, resolution_level: int) -> list[dict]:
+def fetch_communities(
+    space_id: str, resolution_level: int, max_items: int | None = None
+) -> list[dict]:
+    """Fetch communities with optional cap to prevent fetching all 4000+ items.
+
+    max_items: stop once we've accumulated this many. Each page is ~2MB JSON;
+    fetching all pages without a cap puts ~100MB raw + ~800MB-3GB Python dict
+    overhead into RAM, easily blowing the 2GB cronicle memory limit.
+    """
     url = f"{CORE_API}/api/memvault/kg/communities"
     page_size = 100
     page = 1
@@ -131,7 +139,7 @@ def fetch_communities(space_id: str, resolution_level: int) -> list[dict]:
 
     print(
         f"[Phase 1] Fetching communities from {url} "
-        f"(space={space_id}, level={resolution_level}) ..."
+        f"(space={space_id}, level={resolution_level}, max_items={max_items}) ..."
     )
 
     while True:
@@ -151,6 +159,10 @@ def fetch_communities(space_id: str, resolution_level: int) -> list[dict]:
             break
 
         communities.extend(items)
+
+        if max_items is not None and len(communities) >= max_items:
+            communities = communities[:max_items]
+            break
 
         if len(items) < page_size:
             break
@@ -526,6 +538,14 @@ def main() -> None:
         action="store_true",
         help="Regenerate all summaries, even if community content hasn't changed",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=300,
+        help="Max communities to process per run (default 300). Prevents OOM "
+        "on backlog: 4000+ communities × LLM call easily exceeds 2GB RAM "
+        "and the cronicle 1h timeout. Run repeatedly to drain backlog.",
+    )
     args = parser.parse_args()
 
     api_key = DEEPSEEK_API_KEY
@@ -538,11 +558,31 @@ def main() -> None:
     print(f"Space ID : {args.space_id}")
     print(f"Level    : {args.level} (resolution={[1.0, 0.3, 0.05][args.level]})\n")
 
-    # Phase 1
-    communities = fetch_communities(args.space_id, args.level)
+    # Phase 1: cap fetched community pages so we never load all 4000+ at once.
+    # Buffer factor of 3 lets the priority sort still pick from a wider pool.
+    fetch_cap = args.limit * 3
+    communities = fetch_communities(args.space_id, args.level, max_items=fetch_cap)
     if not communities:
         print("[skip] No communities found at this resolution level.")
         sys.exit(0)
+
+    # Prioritize communities without summaries (then by oldest summary first).
+    # This keeps each cron run focused on backlog clearance, not re-processing
+    # already-summarized communities. Existing-map fetch is short (HTTP + 200/page).
+    if len(communities) > args.limit:
+        # Always apply limit (even in dry_run) — fetch_communities returned 4000+
+        # records and unbounded iteration easily exceeds 2GB / 1h cronicle budget.
+        existing_lookup = _fetch_existing_summaries(args.space_id) if not args.dry_run else {}
+
+        def _priority_key(c):
+            comm_id = c.get("community_id", c.get("id", ""))
+            existing = existing_lookup.get(comm_id)
+            if existing is None:
+                return (0, "")  # never summarized → highest priority
+            return (1, existing.get("created_at", ""))  # oldest summary next
+
+        communities = sorted(communities, key=_priority_key)[: args.limit]
+        print(f"[Phase 1] Limit={args.limit}: prioritized backlog + oldest summaries for this run.")
 
     # Phase 2 + 3: fetch triples (from community record or API) and generate summaries
     summaries = generate_summaries(

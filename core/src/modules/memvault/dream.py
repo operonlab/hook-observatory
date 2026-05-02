@@ -16,6 +16,7 @@ Each phase is isolated — a failure in one phase does not abort subsequent phas
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -94,6 +95,13 @@ async def _orient(
     """Phase 1: Gather stats and check dual-gate trigger.
 
     Returns (stats_dict, should_proceed).
+
+    `total_blocks` is the count of *currently active* blocks
+    (`deleted_at IS NULL AND invalid_at IS NULL`), NOT the raw row count.
+    Dream operates on the live memory surface — soft-deleted and superseded
+    rows are intentionally excluded so reflect/curate don't re-process them.
+    Invariant: `total_blocks == sum(block_stats.values())` and equals
+    `SELECT count(*) FROM memvault.blocks WHERE space_id=:s AND <active_block_filters>`.
     """
     from sqlalchemy import func, select
 
@@ -187,8 +195,13 @@ async def _gather_signal(
     db: AsyncSession,
     space_id: str,
     last_dream_at: str | None,
+    skip_ppr: bool = False,
 ) -> dict:
-    """Phase 2: Scan recent blocks and detect contradictions broadly."""
+    """Phase 2: Scan recent blocks and detect contradictions broadly.
+
+    skip_ppr: when True, skip PPR centrality (used in dry-run path).
+    """
+
     from sqlalchemy import func, select
 
     from .lint import check_contradictions
@@ -203,6 +216,7 @@ async def _gather_signal(
     # Count new blocks since last dream — exclude superseded.
     from .bitemporal_filters import active_block_filters
 
+    t0 = time.monotonic()
     q = (
         select(MemoryBlock.block_type, func.count())
         .where(
@@ -214,40 +228,60 @@ async def _gather_signal(
     )
     rows = (await db.execute(q)).all()
     new_blocks = {row[0]: row[1] for row in rows}
+    logger.info("dream.gather_signal: new_blocks query %.2fs", time.monotonic() - t0)
 
     # Broad contradiction scan
+    t1 = time.monotonic()
     contradiction_findings = await check_contradictions(
         db, space_id, sample_size=CONTRADICTION_SAMPLE_SIZE
     )
     resolvable = [f for f in contradiction_findings if f.suggested_action == "resolve"]
+    logger.info(
+        "dream.gather_signal: check_contradictions %.2fs (n=%d)",
+        time.monotonic() - t1,
+        len(contradiction_findings),
+    )
 
     # PPR centrality analysis — identify hub and orphan entities
     hub_entities: list[str] = []
     orphan_entities: list[str] = []
-    try:
-        from .kg_models import Triple
+    if not skip_ppr:
+        try:
+            t2 = time.monotonic()
+            from .kg_models import Triple
 
-        triple_q = (
-            select(Triple.subject, Triple.object)
-            .where(
-                Triple.space_id == space_id,
-                Triple.invalid_at.is_(None),
+            # Limit reduced 2000→500: PPR was Phase-2 hot spot, dry-run took 60s+
+            # because triples table has no (space_id, invalid_at) index.
+            triple_q = (
+                select(Triple.subject, Triple.object)
+                .where(
+                    Triple.space_id == space_id,
+                    Triple.invalid_at.is_(None),
+                )
+                .limit(500)
             )
-            .limit(2000)
-        )
-        triple_rows = (await db.execute(triple_q)).all()
-        if len(triple_rows) >= 50:
-            from kg_ops.community import build_entity_graph
-            from kg_ops.pagerank import global_pagerank
+            triple_rows = (await db.execute(triple_q)).all()
+            logger.info(
+                "dream.gather_signal: triple_q %.2fs (n=%d)",
+                time.monotonic() - t2,
+                len(triple_rows),
+            )
+            if len(triple_rows) >= 50:
+                t3 = time.monotonic()
+                from kg_ops.community import build_entity_graph
+                from kg_ops.pagerank import global_pagerank
 
-            triple_dicts = [{"subject": r[0], "object": r[1]} for r in triple_rows]
-            graph, _idx = build_entity_graph(triple_dicts)
-            pr_results = global_pagerank(graph, top_k=graph.vcount())
-            if pr_results:
-                hub_entities = [name for name, _ in pr_results[:10]]
-                orphan_entities = [name for name, score in pr_results[-10:] if score < 0.001]
-    except Exception:
-        logger.debug("dream.gather_signal: PPR centrality failed", exc_info=True)
+                triple_dicts = [{"subject": r[0], "object": r[1]} for r in triple_rows]
+                graph, _idx = build_entity_graph(triple_dicts)
+                pr_results = global_pagerank(graph, top_k=graph.vcount())
+                if pr_results:
+                    hub_entities = [name for name, _ in pr_results[:10]]
+                    orphan_entities = [name for name, score in pr_results[-10:] if score < 0.001]
+                logger.info(
+                    "dream.gather_signal: PPR %.2fs (V=%d)", time.monotonic() - t3, graph.vcount()
+                )
+        except Exception:
+            logger.debug("dream.gather_signal: PPR centrality failed", exc_info=True)
 
     return {
         "new_blocks_since_last": new_blocks,
@@ -303,7 +337,7 @@ async def _reflect(
     )
     attitudes = (await db.execute(aq)).scalars().all()
     attitudes_summary = "\n".join(
-        f"- [{(a.tags or ['preference'])[0]}] {a.content} (confidence: {a.confidence:.2f})"
+        f"- [{(a.tags or ['preference'])[0]}] {a.content} (confidence: {(a.confidence or 0.0):.2f})"
         for a in attitudes
     )
 
@@ -410,19 +444,19 @@ async def _consolidate(
             content_a = f"{t1.subject} {t1.predicate} {t1.object}"
             content_b = f"{t2.subject} {t2.predicate} {t2.object}"
 
+            # dry_run skips LLM call — it's expensive (60s+ per conflict on
+            # timeout) and the report only needs an estimated count, not the
+            # actual decision. Real run still goes through resolve_conflict.
+            if dry_run:
+                result["contradictions_resolved"] += 1
+                continue
+
             cr = await resolve_conflict(
                 new_content=content_a,
                 existing_content=content_b,
                 existing_block_id=conflicting_id,
                 similarity=meta.get("similarity", 0.8),
             )
-
-            if dry_run:
-                if cr.decision == ConflictDecision.COEXIST:
-                    result["contradictions_coexist"] += 1
-                else:
-                    result["contradictions_resolved"] += 1
-                continue
 
             if cr.decision == ConflictDecision.SUPERSEDE:
                 # Invalidate the older triple
@@ -459,12 +493,18 @@ async def _consolidate(
             logger.warning("dream.consolidate.contradiction failed: %s", e)
 
     # --- 3b. Batch dedup scan ---
+    # dry_run skips this loop entirely — each block triggers embed worker + Qdrant
+    # round-trip, which on 8000+ blocks runs > 10 minutes. dry_run report only
+    # needs an estimate; real run still does the full scan below.
     merge_count = 0
     offset = 0
+    if dry_run:
+        result["blocks_merged"] = 0
+        result["batch_dedup_skipped"] = "dry_run"
     try:
         from .bitemporal_filters import active_block_filters
 
-        while merge_count < MAX_MERGES_PER_RUN:
+        while not dry_run and merge_count < MAX_MERGES_PER_RUN:
             bq = (
                 select(MemoryBlock)
                 .where(
@@ -871,19 +911,24 @@ async def run_dream(
     # Phase 2: Gather Signal
     signal: dict = {}
     try:
-        signal = await _gather_signal(db, space_id, report.phase_orient.get("last_dream_at"))
+        signal = await _gather_signal(
+            db, space_id, report.phase_orient.get("last_dream_at"), skip_ppr=dry_run
+        )
         # Don't expose internal _findings in the report
         report.phase_signal = {k: v for k, v in signal.items() if not k.startswith("_")}
     except Exception as e:
         report.errors.append(f"gather_signal: {e}")
         logger.warning("dream.gather_signal failed: %s", e, exc_info=True)
 
-    # Phase 2.5: LLM Reflection
-    try:
-        report.phase_reflect = await _reflect(db, space_id, report.phase_orient, signal)
-    except Exception as e:
-        report.errors.append(f"reflect: {e}")
-        logger.warning("dream.reflect failed: %s", e, exc_info=True)
+    # Phase 2.5: LLM Reflection (skip in dry_run — LLM call costs 30-60s)
+    if not dry_run:
+        try:
+            report.phase_reflect = await _reflect(db, space_id, report.phase_orient, signal)
+        except Exception as e:
+            report.errors.append(f"reflect: {e}")
+            logger.warning("dream.reflect failed: %s", e, exc_info=True)
+    else:
+        report.phase_reflect = {"skipped": "dry_run"}
 
     # Phase 3: Consolidate
     try:

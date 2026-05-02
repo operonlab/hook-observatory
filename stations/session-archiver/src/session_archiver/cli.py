@@ -24,6 +24,24 @@ def cmd_scan(args: list[str]) -> None:
     parser.add_argument(
         "--summarize", action="store_true", help="Generate summaries for warm candidates"
     )
+    parser.add_argument(
+        "--summarize-limit",
+        type=int,
+        default=60,
+        help="Max warm-promotions per run (default 60). Prevents 1h timeout on big backlog.",
+    )
+    parser.add_argument(
+        "--summarize-timeout",
+        type=int,
+        default=10,
+        help="Per-summary LLM timeout in seconds (default 10).",
+    )
+    parser.add_argument(
+        "--summarize-budget",
+        type=int,
+        default=900,
+        help="Total wall-clock budget for warm sweep in seconds (default 900 = 15min).",
+    )
     opts = parser.parse_args(args)
 
     config = load_config()
@@ -46,14 +64,21 @@ def cmd_scan(args: list[str]) -> None:
 
     # Warm tier promotion: generate summary + embedding for eligible hot sessions
     warmed = 0
+    skipped_budget = 0
     if opts.summarize:
+        import time
+
         from session_archiver.embedding import get_embedding
         from session_archiver.scanner import get_active_session_ids
         from session_archiver.summarizer import generate_summary
 
         active_ids = get_active_session_ids()
-        candidates = db.get_warm_candidates(config)
+        candidates = db.get_warm_candidates(config, limit=opts.summarize_limit)
+        deadline = time.monotonic() + opts.summarize_budget
         for sid, project_path in candidates:
+            if time.monotonic() > deadline:
+                skipped_budget = len(candidates) - warmed
+                break
             if sid in active_ids:
                 continue
             # Find JSONL path
@@ -65,7 +90,7 @@ def cmd_scan(args: list[str]) -> None:
                 continue
             jsonl_path = jsonl_candidates[0]
 
-            summary = generate_summary(jsonl_path)
+            summary = generate_summary(jsonl_path, timeout=opts.summarize_timeout)
             if not summary:
                 continue
 
@@ -161,6 +186,18 @@ def cmd_archive(args: list[str]) -> None:
     )
     parser.add_argument("--embed", action="store_true", help="Generate embeddings for summaries")
     parser.add_argument("--json", action="store_true", help="JSON output")
+    parser.add_argument(
+        "--summarize-timeout",
+        type=int,
+        default=10,
+        help="Per-summary LLM timeout in seconds (default 10).",
+    )
+    parser.add_argument(
+        "--summarize-budget",
+        type=int,
+        default=600,
+        help="Total wall-clock budget for archive summarize+embed in seconds (default 600 = 10min).",
+    )
     opts = parser.parse_args(args)
 
     config = load_config()
@@ -207,16 +244,28 @@ def cmd_archive(args: list[str]) -> None:
     # Generate summaries if requested (skip for warm sessions — they already have one)
     summaries: dict[str, str | None] = {}
     if opts.summarize and not dry_run:
+        import time
+
         from session_archiver.summarizer import generate_summary
 
+        deadline = time.monotonic() + opts.summarize_budget
         for meta, _ in candidates:
+            if time.monotonic() > deadline:
+                logger.warning(
+                    "archive_summarize_budget_exceeded",
+                    processed=len(summaries),
+                    pending=len(candidates) - len(summaries),
+                )
+                break
             # Check if warm session already has summary in DB
             existing = db.get_session(config, meta.session_id)
             if existing and existing.summary:
                 summaries[meta.session_id] = existing.summary
                 continue
             if meta.jsonl_path.exists():
-                summaries[meta.session_id] = generate_summary(meta.jsonl_path)
+                summaries[meta.session_id] = generate_summary(
+                    meta.jsonl_path, timeout=opts.summarize_timeout
+                )
 
     # Archive
     results = archive_batch(config, candidates, summaries=summaries, dry_run=dry_run)
@@ -623,13 +672,15 @@ def cmd_purge_trivial(args: list[str]) -> None:
             if age_days < opts.min_age_days:
                 continue
             if size < threshold_bytes:
-                candidates.append({
-                    "session_id": sid,
-                    "reason": f"file_size={size}B < {opts.threshold_kb}KB",
-                    "size_bytes": size,
-                    "age_days": round(age_days, 1),
-                    "project_dir": str(project_dir),
-                })
+                candidates.append(
+                    {
+                        "session_id": sid,
+                        "reason": f"file_size={size}B < {opts.threshold_kb}KB",
+                        "size_bytes": size,
+                        "age_days": round(age_days, 1),
+                        "project_dir": str(project_dir),
+                    }
+                )
 
     # --- Pass 2: DB-based scan (low quality score) ---
     try:
@@ -653,13 +704,15 @@ def cmd_purge_trivial(args: list[str]) -> None:
                     continue
                 jsonl = project_dir / f"{sid}.jsonl"
                 if jsonl.exists():
-                    candidates.append({
-                        "session_id": sid,
-                        "reason": f"quality={row.get('quality_score', 0):.2f}, outcome={row.get('outcome', '?')}",
-                        "size_bytes": jsonl.stat().st_size,
-                        "age_days": round(age_days_val, 1),
-                        "project_dir": str(project_dir),
-                    })
+                    candidates.append(
+                        {
+                            "session_id": sid,
+                            "reason": f"quality={row.get('quality_score', 0):.2f}, outcome={row.get('outcome', '?')}",
+                            "size_bytes": jsonl.stat().st_size,
+                            "age_days": round(age_days_val, 1),
+                            "project_dir": str(project_dir),
+                        }
+                    )
                     break
     except Exception as e:
         logger.warning("db_scan_skipped", error=str(e))

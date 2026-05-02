@@ -773,29 +773,53 @@ def _run_cmd(cmd: list, input_text: str, env: dict, label: str) -> "str | None":
 def _http_post(
     url: str, data: bytes, timeout: int = 10, connect_timeout: int = 3, method: str = "POST"
 ) -> tuple:
-    """HTTP request, return (http_code, response_body). Returns (0, '') on error."""
-    try:
-        headers = {"Content-Type": "application/json"}
-        internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
-        if internal_key:
-            headers["X-Internal-Key"] = internal_key
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers=headers,
-            method=method,
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as e:
-        body = ""
+    """HTTP request with retry, return (http_code, response_body).
+
+    Auth: Pulls `CORE_INTERNAL_API_KEY` from os.environ and injects as
+    `X-Internal-Key` header. If env is unset, the header is omitted (and
+    Core will reject with 401). Caller must export the env via ~/.zshenv
+    or the cronicle wrapper.
+
+    Returns (0, '') on persistent connection error (after retries).
+    Connection-level errors (URLError, OSError, TimeoutError) are retried up
+    to 3 times with exponential backoff (0.5s → 1s → 2s) — 5/2 SessionEnd
+    hook saw HTTP 0 ×3 when Core was momentarily busy.
+    HTTP 5xx (500/502/503/504/etc) is retried the same way — these are
+    typically transient (Core busy, gateway timeout). Body from the *last*
+    attempt is returned if all retries exhaust.
+    HTTP 4xx returns immediately — client errors won't fix themselves.
+    """
+    headers = {"Content-Type": "application/json"}
+    internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
+    if internal_key:
+        headers["X-Internal-Key"] = internal_key
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+
+    for attempt in range(3):
         try:
-            body = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            pass
-        return e.code, body
-    except Exception:
-        return 0, ""
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status, resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")
+            except Exception:
+                pass
+            # 5xx is transient — retry. 4xx is the caller's fault — return now.
+            if 500 <= e.code < 600 and attempt < 2:
+                time.sleep(0.5 * (2**attempt))
+                continue
+            return e.code, body
+        except (urllib.error.URLError, OSError, TimeoutError) as e:
+            if attempt < 2:
+                time.sleep(0.5 * (2**attempt))
+                continue
+            log(f"  http_post failed after 3 attempts: {type(e).__name__}: {e}")
+            return 0, ""
+        except Exception as e:
+            log(f"  http_post unexpected error: {type(e).__name__}: {e}")
+            return 0, ""
+    return 0, ""
 
 
 def _write_claude_staging(suggestions: list[dict]) -> None:
