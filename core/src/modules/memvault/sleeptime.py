@@ -174,10 +174,12 @@ async def _summarize_recent(db, space_id: str) -> str:
 
     Worker 5 will replace this with a proper LLM-driven summary.
     """
+    # M2: sleeptime summary should reflect only currently-valid memory.
+    from .bitemporal_filters import active_block_filters
+
     stmt = (
         select(MemoryBlock)
-        .where(MemoryBlock.space_id == space_id)
-        .where(MemoryBlock.deleted_at.is_(None))
+        .where(MemoryBlock.space_id == space_id, *active_block_filters())
         .order_by(MemoryBlock.created_at.desc())
         .limit(PROJECT_SUMMARY_RECENT_N)
     )

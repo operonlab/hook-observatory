@@ -33,6 +33,10 @@ class MemoryBlockCreate(BaseModel):
     created_at: datetime | None = Field(
         default=None, description="Override creation time (e.g. session actual time)"
     )
+    valid_at: datetime | None = Field(
+        default=None,
+        description="When the fact started being true (extracted from content if omitted)",
+    )
 
 
 class MemoryBlockUpdate(BaseModel):
@@ -48,6 +52,7 @@ class MemoryBlockResponse(SpaceScopedResponse):
     tags: list[str] = []
     source_session: str | None = None
     confidence: float = 0.0
+    valid_at: datetime | None = None
     invalid_at: datetime | None = None
     superseded_by: str | None = None
     invalidation_reason: str | None = None
@@ -162,6 +167,13 @@ class MemoryQueryRequest(BaseModel):
     top_k: int = Field(default=6, ge=1, le=20)
     retrieval_mode: str = Field(default="auto", description="auto | local | global | hybrid")
     evaluate: str = Field(default="default", description="default | deep | rlm | none")
+    as_of: datetime | None = Field(
+        default=None,
+        description=(
+            "Bitemporal time-travel: return only blocks valid at this instant. "
+            "Default (None) = current view."
+        ),
+    )
 
 
 class MemoryEvidenceRef(BaseModel):

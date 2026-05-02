@@ -539,16 +539,17 @@ async def get_session_context(
     """
     from sqlalchemy import select
 
+    # Blocks for this session — M2: only currently-valid (recall context).
+    from .bitemporal_filters import active_block_filters
     from .kg_models import EntityCanonical, Triple
     from .models import MemoryBlock
 
-    # Blocks for this session
     block_q = (
         select(MemoryBlock)
         .where(
             MemoryBlock.space_id == space_id,
             MemoryBlock.source_session == source_session,
-            MemoryBlock.deleted_at.is_(None),
+            *active_block_filters(),
         )
         .order_by(MemoryBlock.created_at)
     )

@@ -388,11 +388,13 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             "superseded_chain": [],
         }
 
-        # Trace source blocks via source_session
+        # Trace source blocks via source_session — M2: only currently-valid blocks.
         if t.source_session:
+            from .bitemporal_filters import active_block_filters
+
             bq = select(MemoryBlock).where(
                 MemoryBlock.source_session == t.source_session,
-                MemoryBlock.deleted_at.is_(None),
+                *active_block_filters(),
             )
             blocks = (await db.execute(bq)).scalars().all()
             result["source_blocks"] = [
@@ -1172,7 +1174,9 @@ class CascadeRecallService:
 
                 evaluator = CRAGEvaluator()
                 evaluation = await evaluator.evaluate(
-                    query, result, evaluate=evaluate,
+                    query,
+                    result,
+                    evaluate=evaluate,
                     intent=result.routing_intent or "unknown",
                 )
                 result.confidence_score = evaluation.confidence_score
@@ -1256,16 +1260,16 @@ class CascadeRecallService:
             .limit(self._PPR_MAX_TRIPLES)
         )
         rows = (await db.execute(q)).all()
-        triple_dicts = [
-            {"id": str(r[0]), "subject": r[1], "object": r[3]}
-            for r in rows
-        ]
+        triple_dicts = [{"id": str(r[0]), "subject": r[1], "object": r[3]} for r in rows]
 
         # Run PPR
         try:
             ppr_results = ppr_from_triples(
-                triple_dicts, seed_entities, top_k=top_k * 2,
-                subject_key="subject", object_key="object",
+                triple_dicts,
+                seed_entities,
+                top_k=top_k * 2,
+                subject_key="subject",
+                object_key="object",
             )
         except Exception:
             logger.debug("PPR computation failed", exc_info=True)
@@ -1277,7 +1281,8 @@ class CascadeRecallService:
         # Get triples involving top PPR entities
         top_entities = {name for name, _score in ppr_results[:top_k]}
         matching_ids = [
-            t["id"] for t in triple_dicts
+            t["id"]
+            for t in triple_dicts
             if t["subject"] in top_entities or t["object"] in top_entities
         ][:top_k]
 
@@ -1286,9 +1291,7 @@ class CascadeRecallService:
 
         # Fetch full triple objects
         full_triples = (
-            (await db.execute(select(Triple).where(Triple.id.in_(matching_ids))))
-            .scalars()
-            .all()
+            (await db.execute(select(Triple).where(Triple.id.in_(matching_ids)))).scalars().all()
         )
         return [triple_service.to_response(t) for t in full_triples]
 
@@ -1611,9 +1614,7 @@ class CascadeRecallService:
             score = 1.0
             try:
                 raw = t.created_at
-                created = (
-                    datetime.fromisoformat(raw) if isinstance(raw, str) else raw
-                )
+                created = datetime.fromisoformat(raw) if isinstance(raw, str) else raw
                 if created:
                     tz = created.tzinfo or UTC
                     age_s = (now - created.replace(tzinfo=tz)).total_seconds()

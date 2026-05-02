@@ -74,9 +74,13 @@ async def find_similar_blocks(
             results, _meta = await hybrid_search(content, space_id, config)
             if results:
                 block_ids = [r.entity_id for r in results]
+                # M3: dedup must NOT match against superseded blocks — they're
+                # historical, the new write should compare to current truth only.
+                from .bitemporal_filters import active_block_filters
+
                 q_content = select(MemoryBlock.id, MemoryBlock.content).where(
                     MemoryBlock.id.in_(block_ids),
-                    MemoryBlock.deleted_at == None,  # noqa: E711
+                    *active_block_filters(),
                 )
                 rows_map = {str(row[0]): str(row[1]) for row in (await db.execute(q_content)).all()}
                 tuples = []
@@ -157,9 +161,7 @@ async def check_duplicate(
             # Fetch existing block's created_at for temporal context
             existing_ts = None
             ts_row = (
-                await db.execute(
-                    select(MemoryBlock.created_at).where(MemoryBlock.id == best_id)
-                )
+                await db.execute(select(MemoryBlock.created_at).where(MemoryBlock.id == best_id))
             ).scalar_one_or_none()
             if ts_row:
                 existing_ts = ts_row

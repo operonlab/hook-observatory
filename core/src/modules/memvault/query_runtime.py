@@ -283,6 +283,7 @@ async def _search_blocks(
     top_k: int,
     scoring_config: ScoringConfig | None = None,
     intent: str = "unknown",
+    as_of: datetime | None = None,
 ) -> tuple[list, dict]:
     embedding = await get_embedding(query, task_type="search_query")
     if embedding:
@@ -294,6 +295,7 @@ async def _search_blocks(
             top_k=top_k,
             scoring_config=scoring_config,
             intent=intent,
+            as_of=as_of,
         )
         if qdrant_result is not None:
             results, meta = qdrant_result
@@ -307,22 +309,26 @@ async def _search_blocks(
             query=query,
             scoring_config=scoring_config,
             intent=intent,
+            as_of=as_of,
         )
         return results, {
             "backend": meta.backend or "pgvector-fallback",
             "input_count": meta.input_count,
         }
 
-    results = await memory_block_service.text_search(db, space_id, query, top_k=top_k)
+    results = await memory_block_service.text_search(db, space_id, query, top_k=top_k, as_of=as_of)
     if results:
         return results, {"backend": "text", "input_count": len(results)}
 
-    # Final fallback: recent memory blocks from DB when all search backends return empty
+    # Final fallback: recent memory blocks from DB when all search backends return empty.
+    # Bitemporal contract delegated to active_block_filters().
+    from .bitemporal_filters import active_block_filters
+
     q = (
         select(MemoryBlock)
         .where(
             MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at.is_(None),
+            *active_block_filters(as_of=as_of),
         )
         .order_by(MemoryBlock.created_at.desc())
         .limit(top_k)
@@ -504,6 +510,7 @@ async def _run_query_with_pipeline(
             top_k=max(request.top_k, budget["search_top_k"]),
             scoring_config=intent_scoring,
             intent=intent_value,
+            as_of=request.as_of,
         )
         # attitude blocks flow through the same qdrant_search — KAS: Block = SSoT
         fast_cards = [
@@ -700,6 +707,7 @@ async def run_memory_query(
             top_k=max(request.top_k, budget["search_top_k"]),
             scoring_config=intent_scoring,
             intent=intent_value,
+            as_of=request.as_of,
         )
         # attitude blocks flow through the same qdrant_search — KAS: Block = SSoT
         fast_cards = [

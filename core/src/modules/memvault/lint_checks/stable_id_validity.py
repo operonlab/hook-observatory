@@ -28,6 +28,7 @@ async def check_stable_id_validity(
     bq = select(MemoryBlock.id).where(
         MemoryBlock.space_id == space_id,
         MemoryBlock.deleted_at.is_(None),
+        MemoryBlock.invalid_at.is_(None),
     )
     ids = [r[0] for r in (await db.execute(bq)).all()]
 
@@ -43,8 +44,7 @@ async def check_stable_id_validity(
                     entity_type="block",
                     message=f"Duplicate block_id detected: {bid}",
                     suggested_action=(
-                        "Investigate ingestion pipeline — IDs should be "
-                        "uuid7-generated and unique."
+                        "Investigate ingestion pipeline — IDs should be uuid7-generated and unique."
                     ),
                     metadata={"block_id": bid, "issue": "duplicate"},
                 )
@@ -58,10 +58,7 @@ async def check_stable_id_validity(
                     severity="error",
                     entity_id=bid or "",
                     entity_type="block",
-                    message=(
-                        f"Invalid block_id format: {bid!r} "
-                        "(expected 32 lowercase hex chars)"
-                    ),
+                    message=(f"Invalid block_id format: {bid!r} (expected 32 lowercase hex chars)"),
                     suggested_action=(
                         "Re-issue a uuid7 hex id; this row was likely created "
                         "by a non-standard path."
@@ -71,9 +68,14 @@ async def check_stable_id_validity(
             )
 
     # Cross-check: SQL count should match
-    cq = select(func.count()).select_from(MemoryBlock).where(
-        MemoryBlock.space_id == space_id,
-        MemoryBlock.deleted_at.is_(None),
+    cq = (
+        select(func.count())
+        .select_from(MemoryBlock)
+        .where(
+            MemoryBlock.space_id == space_id,
+            MemoryBlock.deleted_at.is_(None),
+            MemoryBlock.invalid_at.is_(None),
+        )
     )
     sql_count = (await db.execute(cq)).scalar_one()
     if sql_count != len(ids):
@@ -84,8 +86,7 @@ async def check_stable_id_validity(
                 entity_id="",
                 entity_type="system",
                 message=(
-                    f"Row count mismatch: SQL={sql_count}, scanned={len(ids)} "
-                    "— retry the lint."
+                    f"Row count mismatch: SQL={sql_count}, scanned={len(ids)} — retry the lint."
                 ),
                 suggested_action="Retry; transient DB read inconsistency.",
                 metadata={"sql_count": sql_count, "scanned_count": len(ids)},

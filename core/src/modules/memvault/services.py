@@ -28,6 +28,9 @@ from src.shared.text_utils import is_cjk, is_cjk_dominant
 from src.shared.tier_config import get_threshold
 from text_ops.noise import QUARANTINE_TAG, check_noise, filter_results
 
+from .bitemporal_filters import (
+    active_block_filters,
+)
 from .injection_guard import is_unsafe_for_injection
 from .models import (
     EMBEDDING_DIM,
@@ -210,6 +213,7 @@ class MemoryBlockService(
             tags=instance.tags or [],
             source_session=instance.source_session,
             confidence=instance.confidence or 0.0,
+            valid_at=instance.valid_at,
             invalid_at=instance.invalid_at,
             superseded_by=instance.superseded_by,
             invalidation_reason=instance.invalidation_reason,
@@ -243,11 +247,17 @@ class MemoryBlockService(
         pagination: PaginationParams | None = None,
         date_from=None,
         date_to=None,
+        include_invalid: bool = False,
     ) -> PaginatedResponse[MemoryBlockResponse]:
         p = pagination or PaginationParams()
+        # M1: default to active-only; audit callers opt in via include_invalid.
+        if include_invalid:
+            block_filters: list = [MemoryBlock.deleted_at.is_(None)]
+        else:
+            block_filters = active_block_filters()
         base = select(MemoryBlock).where(
             MemoryBlock.space_id == space_id,
-            MemoryBlock.deleted_at == None,  # noqa: E711
+            *block_filters,
         )
         base = self._apply_date_filter(base, date_from, date_to)
         count_q = select(func.count()).select_from(base.subquery())
@@ -273,13 +283,18 @@ class MemoryBlockService(
         pagination: PaginationParams | None = None,
         date_from=None,
         date_to=None,
+        include_invalid: bool = False,
     ) -> PaginatedResponse[MemoryBlockResponse]:
         """List blocks that contain ALL specified tags."""
         p = pagination or PaginationParams()
+        if include_invalid:
+            block_filters: list = [MemoryBlock.deleted_at.is_(None)]
+        else:
+            block_filters = active_block_filters()
         base = select(MemoryBlock).where(
             MemoryBlock.space_id == space_id,
             MemoryBlock.tags.contains(tags),
-            MemoryBlock.deleted_at == None,  # noqa: E711
+            *block_filters,
         )
         base = self._apply_date_filter(base, date_from, date_to)
         count_q = select(func.count()).select_from(base.subquery())
@@ -301,13 +316,18 @@ class MemoryBlockService(
         pagination: PaginationParams | None = None,
         date_from=None,
         date_to=None,
+        include_invalid: bool = False,
     ) -> PaginatedResponse[MemoryBlockResponse]:
         """List blocks filtered by block_type."""
         p = pagination or PaginationParams()
+        if include_invalid:
+            block_filters: list = [MemoryBlock.deleted_at.is_(None)]
+        else:
+            block_filters = active_block_filters()
         base = select(MemoryBlock).where(
             MemoryBlock.space_id == space_id,
             MemoryBlock.block_type == block_type,
-            MemoryBlock.deleted_at == None,  # noqa: E711
+            *block_filters,
         )
         base = self._apply_date_filter(base, date_from, date_to)
         count_q = select(func.count()).select_from(base.subquery())
@@ -338,6 +358,7 @@ class MemoryBlockService(
         date_to: datetime | None = None,
         keywords: list[str] | None = None,
         intent: str = "unknown",
+        as_of: datetime | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata]:
         """Text-based fallback search (keyword + warm tier).
 
@@ -369,6 +390,7 @@ class MemoryBlockService(
                     block_type,
                     extra_filters=extra_filters,
                     keywords=keywords,
+                    as_of=as_of,
                 )
                 meta.keyword_used = True
             return results[:top_k], meta
@@ -403,6 +425,7 @@ class MemoryBlockService(
                 block_type,
                 extra_filters=extra_filters,
                 keywords=keywords,
+                as_of=as_of,
             )
             meta.keyword_used = True
             results = keyword_results
@@ -417,6 +440,7 @@ class MemoryBlockService(
                 tags,
                 block_type,
                 extra_filters=extra_filters,
+                as_of=as_of,
             )
             results.extend(warm_results)
 
@@ -505,6 +529,7 @@ class MemoryBlockService(
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         intent: str = "unknown",
+        as_of: datetime | None = None,
     ) -> tuple[list[SemanticSearchResult], SearchMetadata] | None:
         """Search via Qdrant hybrid (BM25 + dense) with full scoring pipeline.
 
@@ -539,11 +564,14 @@ class MemoryBlockService(
 
         meta.keyword_used = qdrant_meta.sparse_used
 
-        # Fetch full records from DB by entity_id for scoring pipeline
+        # Fetch full records from DB by entity_id for scoring pipeline.
+        # C2: pass as_of through so Qdrant path participates in bitemporal recall —
+        # the entity_ids returned by Qdrant are pre-filter; this WHERE is the
+        # gatekeeper that drops superseded / out-of-range blocks before scoring.
         entity_ids = [r.entity_id for r in qdrant_results]
         q = select(MemoryBlock).where(
             MemoryBlock.id.in_(entity_ids),
-            MemoryBlock.deleted_at == None,  # noqa: E711
+            *active_block_filters(as_of=as_of),
         )
         if date_from:
             q = q.where(MemoryBlock.created_at >= date_from)
@@ -652,6 +680,7 @@ class MemoryBlockService(
         block_type: str | None = None,
         extra_filters: list | None = None,
         keywords: list[str] | None = None,
+        as_of: datetime | None = None,
     ) -> list[SemanticSearchResult]:
         """PostgreSQL keyword search.
 
@@ -680,7 +709,7 @@ class MemoryBlockService(
                 .where(
                     MemoryBlock.space_id == space_id,
                     *conditions,
-                    MemoryBlock.deleted_at == None,  # noqa: E711
+                    *active_block_filters(as_of=as_of),
                 )
                 .order_by(MemoryBlock.updated_at.desc())
                 .limit(top_k)
@@ -702,7 +731,7 @@ class MemoryBlockService(
                 .where(
                     MemoryBlock.space_id == space_id,
                     ts_vector.op("@@")(ts_query),
-                    MemoryBlock.deleted_at == None,  # noqa: E711
+                    *active_block_filters(as_of=as_of),
                 )
                 .order_by(rank.desc())
                 .limit(top_k)
@@ -782,6 +811,7 @@ class MemoryBlockService(
         tags: list[str] | None,
         block_type: str | None,
         extra_filters: list | None = None,
+        as_of: datetime | None = None,
     ) -> list[SemanticSearchResult]:
         """Search warm-tier blocks (no HNSW, still in main table).
 
@@ -796,6 +826,7 @@ class MemoryBlockService(
         # CJK-aware conditions (jieba multi-term instead of single ILIKE)
         conditions = build_ilike_conditions(query, MemoryBlock.content)
 
+        # C4: warm-tier was leaking superseded/deleted blocks pre-bitemporal — fixed.
         q = (
             select(MemoryBlock)
             .where(
@@ -803,6 +834,7 @@ class MemoryBlockService(
                 *conditions,
                 MemoryBlock.created_at < hot_cutoff,
                 MemoryBlock.created_at >= warm_cutoff,
+                *active_block_filters(as_of=as_of),
             )
             .order_by(MemoryBlock.updated_at.desc())
             .limit(remaining)
@@ -835,6 +867,7 @@ class MemoryBlockService(
         scope: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        as_of: datetime | None = None,
     ) -> list[SemanticSearchResult]:
         """Fallback text search — CJK-aware jieba multi-term + BM25-lite scoring.
 
@@ -842,6 +875,12 @@ class MemoryBlockService(
           Hot  (age <= hot_days): BM25-lite score
           Warm (hot_days < age <= warm_days): BM25-lite * warm_decay
           Cold (archive table, include_archived): BM25-lite * cold_decay
+
+        Bitemporal:
+          as_of=None → "current view": only blocks that are still valid (invalid_at IS NULL)
+          as_of=T    → "time travel":  blocks valid at instant T
+                       (COALESCE(valid_at, created_at) <= T)
+                       AND (invalid_at IS NULL OR invalid_at > T)
         """
         tier = get_threshold("memvault")
         now = datetime.now(UTC)
@@ -856,6 +895,9 @@ class MemoryBlockService(
         if date_to:
             extra_filters.append(MemoryBlock.created_at <= date_to)
 
+        # Bitemporal filters delegated to active_block_filters() — single source of truth.
+        temporal_filters = active_block_filters(as_of=as_of)
+
         # CJK-aware conditions (jieba multi-term instead of single ILIKE)
         conditions = build_ilike_conditions(query, MemoryBlock.content)
 
@@ -866,6 +908,7 @@ class MemoryBlockService(
                 MemoryBlock.space_id == space_id,
                 *conditions,
                 MemoryBlock.created_at >= hot_cutoff,
+                *temporal_filters,
             )
             .order_by(MemoryBlock.updated_at.desc())
             .limit(top_k)
@@ -891,6 +934,7 @@ class MemoryBlockService(
                     *conditions,
                     MemoryBlock.created_at < hot_cutoff,
                     MemoryBlock.created_at >= warm_cutoff,
+                    *temporal_filters,
                 )
                 .order_by(MemoryBlock.updated_at.desc())
                 .limit(remaining)
@@ -972,7 +1016,7 @@ class MemoryBlockService(
             .where(
                 MemoryBlock.space_id == space_id,
                 MemoryBlock.source_session == source_session,
-                MemoryBlock.deleted_at == None,  # noqa: E711
+                *active_block_filters(),
             )
             .limit(1)
         )
