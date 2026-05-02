@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>system-monitor-rs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; margin: 2em; max-width: 960px; }
+    h1 { font-weight: 600; }
+    pre { background: #f4f4f4; padding: 1em; border-radius: 6px; overflow-x: auto; }
+    .kv { display: grid; grid-template-columns: 200px 1fr; gap: .25em 1em; }
+    .kv b { color: #555; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>system-monitor-rs <small id="version" style="color:#888;font-size:.6em"></small></h1>
+  <p>Live snapshot via <code>/status</code>; SSE stream at <code>/events/stream</code>.</p>
+  <div class="kv" id="kv"></div>
+  <h2>Top processes</h2>
+  <pre id="procs">loading…</pre>
+  <h2>Raw</h2>
+  <pre id="raw">loading…</pre>
+  <script>
+    async function load() {
+      const r = await fetch('/status');
+      const j = await r.json();
+      const kv = document.getElementById('kv');
+      const fmt = (n, d=2) => typeof n === 'number' ? n.toFixed(d) : n;
+      kv.innerHTML = `
+        <b>Hostname</b><span>${j.hostname || ''}</span>
+        <b>Chip</b><span>${j.chip || ''}</span>
+        <b>OS</b><span>${j.os_version || ''}</span>
+        <b>Pressure</b><span>${j.pressure_level || ''}</span>
+        <b>CPU usage</b><span>${fmt(j.hardware?.cpu?.usage_pct)}%</span>
+        <b>Memory</b><span>${fmt(j.hardware?.memory?.used_gb)} / ${fmt(j.hardware?.memory?.total_gb)} GB (${fmt(j.hardware?.memory?.usage_pct)}%)</span>
+        <b>Compressed</b><span>${fmt(j.hardware?.memory?.compressed_gb)} GB</span>
+        <b>Swap</b><span>${fmt(j.hardware?.swap?.used_gb)} / ${fmt(j.hardware?.swap?.total_gb)} GB</span>
+        <b>Disk</b><span>${fmt(j.disk?.usage_pct)}%</span>
+      `;
+      document.getElementById('procs').textContent =
+        (j.top_processes || []).slice(0, 5).map(p =>
+          `${p.name.padEnd(28)} cpu=${p.cpu_pct.toString().padStart(6)}%  mem=${(p.mem_mb||0).toString().padStart(6)} MB`
+        ).join('\n');
+      document.getElementById('raw').textContent = JSON.stringify(j, null, 2);
+    }
+    load();
+    setInterval(load, 30000);
+  </script>
+</body>
+</html>
