@@ -1184,6 +1184,7 @@ class CascadeRecallService:
                 top_k=top_k,
                 skip_routing=True,
                 evaluate=evaluate,
+                as_of=as_of,
             )
 
         # --- Phase 3: CRAG Evaluator ---

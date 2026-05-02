@@ -144,14 +144,19 @@ async def memvault_kg_cascade_recall(
     top_k: int = 5,
     skip_routing: bool = False,
     evaluate: str = "default",
+    as_of: str = "",
 ) -> str:
-    """Adaptive Cascade Recall：Query Router → L2/L1 Semantic + L0 Triples + Blocks → CRAG Evaluation"""
+    """Adaptive Cascade Recall：Query Router → L2/L1 Semantic + L0 Triples + Blocks → CRAG Evaluation.
+
+    as_of: ISO8601 datetime — 時間旅行（看「過去某時刻已知的事實」），空字串 = 現在視角。
+    """
     result = await to_thread(
         client.cascade,
         query,
         top_k=top_k,
         skip_routing=skip_routing,
         evaluate=evaluate,
+        as_of=as_of or None,
     )
     layers = result.get("layers_searched", [])
 

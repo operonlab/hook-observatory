@@ -143,22 +143,24 @@ class MemvaultClient(BaseClient):
         load_budget: str = "standard",
         consumer: str = "human",
         top_k: int = 6,
+        as_of: str | None = None,
     ) -> dict:
         """Unified fast/slow memory query. POST /query
 
         task_mode=auto infers intent from query content via classify_query().
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
         """
-        return self._post(
-            "/query",
-            {
-                "q": query,
-                "task_mode": task_mode,
-                "thinking_mode": thinking_mode,
-                "load_budget": load_budget,
-                "consumer": consumer,
-                "top_k": top_k,
-            },
-        )
+        body: dict = {
+            "q": query,
+            "task_mode": task_mode,
+            "thinking_mode": thinking_mode,
+            "load_budget": load_budget,
+            "consumer": consumer,
+            "top_k": top_k,
+        }
+        if as_of:
+            body["as_of"] = as_of
+        return self._post("/query", body)
 
     def inject(
         self,
@@ -167,19 +169,23 @@ class MemvaultClient(BaseClient):
         thinking_mode: str = "auto",
         load_budget: str = "light",
         top_k: int = 6,
+        as_of: str | None = None,
     ) -> dict:
-        """Agent-facing fast memory payload. POST /inject"""
-        return self._post(
-            "/inject",
-            {
-                "q": query,
-                "task_mode": task_mode,
-                "thinking_mode": thinking_mode,
-                "load_budget": load_budget,
-                "consumer": "agent",
-                "top_k": top_k,
-            },
-        )
+        """Agent-facing fast memory payload. POST /inject
+
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
+        """
+        body: dict = {
+            "q": query,
+            "task_mode": task_mode,
+            "thinking_mode": thinking_mode,
+            "load_budget": load_budget,
+            "consumer": "agent",
+            "top_k": top_k,
+        }
+        if as_of:
+            body["as_of"] = as_of
+        return self._post("/inject", body)
 
     def inspect(
         self,
@@ -187,19 +193,23 @@ class MemvaultClient(BaseClient):
         task_mode: str = "reflect",
         load_budget: str = "deep",
         top_k: int = 6,
+        as_of: str | None = None,
     ) -> dict:
-        """Deep evidence inspection. POST /inspect"""
-        return self._post(
-            "/inspect",
-            {
-                "q": query,
-                "task_mode": task_mode,
-                "thinking_mode": "slow",
-                "load_budget": load_budget,
-                "consumer": "human",
-                "top_k": top_k,
-            },
-        )
+        """Deep evidence inspection. POST /inspect
+
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
+        """
+        body: dict = {
+            "q": query,
+            "task_mode": task_mode,
+            "thinking_mode": "slow",
+            "load_budget": load_budget,
+            "consumer": "human",
+            "top_k": top_k,
+        }
+        if as_of:
+            body["as_of"] = as_of
+        return self._post("/inspect", body)
 
     # ======================== Sessions ========================
 
@@ -485,13 +495,19 @@ class MemvaultClient(BaseClient):
         top_k: int = 5,
         skip_routing: bool = False,
         evaluate: str = "default",
+        as_of: str | None = None,
     ) -> dict:
-        """KG cascade recall (L2→L1→L0→Blocks). GET /kg/recall"""
+        """KG cascade recall (L2→L1→L0→Blocks). GET /kg/recall
+
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
+        """
         params: dict = {"q": query, "top_k": top_k}
         if skip_routing:
             params["skip_routing"] = "true"
         if evaluate != "default":
             params["evaluate"] = evaluate
+        if as_of:
+            params["as_of"] = as_of
         return self._get("/kg/recall", params)
 
     # ======================== KG — Maintenance ========================

@@ -489,13 +489,19 @@ async def _run_query_with_pipeline(
     budget = _budget_config(load_budget)
 
     # Phase B2: Check speculative prefetch cache
-    prefetch_hit, _prefetch_check_ms = await _check_prefetch_cache(
-        space_id,
-        consumer,
-        task_mode,
-        request.q,
-        request.top_k,
-    )
+    # Time-travel queries (as_of != None) MUST bypass prefetch — fingerprint
+    # has no as_of dimension, so a present-time prefetch hit would silently
+    # serve current state for a historical query.
+    if getattr(request, "as_of", None) is not None:
+        prefetch_hit, _prefetch_check_ms = None, 0.0
+    else:
+        prefetch_hit, _prefetch_check_ms = await _check_prefetch_cache(
+            space_id,
+            consumer,
+            task_mode,
+            request.q,
+            request.top_k,
+        )
 
     # --- Search phase (inline, same as sequential path) ---
     if prefetch_hit:
@@ -536,6 +542,7 @@ async def _run_query_with_pipeline(
             top_k=budget["cascade"],
             evaluate=getattr(request, "evaluate", "default"),
             mode=getattr(request, "retrieval_mode", "auto"),
+            as_of=getattr(request, "as_of", None),
         )
         cascade_cards.extend(
             _summary_card(item, "cascade", task_mode) for item in cascade_result.summaries
@@ -731,6 +738,7 @@ async def run_memory_query(
             top_k=budget["cascade"],
             evaluate=getattr(request, "evaluate", "default"),
             mode=getattr(request, "retrieval_mode", "auto"),
+            as_of=getattr(request, "as_of", None),
         )
         cascade_cards.extend(
             _summary_card(item, "cascade", task_mode) for item in cascade.summaries

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +46,7 @@ from .schemas import (
     SemanticSearchParams,  # noqa: F401 — available for future use
     SessionSummary,
     TagResponse,
+    _ensure_tz_aware,
 )
 from .services import (
     knowledge_domain_service,
@@ -558,23 +559,34 @@ async def search(
         meta.routing_tags = inferred_tags if inferred_tags else None
 
         # Temporal fallback: semantic search returned 0 but temporal dates are active
-        # → list blocks in date range (temporal queries like "上週做了什麼" need listing, not matching)
+        # → list blocks in date range (temporal queries like "上週做了什麼" need listing, not matching).
+        # Bitemporal: respect as_of so time-travel /search calls don't silently
+        # leak into the present-time list path (Codex P1-6).
         if not results and expanded and expanded.temporal_from:
+            from .bitemporal_filters import active_block_filters
+            from .models import MemoryBlock
             from .schemas import SemanticSearchResult
 
-            blocks_page = await memory_block_service.list(
-                db,
-                space_id,
-                PaginationParams(page=1, page_size=top_k),
-                date_from=date_from,
-                date_to=date_to,
+            stmt = (
+                select(MemoryBlock)
+                .where(
+                    MemoryBlock.space_id == space_id,
+                    *active_block_filters(as_of=as_of),
+                )
+                .order_by(MemoryBlock.created_at.desc())
+                .limit(top_k)
             )
+            if date_from:
+                stmt = stmt.where(MemoryBlock.created_at >= date_from)
+            if date_to:
+                stmt = stmt.where(MemoryBlock.created_at <= date_to)
+            fallback_rows = (await db.execute(stmt)).scalars().all()
             results = [
                 SemanticSearchResult(
-                    block=b,
+                    block=memory_block_service.to_response(b),
                     score=1.0,
                 )
-                for b in blocks_page.items
+                for b in fallback_rows
             ]
             meta.temporal_fallback = True
 
@@ -655,6 +667,8 @@ class RecallTextRequest(BaseModel):
     session_id: str | None = None
     cwd: str | None = None
     as_of: datetime | None = None
+
+    _validate_as_of_tz = field_validator("as_of")(_ensure_tz_aware)
 
 
 @router.post("/recall/text", response_class=PlainTextResponse)

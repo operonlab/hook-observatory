@@ -309,11 +309,14 @@ async def auto_evolve_kg(
     stats = {"triples_extracted": 0, "triples_stored": 0, "contradictions_resolved": 0}
     chash = _content_hash(content)
 
-    # Idempotency check — was this exact (memory_id, content_hash) already done?
+    # Idempotency check — was this exact (space_id, memory_id, content_hash) already done?
+    # space_id scoping prevents cross-space pollution if the same memory_id is
+    # ever reused (defensive — should not normally happen).
     try:
         existing = (
             await db.execute(
                 select(KGAutoEvolveLog).where(
+                    KGAutoEvolveLog.space_id == space_id,
                     KGAutoEvolveLog.memory_id == memory_id,
                     KGAutoEvolveLog.content_hash == chash,
                     KGAutoEvolveLog.deleted_at.is_(None),
@@ -330,10 +333,13 @@ async def auto_evolve_kg(
                 "triples_stored": existing.triples_stored,
                 "contradictions_resolved": existing.contradictions_resolved,
             }
-        # Same memory_id with a *different* hash means the content was edited;
-        # purge the stale log row so the new run records correctly.
+        # Same (space_id, memory_id) with a *different* hash means the content
+        # was edited; purge the stale log row(s) so the new run records correctly.
         await db.execute(
-            delete(KGAutoEvolveLog).where(KGAutoEvolveLog.memory_id == memory_id)
+            delete(KGAutoEvolveLog).where(
+                KGAutoEvolveLog.space_id == space_id,
+                KGAutoEvolveLog.memory_id == memory_id,
+            )
         )
     except Exception:
         # Idempotency check is best-effort — fall through to normal path on
@@ -406,7 +412,10 @@ async def auto_evolve_kg(
                                     id=triple.id,
                                     vector={"dense": emb},
                                     payload={
-                                        "service_id": "memvault_kg",
+                                        # MUST match triple_service.semantic_search filter
+                                        # (service_ids=["memvault-triple"]); using "memvault_kg"
+                                        # silently writes points that no read path can find.
+                                        "service_id": "memvault-triple",
                                         "entity_type": "triple",
                                         "space_id": space_id,
                                         "subject": triple.subject,

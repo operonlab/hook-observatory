@@ -83,44 +83,37 @@ async def promote_unverified(
         Triple.last_confirmed_at >= cutoff
     ) & (Triple.access_count >= RECENT_CONFIRM_ACCESS_THRESHOLD)
 
+    from sqlalchemy import select
+
     eligible = rule_1 | rule_2
 
-    candidate_q = update(Triple).where(
-        Triple.space_id == space_id,
-        Triple.verification_status == "unverified",
-        Triple.invalid_at.is_(None),
-        Triple.deleted_at.is_(None),
-        eligible,
+    # Single path for both dry_run and apply: SELECT first (with batch_size
+    # limit) so the audit-log "candidates_scanned" / "promoted_ids" reflect
+    # exactly the same set the apply path would mutate. Previously dry_run was
+    # SELECT-limited but apply was UPDATE-without-limit → blast radius of an
+    # accidental flip-to-False would be much larger than the dry_run preview
+    # suggested (Codex P2).
+    promote_sel = (
+        select(Triple.id)
+        .where(
+            Triple.space_id == space_id,
+            Triple.verification_status == "unverified",
+            Triple.invalid_at.is_(None),
+            Triple.deleted_at.is_(None),
+            eligible,
+        )
+        .limit(batch_size)
     )
+    promote_ids = list((await db.execute(promote_sel)).scalars().all())
+    stats.promoted_ids = promote_ids
+    stats.candidates_scanned = len(promote_ids)
 
-    if dry_run:
-        # Count without writing — use a separate SELECT to capture IDs.
-        from sqlalchemy import select
-
-        sel = (
-            select(Triple.id)
-            .where(
-                Triple.space_id == space_id,
-                Triple.verification_status == "unverified",
-                Triple.invalid_at.is_(None),
-                Triple.deleted_at.is_(None),
-                eligible,
-            )
-            .limit(batch_size)
+    if not dry_run and promote_ids:
+        await db.execute(
+            update(Triple)
+            .where(Triple.id.in_(promote_ids))
+            .values(verification_status="verified", verified_at=started)
         )
-        rows = (await db.execute(sel)).scalars().all()
-        stats.promoted_ids = list(rows)
-        stats.candidates_scanned = len(rows)
-    else:
-        result = await db.execute(
-            candidate_q.values(
-                verification_status="verified",
-                verified_at=started,
-            ).returning(Triple.id)
-        )
-        promoted_ids = [r[0] for r in result.fetchall()]
-        stats.promoted_ids = promoted_ids
-        stats.candidates_scanned = len(promoted_ids)
 
     # ---- Demotion safety pass ----
     demote_filter = (
@@ -130,20 +123,16 @@ async def promote_unverified(
         & (Triple.verification_status != "disputed")
         & (Triple.deleted_at.is_(None))
     )
-    if dry_run:
-        from sqlalchemy import select
+    demote_sel = select(Triple.id).where(demote_filter).limit(batch_size)
+    demote_ids = list((await db.execute(demote_sel)).scalars().all())
+    stats.demoted_ids = demote_ids
 
-        sel = select(Triple.id).where(demote_filter).limit(batch_size)
-        rows = (await db.execute(sel)).scalars().all()
-        stats.demoted_ids = list(rows)
-    else:
-        result = await db.execute(
+    if not dry_run and demote_ids:
+        await db.execute(
             update(Triple)
-            .where(demote_filter)
+            .where(Triple.id.in_(demote_ids))
             .values(verification_status="disputed")
-            .returning(Triple.id)
         )
-        stats.demoted_ids = [r[0] for r in result.fetchall()]
 
     # ---- Audit log ----
     log = KGVerificationRunLog(

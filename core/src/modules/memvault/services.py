@@ -1267,6 +1267,42 @@ class SearchFeedbackService:
         rows = (await db.execute(q)).all()
         return {row.entity_id: int(row.net or 0) for row in rows}
 
+    async def record_implicit_batch(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        entity_ids: list[str],
+        query: str,
+        signal: str,
+    ) -> int:
+        """Bulk-record implicit feedback (CRAG-driven) for many entities at once.
+
+        Single SQL bulk INSERT — used by kg_services._record_implicit_feedback so
+        a single CRAG verdict propagates to all returned entities without N round-trips.
+
+        Returns the number of rows inserted. Caller is responsible for db.commit().
+        """
+        if not entity_ids:
+            return 0
+        import hashlib
+
+        query_hash = hashlib.sha256(query.encode()).hexdigest()
+        rows = [
+            {
+                "space_id": space_id,
+                "entity_id": eid,
+                "query_hash": query_hash,
+                "signal": signal,
+                "feedback_source": "implicit_crag",
+            }
+            for eid in entity_ids
+        ]
+        # Use ORM bulk-insert via add_all so SpaceScopedModel defaults (uuid7 id,
+        # timestamps) fire correctly — Core insert() bypasses default factories.
+        db.add_all([SearchFeedback(**r) for r in rows])
+        await db.flush()
+        return len(rows)
+
 
 # ======================== Module-level singletons ========================
 
