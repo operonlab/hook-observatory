@@ -35,6 +35,22 @@
       "enabled": true
     },
     {
+      "name": "ws-memvault-promote-verified",
+      "label": "com.joneshong.scheduler.ws-memvault-promote-verified",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_promote_verified.py",
+      "schedule": {
+        "calendar": {
+          "DayOfWeek": 0,
+          "Hour": 3,
+          "Minute": 0
+        }
+      },
+      "description": "每週日 3AM: KGTriple UNVERIFIED→VERIFIED 自動晉升 + INCORRECT→disputed 降級安全網（dream loop 4AM 前）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-session-archive",
       "label": "com.joneshong.scheduler.ws-session-archive",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_session_archive.py",

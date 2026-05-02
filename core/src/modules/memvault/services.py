@@ -220,17 +220,37 @@ class MemoryBlockService(
         )
 
     async def invalidate_block(
-        self, db: AsyncSession, block_id: str, superseded_by_id: str, reason: str = "superseded"
-    ) -> None:
-        """Mark a block as invalid (superseded by newer knowledge). Does NOT delete."""
+        self,
+        db: AsyncSession,
+        block_id: str,
+        reason: str = "manual",
+        superseded_by_id: str | None = None,
+    ) -> MemoryBlock | None:
+        """Mark a block as invalid. Does NOT delete.
+
+        superseded_by_id is optional — set when a newer block replaces this one
+        (dream pipeline path); leave None for plain manual invalidation
+        (audit / mistake correction path).
+        """
         from datetime import UTC, datetime
 
         block = await self.get(db, block_id)
         if not block:
-            return
+            return None
         block.invalid_at = datetime.now(UTC)
         block.superseded_by = superseded_by_id
         block.invalidation_reason = reason
+        return block
+
+    async def restore_block(self, db: AsyncSession, block_id: str) -> MemoryBlock | None:
+        """Undo invalidate_block — clear invalid_at / superseded_by / reason."""
+        block = await self.get(db, block_id)
+        if not block:
+            return None
+        block.invalid_at = None
+        block.superseded_by = None
+        block.invalidation_reason = None
+        return block
 
     @staticmethod
     def _apply_date_filter(q, date_from=None, date_to=None):

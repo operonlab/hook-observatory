@@ -42,7 +42,17 @@ BLOCK_TYPES: tuple[str, ...] = ("persona", "human", "project")
 PROJECT_SUMMARY_RECENT_N: int = 5
 PROJECT_SUMMARY_PER_BLOCK_CHARS: int = 30
 
+# Worker 5: persona / human LLM generation throttle.
+# Sleeptime fires every SLEEPTIME_INTERVAL captures (~5 events); LLM generation
+# is much costlier than placeholder snapshot, so we cap to once per 24h per
+# space. Backed by Redis with in-process fallback.
+PERSONA_HUMAN_THROTTLE_SECONDS: int = 24 * 60 * 60
+PERSONA_HUMAN_RECENT_N: int = 30  # blocks fed to LLM as context
+PERSONA_TOKEN_BUDGET: int = 500
+HUMAN_TOKEN_BUDGET: int = 500
+
 _background_tasks: set[asyncio.Task] = set()
+_inproc_persona_last_run: dict[str, float] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -94,16 +104,21 @@ async def _run_sleeptime(space_id: str) -> dict:
         #    then fall back to existing contradiction check. Both are optional.
         findings = await _safe_health_check(space_id)
 
-        # 2 + 3. Update multi-block hot snapshot (project only; persona/human placeholder)
+        # 2 + 3. Update multi-block hot snapshot
         async with async_session_factory() as db:
             project_summary = await _summarize_recent(db, space_id)
 
             await _ensure_block(db, space_id, "project", project_summary)
             blocks_updated.append("project")
 
-            # Worker 5 territory: persona / human stay empty (content=None)
-            await _ensure_block(db, space_id, "persona", None)
-            await _ensure_block(db, space_id, "human", None)
+            # Worker 5: persona / human content via LLM, throttled to 24h.
+            persona_human_updated = await _maybe_update_persona_human(db, space_id)
+            blocks_updated.extend(persona_human_updated)
+            # Always ensure rows exist (idempotent) so downstream readers don't
+            # NPE — content stays whatever the last LLM run produced (or None
+            # on first ever run if throttle blocks).
+            await _ensure_block_if_missing(db, space_id, "persona")
+            await _ensure_block_if_missing(db, space_id, "human")
 
             await db.commit()
 
@@ -239,6 +254,176 @@ async def _ensure_block(
         existing.block_version = (existing.block_version or 1) + 1
         existing.updated_at = datetime.now(UTC)
     return existing
+
+
+async def _ensure_block_if_missing(db, space_id: str, block_type: str) -> None:
+    """Ensure a placeholder row exists; do NOT touch existing content."""
+    stmt = (
+        select(MemoryBlockSnapshot)
+        .where(MemoryBlockSnapshot.space_id == space_id)
+        .where(MemoryBlockSnapshot.block_type == block_type)
+        .where(MemoryBlockSnapshot.deleted_at.is_(None))
+    )
+    existing = (await db.execute(stmt)).scalar_one_or_none()
+    if existing is None:
+        db.add(
+            MemoryBlockSnapshot(
+                space_id=space_id,
+                block_type=block_type,
+                content=None,
+                word_count=0,
+                block_version=1,
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# Worker 5: persona / human LLM content generation (24h throttled)
+# ---------------------------------------------------------------------------
+
+
+async def _maybe_update_persona_human(db, space_id: str) -> list[str]:
+    """Generate persona + human blocks via LLM if 24h throttle elapsed.
+
+    Returns the list of block types updated (empty when throttled or LLM
+    unavailable). Best-effort — failures degrade silently and the throttle
+    is still bumped to avoid hot-loop retries against a broken LLM.
+    """
+    if not await _persona_throttle_should_run(space_id):
+        return []
+
+    try:
+        from .bitemporal_filters import active_block_filters
+
+        stmt = (
+            select(MemoryBlock)
+            .where(MemoryBlock.space_id == space_id, *active_block_filters())
+            .order_by(MemoryBlock.created_at.desc())
+            .limit(PERSONA_HUMAN_RECENT_N)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        if not rows:
+            await _persona_throttle_bump(space_id)
+            return []
+        snippets = [
+            (r.content or "").strip().replace("\n", " ")[:300]
+            for r in rows
+            if (r.content or "").strip()
+        ]
+        if not snippets:
+            await _persona_throttle_bump(space_id)
+            return []
+        joined = "\n- ".join(snippets[:PERSONA_HUMAN_RECENT_N])
+
+        persona_text, human_text = await _llm_persona_human(joined)
+
+        updated: list[str] = []
+        if persona_text:
+            await _ensure_block(db, space_id, "persona", persona_text)
+            updated.append("persona")
+        if human_text:
+            await _ensure_block(db, space_id, "human", human_text)
+            updated.append("human")
+        await _persona_throttle_bump(space_id)
+        return updated
+    except Exception:
+        logger.warning(
+            "memvault.sleeptime.persona_human failed: space_id=%s",
+            space_id,
+            exc_info=True,
+        )
+        # Bump throttle even on failure — avoids hammering a broken LLM.
+        await _persona_throttle_bump(space_id)
+        return []
+
+
+async def _persona_throttle_should_run(space_id: str) -> bool:
+    """Return True iff PERSONA_HUMAN_THROTTLE_SECONDS has elapsed since last run."""
+    import time as _time
+
+    key = f"memvault:sleeptime:persona:last_run:{space_id}"
+    try:
+        from src.shared.cache import get_redis  # type: ignore
+
+        redis_client = get_redis()
+        if redis_client is not None:
+            raw = await redis_client.get(key)
+            if raw is None:
+                return True
+            try:
+                last = float(raw)
+            except (TypeError, ValueError):
+                last = 0.0
+            return (_time.time() - last) >= PERSONA_HUMAN_THROTTLE_SECONDS
+    except Exception:
+        logger.debug("persona throttle: redis unavailable, in-proc fallback", exc_info=True)
+
+    last = _inproc_persona_last_run.get(space_id, 0.0)
+    return (_time.time() - last) >= PERSONA_HUMAN_THROTTLE_SECONDS
+
+
+async def _persona_throttle_bump(space_id: str) -> None:
+    import time as _time
+
+    now = _time.time()
+    key = f"memvault:sleeptime:persona:last_run:{space_id}"
+    try:
+        from src.shared.cache import get_redis  # type: ignore
+
+        redis_client = get_redis()
+        if redis_client is not None:
+            # 2x TTL so we keep history briefly for debugging without leaking forever.
+            await redis_client.set(key, str(now), ex=PERSONA_HUMAN_THROTTLE_SECONDS * 2)
+            return
+    except Exception:
+        logger.debug("persona throttle bump: redis unavailable", exc_info=True)
+    _inproc_persona_last_run[space_id] = now
+
+
+async def _llm_persona_human(joined_snippets: str) -> tuple[str | None, str | None]:
+    """Call LLM twice (persona + human) in parallel. Returns (persona, human).
+
+    Returns (None, None) on any failure — the caller treats this as "skip
+    update this round, throttle bump still occurs".
+    """
+    try:
+        from pydantic_ai import Agent
+
+        from .llm_config import get_litellm_model
+    except Exception:
+        return (None, None)
+
+    persona_prompt = (
+        "你是少爺記憶系統的內省層。請根據以下最近的記憶片段，"
+        "用第一人稱寫一段不超過 500 tokens 的 persona 摘要：「我是誰、"
+        "我關心什麼、我目前的工作焦點」。聚焦穩定面向，不要列瑣碎事項。\n\n"
+        f"最近記憶：\n- {joined_snippets}"
+    )
+    human_prompt = (
+        "你是少爺記憶系統的對外觀察層。請根據以下最近的記憶片段，"
+        "從「對話對象視角」寫一段不超過 500 tokens 的 human 摘要："
+        "「對方似乎是個怎樣的人、有什麼特徵、需要注意什麼」。"
+        "聚焦行為模式與互動風格，不要重述事件。\n\n"
+        f"最近記憶：\n- {joined_snippets}"
+    )
+
+    try:
+        model = await get_litellm_model()
+    except Exception:
+        return (None, None)
+
+    async def _one(prompt: str) -> str | None:
+        try:
+            agent = Agent(model=model, system_prompt="繁體中文輸出。簡潔。")
+            result = await agent.run(prompt)
+            text = (getattr(result, "output", None) or getattr(result, "data", "")) or ""
+            return text.strip() or None
+        except Exception:
+            logger.debug("persona/human LLM call failed", exc_info=True)
+            return None
+
+    persona, human = await asyncio.gather(_one(persona_prompt), _one(human_prompt))
+    return (persona, human)
 
 
 async def _emit_sleeptime_completed(

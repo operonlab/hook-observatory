@@ -3,6 +3,8 @@
 Prefix: /api/memvault/kg (mounted via __init__.py)
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -305,6 +307,14 @@ async def cascade_recall(
     space_id: str = Query("default"),
     skip_routing: bool = Query(False, description="Bypass query router, search all layers"),
     evaluate: str = Query("default", pattern="^(default|deep|rlm|none)$"),
+    as_of: datetime | None = Query(
+        None,
+        description=(
+            "Time-travel anchor (ISO8601). Excludes blocks/triples whose valid_at > as_of "
+            "and whose invalid_at <= as_of. Vector layers (Qdrant) currently apply only "
+            "the present-time bitemporal guard — full as_of for semantic search is TODO."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     return await cascade_recall_service.recall(
@@ -314,6 +324,7 @@ async def cascade_recall(
         top_k=top_k,
         skip_routing=skip_routing,
         evaluate=evaluate,
+        as_of=as_of,
     )
 
 
