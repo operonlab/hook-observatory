@@ -20,7 +20,9 @@ fi
 cd "$BLOG_DIR"
 log "Starting blog translation check..."
 
-# Run the CLI translate --all command
-npx tsx cli/blog.ts translate --all 2>&1
+# Run the translate-post CLI (blog.ts has no `translate` subcommand;
+# translation lives in a dedicated CLI that supports --all).
+# Use pnpm (not npx): node v25's npx no longer resolves devDependencies by bin name.
+pnpm tsx cli/translate-post.ts --all 2>&1
 
 log "Translation check complete"

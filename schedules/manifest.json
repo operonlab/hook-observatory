@@ -149,10 +149,10 @@
           "Minute": 30
         }
       },
-      "description": "每週一 17:30: 系統監控週報（磁碟+硬體+AI 建議）⚡quota-gate（晚餐時段執行）",
+      "description": "[已停用 2026-05-01] 每週一 17:30: 系統監控週報（磁碟+硬體+AI 建議）⚡quota-gate",
       "category": "workshop",
       "type": "periodic",
-      "enabled": true
+      "enabled": false
     },
     {
       "name": "ws-sysmon-monthly",
@@ -165,10 +165,10 @@
           "Minute": 30
         }
       },
-      "description": "每月 1 日 17:30: 系統監控月報（深度分析+容量規劃）⚡quota-gate（晚餐時段執行）",
+      "description": "[已停用 2026-05-01] 每月 1 日 17:30: 系統監控月報（深度分析+容量規劃）⚡quota-gate",
       "category": "workshop",
       "type": "periodic",
-      "enabled": true
+      "enabled": false
     },
     {
       "name": "blink-reinstall",
@@ -511,11 +511,11 @@
     {
       "name": "ws-memory-guardian",
       "label": "com.joneshong.scheduler.ws-memory-guardian",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memory_guardian.py",
+      "command": "/Users/joneshong/.cargo/shared-target/release/system-monitor-rs guardian-tick",
       "schedule": {
         "interval": 60
       },
-      "description": "每 60 秒: 記憶體壓力防護 — P1 殺可犧牲 app, P2/P3 殺 Claude Code",
+      "description": "每 60 秒: 記憶體壓力防護（Rust 版 system-monitor-rs guardian-tick）— P1 殺可犧牲 app, P2/P3 殺 Claude Code",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
@@ -699,10 +699,10 @@
       "schedule": {
         "interval": 300
       },
-      "description": "每 5 分鐘: light health check — HTTP probe all services → sentinel DB + Bark on failure",
+      "description": "[已停用 2026-05-01: sentinel-rs 內建 light_loop(30s) 已涵蓋此功能] 每 5 分鐘: light health check — HTTP probe all services → sentinel DB + Bark on failure",
       "category": "workshop",
       "type": "periodic",
-      "enabled": true
+      "enabled": false
     },
     {
       "name": "ws-db-backup-gdrive",

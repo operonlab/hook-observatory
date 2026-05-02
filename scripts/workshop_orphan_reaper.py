@@ -5,6 +5,10 @@ workshop_orphan_reaper.py — Detect and clean orphaned workshop processes.
 Scans for processes whose command contains 'workshop/' but are orphaned (PPID=1)
 and not tracked by any known manager (workshop_services PID files, launchd, etc.).
 
+Also catches inline python orphans (e.g. `python3 -u <<EOF ... EOF`) where the
+command line shows no script path: PPID=1 + python binary + no .py arg → fall
+back to lsof cwd check, claim the process if cwd is under ~/workshop.
+
 Usage:
     python3 workshop_orphan_reaper.py              # dry-run (report only)
     python3 workshop_orphan_reaper.py --kill        # SIGTERM orphans
@@ -57,8 +61,46 @@ def _get_managed_pids() -> set[int]:
     return pids
 
 
+def _get_process_cwd(pid: int) -> str:
+    """Get process cwd via lsof. Empty string on failure."""
+    try:
+        r = subprocess.run(
+            ["lsof", "-p", str(pid), "-d", "cwd", "-Fn"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        for line in r.stdout.splitlines():
+            if line.startswith("n"):
+                return line[1:]
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return ""
+
+
+def _is_inline_python(command: str) -> bool:
+    """Detect inline `python -u` (no script path on argv).
+
+    A heredoc/stdin invocation like `python3 -u <<EOF ... EOF` shows up in ps
+    as just `/path/python3 -u`, with no .py argument — so substring filters on
+    'workshop/' miss it. Such processes are the inline-python case worth a cwd
+    probe.
+    """
+    parts = command.strip().split()
+    if not parts:
+        return False
+    binary = parts[0].rsplit("/", 1)[-1]
+    if not binary.startswith("python"):
+        return False
+    for p in parts[1:]:
+        if p.endswith(".py"):
+            return False
+    return True
+
+
 def _get_workshop_processes() -> list[dict]:
-    """Get all processes with 'workshop/' in their command."""
+    """Get all processes with 'workshop/' in command, plus inline-python orphans
+    whose cwd is under ~/workshop (cmdline alone hides the workshop association)."""
     try:
         result = subprocess.run(
             ["ps", "-eo", "pid,ppid,pgid,rss,etime,command"],
@@ -75,14 +117,25 @@ def _get_workshop_processes() -> list[dict]:
         if len(parts) < 6:
             continue
         pid_s, ppid_s, pgid_s, rss_s, etime, command = parts
-        if "workshop/" not in command:
-            continue
         try:
             pid_i = int(pid_s)
             ppid_i = int(ppid_s)
             pgid_i = int(pgid_s)
         except ValueError:
             continue
+
+        is_workshop = "workshop/" in command
+        cwd = ""
+
+        # Fallback: PPID=1 inline python with no script arg — probe cwd.
+        if not is_workshop and ppid_i == 1 and _is_inline_python(command):
+            cwd = _get_process_cwd(pid_i)
+            if "workshop" in cwd:
+                is_workshop = True
+
+        if not is_workshop:
+            continue
+
         try:
             rss_mb = int(rss_s) // 1024
         except ValueError:
@@ -95,6 +148,7 @@ def _get_workshop_processes() -> list[dict]:
                 "rss_mb": rss_mb,
                 "etime": etime.strip(),
                 "command": command.strip(),
+                "cwd": cwd,
             }
         )
     return procs
@@ -164,7 +218,11 @@ def main():
     print(f"Found {len(orphans)} orphaned workshop process(es):\n")
     for o in orphans:
         cmd = o["command"][:80]
-        print(f"  PID {o['pid']:>6}  RSS {o['rss_mb']:>4} MB  uptime {o['etime']:>12}  {cmd}")
+        cwd_note = f"  cwd={o['cwd']}" if o.get("cwd") else ""
+        print(
+            f"  PID {o['pid']:>6}  RSS {o['rss_mb']:>4} MB  uptime {o['etime']:>12}  "
+            f"{cmd}{cwd_note}"
+        )
 
     if args.kill:
         print()

@@ -213,6 +213,118 @@ def list_jobs():
     print(json.dumps({"jobs": output, "count": len(output)}, indent=2, ensure_ascii=False))
 
 
+def _parse_loaded_args(label: str) -> list[str] | None:
+    """Read what launchd actually has loaded for `label`.
+
+    Returns the ProgramArguments list (post-XML-decode), or None if not loaded.
+    """
+    uid = os.getuid()
+    result = subprocess.run(
+        ["launchctl", "print", f"gui/{uid}/{label}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    args: list[str] = []
+    in_block = False
+    for raw in result.stdout.splitlines():
+        line = raw.rstrip()
+        if not in_block:
+            if line.lstrip().startswith("arguments = {"):
+                in_block = True
+            continue
+        if line.lstrip().startswith("}"):
+            break
+        token = line.strip()
+        if token:
+            args.append(token)
+    return args or None
+
+
+def _disk_args(plist_file: Path) -> list[str] | None:
+    """Read ProgramArguments from a plist file on disk (entities pre-decoded by plistlib)."""
+    try:
+        with open(plist_file, "rb") as f:
+            data = plistlib.load(f)
+    except Exception:
+        return None
+    args = data.get("ProgramArguments")
+    if isinstance(args, list):
+        return [str(a) for a in args]
+    return None
+
+
+def drift_check(json_out: bool = True) -> list[dict]:
+    """Compare every com.joneshong.scheduler.*.plist on disk vs what launchd loaded.
+
+    Returns a list of drift records. Empty list = all aligned.
+    Why: macOS launchd does NOT auto-reload after plist edits. Every silent
+    drift is one missed scheduled run. Run this before any time-sensitive
+    job (e.g. auto-survey 10:00 daemon start, 13:00 LINE poller).
+    """
+    drift: list[dict] = []
+    for plist_file in sorted(LAUNCH_AGENTS_DIR.glob(f"{LABEL_PREFIX}*.plist")):
+        label = plist_file.stem
+        disk = _disk_args(plist_file)
+        loaded = _parse_loaded_args(label)
+        if disk is None:
+            continue
+        if loaded is None:
+            drift.append({"label": label, "reason": "not_loaded", "disk": disk})
+            continue
+        if disk != loaded:
+            drift.append({"label": label, "reason": "mismatch", "disk": disk, "loaded": loaded})
+    if json_out:
+        print(json.dumps({"drift": drift, "count": len(drift)}, indent=2, ensure_ascii=False))
+    return drift
+
+
+def _reload_one(plist_file: Path) -> tuple[bool, str]:
+    uid = os.getuid()
+    label = plist_file.stem
+    subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["launchctl", "bootstrap", f"gui/{uid}", str(plist_file)],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0, (result.stderr or result.stdout).strip()
+
+
+def reload_job(name: str):
+    """Force-reload a single job by name (bootout + bootstrap)."""
+    plist_file = plist_path(name)
+    if not plist_file.exists():
+        print(json.dumps({"error": f"plist not found: {plist_file}"}))
+        sys.exit(1)
+    ok, msg = _reload_one(plist_file)
+    print(json.dumps({"name": name, "reloaded": ok, "msg": msg}, ensure_ascii=False))
+
+
+def reload_all(only_drift: bool = True):
+    """Reload all scheduler-managed plists. Default: only those that drifted."""
+    targets: list[Path]
+    if only_drift:
+        records = drift_check(json_out=False)
+        targets = [LAUNCH_AGENTS_DIR / f"{r['label']}.plist" for r in records]
+    else:
+        targets = sorted(LAUNCH_AGENTS_DIR.glob(f"{LABEL_PREFIX}*.plist"))
+
+    results = []
+    for p in targets:
+        ok, msg = _reload_one(p)
+        results.append({"name": p.stem.removeprefix(LABEL_PREFIX), "reloaded": ok, "msg": msg})
+
+    print(
+        json.dumps(
+            {"mode": "drift" if only_drift else "all", "results": results, "count": len(results)},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
+
+
 def show_logs(name: str, lines: int = 20):
     log_file = REGISTRY_DIR / "logs" / f"{name}.log"
     err_file = REGISTRY_DIR / "logs" / f"{name}.err"
@@ -244,6 +356,9 @@ Commands:
   disable <name>      — Disable a job (keep in registry)
   list                — List all registered jobs
   logs <name> [lines] — Show recent logs for a job
+  drift-check         — Detect plist disk-vs-loaded drift (no changes)
+  reload <name>       — Force-reload a single job into launchd
+  reload-all [--all]  — Reload drifted jobs (default) or every plist (--all)
 """)
 
 
@@ -275,5 +390,15 @@ if __name__ == "__main__":
         name = sys.argv[2]
         lines = int(sys.argv[3]) if len(sys.argv) > 3 else 20
         show_logs(name, lines)
+    elif cmd == "drift-check":
+        records = drift_check(json_out=True)
+        sys.exit(1 if records else 0)
+    elif cmd == "reload":
+        if len(sys.argv) < 3:
+            print("Usage: scheduler.py reload <name>")
+            sys.exit(1)
+        reload_job(sys.argv[2])
+    elif cmd == "reload-all":
+        reload_all(only_drift="--all" not in sys.argv[2:])
     else:
         usage()
