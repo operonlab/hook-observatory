@@ -19,6 +19,17 @@ async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_db() -> AsyncSession:
-    """Dependency: yield an async DB session."""
+    """Dependency: yield an async DB session.
+
+    Adds explicit rollback on cancel/exception. async_session_factory's
+    __aexit__ closes the connection but doesn't always rollback an open
+    transaction (esp. when the request is cancelled mid-handler), so the
+    connection returns to the pool 'idle in transaction' and Postgres
+    reports it for hours. Explicit rollback prevents this leak.
+    """
     async with async_session_factory() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            if session.in_transaction():
+                await session.rollback()
