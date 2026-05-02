@@ -131,6 +131,25 @@ class TmuxRelayClient:
 
     IDLE_TIMESTAMPS_DIR = Path("/tmp/relay-idle-ts")
 
+    RESULT_BASE = Path(
+        os.environ.get(
+            "WORKSHOP_RELAY_OUTPUT_DIR",
+            str(Path.home() / "workshop" / "outputs" / "relay"),
+        )
+    )
+
+    @classmethod
+    def _make_signal_path(cls) -> str:
+        """Build a per-day result/signal file path under outputs/relay/{YYYY-MM-DD}/.
+
+        Returns the .done path; the worker writes the captured payload to the
+        sibling .txt and the meta (status/elapsed/result_file/...) to .done.
+        """
+        day = datetime.now(UTC).strftime("%Y-%m-%d")
+        day_dir = cls.RESULT_BASE / day
+        day_dir.mkdir(parents=True, exist_ok=True)
+        return str(day_dir / f"relay-py-{int(time.time() * 1000)}-{os.getpid()}.done")
+
     def __init__(
         self,
         claude_bin: str | None = None,
@@ -1204,7 +1223,7 @@ class TmuxRelayClient:
     ) -> RelayResult:
         """Core relay execution — pure Python equivalent of relay.sh."""
         if not signal_file:
-            signal_file = f"/tmp/relay-py-{int(time.time() * 1000)}-{os.getpid()}.done"
+            signal_file = self._make_signal_path()
         result_file = signal_file.replace(".done", ".txt")
 
         # Resolve pane_id
@@ -1427,9 +1446,21 @@ class TmuxRelayClient:
             # Start idle countdown immediately (don't wait for auto_standby to discover)
             self._touch_idle_ts(pane_id)
 
+            # Audit-only enrichment: payload stays in result_file, channel
+            # message carries meta + a short preview so other agents can
+            # subscribe to relay-activity for a cross-CLI timeline.
+            preview_lines = [ln for ln in captured.splitlines() if ln.strip()]
+            preview = " | ".join(preview_lines[-8:])
+            if len(preview) > 400:
+                preview = preview[:397] + "..."
             self._notify_channel(
                 "relay-activity",
-                f"✅ completed ← {source}: {command[:60]} ({elapsed}s)",
+                (
+                    f"✅ completed ← {source} ({elapsed}s)\n"
+                    f"cmd: {command[:120]}\n"
+                    f"result_file: {result_file}\n"
+                    f"preview: {preview}"
+                ),
                 tag="completed",
             )
 
@@ -1543,7 +1574,7 @@ class TmuxRelayClient:
                 except TmuxRelayError:
                     continue
 
-            signal_file = f"/tmp/relay-py-{int(time.time() * 1000)}-{os.getpid()}.done"
+            signal_file = self._make_signal_path()
 
             # Cache: pre-mark as busy:relay + role/task metadata
             pane_id_raw = display(pane, "#{pane_id}")
